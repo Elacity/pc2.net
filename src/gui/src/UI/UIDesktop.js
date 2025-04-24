@@ -1495,7 +1495,7 @@ $(document).on('click', '.user-options-menu-btn', async function (e) {
         // -------------------------------------------
         // -
         // -------------------------------------------
-        items.push('-')
+        /* items.push('-')
 
         items.push(
             {
@@ -1511,7 +1511,7 @@ $(document).on('click', '.user-options-menu-btn', async function (e) {
                     });
                 }
             },
-        )
+        ) */
 
         // -------------------------------------------
         // -

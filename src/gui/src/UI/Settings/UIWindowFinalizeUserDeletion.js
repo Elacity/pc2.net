@@ -26,7 +26,7 @@ async function UIWindowFinalizeUserDeletion(options){
         let h = '';
 
         // if user is temporary, ask them to type in 'confirm' to delete their account
-        if(window.user.is_temp){
+        if(window.user.is_temp || window.user.wallet_address){
             h += `<div style="padding: 20px;">`;
                 h += `<div class="generic-close-window-button disable-user-select"> &times; </div>`;
                 h += `<img src="${window.icons['danger.svg']}"  class="account-deletion-confirmation-icon">`;

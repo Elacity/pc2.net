@@ -15,7 +15,7 @@ dist/
 # VS Code IDE
 .vscode/**/*
 !.vscode/extensions.json
-!.vscode/launch.json
+.vscode/launch.json
 !.vscode/settings.json
 !.vscode/tasks.json
 
@@ -30,3 +30,5 @@ dist/
 # Local Netlify folder
 .netlify
 src/emulator/release/
+src/particle-auth
+.vscode

@@ -45,6 +45,7 @@ class GetUserService extends BaseService {
         this.id_properties.add('id');
         this.id_properties.add('email');
         this.id_properties.add('referral_code');
+        this.id_properties.add('wallet_address');
     }
 
     /**

@@ -82,7 +82,6 @@ const install = async ({ services, app, useapi, modapi }) => {
         def('puter.middlewares.anticsrf', require('./middleware/anticsrf'));
         
         def('core.APIError', require('./api/APIError'));
-        def('core.Context', Context);
         
         def('core', require('./services/auth/Actor'), { assign: true });
         def('core.config', config);
@@ -144,6 +143,7 @@ const install = async ({ services, app, useapi, modapi }) => {
     const FilesystemAPIService = require('./services/FilesystemAPIService');
     const ServeGUIService = require('./services/ServeGUIService');
     const PuterAPIService = require('./services/PuterAPIService');
+    const { ParticleAuthGUIService } = require('./services/ParticleAuthGUIService');
     const { RefreshAssociationsService } = require("./services/RefreshAssociationsService");
     // Service names beginning with '__' aren't called by other services;
     // these provide data/functionality to other services or produce
@@ -154,6 +154,7 @@ const install = async ({ services, app, useapi, modapi }) => {
     services.registerService('commands', CommandService);
     services.registerService('__api-filesystem', FilesystemAPIService);
     services.registerService('__api', PuterAPIService);
+    services.registerService('__particle-auth', ParticleAuthGUIService);
     services.registerService('__gui', ServeGUIService);
     services.registerService('registry', RegistryService);
     services.registerService('__registrant', RegistrantService);

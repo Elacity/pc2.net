@@ -63,13 +63,14 @@ const WHOAMI_GET = eggspress('/whoami', {
         uuid: req.user.uuid,
         email: req.user.email,
         unconfirmed_email: req.user.email,
-        email_confirmed: req.user.email_confirmed
-            || req.user.username === 'admin',
+        wallet_address: req.user.wallet_address,
+        email_confirmed: req.user.wallet_address ? 1 : req.user.email_confirmed
+        || req.user.username === 'admin',
         requires_email_confirmation: req.user.requires_email_confirmation,
         desktop_bg_url: req.user.desktop_bg_url,
         desktop_bg_color: req.user.desktop_bg_color,
         desktop_bg_fit: req.user.desktop_bg_fit,
-        is_temp: (req.user.password === null && req.user.email === null),
+        is_temp: req.user.wallet_address ? false : (req.user.password === null && req.user.email === null),
         taskbar_items: await get_taskbar_items(req.user, {
             ...(req.query.icon_size
                 ? { icon_size: req.query.icon_size }
@@ -203,16 +204,17 @@ WHOAMI_POST.post('/whoami', auth, express.json(), async (req, response, next)=>{
         username: req.user.username,
         uuid: req.user.uuid,
         email: req.user.email,
-        email_confirmed: req.user.email_confirmed
+        email_confirmed: req.user.wallet_address ? 1 : req.user.email_confirmed
             || req.user.username === 'admin',
         requires_email_confirmation: req.user.requires_email_confirmation,
         desktop_bg_url: req.user.desktop_bg_url,
         desktop_bg_color: req.user.desktop_bg_color,
         desktop_bg_fit: req.user.desktop_bg_fit,
-        is_temp: (req.user.password === null && req.user.email === null),
+        is_temp: req.user.wallet_address ? false : (req.user.password === null && req.user.email === null),
         taskbar_items: await get_taskbar_items(req.user),
         desktop_items: desktop_items,
         referral_code: req.user.referral_code,
+        wallet_address: req.user.wallet_address
     });
 });
 

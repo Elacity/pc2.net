@@ -69,4 +69,16 @@ A general setting to prevent any fallback behavior that might
 "hide" errors. It is recommended to set this to true when
 debugging, testing, or developing new features.
 
+### `auth_system`
+
+Specifies which authentication system to use. Currently supported values:
+- `"default"`: Uses the default authentication system
+- `"particle"`: Uses Particle authentication
+
+If not specified, defaults to `"default"`.
+
+#### Examples
+
+- `"auth_system": "default"`
+- `"auth_system": "particle"`
 

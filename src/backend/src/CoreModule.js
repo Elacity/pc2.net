@@ -111,6 +111,7 @@ const install = async ({ services, app, useapi, modapi }) => {
     const { DevConsoleService } = require('./services/DevConsoleService');
     const { RateLimitService } = require('./services/sla/RateLimitService');
     const { AuthService } = require('./services/auth/AuthService');
+    const { ParticleAuthService } = require("./services/auth/ParticleAuthService");
     const { SLAService } = require('./services/sla/SLAService');
     const { PermissionService } = require('./services/auth/PermissionService');
     const { ACLService } = require('./services/auth/ACLService');
@@ -222,7 +223,13 @@ const install = async ({ services, app, useapi, modapi }) => {
         ]),
     })
     services.registerService('rate-limit', RateLimitService);
-    services.registerService('auth', AuthService);
+
+    if(config.auth_system === 'particle') {
+        services.registerService('auth', ParticleAuthService);
+    } else {
+        services.registerService('auth', AuthService);
+    }
+
     services.registerService('permission', PermissionService);
     services.registerService('sla', SLAService);
     services.registerService('acl', ACLService);

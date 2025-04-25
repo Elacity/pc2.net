@@ -343,7 +343,8 @@ window.initgui = async function(options){
     // Action: Login with Particle
     //--------------------------------------------------------------------------------------
     else if(action === 'login'){
-        await UIWindowParticleLogin();
+        // await UIWindowParticleLogin();
+        window.location.href = '/particle-auth';
     }
     //--------------------------------------------------------------------------------------
     // Action: Signup
@@ -402,7 +403,7 @@ window.initgui = async function(options){
             // it might be their first visit to Puter on this specific device but it's not their first time ever visiting Puter.
             window.first_visit_ever = false;
             // show login progress window
-            UIWindowLoginInProgress({user_info: whoami});
+            // UIWindowLoginInProgress({user_info: whoami});
             // update auth data
             window.update_auth_data(query_param_auth_token, whoami);
         }
@@ -791,7 +792,8 @@ window.initgui = async function(options){
             UIWindowSessionList();
         }
         else{
-            await UIWindowParticleLogin();
+            window.location.href = '/particle-auth';
+            // await UIWindowParticleLogin();
         }
     }
 
@@ -1338,7 +1340,7 @@ window.initgui = async function(options){
         // disable native browser exit confirmation
         window.onbeforeunload = null;
         // go to home page
-        window.location.replace("/");
+        window.location.replace("/particle-auth");
     });
 }
 

@@ -71,9 +71,15 @@ options:
 dependencies:
   - gitSource:
       repository:
-        url: 'https://github.com/WAUIO/particle-auth-puter'
-        developerConnect: 'projects/elastos-457817/locations/us-east4/connections/wauio-pc2-net/repositories/WAUIO-particle-auth-puter'
-      revision: '4697c6b69cc82742f9189dfd64538fdcb7d3d363'
-      recurseSubmodules: 'true'
+        url: 'https://github.com/WAUIO/pc2.net.git'
+      revision: '$COMMIT_SHA'
+      depth: 1
+      destPath: '.'
+  - gitSource:
+      repository:
+        url: 'https://github.com/WAUIO/particle-auth-puter.git'
+        #developerConnect: 'projects/elastos-457817/locations/us-east4/connections/wauio-pc2-net/gitRepositoryLinks/WAUIO-particle-auth-puter'
+      revision: 'main'
+      recurseSubmodules: true
       depth: 1
       destPath: 'submodules/particle-auth'

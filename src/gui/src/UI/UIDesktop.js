@@ -1150,7 +1150,7 @@ async function UIDesktop(options) {
     let ht = '';
     ht += `<div class="toolbar" style="height:${window.toolbar_height}px; min-height:${window.toolbar_height}px; max-height:${window.toolbar_height}px;">`;
     // logo
-    ht += `<div class="toolbar-btn toolbar-puter-logo" title="Puter" style="margin-left: 10px;"><img src="${window.icons['logo-white.svg']}" draggable="false" style="display:block; width:17px; height:17px"></div>`;
+    ht += `<div class="toolbar-btn toolbar-puter-logo" title="Puter" style="margin-left: 10px; width:107px;"><img src="/images/elastos-logo.webp" draggable="false" style="display:block; width:107px; height:17px"></div>`;
 
 
     // clock spacer
@@ -1165,12 +1165,12 @@ async function UIDesktop(options) {
     ht += `<a href="/" class="show-desktop-btn toolbar-btn antialiased hidden" target="_blank" title="Show Desktop">Show Desktop <img src="${window.icons['launch-white.svg']}" style="width: 10px; height: 10px; margin-left: 5px;"></a>`;
 
     // refer
-    if (window.user.referral_code) {
+    /* if (window.user.referral_code) {
         ht += `<div class="toolbar-btn refer-btn" title="Refer" style="background-image:url(${window.icons['gift.svg']});"></div>`;
-    }
+    } */
 
     // github
-    ht += `<a href="https://github.com/HeyPuter/puter" target="_blank" class="toolbar-btn" title="GitHub" style="background-image:url(${window.icons['logo-github-white.svg']});"></a>`;
+    // ht += `<a href="https://github.com/HeyPuter/puter" target="_blank" class="toolbar-btn" title="GitHub" style="background-image:url(${window.icons['logo-github-white.svg']});"></a>`;
 
     // do not show the fullscreen button on mobile devices since it's broken
     if (!isMobile.phone) {
@@ -1179,8 +1179,8 @@ async function UIDesktop(options) {
     }
 
     // qr code button -- only show if not embedded
-    if (!window.is_embedded)
-        ht += `<div class="toolbar-btn qr-btn" title="QR code" style="background-image:url(${window.icons['qr.svg']})"></div>`;
+    /* if (!window.is_embedded)
+        ht += `<div class="toolbar-btn qr-btn" title="QR code" style="background-image:url(${window.icons['qr.svg']})"></div>`; */
 
     // search button
     ht += `<div class="toolbar-btn search-btn" title="Search" style="background-image:url('${window.icons['search.svg']}')"></div>`;

@@ -25,11 +25,11 @@ const PUTER_THEME_DATA_FILENAME = '~/.__puter_gui.json';
 const SAVE_COOLDOWN_TIME = 1000;
 
 const default_values = {
-    sat: 41.18,
-    hue: 210,
-    lig: 93.33,
-    alpha: 0.8,
-    light_text: false,
+    sat: 0,
+    hue: 43,
+    lig: 13,
+    alpha :0.92,
+    light_text: true
 };
 
 export class ThemeService extends Service {
@@ -38,13 +38,7 @@ export class ThemeService extends Service {
     async _init () {
         this.#broadcastService = globalThis.services.get('broadcast');
 
-        this.state = {
-            sat: 41.18,
-            hue: 210,
-            lig: 93.33,
-            alpha: 0.8,
-            light_text: false,
-        };
+        this.state = {...default_values}
         this.root = document.querySelector(':root');
         // this.ss = new CSSStyleSheet();
         // document.adoptedStyleSheets.push(this.ss);
@@ -84,6 +78,7 @@ export class ThemeService extends Service {
         if ( data && data.colors ) {
             this.state = {
                 ...this.state,
+                ...default_values,
                 ...data.colors,
             };
             this.reload_();

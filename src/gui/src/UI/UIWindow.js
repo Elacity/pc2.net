@@ -455,7 +455,7 @@ async function UIWindow(options) {
         if(options.backdrop_covers_toolbar)
             backdrop_zindex = 999999;
         
-        h = `<div class="window-backdrop" style="z-index:${backdrop_zindex};">` + h + `</div>`;
+        h = `<div class="window-backdrop"  style="z-index:${backdrop_zindex};">` + h + `</div>`;
     }
 
     // Append

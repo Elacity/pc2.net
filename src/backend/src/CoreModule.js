@@ -82,7 +82,6 @@ const install = async ({ services, app, useapi, modapi }) => {
         def('puter.middlewares.anticsrf', require('./middleware/anticsrf'));
         
         def('core.APIError', require('./api/APIError'));
-        def('core.Context', Context);
         
         def('core', require('./services/auth/Actor'), { assign: true });
         def('core.config', config);
@@ -112,6 +111,7 @@ const install = async ({ services, app, useapi, modapi }) => {
     const { DevConsoleService } = require('./services/DevConsoleService');
     const { RateLimitService } = require('./services/sla/RateLimitService');
     const { AuthService } = require('./services/auth/AuthService');
+    const { ParticleAuthService } = require("./services/auth/ParticleAuthService");
     const { SLAService } = require('./services/sla/SLAService');
     const { PermissionService } = require('./services/auth/PermissionService');
     const { ACLService } = require('./services/auth/ACLService');
@@ -144,6 +144,7 @@ const install = async ({ services, app, useapi, modapi }) => {
     const FilesystemAPIService = require('./services/FilesystemAPIService');
     const ServeGUIService = require('./services/ServeGUIService');
     const PuterAPIService = require('./services/PuterAPIService');
+    const { ParticleAuthGUIService } = require('./services/ParticleAuthGUIService');
     const { RefreshAssociationsService } = require("./services/RefreshAssociationsService");
     // Service names beginning with '__' aren't called by other services;
     // these provide data/functionality to other services or produce
@@ -154,6 +155,7 @@ const install = async ({ services, app, useapi, modapi }) => {
     services.registerService('commands', CommandService);
     services.registerService('__api-filesystem', FilesystemAPIService);
     services.registerService('__api', PuterAPIService);
+    services.registerService('__particle-auth', ParticleAuthGUIService);
     services.registerService('__gui', ServeGUIService);
     services.registerService('registry', RegistryService);
     services.registerService('__registrant', RegistrantService);
@@ -221,7 +223,13 @@ const install = async ({ services, app, useapi, modapi }) => {
         ]),
     })
     services.registerService('rate-limit', RateLimitService);
-    services.registerService('auth', AuthService);
+
+    if(config.auth_system === 'particle') {
+        services.registerService('auth', ParticleAuthService);
+    } else {
+        services.registerService('auth', AuthService);
+    }
+
     services.registerService('permission', PermissionService);
     services.registerService('sla', SLAService);
     services.registerService('acl', ACLService);

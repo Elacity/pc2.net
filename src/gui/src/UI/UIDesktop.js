@@ -1150,7 +1150,7 @@ async function UIDesktop(options) {
     let ht = '';
     ht += `<div class="toolbar" style="height:${window.toolbar_height}px; min-height:${window.toolbar_height}px; max-height:${window.toolbar_height}px;">`;
     // logo
-    ht += `<div class="toolbar-btn toolbar-puter-logo" title="Puter" style="margin-left: 10px;"><img src="${window.icons['logo-white.svg']}" draggable="false" style="display:block; width:17px; height:17px"></div>`;
+    ht += `<div class="toolbar-btn toolbar-puter-logo" title="Puter" style="margin-left: 10px; width:107px;"><img src="/images/elastos-logo.webp" draggable="false" style="display:block; width:107px; height:17px"></div>`;
 
 
     // clock spacer
@@ -1165,12 +1165,12 @@ async function UIDesktop(options) {
     ht += `<a href="/" class="show-desktop-btn toolbar-btn antialiased hidden" target="_blank" title="Show Desktop">Show Desktop <img src="${window.icons['launch-white.svg']}" style="width: 10px; height: 10px; margin-left: 5px;"></a>`;
 
     // refer
-    if (window.user.referral_code) {
+    /* if (window.user.referral_code) {
         ht += `<div class="toolbar-btn refer-btn" title="Refer" style="background-image:url(${window.icons['gift.svg']});"></div>`;
-    }
+    } */
 
     // github
-    ht += `<a href="https://github.com/HeyPuter/puter" target="_blank" class="toolbar-btn" title="GitHub" style="background-image:url(${window.icons['logo-github-white.svg']});"></a>`;
+    // ht += `<a href="https://github.com/HeyPuter/puter" target="_blank" class="toolbar-btn" title="GitHub" style="background-image:url(${window.icons['logo-github-white.svg']});"></a>`;
 
     // do not show the fullscreen button on mobile devices since it's broken
     if (!isMobile.phone) {
@@ -1179,8 +1179,8 @@ async function UIDesktop(options) {
     }
 
     // qr code button -- only show if not embedded
-    if (!window.is_embedded)
-        ht += `<div class="toolbar-btn qr-btn" title="QR code" style="background-image:url(${window.icons['qr.svg']})"></div>`;
+    /* if (!window.is_embedded)
+        ht += `<div class="toolbar-btn qr-btn" title="QR code" style="background-image:url(${window.icons['qr.svg']})"></div>`; */
 
     // search button
     ht += `<div class="toolbar-btn search-btn" title="Search" style="background-image:url('${window.icons['search.svg']}')"></div>`;
@@ -1374,23 +1374,97 @@ async function UIDesktop(options) {
     //--------------------------------------------------------------------------------------
     const url_paths = window.location.pathname.split('/').filter(element => element);
     if (url_paths[0]?.startsWith('@')) {
-        let username = url_paths[0].substring(1);
+        const username = url_paths[0].substring(1);
         let item_path = '/' + username + '/Public';
-
-        // check if username has valid characters
-        if (!username.match(/^[a-z0-9_]+$/i)) {
-            UIAlert({
-                message: 'Invalid username.'
-            });
-        } else {
-            UIWindow({
-                path: item_path,
-                title: path.basename(item_path),
-                icon: await item_icon({ is_dir: true, path: item_path }),
-                is_dir: true,
-                app: 'explorer',
-            });
+        if ( url_paths.length > 1 ) {
+            item_path += '/' + url_paths.slice(1).join('/');
         }
+
+        // GUARD: avoid invalid user directories
+        {
+            if (!username.match(/^[a-z0-9_]+$/i)) {
+                UIAlert({
+                    message: 'Invalid username.'
+                });
+                return;
+            }
+        }
+
+        const stat = await puter.fs.stat(item_path);
+        console.log('stat result', stat);
+        
+        // TODO: DRY everything here with open_item. Unfortunately we can't
+        //       use open_item here because it's coupled with UI logic;
+        //       it requires a UIItem element and cannot operate on a
+        //       file path on its own.
+        if ( ! stat.is_dir ) {
+            if ( stat.associated_app ) {
+                launch_app({ name: stat.associated_app.name });
+                return;
+            }
+            
+            const ext_pref =
+                window.user_preferences[`default_apps${path.extname(item_path).toLowerCase()}`];
+            
+            if ( ext_pref ) {
+                launch_app({
+                    name: ext_pref,
+                    file_path: item_path,
+                });
+                return;
+            }
+            
+
+            const open_item_meta = await $.ajax({
+                url: window.api_origin + "/open_item",
+                type: 'POST',
+                contentType: "application/json",
+                data: JSON.stringify({
+                    path: item_path,
+                }),
+                headers: {
+                    "Authorization": "Bearer "+window.auth_token
+                },
+                statusCode: {
+                    401: function () {
+                        window.logout();
+                    },
+                },
+            });
+            const suggested_apps = open_item_meta?.suggested_apps ?? await window.suggest_apps_for_fsentry({
+                path: item_path
+            });
+
+            // Note: I'm not adding unzipping logic here. We'll wait until
+            //       we've refactored open_item so that Puter can have a
+            //       properly-reusable open function.
+            if ( suggested_apps.length !== 0 ) {
+                launch_app({
+                    name: suggested_apps[0].name, 
+                    token: open_item_meta.token,
+                    file_path: item_path,
+                    app_obj: suggested_apps[0],
+                    window_title: path.basename(item_path),
+                    maximized: options.maximized,
+                    file_signature: open_item_meta.signature,
+                });
+                return;
+            }
+
+            await UIAlert({
+                message: 'Cannot find an app to open this file; ' +
+                    'opening directory instead.'
+            });
+            item_path = item_path.split('/').slice(0, -1).join('/')
+        }
+
+        UIWindow({
+            path: item_path,
+            title: path.basename(item_path),
+            icon: await item_icon({ is_dir: true, path: item_path }),
+            is_dir: true,
+            app: 'explorer',
+        });
     }
 }
 
@@ -1495,7 +1569,7 @@ $(document).on('click', '.user-options-menu-btn', async function (e) {
         // -------------------------------------------
         // -
         // -------------------------------------------
-        items.push('-')
+        /* items.push('-')
 
         items.push(
             {
@@ -1511,7 +1585,7 @@ $(document).on('click', '.user-options-menu-btn', async function (e) {
                     });
                 }
             },
-        )
+        ) */
 
         // -------------------------------------------
         // -

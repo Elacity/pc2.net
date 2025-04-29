@@ -427,7 +427,8 @@ const en = {
         'captcha_too_long': 'Verification code answer is too long.',
         'too_many_attempts': 'Too many attempts. Please try again later.',
         'server_timeout': 'The server took too long to respond. Please try again.',
-        'signup_error': 'An error occurred during signup. Please try again.'
+        'signup_error': 'An error occurred during signup. Please try again.',
+        wallet_address: 'Wallet Address'
     }
 };
 

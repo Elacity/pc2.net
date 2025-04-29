@@ -37,8 +37,21 @@ RUN npm cache clean --force && \
     fi; \
     done
 
+ARG NODE_ENV=production
+ARG VITE_PUTER_API_URL=http://puter.localhost:4100
+ARG VITE_PARTICLE_PROJECT_ID=your_particle_project_id
+ARG VITE_PARTICLE_CLIENT_KEY=particle_client
+ARG VITE_PARTICLE_APP_ID=your_particle_app_id
+ARG VITE_WALLETCONNECT_PROJECT_ID=your_walletconnect_project_id
+
+ENV VITE_PUTER_API_URL=${VITE_PUTER_API_URL}
+ENV VITE_PARTICLE_PROJECT_ID=${VITE_PARTICLE_PROJECT_ID}
+ENV VITE_PARTICLE_CLIENT_KEY=${VITE_PARTICLE_CLIENT_KEY}
+ENV VITE_PARTICLE_APP_ID=${VITE_PARTICLE_APP_ID}
+ENV VITE_WALLETCONNECT_PROJECT_ID=${VITE_WALLETCONNECT_PROJECT_ID}
+
 # Run the build command if necessary
-RUN cd src/gui && npm run build && cd -
+RUN npm run build
 
 # Production stage
 FROM node:23.9-alpine
@@ -46,7 +59,7 @@ FROM node:23.9-alpine
 # Set labels
 LABEL repo="https://github.com/WAUIO/pc2.net"
 LABEL license="AGPL-3.0,https://github.com/WAUIO/pc2.net/blob/master/LICENSE.txt"
-LABEL version="1.2.46-beta-1"
+LABEL version="1.2.47-elastos-1"
 
 # Install git (required by Puter to check version)
 RUN apk add --no-cache git

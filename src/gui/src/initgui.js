@@ -21,7 +21,7 @@
 import UIDesktop from './UI/UIDesktop.js'
 import UIWindow from './UI/UIWindow.js'
 import UIAlert from './UI/UIAlert.js'
-import UIWindowLogin from './UI/UIWindowLogin.js';
+import UIWindowParticleLogin from './UI/UIWindowParticleLogin.js';
 import UIWindowSignup from './UI/UIWindowSignup.js';
 import path from "./lib/path.js";
 import UIWindowSaveAccount from './UI/UIWindowSaveAccount.js';
@@ -340,10 +340,11 @@ window.initgui = async function(options){
         await UIWindowChangeUsername();
     }
     //--------------------------------------------------------------------------------------
-    // Action: Login
+    // Action: Login with Particle
     //--------------------------------------------------------------------------------------
     else if(action === 'login'){
-        await UIWindowLogin();
+        // await UIWindowParticleLogin();
+        window.location.href = '/particle-auth';
     }
     //--------------------------------------------------------------------------------------
     // Action: Signup
@@ -402,7 +403,7 @@ window.initgui = async function(options){
             // it might be their first visit to Puter on this specific device but it's not their first time ever visiting Puter.
             window.first_visit_ever = false;
             // show login progress window
-            UIWindowLoginInProgress({user_info: whoami});
+            // UIWindowLoginInProgress({user_info: whoami});
             // update auth data
             window.update_auth_data(query_param_auth_token, whoami);
         }
@@ -785,29 +786,21 @@ window.initgui = async function(options){
     // -------------------------------------------------------------------------------------
     // Un-authed but not first visit -> try to log in/sign up
     // -------------------------------------------------------------------------------------
-    if(!window.is_auth() && (!window.first_visit_ever || window.disable_temp_users)){
+    // if(!window.is_auth() && (!window.first_visit_ever || window.disable_temp_users)){
+    if(!window.is_auth()){
         if(window.logged_in_users.length > 0){
             UIWindowSessionList();
         }
         else{
-            const resp = await fetch(window.gui_origin + '/whoarewe');
-            const whoarewe = await resp.json();
-            await UIWindowLogin({
-                // show_signup_button: 
-                reload_on_success: true,
-                send_confirmation_code: false,
-                show_signup_button: ( ! whoarewe.disable_user_signup ),
-                window_options:{
-                    has_head: false
-                }
-            });
+            window.location.href = '/particle-auth';
+            // await UIWindowParticleLogin();
         }
     }
 
     // -------------------------------------------------------------------------------------
     // Un-authed and first visit ever -> create temp user
     // -------------------------------------------------------------------------------------
-    else if(!window.is_auth() && window.first_visit_ever && !window.disable_temp_users){
+    /* else if(!window.is_auth() && window.first_visit_ever && !window.disable_temp_users){
         let referrer;
         try{
             referrer = new URL(window.location.href).pathname;
@@ -851,7 +844,7 @@ window.initgui = async function(options){
                 });
             }
         });
-    }
+    } */
 
     // if there is at least one window open (only non-Explorer windows), ask user for confirmation when navigating away
     if(window.feature_flags.prompt_user_when_navigation_away_from_puter){
@@ -1333,6 +1326,9 @@ window.initgui = async function(options){
         window.auth_token = null;
         localStorage.removeItem('auth_token');
 
+        // disconnect particle under iframe 
+        localStorage.setItem('disconnect_particle', true);
+
         // close all windows
         $('.window').close();
         // close all ctxmenus
@@ -1344,7 +1340,7 @@ window.initgui = async function(options){
         // disable native browser exit confirmation
         window.onbeforeunload = null;
         // go to home page
-        window.location.replace("/");
+        window.location.replace("/particle-auth");
     });
 }
 

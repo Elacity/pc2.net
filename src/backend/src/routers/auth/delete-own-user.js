@@ -35,6 +35,11 @@ module.exports = eggspress("/delete-own-user", {
         // any way in case the auth middleware is broken.
         if ( ! user ) return false;
 
+        // wallet user does not need password verification
+        if ( user.wallet_address ) {
+            return true
+        }
+
         // temporary users don't require password verification
         if ( ! user.email && ! user.password ) {
             return true;

@@ -1706,7 +1706,7 @@ window.move_items = async function(el_items, dest_path, is_undo = false){
  * // This will refresh the desktop background according to the user's preference or defaults.
  * window.refresh_desktop_background();
  */
-window.refresh_desktop_background = function(){
+/* window.refresh_desktop_background = function(){
     if(window.user && (window.user.desktop_bg_url !== null || window.user.desktop_bg_color !== null)){
         window.set_desktop_background({
             url: window.user.desktop_bg_url,
@@ -1722,7 +1722,22 @@ window.refresh_desktop_background = function(){
             fit: 'cover',
         });
     }
-}
+} */
+
+window.refresh_desktop_background = function() {
+    if (window.user && (window.user.desktop_bg_url !== null || window.user.desktop_bg_color !== null)) {
+        window.set_desktop_background({
+            url: window.user.desktop_bg_url,
+            fit: window.user.desktop_bg_fit,
+            color: window.user.desktop_bg_color,
+        });
+    } else {
+        window.set_desktop_background({
+            color: '#171717',
+            fit: 'cover',
+        });
+    }
+};
 
 window.determine_website_url = function(fsentry_path){
     // search window.sites and if any site has `dir_path` set and the fsentry_path starts with that dir_path + '/', return the site's url + path

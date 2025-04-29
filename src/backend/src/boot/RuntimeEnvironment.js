@@ -23,6 +23,8 @@ const { print_error_help } = require("../errors/error_help_details");
 const default_config = require("./default_config");
 const config = require("../config");
 const { ConfigLoader } = require("../config/ConfigLoader");
+const dotenv = require('dotenv');
+dotenv.config();
 
 // highlights a string
 const hl = s => `\x1b[33;1m${s}\x1b[0m`;

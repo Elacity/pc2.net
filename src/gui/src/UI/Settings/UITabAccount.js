@@ -56,7 +56,7 @@ export default {
             display: flex; align-items: center; justify-content: center; background-color: #e74c3c;">${i18n('Remove Profile Picture')}</button>`; 
         h += `</div>`;
         // change password button
-        if(!window.user.is_temp){
+        if(!window.user.is_temp && !window.user.wallet_address){
             h += `<div class="settings-card">`;
                 h += `<strong>${i18n('password')}</strong>`;
                 h += `<div style="flex-grow:1;">`;
@@ -66,15 +66,27 @@ export default {
         }
 
         // change username button
-        h += `<div class="settings-card">`;
-            h += `<div>`;
-                h += `<strong style="display:block;">${i18n('username')}</strong>`;
-                h += `<span class="username" style="display:block; margin-top:5px;">${html_encode(window.user.username)}</span>`;
+        if(!window.user.username && !window.user.wallet_address){
+            h += `<div class="settings-card">`;
+                h += `<div>`;
+                    h += `<strong style="display:block;">${i18n('username')}</strong>`;
+                    h += `<span class="username" style="display:block; margin-top:5px;">${html_encode(window.user.username)}</span>`;
+                h += `</div>`;
+                h += `<div style="flex-grow:1;">`;
+                    h += `<button class="button change-username" style="float:right;">${i18n('change_username')}</button>`;
+                h += `</div>`
             h += `</div>`;
-            h += `<div style="flex-grow:1;">`;
-                h += `<button class="button change-username" style="float:right;">${i18n('change_username')}</button>`;
-            h += `</div>`
-        h += `</div>`;
+        }
+        
+        // display user wallet address
+        if(window.user.wallet_address){
+            h += `<div class="settings-card">`;
+                h += `<div>`;
+                    h += `<strong style="display:block;">${i18n('wallet_address')}</strong>`;
+                    h += `<span class="username" style="display:block; margin-top:5px;">${html_encode(window.user.wallet_address)}</span>`;
+                h += `</div>`;
+            h += `</div>`;
+        }
 
         // change email button
         if(window.user.email){

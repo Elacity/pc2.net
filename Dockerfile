@@ -7,7 +7,7 @@
 # to such changes as possible; developers shouldn't need to
 # worry about Docker unless the build/run process changes.
 
-# Build stage
+# Build stage ================================================================
 FROM node:23.9-alpine AS build
 
 # Install build dependencies
@@ -53,7 +53,7 @@ ENV VITE_WALLETCONNECT_PROJECT_ID=${VITE_WALLETCONNECT_PROJECT_ID}
 # Run the build command if necessary
 RUN npm run build
 
-# Production stage
+# Production stage ===========================================================
 FROM node:23.9-alpine
 
 # Set labels
@@ -72,6 +72,7 @@ WORKDIR /opt/puter/app
 COPY --from=build /app/src/gui/dist ./dist
 COPY --from=build /app/node_modules ./node_modules
 COPY . .
+COPY --from=build /app/src/particle-auth ./src/particle-auth
 
 # Set permissions
 RUN chown -R node:node /opt/puter/app

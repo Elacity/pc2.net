@@ -32,7 +32,9 @@
     "start=gui": "nodemon --exec \"node dev-server.js\" ",
     "start": "node ./tools/run-selfhosted.js",
     "build": "cd src/gui; node ./build.js",
-    "check-translations": "node tools/check-translations.js"
+    "prebuild": "npm run build:particle-auth",
+    "check-translations": "node tools/check-translations.js",
+    "build:particle-auth": "cd ./submodules/particle-auth && yarn install && yarn build && rm -rf ../../src/particle-auth && mv ./dist ../../src/particle-auth"
   },
   "workspaces": [
     "src/*",

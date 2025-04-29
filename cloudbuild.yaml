@@ -1,0 +1,56 @@
+# This build is used to build the project
+# by creating a container image with a full-contained
+# bundle of the codes
+steps:
+  # Ensure changes pass test 
+  - name: node:23.9-alpine
+    entrypoint: npm
+    args: ['install']
+  - name: node:23.9-alpine
+    entrypoint: npm
+    args: ['test']
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+    - 'buildx'
+    - 'create'
+    - '--name'
+    - 'multiarch-builder'
+    - '--use'
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+    - 'buildx'
+    - 'build'
+    - '--platform'
+    - '${_TARGET_ARCH}'
+    - '--builder'
+    - 'multiarch-builder'
+    - '-f'
+    - 'Dockerfile'
+    - '-t'
+    - 'us-east4-docker.pkg.dev/$PROJECT_ID/docker-repo/${_IMAGE_NAME}:$SHORT_SHA'
+    - '--push'
+    - '.'
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: update-workloads
+    entrypoint: bash
+    args:
+    - '-c'
+    - |
+      echo "=== Copy toolkit to the remote server ==="
+      mkdir -p ./deploy/bin
+      cp .google/toolkit/update-docker-image ./deploy/bin/update-docker-image
+      cp docker-compose.yml ./deploy/docker-compose.yml
+      gcloud compute scp --recurse ./deploy/* root@${_GCLOUD_COMPUTER}:/app/pc2.net
+        --project $PROJECT_ID \
+        --zone us-east4-a \
+        --force-key-file-overwrite
+      echo "=== Deploy new image ${_IMAGE_NAME}:$SHORT_SHA ==="
+      gcloud compute ssh root@${_GCLOUD_COMPUTER} \
+        --project $PROJECT_ID \
+        --zone us-east4-a \
+        --quiet \
+        --force-key-file-overwrite \
+        --command="/app/pc2.net/bin/update-docker-image puter us-east4-docker.pkg.dev/$PROJECT_ID/docker-repo/${_IMAGE_NAME}:$SHORT_SHA"
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8

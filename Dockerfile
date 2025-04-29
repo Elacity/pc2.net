@@ -29,12 +29,12 @@ RUN npm install -g mocha
 # Install node modules
 RUN npm cache clean --force && \
     for i in 1 2 3; do \
-        npm ci && break || \
-        if [ $i -lt 3 ]; then \
-            sleep 15; \
-        else \
-            exit 1; \
-        fi; \
+    npm ci && break || \
+    if [ $i -lt 3 ]; then \
+    sleep 15; \
+    else \
+    exit 1; \
+    fi; \
     done
 
 # Run the build command if necessary
@@ -44,8 +44,8 @@ RUN cd src/gui && npm run build && cd -
 FROM node:23.9-alpine
 
 # Set labels
-LABEL repo="https://github.com/HeyPuter/puter"
-LABEL license="AGPL-3.0,https://github.com/HeyPuter/puter/blob/master/LICENSE.txt"
+LABEL repo="https://github.com/WAUIO/pc2.net"
+LABEL license="AGPL-3.0,https://github.com/WAUIO/pc2.net/blob/master/LICENSE.txt"
 LABEL version="1.2.46-beta-1"
 
 # Install git (required by Puter to check version)
@@ -74,5 +74,11 @@ ENV NO_VAR_RUNTUME=1
 # Attempt to fix `lru-cache@11.0.2` missing after build stage
 # by doing a redundant `npm install` at this stage
 RUN npm install
+
+# Fix for aarch64
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "aarch64" ]; then \
+    npm install --os=linux --libc=musl --cpu=arm64 sharp; \
+    fi
 
 CMD ["npm", "start"]

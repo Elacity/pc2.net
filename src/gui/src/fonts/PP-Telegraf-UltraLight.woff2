@@ -1,0 +1,70 @@
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="preconnect" href="https://ela.elastos.io" />
+    <title>Elastos - Web3 Infrastructure Secured by Bitcoin</title>
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/images/Elastos Icon - 2.svg" />
+    <link rel="alternate icon" type="image/png" href="/images/Elastos Icon - 2.png" />
+    <link rel="apple-touch-icon" href="/images/Elastos Icon - 2.png" />
+
+    <!-- Primary Meta Tags -->
+    <meta name="title" content="Elastos - Web3 Infrastructure Secured by Bitcoin" />
+    <meta name="description" content="Elastos is building a decentralized internet infrastructure that gives users true digital ownership and privacy, secured by Bitcoin's hashpower." />
+    <meta name="keywords" content="Elastos, Web3, Blockchain, Bitcoin, Digital Identity, DID, Smart Web, Decentralized Internet, Digital Ownership, ELA, Merged Mining, BeL2" />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://elastos.org/" />
+    <meta property="og:title" content="Elastos - Web3 Infrastructure Secured by Bitcoin" />
+    <meta property="og:description" content="Elastos is building a decentralized internet infrastructure that gives users true digital ownership and privacy, secured by Bitcoin's hashpower." />
+    <meta property="og:image" content="/images/Elastosbanner.jpg" />
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:url" content="https://elastos.org/" />
+    <meta property="twitter:title" content="Elastos - Web3 Infrastructure Secured by Bitcoin" />
+    <meta property="twitter:description" content="Elastos is building a decentralized internet infrastructure that gives users true digital ownership and privacy, secured by Bitcoin's hashpower." />
+    <meta property="twitter:image" content="/images/Elastosbanner.jpg" />
+
+    <!-- Additional SEO Meta Tags -->
+    <meta name="robots" content="index, follow" />
+    <meta name="author" content="Elastos Foundation" />
+    <meta name="theme-color" content="#5C8EFF" />
+    <meta name="application-name" content="Elastos SmartWeb" />
+    <meta name="msapplication-TileColor" content="#5C8EFF" />
+    <meta name="msapplication-TileImage" content="/images/Elastos%20Icon%20-%202.png" />
+
+    <!-- Structured Data for Better SEO -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "Elastos",
+        "url": "https://elastos.org",
+        "logo": "https://elastos.org/images/Elastos%20New%20Logo_Kit-03.png",
+        "sameAs": [
+          "https://twitter.com/elastosinfo",
+          "https://github.com/elastos",
+          "https://medium.com/@elastos",
+          "https://www.youtube.com/channel/UCy5AjgpQIQq3bv8oy_L5WTQ"
+        ],
+        "description": "Elastos is building a decentralized internet infrastructure that gives users true digital ownership and privacy, secured by Bitcoin."
+      }
+    </script>
+
+    <!-- Let Vite inject its scripts after our meta tags -->
+    <script type="module" crossorigin src="/assets/index-0o3yT1UY.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/framer-motion-B-3dmUKG.js">
+    <link rel="modulepreload" crossorigin href="/assets/icons-CIfxv4Y5.js">
+    <link rel="modulepreload" crossorigin href="/assets/ui-CjgYlfhj.js">
+    <link rel="stylesheet" crossorigin href="/assets/index-BherA0kC.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

@@ -71,8 +71,88 @@
     font-weight: 900;
 }
 
+@font-face {
+    font-family: 'PP Telegraf';
+    src: url('../fonts/PPTelegraf-UltraLight.otf') format('opentype'),
+         url('../fonts/PP-Telegraf-UltraLight.woff2') format('woff2');
+    font-weight: 100;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'PP Telegraf';
+    src: url('../fonts/PPTelegraf-UltraLight.otf') format('opentype'),
+         url('../fonts/PP-Telegraf-UltraLight.woff2') format('woff2');
+    font-weight: 200;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'PP Telegraf';
+    src: url('/fonts/PPTelegraf-UltraLight.otf') format('opentype'),
+         url('/fonts/PP-Telegraf-UltraLight.woff2') format('woff2');
+    font-weight: 300;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'PP Telegraf';
+    src: url('/fonts/PPTelegraf-Regular.otf') format('opentype'),
+         url('/fonts/PP-Telegraf-Regular.woff2') format('woff2');
+    font-weight: 400;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'PP Telegraf';
+    src: url('/fonts/PPTelegraf-Regular.otf') format('opentype'),
+         url('/fonts/PP-Telegraf-Regular.woff2') format('woff2');
+    font-weight: 500;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'PP Telegraf';
+    src: url('/fonts/PPTelegraf-Regular.otf') format('opentype'),
+         url('/fonts/PP-Telegraf-Regular.woff2') format('woff2');
+    font-weight: 600;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'PP Telegraf';
+    src: url('/fonts/PPTelegraf-Regular.otf') format('opentype'),
+         url('/fonts/PP-Telegraf-Regular.woff2') format('woff2');
+    font-weight: 700;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'PP Telegraf';
+    src: url('/fonts/PPTelegraf-Regular.otf') format('opentype'),
+         url('/fonts/PP-Telegraf-Regular.woff2') format('woff2');
+    font-weight: 800;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'PP Telegraf';
+    src: url('/fonts/PPTelegraf-Regular.otf') format('opentype'),
+         url('/fonts/PP-Telegraf-Regular.woff2') format('woff2');
+    font-weight: 900;
+    font-display: swap;
+}
+
 * {
-    font-family: "Inter", "Helvetica Neue", HelveticaNeue, Helvetica, Arial, sans-serif;
+    font-family: 'PP Telegraf', monospace;
+    user-select: none;
+    font-optical-sizing: auto;
+    font-style: normal;
+    font-variation-settings: "slnt"0;
+}
+
+* {
+    font-family: 'PP Telegraf',system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue,Arial,sans-serif;
     user-select: none;
     font-optical-sizing: auto;
     font-style: normal;
@@ -80,36 +160,32 @@
 }
 
 pre {
-    font-family: "Inter", "Helvetica Neue", HelveticaNeue, Helvetica, Arial, sans-serif;
+    font-family: 'PP Telegraf',system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue,Arial,sans-serif;
 }
 
 :root {
-    --primary-hue: 210;
-    --primary-saturation: 41.18%;
-    --primary-lightness: 93.33%;
-    --primary-alpha: 0.8;
-    --primary-color: #373e44;
-    --primary-color-icon: invert(0);
-    --primary-color-sidebar-item: #fefeff;
-
+    --primary-hue: 43;
+    --primary-saturation: 0%;
+    --primary-lightness: 13%;
+    --primary-alpha: 0.92;
+    --primary-color: #ffffff;
+    --primary-color-icon: invert(1);
+    --primary-color-sidebar-item: #5a5d61aa;
     --window-head-hue: var(--primary-hue);
     --window-head-saturation: var(--primary-saturation);
     --window-head-lightness: var(--primary-lightness);
     --window-head-alpha: var(--primary-alpha);
     --window-head-color: var(--primary-color);
-
     --window-sidebar-hue: var(--primary-hue);
     --window-sidebar-saturation: var(--primary-saturation);
     --window-sidebar-lightness: var(--primary-lightness);
     --window-sidebar-alpha: calc(min(1, 0.11 + var(--primary-alpha)));
     --window-sidebar-color: var(--primary-color);
-
     --taskbar-hue: var(--primary-hue);
     --taskbar-saturation: var(--primary-saturation);
     --taskbar-lightness: var(--primary-lightness);
     --taskbar-alpha: calc(0.73 * var(--primary-alpha));
     --taskbar-color: var(--primary-color);
-
     --select-hue: 213.05;
     --select-saturation: 74.22%;
     --select-lightness: 55.88%;
@@ -125,7 +201,8 @@ body {
     background: no-repeat center center fixed;
     background-position: center;
     background-size: cover;
-    background-color: #3d4c74;
+    /* background-color: #3d4c74; */
+    background-color: #171717;
     overflow: hidden;
 }
 
@@ -793,7 +870,7 @@ span.header-sort-icon img {
 }
 
 .device-desktop .item-selected>.item-name, .device-desktop .window-body .item-selected>.item-name {
-    background-color: #3b56ee;
+    background-color: #F6921A;
     color: white;
 }
 
@@ -1029,9 +1106,9 @@ span.header-sort-icon img {
 
 .window-navbar {
     overflow: hidden;
-    border-bottom: 1px solid #e3e3e3;
+    border-bottom: 1px solid #ffffff;
     padding: 5px 0 5px 1px;
-    background-color: #fafafa;
+    background-color: #ffffff;
     height: 48px;
     box-sizing: border-box;
 }
@@ -1143,7 +1220,7 @@ span.header-sort-icon img {
 .window-body {
     width: 100%;
     height: calc(100% - 77px);
-    background-color: white;
+    background-color: #ffffff;
     overflow: auto;
 }
 
@@ -1568,9 +1645,9 @@ span.header-sort-icon img {
     position: absolute;
     overflow: hidden;
     white-space: nowrap;
-    font-family: sans-serif;
-    background: #FFF;
-    color: #333;
+    font-family: 'PP Telegraf';
+    background: #232324;
+    color: #ffffff;
     border-radius: 2px;
     padding: 3px 0;
     min-width: 200px;
@@ -1658,7 +1735,7 @@ span.header-sort-icon img {
 }
 
 .context-menu .context-menu-item-active:not(.context-menu-divider) {
-    background-color: var(--select-color);
+    background-color: #5a5d61aa;
     color: white;
 }
 
@@ -2381,7 +2458,7 @@ label {
 .taskbar-item.has-open-popover .taskbar-icon,
 .taskbar .taskbar-item.active .taskbar-icon,
 .taskbar-item.ui-sortable-helper .taskbar-icon {
-    background-color: rgb(255 255 255 / 80%) !important;
+    background-color: #5a5d61aa !important;
     transition: background-color 0.2s;
     filter: none;
 }
@@ -2771,12 +2848,13 @@ label {
  * Start
  *****************************************************/
 .launch-popover {
+    color: #ffffff;
     width: 530px;
     height: 500px;
     padding: 20px 20px 20px;
-    border: 1px solid #bbc2c9;
+    border: 1px solid #f6921a75;
     border-radius: 4px;
-    background-color: rgba(231, 238, 245, .92);
+    background-color: #232324;
     backdrop-filter: blur(3px);
     box-sizing: border-box;
     overflow-y: scroll;
@@ -2807,9 +2885,9 @@ label {
     height: 15px;
     margin-left: 5px;
     margin-right: 5px;
-    border-bottom: 1px solid #CCC;
+    border-bottom: 1px solid #f6921a75;
     padding-bottom: 10px;
-    color: #677a86;
+    color: #F6921A;
     clear: both;
 }
 
@@ -2862,7 +2940,7 @@ label {
 }
 
 .start-app:hover, .launch-app-selected .start-app {
-    background-color: #ffffff;
+    background-color: #2f2f30;
 }
 
 .start-app:active {
@@ -3164,7 +3242,7 @@ fieldset[name=number-code] {
     }
 
     .context-menu {
-        background-color: rgb(255 255 255 / 92%);
+        background-color: #232324;
         backdrop-filter: blur(3px);
     }
 
@@ -3497,7 +3575,7 @@ fieldset[name=number-code] {
 
 .puter-auth-dialog * {
     max-width: 500px;
-    font-family: "Helvetica Neue", HelveticaNeue, Helvetica, Arial, sans-serif;
+    font-family: 'PP Telegraf', "Helvetica Neue", HelveticaNeue, Helvetica, Arial, sans-serif;
 }
 
 .puter-auth-dialog p.about {
@@ -4656,8 +4734,9 @@ fieldset[name=number-code] {
     position: sticky;
     top: -20px;
     z-index: 1;
-    background: rgba(231, 238, 245);
+    background: #2f2f30;
     padding-top: 7px;
+    border-radius: 6px;
 }
 
 .device-phone .launch-search-wrapper {

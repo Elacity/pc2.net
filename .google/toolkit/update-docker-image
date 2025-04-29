@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+# ---------------------------------------------------------------------
+# This command-line is intended to update a service by incrementing the
+# docker image tag.
+#
+# Basic usage:
+#  > update a service
+#     ./bin/update-docker-image <service> <image-full-with-tag>
+# ---------------------------------------------------------------------
+# Developer notes
+# This commnand the BNU enhanced version of `getopt`, which should be
+# basically installed on recent linux system
+# On macos you need install it manually
+# ```
+# $ brew install gnu-getopt
+# ```
+# After installation, make sure it get used, ensure to add it to ~/.bashrc
+# ---------------------------------------------------------------------
+
+set -e
+
+# Get the directory where the script is located
+SCRIPT_DIR="$(dirname "$(dirname "$(realpath "$0")")")"
+cd "$SCRIPT_DIR"
+
+# basic compose
+detach="no"
+compose="$(which docker) compose"
+
+current_file="docker-compose.yml"
+VALID_ARGS=$(getopt -o c:h --long help,dry,current: -- "$@")
+eval set -- "$VALID_ARGS"
+
+while [ : ]; do
+  case "$1" in
+    -c | --current)
+      current_file="$2"
+      shift 2
+      ;;
+    -d | --dry)
+      dry="yes"
+      shift
+      ;;
+    -h | --help)
+      echo "Usage: $0 [options]"
+      echo "Options:"
+      echo "  -c, --current <file>  Use a custom current.yaml file"
+      exit 0
+      ;;
+    --)
+      shift
+      break
+      ;;
+  esac
+done
+
+echo "Updating service $1 to $2, $current_file"
+
+# check if current.yaml exists
+if [ -f "$current_file" ]; then
+  compose+=" -f $current_file"
+fi
+
+tmp_file=$(mktemp)
+touch $tmp_file
+
+# update the `current.yaml` manifest to use the new image of the selected service
+$compose -f <(cat <<EOF
+services:
+  $1:
+    image: "$2"
+EOF
+) config > $tmp_file
+
+# re-run the compose
+if [ "$dry" = "yes" ]; then
+  $(which docker) compose -f $tmp_file config
+  rm -f $tmp_file
+else
+  cp $current_file $current_file.bak
+  mv $tmp_file $current_file
+  $compose up -d
+fi

@@ -1,20 +1,20 @@
 const APIError = require("../../api/APIError");
 const BaseService = require("../../services/BaseService");
 
-class IPGeoService extends BaseService {
+class NewsDataService extends BaseService {
     async ['__on_driver.register.interfaces'] () {
         const svc_registry = this.services.get('registry');
         const col_interfaces = svc_registry.get('interfaces');
         
-        col_interfaces.set('ipgeo', {
-            description: 'IP Geolocation',
+        col_interfaces.set('newsdata', {
+            description: 'NewsData.io',
             methods: {
-                ipgeo: {
+                newsdata: {
                     description: 'Report geolocation information',
-                    default_parameter: 'ip',
+                    default_parameter: 'q',
                     parameters: {
-                        ip: {
-                            type: 'string',
+                        '*': {
+                            type: 'json',
                         },
                     },
                     result: {
@@ -26,8 +26,10 @@ class IPGeoService extends BaseService {
     }
     
     static IMPLEMENTS = {
-        ipgeo: {
-            async ipgeo ({ ip }) {
+        newsdata: {
+            async newsdata (parameters) {
+                const cost_per_article =
+                    this.config.cost_per_article ?? 13000;
                 // doing this makes vscode recognize what's being required
                 const require = this.require;
 
@@ -35,31 +37,32 @@ class IPGeoService extends BaseService {
                 const querystring = require('querystring');
                 
                 const qstr = querystring.stringify({
+                    ...parameters,
+
                     // Yep, API key reall does go in the query string.
                     // This is what the docs say to do.
-                    apiKey: this.config.apiKey,
-                    
-                    ip,
+                    apikey: this.config.apiKey,
+                    size: 10,
                 });
                 
+                const resp = await axios.request({
+                    method: 'GET',
+                    url: 'https://newsdata.io/api/1/latest?' + qstr,
+                });
+                
+                const amount_articles = resp.data.results.length;
+
                 {
-                    const microcents_per_request = this.config.microcents_per_request
-                        ?? 7000;
+                    const cost = amount_articles * cost_per_article;
                     const svc_cost = this.services.get('cost');
                     const usageAllowed = await svc_cost.get_funding_allowed({
-                        minimum: microcents_per_request,
+                        minimum: cost,
                     });
                     if ( ! usageAllowed ) {
                         throw APIError.create('insufficient_funds');
                     }
-                    await svc_cost.record_cost({ cost: microcents_per_request });
+                    await svc_cost.record_cost({ cost });
                 }
-
-                
-                const resp = await axios.request({
-                    method: 'GET',
-                    url:  'https://api.ipgeolocation.io/ipgeo?' + qstr,
-                });
                 
                 return resp.data;
             }
@@ -68,5 +71,5 @@ class IPGeoService extends BaseService {
 }
 
 module.exports = {
-    IPGeoService,
+    NewsDataService,
 };

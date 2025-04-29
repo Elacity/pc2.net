@@ -5,10 +5,9 @@ services:
     container_name: puter
     image: ghcr.io/heyputer/puter:latest
     pull_policy: always
-    # build: ./
     restart: unless-stopped
     ports:
-      - '4100:4100'
+      - "4100:4100"
     environment:
       # TZ: Europe/Paris
       # CONFIG_PATH: /etc/puter

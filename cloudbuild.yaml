@@ -40,7 +40,7 @@ steps:
       mkdir -p ./deploy/bin
       cp .google/toolkit/update-docker-image ./deploy/bin/update-docker-image
       cp docker-compose.yml ./deploy/docker-compose.yml
-      gcloud compute scp --recurse ./deploy/* root@${_GCLOUD_COMPUTER}:/app/pc2.net
+      gcloud compute scp --recurse ./deploy/* root@${_GCLOUD_COMPUTER}:/app/pc2.net \
         --project $PROJECT_ID \
         --zone us-east4-a \
         --force-key-file-overwrite

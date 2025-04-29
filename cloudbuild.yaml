@@ -2,6 +2,8 @@
 # by creating a container image with a full-contained
 # bundle of the codes
 steps:
+  - name: gcr.io/cloud-builders/git
+    args: ['submodule', 'update', '--init', '--recursive']
   # Ensure changes pass test 
   - name: node:23.9-alpine
     entrypoint: npm
@@ -26,6 +28,16 @@ steps:
     - 'multiarch-builder'
     - '-f'
     - 'Dockerfile'
+    - '--build-arg'
+    - 'VITE_PUTER_API_URL=${_VITE_PUTER_API_URL}'
+    - '--build-arg'
+    - 'VITE_PARTICLE_PROJECT_ID=${_VITE_PARTICLE_PROJECT_ID}'
+    - '--build-arg'
+    - 'VITE_PARTICLE_CLIENT_KEY=${_VITE_PARTICLE_CLIENT_KEY}'
+    - '--build-arg'
+    - 'VITE_PARTICLE_APP_ID=${_VITE_PARTICLE_APP_ID}'
+    - '--build-arg'
+    - 'VITE_WALLETCONNECT_PROJECT_ID=${_VITE_WALLETCONNECT_PROJECT_ID}'
     - '-t'
     - 'us-east4-docker.pkg.dev/$PROJECT_ID/docker-repo/${_IMAGE_NAME}:$SHORT_SHA'
     - '--push'

@@ -40,13 +40,15 @@ $(window).on('ctxmenu-will-open', (event) => {
         
         // 'contact_us' not found, append new items at the end
         if (insertBeforeIndex === -1) {
-            event.detail.options.items = [...items, ...newMenuItems];
+            // event.detail.options.items = [...items, ...newMenuItems];
+            event.detail.options.items = [...items];
             return;
         }
 
         // 'contact_us' found, insert new items before it
         const firstHalf = items.slice(0, insertBeforeIndex);
         const secondHalf = items.slice(insertBeforeIndex);
-        event.detail.options.items = [...firstHalf, ...newMenuItems, ...secondHalf];
+        // event.detail.options.items = [...firstHalf, ...newMenuItems, ...secondHalf];
+        event.detail.options.items = [...firstHalf, ...secondHalf];
     }
 });

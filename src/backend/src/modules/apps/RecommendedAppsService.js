@@ -28,9 +28,10 @@ const get_apps = async ({ specifiers }) => {
 
 class RecommendedAppsService extends BaseService {
     static APP_NAMES = [
-        'app-center',
-        'dev-center',
         'editor',
+        'terminal',
+        /* 'app-center',
+        'dev-center',
         'code',
         'camera',
         'recorder',
@@ -40,7 +41,6 @@ class RecommendedAppsService extends BaseService {
         'judge0',
         'viewer',
         'solitaire-frvr',
-        'terminal',
         'tiles-beat',
         'draw',
         'silex',
@@ -69,7 +69,7 @@ class RecommendedAppsService extends BaseService {
         'turbo-racing',
         'guns-and-bottles',
         'tronix',
-        'jewel-classic',
+        'jewel-classic', */
     ];
 
     _construct () {

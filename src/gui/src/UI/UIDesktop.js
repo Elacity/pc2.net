@@ -1056,7 +1056,7 @@ async function UIDesktop(options) {
     // we don't need to get the desktop items if we're in embedded or fullpage mode
     // because the items aren't visible anyway and we don't need to waste bandwidth/server resources
     //-------------------------------------------
-    if (!window.is_embedded && !window.is_fullpage_mode) {
+    /* if (!window.is_embedded && !window.is_fullpage_mode) {
         refresh_item_container(el_desktop, { fadeInItems: true })
 
         // Show welcome window if user hasn't already seen it and hasn't directly navigated to an app 
@@ -1071,7 +1071,7 @@ async function UIDesktop(options) {
                 }, 1000);
             }
         }
-    }
+    } */
 
     // -------------------------------------------
     // Selectable
@@ -1626,13 +1626,13 @@ $(document).on('click', '.user-options-menu-btn', async function (e) {
             //--------------------------------------------------
             // My Websites
             //--------------------------------------------------
-            {
+            /* {
                 html: i18n('my_websites'),
                 id: 'my_websites',
                 onClick: async function () {
                     UIWindowMyWebsites();
                 }
-            },
+            }, */
             //--------------------------------------------------
             // Task Manager
             //--------------------------------------------------
@@ -1646,13 +1646,13 @@ $(document).on('click', '.user-options-menu-btn', async function (e) {
             //--------------------------------------------------
             // Contact Us
             //--------------------------------------------------
-            {
+            /* {
                 html: i18n('contact_us'),
                 id: 'contact_us',
                 onClick: async function () {
                     UIWindowFeedback();
                 }
-            },
+            },*/
             // -------------------------------------------
             // -
             // -------------------------------------------

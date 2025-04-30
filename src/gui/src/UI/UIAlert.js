@@ -143,7 +143,8 @@ function UIAlert(options) {
             body_css: {
                 width: 'initial',
                 padding: '20px',
-                'background-color': 'rgba(231, 238, 245, .95)',
+                // 'background-color': 'rgba(231, 238, 245, .95)',
+                'background-color': '#5a5d61aa',
                 'backdrop-filter': 'blur(3px)',
             }
         });

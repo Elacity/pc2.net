@@ -98,6 +98,10 @@ config.puter_hosted_data = {
 // config.reserved_words = reserved_words;
 config.reserved_words = [];
 
+{
+    config.reserved_words.push(...require('./config/reserved_words'));
+}
+
 // set default S3 settings for this server, if any
 if (config.server_id) {
 	// see if this server has a specific bucket
@@ -203,8 +207,6 @@ const config_pointer = {};
             if (prop in target) {
                 return target[prop];
             } else {
-                // console.log('implied', prop,
-                //     'to', get_implied(config_to_export, prop));
                 return get_implied(config_to_export, prop);
             }
         }
@@ -228,7 +230,6 @@ const config_pointer = {};
                 '\x1B[36;1mCONFIGURATION MUTATED AT RUNTIME\x1B[0m',
                 prop, 'to', value
             );
-            // console.log(new Error('stack trace to find configuration mutation'));
             target[prop] = value;
             return true;
         }

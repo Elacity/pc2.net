@@ -28,7 +28,7 @@
     "webpack-cli": "^5.1.1"
   },
   "scripts": {
-    "test": "npx mocha src/phoenix/test && node src/backend/tools/test",
+    "test": "npx mocha src/phoenix/test && npx vitest run src/backend && node src/backend/tools/test",
     "start=gui": "nodemon --exec \"node dev-server.js\" ",
     "start": "node ./tools/run-selfhosted.js",
     "build": "cd src/gui; node ./build.js",
@@ -50,16 +50,19 @@
   },
   "dependencies": {
     "@heyputer/putility": "^1.0.2",
+    "@paralleldrive/cuid2": "^2.2.2",
     "dedent": "^1.5.3",
     "ioredis": "^5.6.0",
     "javascript-time-ago": "^2.5.11",
     "json-colorizer": "^3.0.1",
     "open": "^10.1.0",
-    "sharp": "^0.33.5",
-    "sharp-bmp": "^0.1.5",
-    "sharp-ico": "^0.1.5",
     "simple-git": "^3.25.0",
     "string-template": "^1.0.0",
     "uuid": "^9.0.1"
+  },
+  "optionalDependencies": {
+    "sharp": "^0.34.3",
+    "sharp-bmp": "^0.1.5",
+    "sharp-ico": "^0.1.5"
   }
 }

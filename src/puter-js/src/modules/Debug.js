@@ -14,12 +14,12 @@ export class Debug {
         enabled_logs = enabled_logs.split(';');
         for ( const category of enabled_logs ) {
             if ( category === '' ) continue;
-            this.context.puter.log.on(category);
+            this.context.puter.logger.on(category);
         }
 
-        window.addEventListener('message', async e => {
+        globalThis.addEventListener('message', async e => {
             // Ensure message is from parent window
-            if ( e.source !== window.parent ) return;
+            if ( e.source !== globalThis.parent ) return;
             // (parent window is allowed to be anything)
 
             // Check if it's a debug message
@@ -32,7 +32,7 @@ export class Debug {
 
             if ( e.data.cmd === 'log.on' ) {
                 console.log('Got instruction to turn logs on!');
-                this.context.puter.log.on(e.data.category);
+                this.context.puter.logger.on(e.data.category);
             }
         })
     }

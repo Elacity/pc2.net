@@ -22,6 +22,8 @@ const Library = require("./definitions/Library");
 const { NotificationES } = require("./om/entitystorage/NotificationES");
 const { ProtectedAppES } = require("./om/entitystorage/ProtectedAppES");
 const { Context } = require('./util/context');
+const { LLOWrite } = require("./filesystem/ll_operations/ll_write");
+const { LLRead } = require("./filesystem/ll_operations/ll_read");
 
 
 
@@ -35,8 +37,8 @@ const { Context } = require('./util/context');
  * and Core2Module will take on its name.
  */
 class CoreModule extends AdvancedBase {
-    dirname () { return __dirname; }
-    async install (context) {
+    dirname() { return __dirname; }
+    async install(context) {
         const services = context.get('services');
         const app = context.get('app');
         const useapi = context.get('useapi');
@@ -54,7 +56,7 @@ class CoreModule extends AdvancedBase {
     * @param {Object} context.services - Service registry for registering legacy services
     * @returns {Promise<void>} Resolves when legacy services are installed
     */
-    async install_legacy (context) {
+    async install_legacy(context) {
         const services = context.get('services');
         await install_legacy({ services });
     }
@@ -79,24 +81,39 @@ const install = async ({ services, app, useapi, modapi }) => {
         def('core.util.helpers', require('./helpers'));
         def('core.util.permission', require('./services/auth/PermissionService').PermissionUtil);
         def('puter.middlewares.auth', require('./middleware/auth2'));
+        def('puter.middlewares.configurable_auth', require('./middleware/configurable_auth'));
         def('puter.middlewares.anticsrf', require('./middleware/anticsrf'));
-        
+
         def('core.APIError', require('./api/APIError'));
-        
+
         def('core', require('./services/auth/Actor'), { assign: true });
         def('core.config', config);
+
+        // Note: this is an incomplete export; it was added for a proprietary
+        // extension. Contributors may wish to add definitions in the 'fs.'
+        // scope. Needing to add these individually is possibly a symptom of an
+        // anti-pattern; "export filesystem operations to extensions" is one
+        // statement in English, so maybe it should be one statement of code.
+        def('core.fs', {
+            LLOWrite,
+            LLRead,
+        });
+        def('core.fs.selectors', require('./filesystem/node/selectors'));
+        def('core.util.stream', require('./util/streamutil'));
+        def('web', require('./util/expressutil'));
+        def('core.validation', require('@heyputer/backend-core-0').validation);
     });
-    
+
     useapi.withuse(() => {
         const ArrayUtil = require('./libraries/ArrayUtil');
         services.registerService('util-array', ArrayUtil);
-    
+
         const LibTypeTagged = require('./libraries/LibTypeTagged');
         services.registerService('lib-type-tagged', LibTypeTagged);
     });
 
     modapi.libdir('core.util', './util');
-    
+
     // === SERVICES ===
 
     // /!\ IMPORTANT /!\
@@ -195,7 +212,7 @@ const install = async ({ services, app, useapi, modapi }) => {
 
     const { InformationService } = require('./services/information/InformationService');
     services.registerService('information', InformationService)
-    
+
     const { FilesystemService } = require('./filesystem/FilesystemService');
     services.registerService('filesystem', FilesystemService);
 
@@ -224,7 +241,7 @@ const install = async ({ services, app, useapi, modapi }) => {
     })
     services.registerService('rate-limit', RateLimitService);
 
-    if(config.auth_system === 'particle') {
+    if (config.auth_system === 'particle') {
         services.registerService('auth', ParticleAuthService);
     } else {
         services.registerService('auth', AuthService);
@@ -251,7 +268,7 @@ const install = async ({ services, app, useapi, modapi }) => {
     });
     services.registerService('__refresh-assocs', RefreshAssociationsService);
     services.registerService('__prod-debugging', MakeProdDebuggingLessAwfulService);
-    if ( config.env == 'dev' ) {
+    if (config.env == 'dev') {
         services.registerService('dev-console', DevConsoleService);
     }
 
@@ -308,31 +325,31 @@ const install = async ({ services, app, useapi, modapi }) => {
 
     const { ScriptService } = require('./services/ScriptService');
     services.registerService('script', ScriptService);
-    
+
     const { NotificationService } = require('./services/NotificationService');
     services.registerService('notification', NotificationService);
 
     const { ShareService } = require('./services/ShareService');
     services.registerService('share', ShareService);
-    
+
     const { GroupService } = require('./services/auth/GroupService');
     services.registerService('group', GroupService);
 
     const { VirtualGroupService } = require('./services/auth/VirtualGroupService');
     services.registerService('virtual-group', VirtualGroupService);
-    
+
     const { PermissionAPIService } = require('./services/PermissionAPIService');
     services.registerService('__permission-api', PermissionAPIService);
 
     const { AnomalyService } = require('./services/AnomalyService');
     services.registerService('anomaly', AnomalyService);
-    
+
     const { HelloWorldService } = require('./services/HelloWorldService');
     services.registerService('hello-world', HelloWorldService);
-    
+
     const { SystemDataService } = require('./services/SystemDataService');
     services.registerService('system-data', SystemDataService);
-    
+
     const { SUService } = require('./services/SUService');
     services.registerService('su', SUService);
 
@@ -356,7 +373,7 @@ const install = async ({ services, app, useapi, modapi }) => {
 
     const { ReferralCodeService } = require('./services/ReferralCodeService');
     services.registerService('referral-code', ReferralCodeService);
-    
+
     const { UserService } = require('./services/UserService');
     services.registerService('user', UserService);
 
@@ -368,7 +385,7 @@ const install = async ({ services, app, useapi, modapi }) => {
 
     const { PerformanceMonitor } = require('./monitor/PerformanceMonitor');
     services.registerService('performance-monitor', PerformanceMonitor);
-    
+
     const { WispService } = require('./services/WispService');
     services.registerService('wisp', WispService);
 
@@ -380,6 +397,12 @@ const install = async ({ services, app, useapi, modapi }) => {
 
     const { ChatAPIService } = require('./services/ChatAPIService');
     services.registerService('__chat-api', ChatAPIService);
+
+    const { WorkerService } = require('./services/worker/WorkerService');
+    services.registerService("worker-service", WorkerService)
+
+    const { PermissionShortcutService } = require('./services/auth/PermissionShortcutService');
+    services.registerService('permission-shortcut', PermissionShortcutService);
 }
 
 const install_legacy = async ({ services }) => {

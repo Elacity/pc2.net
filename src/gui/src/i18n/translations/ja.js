@@ -162,10 +162,6 @@ const ja = {
         log_out: 'ログアウト',
         looks_good: "ナイス！",
         manage_sessions: "セッションを管理",
-        menubar_style: "メニューバースタイル",
-        menubar_style_desktop: "デスクトップ",
-        menubar_style_system: "システム",
-        menubar_style_window: "ウィンドウ",
         modified: '変更日時',
         move: '移動',
         moving_file: "移動中 %%",
@@ -380,6 +376,7 @@ const ja = {
         "billing.subscription_cancelled_description": "この請求期間の終了までサブスクリプションを利用できます。", // In English: "You will still have access to your subscription until the end of this billing period."
         "billing.offering.free": "無料", // In English: "Free"
         "billing.offering.pro": "プロフェッショナル", // In English: "Professional"
+        "billing.offering.professional": "プロフェッショナル", // In English: "Professional"
         "billing.offering.business": "ビジネス", // In English: "Business"
         "billing.cloud_storage": "クラウドストレージ", // In English: "Cloud Storage"
         "billing.ai_access": "AIアクセス", // In English: "AI Access"

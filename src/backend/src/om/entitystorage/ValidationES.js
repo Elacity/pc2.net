@@ -16,10 +16,11 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-const { AdvancedBase } = require("@heyputer/putility");
 const { BaseES } = require("./BaseES");
 
 const APIError = require("../../api/APIError");
+const { Context } = require("../../util/context");
+const { SKIP_ES_VALIDATION } = require("./consts");
 
 class ValidationES extends BaseES {
     async _on_context_provided () {
@@ -62,7 +63,7 @@ class ValidationES extends BaseES {
             return await out_entity.get_client_safe();
         },
         async validate_ (entity, diff) {
-            const processed = {};
+            if ( Context.get(SKIP_ES_VALIDATION) ) return;
 
             for ( const prop of Object.values(this.om.properties) ) {
                 let value = await entity.get(prop.name);
@@ -97,8 +98,6 @@ class ValidationES extends BaseES {
                     }
                     throw e;
                 }
-
-                processed[prop.name] = value;
             }
 
         },

@@ -1,4 +1,4 @@
-import * as utils from '../lib/utils.js'
+import * as utils from '../lib/utils.js';
 
 class AI{
     /**
@@ -130,27 +130,89 @@ class AI{
         if(!args){
             throw({message: 'Arguments are required', code: 'arguments_required'});
         }
+        
+        // Accept arguments in the following formats:
+        // 1. Shorthand API
+        //      puter.ai.txt2speech("Hello world")
+        // 2. Verbose API
+        //      puter.ai.txt2speech("Hello world", {
+        //           voice: "Joanna",
+        //           engine: "neural",
+        //           language: "en-US"
+        //      })
+        // 3. Positional arguments (Legacy)
+        //      puter.ai.txt2speech(<text>, <language>, <voice>, <engine>)
+        //      e.g:
+        //      puter.ai.txt2speech("Hello world", "en-US")
+        //      puter.ai.txt2speech("Hello world", "en-US", "Joanna")
+        //      puter.ai.txt2speech("Hello world", "en-US", "Joanna", "neural")
+        // 
+        // Undefined parameters will be set to default values:
+        // - voice: "Joanna"
+        // - engine: "standard"
+        // - language: "en-US"
 
-        // if argument is string transform it to the object that the API expects
+
         if (typeof args[0] === 'string') {
             options = { text: args[0] };
         }
 
-        // if second argument is string, it's the language
-        if (args[1] && typeof args[1] === 'string') {
+        if (args[1] && typeof args[1] === 'object' && !Array.isArray(args[1])) {
+            // for verbose object API
+            Object.assign(options, args[1]);
+        } else if (args[1] && typeof args[1] === 'string') {
+            // for legacy positional-arguments API
+            // 
+            // puter.ai.txt2speech(<text>, <language>, <voice>, <engine>)
             options.language = args[1];
+            
+            if (args[2] && typeof args[2] === 'string') {
+                options.voice = args[2];
+            }
+            
+            if (args[3] && typeof args[3] === 'string') {
+                options.engine = args[3];
+            }
+        } else if (args[1] && typeof args[1] !== 'boolean') {
+            // If second argument is not an object, string, or boolean, throw an error
+            throw { message: 'Second argument must be an options object or language string. Use: txt2speech("text", { voice: "name", engine: "type", language: "code" }) or txt2speech("text", "language", "voice", "engine")', code: 'invalid_arguments' };
+        }
+
+        // Validate required text parameter
+        if (!options.text) {
+            throw { message: 'Text parameter is required', code: 'text_required' };
+        }
+
+        // Validate engine if provided
+        if (options.engine) {
+            const validEngines = ['standard', 'neural', 'long-form', 'generative'];
+            if (!validEngines.includes(options.engine)) {
+                throw { message: 'Invalid engine. Must be one of: ' + validEngines.join(', '), code: 'invalid_engine' };
+            }
+        }
+
+        // Set default values if not provided
+        if (!options.voice) {
+            options.voice = 'Joanna';
+        }
+        if (!options.engine) {
+            options.engine = 'standard';
+        }
+        if (!options.language) {
+            options.language = 'en-US';
         }
 
         // check input size
-        if (options.text.length > this.MAX_INPUT_SIZE) {
+        if (options.text.length > MAX_INPUT_SIZE) {
             throw { message: 'Input size cannot be larger than ' + MAX_INPUT_SIZE, code: 'input_too_large' };
         }
 
-        // determine if test mode is enabled
-        if (typeof args[1] === 'boolean' && args[1] === true ||
-            typeof args[2] === 'boolean' && args[2] === true ||
-            typeof args[3] === 'boolean' && args[3] === true) {
-            testMode = true;
+        // determine if test mode is enabled (check all arguments for boolean true)
+        for (let i = 0; i < args.length; i++) {
+            if (typeof args[i] === 'boolean' && args[i] === true) {
+                testMode = true;
+                break;
+            }
         }
     
         return await utils.make_driver_method(['source'], 'puter-tts', 'aws-polly', 'synthesize', {
@@ -165,6 +227,35 @@ class AI{
             }
         }).call(this, options);
     }
+
+    // Add new methods for TTS engine management
+    txt2speech = Object.assign(this.txt2speech, {
+        /**
+         * List available TTS engines with pricing information
+         * @returns {Promise<Array>} Array of available engines
+         */
+        listEngines: async () => {
+            return await utils.make_driver_method(['source'], 'puter-tts', 'aws-polly', 'list_engines', {
+                responseType: 'text',
+            }).call(this, {});
+        },
+
+        /**
+         * List all available voices, optionally filtered by engine
+         * @param {string} [engine] - Optional engine filter
+         * @returns {Promise<Array>} Array of available voices
+         */
+        listVoices: async (engine) => {
+            const params = {};
+            if (engine) {
+                params.engine = engine;
+            }
+
+            return utils.make_driver_method(['source'], 'puter-tts', 'aws-polly', 'list_voices', {
+                responseType: 'text',
+            }).call(this, params);
+        }
+    });
 
 
     // accepts either a string or an array of message objects
@@ -294,6 +385,12 @@ class AI{
         if( requestParams.model === 'claude-3-7-sonnet' || requestParams.model === 'claude'){
             requestParams.model = 'claude-3-7-sonnet-latest';
         }
+        if( requestParams.model === 'claude-sonnet-4' || requestParams.model === 'claude-sonnet-4-latest'){
+            requestParams.model = 'claude-sonnet-4-20250514';
+        }
+        if( requestParams.model === 'claude-opus-4' || requestParams.model === 'claude-opus-4-latest') {
+            requestParams.model = 'claude-opus-4-20250514';
+        }
         if ( requestParams.model === 'mistral' ) {
             requestParams.model = 'mistral-large-latest';
         }
@@ -305,7 +402,7 @@ class AI{
         }
 
         // o1-mini to openrouter:openai/o1-mini
-        if ( requestParams.model === 'o1-mini' || requestParams.model === 'o1-pro' ) {
+        if ( requestParams.model === 'o1-mini') {
             requestParams.model = 'openrouter:openai/o1-mini';
         }
 
@@ -320,8 +417,9 @@ class AI{
         //      google/
         //      deepseek/
         //      x-ai/
+        //      qwen/
         // prepend it with openrouter:
-        if ( requestParams.model.startsWith('meta-llama/') || requestParams.model.startsWith('google/') || requestParams.model.startsWith('deepseek/') || requestParams.model.startsWith('x-ai/') ) {
+        if ( requestParams.model.startsWith('meta-llama/') || requestParams.model.startsWith('google/') || requestParams.model.startsWith('deepseek/') || requestParams.model.startsWith('x-ai/') || requestParams.model.startsWith('qwen/') ) {
             requestParams.model = 'openrouter:' + requestParams.model;
         }
 
@@ -329,16 +427,12 @@ class AI{
         if (!requestParams.model || requestParams.model.startsWith('gpt-')) {
             driver = 'openai-completion';
         }else if(
-            requestParams.model === 'claude-3-haiku-20240307' ||
-            requestParams.model === 'claude-3-5-sonnet-20240620' ||
-            requestParams.model === 'claude-3-5-sonnet-20241022' ||
-            requestParams.model === 'claude-3-5-sonnet-latest' ||
-            requestParams.model === 'claude-3-7-sonnet-latest'
+            requestParams.model.startsWith('claude-')
         ){
             driver = 'claude';
         }else if(requestParams.model === 'meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo' || requestParams.model === 'meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo' || requestParams.model === 'meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo' || requestParams.model === `google/gemma-2-27b-it`){
             driver = 'together-ai';
-        }else if(requestParams.model === 'mistral-large-latest' || requestParams.model === 'codestral-latest'){
+        }else if(requestParams.model.startsWith('mistral-') || requestParams.model.startsWith('codestral-') || requestParams.model.startsWith('pixtral-') || requestParams.model.startsWith('magistral-') || requestParams.model.startsWith('devstral-') || requestParams.model.startsWith('mistral-ocr-') || requestParams.model.startsWith('open-mistral-')){
             driver = 'mistral';
         }else if([
             "distil-whisper-large-v3-en",
@@ -357,6 +451,9 @@ class AI{
             driver = 'groq';
         }else if(requestParams.model === 'grok-beta') {
             driver = 'xai';
+        }
+        else if(requestParams.model.startsWith('grok-')){
+            driver = 'openrouter';
         }
         else if(
             requestParams.model === 'deepseek-chat' ||

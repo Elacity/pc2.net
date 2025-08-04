@@ -26,7 +26,6 @@ const StringParam = require('../../api/filesystem/StringParam');
 const FlagParam = require("../../api/filesystem/FlagParam");
 const UserParam = require('../../api/filesystem/UserParam');
 const FSNodeContext = require('../FSNodeContext');
-const { ContextAwareFeature } = require('../../traits/ContextAwareFeature');
 const { OtelFeature } = require('../../traits/OtelFeature');
 const { HLFilesystemOperation } = require('./definitions');
 const { is_valid_path } = require('../validation');
@@ -272,14 +271,33 @@ class HLMkdir extends HLFilesystemOperation {
             });
         }
 
+        // Unify the following formats:
+        // - full path: {"path":"/foo/bar", args...}, used by apitest (./tools/api-tester/apitest.js)
+        // - parent + path: {"parent": "/foo", "path":"bar", args...}, used by puter-js (puter.fs.mkdir("/foo/bar"))
+        if ( !values.parent && values.path ) {
+            values.parent = await fs.node(new NodePathSelector(_path.dirname(values.path)));
+            values.path = _path.basename(values.path);
+        }
+
         let parent_node = values.parent || await fs.node(new RootNodeSelector());
         console.log('USING PARENT', parent_node.selector.describe());
+
         let target_basename = _path.basename(values.path);
 
+        // "top_parent" is the immediate parent of the target directory
+        // (e.g: /home/foo/bar -> /home/foo)
         const top_parent = values.create_missing_parents
             ? await this._create_top_parent({ top_parent: parent_node })
             : await this._get_existing_top_parent({ top_parent: parent_node })
             ;
+
+        // TODO: this can be removed upon completion of: https://github.com/HeyPuter/puter/issues/1352
+        if ( top_parent.isRoot ) {
+            // root directory is read-only
+            throw APIError.create('forbidden', null, {
+                message: 'Cannot create directories in the root directory.'
+            });
+        }
 
         // `parent_node` becomes the parent of the last directory name
         // specified under `path`.

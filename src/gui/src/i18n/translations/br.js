@@ -162,10 +162,6 @@ const br = {
     log_out: 'Sair',
     looks_good: "Parece bom!",
     manage_sessions: "Gerenciar Sessões",
-    menubar_style: "Estilo da Barra de Menus",
-    menubar_style_desktop: "Área de Trabalho",
-    menubar_style_system: "Sistema",
-    menubar_style_window: "Janela",
     modified: 'Modificado',
     move: 'Mover',
     moving_file: "Movendo %%",
@@ -377,6 +373,7 @@ const br = {
     "billing.subscription_cancelled_description": "Você ainda terá acesso a sua assinatura até finalizar o período pago", // In English: "You will still have access to your subscription until the end of this billing period."
     "billing.offering.free": "Grátis", // In English: "Free"
     "billing.offering.pro": "Profissional", // In English: "Professional"
+    "billing.offering.professional": "Profissional", // In English: "Professional"
     "billing.offering.business": "Business", // In English: "Business"
     "billing.cloud_storage": "Armazenamento em Nuvem", // In English: "Cloud Storage"
     "billing.ai_access": "Acesso à IA", // In English: "AI Access"

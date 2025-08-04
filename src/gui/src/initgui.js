@@ -33,7 +33,6 @@ import UIWindowRequestPermission from './UI/UIWindowRequestPermission.js';
 import UIWindowChangeUsername from './UI/UIWindowChangeUsername.js';
 import update_last_touch_coordinates from './helpers/update_last_touch_coordinates.js';
 import update_title_based_on_uploads from './helpers/update_title_based_on_uploads.js';
-import PuterDialog from './UI/PuterDialog.js';
 import { ThemeService } from './services/ThemeService.js';
 import { BroadcastService } from './services/BroadcastService.js';
 import { ProcessService } from './services/ProcessService.js';
@@ -227,6 +226,14 @@ window.initgui = async function(options){
     await launch_services(options);
 
     //--------------------------------------------------------------------------------------
+    // Is attempt_temp_user_creation?
+    // i.e. https://puter.com/?attempt_temp_user_creation=true
+    //--------------------------------------------------------------------------------------
+    if(window.url_query_params.has('attempt_temp_user_creation') && (window.url_query_params.get('attempt_temp_user_creation') === 'true' || window.url_query_params.get('attempt_temp_user_creation') === '1')){
+        window.attempt_temp_user_creation = true;
+    }
+
+    //--------------------------------------------------------------------------------------
     // Is GUI embedded in a popup?
     // i.e. https://puter.com/?embedded_in_popup=true
     //--------------------------------------------------------------------------------------
@@ -249,7 +256,7 @@ window.initgui = async function(options){
         // this is the referrer in terms of user acquisition
         window.referrerStr = window.openerOrigin;
 
-        if(action === 'sign-in' && !window.is_auth()){
+        if(action === 'sign-in' && !window.is_auth() && !(window.attempt_temp_user_creation && window.first_visit_ever)){
             // show signup window
             if(await UIWindowSignup({
                 reload_on_success: false,
@@ -262,7 +269,7 @@ window.initgui = async function(options){
             }))
                 await window.getUserAppToken(window.openerOrigin);
         }
-        else if(action === 'sign-in' && window.is_auth()){
+        else if(action === 'sign-in' && window.is_auth() && !(window.attempt_temp_user_creation && window.first_visit_ever)){
             picked_a_user_for_sdk_login = await UIWindowSessionList({
                 reload_on_success: false,
                 draggable_body: false,
@@ -823,6 +830,13 @@ window.initgui = async function(options){
         let headers = {};
         if(window.custom_headers)
             headers = window.custom_headers;
+
+        // if this is a popup, show a spinner
+        let spinner_init_ts = Date.now();
+        if(window.embedded_in_popup){
+            puter.ui.showSpinner('<span style="-webkit-font-smoothing: antialiased;">Setting up your <a href="https://puter.com" target="_blank">Puter.com</a> account for secure AI and Cloud features</span>');
+        }
+
         $.ajax({
             url: window.gui_origin + "/signup",
             type: 'POST',
@@ -835,18 +849,33 @@ window.initgui = async function(options){
                 is_temp: true,
             }),
             success: async function (data){
-                window.update_auth_data(data.token, data.user);
-                document.dispatchEvent(new Event("login", { bubbles: true}));
+                // if this is a popup, hide the spinner, make sure it was visible for at least 2 seconds
+                if(window.embedded_in_popup){
+                    let spinner_duration = (Date.now() - spinner_init_ts);
+                    setTimeout(() => {
+                        window.update_auth_data(data.token, data.user);
+                        document.dispatchEvent(new Event("login", { bubbles: true}));        
+                        puter.ui.hideSpinner();
+                    }, spinner_duration > 2000 ? 10 : 2000 - spinner_duration);
+
+                    return;
+                }else{
+                    window.update_auth_data(data.token, data.user);
+                    document.dispatchEvent(new Event("login", { bubbles: true}));
+                }
             },
             error: async (err) => {
                 UIAlert({
                     message: html_encode(err.responseText),
                 });
+            },
+            complete: function(){
+                
             }
         });
     } */
 
-    // if there is at least one window open (only non-Explorer windows), ask user for confirmation when navigating away
+    // if there is at least one window open (only non-Explorer windows), ask user for confirmation when navigating away from puter
     if(window.feature_flags.prompt_user_when_navigation_away_from_puter){
         window.onbeforeunload = function(){
             if($(`.window:not(.window[data-app="explorer"])`).length > 0)
@@ -1203,9 +1232,13 @@ window.initgui = async function(options){
     //--------------------------------------------------------
     $(document).on('mousedown', function(e){
         // if taskbar or any parts of it is clicked, drop the event
-        if($(e.target).hasClass('taskbar') || $(e.target).closest('.taskbar').length > 0)
+        if($(e.target).hasClass('taskbar') || $(e.target).closest('.taskbar').length > 0){
             return;
-
+        }
+        // if toolbar or any parts of it is clicked, drop the event
+        if($(e.target).hasClass('toolbar') || $(e.target).closest('.toolbar').length > 0){
+            return;
+        }
         // if mouse is clicked on a window, activate it
         if(window.mouseover_window !== undefined){
             // if popover clicked on, don't activate window. This is because if an app 

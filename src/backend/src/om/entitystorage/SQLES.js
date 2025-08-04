@@ -22,7 +22,7 @@ const { BaseES } = require("./BaseES");
 const APIError = require("../../api/APIError");
 const { Entity } = require("./Entity");
 const { WeakConstructorFeature } = require("../../traits/WeakConstructorFeature");
-const { And, Or, Eq, Like, Null, Predicate, PredicateUtil, IsNotNull } = require("../query/query");
+const { And, Or, Eq, Like, Null, Predicate, PredicateUtil, IsNotNull, StartsWith } = require("../query/query");
 const { DB_WRITE } = require("../../services/database/consts");
 
 class RawCondition extends AdvancedBase {
@@ -114,10 +114,6 @@ class SQLES extends BaseES {
 
             const values = [];
             if ( predicate ) values.push(...(predicate.values || []));
-
-            if ( this.debug ) {
-                this.log.info('-> SQL STMT', { stmt, values });
-            }
 
             const rows = await this.db.read(stmt, values);
 
@@ -400,6 +396,25 @@ class SQLES extends BaseES {
                 const col_name = options.column_name ?? prop.name;
 
                 const sql = value === null ? `${col_name} IS NULL` : `${col_name} = ?`;
+                const values = value === null ? [] : [value];
+
+                return new RawCondition({ sql, values });
+            }
+            
+            if (om_query instanceof StartsWith) {
+                const key = om_query.key;
+                let value = om_query.value;
+                const prop = this.om.properties[key];
+
+                value = await prop.sql_reference(value);
+
+                const options = prop.descriptor.sql ?? {};
+                const col_name = options.column_name ?? prop.name;
+
+                const sql = `${col_name} LIKE ${this.db.case({
+                    sqlite: `? || '%'`,
+                    otherwise: `CONCAT(?, '%')`
+                })}`;
                 const values = value === null ? [] : [value];
 
                 return new RawCondition({ sql, values });

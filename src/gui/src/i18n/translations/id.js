@@ -172,10 +172,6 @@ const id = {
     log_out: "Keluar",
     looks_good: "Tampak bagus!",
     manage_sessions: "Kelola Sesi",
-    menubar_style: "Gaya Menubar",
-    menubar_style_desktop: "Desktop",
-    menubar_style_system: "Sistem",
-    menubar_style_window: "Jendela",
     modified: "Dimodifikasi",
     move: "Pindahkan",
     moving_file: "Memindahkan %%",
@@ -398,6 +394,7 @@ const id = {
     "billing.subscription_cancelled_description": "Anda masih memiliki akses ke langganan Anda hingga akhir periode penagihan ini.", // In English: "You will still have access to your subscription until the end of this billing period."
     "billing.offering.free": "Gratis", // In English: "Free"
     "billing.offering.pro": "Profesional", // In English: "Professional"
+    "billing.offering.professional": "Profesional", // In English: "Professional"
     "billing.offering.business": "Bisnis", // In English: "Business"
     "billing.cloud_storage": "Penyimpanan Cloud", // In English: "Cloud Storage"
     "billing.ai_access": "Akses AI", // In English: "AI Access"

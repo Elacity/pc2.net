@@ -157,10 +157,6 @@ const hu = {
         log_out: "Kijelentkezés",
         looks_good: "Jól néz ki!",
         manage_sessions: "Munkamenetek kezelése",
-        menubar_style: "Menü stílusa",
-        menubar_style_desktop: "Asztal",
-        menubar_style_system: "Rendszer",
-        menubar_style_window: "Ablak",
         modified: "Módosítva",
         move: "Mozgatás",
         moving_file: "Mozgatás: %%",
@@ -366,6 +362,7 @@ const hu = {
         "billing.subscription_cancelled_description": "Az aktuális számlázási időszak végéig továbbra is hozzáférsz az előfizetésedhez.", // In English: "You will still have access to your subscription until the end of this billing period."
         "billing.offering.free": "Ingyenes", // In English: "Free"
         "billing.offering.pro": "Professzionális", // In English: "Professional"
+        "billing.offering.professional": "Professzionális", // In English: "Professional"
         "billing.offering.business": "Üzleti", // In English: "Business"
         "billing.cloud_storage": "Felhő Tárhely", // In English: "Cloud Storage"
         "billing.ai_access": "AI hozzáférés", // In English: "AI Access"

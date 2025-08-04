@@ -47,6 +47,7 @@ class AIChatService extends BaseService {
     static MODULES = {
         kv: globalThis.kv,
         uuidv4: require('uuid').v4,
+        cuid2: require('@paralleldrive/cuid2').createId,
     }
 
 
@@ -64,6 +65,23 @@ class AIChatService extends BaseService {
         this.detail_model_list = [];
         this.detail_model_map = {};
     }
+    
+    get_model_details (model_name, context) {
+        let model_details = this.detail_model_map[model_name];
+        if ( Array.isArray(model_details) && context ) {
+            for ( const model of model_details ) {
+                if ( model.provider === context.service_used ) {
+                    model_details = model;
+                    break;
+                }
+            }
+        }
+        if ( Array.isArray(model_details) ) {
+            model_details = model_details[0];
+        }
+        return model_details;
+    }
+    
     /**
     * Initializes the service by setting up empty arrays and maps for providers and models.
     * This method is called during service construction to establish the initial state.
@@ -80,6 +98,7 @@ class AIChatService extends BaseService {
         svc_event.on('ai.prompt.report-usage', async (_, details) => {
             // Only skip usage reporting for fake-chat if it's not using the costly model
             if ( details.service_used === 'fake-chat' && details.model_used !== 'costly' ) return;
+            if ( details.service_used === 'usage-limited-chat' ) return;
 
             const values = {
                 user_id: details.actor?.type?.user?.id,
@@ -87,6 +106,8 @@ class AIChatService extends BaseService {
                 service_name: details.service_used,
                 model_name: details.model_used,
             };
+            
+            let model_details;
 
             // New format
             if ( Array.isArray(details.usage) ) {
@@ -97,18 +118,9 @@ class AIChatService extends BaseService {
                 values.value_uint_1 = details.usage?.input_tokens;
                 values.value_uint_2 = details.usage?.output_tokens;
 
-                let model_details = this.detail_model_map[details.model_used];
-                if ( Array.isArray(model_details) ) {
-                    for ( const model of model_details ) {
-                        if ( model.provider === details.service_used ) {
-                            model_details = model;
-                            break;
-                        }
-                    }
-                }
-                if ( Array.isArray(model_details) ) {
-                    model_details = model_details[0];
-                }
+                model_details = this.get_model_details(values.model_name, {
+                    service_used: values.service_name,
+                });
                 if ( model_details ) {
                     values.cost = 0 + // for formatting
 
@@ -127,6 +139,15 @@ class AIChatService extends BaseService {
             this.log.noticeme('USAGE INFO', { usage: details.usage });
             this.log.noticeme('COST INFO', values);
 
+            await svc_event.emit('ai.prompt.cost-calculated', {
+                actor: Context.get('actor'),
+                model_details,
+                usage: details.usage,
+                completionId: details.completionId,
+                service: values.service_name,
+                model: values.model_name,
+                cost: values.cost,
+            });
 
             const svc_cost = this.services.get('cost');
             svc_cost.record_cost({ cost: values.cost });
@@ -357,9 +378,13 @@ class AIChatService extends BaseService {
                 const client_driver_call = Context.get('client_driver_call');
                 let { test_mode, intended_service, response_metadata } = client_driver_call;
                 
+                const completionId = this.modules.cuid2();
+                
                 this.log.noticeme('AIChatService.complete', { intended_service, parameters, test_mode });
                 const svc_event = this.services.get('event');
                 const event = {
+                    actor: Context.get('actor'),
+                    completionId,
                     allow: true,
                     intended_service,
                     parameters
@@ -367,6 +392,7 @@ class AIChatService extends BaseService {
                 await svc_event.emit('ai.prompt.validate', event);
                 if ( ! event.allow ) {
                     test_mode = true;
+                    if ( event.custom ) parameters.custom = event.custom;
                 }
 
                 if ( parameters.messages ) {
@@ -406,16 +432,66 @@ class AIChatService extends BaseService {
 
                 // Updated: Check usage and get a boolean result instead of throwing error
                 const svc_cost = this.services.get('cost');
-                const usageAllowed = await svc_cost.get_funding_allowed();
+                const available = await svc_cost.get_available_amount();
+                
+                const model_details = this.get_model_details(model_used, {
+                    service_used,
+                });
 
+                if ( ! model_details ) {
+                    // TODO (xiaochen): replace with a standard link
+                    const available_models_url = this.global_config.origin + "/puterai/chat/models";
+
+                    throw APIError.create('field_invalid', null, {
+                        key: 'model',
+                        expected: `a valid model name from ${available_models_url}`,
+                        got: model_used,
+                    });
+                }
+                
+                const model_input_cost = model_details.cost.input;
+                const model_output_cost = model_details.cost.output;
+                const model_max_tokens = model_details.max_tokens;
+                const text = Messages.extract_text(parameters.messages);
+                const approximate_input_cost = text.length / 4 * model_input_cost;
+                const usageAllowed = await svc_cost.get_funding_allowed({
+                    available,
+                    minimum: approximate_input_cost,
+                });
+                
                 // Handle usage limits reached case
+                this.log.noticeme('DEBUGGING VALUES', {
+                    messages: parameters.messages,
+                    text,
+                    available,
+                    model_input_cost,
+                    model_output_cost,
+                    approximate_input_cost,
+                    usageAllowed,
+                })
                 if ( !usageAllowed ) {
-                    // The check_usage_ method has already updated the intended_service to 'usage-limited-chat'
+                    // The check_usage_ method has eady updated the intended_service to 'usage-limited-chat'
                     service_used = 'usage-limited-chat';
                     model_used = 'usage-limited';
                     // Update intended_service to match service_used
                     intended_service = service_used;
                 }
+                
+                const max_allowed_output_amount =
+                    available - approximate_input_cost;
+                
+                const max_allowed_output_tokens =
+                    max_allowed_output_amount / model_output_cost;
+                
+                if ( model_max_tokens ) {
+                    parameters.max_tokens = Math.floor(Math.min(
+                        parameters.max_tokens ?? Number.POSITIVE_INFINITY,
+                        max_allowed_output_tokens,
+                        model_max_tokens,
+                    ));
+                }
+
+                this.log.noticeme('AI PARAMETERS', parameters);
 
                 try {
                     ret = await svc_driver.call_new_({
@@ -457,7 +533,8 @@ class AIChatService extends BaseService {
                     })();
 
                     if ( is_request_error ) {
-                        throw APIError.create('error_400_from_delegate', null, {
+                        console.log(e.stack);
+                        throw APIError.create('error_400_from_delegate', e, {
                             delegate: intended_service,
                             message: e.message,
                         })
@@ -474,6 +551,11 @@ class AIChatService extends BaseService {
                         error: e,
                     });
                     while ( !! error ) {
+                        // No fallbacks for pseudo-models
+                        if ( intended_service === 'fake-chat' ) {
+                            break;
+                        }
+
                         const fallback = this.get_fallback_model({
                             model, tried,
                         });
@@ -571,6 +653,7 @@ class AIChatService extends BaseService {
                         const usage = await usage_promise;
                         await svc_event.emit('ai.prompt.report-usage', {
                             actor: Context.get('actor'),
+                            completionId,
                             service_used,
                             model_used,
                             usage,
@@ -593,11 +676,18 @@ class AIChatService extends BaseService {
                             try {
                                 await ret.result.value.init_chat_stream({ chatStream });
                             } catch (e) {
+                                this.errors.report('error during stream response', {
+                                    source: e,
+                                })
                                 stream.write(JSON.stringify({
                                     type: 'error',
                                     message: e.message,
                                 }) + '\n');
                                 stream.end();
+                            } finally {
+                                if ( ret.result.value.finally_fn ) {
+                                    await ret.result.value.finally_fn();
+                                }
                             }
                         })();
 
@@ -608,6 +698,7 @@ class AIChatService extends BaseService {
                 } else {
                     await svc_event.emit('ai.prompt.report-usage', {
                         actor: Context.get('actor'),
+                        completionId,
                         username,
                         service_used,
                         model_used,
@@ -845,6 +936,7 @@ class AIChatService extends BaseService {
 
         for ( const model of sorted_models ) {
             if ( tried.includes(model.id) ) continue;
+            if ( model.provider === 'fake-chat' ) continue;
 
             return {
                 fallback_service_name: model.provider,

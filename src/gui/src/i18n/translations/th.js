@@ -160,10 +160,6 @@ const th = {
         log_out: "ออกจากระบบ",
         looks_good: "ดูดีเลย!",
         manage_sessions: "จัดการเซสชั่น",
-        menubar_style: "ไตล์เมนูบาร์",
-        menubar_style_desktop: "เดสก์ท็อป",
-        menubar_style_system: "ระบบ",
-        menubar_style_window: "หน้าต่าง",
         modified: 'แก้ไขเเมื่อ',
         move: "ย้าย",
         moving_file: "กำลังย้าย %%",
@@ -378,6 +374,7 @@ const th = {
         "billing.subscription_cancelled_description": "คุณยังเป็นสมาชิกอยู่จนถึงวันสิ้นสุดรอบบิลนี้", // In English: "You will still have access to your subscription until the end of this billing period."
         "billing.offering.free": "ฟรี", // In English: "Free"
         "billing.offering.pro": "มืออาชีพ", // In English: "Professional"
+        "billing.offering.professional": "มืออาชีพ", // In English: "Professional"
         "billing.offering.business": "ธุรกิจ", // In English: "Business"
         "billing.cloud_storage": "จัดเก็บบนคลาวด์", // In English: "Cloud Storage"
         "billing.ai_access": "การเข้าถึงโดย AI", // In English: "AI Access"

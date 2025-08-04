@@ -162,10 +162,6 @@ const ro = {
         log_out: 'Deconectează-te',
         looks_good: "Arată bine!",
         manage_sessions: "Administrează sesiuni",
-        menubar_style: "Stil bară de meniu",
-        menubar_style_desktop: "Desktop",
-        menubar_style_system: "Sistem",
-        menubar_style_window: "Fereastră",
         modified: "Modificat",
         move: 'Mută',
         moving_file: "Se mută %%",
@@ -374,6 +370,7 @@ const ro = {
         "billing.subscription_cancelled_description": "Vei avea în continuare acces la abonament până la sfârșitul perioadei de facturare actuale.",
         "billing.offering.free": "Gratis",
         "billing.offering.pro": "Profesional", 
+        "billing.offering.professional": "Profesional", // In English: "Professional"
         "billing.offering.business": "Business", // Keeping "Business" as it's commonly used in Romanian
         "billing.cloud_storage": "Stocare în cloud",
         "billing.ai_access": "Acces AI",

@@ -42,70 +42,188 @@ class MistralAIService extends BaseService {
     _construct () {
         this.costs_ = {
             'mistral-large-latest': {
-                currency: 'usd-cents',
-                tokens: 1_000_000,
-                input: 200,
-                output: 600,
+                aliases: ['mistral-large-2411'],
+                cost:{
+                    currency: 'usd-cents',
+                    tokens: 1_000_000,
+                    input: 200,
+                    output: 600,
+                },
+                max_tokens: 128000,
             },
             'pixtral-large-latest': {
-                currency: 'usd-cents',
-                tokens: 1_000_000,
-                input: 200,
-                output: 600,
+                aliases: ['pixtral-large-2411'],
+                cost: {
+                    currency: 'usd-cents',
+                    tokens: 1_000_000,
+                    input: 200,
+                    output: 600,
+                },
+                max_tokens: 128000,
             },
             'mistral-small-latest': {
-                currency: 'usd-cents',
-                tokens: 1_000_000,
-                input: 20,
-                output: 60,
+                aliases: ['mistral-small-2506'],
+                license: 'Apache-2.0',
+                cost: {
+                    currency: 'usd-cents',
+                    tokens: 1_000_000,
+                    input: 20,
+                    output: 60,
+                },
+                max_tokens: 128000,
             },
             'codestral-latest': {
-                currency: 'usd-cents',
-                tokens: 1_000_000,
-                input: 20,
-                output: 60,
+                aliases: ['codestral-2501'],
+                cost: {
+                    currency: 'usd-cents',
+                    tokens: 1_000_000,
+                    input: 30,
+                    output: 90,
+                },
+                max_tokens: 256000,
             },
             'ministral-8b-latest': {
-                currency: 'usd-cents',
-                tokens: 1_000_000,
-                input: 10,
-                output: 10,
+                aliases: ['ministral-8b-2410'],
+                cost: {
+                    currency: 'usd-cents',
+                    tokens: 1_000_000,
+                    input: 10,
+                    output: 10,
+                },
+                max_tokens: 128000,
             },
             'ministral-3b-latest': {
-                currency: 'usd-cents',
-                tokens: 1_000_000,
-                input: 4,
-                output: 4,
+                aliases: ['ministral-3b-2410'],
+                cost: {
+                    currency: 'usd-cents',
+                    tokens: 1_000_000,
+                    input: 4,
+                    output: 4,
+                },
+                max_tokens: 128000,
             },
             'pixtral-12b': {
-                currency: 'usd-cents',
-                tokens: 1_000_000,
-                input: 15,
-                output: 15,
+                aliases: ['pixtral-12b-2409'],
+                license: 'Apache-2.0',
+                cost: {
+                    currency: 'usd-cents',
+                    tokens: 1_000_000,
+                    input: 15,
+                    output: 15,
+                },
+                max_tokens: 128000,
             },
             'mistral-nemo': {
-                currency: 'usd-cents',
-                tokens: 1_000_000,
-                input: 15,
-                output: 15,
+                cost: {
+                    currency: 'usd-cents',
+                    tokens: 1_000_000,
+                    input: 15,
+                    output: 15,
+                },
             },
             'open-mistral-7b': {
-                currency: 'usd-cents',
-                tokens: 1_000_000,
-                input: 25,
-                output: 25,
+                cost: {
+                    currency: 'usd-cents',
+                    tokens: 1_000_000,
+                    input: 25,
+                    output: 25,
+                },
             },
             'open-mixtral-8x7b': {
-                currency: 'usd-cents',
-                tokens: 1_000_000,
-                input: 7,
-                output: 7,
+                cost: {
+                    currency: 'usd-cents',
+                    tokens: 1_000_000,
+                    input: 7,
+                    output: 7,
+                },
             },
             'open-mixtral-8x22b': {
-                currency: 'usd-cents',
-                tokens: 1_000_000,
-                input: 2,
-                output: 6,
+                cost: {
+                    currency: 'usd-cents',
+                    tokens: 1_000_000,
+                    input: 2,
+                    output: 6,
+                },
+            },
+            'magistral-medium-latest': {
+                aliases: ['magistral-medium-2506'],
+                cost: {
+                    currency: 'usd-cents',
+                    tokens: 1_000_000,
+                    input: 200,
+                    output: 500,
+                },
+                max_tokens: 40000,
+            },
+            'magistral-small-latest': {
+                aliases: ['magistral-small-2506'],
+                license: 'Apache-2.0',
+                cost: {
+                    currency: 'usd-cents',
+                    tokens: 1_000_000,
+                    input: 10,
+                    output: 10,
+                },
+                max_tokens: 40000,
+            },
+            'mistral-medium-latest': {
+                aliases: ['mistral-medium-2505'],
+                cost: {
+                    currency: 'usd-cents',
+                    tokens: 1_000_000,
+                    input: 40,
+                    output: 200,
+                },
+                max_tokens: 128000,
+            },
+            'mistral-moderation-latest': {
+                aliases: ['mistral-moderation-2411'],
+                cost: {
+                    currency: 'usd-cents',
+                    tokens: 1_000_000,
+                    input: 10,
+                    output: 10,
+                },
+                max_tokens: 8000,
+            },
+            'devstral-small-latest': {
+                aliases: ['devstral-small-2505'],
+                license: 'Apache-2.0',
+                cost: {
+                    currency: 'usd-cents',
+                    tokens: 1_000_000,
+                    input: 10,
+                    output: 10,
+                },
+                max_tokens: 128000,
+            },
+            'mistral-saba-latest': {
+                aliases: ['mistral-saba-2502'],
+                cost: {
+                    currency: 'usd-cents',
+                    tokens: 1_000_000,
+                    input: 20,
+                    output: 60,
+                },
+            },
+            'open-mistral-nemo': {
+                aliases: ['open-mistral-nemo-2407'],
+                license: 'Apache-2.0',
+                cost: {
+                    currency: 'usd-cents',
+                    tokens: 1_000_000,
+                    input: 10,
+                    output: 10,
+                },
+            },
+            'mistral-ocr-latest': {
+                aliases: ['mistral-ocr-2505'],
+                cost: {
+                    currency: 'usd-cents',
+                    tokens: 1_000_000,
+                    input: 100,
+                    output: 300,
+                },
             },
         };
     }
@@ -160,13 +278,13 @@ class MistralAIService extends BaseService {
             }
             if ( ! cost ) continue;
             const model = {
+                ...cost,
                 id: api_model.id,
                 name: api_model.description,
                 aliases: api_model.aliases,
                 context: api_model.max_context_length,
                 capabilities: api_model.capabilities,
                 vision: api_model.capabilities.vision,
-                cost,
             };
 
             this.models_array_.push(model);
@@ -251,6 +369,10 @@ class MistralAIService extends BaseService {
                         },
                         chunk_but_like_actually: chunk => chunk.data,
                         index_tool_calls_from_stream_choice: choice => choice.delta.toolCalls,
+                        coerce_completion_usage: completion => ({
+                            prompt_tokens: completion.usage.promptTokens,
+                            completion_tokens: completion.usage.completionTokens,
+                        }),
                     },
                     completion, stream,
                     usage_calculator: OpenAIUtil.create_usage_calculator({

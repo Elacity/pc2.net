@@ -2,65 +2,65 @@
 # by creating a container image with a full-contained
 # bundle of the codes
 steps:
-  # Ensure changes pass test 
+  # Ensure changes pass test
   - name: node:23.9-alpine
     entrypoint: npm
-    args: ['install']
+    args: ["install"]
   - name: node:23.9-alpine
     entrypoint: npm
-    args: ['test']
-  - name: 'gcr.io/cloud-builders/docker'
+    args: ["test"]
+  - name: "gcr.io/cloud-builders/docker"
     args:
-    - 'buildx'
-    - 'create'
-    - '--name'
-    - 'multiarch-builder'
-    - '--use'
-  - name: 'gcr.io/cloud-builders/docker'
+      - "buildx"
+      - "create"
+      - "--name"
+      - "multiarch-builder"
+      - "--use"
+  - name: "gcr.io/cloud-builders/docker"
     args:
-    - 'buildx'
-    - 'build'
-    - '--platform'
-    - '${_TARGET_ARCH}'
-    - '--builder'
-    - 'multiarch-builder'
-    - '-f'
-    - 'Dockerfile'
-    - '--build-arg'
-    - 'VITE_PUTER_API_URL=${_VITE_PUTER_API_URL}'
-    - '--build-arg'
-    - 'VITE_PARTICLE_PROJECT_ID=${_VITE_PARTICLE_PROJECT_ID}'
-    - '--build-arg'
-    - 'VITE_PARTICLE_CLIENT_KEY=${_VITE_PARTICLE_CLIENT_KEY}'
-    - '--build-arg'
-    - 'VITE_PARTICLE_APP_ID=${_VITE_PARTICLE_APP_ID}'
-    - '--build-arg'
-    - 'VITE_WALLETCONNECT_PROJECT_ID=${_VITE_WALLETCONNECT_PROJECT_ID}'
-    - '-t'
-    - 'us-east4-docker.pkg.dev/$PROJECT_ID/docker-repo/${_IMAGE_NAME}:$SHORT_SHA'
-    - '--push'
-    - '.'
+      - "buildx"
+      - "build"
+      - "--platform"
+      - "${_TARGET_ARCH}"
+      - "--builder"
+      - "multiarch-builder"
+      - "-f"
+      - "Dockerfile"
+      - "--build-arg"
+      - "VITE_PUTER_API_URL=${_VITE_PUTER_API_URL}"
+      - "--build-arg"
+      - "VITE_PARTICLE_PROJECT_ID=${_VITE_PARTICLE_PROJECT_ID}"
+      - "--build-arg"
+      - "VITE_PARTICLE_CLIENT_KEY=${_VITE_PARTICLE_CLIENT_KEY}"
+      - "--build-arg"
+      - "VITE_PARTICLE_APP_ID=${_VITE_PARTICLE_APP_ID}"
+      - "--build-arg"
+      - "VITE_WALLETCONNECT_PROJECT_ID=${_VITE_WALLETCONNECT_PROJECT_ID}"
+      - "-t"
+      - "us-east4-docker.pkg.dev/$PROJECT_ID/docker-repo/${_IMAGE_NAME}:$SHORT_SHA"
+      - "--push"
+      - "."
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     id: update-workloads
     entrypoint: bash
     args:
-    - '-c'
-    - |
-      echo "=== Copy toolkit to the remote server ==="
-      mkdir -p ./deploy/bin
-      cp .google/toolkit/update-docker-image ./deploy/bin/update-docker-image
-      cp docker-compose.yml ./deploy/docker-compose.yml
-      gcloud compute scp --recurse ./deploy/* root@${_GCLOUD_COMPUTER}:/app/pc2.net \
-        --project $PROJECT_ID \
-        --zone us-east4-a \
-        --force-key-file-overwrite
-      echo "=== Deploy new image ${_IMAGE_NAME}:$SHORT_SHA ==="
-      gcloud compute ssh root@${_GCLOUD_COMPUTER} \
-        --project $PROJECT_ID \
-        --zone us-east4-a \
-        --quiet \
-        --force-key-file-overwrite \
-        --command="/app/pc2.net/bin/update-docker-image puter us-east4-docker.pkg.dev/$PROJECT_ID/docker-repo/${_IMAGE_NAME}:$SHORT_SHA"
+      - "-c"
+      - |
+        echo "=== Copy toolkit to the remote server ==="
+        mkdir -p ./deploy/bin
+        cp .google/toolkit/update-docker-image ./deploy/bin/update-docker-image
+        cp docker-compose.yml ./deploy/docker-compose.yml
+        gcloud compute scp --recurse ./deploy/* root@${_GCLOUD_COMPUTER}:/app/pc2.net \
+          --project $PROJECT_ID \
+          --zone us-east4-a \
+          --force-key-file-overwrite
+        echo "=== Deploy new image ${_IMAGE_NAME}:$SHORT_SHA ==="
+        gcloud compute ssh root@${_GCLOUD_COMPUTER} \
+          --project $PROJECT_ID \
+          --zone us-east4-a \
+          --quiet \
+          --force-key-file-overwrite \
+          --command="/app/pc2.net/bin/update-docker-image puter us-east4-docker.pkg.dev/$PROJECT_ID/docker-repo/${_IMAGE_NAME}:$SHORT_SHA"
 options:
   logging: CLOUD_LOGGING_ONLY
   machineType: E2_HIGHCPU_8
@@ -71,15 +71,14 @@ options:
 dependencies:
   - gitSource:
       repository:
-        url: 'https://github.com/WAUIO/pc2.net.git'
-      revision: '$COMMIT_SHA'
+        url: "https://github.com/Elacity/pc2.net.git"
+      revision: "$COMMIT_SHA"
       depth: 1
-      destPath: '.'
+      destPath: "."
   - gitSource:
       repository:
-        url: 'https://github.com/WAUIO/particle-auth-puter.git'
-        #developerConnect: 'projects/elastos-457817/locations/us-east4/connections/wauio-pc2-net/gitRepositoryLinks/WAUIO-particle-auth-puter'
-      revision: 'main'
+        url: "https://github.com/Elacity/particle-auth-puter.git"
+      revision: "main"
       recurseSubmodules: true
       depth: 1
-      destPath: 'submodules/particle-auth'
+      destPath: "submodules/particle-auth"

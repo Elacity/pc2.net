@@ -161,10 +161,6 @@ const zhtw = {
         log_out: '登出',
         looks_good: "看起來不錯！",
         manage_sessions: "管理工作階段",
-        menubar_style: "選單列樣式",
-        menubar_style_desktop: "桌面",
-        menubar_style_system: "系統",
-        menubar_style_window: "視窗",
         modified: '已修改',
         move: '移動',
         moving_file: "正在移動 %%",
@@ -376,6 +372,7 @@ const zhtw = {
 	"billing.subscription_cancelled_description": "在本計費週期結束之前，您仍然可以使用您的訂閱。", // You will still have access to your subscription until the end of this billing period.
 	"billing.offering.free": "免費", // Free
 	"billing.offering.pro": "專業版", // Professional
+	"billing.offering.professional": "專業版", // Professional
 	"billing.offering.business": "商業版", // Business
 	"billing.cloud_storage": "雲端儲存空間", // Cloud Storage
 	"billing.ai_access": "AI 使用權限", // AI Access

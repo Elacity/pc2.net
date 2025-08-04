@@ -300,7 +300,7 @@ module.exports = class APIError {
         // Subdomains
         'subdomain_limit_reached': {
             status: 400,
-            message: ({ limit }) => `You have exceeded the number of subdomains under your current plan (${limit}).`,
+            message: ({ limit, isWorker }) => isWorker ? `You have exceeded the maximum number of workers for your plan! (${limit})`:`You have exceeded the number of subdomains under your current plan (${limit}).`,
         },
         'subdomain_reserved': {
             status: 400,
@@ -351,6 +351,10 @@ module.exports = class APIError {
         'token_missing': {
             status: 401,
             message: 'Missing authentication token.',
+        },
+        'unexpected_undefined': {
+            status: 401,
+            message: msg => msg ?? "unexpected string undefined"
         },
         'token_auth_failed': {
             status: 401,
@@ -495,6 +499,12 @@ module.exports = class APIError {
         'captcha_invalid': {
             status: 400,
             message: ({ message }) => message || 'Invalid captcha response',
+        },
+
+        // TTS Errors
+        'invalid_engine': {
+            status: 400,
+            message: ({ engine, valid_engines }) => `Invalid engine: ${quot(engine)}. Valid engines are: ${valid_engines.map(quot).join(', ')}.`,
         },
     };
 

@@ -35,10 +35,50 @@ const strutil = require('@heyputer/putility').libs.string;
  * It provides methods for registering drivers, calling driver methods, and handling driver errors.
  */
 class DriverService extends BaseService {
+    static CONCERN = 'drivers';
+
     static MODULES = {
         types: require('./types'),
     }
 
+    // 'IMPLEMENTS' here makes DriverService itself a driver
+    static IMPLEMENTS = {
+        driver: {
+            async usage () {
+                const actor = Context.get('actor');
+
+                const usages = {
+                    user: {}, // map[str(iface:method)]{date,count,max}
+                    apps: {}, // []{app,map[str(iface:method)]{date,count,max}}
+                    app_objects: {},
+                    usages: [],
+                };
+                
+                const event = {
+                    actor,
+                    usages: [],
+                };
+                const svc_event = this.services.get('event');
+                await svc_event.emit('usages.query', event);
+                usages.usages = event.usages;
+
+
+                for ( const k in usages.apps ) {
+                    usages.apps[k] = Object.values(usages.apps[k]);
+                }
+
+                return {
+                    // Usage endpoint reports these, but the driver doesn't need to
+                    // user: Object.values(usages.user),
+                    // apps: usages.apps,
+                    // app_objects: usages.app_objects,
+                    
+                    // This is the main "usages" object
+                    usages: usages.usages,
+                };
+            }
+        }
+    }
 
     _construct () {
         this.drivers = {};
@@ -122,6 +162,26 @@ class DriverService extends BaseService {
             { col_interfaces });
         await services.emit('driver.register.drivers',
             { col_drivers });
+    }
+    
+    // This is a bit meta: we register the "driver" driver interface.
+    // This allows DriverService to be a driver called "driver".
+    // The driver drivers allows checking metered usage for drivers,
+    // and in the future may provide other driver-related functions.
+    async ['__on_driver.register.interfaces'] () {
+        const svc_registry = this.services.get('registry');
+        const col_interfaces = svc_registry.get('interfaces');
+        
+        col_interfaces.set('driver', {
+            description: 'provides functions for managing Puter drivers',
+            methods: {
+                usage: {
+                    description: 'get usage information for drivers',
+                    parameters: {},
+                    result: { type: 'json' },
+                }
+            }
+        });
     }
     
     register_driver (interface_name, implementation) {
@@ -283,16 +343,20 @@ class DriverService extends BaseService {
         
         svc_event.emit('driver.create-call-context', event);
         
-        return event.context.arun(async () => {
-            const result = await this.call_new_({
-                actor,
-                service,
-                service_name: driver,
-                iface, method, args: processed_args,
-                skip_usage,
+        const svc_trace = this.services.get('traceService');
+        
+        return await svc_trace.spanify(`driver:${driver}:${iface}:${method}`, async () => {
+            return event.context.arun(async () => {
+                const result = await this.call_new_({
+                    actor,
+                    service,
+                    service_name: driver,
+                    iface, method, args: processed_args,
+                    skip_usage,
+                });
+                result.metadata = client_driver_call.response_metadata;
+                return result;
             });
-            result.metadata = client_driver_call.response_metadata;
-            return result;
         });
     }
     

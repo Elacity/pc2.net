@@ -162,10 +162,6 @@ const sv = {
         log_out: "Logga ut",
         looks_good: "Ser bra ut!",
         manage_sessions: "Hantera sessioner",
-        menubar_style: "Stil för menyraden",
-        menubar_style_desktop: "Skrivbord",
-        menubar_style_system: "System",
-        menubar_style_window: "Fönster",
         modified: "Ändrad",
         move: "Flytta",
         moving_file: "Flyttar %%",
@@ -380,6 +376,7 @@ const sv = {
         "billing.subscription_cancelled_description": "Du har fortfarande tillgång till din prenumeration fram till slutet av denna faktureringsperiod.", // In English: "You will still have access to your subscription until the end of this billing period."
         "billing.offering.free": "Gratis", // In English: "Free"
         "billing.offering.pro": "Professionell", // In English: "Professional"
+        "billing.offering.professional": "Professionell", // In English: "Professional"
         "billing.offering.business": "Företag", // In English: "Business"
         "billing.cloud_storage": "Molnlagring", // In English: "Cloud Storage"
         "billing.ai_access": "AI Tillgång", // In English: "AI Access"

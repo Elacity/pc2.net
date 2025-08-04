@@ -161,7 +161,13 @@ module.exports = class OpenAIUtil {
         deviations,
         stream, completion, moderate,
         usage_calculator,
+        finally_fn,
     }) {
+        deviations = Object.assign({
+            // affected by: Mistral
+            coerce_completion_usage: completion => completion.usage,
+        }, deviations);
+
         if ( stream ) {
             let usage_promise = new putility.libs.promise.TeePromise();
         
@@ -176,6 +182,7 @@ module.exports = class OpenAIUtil {
             return new TypedValue({ $: 'ai-chat-intermediate' }, {
                 stream: true,
                 init_chat_stream,
+                finally_fn,
                 usage_promise: usage_promise.then(usage => {
                     return usage_calculator ? usage_calculator({ usage }) : {
                         input_tokens: usage.prompt_tokens,
@@ -184,6 +191,8 @@ module.exports = class OpenAIUtil {
                 }),
             });
         }
+
+        if ( finally_fn ) await finally_fn();
 
         const is_empty = completion.choices?.[0]?.message?.content?.trim() === '';
         if ( is_empty && ! completion.choices?.[0]?.message?.tool_calls ) {
@@ -202,10 +211,18 @@ module.exports = class OpenAIUtil {
         }
         
         const ret = completion.choices[0];
-        ret.usage = usage_calculator ? usage_calculator(completion) : {
-            input_tokens: completion.usage.prompt_tokens,
-            output_tokens: completion.usage.completion_tokens,
+        const completion_usage = deviations.coerce_completion_usage(completion);
+        ret.usage = usage_calculator ? usage_calculator({
+            ...completion,
+            usage: completion_usage,
+        }) : {
+            input_tokens: completion_usage.prompt_tokens,
+            output_tokens: completion_usage.completion_tokens,
         };
+        // TODO: turn these into toggle logs
+        // console.log('ORIGINAL COMPLETION', completion);
+        // console.log('COMPLETION USAGE', completion_usage);
+        // console.log('RETURN VALUE', ret);
         return ret;
     }
 };

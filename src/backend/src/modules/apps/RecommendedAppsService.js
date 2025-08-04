@@ -42,7 +42,6 @@ class RecommendedAppsService extends BaseService {
         'viewer',
         'solitaire-frvr',
         'tiles-beat',
-        'draw',
         'silex',
         'markus',
         'puterjs-playground',

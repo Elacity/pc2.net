@@ -162,10 +162,6 @@ const vi = {
         log_out: 'Đăng xuất',
         looks_good: "Trông tốt!",
         manage_sessions: "Quản lý phiên",
-        menubar_style: "Kiểu thanh menu",
-        menubar_style_desktop: "Màn hình chính",
-        menubar_style_system: "Hệ thống",
-        menubar_style_window: "Cửa sổ",
         modified: 'Đã sửa đổi',
         move: 'Di chuyển',
         moving_file: "Đang di chuyển %%",
@@ -378,6 +374,7 @@ const vi = {
         "billing.subscription_cancelled_description": "Bạn vẫn có thể tiếp tục sử dụng dịch vụ của mình cho đến cuối kỳ thanh toán này.", // In English: "You will still have access to your subscription until the end of this billing period."
         "billing.offering.free": "Miễn phí", // In English: "Free"
         "billing.offering.pro": "Chuyên nghiệp", // In English: "Professional"
+        "billing.offering.professional": "Chuyên nghiệp", // In English: "Professional"
         "billing.offering.business": "Doanh nghiệp", // In English: "Business"
         "billing.cloud_storage": "Lưu trữ đám mây", // In English: "Cloud Storage"
         "billing.ai_access": "Truy cập AI", // In English: "AI Access"

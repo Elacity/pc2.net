@@ -16,7 +16,6 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-const { chkperm } = require("../../helpers");
 const { Context } = require("../../util/context");
 const { HLFilesystemOperation } = require("./definitions");
 const APIError = require('../../api/APIError');
@@ -30,7 +29,8 @@ class HLStat extends HLFilesystemOperation {
         const {
             subject, user,
             return_subdomains,
-            return_permissions,
+            return_permissions, // Deprecated: kept for backwards compatiable with `return_shares`
+            return_shares,
             return_versions,
             return_size,
         } = this.values;
@@ -56,7 +56,9 @@ class HLStat extends HLFilesystemOperation {
 
         if (return_size) await subject.fetchSize(user);
         if (return_subdomains) await subject.fetchSubdomains(user)
-        if (return_permissions) await subject.fetchShares();
+        if (return_shares || return_permissions) {
+            await subject.fetchShares();
+        }
         if (return_versions) await subject.fetchVersions();
 
         await subject.fetchIsEmpty();

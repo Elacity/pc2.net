@@ -17,6 +17,7 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+const { Actor } = require("./auth/Actor");
 const BaseService = require("./BaseService");
 const { DB_READ } = require("./database/consts");
 
@@ -78,6 +79,16 @@ class GetUserService extends BaseService {
         const svc_whoami = this.services.get('whoami');
         await svc_whoami.get_details({ user }, user);
         return user;
+    }
+    
+    async refresh_actor (actor) {
+        if ( actor.type.user ) {
+            actor.type.user = await this.get_user({
+                username: actor.type.user.username,
+                force: true,
+            });
+        }
+        return actor;
     }
 
     async get_user_ (options) {

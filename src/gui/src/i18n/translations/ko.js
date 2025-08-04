@@ -174,10 +174,6 @@ const ko = {
     log_out: "로그아웃",
     looks_good: "좋아 보입니다!",
     manage_sessions: "세션 관리",
-    menubar_style: "메뉴 표시줄 스타일",
-    menubar_style_desktop: "바탕화면",
-    menubar_style_system: "시스템",
-    menubar_style_window: "윈도우",
     modified: "수정한 날짜",
     move: "이동",
     moving_file: "이동 중 %%",
@@ -404,6 +400,7 @@ const ko = {
       "청구 기간이 끝날 때까지 구독을 계속 이용할 수 있습니다.", // In English: "You will still have access to your subscription until the end of this billing period."
     "billing.offering.free": "무료", // In English: "Free"
     "billing.offering.pro": "프로", // In English: "Professional"
+    "billing.offering.professional": "프로", // In English: "Professional"
     "billing.offering.business": "비즈니스", // In English: "Business"
     "billing.cloud_storage": "클라우드 저장소", // In English: "Cloud Storage"
     "billing.ai_access": "AI 접근", // In English: "AI Access"

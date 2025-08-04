@@ -20,7 +20,7 @@
 // METADATA // {"ai-commented":{"service":"claude"}}
 const { default: dedent } = require("dedent");
 const BaseService = require("../../services/BaseService");
-
+const { TypedValue } = require("../../services/drivers/meta/Runtime");
 
 /**
 * FakeChatService - A mock implementation of a chat service that extends BaseService.
@@ -69,7 +69,8 @@ class FakeChatService extends BaseService {
                         cost: {
                             input: 1000,  // 1000 microcents per million tokens (0.001 cents per 1000 tokens)
                             output: 2000  // 2000 microcents per million tokens (0.002 cents per 1000 tokens)
-                        }
+                        },
+                        max_tokens: 8192,
                     },
                     {
                         id: 'abuse',
@@ -100,7 +101,7 @@ class FakeChatService extends BaseService {
             * @param {string} params.model - The model to use ('fake', 'costly', or 'abuse')
             * @returns {Object} A simulated chat completion response with Lorem Ipsum content
             */
-            async complete ({ messages, stream, model }) {
+            async complete ({ messages, stream, model, max_tokens, custom }) {
                 const { LoremIpsum } = require('lorem-ipsum');
                 const li = new LoremIpsum({
                     sentencesPerParagraph: {
@@ -117,74 +118,101 @@ class FakeChatService extends BaseService {
                 const usedModel = model || this.get_default_model();
                 
                 // For the costly model, simulate actual token counting
-                let inputTokens = 0;
-                let outputTokens = 0;
+                const resp = this.get_response({ li, usedModel, custom, max_tokens, messages });
                 
-                if (usedModel === 'costly') {
-                    // Simple token estimation: roughly 4 chars per token for input
-                    if (messages && messages.length > 0) {
-                        for (const message of messages) {
-                            if (typeof message.content === 'string') {
-                                inputTokens += Math.ceil(message.content.length / 4);
-                            } else if (Array.isArray(message.content)) {
-                                for (const content of message.content) {
-                                    if (content.type === 'text') {
-                                        inputTokens += Math.ceil(content.text.length / 4);
-                                    }
-                                }
+                if ( stream ) {
+                    return new TypedValue({ $: 'ai-chat-intermediate' }, {
+                        stream: true,
+                        init_chat_stream: async ({ chatStream }) => {
+                            await new Promise(rslv => setTimeout(rslv, 500))
+                            chatStream.stream.write(JSON.stringify({
+                                type: 'text',
+                                text: resp.message.content[0].text,
+                            }) + '\n');
+                            chatStream.end();
+                        },
+                        usage_promise: new Promise(rslv => rslv(resp.usage)),
+                    });
+                }
+                
+                return resp;
+            }
+        }
+    }
+
+    get_response ({ li, usedModel, messages, custom, max_tokens }) {
+        let inputTokens = 0;
+        let outputTokens = 0;
+        
+        if (usedModel === 'costly') {
+            // Simple token estimation: roughly 4 chars per token for input
+            if (messages && messages.length > 0) {
+                for (const message of messages) {
+                    if (typeof message.content === 'string') {
+                        inputTokens += Math.ceil(message.content.length / 4);
+                    } else if (Array.isArray(message.content)) {
+                        for (const content of message.content) {
+                            if (content.type === 'text') {
+                                inputTokens += Math.ceil(content.text.length / 4);
                             }
                         }
                     }
-                    
-                    // Generate random output token count between 50 and 200
-                    outputTokens = Math.floor(Math.random() * 150) + 50;
-                }
-                
-                // Generate the response text
-                let responseText;
-                if (usedModel === 'abuse') {
-                    responseText = dedent(`
-                        This is a message from ${
-                            this.global_config.origin}. We have detected abuse of our services.
-                        
-                        If you are seeing this on another website, please report it to ${
-                            this.global_config.abuse_email ?? 'hi@puter.com'}
-                    `);
-                } else {
-                    // Generate 1-3 paragraphs for both fake and costly models
-                    responseText = li.generateParagraphs(
-                        Math.floor(Math.random() * 3) + 1
-                    );
-                }
-                
-                // Report usage based on model
-                const usage = {
-                    "input_tokens": usedModel === 'costly' ? inputTokens : 0,
-                    "output_tokens": usedModel === 'costly' ? outputTokens : 1
-                };
-                
-                return {
-                    "index": 0,
-                    message: {
-                        "id": "00000000-0000-0000-0000-000000000000",
-                        "type": "message",
-                        "role": "assistant",
-                        "model": usedModel,
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": responseText
-                            }
-                        ],
-                        "stop_reason": "end_turn",
-                        "stop_sequence": null,
-                        "usage": usage
-                    },
-                    "usage": usage,
-                    "logprobs": null,
-                    "finish_reason": "stop"
                 }
             }
+            
+            // Generate random output token count between 50 and 200
+            outputTokens = Math.floor(Math.min((Math.random() * 150)+50, max_tokens));
+            // outputTokens = Math.floor(Math.random() * 150) + 50;
+        }
+        
+        // Generate the response text
+        let responseText;
+        if (usedModel === 'abuse') {
+            // responseText = dedent(`
+            //     This is a message from ${
+            //         this.global_config.origin}. We have detected abuse of our services.
+                
+            //     If you are seeing this on another website, please report it to ${
+            //         this.global_config.abuse_email ?? 'hi@puter.com'}
+            // `);
+            responseText = dedent(`
+                <h2>Free AI and Cloud for everyone!</h2><br />
+                Come on down to <a href="https://puter.com">puter.com</a> and try it out!
+                ${custom ?? ''}
+            `);
+        } else {
+            // Generate 1-3 paragraphs for both fake and costly models
+            responseText = li.generateParagraphs(
+                Math.floor(Math.random() * 3) + 1
+            );
+        }
+        
+        // Report usage based on model
+        const usage = {
+            "input_tokens": usedModel === 'costly' ? inputTokens : 0,
+            "output_tokens": usedModel === 'costly' ? outputTokens : 1
+        };
+        
+        return {
+            "index": 0,
+            message: {
+                "id": "00000000-0000-0000-0000-000000000000",
+                "type": "message",
+                "role": "assistant",
+                "model": usedModel,
+                "content": [
+                    {
+                        "type": "text",
+                        "text": responseText
+                    }
+                ],
+                "stop_reason": "end_turn",
+                "stop_sequence": null,
+                "usage": usage
+            },
+            "usage": usage,
+            "logprobs": null,
+            "finish_reason": "stop"
         }
     }
 }

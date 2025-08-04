@@ -164,10 +164,6 @@ const ua = {
         log_out: "Вийти",
         looks_good: "Гарно виглядає!",
         manage_sessions: "Управління Сеансами",
-        menubar_style: "Стиль Меню",
-        menubar_style_desktop: "Робочого стола",
-        menubar_style_system: "Системи",
-        menubar_style_window: "Вікна",
         modified: "Змінено",
         move: "Перемістити",
         moving_file: "Переміщується %%",
@@ -363,6 +359,7 @@ const ua = {
         "billing.subscription_cancelled_description": "Ви матимете доступ до своєї підписки до кінця поточного розрахункового періоду.",
         "billing.offering.free": "Free", // In English: "Free"
         "billing.offering.pro": "Professional", // In English: "Professional"
+        "billing.offering.professional": "Professional", // In English: "Professional"
         "billing.offering.business": "Business", // In English: "Business"
         "billing.cloud_storage": "Хмарне сховище",
         "billing.ai_access": "Доступ до ШІ",

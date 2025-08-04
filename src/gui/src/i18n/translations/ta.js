@@ -160,10 +160,6 @@ const ta = {
         log_out: 'வெளியேறு',
         looks_good: "நன்றாக இருக்கிறது!",
         manage_sessions: "அமர்வுகளை நிர்வகிக்கவும்",
-        menubar_style: "மெனுபார் உடை",
-        menubar_style_desktop: "டெஸ்க்டாப்",
-        menubar_style_system: "அமைப்பு",
-        menubar_style_window: "ஜன்னல்",
         modified: 'மாற்றியமைக்கப்பட்டது',
         move: 'நகர்வு',
         moving_file: "நகரும் %%",
@@ -379,6 +375,7 @@ const ta = {
         "billing.subscription_cancelled_description": "நீங்கள் இந்த பில்லிங் காலத்தின் முடிவுவரை உங்கள் சப்ஸ்கிரிப்ஷனுக்கு அணுகல் பெறுவீர்கள்.", // In English: "You will still have access to your subscription until the end of this billing period."
         "billing.offering.free": "இலவசம்", // In English: "Free"
         "billing.offering.pro": "தொழில்முறை", // In English: "Professional"
+        "billing.offering.professional": "தொழில்முறை", // In English: "Professional"
         "billing.offering.business": "வியாபாரம்", // In English: "Business"
         "billing.cloud_storage": "மேக சேமிப்பு", // In English: "Cloud Storage"
         "billing.ai_access": "AI அணுகல்", // In English: "AI Access"

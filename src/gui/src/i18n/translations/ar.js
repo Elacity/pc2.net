@@ -175,10 +175,6 @@ const ar = {
       log_out: "تسجيل الخروج",
       looks_good: "يبدو جيدًا!",
       manage_sessions: "إدارة الجلسات",
-      menubar_style: "نمط شريط القوائم",
-      menubar_style_desktop: "سطح المكتب",
-      menubar_style_system: "النظام",
-      menubar_style_window: "النافذة",
       modified: "تم التعديل",
       move: "نقل",
       moving_file: "جارٍ نقل %%",
@@ -402,6 +398,7 @@ const ar = {
     "billing.subscription_cancelled_description": "ستظل لديك إمكانية الوصول إلى اشتراكك حتى نهاية فترة الفوترة الحالية.", // In English: "You will still have access to your subscription until the end of this billing period."
     "billing.offering.free": "مجاني", // In English: "Free"
     "billing.offering.pro": "احترافي", // In English: "Professional"
+    "billing.offering.professional": "احترافي", // In English: "Professional"
     "billing.offering.business": "تجاري", // In English: "Business"
     "billing.cloud_storage": "Cloud Storage", // In English: "Cloud Storage"
     "billing.ai_access": "التحصل على الذكاء الاصطناعي", // In English: "AI Access"

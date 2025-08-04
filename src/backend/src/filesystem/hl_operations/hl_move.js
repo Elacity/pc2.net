@@ -24,7 +24,6 @@ const { HLFilesystemOperation } = require("./definitions");
 const { MkTree } = require("./hl_mkdir");
 const { HLRemove } = require("./hl_remove");
 const { TYPE_DIRECTORY } = require("../FSNodeContext");
-const config = require("../../config");
 
 class HLMove extends HLFilesystemOperation {
     static MODULES = {
@@ -148,7 +147,7 @@ class HLMove extends HLFilesystemOperation {
         if ( await dest.exists() ) {
             if ( ! values.overwrite && ! values.dedupe_name ) {
                 throw APIError.create('item_with_same_name_exists', null, {
-                    entry_name: target_name,
+                    entry_name: await dest.get('name'),
                 });
             }
 

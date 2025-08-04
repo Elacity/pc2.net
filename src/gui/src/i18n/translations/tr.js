@@ -161,10 +161,6 @@ const tr = {
         log_out: "Çıkış Yap",
         looks_good: "İyi görünüyor!",
         manage_sessions: "Oturumları Yönet",
-        menubar_style: "Menü Çubuğu Stili",
-        menubar_style_desktop: "Masaüstü",
-        menubar_style_system: "Sistem",
-        menubar_style_window: "Pencere",
         modified: "Değiştirilmiş",
         move: "Taşı",
         moving_file: "%% Taşınıyor",
@@ -381,6 +377,7 @@ const tr = {
         "billing.subscription_cancelled_description": "Bu fatura döneminin sonuna kadar aboneliğinizi kullanmaya devam edebilirsiniz.", // In English: "You will still have access to your subscription until the end of this billing period."
         "billing.offering.free": "Ücretsiz", // In English: "Free"
         "billing.offering.pro": "Profesyonel", // In English: "Professional"
+        "billing.offering.professional": "Profesyonel", // In English: "Professional"
         "billing.offering.business": "İşletme", // In English: "Business"
         "billing.cloud_storage": "Bulut Depolama", // In English: "Cloud Storage"
         "billing.ai_access": "Yapay Zeka Erişimi", // In English: "AI Access"

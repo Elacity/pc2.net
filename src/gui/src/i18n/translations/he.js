@@ -172,10 +172,6 @@ const en = {
     log_out: "התנתק",
     looks_good: "נראה טוב!",
     manage_sessions: "ניהול ישיבות",
-    menubar_style: "סגנון שורת התפריט",
-    menubar_style_desktop: "שולחן העבודה",
-    menubar_style_system: "מערכת",
-    menubar_style_window: "חַלוֹן",
     modified: "שונה",
     move: "לעבור",
     moving_file: "מעביר %%",
@@ -394,6 +390,7 @@ const en = {
     "billing.subscription_cancelled_description": "עדיין תהיה לכם גישה למנוי עד סוף תקופת החיוב.", // In English: "You will still have access to your subscription until the end of this billing period."
     "billing.offering.free": "חינם", // In English: "Free"
     "billing.offering.pro": "מקצועי", // In English: "Professional"
+    "billing.offering.professional": "מקצועי", // In English: "Professional"
     "billing.offering.business": "עסקי", // In English: "Business"
     "billing.cloud_storage": "אחסון בענן", // In English: "Cloud Storage"
     "billing.ai_access": "גישה לAI", // In English: "AI Access"

@@ -161,10 +161,6 @@ const hi = {
         log_out: 'लॉग आउट',
         looks_good: "अच्छा लग रहा है!",
         manage_sessions: "सत्र प्रबंधित करें",
-        menubar_style: "मेनूबार शैली",
-        menubar_style_desktop: "डेस्कटॉप",
-        menubar_style_system: "प्रणाली",
-        menubar_style_window: "खिड़की",
         modified: 'संशोधित',
         move: 'बदले',
         moving_file: "जा रहे हैं %%",
@@ -369,6 +365,7 @@ const hi = {
         "billing.subscription_cancelled_description": "इस विधेयक अवधि के अंत तक आप अपनी सदस्यता का उपयोग कर पाएंगे।", // In English: "You will still have access to your subscription until the end of this billing period."
         "billing.offering.free": "मुक्त", // In English: "Free"
         "billing.offering.pro": "पेशेवर", // In English: "Professional"
+        "billing.offering.professional": "पेशेवर", // In English: "Professional"
         "billing.offering.business": "व्यापार", // In English: "Business"
         "billing.cloud_storage": "क्लाउड स्टोरेज", // In English: "Cloud Storage"
         "billing.ai_access": "एआई पहुँच", // In English: "AI Access"

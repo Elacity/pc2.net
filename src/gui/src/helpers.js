@@ -30,7 +30,6 @@ import UIWindowProgress from './UI/UIWindowProgress.js';
 import globToRegExp from "./helpers/globToRegExp.js";
 import get_html_element_from_options from "./helpers/get_html_element_from_options.js";
 import item_icon from "./helpers/item_icon.js";
-import play_startup_chime from "./helpers/play_startup_chime.js";
 
 window.is_auth = ()=>{
     if(localStorage.getItem("auth_token") === null || window.auth_token === null)
@@ -436,12 +435,6 @@ window.refresh_user_data = async (auth_token)=>{
 window.update_auth_data = async (auth_token, user)=>{
     window.auth_token = auth_token;
     localStorage.setItem('auth_token', auth_token);
-
-    // Play startup chime if enabled
-    if ( sessionStorage.getItem('playChimeNextUpdate') === 'yes' ) {
-        sessionStorage.setItem('playChimeNextUpdate', 'no');
-        play_startup_chime();
-    }
 
     // Has username changed?
     if(window.user?.username !== user.username)
@@ -933,14 +926,13 @@ window.available_templates = async () => {
 }
 
 window.create_shortcut = async(filename, is_dir, basedir, appendto_element, shortcut_to, shortcut_to_path)=>{
-    let dirname = basedir;
     const extname = path.extname(filename);
     const basename = path.basename(filename, extname) + ' - Shortcut';
     filename = basename + extname;
 
     // create file shortcut
     try{
-        await puter.fs.upload(new File([], filename), dirname, {
+        await puter.fs.upload(new File([], filename), basedir, {
             overwrite: false,
             shortcutTo: shortcut_to_path ?? shortcut_to,
             dedupeName: true,
@@ -1668,7 +1660,6 @@ window.move_items = async function(el_items, dest_path, is_undo = false){
 
     // log stats to console
     let move_duration = (Date.now() - move_init_ts);
-    // console.log(`moved ${el_items.length} item${el_items.length > 1 ? 's':''} in ${move_duration}ms`);
 
     // -----------------------------------------------------------------------
     // DONE! close progress window with delay to allow user to see 100% progress
@@ -2744,4 +2735,96 @@ window.get_profile_picture = async function(username){
     }
 
     return icon;
+}
+
+window.format_with_units = (num, { mulUnits, divUnits, precision = 3 }) => {
+  if ( num === 0 ) return "0";
+
+  mulUnits = mulUnits ?? ["", "K", "M", "G", "T", "P", "E", "Z", "Y"];
+  divUnits = divUnits ?? ["m", "µ", "n", "p", "f", "a", "z", "y"];
+
+  const abs = Math.abs(num);
+  let exp = Math.floor(Math.log10(abs) / 3);
+  let symbol = "";
+
+  symbol = exp >= 0
+    ? mulUnits[exp]
+    : divUnits[-exp - 1] ;
+
+  if ( ! symbol ) {
+    symbol = `e${exp * 3}`;
+  }
+
+  const scaled = num / Math.pow(10, exp * 3);
+  const rounded = Number.parseFloat(scaled.toPrecision(precision));
+
+  return `${rounded}${symbol}`;
+};
+
+window.format_SI = (num) => {
+  if ( num === 0 ) return "0";
+
+  const mulUnits = ["", "K", "M", "G", "T", "P", "E", "Z", "Y"];
+  const divUnits = ["m", "µ", "n", "p", "f", "a", "z", "y"];
+  
+  return window.format_with_units(num, { mulUnits, divUnits });
+};
+
+window.format_credits = (num) => {
+  if ( num === 0 ) return "0";
+  
+  const mulUnits = ["", "K", "M", "B", "T", "Q"];
+
+  return window.format_with_units(num, { mulUnits })
+};
+
+/**
+ * This function will call the provided action function in a try...catch
+ * and handle the 'item_with_same_name_exists' error by re-calling the
+ * action with `{ overwrite: true }` if the user specifies they want to
+ * do so.
+ * 
+ * All exceptions are trapped by this function. The user will see
+ * "Upload failed." if an error occurs and the error object will
+ * be logged to the console.
+ * 
+ * A parent_uuid for a window should be specified for alert boxes to
+ * behave correctly.
+ */
+window.handle_same_name_exists = async ({
+    action, parent_uuid,
+}) => {
+    try {
+        await action({ overwrite: false });
+        return true;
+    } catch ( err ) {
+        if ( err.code !== 'item_with_same_name_exists' ) {
+            console.error(err);
+            await UIAlert({
+                message: err.message ?? "Upload failed.",
+                parent_uuid,
+            });
+            return false;
+        }
+        const alert_resp = await UIAlert({
+            message: `<strong>${html_encode(err.entry_name)}</strong> already exists.`,
+            buttons:[
+                {
+                    label: i18n('replace'),
+                    value: 'replace',
+                    type: 'primary',
+                },
+                {
+                    label: i18n('cancel'),
+                    value: 'cancel',
+                },
+            ],
+            parent_uuid,
+        });
+        if ( alert_resp === 'replace' ) {
+            await action({ overwrite: true });
+            return true;
+        }
+        return false;
+    }
 }

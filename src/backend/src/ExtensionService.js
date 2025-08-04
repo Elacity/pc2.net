@@ -22,7 +22,7 @@ const BaseService = require("./services/BaseService");
 const { Endpoint } = require("./util/expressutil");
 const configurable_auth = require("./middleware/configurable_auth");
 const { Context } = require("./util/context");
-const { DB_READ, DB_WRITE } = require("./services/database/consts");
+const { DB_WRITE } = require("./services/database/consts");
 const { Actor } = require("./services/auth/Actor");
 
 /**
@@ -63,6 +63,7 @@ class ExtensionServiceState extends AdvancedBase {
             mw,
             route: path,
             handler: handler,
+            ...(options.subdomain ? { subdomain: options.subdomain } : {}),
         });
     
         this.endpoints_.push(endpoint);
@@ -94,7 +95,13 @@ class ExtensionService extends BaseService {
         svc_event.on_all(async (key, data, meta = {}) => {
             meta.from_outside_of_extension = true;
 
-            await this.state.extension.emit(`core.${key}`, data, meta);
+            // register for both `core.` and the extension name
+            const promises = [];
+            promises.push(
+                this.state.extension.emit(`core.${key}`, data, meta));
+            promises.push(
+                this.state.extension.emit(key, data, meta));
+            await Promise.all(promises);
         });
 
         this.state.extension.on_all(async (key, data, meta) => {

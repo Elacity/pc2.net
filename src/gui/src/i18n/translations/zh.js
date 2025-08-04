@@ -162,10 +162,6 @@ const zh = {
         log_out: '退出',
         looks_good: "看起来不错！",
         manage_sessions: "会话管理",
-        menubar_style: "菜单条样式",
-        menubar_style_desktop: "桌面",
-        menubar_style_system: "系统",
-        menubar_style_window: "窗口",
         modified: '已修改',
         move: '移动',
         moving_file: "移动 %%",
@@ -378,6 +374,7 @@ const zh = {
         "billing.subscription_cancelled_description": '在此账单期结束前，您仍可使用您的订阅服务。', // In English: "You will still have access to your subscription until the end of this billing period."
         "billing.offering.free": '免费', // In English: "Free"
         "billing.offering.pro": '专业', // In English: "Professional"
+        "billing.offering.professional": '专业', // In English: "Professional"
         "billing.offering.business": '商业', // In English: "Business"
         "billing.cloud_storage": '云存储', // In English: "Cloud Storage"
         "billing.ai_access": '人工智能访问', // In English: "AI Access"

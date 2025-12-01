@@ -153,7 +153,7 @@ const install = async ({ services, app, useapi, modapi }) => {
     const { OwnerLimitedES } = require('./om/entitystorage/OwnerLimitedES');
     const { ESBuilder } = require('./om/entitystorage/ESBuilder');
     const { Eq, Or } = require('./om/query/query');
-    const { TrackSpendingService } = require('./services/TrackSpendingService');
+    // const { TrackSpendingService } = require('./services/TrackSpendingService'); // DISABLED: Service not found
     const { MakeProdDebuggingLessAwfulService } = require('./services/MakeProdDebuggingLessAwfulService');
     const { ConfigurableCountingService } = require('./services/ConfigurableCountingService');
     const { FSLockService } = require('./services/fs/FSLockService');
@@ -255,7 +255,7 @@ const install = async ({ services, app, useapi, modapi }) => {
     services.registerService('context-init', ContextInitService);
     services.registerService('identification', IdentificationService);
     services.registerService('auth-audit', AuthAuditService);
-    services.registerService('spending', TrackSpendingService);
+    // services.registerService('spending', TrackSpendingService); // DISABLED: Service not found
     services.registerService('counting', ConfigurableCountingService);
     services.registerService('thumbnails', StrategizedService, {
         strategy_key: 'engine',

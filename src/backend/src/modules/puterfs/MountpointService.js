@@ -56,13 +56,13 @@ class MountpointService extends BaseService {
         };
         await svc_event.emit('create.filesystem-types', event);
 
-        // Determine mountpoints configuration
-        // ELACITY: Temporarily disabled default puterfs mounter (will be enabled with extensions in Phase 3)
-        const mountpoints = this.config.mountpoints ?? {};
-        // Upstream default (disabled for now):
-        // const mountpoints = this.config.mountpoints ?? {
-        //     '/': {
-        //         mounter: 'puterfs',
+        // Determine mountpoints configuration  
+        // ELACITY: Use dbfs (database filesystem) for persistence
+        const mountpoints = this.config.mountpoints ?? {
+            '/': {
+                mounter: 'dbfs',
+            },
+        };
         //     },
         // };
 
@@ -89,6 +89,11 @@ class MountpointService extends BaseService {
     }
 
     async get_provider (selector) {
+        // If no mountpoints configured, return null (use database directly)
+        if ( Object.keys(this.#mountpoints).length === 0 ) {
+            return null;
+        }
+        
         // If there is only one provider, we don't need to do any of this,
         // and that's a big deal because the current implementation requires
         // fetching a filesystem entry before we even have operation-level
@@ -100,7 +105,7 @@ class MountpointService extends BaseService {
         try_infer_attributes(selector);
 
         if ( selector instanceof RootNodeSelector ) {
-            return this.#mountpoints['/'].provider;
+            return this.#mountpoints['/']?.provider ?? null;
         }
 
         if ( selector instanceof NodeUIDSelector ) {
@@ -143,8 +148,8 @@ class MountpointService extends BaseService {
             }
         }
 
-        // Use root mountpoint as fallback
-        return this.#mountpoints['/'].provider;
+        // Use root mountpoint as fallback (or null if no mountpoints)
+        return this.#mountpoints['/']?.provider ?? null;
     }
 
     // Temporary solution - we'll develop this incrementally

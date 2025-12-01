@@ -34,9 +34,14 @@ const tmp_provide_services = async ss => {
     await services.ready;
 }
 
-async function is_empty(dir_uuid){
+async function is_empty(dir_identifier){
     /** @type BaseDatabaseAccessService */
     const db = services.get('database').get(DB_READ, 'filesystem');
+
+    // Handle both old signature (string) and new signature (object)
+    const dir_uuid = typeof dir_identifier === 'string' 
+        ? dir_identifier 
+        : dir_identifier?.uid;
 
     // first check if this entry is shared
     let rows = await db.read(

@@ -147,8 +147,7 @@ const install = async ({ context, services, app, useapi, modapi }) => {
     const { RateLimitService } = require('./services/sla/RateLimitService');
     const { AuthService } = require('./services/auth/AuthService');
     const { PreAuthService } = require('./services/auth/PreAuthService');
-    // ELACITY: Particle Auth Integration
-    const { ParticleAuthService } = require('./services/auth/ParticleAuthService');
+    // ELACITY: Particle Auth driver moved to extension, GUI service stays in core for simplicity
     const { ParticleAuthGUIService } = require('./services/ParticleAuthGUIService');
     const { SLAService } = require('./services/sla/SLAService');
     const { PermissionService } = require('./services/auth/PermissionService');
@@ -264,13 +263,9 @@ const install = async ({ context, services, app, useapi, modapi }) => {
         ]),
     });
     services.registerService('rate-limit', RateLimitService);
-    // ELACITY: Conditional Particle Auth or default AuthService
-    if (config.auth_system === 'particle') {
-        services.registerService('auth', ParticleAuthService);
-        services.registerService('__particle-auth', ParticleAuthGUIService);
-    } else {
-        services.registerService('auth', AuthService);
-    }
+    // ELACITY: Auth service (extension provides driver, core provides GUI)
+    services.registerService('auth', AuthService);
+    services.registerService('__particle-auth-gui', ParticleAuthGUIService);
     // services.registerService('preauth', PreAuthService);
     services.registerService('permission', PermissionService);
     services.registerService('sla', SLAService);

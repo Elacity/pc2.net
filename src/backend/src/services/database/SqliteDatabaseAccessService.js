@@ -162,7 +162,13 @@ class SqliteDatabaseAccessService extends BaseDatabaseAccessService {
                 '0036_dev-to-app.sql',
             ]],
             [34, [
+                '0037_cost.sql',
+            ]],
+            [35, [
                 '0038_user_wallet_address.sql',
+            ]],
+            [36, [
+                '0039_add-expireAt-to-kv-store.sql',
             ]],
         ];
 

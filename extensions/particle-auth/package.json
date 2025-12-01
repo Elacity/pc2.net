@@ -1,0 +1,28 @@
+{
+    "name": "@elacity/extension-particle-auth",
+    "version": "1.0.0",
+    "description": "Particle Network authentication extension for ElastOS",
+    "main": "main.js",
+    "author": "Elacity",
+    "license": "AGPL-3.0-only",
+    "puter": {
+        "type": "extension",
+        "provides": {
+            "drivers": [
+                {
+                    "interface": "auth",
+                    "implementation": "particle"
+                }
+            ],
+            "services": [
+                "particle-auth",
+                "particle-auth-gui"
+            ]
+        }
+    },
+    "dependencies": {
+        "@particle-network/auth": "^1.3.1",
+        "@particle-network/provider": "^1.3.1"
+    }
+}
+

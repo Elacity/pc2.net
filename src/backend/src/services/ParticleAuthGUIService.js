@@ -30,19 +30,21 @@ const _path = require('path');
 class ParticleAuthGUIService extends BaseService {
     /**
     * Handles the installation of GUI-related routes for the particle auth.
+    * Using install.routes instead of install.routes-gui to register BEFORE default router
     *
     * @async
     * @returns {Promise<void>} Resolves when routing is successfully set up.
     */
-    async ['__on_install.routes-gui'] () {
+    async ['__on_install.routes'] () {
         const { app } = this.services.get('web-server');
 
+        // ELACITY: Path from src/backend/src/services/ to src/particle-auth/
         const dirPath = _path.join(__dirname, '../../../particle-auth');
 
-        // Serve the Particle Auth React app
+        // Serve the Particle Auth React app BEFORE the default router
         app.use('/particle-auth', express.static(dirPath));
 
-        this.log.info('[Particle Auth]: routes registered');
+        this.log.info('[Particle Auth]: routes registered, serving from', dirPath);
 
     }
 }

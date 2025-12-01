@@ -42,7 +42,8 @@ const { EntityStoreModule } = require('./src/modules/entitystore/EntityStoreModu
 const { KVStoreModule } = require('./src/modules/kvstore/KVStoreModule.js');
 const { DomainModule } = require('./src/modules/domain/DomainModule.js');
 const { DNSModule } = require('./src/modules/dns/DNSModule.js');
-const { TestConfigModule } = require('./src/modules/test-config/TestConfigModule.js');
+// ELACITY: Disabled test-config module (incompatible config API)
+// const { TestConfigModule } = require('./src/modules/test-config/TestConfigModule.js');
 
 module.exports = {
     helloworld: () => {
@@ -78,7 +79,7 @@ module.exports = {
     MemoryStorageModule,
     SelfHostedModule,
     TestDriversModule,
-    TestConfigModule,
+    // TestConfigModule, // ELACITY: Disabled (incompatible config API)
     PuterAIModule,
     BroadcastModule,
     InternetModule,

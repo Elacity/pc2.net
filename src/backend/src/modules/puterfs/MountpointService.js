@@ -57,11 +57,14 @@ class MountpointService extends BaseService {
         await svc_event.emit('create.filesystem-types', event);
 
         // Determine mountpoints configuration
-        const mountpoints = this.config.mountpoints ?? {
-            '/': {
-                mounter: 'puterfs',
-            },
-        };
+        // ELACITY: Temporarily disabled default puterfs mounter (will be enabled with extensions in Phase 3)
+        const mountpoints = this.config.mountpoints ?? {};
+        // Upstream default (disabled for now):
+        // const mountpoints = this.config.mountpoints ?? {
+        //     '/': {
+        //         mounter: 'puterfs',
+        //     },
+        // };
 
         // Mount filesystems
         for ( const path of Object.keys(mountpoints) ) {

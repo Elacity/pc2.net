@@ -1,0 +1,137 @@
+---
+description: Unified AI Development & Code Quality Rules
+alwaysApply: true
+---
+
+# Elacity Unified AI Development & Code Quality Rules
+
+This single rule set replaces previous duplicates and governs AI-driven development and code quality for Elacity. It is concise, prescriptive, and emphasizes critical anti-patterns to avoid.
+
+## Task Workflow
+- Use templates from `.cursor/templates/`
+- Verify task status in `.cursor/tasks/[TASK-ID/SLUG].md` is Agreed before any implementation
+- Sequence: Analysis → Context → Plan → Implement → Review & Document
+
+## Scope & Change Control
+- Do not implement beyond the agreed task scope
+- Pause and document questions if requirements are unclear
+- Use feature flags (config-driven) instead of commented-out code
+
+## Component & State Patterns
+```typescript
+// Component skeleton
+interface ComponentProps {
+  id: string; // required first
+  loading?: boolean;
+  onClick?: (e: React.MouseEvent) => void;
+  sx?: SxProps<Theme>;
+  children?: React.ReactNode;
+}
+
+const Component: React.FC<ComponentProps> = ({
+  id,
+  loading = false,
+  onClick,
+  sx,
+  children
+}) => {
+  const memoValue = React.useMemo(() => compute(), []);
+  
+  const handleClick = React.useCallback((e: React.MouseEvent) => onClick?.(e), [onClick]);
+  if (loading) {
+    return (
+      <LoadingComponent />
+    );
+  }
+  
+  return (
+    <Box sx={sx}>
+      {children}
+    </Box>
+  );
+};
+```
+
+```typescript
+// RTK Slice & RTK Query (abbreviated)
+export const slice = createSlice({
+  name: 'feature',
+  initialState,
+  reducers: {
+    set(state, a: PayloadAction < T > ) {
+      state.v = a.payload;
+    }
+  }
+});
+
+export const api = createApi({
+  reducerPath: 'api',
+  baseQuery: fetchBaseQuery({
+    baseUrl: '/api'
+  }),
+  tagTypes: ['Entity'],
+  endpoints: (b) = >({
+    fetchData: b.query < R,
+    P > ({
+      query: (p) = >({
+        url: '/endpoint',
+        params: p
+      }),
+      providesTags: ['Entity']
+    })
+  })
+});
+```
+
+## Web3 & Transactions
+- Validate inputs: address format, positive amounts, correct decimals
+- Handle errors with user-friendly messages; catch user rejections
+- Use `lib/web3/executable` TxExecutable pattern for all transactions
+
+## Error Handling & UX
+- Add loading and empty states
+- Provide error boundaries at route/feature level
+- No console pollution in production
+
+## Performance Rules
+- Memoize expensive calculations and handlers
+- Use proper dependency arrays; clean up all subscriptions
+- Offload filtering/sorting/heavy calculations to backend APIs
+
+## Import Organization
+- React imports → MUI components → MUI icons → External libs → Internal modules
+- Separate groups with empty lines; multiline when >3 items
+
+## Critical Anti-Patterns to Avoid (with Correct Practices)
+- Duplication: Do not repeat component structures, styled blocks, constants, or types across files. Extract shared abstractions.
+- Console Pollution: Remove `console.*` from production paths; use dev-only logging if needed.
+- Theme Shadowing: Do not declare `const theme = useTheme()` when using `sx={(theme) => ({})}`. Use the `sx` theme parameter directly.
+- Memory Leaks: Every `useEffect` path must return a cleanup when side effects exist. Always clear timeouts/intervals/subscriptions. Include correct deps for `useMemo`/`useCallback`.
+- Commented Feature Toggles: Never leave commented UI/logic as a flag. Use a feature flag config and conditional inclusion.
+- Context/Logic Duplication: Centralize shared fetching/derivations/navigation into Context or hooks when used in 3+ components.
+- Input Security: Validate and bound user inputs; enforce absolute maximums (e.g., quantities ≤ 10000, prices ≤ 1_000_000 units).
+- Nested Ternaries/Deep If-Else: Prefer early returns, small helpers, or switch/strategy patterns.
+- Hooks Misuse: Never call hooks conditionally, in loops, inside callbacks, or after early returns. Hooks go at the top level.
+- Keys in Lists: Use stable unique identifiers; avoid array index keys for dynamic lists.
+- Generic Types: Avoid `any`, `{}`, and `object`. Use specific interfaces and `Record<string, T>` where dynamic keys are needed.
+- Render-time Allocations: Avoid inline object/function creation in render; memoize or lift constants.
+
+## Backend-First Data Processing
+Bad: Frontend → Raw Data → Frontend calculations → Display
+
+Good: Frontend → Backend processing → Pre-processed data → Display
+- Sort/filter/aggregate on the server; include precomputed fields in API/GraphQL
+
+## Quality Gates (Before Review)
+- TypeScript strict; accessibility verified
+- No console logs; performance optimizations applied
+- Error scenarios handled; loading/empty states present
+- Tests and documentation updated
+
+## Quick Checklists
+- During implementation: memoize, validate inputs, follow `sx={(theme)=>({})}` correctly, cleanup effects
+- Before commit: search for `console.`, check for duplication, verify hook dependencies and cleanups, ensure keys and types are correct
+
+---
+
+This unified rule is the single source of truth for AI development and code quality in Elacity.

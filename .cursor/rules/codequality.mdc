@@ -1,0 +1,796 @@
+---
+description: Code Quality Anti-Patterns - What NOT to do (Based on Real Issues)
+alwaysApply: true
+---
+
+# Code Quality Anti-Patterns: What NOT to Do
+
+> **Context**: This document catalogs real anti-patterns discovered during code review of AI-generated commits (95855a58, 74fb5819) that required major refactoring (9cff5b6a). These rules prevent code corruption, maintainability issues, and technical debt.
+
+---
+
+## 🚨 CRITICAL #1: NEVER Call Hooks Inside JSX
+
+> **⚠️ THIS IS THE MOST CRITICAL ANTI-PATTERN** - This violation is so severe it required splitting an entire 1000+ line component into multiple components to fix.
+
+### The Problem: React.useEffect Called Directly in JSX
+
+**❌ ABSOLUTELY FORBIDDEN - Real Example from Commit 95855a58:**
+```tsx
+const SendModal = () => {
+  return (
+    <Form>
+      {/* ... form fields ... */}
+      
+      {/* THIS IS CATASTROPHICALLY WRONG */}
+      {React.useEffect(() => {
+        setFeeEstimate(null);
+        setFeeError(null);
+
+        const timeoutId = setTimeout(() => {
+          if (values.sendAmount && values.recipientAddress && isAddress(values.recipientAddress) && values.selectedNetwork) {
+            estimateFeeForTransaction(values.sendAmount, values.recipientAddress, values.selectedNetwork, values.selectedToken);
+          }
+        }, 800);
+
+        return () => clearTimeout(timeoutId);
+      }, [values.sendAmount, values.recipientAddress, values.selectedNetwork, values.selectedToken])}
+      
+      {/* Fee Display Section */}
+      {(estimatingFee || feeEstimate || feeError) && (
+        <Box>Fee information</Box>
+      )}
+    </Form>
+  );
+};
+```
+
+**Why This is Catastrophic:**
+1. **Violates React's Rules of Hooks** - Hooks MUST be called at the top level of a component
+2. **Unpredictable Behavior** - The effect may run multiple times, not run at all, or run in the wrong order
+3. **Breaking React's Mental Model** - JSX should describe what to render, not execute side effects
+4. **Makes Components Untestable** - Cannot properly test or mock hook behavior
+5. **Causes Re-render Issues** - Can trigger infinite loops or missed updates
+6. **Makes Code Unmaintainable** - Other developers will not understand the flow
+
+**✅ CORRECT - Solution: Split Into Separate Components (Commit 9cff5b6a):**
+```tsx
+// Parent component - clean separation
+const SendModal = ({ open, onClose }) => {
+  const availableTokens = useAvailableTokens();
+  
+  return (
+    <Modal open={open} onClose={onClose}>
+      <DialogTitle>Send Tokens</DialogTitle>
+      <DialogContent>
+        <Formik initialValues={...} validationSchema={...}>
+          <SendModalInnerForm availableTokens={availableTokens} />
+        </Formik>
+      </DialogContent>
+    </Modal>
+  );
+};
+
+// Child component - hooks at top level where they belong
+const SendModalInnerForm = ({ availableTokens }) => {
+  const [feeEstimate, setFeeEstimate] = useState(null);
+  const [estimatingFee, setEstimatingFee] = useState(false);
+  
+  // Hooks at the TOP of the component - CORRECT!
+  useEffect(() => {
+    setFeeEstimate(null);
+    setFeeError(null);
+
+    const timeoutId = setTimeout(() => {
+      if (values.sendAmount && values.recipientAddress && isAddress(values.recipientAddress) && values.selectedNetwork) {
+        estimateFeeForTransaction(values.sendAmount, values.recipientAddress, values.selectedNetwork, values.selectedToken);
+      }
+    }, 800);
+
+    return () => clearTimeout(timeoutId);
+  }, [values.sendAmount, values.recipientAddress, values.selectedNetwork, values.selectedToken]);
+  
+  return (
+    <Form>
+      {/* ... form fields ... */}
+      
+      {/* Fee Display Section - No hooks in JSX! */}
+      {(estimatingFee || feeEstimate || feeError) && (
+        <Box>Fee information</Box>
+      )}
+    </Form>
+  );
+};
+```
+
+**Key Takeaway:**
+If you find yourself needing to call a hook inside JSX, it means your component is doing too much and needs to be split into multiple components. The hook should be moved to the top level of a new child component.
+
+---
+
+## 🚨 CRITICAL: Other Never Violate Rules
+
+### 2. NO Code Duplication Across Files
+
+---
+
+### 2. NO Code Duplication Across Files
+
+**❌ FORBIDDEN - Duplicating Constants:**
+```tsx
+// File: HistoryList.tsx
+const CHAIN_INFO = {
+  1: { name: 'Ethereum', icon: '...', explorer: '...' },
+  // ... 10+ entries
+};
+
+// File: TransactionDetailModal.tsx  
+const CHAIN_INFO = {  // DUPLICATE!
+  1: { name: 'Ethereum', icon: '...', explorer: '...' },
+  // ... 10+ entries
+};
+```
+
+**✅ CORRECT:**
+```tsx
+// File: constants/chain.ts
+export const CHAIN_INFO = {
+  1: { name: 'Ethereum', icon: '...', explorer: '...' },
+  // Single source of truth
+};
+
+// File: HistoryList.tsx
+import { CHAIN_INFO } from '../constants/chain';
+
+// File: TransactionDetailModal.tsx
+import { CHAIN_INFO } from '../constants/chain';
+```
+
+**Why**: 
+- Single source of truth principle
+- Changes need to be made in one place only
+- Prevents inconsistencies and maintenance nightmares
+- Reduces bundle size
+
+---
+
+### 3. NO Duplicate Type Definitions
+
+**❌ FORBIDDEN:**
+```tsx
+// File: HistoryList.tsx
+interface Transaction {
+  transactionId: string;
+  tag: string;
+  // ... 15 properties
+}
+
+// File: TransactionDetailModal.tsx
+interface Transaction {  // DUPLICATE!
+  transactionId: string;
+  tag: string;
+  // ... 15 properties (might diverge!)
+}
+```
+
+**✅ CORRECT:**
+```tsx
+// File: types/index.ts
+export interface Transaction {
+  transactionId: string;
+  tag: string;
+  // ... all properties
+}
+
+// Import in all files that need it
+import { type Transaction } from '../types';
+```
+
+**Why**: Type definitions must be centralized to ensure consistency and enable refactoring.
+
+---
+
+### 4. NO Utility Functions Inside Components
+
+**❌ FORBIDDEN:**
+```tsx
+const MyComponent = () => {
+  // Helper function defined inside component
+  const formatDate = (dateString: string): string => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+    
+    if (diffInSeconds < 60) return 'Just now';
+    // ... 20 more lines
+  };
+
+  const formatAmount = (amount: string): string => {
+    // ... 30 lines of logic
+  };
+
+  return <div>{formatDate(someDate)}</div>;
+};
+```
+
+**✅ CORRECT:**
+```tsx
+// File: utils/display.tsx
+export const formatDate = (dateString: string): string => {
+  // ... implementation
+};
+
+export const formatAmount = (amount: string): string => {
+  // ... implementation
+};
+
+// File: MyComponent.tsx
+import { formatDate, formatAmount } from '../utils/display';
+
+const MyComponent = () => {
+  return <div>{formatDate(someDate)}</div>;
+};
+```
+
+**Why**:
+- Enables reusability across components
+- Improves testability (can test utils independently)
+- Reduces component size and complexity
+- Prevents recreation on every render
+
+---
+
+### 5. NO Monolithic Components (>300 LOC)
+
+> **Note**: The SendModal anti-pattern (#1 above) was made worse by having a 1000+ line monolithic component. Large components make it harder to spot critical violations like hooks in JSX.
+
+**❌ FORBIDDEN:**
+```tsx
+const SendModal = ({ open, onClose }) => {
+  // 50 lines of state declarations
+  const [state1, setState1] = useState();
+  const [state2, setState2] = useState();
+  // ... 20 more state variables
+  
+  // 100 lines of handlers
+  const handleThis = () => { /* ... */ };
+  const handleThat = () => { /* ... */ };
+  // ... 15 more handlers
+  
+  // 300 lines of helper functions
+  const helper1 = () => { /* ... */ };
+  const helper2 = () => { /* ... */ };
+  
+  // 400 lines of JSX with deeply nested logic
+  return (
+    <Modal>
+      <Box>
+        {/* 400+ lines of complex JSX */}
+      </Box>
+    </Modal>
+  );
+};
+```
+
+**✅ CORRECT:**
+```tsx
+// File: SendModal.tsx
+const SendModal = ({ open, onClose }) => {
+  const availableTokens = useAvailableTokens();
+  
+  return (
+    <Modal open={open} onClose={onClose}>
+      <DialogTitle>Send Tokens</DialogTitle>
+      <DialogContent>
+        <Formik initialValues={...} validationSchema={...}>
+          <SendModalInnerForm availableTokens={availableTokens} />
+        </Formik>
+      </DialogContent>
+    </Modal>
+  );
+};
+
+// File: SendModalInnerForm.tsx
+const SendModalInnerForm = ({ availableTokens }) => {
+  // Focused component with single responsibility
+  // ~150 lines max
+};
+```
+
+**Why**:
+- Improves readability and maintainability
+- Enables easier testing
+- Facilitates code reuse
+- Reduces cognitive load
+- Follows Single Responsibility Principle
+
+---
+
+### 6. NO Logic Mixed with Constants
+
+**❌ FORBIDDEN:**
+```tsx
+const MyComponent = () => {
+  // Constants defined in component
+  const CHAIN_INFO = {
+    1: { name: 'Ethereum', /* ... */ },
+    // ... many entries
+  };
+  
+  const TOKENS = ['ETH', 'USDC', 'DAI', /* ... */];
+  
+  return <div>{/* use constants */}</div>;
+};
+```
+
+**✅ CORRECT:**
+```tsx
+// File: constants/chain.ts
+export const CHAIN_INFO = {
+  1: { name: 'Ethereum', /* ... */ },
+  // ...
+};
+
+export const AVAILABLE_TOKENS = ['ETH', 'USDC', 'DAI'];
+
+// File: MyComponent.tsx
+import { CHAIN_INFO, AVAILABLE_TOKENS } from '../constants/chain';
+
+const MyComponent = () => {
+  return <div>{/* use imported constants */}</div>;
+};
+```
+
+**Why**:
+- Constants should be defined once and imported
+- Prevents recreation on every render
+- Enables sharing across components
+- Makes configuration changes easier
+
+---
+
+## 📋 File Organization Rules
+
+### 7. Proper Module Structure
+
+**❌ WRONG Structure:**
+```
+components/
+  ├── HistoryList.tsx (800 lines, everything inline)
+  ├── SendModal.tsx (1000+ lines, all logic embedded)
+  └── TransactionDetailModal.tsx (duplicates everywhere)
+```
+
+**✅ CORRECT Structure:**
+```
+components/
+  ├── HistoryList.tsx (150 lines, imports from modules)
+  ├── SendModal.tsx (100 lines, composition)
+  ├── SendModalInnerForm.tsx (200 lines, extracted component)
+  ├── TransactionDetailModal.tsx (150 lines, uses shared code)
+  ├── constants/
+  │   └── chain.ts (centralized constants)
+  ├── types/
+  │   └── index.ts (centralized types)
+  └── utils/
+      └── display.tsx (shared utility functions)
+```
+
+**Required Module Structure:**
+1. **constants/** - All constant values (chain info, tokens, configs)
+2. **types/** - All TypeScript interfaces and types
+3. **utils/** - Pure utility functions (formatting, validation, transforms)
+4. **components/** - React components only (lean, delegating to utils)
+5. **hooks/** - Custom React hooks (if needed)
+
+---
+
+### 8. Module Responsibility Guidelines
+
+**Each file should have a single, clear responsibility:**
+
+- **Component files**: UI rendering + component-local state only
+- **Constants files**: Static configuration data
+- **Types files**: TypeScript definitions
+- **Utils files**: Pure functions (same input → same output)
+- **Hooks files**: React hooks for shared stateful logic
+
+**❌ WRONG - Mixed Responsibilities:**
+```tsx
+// SendModal.tsx - everything in one file
+const CONSTANTS = { /* ... */ };
+interface Types { /* ... */ }
+const utils = { /* ... */ };
+const Component = () => { /* ... */ };
+```
+
+**✅ CORRECT - Separated Concerns:**
+```tsx
+// constants/chain.ts - only constants
+// types/index.ts - only types
+// utils/display.tsx - only utilities
+// SendModal.tsx - only component logic
+```
+
+---
+
+## 🎯 React-Specific Rules
+
+### 9. Component Composition Over Monoliths
+
+**❌ FORBIDDEN - God Component:**
+```tsx
+const SendModal = () => {
+  // 1000+ lines handling:
+  // - form state
+  // - validation
+  // - fee estimation
+  // - network selection
+  // - token selection
+  // - transaction submission
+  // - error handling
+  // - UI rendering
+  // ALL IN ONE COMPONENT
+};
+```
+
+**✅ CORRECT - Composed Components:**
+```tsx
+const SendModal = ({ open, onClose }) => (
+  <Modal open={open} onClose={onClose}>
+    <Formik {...formikProps}>
+      <SendModalInnerForm />
+    </Formik>
+  </Modal>
+);
+
+const SendModalInnerForm = () => {
+  // Focused on form logic only
+  return (
+    <Form>
+      <AmountInput />
+      <RecipientInput />
+      <NetworkSelector />
+      <FeeEstimator />
+      <SubmitButton />
+    </Form>
+  );
+};
+
+const FeeEstimator = () => {
+  // Focused on fee estimation only
+  const fee = useFeeEstimation();
+  return <FeeDisplay fee={fee} />;
+};
+```
+
+---
+
+### 10. Hook Usage Rules
+
+**❌ FORBIDDEN - Hooks in Wrong Places:**
+```tsx
+// In conditional
+if (condition) {
+  useEffect(() => {}, []);  // WRONG!
+}
+
+// In loop
+for (let i = 0; i < 10; i++) {
+  useState(i);  // WRONG!
+}
+
+// In JSX
+return <div>{useMyHook()}</div>;  // WRONG!
+
+// After early return
+if (error) return null;
+useEffect(() => {}, []);  // WRONG! (unreachable)
+```
+
+**✅ CORRECT - Hooks at Top Level:**
+```tsx
+const MyComponent = () => {
+  // All hooks at the top, unconditionally
+  const [state, setState] = useState();
+  const value = useMyHook();
+  
+  useEffect(() => {
+    // effect logic
+  }, []);
+  
+  // Then conditional logic
+  if (error) return null;
+  
+  return <div>{value}</div>;
+};
+```
+
+---
+
+### 11. ESLint Disable Comments
+
+**When you must disable ESLint, do it properly:**
+
+**❌ WRONG:**
+```tsx
+// No comment explaining why
+for (let i = 0; i < arr.length; i++) {  // triggers no-plusplus
+  // ...
+}
+```
+
+**✅ CORRECT:**
+```tsx
+/* eslint-disable no-plusplus */
+// Explicit loop needed for performance-critical array traversal
+for (let i = 0; i < decimals.length; i++) {
+  if (decimals[i] !== '0') {
+    firstNonZero = i;
+    break;
+  }
+}
+/* eslint-enable no-plusplus */
+```
+
+**Rules:**
+- Only disable at the smallest scope possible
+- Always include a comment explaining WHY
+- Re-enable after the specific code block
+- Prefer file-level disable only when entire file needs exception
+
+---
+
+## 🔧 TypeScript Quality Rules
+
+### 12. NO Inline Interface Definitions
+
+**❌ FORBIDDEN:**
+```tsx
+// Component file with inline interface
+const TransactionDetail = ({ transaction }: { 
+  transaction: {
+    transactionId: string;
+    tag: string;
+    createdAt: string;
+    targetToken: {
+      name: string;
+      symbol: string;
+      // ... 10+ nested properties
+    };
+    // ... 15+ more properties
+  }
+}) => {
+  // ...
+};
+```
+
+**✅ CORRECT:**
+```tsx
+// types/index.ts
+export interface Transaction {
+  transactionId: string;
+  tag: string;
+  createdAt: string;
+  targetToken: TokenInfo;
+  // ...
+}
+
+export interface TokenInfo {
+  name: string;
+  symbol: string;
+  // ...
+}
+
+// Component file
+import { type Transaction } from '../types';
+
+const TransactionDetail = ({ transaction }: { transaction: Transaction }) => {
+  // ...
+};
+```
+
+---
+
+### 13. Type Import Convention
+
+**✅ Use `type` imports for type-only imports:**
+```tsx
+// Correct - explicit type import
+import { type Transaction } from '../types';
+import { type Network } from '../constants/chain';
+
+// Also correct for multiple types
+import { 
+  type Transaction, 
+  type TokenInfo,
+  type ChainInfo 
+} from '../types';
+```
+
+**Why**: Makes it clear these are type-only imports, helps with tree-shaking, and follows TypeScript best practices.
+
+---
+
+## 🧪 Testing & Maintainability Rules
+
+### 14. Testable Code Structure
+
+**❌ HARD TO TEST:**
+```tsx
+const MyComponent = () => {
+  const [data, setData] = useState([]);
+  
+  useEffect(() => {
+    // Complex logic mixed with side effects
+    const result = someData
+      .filter(x => x.value > 10)
+      .map(x => ({
+        ...x,
+        formatted: `${x.value} USD`,
+        processed: x.value * 1.5
+      }))
+      .sort((a, b) => b.value - a.value);
+    
+    setData(result);
+  }, [someData]);
+  
+  return <List items={data} />;
+};
+```
+
+**✅ EASY TO TEST:**
+```tsx
+// utils/dataProcessing.ts
+export const processTransactions = (data: Transaction[]): ProcessedTransaction[] => {
+  return data
+    .filter(x => x.value > 10)
+    .map(x => ({
+      ...x,
+      formatted: formatCurrency(x.value),
+      processed: calculateProcessedValue(x.value)
+    }))
+    .sort(compareByValue);
+};
+
+// MyComponent.tsx
+const MyComponent = () => {
+  const [data, setData] = useState([]);
+  
+  useEffect(() => {
+    setData(processTransactions(someData));
+  }, [someData]);
+  
+  return <List items={data} />;
+};
+
+// __tests__/dataProcessing.test.ts
+describe('processTransactions', () => {
+  it('filters values less than 10', () => {
+    const input = [{ value: 5 }, { value: 15 }];
+    const result = processTransactions(input);
+    expect(result).toHaveLength(1);
+    expect(result[0].value).toBe(15);
+  });
+});
+```
+
+---
+
+### 15. Performance Considerations
+
+**❌ CAUSES UNNECESSARY RE-RENDERS:**
+```tsx
+const MyComponent = () => {
+  // Object/function created on every render
+  const config = {
+    option1: 'value1',
+    option2: 'value2'
+  };
+  
+  const handler = () => {
+    // handler logic
+  };
+  
+  return <ChildComponent config={config} onAction={handler} />;
+};
+```
+
+**✅ OPTIMIZED:**
+```tsx
+// Constants outside component
+const CONFIG = {
+  option1: 'value1',
+  option2: 'value2'
+};
+
+const MyComponent = () => {
+  // Memoized callback
+  const handler = useCallback(() => {
+    // handler logic
+  }, []);
+  
+  return <ChildComponent config={CONFIG} onAction={handler} />;
+};
+```
+
+---
+
+## 📝 Documentation Rules
+
+### 16. Document WHY, Not WHAT
+
+**❌ BAD COMMENTS:**
+```tsx
+// Set loading to true
+setLoading(true);
+
+// Create array of transactions
+const transactions = data.map(x => x);
+
+// Call API
+fetchData();
+```
+
+**✅ GOOD COMMENTS:**
+```tsx
+// Fee estimation requires debouncing to avoid excessive API calls
+// as users type. 800ms provides good UX without hammering the backend.
+const timeoutId = setTimeout(() => {
+  estimateFee(amount, recipient);
+}, 800);
+
+// Particle SDK returns internal transaction IDs, not blockchain tx hashes.
+// These IDs cannot be used with block explorers. We'll need to implement
+// a separate API call to getTokenTransactions for actual tx hashes.
+console.warn('Transaction ID is internal only:', transaction.transactionId);
+```
+
+---
+
+## ⚡ Quick Reference: Before Committing
+
+**Run this mental checklist:**
+
+- [ ] No duplicate code (check constants, types, utils)
+- [ ] No inline hooks in JSX
+- [ ] Component < 300 lines (extract if larger)
+- [ ] Types defined in types/
+- [ ] Constants defined in constants/
+- [ ] Utils defined in utils/
+- [ ] Proper imports (use `type` for types)
+- [ ] Hooks at component top level
+- [ ] ESLint warnings addressed or properly disabled with comments
+- [ ] No inline complex logic in JSX
+- [ ] Functions extracted and named descriptively
+
+---
+
+## 🎓 Summary: Core Principles
+
+1. **DRY (Don't Repeat Yourself)**: One source of truth for everything
+2. **Separation of Concerns**: Components, types, constants, utils in separate modules
+3. **Single Responsibility**: Each file/function does ONE thing well
+4. **Composition Over Inheritance**: Build complex UIs from simple components
+5. **Type Safety**: Centralized, shared type definitions
+6. **Testability**: Extract pure functions, avoid mixing logic with effects
+7. **Performance**: Avoid unnecessary re-renders, memoize when needed
+8. **Clarity**: Code should be self-documenting; comments explain WHY
+
+---
+
+## 🚫 Final Warning
+
+**If you find yourself:**
+- Copy-pasting code between files → STOP, extract to shared module
+- Writing a component over 300 lines → STOP, break it down
+- Defining interfaces in component files → STOP, move to types/
+- Calling hooks in JSX → STOP, this is fundamentally broken
+- Writing complex logic in useEffect → STOP, extract to utility function
+- Duplicating constants → STOP, centralize them
+
+**Then you are violating these principles and creating technical debt that will require major refactoring later.**
+
+---
+
+*This document is based on actual code review findings and must be treated as mandatory guidelines to prevent future technical debt.*

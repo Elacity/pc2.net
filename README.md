@@ -27,7 +27,7 @@
 
 ## Puter
 
-Puter is an advanced, open-source internet operating system designed to be feature-rich, exceptionally fast, and highly extensible. Puter can be used as:
+Puter is an advanced, open-source internet operating system designed to be feature-rich, fast, and highly extensible. Puter can be used as:
 
 - A privacy-first personal cloud to keep all your files, apps, and games in one secure place, accessible from anywhere at any time.
 - A platform for building and publishing websites, web apps, and games.
@@ -114,7 +114,7 @@ Puter is available as a hosted service at [**puter.com**](https://puter.com).
 - **Operating Systems:** Linux, macOS, Windows
 - **RAM:** 2GB minimum (4GB recommended)
 - **Disk Space:** 1GB free space
-- **Node.js:** Version 16+ (Version 23+ recommended)
+- **Node.js:** Version 20.19.5+ (Version 23+ recommended)
 - **npm:** Latest stable version
 
 <br/>
@@ -152,7 +152,7 @@ This repository, including all its contents, sub-projects, modules, and componen
 - [Farsi / فارسی](https://github.com/HeyPuter/puter/blob/main/doc/i18n/README.fa.md)
 - [Finnish / Suomi](https://github.com/HeyPuter/puter/blob/main/doc/i18n/README.fi.md)
 - [French / Français](https://github.com/HeyPuter/puter/blob/main/doc/i18n/README.fr.md)
-- [German/ Deutsch](https://github.com/HeyPuter/puter/blob/main/doc/i18n/README.de.md)
+- [German /  Deutsch](https://github.com/HeyPuter/puter/blob/main/doc/i18n/README.de.md)
 - [Hebrew/ עברית](https://github.com/HeyPuter/puter/blob/main/doc/i18n/README.he.md)
 - [Hindi / हिंदी](https://github.com/HeyPuter/puter/blob/main/doc/i18n/README.hi.md)
 - [Hungarian / Magyar](https://github.com/HeyPuter/puter/blob/main/doc/i18n/README.hu.md)
@@ -160,9 +160,11 @@ This repository, including all its contents, sub-projects, modules, and componen
 - [Italian / Italiano](https://github.com/HeyPuter/puter/blob/main/doc/i18n/README.it.md)
 - [Japanese / 日本語](https://github.com/HeyPuter/puter/blob/main/doc/i18n/README.jp.md)
 - [Korean / 한국어](https://github.com/HeyPuter/puter/blob/main/doc/i18n/README.ko.md)
+- [Malay / Bahasa Malaysia](https://github.com/HeyPuter/puter/blob/main/doc/i18n/README.my.md)
 - [Malayalam / മലയാളം](https://github.com/HeyPuter/puter/blob/main/doc/i18n/README.ml.md)
 - [Polish / Polski](https://github.com/HeyPuter/puter/blob/main/doc/i18n/README.pl.md)
 - [Portuguese / Português](https://github.com/HeyPuter/puter/blob/main/doc/i18n/README.pt.md)
+- [Punjabi / ਪੰਜਾਬੀ](https://github.com/HeyPuter/puter/blob/main/doc/i18n/README.pa.md)
 - [Romanian / Română](https://github.com/HeyPuter/puter/blob/main/doc/i18n/README.ro.md)
 - [Russian / Русский](https://github.com/HeyPuter/puter/blob/main/doc/i18n/README.ru.md)
 - [Spanish / Español](https://github.com/HeyPuter/puter/blob/main/doc/i18n/README.es.md)
@@ -174,3 +176,10 @@ This repository, including all its contents, sub-projects, modules, and componen
 - [Ukrainian / Українська](https://github.com/HeyPuter/puter/blob/main/doc/i18n/README.ua.md)
 - [Urdu / اردو](https://github.com/HeyPuter/puter/blob/main/doc/i18n/README.ur.md)
 - [Vietnamese / Tiếng Việt](https://github.com/HeyPuter/puter/blob/main/doc/i18n/README.vi.md)
+
+
+## Links to Other READMEs
+### Backend
+- [PuterAI Module](./src/backend/doc/modules/puterai/README.md)
+- [Metering Service](./src/backend/src/services/MeteringService/README.md)
+- [Extensions Development Guide](./extensions/README.md)

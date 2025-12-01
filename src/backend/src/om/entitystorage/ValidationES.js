@@ -16,11 +16,11 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-const { BaseES } = require("./BaseES");
+const { BaseES } = require('./BaseES');
 
-const APIError = require("../../api/APIError");
-const { Context } = require("../../util/context");
-const { SKIP_ES_VALIDATION } = require("./consts");
+const APIError = require('../../api/APIError');
+const { Context } = require('../../util/context');
+const { SKIP_ES_VALIDATION } = require('./consts');
 
 class ValidationES extends BaseES {
     async _on_context_provided () {
@@ -39,8 +39,6 @@ class ValidationES extends BaseES {
         //     return await this.om.get_client_safe((await this.upstream.update(entity)).data);
         // },
         async upsert (entity, extra) {
-            console.log('OLD ENT', extra.old_entity);
-
             for ( const prop of Object.values(this.om.properties) ) {
                 if (
                     prop.descriptor.protected ||
@@ -54,11 +52,8 @@ class ValidationES extends BaseES {
                 ? await (await extra.old_entity.clone()).apply(entity)
                 : entity
                 ;
-            console.log('VALID ENT', valid_entity)
-            await this.validate_(
-                valid_entity,
-                extra.old_entity ? entity : undefined
-            );
+            await this.validate_(valid_entity,
+                            extra.old_entity ? entity : undefined);
             const { entity: out_entity } = await this.upstream.upsert(entity, extra);
             return await out_entity.get_client_safe();
         },
@@ -82,9 +77,7 @@ class ValidationES extends BaseES {
 
                 try {
                     const validation_result = await prop.validate(value);
-                    console.log('validation result', validation_result)
                     if ( validation_result !== true ) {
-                        console.log('BUT KEY IS PROP NAMNE', prop.name, validation_result);
                         throw validation_result || APIError.create('field_invalid', null, { key: prop.name });
                     }
                 } catch ( e ) {
@@ -105,4 +98,3 @@ class ValidationES extends BaseES {
 }
 
 module.exports = ValidationES;
-

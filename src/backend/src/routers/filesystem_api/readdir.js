@@ -16,7 +16,7 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-"use strict"
+'use strict';
 const { Context } = require('../../util/context.js');
 const eggspress = require('../../api/eggspress.js');
 const FSNodeParam = require('../../api/filesystem/FSNodeParam.js');
@@ -33,20 +33,23 @@ module.exports = eggspress('/readdir', {
     fs: true,
     json: true,
     allowedMethods: ['POST'],
-    alias: { uid: 'path' },
+    alias: {
+        path: 'subject',
+        uid: 'subject',
+    },
     parameters: {
-        subject: new FSNodeParam('path'),
+        subject: new FSNodeParam('subject'),
         recursive: new FlagParam('recursive', { optional: true }),
         no_thumbs: new FlagParam('no_thumbs', { optional: true }),
         no_assocs: new FlagParam('no_assocs', { optional: true }),
-    }
+    },
 }, async (req, res, next) => {
     let log; {
         const x = Context.get();
         log = x.get('services').get('log-service').create('readdir', {
             concern: 'filesystem',
         });
-        log.info(`readdir: ${req.body.path}`);
+        log.debug(`readdir: ${req.body.subject || req.body.path || req.body.uid}`);
     }
 
     const subject = req.values.subject;

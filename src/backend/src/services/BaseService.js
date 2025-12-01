@@ -17,14 +17,12 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-const { concepts } = require("@heyputer/putility");
-
-
+const { concepts } = require('@heyputer/putility');
 
 // This is a no-op function that AI is incapable of writing a comment for.
 // That said, I suppose it didn't need one anyway.
-const NOOP = async () => {};
-
+const NOOP = async () => {
+};
 
 /**
 * @class BaseService
@@ -40,13 +38,22 @@ const NOOP = async () => {};
 */
 class BaseService extends concepts.Service {
     constructor (service_resources, ...a) {
-        const { services, config, my_config, name, args, context } = service_resources;
+        const { services, config, name, args, context } = service_resources;
         super(service_resources, ...a);
 
         this.args = args;
         this.service_name = name || this.constructor.name;
         this.services = services;
-        this.config = my_config;
+        let configOverride = undefined;
+        Object.defineProperty(this, 'config', {
+            get: () => configOverride ?? config.services?.[name] ?? {},
+            set: why => {
+                // TODO: uncomment and fix these in legacy services
+                //       (not very important; low priority)
+                // console.warn('replacing config like this is probably a bad idea');
+                configOverride = why;
+            },
+        });
         this.global_config = config;
         this.context = context;
 
@@ -55,15 +62,17 @@ class BaseService extends concepts.Service {
         }
     }
 
+    async run_as_early_as_possible () {
+        await (this._run_as_early_as_possible || NOOP).call(this, this.args);
+    }
 
     /**
     * Creates the service's data structures and initial values.
     * This method sets up logging and error handling, and calls a custom `_construct` method if defined.
-    * 
+    *
     * @returns {Promise<void>} A promise that resolves when construction is complete.
     */
     async construct () {
-        console.log('CLASS', this.constructor.name);
         const useapi = this.context.get('useapi');
         const use = this._get_merged_static_object('USE');
         for ( const [key, value] of Object.entries(use) ) {
@@ -72,12 +81,11 @@ class BaseService extends concepts.Service {
         await (this._construct || NOOP).call(this, this.args);
     }
 
-
     /**
     * Performs the initialization phase of the service lifecycle.
     * This method sets up logging and error handling for the service,
     * then calls the service-specific initialization logic if defined.
-    * 
+    *
     * @async
     * @memberof BaseService
     * @instance
@@ -90,11 +98,21 @@ class BaseService extends concepts.Service {
             log_fields.concern = this.constructor.CONCERN;
         }
         this.log = services.get('log-service').create(this.service_name, log_fields);
+
+        // INFO logs are treated as DEBUG logs instead if...
+        if (
+            // The configuration file explicitly says to do so
+            this.config.log_debug ||
+            // The class has `static LOG_DEBUG = true`; AND,
+            // the configuration file does NOT explicitly say NOT to do this
+            (!this.config.log_info && this.constructor.LOG_DEBUG)
+        ) {
+            this.log.info = this.log.debug;
+        }
         this.errors = services.get('error-service').create(this.log);
 
         await (this._init || NOOP).call(this, this.args);
     }
-
 
     /**
     * Handles an event by retrieving the appropriate event handler
@@ -118,3 +136,4 @@ class BaseService extends concepts.Service {
 }
 
 module.exports = BaseService;
+module.exports.BaseService = BaseService;

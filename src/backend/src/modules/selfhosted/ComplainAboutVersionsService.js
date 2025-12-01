@@ -17,7 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 const BaseService = require('../../services/BaseService');
-const { surrounding_box } = require("../../fun/dev-console-ui-utils");
+const { surrounding_box } = require('../../fun/dev-console-ui-utils');
 
 class ComplainAboutVersionsService extends BaseService {
     static DESCRIPTION = `
@@ -33,20 +33,16 @@ class ComplainAboutVersionsService extends BaseService {
 
     static MODULES = {
         axios: require('axios'),
-    }
+    };
 
     async _init () {
         const eol_data = await this.get_eol_data_();
 
         const [major] = process.versions.node.split('.');
-        const current_version_data = eol_data.find(
-            ({ cycle }) => cycle === major
-        );
+        const current_version_data = eol_data.find(({ cycle }) => cycle === major);
 
         if ( ! current_version_data ) {
-            this.log.warn(
-                `failed to check ${major} in the EOL database`
-            );
+            this.log.warn(`failed to check ${major} in the EOL database`);
             return;
         }
 
@@ -54,14 +50,14 @@ class ComplainAboutVersionsService extends BaseService {
         const cur_date_obj = new Date();
 
         if ( cur_date_obj < eol_date ) {
-            this.log.info('node.js version looks good');
+            this.log.debug('node.js version looks good');
             return;
         }
 
         let timeago = (() => {
             let years = cur_date_obj.getFullYear() - eol_date.getFullYear();
             let months = cur_date_obj.getMonth() - eol_date.getMonth();
-            
+
             let str = '';
             while ( years > 0 ) {
                 years -= 1;
@@ -70,27 +66,18 @@ class ComplainAboutVersionsService extends BaseService {
             if ( months > 0 ) {
                 str += `at least ${months} month${months > 1 ? 's' : ''}`;
             } else {
-                str += `a few days`;
+                str += 'a few days';
             }
             return str;
         })();
 
-        const svc_devConsole = this.services.get('dev-console');
-        svc_devConsole.add_widget(() => {
-            const widget_lines = [];
-            widget_lines.push(
-                `Node.js version ${major} is past EOL by ${timeago};`,
-                `Everything should work, but you should still upgrade.`,
-            );
-            surrounding_box('31;1', widget_lines);
-            return widget_lines;
-        });
+        this.log.warn(`Node.js version ${major} is past EOL by ${timeago}`);
     }
 
     async get_eol_data_ () {
         const require = this.require;
         const axios = require('axios');
-        const url = 'https://endoflife.date/api/nodejs.json'
+        const url = 'https://endoflife.date/api/nodejs.json';
         let data;
         try {
             ({ data } = await axios.get(url));

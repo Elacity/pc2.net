@@ -1,13 +1,13 @@
-import putility from "@heyputer/putility";
-import { PuterAPIFilesystem } from "../lib/filesystem/APIFS.js";
-import { CachedFilesystem } from "../lib/filesystem/CacheFS.js";
-import { ProxyFilesystem, TFilesystem } from "../lib/filesystem/definitions.js";
+import putility from '@heyputer/putility';
+import { PuterAPIFilesystem } from '../lib/filesystem/APIFS.js';
+import { CachedFilesystem } from '../lib/filesystem/CacheFS.js';
+import { ProxyFilesystem, TFilesystem } from '../lib/filesystem/definitions.js';
+import { PostMessageFilesystem } from '../lib/filesystem/PostMessageFS.js';
 import io from '../lib/socket.io/socket.io.esm.min.js';
-import { PostMessageFilesystem } from "../lib/filesystem/PostMessageFS.js";
 
 export class FilesystemService extends putility.concepts.Service {
     static PROPERTIES = {
-        // filesystem: 
+        // filesystem:
     };
 
     static DEPENDS = ['api-access'];
@@ -21,9 +21,9 @@ export class FilesystemService extends putility.concepts.Service {
             `,
             async do () {
                 this.initializeSocket();
-            }
-        }
-    ]
+            },
+        },
+    ];
 
     _init () {
         const env = this._.context.env;
@@ -64,7 +64,7 @@ export class FilesystemService extends putility.concepts.Service {
     }
 
     async initializeSocket () {
-        if (this.socket) {
+        if ( this.socket ) {
             this.socket.disconnect();
         }
 
@@ -77,46 +77,61 @@ export class FilesystemService extends putility.concepts.Service {
         }
 
         this.socket = io(api_info.api_origin, {
-            auth: { auth_token: api_info.auth_token }
+            auth: { auth_token: api_info.auth_token },
+            autoUnref: this._.context.env === 'nodejs',
         });
 
         this.bindSocketEvents();
     }
 
-    bindSocketEvents() {
+    bindSocketEvents () {
         this.socket.on('connect', () => {
-            if(puter.debugMode)
+            if ( puter.debugMode )
+            {
                 console.log('FileSystem Socket: Connected', this.socket.id);
+            }
         });
 
         this.socket.on('disconnect', () => {
-            if(puter.debugMode)
+            if ( puter.debugMode )
+            {
                 console.log('FileSystem Socket: Disconnected');
+            }
         });
 
         this.socket.on('reconnect', (attempt) => {
-            if(puter.debugMode)
+            if ( puter.debugMode )
+            {
                 console.log('FileSystem Socket: Reconnected', this.socket.id);
+            }
         });
 
         this.socket.on('reconnect_attempt', (attempt) => {
-            if(puter.debugMode)
+            if ( puter.debugMode )
+            {
                 console.log('FileSystem Socket: Reconnection Attemps', attempt);
+            }
         });
 
         this.socket.on('reconnect_error', (error) => {
-            if(puter.debugMode)
+            if ( puter.debugMode )
+            {
                 console.log('FileSystem Socket: Reconnection Error', error);
+            }
         });
 
         this.socket.on('reconnect_failed', () => {
-            if(puter.debugMode)
+            if ( puter.debugMode )
+            {
                 console.log('FileSystem Socket: Reconnection Failed');
+            }
         });
 
         this.socket.on('error', (error) => {
-            if(puter.debugMode)
+            if ( puter.debugMode )
+            {
                 console.error('FileSystem Socket Error:', error);
+            }
         });
     }
 }

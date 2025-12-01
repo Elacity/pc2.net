@@ -16,13 +16,13 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-const { AdvancedBase } = require("@heyputer/putility");
-const { WeakConstructorFeature } = require("../../traits/WeakConstructorFeature");
+const { AdvancedBase } = require('@heyputer/putility');
+const { WeakConstructorFeature } = require('../../traits/WeakConstructorFeature');
 
 class PropType extends AdvancedBase {
     static FEATURES = [
         new WeakConstructorFeature(),
-    ]
+    ];
 
     static create (context, data, k) {
         const chains = {};
@@ -113,7 +113,9 @@ class PropType extends AdvancedBase {
             this.chains.factory && [...this.chains.factory].reverse()
         ) || [];
 
-        console.log('FACTORIES', factories)
+        if ( process.env.DEBUG ) {
+            console.log('FACTORIES', factories);
+        }
 
         for ( const factory of factories ) {
             const result = await factory(extra);

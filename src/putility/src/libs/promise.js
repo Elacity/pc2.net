@@ -1,21 +1,7 @@
 /*
  * Copyright (C) 2024-present Puter Technologies Inc.
- *
- * This file is part of Puter.
- *
- * Puter is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as published
- * by the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+
 class TeePromise {
     static STATUS_PENDING = Symbol('pending');
     static STATUS_RUNNING = {};
@@ -55,18 +41,18 @@ class TeePromise {
     /**
      * @deprecated use then() instead
      */
-    onComplete(fn) {
+    onComplete (fn) {
         return this.then(fn);
     }
 }
 
 class Lock {
-    constructor() {
+    constructor () {
         this._locked = false;
         this._waiting = [];
     }
 
-    async acquire(callback) {
+    async acquire (callback) {
         await new Promise(resolve => {
             if ( ! this._locked ) {
                 this._locked = true;
@@ -76,7 +62,7 @@ class Lock {
                     resolve,
                 });
             }
-        })
+        });
         if ( callback ) {
             let retval;
             try {
@@ -88,8 +74,8 @@ class Lock {
         }
     }
 
-    release() {
-        if (this._waiting.length > 0) {
+    release () {
+        if ( this._waiting.length > 0 ) {
             const { resolve } = this._waiting.shift();
             resolve();
         } else {
@@ -108,7 +94,8 @@ class RWLock {
         this.readers_ = 0;
         this.writer_ = false;
 
-        this.on_empty_ = () => {};
+        this.on_empty_ = () => {
+        };
 
         this.mode = this.constructor.TYPE_READ;
     }
@@ -118,7 +105,7 @@ class RWLock {
         return undefined;
     }
     push_ (item) {
-        if ( this.readers_ === 0 && ! this.writer_ ) {
+        if ( this.readers_ === 0 && !this.writer_ ) {
             this.mode = item.type;
         }
         this.queue.push(item);
@@ -131,7 +118,7 @@ class RWLock {
         //     queue: this.queue.map(item => item.type),
         // });
         if ( this.queue.length === 0 ) {
-            if ( this.readers_ === 0 && ! this.writer_ ) {
+            if ( this.readers_ === 0 && !this.writer_ ) {
                 this.on_empty_();
             }
             return;
@@ -139,7 +126,7 @@ class RWLock {
 
         const peek = () => this.queue[0];
 
-        if ( this.readers_ === 0 && ! this.writer_ ) {
+        if ( this.readers_ === 0 && !this.writer_ ) {
             this.mode = peek().type;
         }
 
@@ -174,7 +161,7 @@ class RWLock {
         const handle = {
             unlock: () => {
                 p_unlock.resolve();
-            }
+            },
         };
 
         this.push_({
@@ -193,7 +180,7 @@ class RWLock {
         const handle = {
             unlock: () => {
                 p_unlock.resolve();
-            }
+            },
         };
 
         this.push_({
@@ -257,7 +244,7 @@ const asyncSafeSetInterval = async (callback, delay, args, options) => {
             await sleep(sleep_time);
         }
     }
-}
+};
 
 /**
  * raceCase is like Promise.race except it takes an object instead of
@@ -270,7 +257,7 @@ const asyncSafeSetInterval = async (callback, delay, args, options) => {
  */
 const raceCase = async (promise_map) => {
     return Promise.race(Object.entries(promise_map).map(
-        ([key, promise]) => promise.then(value => [key, value])));
+                    ([key, promise]) => promise.then(value => [key, value])));
 };
 
 module.exports = {

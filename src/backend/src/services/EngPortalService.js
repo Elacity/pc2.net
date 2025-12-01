@@ -17,8 +17,7 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-const { AdvancedBase } = require("@heyputer/putility");
-
+const { AdvancedBase } = require('@heyputer/putility');
 
 /**
 * @class EngPortalService
@@ -41,7 +40,6 @@ class EngPortalService extends AdvancedBase {
         this.commands = services.get('commands');
         this._registerCommands(this.commands);
     }
-
 
     /**
     * Lists all ongoing operations.
@@ -88,7 +86,6 @@ class EngPortalService extends AdvancedBase {
         return out;
     }
 
-
     /**
     * Retrieves a list of alarms.
     *
@@ -106,7 +103,6 @@ class EngPortalService extends AdvancedBase {
 
         return ls;
     }
-
 
     /**
     * Gets the system statistics.
@@ -131,7 +127,7 @@ class EngPortalService extends AdvancedBase {
                 error: {
                     message: alarm.error.message,
                     stack: alarm.error.stack,
-                }
+                },
             } : {}),
         };
 
@@ -151,45 +147,13 @@ class EngPortalService extends AdvancedBase {
     _registerCommands (commands) {
         this.commands.registerCommands('eng', [
             {
-                id: 'test',
+                id: 'list-operations',
                 description: 'testing',
                 handler: async (args, log) => {
                     const ops = await this.list_operations();
                     log.log(JSON.stringify(ops, null, 2));
-                }
+                },
             },
-            {
-                id: 'set',
-                description: 'set a parameter',
-                handler: async (args, log) => {
-                    const [name, value] = args;
-                    const parameter = this._get_param(name);
-                    parameter.set(value);
-                    log.log(value);
-                }
-            },
-            {
-                id: 'list',
-                description: 'list parameters',
-                handler: async (args, log) => {
-                    const [prefix] = args;
-                    let parameters = this.parameters_;
-                    if ( prefix ) {
-                        parameters = parameters
-                            .filter(p => p.spec_.id.startsWith(prefix));
-                    }
-                    log.log(`available parameters${
-                        prefix ? ` (starting with: ${prefix})` : ''
-                    }:`);
-                    for (const parameter of parameters) {
-                        // log.log(`- ${parameter.spec_.id}: ${parameter.spec_.description}`);
-                        // Log parameter description and value
-                        const value = await parameter.get();
-                        log.log(`- ${parameter.spec_.id} = ${value}`);
-                        log.log(`  ${parameter.spec_.description}`);
-                    }
-                }
-            }
         ]);
     }
 }

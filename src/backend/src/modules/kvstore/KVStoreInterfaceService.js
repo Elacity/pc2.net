@@ -1,29 +1,64 @@
 /*
  * Copyright (C) 2025-present Puter Technologies Inc.
- * 
+ *
  * This file is part of Puter.
- * 
+ *
  * Puter is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
  * by the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Affero General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-const BaseService = require("../../services/BaseService");
+const BaseService = require('../../services/BaseService');
 
 /**
-* Service class that manages KVStore interface registrations.
-* Handles registration of the puter-kvstore interface.
-* @extends BaseService
-*/
+ * @typedef {Object} KVStoreInterface
+ * @property {function(KVStoreGetParams): Promise<unknown>} get - Retrieve the value(s) for the given key(s).
+ * @property {function(KVStoreSetParams): Promise<void>} set - Set a value for a key, with optional expiration.
+ * @property {function(KVStoreDelParams): Promise<void>} del - Delete a value by key.
+ * @property {function(KVStoreListParams): Promise<string[]>} list - List all key-value pairs, optionally as a specific type.
+ * @property {function(): Promise<void>} flush - Delete all key-value pairs in the store.
+ * @property {(params: {key:string, pathAndAmountMap: Record<string, number>}) => Promise<unknown>} incr - Increment a numeric value by key.
+ * @property {(params: {key:string, pathAndAmountMap: Record<string, number>}) => Promise<unknown>} decr - Decrement a numeric value by key.
+ * @property {function(KVStoreExpireAtParams): Promise<number>} expireAt - Set a key to expire at a specific UNIX timestamp (seconds).
+ * @property {function(KVStoreExpireParams): Promise<number>} expire - Set a key to expire after a given TTL (seconds).
+ *
+ * @typedef {Object} KVStoreGetParams
+ * @property {string|string[]} key - The key or array of keys to retrieve.
+ *
+ * @typedef {Object} KVStoreSetParams
+ * @property {string} key - The key to set.
+ * @property {*} value - The value to store.
+ * @property {number} [expireAt] - Optional UNIX timestamp (seconds) when the key should expire.
+ *
+ * @typedef {Object} KVStoreDelParams
+ * @property {string} key - The key to delete.
+ *
+ * @typedef {Object} KVStoreListParams
+ * @property {string} [as] - Optional type to list as (e.g., 'array', 'object').
+ *
+ * @typedef {Object} KVStoreExpireAtParams
+ * @property {string} key - The key to set expiration for.
+ * @property {number} timestamp - UNIX timestamp (seconds) when the key should expire.
+ *
+ * @typedef {Object} KVStoreExpireParams
+ * @property {string} key - The key to set expiration for.
+ * @property {number} ttl - Time-to-live in seconds.
+ */
+
+/**
+ * Service for registering the puter-kvstore interface, exposing a simple key-value store API
+ * with support for get, set, delete, list, flush, increment, decrement, and key expiration.
+ * @extends BaseService
+ */
 class KVStoreInterfaceService extends BaseService {
     /**
     * Service class for managing KVStore interface registrations.
@@ -32,7 +67,7 @@ class KVStoreInterfaceService extends BaseService {
     async ['__on_driver.register.interfaces'] () {
         const svc_registry = this.services.get('registry');
         const col_interfaces = svc_registry.get('interfaces');
-        
+
         // Register the puter-kvstore interface
         col_interfaces.set('puter-kvstore', {
             description: 'A simple key-value store.',
@@ -41,16 +76,15 @@ class KVStoreInterfaceService extends BaseService {
                     description: 'Get a value by key.',
                     parameters: {
                         key: { type: 'json', required: true },
-                        app_uid: { type: 'string', optional: true },
                     },
                     result: { type: 'json' },
                 },
                 set: {
                     description: 'Set a value by key.',
                     parameters: {
-                        key: { type: 'string', required: true, },
+                        key: { type: 'string', required: true },
                         value: { type: 'json' },
-                        app_uid: { type: 'string', optional: true },
+                        expireAt: { type: 'number' },
                     },
                     result: { type: 'void' },
                 },
@@ -58,7 +92,6 @@ class KVStoreInterfaceService extends BaseService {
                     description: 'Delete a value by key.',
                     parameters: {
                         key: { type: 'string' },
-                        app_uid: { type: 'string', optional: true },
                     },
                     result: { type: 'void' },
                 },
@@ -68,7 +101,6 @@ class KVStoreInterfaceService extends BaseService {
                         as: {
                             type: 'string',
                         },
-                        app_uid: { type: 'string', optional: true },
                     },
                     result: { type: 'array' },
                 },
@@ -80,26 +112,43 @@ class KVStoreInterfaceService extends BaseService {
                 incr: {
                     description: 'Increment a value by key.',
                     parameters: {
-                        key: { type: 'string', required: true, },
-                        amount: { type: 'number' },
-                        app_uid: { type: 'string', optional: true },
+                        key: { type: 'string', required: true },
+                        pathAndAmountMap: { type: 'json', required: true, description: 'map of period-joined path to amount to increment by' },
                     },
-                    result: { type: 'number' },
+                    result: { type: 'json', description: 'The updated value' },
                 },
                 decr: {
                     description: 'Decrement a value by key.',
                     parameters: {
-                        key: { type: 'string', required: true, },
-                        amount: { type: 'number' },
-                        app_uid: { type: 'string', optional: true },
+                        key: { type: 'string', required: true },
+                        pathAndAmountMap: { type: 'json', required: true, description: 'map of period-joined path to amount to increment by' },
+
+                    },
+                    result: { type: 'json', description: 'The updated value' },
+                },
+                expireAt: {
+                    description: 'Set a key to expire at a given timestamp in sec.',
+                    parameters: {
+                        key: { type: 'string', required: true },
+                        timestamp: { type: 'number', required: true },
+
                     },
                     result: { type: 'number' },
                 },
-            }
+                expire: {
+                    description: 'Set a key to expire in ttl many seconds.',
+                    parameters: {
+                        key: { type: 'string', required: true },
+                        ttl: { type: 'number', required: true },
+
+                    },
+                    result: { type: 'number' },
+                },
+            },
         });
     }
 }
 
 module.exports = {
-    KVStoreInterfaceService
+    KVStoreInterfaceService,
 };

@@ -3,13 +3,13 @@ class FetchDriverCallBackend {
         this.context = context;
         this.response_handlers = this.constructor.response_handlers;
     }
-    
+
     static response_handlers = {
         'application/x-ndjson': async resp => {
             const Stream = async function* Stream (readableStream) {
                 const reader = readableStream.getReader();
                 let value, done;
-                while ( ! done ) {
+                while ( !done ) {
                     ({ value, done } = await reader.read());
                     if ( done ) break;
                     const parts = (new TextDecoder().decode(value).split('\n'));
@@ -18,8 +18,8 @@ class FetchDriverCallBackend {
                         yield JSON.parse(part);
                     }
                 }
-            }
-            
+            };
+
             return Stream(resp.body);
         },
         'application/json': async resp => {
@@ -28,37 +28,76 @@ class FetchDriverCallBackend {
         'application/octet-stream': async resp => {
             return await resp.blob();
         },
-    }
-    
+    };
+
     async call ({ driver, method_name, parameters }) {
-        const resp = await fetch(`${this.context.APIOrigin}/drivers/call`, {
-            headers: {
-                Authorization: `Bearer ${this.context.authToken}`,
-                'Content-Type': 'application/json',
-            },
-            method: 'POST',
-            body: JSON.stringify({
-                'interface': driver.iface_name,
-                ...(driver.service_name
-                    ? { service: driver.service_name }
-                    : {}),
-                method: method_name,
-                args: parameters,
-            }),
-        });
-        
-        const content_type = resp.headers.get('content-type')
-            .split(';')[0].trim(); // TODO: parser for Content-Type
-        const handler = this.response_handlers[content_type];
-        if ( ! handler ) {
-            const msg = `unrecognized content type: ${content_type}`;
-            console.error(msg);
-            console.error('creating blob so dev tools shows response...');
-            await resp.blob();
-            throw new Error(msg);
+        try {
+            const resp = await fetch(`${this.context.APIOrigin}/drivers/call`, {
+                headers: {
+                    'Content-Type': 'text/plain;actually=json',
+                },
+                method: 'POST',
+                body: JSON.stringify({
+                    'interface': driver.iface_name,
+                    ...(driver.service_name
+                        ? { service: driver.service_name }
+                        : {}),
+                    method: method_name,
+                    args: parameters,
+                    auth_token: this.context.authToken,
+                }),
+            });
+
+            const content_type = resp.headers.get('content-type')
+                .split(';')[0].trim(); // TODO: parser for Content-Type
+            const handler = this.response_handlers[content_type];
+            if ( ! handler ) {
+                const msg = `unrecognized content type: ${content_type}`;
+                console.error(msg);
+                console.error('creating blob so dev tools shows response...');
+                await resp.blob();
+
+                // Log the error
+                if ( globalThis.puter?.apiCallLogger?.isEnabled() ) {
+                    globalThis.puter.apiCallLogger.logRequest({
+                        service: 'drivers',
+                        operation: `${driver.iface_name}::${method_name}`,
+                        params: { interface: driver.iface_name, driver: driver.service_name || driver.iface_name, method: method_name, args: parameters },
+                        error: { message: msg },
+                    });
+                }
+
+                throw new Error(msg);
+            }
+
+            const result = await handler(resp);
+
+            // Log the successful response
+            if ( globalThis.puter?.apiCallLogger?.isEnabled() ) {
+                globalThis.puter.apiCallLogger.logRequest({
+                    service: 'drivers',
+                    operation: `${driver.iface_name}::${method_name}`,
+                    params: { interface: driver.iface_name, driver: driver.service_name || driver.iface_name, method: method_name, args: parameters },
+                    result: result,
+                });
+            }
+
+            return result;
+        } catch ( error ) {
+            // Log unexpected errors
+            if ( globalThis.puter?.apiCallLogger?.isEnabled() ) {
+                globalThis.puter.apiCallLogger.logRequest({
+                    service: 'drivers',
+                    operation: `${driver.iface_name}::${method_name}`,
+                    params: { interface: driver.iface_name, driver: driver.service_name || driver.iface_name, method: method_name, args: parameters },
+                    error: {
+                        message: error.message || error.toString(),
+                        stack: error.stack,
+                    },
+                });
+            }
+            throw error;
         }
-        
-        return await handler(resp);
     }
 }
 
@@ -96,7 +135,7 @@ class Drivers {
         this.authToken = context.authToken;
         this.APIOrigin = context.APIOrigin;
         this.appID = context.appID;
-        
+
         // Driver-specific
         this.drivers_ = {};
 
@@ -109,7 +148,7 @@ class Drivers {
             get: () => this.APIOrigin,
         });
     }
-    
+
     _init ({ puter }) {
         puter.call = this.call.bind(this);
     }
@@ -127,7 +166,7 @@ class Drivers {
 
     /**
      * Sets the API origin.
-     * 
+     *
      * @param {string} APIOrigin - The new API origin.
      * @memberof [AI]
      * @returns {void}
@@ -135,41 +174,69 @@ class Drivers {
     setAPIOrigin (APIOrigin) {
         this.APIOrigin = APIOrigin;
     }
-    
+
     async list () {
-        const resp = await fetch(`${this.APIOrigin}/lsmod`, {
-            headers: {
-                Authorization: 'Bearer ' + this.authToken,
-            },
-            method: 'POST'
-        });
-        const list = await resp.json();
-        return list.interfaces;
+        try {
+            const resp = await fetch(`${this.APIOrigin}/lsmod`, {
+                headers: {
+                    Authorization: `Bearer ${ this.authToken}`,
+                },
+                method: 'POST',
+            });
+
+            const list = await resp.json();
+
+            // Log the response
+            if ( globalThis.puter?.apiCallLogger?.isEnabled() ) {
+                globalThis.puter.apiCallLogger.logRequest({
+                    service: 'drivers',
+                    operation: 'list',
+                    params: {},
+                    result: list.interfaces,
+                });
+            }
+
+            return list.interfaces;
+        } catch ( error ) {
+            // Log the error
+            if ( globalThis.puter?.apiCallLogger?.isEnabled() ) {
+                globalThis.puter.apiCallLogger.logRequest({
+                    service: 'drivers',
+                    operation: 'list',
+                    params: {},
+                    error: {
+                        message: error.message || error.toString(),
+                        stack: error.stack,
+                    },
+                });
+            }
+            throw error;
+        }
     }
-    
+
     async get (iface_name, service_name) {
         if ( ! service_name ) service_name = iface_name;
         const key = `${iface_name}:${service_name}`;
         if ( this.drivers_[key] ) return this.drivers_[key];
-        
-        const interfaces = await this.list();
-        if ( ! interfaces[iface_name] ) {
-            throw new Error(`Interface ${iface_name} not found`);
-        }
-        
+
+        // const interfaces = await this.list();
+        // if ( ! interfaces[iface_name] ) {
+        //     throw new Error(`Interface ${iface_name} not found`);
+        // }
+
         return this.drivers_[key] = new Driver ({
             call_backend: new FetchDriverCallBackend({
                 context: this.context,
             }),
-            iface: interfaces[iface_name],
+            // iface: interfaces[iface_name],
             iface_name,
             service_name,
         });
     }
-    
+
     async call (...a) {
         let iface_name, service_name, method_name, parameters;
-        
+
         // Services with the same name as an interface they implement
         // are considered the default implementation for that interface.
         //
@@ -187,7 +254,7 @@ class Drivers {
         // the interface might not specify the structure of the response
         // because it is only intended for that specific integration
         // (and that integration alone is responsible for avoiding regressions)
-        
+
         // interface name, service name, method name, parameters
         if ( a.length === 4 ) {
             ([iface_name, service_name, method_name, parameters] = a);
@@ -205,7 +272,7 @@ class Drivers {
         const driver = await this.get(iface_name, service_name);
         return await driver.call(method_name, parameters);
     }
-    
+
 }
 
 export default Drivers;

@@ -1,18 +1,18 @@
 /*
  * Copyright (C) 2024-present Puter Technologies Inc.
- * 
+ *
  * This file is part of Puter.
- * 
+ *
  * Puter is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
  * by the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Affero General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
@@ -23,7 +23,10 @@ const default_implicit_user_app_permissions = {
     'driver:puter-ocr:recognize': {},
     'driver:puter-chat-completion': {},
     'driver:puter-image-generation': {},
+    'driver:puter-video-generation': {},
     'driver:puter-tts': {},
+    'driver:puter-speech2speech': {},
+    'driver:puter-speech2txt': {},
     'driver:puter-apps': {},
     'driver:puter-subdomains': {},
     'driver:temp-email': {},
@@ -58,6 +61,10 @@ const implicit_user_app_permissions = [
             'driver:puter-kvstore:flush': {},
             'driver:puter-chat-completion:complete': {},
             'driver:puter-image-generation:generate': {},
+            'driver:puter-video-generation:generate': {},
+            'driver:puter-speech2speech:convert': {},
+            'driver:puter-speech2txt:transcribe': {},
+            'driver:puter-speech2txt:translate': {},
             'driver:puter-analytics:create_trace': {},
             'driver:puter-analytics:record': {},
         },
@@ -87,7 +94,7 @@ const policy_perm = selector => ({
         $: 'json-address',
         path: '/admin/.policy/drivers.json',
         selector,
-    }
+    },
 });
 
 const hardcoded_user_group_permissions = {

@@ -1,27 +1,25 @@
 /*
  * Copyright (C) 2024-present Puter Technologies Inc.
- * 
+ *
  * This file is part of Puter.
- * 
+ *
  * Puter is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
  * by the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Affero General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 // METADATA // {"ai-commented":{"service":"claude"}}
-const { default: dedent } = require("dedent");
-const BaseService = require("../../services/BaseService");
-const { TypedValue } = require("../../services/drivers/meta/Runtime");
-
+const { default: dedent } = require('dedent');
+const BaseService = require('../../services/BaseService');
 /**
 * FakeChatService - A mock implementation of a chat service that extends BaseService.
 * Provides fake chat completion responses using Lorem Ipsum text generation.
@@ -34,7 +32,7 @@ class FakeChatService extends BaseService {
      * @private
      * @returns {Promise<void>}
      */
-    async _init() {
+    async _init () {
         const svc_aiChat = this.services.get('ai-chat');
         svc_aiChat.register_provider({
             service_name: this.service_name,
@@ -60,15 +58,15 @@ class FakeChatService extends BaseService {
                         aliases: [],
                         cost: {
                             input: 0,
-                            output: 0
-                        }
+                            output: 0,
+                        },
                     },
                     {
                         id: 'costly',
                         aliases: [],
                         cost: {
-                            input: 1000,  // 1000 microcents per million tokens (0.001 cents per 1000 tokens)
-                            output: 2000  // 2000 microcents per million tokens (0.002 cents per 1000 tokens)
+                            input: 1000, // 1000 microcents per million tokens (0.001 cents per 1000 tokens)
+                            output: 2000, // 2000 microcents per million tokens (0.002 cents per 1000 tokens)
                         },
                         max_tokens: 8192,
                     },
@@ -77,12 +75,12 @@ class FakeChatService extends BaseService {
                         aliases: [],
                         cost: {
                             input: 0,
-                            output: 0
-                        }
-                    }
+                            output: 0,
+                        },
+                    },
                 ];
             },
-            
+
             /**
             * Returns a list of available model names including their aliases
             * @returns {Promise<string[]>} Array of model identifiers and their aliases
@@ -106,72 +104,71 @@ class FakeChatService extends BaseService {
                 const li = new LoremIpsum({
                     sentencesPerParagraph: {
                         max: 8,
-                        min: 4
+                        min: 4,
                     },
                     wordsPerSentence: {
                         max: 20,
-                        min: 12
+                        min: 12,
                     },
                 });
-                
+
                 // Determine token counts based on messages and model
                 const usedModel = model || this.get_default_model();
-                
+
                 // For the costly model, simulate actual token counting
                 const resp = this.get_response({ li, usedModel, custom, max_tokens, messages });
-                
+
                 if ( stream ) {
-                    return new TypedValue({ $: 'ai-chat-intermediate' }, {
+                    return {
                         stream: true,
                         init_chat_stream: async ({ chatStream }) => {
-                            await new Promise(rslv => setTimeout(rslv, 500))
-                            chatStream.stream.write(JSON.stringify({
+                            await new Promise(rslv => setTimeout(rslv, 500));
+                            chatStream.stream.write(`${JSON.stringify({
                                 type: 'text',
                                 text: resp.message.content[0].text,
-                            }) + '\n');
+                            }) }\n`);
                             chatStream.end();
                         },
-                        usage_promise: new Promise(rslv => rslv(resp.usage)),
-                    });
+                    };
                 }
-                
+
                 return resp;
-            }
-        }
-    }
+            },
+        },
+    };
 
     get_response ({ li, usedModel, messages, custom, max_tokens }) {
         let inputTokens = 0;
         let outputTokens = 0;
-        
-        if (usedModel === 'costly') {
+
+        if ( usedModel === 'costly' ) {
             // Simple token estimation: roughly 4 chars per token for input
-            if (messages && messages.length > 0) {
-                for (const message of messages) {
-                    if (typeof message.content === 'string') {
+            if ( messages && messages.length > 0 ) {
+                for ( const message of messages ) {
+                    if ( typeof message.content === 'string' ) {
                         inputTokens += Math.ceil(message.content.length / 4);
-                    } else if (Array.isArray(message.content)) {
-                        for (const content of message.content) {
-                            if (content.type === 'text') {
+                    } else if ( Array.isArray(message.content) ) {
+                        for ( const content of message.content ) {
+                            if ( content.type === 'text' ) {
                                 inputTokens += Math.ceil(content.text.length / 4);
                             }
                         }
                     }
                 }
             }
-            
+
             // Generate random output token count between 50 and 200
-            outputTokens = Math.floor(Math.min((Math.random() * 150)+50, max_tokens));
+            outputTokens = Math.floor(Math.min((Math.random() * 150) + 50, max_tokens));
             // outputTokens = Math.floor(Math.random() * 150) + 50;
         }
-        
+
         // Generate the response text
         let responseText;
-        if (usedModel === 'abuse') {
+        if ( usedModel === 'abuse' ) {
             // responseText = dedent(`
             //     This is a message from ${
             //         this.global_config.origin}. We have detected abuse of our services.
-                
+
             //     If you are seeing this on another website, please report it to ${
             //         this.global_config.abuse_email ?? 'hi@puter.com'}
             // `);
@@ -182,38 +179,36 @@ class FakeChatService extends BaseService {
             `);
         } else {
             // Generate 1-3 paragraphs for both fake and costly models
-            responseText = li.generateParagraphs(
-                Math.floor(Math.random() * 3) + 1
-            );
+            responseText = li.generateParagraphs(Math.floor(Math.random() * 3) + 1);
         }
-        
+
         // Report usage based on model
         const usage = {
-            "input_tokens": usedModel === 'costly' ? inputTokens : 0,
-            "output_tokens": usedModel === 'costly' ? outputTokens : 1
+            'input_tokens': usedModel === 'costly' ? inputTokens : 0,
+            'output_tokens': usedModel === 'costly' ? outputTokens : 1,
         };
-        
+
         return {
-            "index": 0,
+            'index': 0,
             message: {
-                "id": "00000000-0000-0000-0000-000000000000",
-                "type": "message",
-                "role": "assistant",
-                "model": usedModel,
-                "content": [
+                'id': '00000000-0000-0000-0000-000000000000',
+                'type': 'message',
+                'role': 'assistant',
+                'model': usedModel,
+                'content': [
                     {
-                        "type": "text",
-                        "text": responseText
-                    }
+                        'type': 'text',
+                        'text': responseText,
+                    },
                 ],
-                "stop_reason": "end_turn",
-                "stop_sequence": null,
-                "usage": usage
+                'stop_reason': 'end_turn',
+                'stop_sequence': null,
+                'usage': usage,
             },
-            "usage": usage,
-            "logprobs": null,
-            "finish_reason": "stop"
-        }
+            'usage': usage,
+            'logprobs': null,
+            'finish_reason': 'stop',
+        };
     }
 }
 

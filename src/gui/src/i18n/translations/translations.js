@@ -18,6 +18,7 @@
  */
 
 import ar from './ar.js';
+import bg from './bg.js';
 import bn from './bn.js';
 import br from './br.js';
 import da from './da.js';
@@ -38,6 +39,7 @@ import ig from './ig.js';
 import ja from './ja.js';
 import ko from './ko.js';
 import ku from './ku.js';
+import my from './my.js';
 import nb from './nb.js';
 import nl from './nl.js';
 import nn from './nn.js';
@@ -45,18 +47,20 @@ import pl from './pl.js';
 import pt from './pt.js';
 import ro from './ro.js';
 import ru from './ru.js';
+import sl from './sl.js';
 import sv from './sv.js';
 import ta from './ta.js';
 import th from './th.js';
 import tr from './tr.js';
 import ua from './ua.js';
 import ur from './ur.js';
-import vi from "./vi.js";
+import vi from './vi.js';
 import zh from './zh.js';
 import zhtw from './zhtw.js';
 
 export default {
     ar,
+    bg,
     bn,
     br,
     da,
@@ -77,6 +81,7 @@ export default {
     ja,
     ko,
     ku,
+    my,
     nb,
     nl,
     nn,
@@ -84,6 +89,7 @@ export default {
     pt,
     ro,
     ru,
+    sl,
     sv,
     ta,
     th,

@@ -16,12 +16,13 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-const { get_user } = require("../../helpers");
-const { PermissionUtil } = require("../../services/auth/PermissionService");
-const { DB_WRITE } = require("../../services/database/consts");
-const { NodeUIDSelector } = require("../node/selectors");
-const { LLFilesystemOperation } = require("./definitions");
-const { LLReadDir } = require("./ll_readdir");
+const { get_user } = require('../../helpers');
+const { MANAGE_PERM_PREFIX } = require('../../services/auth/permissionConts.mjs');
+const { PermissionUtil } = require('../../services/auth/permissionUtils.mjs');
+const { DB_WRITE } = require('../../services/database/consts');
+const { NodeUIDSelector } = require('../node/selectors');
+const { LLFilesystemOperation } = require('./definitions');
+const { LLReadDir } = require('./ll_readdir');
 
 class LLReadShares extends LLFilesystemOperation {
     static description = `
@@ -32,7 +33,7 @@ class LLReadShares extends LLFilesystemOperation {
         found with "see" permission is found, children of that node
         will not be traversed.
     `;
-    
+
     async _run () {
         const { subject, user, actor } = this.values;
 
@@ -44,16 +45,14 @@ class LLReadShares extends LLFilesystemOperation {
 
         const issuer_username = await subject.getUserPart();
         const issuer_user = await get_user({ username: issuer_username });
-        const rows = await db.read(
-            'SELECT DISTINCT permission FROM `user_to_user_permissions` ' +
+        const rows = await db.read('SELECT DISTINCT permission FROM `user_to_user_permissions` ' +
             'WHERE `holder_user_id` = ? AND `issuer_user_id` = ? ' +
-            'AND `permission` LIKE ?',
-            [user.id, issuer_user.id, 'fs:%']
-        );
+            'AND (`permission` LIKE ? OR `permission` LIKE ?)',
+        [user.id, issuer_user.id, 'fs:%', 'manage:fs:%']);
 
         const fsentry_uuids = [];
         for ( const row of rows ) {
-            const parts = PermissionUtil.split(row.permission);
+            const parts = PermissionUtil.split(row.permission.replace(`${MANAGE_PERM_PREFIX}:`, ''));
             fsentry_uuids.push(parts[1]);
         }
 
@@ -79,6 +78,7 @@ class LLReadShares extends LLFilesystemOperation {
         }
 
         for ( const node of interm_results ) {
+            if ( ! await node.exists() ) continue;
             if ( ! await svc_acl.check(actor, node, 'see') ) continue;
             results.push(node);
         }

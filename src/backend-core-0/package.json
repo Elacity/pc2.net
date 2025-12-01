@@ -4,7 +4,7 @@
   "description": "The ugly name is intentional. We prefer to refactor incrementally which means we need a way to \"re-core\" the backend, and we may do this more than once simultaneously (hence it's `0` right now).",
   "type": "module",
   "scripts": {
-    "build": "rollup -c",
+    "build": "webpack",
     "prepare": "npm run build",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -13,6 +13,10 @@
       "require": "./dist/cjs/exports.cjs",
       "import": "./dist/esm/exports.js"
     }
+  },
+  "devDependencies": {
+    "webpack": "^5.88.2",
+    "webpack-cli": "^5.1.1"
   },
   "keywords": [],
   "author": "",

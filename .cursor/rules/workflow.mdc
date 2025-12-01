@@ -1,0 +1,315 @@
+---
+description: Development Workflow and Best Practices
+alwaysApply: true
+---
+
+# Development Workflow
+
+> This rule defines standard workflows for common development activities within the Elacity project.
+
+## Core Development Principles
+
+1. **Task-First Approach**: Never start coding without an agreed task
+2. **Context Before Code**: Gather context from `docs/wiki/` and existing code before implementing
+3. **Quality Over Speed**: Proper implementation beats quick hacks
+4. **Security Mindset**: Always validate inputs and consider Web3 security implications
+5. **Accessibility Required**: All UI changes must meet WCAG 2.1 AA standards
+
+## Standard Development Workflow
+
+### 1. Task Initialization
+
+**Before writing any code:**
+- [ ] Verify task status is "Agreed" in `.cursor/tasks/.cursor/tasks/<TASK-KIND|JIRA-REFERENCE>/<TASK-ID>.md`
+- [ ] Review task requirements and acceptance criteria
+- [ ] Check for Jira reference and fetch if available (using Rovo MCP)
+- [ ] Consult `docs/wiki/` for relevant project documentation
+- [ ] Identify similar implementations in codebase for pattern consistency
+
+### 2. Context Gathering
+
+**Essential research steps:**
+- [ ] Read relevant `docs/wiki/Technical/` documentation
+- [ ] Review existing components that solve similar problems
+- [ ] Check `src/types/` for existing type definitions
+- [ ] Review `.cursor/rules/` for specific technical requirements
+- [ ] Identify reusable utilities in `src/utils/` and `src/lib/`
+
+### 3. Implementation Planning
+
+**Create detailed plan:**
+- [ ] List all files to be created/modified
+- [ ] Define data flow and state management approach
+- [ ] Plan component hierarchy and composition
+- [ ] Identify potential breaking changes
+- [ ] Design error handling strategy
+- [ ] Plan accessibility features
+- [ ] Define testing approach
+
+### 4. Implementation
+
+**During development:**
+- [ ] Update task status to "InProgress"
+- [ ] Follow established project patterns
+- [ ] Write TypeScript types first, implementation second
+- [ ] Implement error boundaries where appropriate
+- [ ] Add loading and empty states for async operations
+- [ ] Include accessibility attributes (aria-labels, roles)
+- [ ] Keep components under 200 lines (split if needed)
+- [ ] Add comments for non-obvious logic
+- [ ] Check off implementation plan items as completed
+
+### 5. Quality Assurance
+
+**Before marking task as "Review":**
+- [ ] All acceptance criteria met
+- [ ] Tests written and passing
+- [ ] No TypeScript errors
+- [ ] No ESLint warnings
+- [ ] No console.log statements
+- [ ] Accessibility verified (keyboard navigation, screen readers)
+- [ ] Performance acceptable (no unnecessary re-renders)
+- [ ] Error handling comprehensive
+- [ ] Documentation updated in `docs/wiki/` if needed
+
+### 6. Review Submission
+
+**Final checks:**
+- [ ] Self-review code against task requirements
+- [ ] Update task documentation with implementation details
+- [ ] List all modified/created files in task
+- [ ] Run full test suite
+- [ ] Update task status to "Review"
+- [ ] Request User review
+
+## Workflow by Task Type
+
+### Feature Implementation
+
+**Additional steps for new features:**
+1. Review feature specification in `docs/wiki/Featured/`
+2. Design component API before implementation
+3. Create mock data for development
+4. Implement with progressive enhancement
+5. Add feature flag if appropriate
+6. Document usage in `docs/wiki/`
+
+### Bug Fix
+
+**Bug fix workflow:**
+1. Reproduce the bug locally
+2. Identify root cause through debugging
+3. Write failing test that reproduces bug
+4. Implement fix
+5. Verify test now passes
+6. Check for similar bugs in codebase
+7. Document fix and prevention strategy
+
+### Refactoring
+
+**Safe refactoring approach:**
+1. Ensure existing tests pass
+2. Make changes incrementally
+3. Run tests after each change
+4. Do not change functionality
+5. Update only relevant tests if needed
+6. Document what was refactored and why
+
+### Component Development
+
+**React component workflow:**
+1. Check for existing similar components
+2. Design component API (props interface)
+3. Implement presentational layer
+4. Add state management if needed
+5. Implement accessibility features
+6. Create test file (see `.cursor/rules/testing.mdc`)
+7. Add to component index if reusable
+8. Document in `.cursor/templates/reference-code-examples.md` if pattern-worthy
+
+### API Integration
+
+**RTK Query integration workflow:**
+1. Define endpoint in appropriate `src/state/api/[feature].ts` file
+2. Define request/response types in `src/types/`
+3. Configure tags for cache invalidation
+4. Add error handling with standardized `AppError`
+5. Create custom hook if complex data transformation needed
+6. Test with mock service worker
+7. Document API patterns in `docs/wiki/Technical/`
+
+### Web3 Integration
+
+**Blockchain interaction workflow:**
+1. Review transaction pattern in `docs/wiki/Technical/Transactions.md`
+2. Use `lib/web3/executable/TxExecutable` pattern
+3. Validate all inputs (addresses, amounts, decimals)
+4. Implement preflight checks (balance, allowance, network)
+5. Add explicit user confirmation step
+6. Handle all transaction states (preparing, signing, pending, confirmed, failed)
+7. Integrate with RTK Query cache invalidation
+8. Never access window.ethereum directly
+9. Test with multiple wallet types
+
+## Common Patterns
+
+### State Management Decision Tree
+
+```
+Is it server data?
+├─ Yes → Use RTK Query
+└─ No → Is it shared across features?
+    ├─ Yes → Use Redux slice
+    └─ No → Is it shared across components in feature?
+        ├─ Yes → Use React Context
+        └─ No → Use component state (useState)
+```
+
+### Component Composition Pattern
+
+```
+View (route level)
+├─ Container Component (data fetching, business logic)
+│   ├─ Feature Component (feature-specific UI)
+│   │   ├─ Common Component (reusable UI)
+│   │   └─ Primitive Component (@ui components)
+│   └─ Feature Component
+└─ Layout Component (page structure)
+```
+
+### Error Handling Pattern
+
+```typescript
+try {
+  // Operation
+  const result = await operation();
+  
+  // Success handling
+  handleSuccess(result);
+} catch (error) {
+  // Normalize to AppError
+  const appError = normalizeError(error);
+  
+  // User-friendly message
+  showToast(appError.message);
+  
+  // Log technical details
+  console.error('Operation failed:', appError);
+  
+  // Metrics/monitoring
+  reportError(appError);
+}
+```
+
+## Anti-Patterns to Avoid
+
+### Never Do These
+
+❌ Start coding without an agreed task  
+❌ Copy-paste code without understanding it  
+❌ Leave console.log statements in production code  
+❌ Store non-serializable objects in Redux  
+❌ Call hooks conditionally or in loops  
+❌ Ignore TypeScript errors  
+❌ Skip accessibility considerations  
+❌ Implement without error handling  
+❌ Create components over 200 lines  
+❌ Duplicate code instead of creating utilities  
+❌ Access window.ethereum directly  
+❌ Ignore existing patterns and conventions  
+
+### Scope Creep Warning Signs
+
+Stop immediately if you find yourself:
+- Adding features not in task description
+- "Improving" unrelated code
+- Creating new utilities not required by task
+- Refactoring unrelated components
+- Adding "nice to have" features
+
+**What to do**: Document the additional work needed, create separate task proposal, complete only original scope.
+
+## Emergency Procedures
+
+### Requirements Unclear
+1. Stop implementation
+2. Document specific questions in task
+3. Ask User for clarification
+4. Do not proceed with assumptions
+5. Wait for explicit answers
+
+### Task Blocked
+1. Update task status to "Blocked"
+2. Document blocking issue clearly
+3. Suggest potential solutions
+4. Notify User immediately
+5. Do not attempt workarounds without approval
+
+### Breaking Change Required
+1. Stop current implementation
+2. Document why breaking change is needed
+3. Propose alternative non-breaking approaches
+4. Wait for User decision and approval
+5. Update task scope if approved
+
+### Scope Expansion Detected
+1. Stop work immediately
+2. Document scope difference (original vs needed)
+3. Propose new task for additional work
+4. Ask User for direction
+5. Complete only original agreed scope
+
+## Success Metrics
+
+### Task Completion Quality
+- ✅ All requirements met without exceptions
+- ✅ No scope creep or unapproved additions
+- ✅ Code follows all project conventions
+- ✅ Tests comprehensive and passing
+- ✅ Documentation complete and accurate
+- ✅ User approval on first review attempt
+
+### Code Quality Indicators
+- ✅ TypeScript strict mode compliant
+- ✅ ESLint zero warnings/errors
+- ✅ Accessibility audit passing
+- ✅ Performance benchmarks met
+- ✅ Security validation complete
+- ✅ Maintainability score high
+
+### Process Efficiency
+- ✅ Minimal back-and-forth with User
+- ✅ First-time quality implementation
+- ✅ Proper context gathered before coding
+- ✅ Pattern reuse over reinvention
+- ✅ Clear communication in task updates
+
+## Quick Reference
+
+### Before Starting Task
+1. Check task status = "Agreed"
+2. Read `docs/wiki/` relevant docs
+3. Review similar code patterns
+4. Plan implementation approach
+5. Get User confirmation if needed
+
+### During Implementation
+1. Update status to "InProgress"
+2. Follow established patterns
+3. Write tests alongside code
+4. Check off plan items
+5. Document decisions
+
+### Before Submitting
+1. All criteria met
+2. Tests passing
+3. No warnings/errors
+4. Documentation updated
+5. Status = "Review"
+
+### If Stuck
+1. Check `docs/wiki/` first
+2. Review similar implementations
+3. Consult `.cursor/rules/` for guidance
+4. Ask User if still unclear
+5. Never guess or assume

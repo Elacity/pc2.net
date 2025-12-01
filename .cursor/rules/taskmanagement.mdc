@@ -1,0 +1,303 @@
+---
+description: Task Management and Development Workflow Rules
+alwaysApply: true
+---
+
+# Task Management Framework
+
+> This rule defines how tasks are created, tracked, and executed within the AI-driven development framework.
+
+## Core Principles
+
+1. **Task-Driven Development**: No code shall be changed unless there is an approved task authorizing that change
+2. **User Authority**: The User is the sole decider for scope and design of ALL work
+3. **Single Responsibility**: Each task represents one cohesive, testable unit of work
+4. **DRY Principle**: Information defined once and referenced elsewhere
+5. **No Scope Creep**: Work must stay within explicit task boundaries
+
+## Task Location and Structure
+
+### Primary Task Location
+**All tasks must be created in**: `.cursor/tasks/<TASK-ID>/`
+
+**Deprecated**: `docs/delivery/` system is no longer used for new tasks
+
+### Task File Structure
+```
+.cursor/tasks/
+  └── <TASK-ID>/
+      ├── <TASK-ID>.md          # Main task document (required)
+      ├── <TASK-ID>-notes.md    # Optional working notes
+      └── <TASK-ID>-*.md        # Optional sub-documents
+```
+
+### Required Task Document Sections
+
+Every task file must include:
+
+```markdown
+# Task: [Task Title]
+
+**Task ID**: [unique-id]
+**Created**: [YYYY-MM-DD]
+**Status**: [Proposed|Agreed|InProgress|Review|Done|Blocked]
+**Priority**: [High|Medium|Low]
+
+## Description
+[Clear description of what needs to be done]
+
+## Background
+[Context explaining why this task is needed]
+
+## Requirements
+[Detailed requirements and acceptance criteria]
+
+## Implementation Plan
+[Step-by-step plan with checkboxes]
+- [ ] Step 1
+- [ ] Step 2
+
+## Acceptance Criteria
+[Specific, measurable criteria for completion]
+
+## Files to Modify
+[List of files that will be changed]
+
+## Files to Create
+[List of new files to be created]
+
+## Testing Strategy
+[How the task will be tested]
+
+## Notes
+[Additional context, gotchas, or considerations]
+```
+
+## Task Workflow and Status Definitions
+
+### Status Definitions
+
+- **Proposed**: Initial state of a newly defined task
+- **Agreed**: User has approved the task and scope
+- **InProgress**: AI Agent is actively working on the task
+- **Review**: Implementation complete, awaiting User validation
+- **Done**: User has reviewed and approved the implementation
+- **Blocked**: Cannot proceed due to external dependency or issue
+
+### Status Transitions
+
+#### Proposed → Agreed
+**Trigger**: User approval
+**Actions**:
+1. Verify task description is clear and complete
+2. Ensure task file exists with all required sections
+3. Confirm scope is well-defined
+4. Log status change
+
+#### Agreed → InProgress
+**Trigger**: AI Agent starts implementation
+**Actions**:
+1. Verify no conflicting InProgress tasks
+2. Update implementation plan with actual steps
+3. Log start time
+4. Begin work on first step
+
+#### InProgress → Review
+**Trigger**: Implementation complete
+**Actions**:
+1. Ensure all requirements met
+2. Run all relevant tests
+3. Update task documentation with results
+4. Log completion details
+5. Request User review
+
+#### Review → Done
+**Trigger**: User approval
+**Actions**:
+1. Verify acceptance criteria met
+2. Document completion
+3. Archive task if needed
+4. Log approval
+
+#### Review → InProgress (Rejection)
+**Trigger**: User requests changes
+**Actions**:
+1. Document rejection reasons
+2. Update task with feedback
+3. Resume implementation
+4. Log rejection and restart
+
+#### Any → Blocked
+**Trigger**: External dependency or issue
+**Actions**:
+1. Document blocking issue
+2. Identify resolution path
+3. Notify User
+4. Log blocking details
+
+## Task Creation Workflow
+
+### Step 1: Task Definition
+1. **Understand the request**: Bugfix, feature, refactor, etc.
+2. **Check for Jira reference**: If available, retrieve using Rovo MCP
+3. **Gather context**: 
+   - Browse relevant code
+   - Check `docs/wiki/` for project documentation
+   - Review similar existing implementations
+4. **Define scope clearly**: What's included, what's explicitly excluded
+
+### Step 2: Task Documentation
+1. **Create task directory**: `.cursor/tasks/<TASK-ID>/`
+2. **Create task file**: Use template from `.cursor/templates/tasks.md`
+3. **Fill all required sections**: No placeholders or TBDs
+4. **Define acceptance criteria**: Specific, measurable, testable
+5. **Create implementation checklist**: Granular, actionable steps
+
+### Step 3: Task Approval
+1. **Present task to User**: Share task document
+2. **Address questions**: Clarify any ambiguities
+3. **Wait for explicit approval**: Do not proceed without confirmation
+4. **Update status to Agreed**: Log the approval
+
+### Step 4: Implementation
+1. **Update status to InProgress**
+2. **Follow implementation plan**: Check off items as completed
+3. **Stay within scope**: No unapproved additions
+4. **Document decisions**: Add notes for non-obvious choices
+5. **Update progress regularly**: Keep checklist current
+
+### Step 5: Review and Completion
+1. **Self-review against criteria**: Verify all requirements met
+2. **Update task documentation**: Document what was actually done
+3. **Update status to Review**: Request User validation
+4. **Address feedback**: Make requested changes
+5. **Final approval**: Wait for User to mark as Done
+
+## Context Gathering Requirements
+
+### Always Check These Sources
+
+1. **Project Documentation**: `docs/wiki/`
+   - Technical architecture docs
+   - Feature documentation
+   - Integration guides
+   - Best practices
+
+2. **Existing Code**:
+   - Similar components or features
+   - Established patterns
+   - Utility functions
+   - Type definitions
+
+3. **Related Issues**:
+   - Jira tickets (if referenced)
+   - GitHub issues
+   - Previous task documents
+
+4. **Project Rules**:
+   - `.cursor/rules/*.mdc` - Specific technical rules
+   - `.cursor/templates/*` - Templates and workflows
+   - `.cursorrules` - High-level framework guidance
+
+### Documentation in docs/wiki/
+
+The `docs/wiki/` directory contains:
+- **Technical/**: Architecture, APIs, integrations
+- **Components/**: Component-specific documentation
+- **Featured/**: Feature guides and specifications
+- **HOWTO.md**: Common development tasks
+
+**Always consult relevant wiki docs before starting implementation** to ensure alignment with existing architecture and patterns.
+
+## Scope Management
+
+### Detecting Scope Creep
+
+Stop immediately if you encounter:
+- Additional features not in original task description
+- Requirements beyond acceptance criteria
+- Related improvements or refactors
+- "While we're at it" type changes
+
+### Handling Scope Expansion
+
+1. **Stop current work immediately**
+2. **Document the scope expansion**: What was asked vs what's needed
+3. **Create proposal**: Suggest new task for additional work
+4. **Ask User for direction**: Wait for explicit decision
+5. **Complete only original scope**: Do not expand without approval
+
+### Emergency Procedures
+
+**If Requirements Unclear**:
+1. Do not assume or guess
+2. Document questions in task
+3. Ask User for clarification
+4. Wait for explicit answers
+
+**If Blocked**:
+1. Update status to "Blocked"
+2. Document blocking issue
+3. Suggest resolution approach
+4. Notify User immediately
+
+**If Breaking Changes Needed**:
+1. Stop implementation
+2. Document why breaking changes needed
+3. Propose alternative approaches
+4. Wait for User decision
+
+## Quality Requirements
+
+### Before Marking Review
+
+- [ ] All acceptance criteria met
+- [ ] Code follows project conventions
+- [ ] Tests written and passing
+- [ ] No console errors/warnings
+- [ ] Documentation updated
+- [ ] TypeScript types defined
+- [ ] Error handling implemented
+- [ ] Accessibility considered
+- [ ] Performance acceptable
+- [ ] Security validated
+
+### Code Quality Standards
+
+- [ ] Components under 200 lines
+- [ ] No code duplication
+- [ ] Proper memoization for expensive operations
+- [ ] Cleanup in useEffect hooks
+- [ ] Theme variables used correctly
+- [ ] Input validation implemented
+- [ ] Error boundaries considered
+
+## Task Templates Reference
+
+Detailed templates and workflows are available in:
+- **`.cursor/templates/tasks.md`**: Main AI-driven development workflow
+- **`.cursor/templates/component-development-workflow.md`**: React component specifics
+- **`.cursor/templates/reference-code-examples.md`**: Code pattern examples
+- **`.cursor/templates/code-review.md`**: Review templates
+- **`.cursor/templates/write-testings.md`**: Testing templates
+
+## Success Metrics
+
+### Task Completion Success
+- ✅ Requirements fully met without scope expansion
+- ✅ Quality standards maintained
+- ✅ Documentation complete
+- ✅ Tests passing
+- ✅ User approval received
+
+### Development Efficiency
+- ✅ Reduced revision cycles
+- ✅ Clear understanding of requirements
+- ✅ Minimal scope creep
+- ✅ Fast feedback loops
+
+### Code Quality
+- ✅ Maintainable and readable
+- ✅ Follows established patterns
+- ✅ Properly tested
+- ✅ Well documented

@@ -80,6 +80,7 @@ class DefaultUserService extends BaseService {
         if ( ! user ) {
             user = await this.create_default_user_();
         } else {
+            // ELACITY: Re-enabled now that we have memoryfs working
             await this.#createDefaultUserFiles(Actor.adapt(user));
         }
 

@@ -1,6 +1,7 @@
 CREATE TABLE `per_user_credit` (
     `id` INTEGER PRIMARY KEY AUTOINCREMENT,
     `user_id` INTEGER NOT NULL UNIQUE,
+    `app_id` INTEGER NULL,
     `amount` int NOT NULL,
     
     -- NOTE: "BIGINT UNSIGNED"

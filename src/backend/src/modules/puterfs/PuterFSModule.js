@@ -65,6 +65,9 @@ class PuterFSModule extends AdvancedBase {
 
         const { MemoryFSService } = require('./customfs/MemoryFSService');
         services.registerService('memoryfs', MemoryFSService);
+
+        const { DBFSService } = require('./customfs/DBFSService');
+        services.registerService('dbfs', DBFSService);
     }
 }
 

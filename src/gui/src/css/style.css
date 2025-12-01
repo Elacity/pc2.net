@@ -1302,10 +1302,11 @@ span.header-sort-icon img {
     padding: 0 !important;
 }
 
-.window-cover-page.window-login, .window-cover-page.window-signup {
+.window-cover-page.window-login, .window-cover-page.window-signup, .window-cover-page.window-particle-login {
     height: 100vh !important;
     width: 100%;
     top: 0 !important;
+    left: 0 !important;
 }
 
 .window-sidebar-title {

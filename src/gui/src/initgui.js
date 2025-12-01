@@ -783,25 +783,24 @@ window.initgui = async function(options){
     }
 
     // -------------------------------------------------------------------------------------
-    // Desktop Background
-    // If we're in fullpage/emebedded/Auth Popup mode, we don't want to load the custom background
-    // because it's not visible anyway and it's a waste of bandwidth
-    // -------------------------------------------------------------------------------------
-    if(!window.is_fullpage_mode && !window.embedded_in_popup){
-        window.refresh_desktop_background();
-    }
-    // -------------------------------------------------------------------------------------
     // Un-authed but not first visit -> try to log in/sign up
     // -------------------------------------------------------------------------------------
-    // if(!window.is_auth() && (!window.first_visit_ever || window.disable_temp_users)){
     if(!window.is_auth()){
         if(window.logged_in_users.length > 0){
             UIWindowSessionList();
         }
         else{
-            window.location.href = '/particle-auth';
-            // await UIWindowParticleLogin();
+            // ELACITY: Embed Particle Auth inside the OS instead of redirecting
+            // Set reload_on_success to false so the desktop loads via the "login" event
+            await UIWindowParticleLogin({ reload_on_success: false });
         }
+    }
+    // -------------------------------------------------------------------------------------
+    // Desktop Background
+    // Only load after authentication to avoid black background showing during login
+    // -------------------------------------------------------------------------------------
+    else if(!window.is_fullpage_mode && !window.embedded_in_popup){
+        window.refresh_desktop_background();
     }
 
     // -------------------------------------------------------------------------------------
@@ -1373,7 +1372,7 @@ window.initgui = async function(options){
         // disable native browser exit confirmation
         window.onbeforeunload = null;
         // go to home page
-        window.location.replace("/particle-auth");
+        window.location.replace("/");
     });
 }
 

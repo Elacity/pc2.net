@@ -31,7 +31,7 @@ const launch_app = async (options) => {
     // A transaction to trace the time it takes to launch an app and
     // for it to be ready.
     // Explorer is a special case, it's not an app per se, so it doesn't need a transaction.
-    if ( options?.name !== 'explorer' ) {
+    if ( options?.name !== 'explorer' && window.Transaction ) {
         transaction = new window.Transaction('app-is-ready');
         transaction.start();
     }

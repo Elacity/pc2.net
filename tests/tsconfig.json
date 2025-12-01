@@ -1,0 +1,21 @@
+{
+    "extends": "../tsconfig.json",
+    "noEmit": true,
+    "compilerOptions": {
+        "noEmit": true,
+        "rootDir": ".",
+        "target": "es6",
+        "module": "es6",
+        "moduleResolution": "bundler",
+        "outDir": "build",
+        "esModuleInterop": true,
+        "types": ["vitest/globals"]
+    },
+    "include": [
+        "../**/*.test.mts",
+        "../**/*.test.ts",
+    ],
+    "exclude": [
+        "node_modules"
+    ]
+}

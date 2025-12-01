@@ -17,13 +17,13 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 const { AsyncLocalStorage } = require('async_hooks');
-const config = require('../config');
+const context_config = {};
 
 class Context {
     static USE_NAME_FALLBACK = {};
     static next_name_ = 0;
     static other_next_names_ = {};
-    
+
     // Context hooks should be registered via service (ContextService.js)
     static context_hooks_ = {
         pre_create: [],
@@ -43,19 +43,22 @@ class Context {
     static create (values, opt_name) {
         return new Context(values, undefined, opt_name);
     }
-    static get (k, { allow_fallback } = {}) {
-        let x = this.contextAsyncLocalStorage.getStore()?.get('context');
-        if ( ! x ) {
-            if ( config.env === 'dev' && ! allow_fallback ) {
-                throw new Error(
-                    'FAILED TO GET THE CORRECT CONTEXT'
-                );
+    static get (key, { allow_fallback } = {}) {
+        const existingContext = this.contextAsyncLocalStorage.getStore()?.get('context');
+        if ( ! existingContext ) {
+            if ( context_config.strict && !allow_fallback ) {
+                throw new Error('FAILED TO GET THE CORRECT CONTEXT');
             }
-
-            x = this.root.sub({}, this.USE_NAME_FALLBACK);
+            const rootFallback =  this.root.sub({}, this.USE_NAME_FALLBACK);
+            if ( key ) {
+                return rootFallback.get(key);
+            }
+            return rootFallback;
         }
-        if ( x && k ) return x.get(k);
-        return x;
+        if ( key ) {
+            return existingContext.get(key);
+        }
+        return existingContext;
     }
     static set (k, v) {
         const x = this.contextAsyncLocalStorage.getStore()?.get('context');
@@ -71,10 +74,29 @@ class Context {
     static sub (values, opt_name) {
         return this.get().sub(values, opt_name);
     }
+
+    #dead = false;
+
+    /**
+     * Clears this context's values and unlinks from its parent. This context
+     * will become empty. This is to ensure contexts that aren't used anymore
+     * get garbage collected. This was added to prevent memory leaks due to
+     * ECMAP, where currently we're not sure what's holding a reference back
+     * to the ECMAP (or perhaps its subcontext).
+     */
+    unlink () {
+        // Settings `values_` to an empty object should clear any references
+        // that were inside it while avoiding errors if .get() happens to be
+        // called by a lingering asynchronous function.
+        this.values_ = {};
+        this.#dead = true;
+    }
+
     get (k) {
         return this.values_[k];
     }
     set (k, v) {
+        if ( this.#dead ) return;
         this.values_[k] = v;
     }
     sub (values, opt_name) {
@@ -120,7 +142,7 @@ class Context {
             }
             if ( opt_name ) {
                 const name_numbers = this.constructor.other_next_names_;
-                if ( ! name_numbers.hasOwnProperty(opt_name) ) {
+                if ( ! Object.prototype.hasOwnProperty.call(name_numbers, opt_name) ) {
                     name_numbers[opt_name] = 0;
                 }
                 const num = ++name_numbers[opt_name];
@@ -146,7 +168,7 @@ class Context {
     }
     async arun (...args) {
         let cb = args.shift();
-        
+
         let hints = {};
         if ( typeof cb === 'object' ) {
             hints = cb;
@@ -157,11 +179,11 @@ class Context {
             const sub_context = this.sub(cb);
             return await sub_context.arun({ trace: true }, ...args);
         }
-        
+
         const replace_callback = new_cb => {
             cb = new_cb;
-        }
-        
+        };
+
         for ( const hook of this.constructor.context_hooks_.pre_arun ) {
             hook({
                 hints,
@@ -171,7 +193,7 @@ class Context {
                 callback: cb,
             });
         }
-        
+
         const als = this.constructor.contextAsyncLocalStorage;
         return await als.run(new Map(), async () => {
             als.getStore().set('context', this);
@@ -190,7 +212,7 @@ class Context {
         return `Context(${this.describe_()})`;
     }
     describe_ () {
-        if ( ! this.parent_ ) return `[R]`;
+        if ( ! this.parent_ ) return '[R]';
         return `${this.parent_.describe_()}->${this.name}`;
     }
 
@@ -213,7 +235,8 @@ class ContextExpressMiddleware {
     }
     async run (req, res, next) {
         return await this.parent_.sub({
-            req, res,
+            req,
+            res,
             trace_request: uuidv4(),
         }, 'req').arun(async () => {
             const ctx = Context.get();
@@ -227,4 +250,5 @@ class ContextExpressMiddleware {
 module.exports = {
     Context,
     ContextExpressMiddleware,
+    context_config,
 };

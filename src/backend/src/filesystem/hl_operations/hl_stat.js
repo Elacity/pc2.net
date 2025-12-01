@@ -16,16 +16,28 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-const { Context } = require("../../util/context");
-const { HLFilesystemOperation } = require("./definitions");
+const { Context } = require('../../util/context');
+const { HLFilesystemOperation } = require('./definitions');
 const APIError = require('../../api/APIError');
+const { ECMAP } = require('../ECMAP');
+const { NodeUIDSelector } = require('../node/selectors');
 
 class HLStat extends HLFilesystemOperation {
     static MODULES = {
         ['mime-types']: require('mime-types'),
-    }
+    };
 
     async _run () {
+        return await ECMAP.arun(async () => {
+            const ecmap = Context.get(ECMAP.SYMBOL);
+            ecmap.store_fsNodeContext(this.values.subject);
+            return await this.__run();
+        });
+    }
+    // async _run () {
+    //     return await this.__run();
+    // }
+    async __run () {
         const {
             subject, user,
             return_subdomains,
@@ -35,10 +47,27 @@ class HLStat extends HLFilesystemOperation {
             return_size,
         } = this.values;
 
-        await subject.fetchEntry();
+        const maybe_uid_selector = subject.get_selector_of_type(NodeUIDSelector);
+
+        // users created before 2025-07-30 might have fsentries with NULL paths.
+        // we can remove this check once that is fixed.
+        const user_unix_ts = Number((`${Date.parse(Context.get('actor')?.type?.user?.timestamp)}`).slice(0, -3));
+        const paths_are_fine = user_unix_ts >= 1722385593;
+
+        if ( maybe_uid_selector || paths_are_fine ) {
+            // We are able to fetch the entry and is_empty simultaneously
+            await Promise.all([
+                subject.fetchEntry(),
+                subject.fetchIsEmpty(),
+            ]);
+        } else {
+            // We need the entry first in order for is_empty to work correctly
+            await subject.fetchEntry();
+            await subject.fetchIsEmpty();
+        }
 
         // file not found
-        if( ! subject.found ) throw APIError.create('subject_does_not_exist');
+        if ( ! subject.found ) throw APIError.create('subject_does_not_exist');
 
         await subject.fetchOwner();
 
@@ -51,22 +80,20 @@ class HLStat extends HLFilesystemOperation {
 
         // TODO: why is this specific to stat?
         const mime = this.require('mime-types');
-        const contentType = mime.contentType(subject.entry.name)
+        const contentType = mime.contentType(subject.entry.name);
         subject.entry.type = contentType ? contentType : null;
 
-        if (return_size) await subject.fetchSize(user);
-        if (return_subdomains) await subject.fetchSubdomains(user)
-        if (return_shares || return_permissions) {
+        if ( return_size ) await subject.fetchSize(user);
+        if ( return_subdomains ) await subject.fetchSubdomains(user);
+        if ( return_shares || return_permissions ) {
             await subject.fetchShares();
         }
-        if (return_versions) await subject.fetchVersions();
-
-        await subject.fetchIsEmpty();
+        if ( return_versions ) await subject.fetchVersions();
 
         return await subject.getSafeEntry();
     }
 }
 
 module.exports = {
-    HLStat
+    HLStat,
 };

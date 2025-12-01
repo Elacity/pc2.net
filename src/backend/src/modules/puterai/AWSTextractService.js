@@ -1,28 +1,28 @@
 /*
  * Copyright (C) 2024-present Puter Technologies Inc.
- * 
+ *
  * This file is part of Puter.
- * 
+ *
  * Puter is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
  * by the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Affero General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 // METADATA // {"ai-commented":{"service":"claude"}}
-const { TextractClient, AnalyzeDocumentCommand, InvalidS3ObjectException } = require("@aws-sdk/client-textract");
+const { TextractClient, AnalyzeDocumentCommand, InvalidS3ObjectException } = require('@aws-sdk/client-textract');
 
-const BaseService = require("../../services/BaseService");
-const APIError = require("../../api/APIError");
-
+const BaseService = require('../../services/BaseService');
+const APIError = require('../../api/APIError');
+const { Context } = require('../../util/context');
 
 /**
 * AWSTextractService class - Provides OCR (Optical Character Recognition) functionality using AWS Textract
@@ -31,6 +31,10 @@ const APIError = require("../../api/APIError");
 * Handles both S3-stored and buffer-based document processing with automatic region management.
 */
 class AWSTextractService extends BaseService {
+    /** @type {import('../../services/MeteringService/MeteringService').MeteringService} */
+    get meteringService () {
+        return this.services.get('meteringService').meteringService;
+    }
     /**
     * AWS Textract service for OCR functionality
     * Provides document analysis capabilities using AWS Textract API
@@ -45,7 +49,7 @@ class AWSTextractService extends BaseService {
         ['driver-capabilities']: {
             supports_test_mode (iface, method_name) {
                 return iface === 'puter-ocr' && method_name === 'recognize';
-            }
+            },
         },
         ['puter-ocr']: {
             /**
@@ -69,7 +73,7 @@ class AWSTextractService extends BaseService {
                                 confidence: 1,
                                 text: 'The test_mode flag is set to true. This is a sample output.',
                             },
-                        ]
+                        ],
                     };
                 }
 
@@ -77,9 +81,9 @@ class AWSTextractService extends BaseService {
 
                 // Simplify the response for common interface
                 const puter_response = {
-                    blocks: []
+                    blocks: [],
                 };
-    
+
                 for ( const block of resp.Blocks ) {
                     if ( block.BlockType === 'PAGE' ) continue;
                     if ( block.BlockType === 'CELL' ) continue;
@@ -87,7 +91,7 @@ class AWSTextractService extends BaseService {
                     if ( block.BlockType === 'MERGED_CELL' ) continue;
                     if ( block.BlockType === 'LAYOUT_FIGURE' ) continue;
                     if ( block.BlockType === 'LAYOUT_TEXT' ) continue;
-    
+
                     const puter_block = {
                         type: `text/textract:${block.BlockType}`,
                         confidence: block.Confidence,
@@ -95,12 +99,11 @@ class AWSTextractService extends BaseService {
                     };
                     puter_response.blocks.push(puter_block);
                 }
-    
+
                 return puter_response;
-            }
+            },
         },
     };
-
 
     /**
     * Creates AWS credentials object for authentication
@@ -129,7 +132,6 @@ class AWSTextractService extends BaseService {
         return this.clients_[region];
     }
 
-
     /**
     * Analyzes a document using AWS Textract to extract text and layout information
     * @param {FileFacade} file_facade - Interface to access the document file
@@ -140,26 +142,17 @@ class AWSTextractService extends BaseService {
     */
     async analyze_document (file_facade) {
         const {
-            client, document, using_s3
+            client, document, using_s3,
         } = await this._get_client_and_document(file_facade);
-        
-        const min_cost = 150 // cents per 1000 pages
-            * Math.pow(10,6) // microcents per cent
-            / 1000 // pages
-            ; // works out to 150,000 microcents per page
-            
-        const svc_cost = this.services.get('cost');
-        const usageAllowed = await svc_cost.get_funding_allowed({
-            minimum: min_cost,
-        });
-        
+
+        const actor = Context.get('actor');
+        const usageType = 'aws-textract:detect-document-text:page';
+
+        const usageAllowed = await this.meteringService.hasEnoughCreditsFor(actor, usageType, 1); // allow them to pass if they have enough for 1 page atleast
+
         if ( ! usageAllowed ) {
             throw APIError.create('insufficient_funds');
         }
-        
-        // Note: we are using the synchronous command, so cost
-        // should always be the same (only 1 page allowed)
-        await svc_cost.record_cost({ cost: min_cost });
 
         const command = new AnalyzeDocumentCommand({
             Document: document,
@@ -167,12 +160,13 @@ class AWSTextractService extends BaseService {
                 // 'TABLES',
                 // 'FORMS',
                 // 'SIGNATURES',
-                'LAYOUT'
+                'LAYOUT',
             ],
         });
 
+        let textractResp;
         try {
-            return await client.send(command);
+            textractResp = await client.send(command);
         } catch (e) {
             if ( using_s3 && e instanceof InvalidS3ObjectException ) {
                 const { client, document } =
@@ -182,16 +176,25 @@ class AWSTextractService extends BaseService {
                     FeatureTypes: [
                         'LAYOUT',
                     ],
-                })
-                return await client.send(command);
+                });
+                textractResp = await client.send(command);
+            } else {
+                throw e;
             }
-
-            throw e;
         }
 
-        throw new Error('expected to be unreachable');
-    }
+        // Metering integration for Textract OCR usage
+        // AWS Textract metering: track page count, block count, cost, document size if available
+        let pageCount = 0;
+        if ( textractResp.Blocks ) {
+            for ( const block of textractResp.Blocks ) {
+                if ( block.BlockType === 'PAGE' ) pageCount += 1;
+            }
+        }
+        this.meteringService.incrementUsage(actor, usageType, pageCount || 1);
 
+        return textractResp;
+    }
 
     /**
     * Gets AWS client and document configuration for Textract processing
@@ -206,8 +209,8 @@ class AWSTextractService extends BaseService {
     */
     async _get_client_and_document (file_facade, force_buffer) {
         const try_s3info = await file_facade.get('s3-info');
-        if ( try_s3info && ! force_buffer ) {
-            console.log('S3 INFO', try_s3info)
+        if ( try_s3info && !force_buffer ) {
+            console.log('S3 INFO', try_s3info);
             return {
                 using_s3: true,
                 client: this._get_client(try_s3info.bucket_region),
@@ -231,7 +234,7 @@ class AWSTextractService extends BaseService {
         }
 
         const fsNode = await file_facade.get('fs-node');
-        if ( fsNode && ! await fsNode.exists() ) {
+        if ( fsNode && !await fsNode.exists() ) {
             throw APIError.create('subject_does_not_exist');
         }
 

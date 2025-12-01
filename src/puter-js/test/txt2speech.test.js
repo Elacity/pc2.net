@@ -135,6 +135,54 @@ const testTxt2SpeechWithTestModeCore = async function() {
     assert(valueOfValue === srcValue, `valueOf() should return the same as src in test mode. valueOf(): ${valueOfValue}, src: ${srcValue}`);
 };
 
+const testTxt2SpeechWithOpenAIProviderCore = async function() {
+    // Test OpenAI-based text-to-speech using test mode to avoid live requests
+    const result = await puter.ai.txt2speech("Hello, this is an OpenAI provider test.", { provider: "openai", voice: "alloy" }, true);
+
+    assert(result instanceof Audio, "txt2speech should return an Audio object for OpenAI provider");
+    assert(result !== null, "txt2speech should not return null for OpenAI provider");
+
+    const toStringValue = result.toString();
+    const valueOfValue = result.valueOf();
+    const srcValue = result.src;
+
+    assert(typeof toStringValue === 'string', "toString() should return a string for OpenAI provider");
+    assert(typeof valueOfValue === 'string', "valueOf() should return a string for OpenAI provider");
+    assert(typeof srcValue === 'string', "src should be a string for OpenAI provider");
+    assert(toStringValue.length > 0, "toString() should not be empty for OpenAI provider");
+    assert(valueOfValue.length > 0, "valueOf() should not be empty for OpenAI provider");
+    assert(srcValue.length > 0, "src should not be empty for OpenAI provider");
+
+    assert(toStringValue === srcValue, "toString() should match src for OpenAI provider");
+    assert(valueOfValue === srcValue, "valueOf() should match src for OpenAI provider");
+};
+
+const testTxt2SpeechWithElevenLabsProviderCore = async function() {
+    // Test ElevenLabs provider in test mode to avoid external calls
+    const result = await puter.ai.txt2speech(
+        "Hello, this is an ElevenLabs provider test.",
+        { provider: "elevenlabs", voice: "21m00Tcm4TlvDq8ikWAM" },
+        true,
+    );
+
+    assert(result instanceof Audio, "txt2speech should return an Audio object for ElevenLabs provider");
+    assert(result !== null, "txt2speech should not return null for ElevenLabs provider");
+
+    const toStringValue = result.toString();
+    const valueOfValue = result.valueOf();
+    const srcValue = result.src;
+
+    assert(typeof toStringValue === 'string', "toString() should return a string for ElevenLabs provider");
+    assert(typeof valueOfValue === 'string', "valueOf() should return a string for ElevenLabs provider");
+    assert(typeof srcValue === 'string', "src should be a string for ElevenLabs provider");
+    assert(toStringValue.length > 0, "toString() should not be empty for ElevenLabs provider");
+    assert(valueOfValue.length > 0, "valueOf() should not be empty for ElevenLabs provider");
+    assert(srcValue.length > 0, "src should not be empty for ElevenLabs provider");
+
+    assert(toStringValue === srcValue, "toString() should match src for ElevenLabs provider");
+    assert(valueOfValue === srcValue, "valueOf() should match src for ElevenLabs provider");
+};
+
 // Export test functions
 window.txt2speechTests = [
     {
@@ -174,5 +222,31 @@ window.txt2speechTests = [
                 fail("testTxt2SpeechWithTestMode failed:", error);
             }
         }
+    },
+
+    {
+        name: "testTxt2SpeechWithOpenAIProvider",
+        description: "Test text-to-speech using the OpenAI provider in test mode",
+        test: async function() {
+            try {
+                await testTxt2SpeechWithOpenAIProviderCore();
+                pass("testTxt2SpeechWithOpenAIProvider passed");
+            } catch (error) {
+                fail("testTxt2SpeechWithOpenAIProvider failed:", error);
+            }
+        }
+    },
+
+    {
+        name: "testTxt2SpeechWithElevenLabsProvider",
+        description: "Test text-to-speech using the ElevenLabs provider in test mode",
+        test: async function() {
+            try {
+                await testTxt2SpeechWithElevenLabsProviderCore();
+                pass("testTxt2SpeechWithElevenLabsProvider passed");
+            } catch (error) {
+                fail("testTxt2SpeechWithElevenLabsProvider failed:", error);
+            }
+        }
     }
-]; 
+];

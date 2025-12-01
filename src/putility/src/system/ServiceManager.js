@@ -1,59 +1,17 @@
 /*
  * Copyright (C) 2024-present Puter Technologies Inc.
- * 
- * This file is part of Puter.
- * 
- * Puter is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as published
- * by the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- * 
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- * 
- * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-const { AdvancedBase } = require("../AdvancedBase");
-const { TService } = require("../concepts/Service");
-const { TeePromise } = require("../libs/promise");
+const { AdvancedBase } = require('../AdvancedBase');
+const { TService } = require('../concepts/Service');
 
-const mkstatus = name => {
-    const c = class {
-        get label () { return name }
-        describe () { return name }
-    }
-    c.name = `Status${
-        name[0].toUpperCase() + name.slice(1)
-    }`
-    return c;
-}
-
+const StatusEnum = {
+    Registering: 'registering',
+    Pending: 'pending',
+    Initializing: 'initializing',
+    Running: 'running',
+};
 class ServiceManager extends AdvancedBase {
-    static StatusRegistering = mkstatus('registering');
-    static StatusPending = class StatusPending {
-        constructor ({ waiting_for }) {
-            this.waiting_for = waiting_for;
-        }
-        get label () { return 'waiting'; }
-        // TODO: trait?
-        describe () {
-            return `waiting for: ${this.waiting_for.join(', ')}`
-        }
-    }
-    static StatusInitializing = mkstatus('initializing');
-    static StatusRunning = class StatusRunning {
-        constructor ({ start_ts }) {
-            this.start_ts = start_ts;
-        }
-        get label () { return 'running'; }
-        describe () {
-            return `running (since ${this.start_ts})`;
-        }
-    }
     constructor ({ context } = {}) {
         super();
 
@@ -78,7 +36,7 @@ class ServiceManager extends AdvancedBase {
         const entry = {
             name,
             instance: ins,
-            status: new this.constructor.StatusRegistering(),
+            status: StatusEnum.Registering,
         };
         this.services_l_.push(entry);
         this.services_m_[name] = entry;
@@ -91,7 +49,7 @@ class ServiceManager extends AdvancedBase {
     get (name) {
         const info = this.services_m_[name];
         if ( ! info ) throw new Error(`Service not registered: ${name}`);
-        if ( ! (info.status instanceof this.constructor.StatusRunning ) ) {
+        if ( info.status !== StatusEnum.Running ) {
             return undefined;
         }
         return info.instance;
@@ -142,7 +100,7 @@ class ServiceManager extends AdvancedBase {
                 waiting_for.push(depend);
                 continue;
             }
-            if ( ! (depend_entry.status instanceof this.constructor.StatusRunning) ) {
+            if ( ( depend_entry.status !== StatusEnum.Running ) ) {
                 waiting_for.push(depend);
             }
         }
@@ -160,34 +118,33 @@ class ServiceManager extends AdvancedBase {
         }
 
         for ( const dependency of waiting_for ) {
-            /** @type Set */
-            const waiting_set = this.waiting_[dependency] ||
-                (this.waiting_[dependency] = new Set());
-            waiting_set.add(name);
+            if ( ! this.waiting_[dependency] ) {
+                this.waiting_[dependency] = new Set();
+            }
+            this.waiting_[dependency].add(name);
         }
 
-        entry.status = new this.constructor.StatusPending(
-            { waiting_for });
+        entry.status = StatusEnum.Pending;
+        entry.statusWaitingFor = waiting_for;
     }
 
     // called when a service has all of its dependencies initialized
     // and is ready to be initialized itself
     async init_service_ (name, modifiers = {}) {
         const entry = this.services_m_[name];
-        entry.status = new this.constructor.StatusInitializing();
+        entry.status = StatusEnum.Initializing;
 
         const service_impl = entry.instance.as(TService);
         await service_impl.init();
-        entry.status = new this.constructor.StatusRunning({
-            start_ts: new Date(),
-        });
+        entry.status = StatusEnum.Running;
+        entry.statusStartTS = new Date();
         /** @type Set */
         const maybe_ready_set = this.waiting_[name];
         const promises = [];
         if ( maybe_ready_set ) {
             for ( const dependent of maybe_ready_set.values() ) {
                 promises.push(this.maybe_init_(dependent, {
-                    no_init_listeners: true
+                    no_init_listeners: true,
                 }));
             }
         }

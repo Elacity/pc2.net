@@ -16,15 +16,25 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-const { AdvancedBase, libs } = require("@heyputer/putility");
+const { AdvancedBase, libs } = require('@heyputer/putility');
 const { Context } = require('./util/context');
-const BaseService = require("./services/BaseService");
+const BaseService = require('./services/BaseService');
 const useapi = require('useapi');
-const yargs = require('yargs/yargs')
+const yargs = require('yargs/yargs');
 const { hideBin } = require('yargs/helpers');
-const { Extension } = require("./Extension");
-const { ExtensionModule } = require("./ExtensionModule");
-const { spawn } = require("node:child_process");
+const { Extension } = require('./Extension');
+const { ExtensionModule } = require('./ExtensionModule');
+const { spawn } = require('node:child_process');
+
+const fs = require('fs');
+const path_ = require('path');
+const { prependToJSFiles } = require('./kernel/modutil');
+
+const uuid = require('uuid');
+const readline = require('node:readline/promises');
+const { RuntimeModuleRegistry } = require('./extension/RuntimeModuleRegistry');
+const { RuntimeModule } = require('./extension/RuntimeModule');
+const deep_proto_merge = require('./config/deep_proto_merge');
 
 const { quot } = libs.string;
 
@@ -41,6 +51,11 @@ class Kernel extends AdvancedBase {
         });
 
         this.entry_path = entry_path;
+        this.extensionExports = {};
+        this.extensionInfo = {};
+        this.registry = {};
+
+        this.runtimeModuleRegistry = new RuntimeModuleRegistry();
     }
 
     add_module (module) {
@@ -75,17 +90,18 @@ class Kernel extends AdvancedBase {
     }
 
     boot () {
-        const args = yargs(hideBin(process.argv)).argv
+        const args = yargs(hideBin(process.argv)).argv;
 
         this._runtime_init({ args });
 
         const config = require('./config');
 
         globalThis.ll = o => o;
-        globalThis.xtra_log = () => {};
+        globalThis.xtra_log = () => {
+        };
         if ( config.env === 'dev' ) {
             globalThis.ll = o => {
-                console.log('debug: ' + require('node:util').inspect(o));
+                console.log(`debug: ${ require('node:util').inspect(o)}`);
                 return o;
             };
             globalThis.xtra_log = (...args) => {
@@ -93,8 +109,8 @@ class Kernel extends AdvancedBase {
                 const fs = require('fs');
                 const path = require('path');
                 const log_path = path.join('/tmp/xtra_log.txt');
-                fs.appendFileSync(log_path, args.join(' ') + '\n');
-            }
+                fs.appendFileSync(log_path, `${args.join(' ') }\n`);
+            };
         }
 
         const { consoleLogManager } = require('./util/consolelog');
@@ -112,7 +128,11 @@ class Kernel extends AdvancedBase {
             services,
             config,
             logger: this.bootLogger,
+            extensionExports: this.extensionExports,
+            extensionInfo: this.extensionInfo,
+            registry: this.registry,
             args,
+            ['runtime-modules']: this.runtimeModuleRegistry,
         }, 'app');
         globalThis.root_context = root_context;
 
@@ -120,7 +140,6 @@ class Kernel extends AdvancedBase {
             await this._install_modules();
             await this._boot_services();
         });
-
 
         Error.stackTraceLimit = 200;
     }
@@ -137,6 +156,12 @@ class Kernel extends AdvancedBase {
                 external: false,
             });
             await module_.install(mod_context);
+        }
+
+        for ( const k in services.instances_ ) {
+            const service_exports = new RuntimeModule({ name: `service:${k}` });
+            this.runtimeModuleRegistry.register(service_exports);
+            service_exports.exports = services.instances_[k];
         }
 
         // External modules
@@ -163,10 +188,8 @@ class Kernel extends AdvancedBase {
                 throw e;
             }
 
-            await svc_systemValidation.mark_invalid(
-                'failed to initialize services',
-                e,
-            );
+            await svc_systemValidation.mark_invalid('failed to initialize services',
+                            e);
         }
 
         for ( const module of this.modules ) {
@@ -193,8 +216,6 @@ class Kernel extends AdvancedBase {
             await services.ready;
             globalThis.services = services;
             const log = services.get('log-service').create('init');
-            log.info('services ready');
-
             log.system('server ready', {
                 deployment_type: globalThis.deployment_type,
             });
@@ -205,47 +226,84 @@ class Kernel extends AdvancedBase {
     }
 
     async install_extern_mods_ () {
-        const path_ = require('path');
-        const fs = require('fs');
-        
+
         // In runtime directory, we'll create a `mod_packages` directory.`
         if ( fs.existsSync('mod_packages') ) {
             fs.rmSync('mod_packages', { recursive: true, force: true });
         }
         fs.mkdirSync('mod_packages');
-        
+
+        // Initialize some globals that external mods depend on
+        globalThis.__puter_extension_globals__ = {
+            extensionObjectRegistry: {},
+            useapi: this.useapi,
+            global_config: require('./config'),
+        };
+
+        // Install the mods...
+
         const mod_install_root_context = Context.get();
+
+        const mod_directory_promises = [];
+        const mod_installation_promises = [];
 
         const mod_paths = this.environment.mod_paths;
         for ( const mods_dirpath of mod_paths ) {
-            if ( ! fs.existsSync(mods_dirpath) ) {
-                this.services.logger.error(
-                    `mod directory not found: ${quot(mods_dirpath)}; skipping...`
-                );
-                // intentional delay so error is seen
-                this.services.logger.info('boot will continue in 4 seconds');
-                await new Promise(rslv => setTimeout(rslv, 4000));
-                continue;
+            const p = (async () => {
+                if ( ! fs.existsSync(mods_dirpath) ) {
+                    this.services.logger.error(`mod directory not found: ${quot(mods_dirpath)}; skipping...`);
+                    // intentional delay so error is seen
+                    this.services.logger.info('boot will continue in 4 seconds');
+                    await new Promise(rslv => setTimeout(rslv, 4000));
+                    return;
+                }
+                const mod_dirnames = await fs.promises.readdir(mods_dirpath);
+
+                const ignoreList = new Set([
+                    '.git',
+                ]);
+
+                for ( const mod_dirname of mod_dirnames ) {
+                    if ( ignoreList.has(mod_dirname) ) continue;
+                    mod_installation_promises.push(this.install_extern_mod_({
+                        mod_install_root_context,
+                        mod_dirname,
+                        mod_path: path_.join(mods_dirpath, mod_dirname),
+                    }));
+                }
+            })();
+            if ( process.env.SYNC_MOD_INSTALL ) await p;
+            mod_directory_promises.push(p);
+        }
+
+        await Promise.all(mod_directory_promises);
+
+        const mods_to_run = (await Promise.all(mod_installation_promises))
+            .filter(v => v !== undefined);
+        mods_to_run.sort((a, b) => a.priority - b.priority);
+        let i = 0;
+        while ( i < mods_to_run.length ) {
+            const currentPriority = mods_to_run[i].priority;
+            const samePriorityMods = [];
+
+            // Collect all mods with the same priority
+            while ( i < mods_to_run.length && mods_to_run[i].priority === currentPriority ) {
+                samePriorityMods.push(mods_to_run[i]);
+                i++;
             }
-            const mod_dirnames = fs.readdirSync(mods_dirpath);
-            for ( const mod_dirname of mod_dirnames ) {
-                await this.install_extern_mod_({
-                    mod_install_root_context,
-                    mod_dirname,
-                    mod_path: path_.join(mods_dirpath, mod_dirname),
-                });
-            }
+
+            // Run all mods with the same priority concurrently
+            await Promise.all(samePriorityMods.map(mod_entry => {
+                return this._run_extern_mod(mod_entry);
+            }));
         }
     }
-        
-    async install_extern_mod_({
+
+    async install_extern_mod_ ({
         mod_install_root_context,
         mod_dirname,
         mod_path,
     }) {
-        const path_ = require('path');
-        const fs = require('fs');
-
         let stat = fs.lstatSync(mod_path);
         while ( stat.isSymbolicLink() ) {
             mod_path = fs.readlinkSync(mod_path);
@@ -253,20 +311,39 @@ class Kernel extends AdvancedBase {
         }
 
         // Mod must be a directory or javascript file
-        if ( ! stat.isDirectory() && !(mod_path.endsWith('.js')) ) {
+        if ( !stat.isDirectory() && !(mod_path.endsWith('.js')) ) {
             return;
         }
-        
-        const mod_name = path_.parse(mod_path).name;
+
+        let mod_name = path_.parse(mod_path).name;
         const mod_package_dir = `mod_packages/${mod_name}`;
         fs.mkdirSync(mod_package_dir);
 
+        const mod_entry = {
+            priority: 0,
+            jsons: {},
+        };
+
         if ( ! stat.isDirectory() ) {
-            this.create_mod_package_json(mod_package_dir, {
-                name: mod_name,
-                entry: 'main.js'
+            const rl = readline.createInterface({
+                input: fs.createReadStream(mod_path),
             });
-            fs.copyFileSync(mod_path, path_.join(mod_package_dir, 'main.js'));
+            for await ( const line of rl ) {
+                if ( line.trim() === '' ) continue;
+                if ( ! line.startsWith('//@extension') ) break;
+                const tokens = line.split(' ');
+                if ( tokens[1] === 'priority' ) {
+                    mod_entry.priority = Number(tokens[2]);
+                }
+                if ( tokens[1] === 'name' ) {
+                    mod_name = `${ tokens[2]}`;
+                }
+            }
+            mod_entry.jsons.package = await this.create_mod_package_json(mod_package_dir, {
+                name: mod_name,
+                entry: 'main.js',
+            });
+            await fs.promises.copyFile(mod_path, path_.join(mod_package_dir, 'main.js'));
         } else {
             // If directory is empty, we'll just skip it
             if ( fs.readdirSync(mod_path).length === 0 ) {
@@ -274,57 +351,155 @@ class Kernel extends AdvancedBase {
                 return;
             }
 
+            const promises = [];
+
             // Create package.json if it doesn't exist
-            if ( ! fs.existsSync(path_.join(mod_path, 'package.json')) ) {
-                this.create_mod_package_json(mod_package_dir, {
-                    name: mod_name,
-                });
+            promises.push((async () => {
+                if ( ! fs.existsSync(path_.join(mod_path, 'package.json')) ) {
+                    mod_entry.jsons.package = await this.create_mod_package_json(mod_package_dir, {
+                        name: mod_name,
+                    });
+                } else {
+                    const bin = await fs.promises.readFile(path_.join(mod_path, 'package.json'));
+                    const str = bin.toString();
+                    mod_entry.jsons.package = JSON.parse(str);
+                }
+            })());
+
+            const puter_json_path = path_.join(mod_path, 'puter.json');
+            if ( fs.existsSync(puter_json_path) ) {
+                promises.push((async () => {
+                    const buffer = await fs.promises.readFile(puter_json_path);
+                    const json = buffer.toString();
+                    const obj = JSON.parse(json);
+                    mod_entry.priority = obj.priority ?? mod_entry.priority;
+                    mod_entry.jsons.puter = obj;
+                })());
             }
-            
+
+            const config_json_path = path_.join(mod_path, 'config.json');
+            if ( fs.existsSync(config_json_path) ) {
+                promises.push((async () => {
+                    const buffer = await fs.promises.readFile(config_json_path);
+                    const json = buffer.toString();
+                    const obj = JSON.parse(json);
+                    mod_entry.priority = obj.priority ?? mod_entry.priority;
+                    mod_entry.jsons.config = obj;
+                })());
+            }
+
             // Copy mod contents to `/mod_packages`
-            fs.cpSync(mod_path, mod_package_dir, {
+            promises.push(fs.promises.cp(mod_path, mod_package_dir, {
                 recursive: true,
-            });
+            }));
+
+            await Promise.all(promises);
         }
-        
-        const mod_require_dir = path_.join(process.cwd(), mod_package_dir);
-        
-        await this.run_npm_install(mod_require_dir);
-        
+
+        mod_entry.priority = mod_entry.jsons.puter?.priority ?? mod_entry.priority;
+
+        const extension_id = uuid.v4();
+
+        await prependToJSFiles(mod_package_dir, `${[
+            'const { use, def } = globalThis.__puter_extension_globals__.useapi;',
+            'const { use: puter } = globalThis.__puter_extension_globals__.useapi;',
+            'const extension = globalThis.__puter_extension_globals__' +
+            `.extensionObjectRegistry[${JSON.stringify(extension_id)}];`,
+            'const console = extension.console;',
+            'const runtime = extension.runtime;',
+            'const config = extension.config;',
+            'const registry = extension.registry;',
+            'const register = registry.register;',
+            'const global_config = globalThis.__puter_extension_globals__.global_config',
+        ].join('\n') }\n`);
+
+        mod_entry.require_dir = path_.join(process.cwd(), mod_package_dir);
+
+        await this.run_npm_install(mod_entry.require_dir);
+
         const mod = new ExtensionModule();
         mod.extension = new Extension();
 
+        const runtimeModule = new RuntimeModule({ name: mod_name });
+        this.runtimeModuleRegistry.register(runtimeModule);
+        mod.extension.runtime = runtimeModule;
+
+        mod_entry.module = mod;
+
+        globalThis.__puter_extension_globals__.extensionObjectRegistry[extension_id]
+            = mod.extension;
+
         const mod_context = this._create_mod_context(mod_install_root_context, {
-            name: mod_dirname,
+            name: mod_name,
             ['module']: mod,
             external: true,
             mod_path,
         });
 
-        // This is where the module gets the 'use' and 'def' globals
-        await this.useapi.awithuse(async () => {
-            // This is where the module gets the 'extension' global
-            await useapi.aglobalwith({
-                extension: mod.extension,
-            }, async () => {
-                const maybe_promise = require(mod_require_dir);
-                if ( maybe_promise && maybe_promise instanceof Promise ) {
-                    await maybe_promise;
-                }
-                // This is where the 'install' event gets triggered
-                await mod.install(mod_context);
-            });
-        });
+        mod_entry.context = mod_context;
+
+        return mod_entry;
     };
 
-    _create_mod_context (parent, options) {
-        const path_ = require('path');
-        const fs = require('fs');
+    async _run_extern_mod (mod_entry) {
+        let exportObject = null;
 
+        const {
+            module: mod,
+            require_dir,
+            context,
+        } = mod_entry;
+
+        const packageJSON = mod_entry.jsons.package;
+
+        Object.defineProperty(mod.extension, 'config', {
+            get: () => {
+                const builtin_config = mod_entry.jsons.config ?? {};
+                const user_config = require('./config').extensions?.[packageJSON.name] ?? {};
+                return deep_proto_merge(user_config, builtin_config);
+            },
+        });
+
+        mod.extension.name = packageJSON.name;
+
+        const maybe_promise = (typ => typ.trim().toLowerCase())(packageJSON.type ?? '') === 'module'
+            ? await import(path_.join(require_dir, packageJSON.main ?? 'index.js'))
+            : require(require_dir);
+
+        if ( maybe_promise && maybe_promise instanceof Promise ) {
+            exportObject = await maybe_promise;
+        } else exportObject = maybe_promise;
+
+        const extension_name = exportObject?.name ?? packageJSON.name;
+        this.extensionExports[extension_name] = exportObject;
+        this.extensionInfo[extension_name] = {
+            name: extension_name,
+            priority: mod_entry.priority,
+            type: packageJSON?.type ?? 'commonjs',
+        };
+        mod.extension.registry = this.registry;
+        mod.extension.name = extension_name;
+
+        if ( exportObject.construct ) {
+            mod.extension.on('construct', exportObject.construct);
+        }
+        if ( exportObject.preinit ) {
+            mod.extension.on('preinit', exportObject.preinit);
+        }
+
+        if ( exportObject.init ) {
+            mod.extension.on('init', exportObject.init);
+        }
+
+        // This is where the 'install' event gets triggered
+        await mod.install(context);
+    }
+
+    _create_mod_context (parent, options) {
         const modapi = {};
 
         let mod_path = options.mod_path;
-        if ( ! mod_path && options.module.dirname ) {
+        if ( !mod_path && options.module.dirname ) {
             mod_path = options.module.dirname();
         }
 
@@ -352,17 +527,14 @@ class Kernel extends AdvancedBase {
                     // getter-like behavior to useapi.
                     this.useapi.def(`${prefix}.${name}`, lib);
                 }
-            }
+            };
         }
         const mod_context = parent.sub({ modapi }, `mod:${options.name}`);
         return mod_context;
 
     }
-    
-    create_mod_package_json (mod_path, { name, entry }) {
-        const fs = require('fs');
-        const path_ = require('path');
 
+    async create_mod_package_json (mod_path, { name, entry }) {
         // Expect main.js or index.js to exist
         const options = ['main.js', 'index.js'];
 
@@ -380,38 +552,56 @@ class Kernel extends AdvancedBase {
         if ( ! entry ) {
             this.bootLogger.error(`Expected main.js or index.js in ${quot(mod_path)}`);
             if ( ! process.env.SKIP_INVALID_MODS ) {
-                this.bootLogger.error(`Set SKIP_INVALID_MODS=1 (environment variable) to run anyway.`);
+                this.bootLogger.error('Set SKIP_INVALID_MODS=1 (environment variable) to run anyway.');
                 process.exit(1);
             } else {
                 return;
             }
         }
 
-        const data = JSON.stringify({
+        const data = {
             name,
             version: '1.0.0',
             main: entry ?? 'main.js',
-        });
-        
-        console.log('WRITING TO', path_.join(mod_path, 'package.json'));
-        
-        fs.writeFileSync(path_.join(mod_path, 'package.json'), data);
+        };
+        const data_json = JSON.stringify(data);
+
+        this.bootLogger.debug(`WRITING TO: ${ path_.join(mod_path, 'package.json')}`);
+
+        await fs.promises.writeFile(path_.join(mod_path, 'package.json'), data_json);
+        return data;
     }
-    
+
     async run_npm_install (path) {
-        const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
-        const proc = spawn(npmCmd, ["install"], { cwd: path, shell: true, stdio: "inherit" });
+        const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+        const proc = spawn(npmCmd, ['install'], { cwd: path, stdio: 'pipe' });
+
+        let buffer = '';
+
+        proc.stdout.on('data', (data) => {
+            buffer += data.toString();
+        });
+
+        proc.stderr.on('data', (data) => {
+            buffer += data.toString();
+        });
+
         return new Promise((rslv, rjct) => {
             proc.on('close', code => {
                 if ( code !== 0 ) {
-                    throw new Error(`exit code: ${code}`);
+                    // Print buffered output on error
+                    if ( buffer ) process.stdout.write(buffer);
+                    rjct(new Error(`exit code: ${code}`));
+                    return;
                 }
                 rslv();
             });
             proc.on('error', err => {
+                // Print buffered output on error
+                if ( buffer ) process.stdout.write(buffer);
                 rjct(err);
-            })
-        })
+            });
+        });
     }
 }
 

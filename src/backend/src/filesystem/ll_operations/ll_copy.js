@@ -23,7 +23,7 @@ class LLCopy extends LLFilesystemOperation {
     static MODULES = {
         _path: require('path'),
         uuidv4: require('uuid').v4,
-    }
+    };
 
     async _run () {
         const { _path, uuidv4 } = this.modules;
@@ -36,7 +36,7 @@ class LLCopy extends LLFilesystemOperation {
         const svc_event = svc.get('event');
 
         const uuid = uuidv4();
-        const ts = Math.round(Date.now()/1000);
+        const ts = Math.round(Date.now() / 1000);
 
         this.field('target-uid', uuid);
         this.field('source', source.selector.describe());
@@ -46,11 +46,6 @@ class LLCopy extends LLFilesystemOperation {
         this.checkpoint('before fetch source entry');
         await source.fetchEntry({ thumbnail: true });
         this.checkpoint('fetched source and parent entries');
-
-        console.log('PATH PARAMETERS', {
-            path: await parent.get('path'),
-            target_name,
-        })
 
         // Access Control
         {

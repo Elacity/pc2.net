@@ -16,15 +16,15 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-const APIError = require("../../api/APIError");
-const eggspress = require("../../api/eggspress");
-const { FileFacade } = require("../../services/drivers/FileFacade");
-const { TypeSpec } = require("../../services/drivers/meta/Construct");
-const { TypedValue } = require("../../services/drivers/meta/Runtime");
-const { Context } = require("../../util/context");
-const { whatis } = require("../../util/langutil");
+const APIError = require('../../api/APIError');
+const eggspress = require('../../api/eggspress');
+const { FileFacade } = require('../../services/drivers/FileFacade');
+const { TypeSpec } = require('../../services/drivers/meta/Construct');
+const { TypedValue } = require('../../services/drivers/meta/Runtime');
+const { Context } = require('../../util/context');
+const { whatis } = require('../../util/langutil');
 const { TeePromise } = require('@heyputer/putility').libs.promise;
-const { valid_file_size } = require("../../util/validutil");
+const { valid_file_size } = require('../../util/validutil');
 
 let _handle_multipart;
 
@@ -53,6 +53,8 @@ let _handle_multipart;
 module.exports = eggspress('/drivers/call', {
     subdomain: 'api',
     auth2: true,
+    // noReallyItsJson: true,
+    jsonCanBeLarge: true,
     allowedMethods: ['POST'],
 }, async (req, res, next) => {
     const x = Context.get();
@@ -84,7 +86,7 @@ module.exports = eggspress('/drivers/call', {
     // consider the case where a driver method implements a
     // stream transformation, thus the stream from the request isn't
     // consumed until the response is being sent.
-    
+
     _respond(res, result);
 
     // What we _can_ do is await the request promise while responding
@@ -95,7 +97,6 @@ module.exports = eggspress('/drivers/call', {
 const _respond = (res, result) => {
     if ( result.result instanceof TypedValue ) {
         const tv = result.result;
-        debugger;
         if ( TypeSpec.adapt({ $: 'stream' }).equals(tv.type) ) {
             res.set('Content-Type', tv.type.raw.content_type);
             if ( tv.type.raw.chunked ) {
@@ -106,10 +107,10 @@ const _respond = (res, result) => {
         }
 
         // This is the
-        if ( typeof result.value === 'object' ) {
-            result.value.type_fallback = true;
+        if ( typeof tv.value === 'object' ) {
+            tv.value.type_fallback = true;
         }
-        res.json(result.value);
+        res.json(tv.value);
         return;
     }
     res.json(result);
@@ -144,9 +145,7 @@ _handle_multipart = async (req) => {
                 dst[key_parts[i]] = {};
             }
             if ( whatis(dst[key_parts[i]]) !== 'object' ) {
-                throw new Error(
-                    `Tried to set member of non-object: ${key_parts[i]} in ${fieldname}`
-                );
+                throw new Error(`Tried to set member of non-object: ${key_parts[i]} in ${fieldname}`);
             }
             dst = dst[key_parts[i]];
         }
@@ -198,4 +197,4 @@ _handle_multipart = async (req) => {
     await p_nonfile_data_end;
 
     return { params, p_data_end };
-}
+};

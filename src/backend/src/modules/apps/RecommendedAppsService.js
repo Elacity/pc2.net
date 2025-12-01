@@ -1,24 +1,24 @@
 /*
  * Copyright (C) 2024-present Puter Technologies Inc.
- * 
+ *
  * This file is part of Puter.
- * 
+ *
  * Puter is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
  * by the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Affero General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-const { get_app } = require("../../helpers");
-const BaseService = require("../../services/BaseService");
+const { get_app } = require('../../helpers');
+const BaseService = require('../../services/BaseService');
 
 const get_apps = async ({ specifiers }) => {
     return await Promise.all(specifiers.map(async (specifier) => {
@@ -74,13 +74,13 @@ class RecommendedAppsService extends BaseService {
     _construct () {
         this.app_names = new Set(RecommendedAppsService.APP_NAMES);
     }
-    
+
     ['__on_boot.consolidation'] () {
         const svc_appIcon = this.services.get('app-icon');
         const svc_event = this.services.get('event');
         svc_event.on('apps.invalidate', (_, { app }) => {
             const sizes = svc_appIcon.get_sizes();
-            
+
             this.log.noticeme('Invalidating recommended apps', { app, sizes });
 
             // If it's a single-app invalidation, only invalidate if the
@@ -99,9 +99,8 @@ class RecommendedAppsService extends BaseService {
     }
 
     async get_recommended_apps ({ icon_size }) {
-        const recommended_cache_key = 'global:recommended-apps' + (
-            icon_size ? `:icon-size:${icon_size}` : ''
-        );
+        const recommended_cache_key = `global:recommended-apps${
+            icon_size ? `:icon-size:${icon_size}` : ''}`;
 
         let recommended = kv.get(recommended_cache_key);
         if ( recommended ) return recommended;
@@ -109,8 +108,8 @@ class RecommendedAppsService extends BaseService {
         // Prepare each app for returning to user by only returning the necessary fields
         // and adding them to the retobj array
         recommended = (await get_apps({
-            specifiers: Array.from(this.app_names).map(name => ({ name }))
-        })).filter(app => !! app).map(app => {
+            specifiers: Array.from(this.app_names).map(name => ({ name })),
+        })).filter(app => !!app).map(app => {
             return {
                 uuid: app.uid,
                 name: app.name,
@@ -121,7 +120,7 @@ class RecommendedAppsService extends BaseService {
                 index_url: app.index_url,
             };
         });
-        
+
         const svc_appIcon = this.services.get('app-icon');
 
         // Iconify apps
@@ -133,7 +132,7 @@ class RecommendedAppsService extends BaseService {
         }
 
         kv.set(recommended_cache_key, recommended);
-        
+
         return recommended;
     }
 }

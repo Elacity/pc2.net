@@ -26,6 +26,12 @@
 import console from 'node:console';
 import process from 'node:process';
 
+try {
+    await import('dotenv/config');
+} catch (e) {
+    // dotenv is optional
+}
+
 const surrounding_box = (col, lines) => {
     const lengths = lines.map(line => line.length);
 
@@ -83,12 +89,16 @@ const main = async () => {
         EssentialModules,
         DatabaseModule,
         LocalDiskStorageModule,
+        MemoryStorageModule,
         SelfHostedModule,
         BroadcastModule,
         TestDriversModule,
+        TestConfigModule,
         PuterAIModule,
         InternetModule,
         DevelopmentModule,
+        DNSModule,
+        PerfMonModule,
     } = (await import('@heyputer/backend')).default;
 
     const k = new Kernel({
@@ -99,11 +109,17 @@ const main = async () => {
     }
     k.add_module(new DatabaseModule());
     k.add_module(new LocalDiskStorageModule());
+    k.add_module(new MemoryStorageModule());
     k.add_module(new SelfHostedModule());
     k.add_module(new BroadcastModule());
     k.add_module(new TestDriversModule());
+    k.add_module(new TestConfigModule());
     k.add_module(new PuterAIModule());
     k.add_module(new InternetModule());
+    k.add_module(new DNSModule());
+    if ( process.env.PERFMON ) {
+        k.add_module(new PerfMonModule());
+    }
     if ( process.env.UNSAFE_PUTER_DEV ) {
         k.add_module(new DevelopmentModule());
     }

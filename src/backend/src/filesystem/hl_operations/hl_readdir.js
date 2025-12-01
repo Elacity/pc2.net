@@ -16,17 +16,26 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-const APIError = require("../../api/APIError");
-const { stream_to_buffer } = require("../../util/streamutil");
-const { TYPE_DIRECTORY, TYPE_SYMLINK } = require("../FSNodeContext");
-const { LLListUsers } = require("../ll_operations/ll_listusers");
-const { LLReadDir } = require("../ll_operations/ll_readdir");
-const { LLReadShares } = require("../ll_operations/ll_readshares");
-const { HLFilesystemOperation } = require("./definitions");
+const APIError = require('../../api/APIError');
+const { Context } = require('../../util/context');
+const { stream_to_buffer } = require('../../util/streamutil');
+const { ECMAP } = require('../ECMAP');
+const { TYPE_DIRECTORY, TYPE_SYMLINK } = require('../FSNodeContext');
+const { LLListUsers } = require('../ll_operations/ll_listusers');
+const { LLReadDir } = require('../ll_operations/ll_readdir');
+const { LLReadShares } = require('../ll_operations/ll_readshares');
+const { HLFilesystemOperation } = require('./definitions');
 
 class HLReadDir extends HLFilesystemOperation {
     static CONCERN = 'filesystem';
     async _run () {
+        return ECMAP.arun(async () => {
+            const ecmap = Context.get(ECMAP.SYMBOL);
+            ecmap.store_fsNodeContext(this.values.subject);
+            return await this.__run();
+        });
+    }
+    async __run () {
         const { subject: subject_let, user, no_thumbs, no_assocs, actor } = this.values;
         let subject = subject_let;
 
@@ -52,15 +61,14 @@ class HLReadDir extends HLFilesystemOperation {
             }
             throw APIError.create('readdir_of_non_directory');
         }
-        
+
         let children;
 
-        this.log.noticeme('READDIR',
-            {
-            userdir: await subject.isUserDirectory(),
-            namediff: await subject.get('name') !== user.username
-            }
-        );
+        this.log.debug('READDIR',
+                        {
+                            userdir: await subject.isUserDirectory(),
+                            namediff: await subject.get('name') !== user.username,
+                        });
         if ( subject.isRoot ) {
             const ll_listusers = new LLListUsers();
             children = await ll_listusers.run(this.values);
@@ -77,13 +85,21 @@ class HLReadDir extends HLFilesystemOperation {
         }
 
         return Promise.all(children.map(async child => {
-            // await child.fetchAll(null, user);
-            if ( ! no_assocs ) {
-                await child.fetchSuggestedApps(user);
-                await child.fetchSubdomains(user);
+            // When thumbnails are requested, fetching before the call to
+            // .getSafeEntry prevents .fetchEntry (possibly called by
+            // .fetchSuggestedApps or .fetchSubdomains)
+            if ( ! no_thumbs ) {
+                await child.fetchEntry({ thumbnail: true });
             }
-            const entry = await child.getSafeEntry({ thumbnail: ! no_thumbs });
-            if ( ! no_thumbs && entry.associated_app ) {
+
+            if ( ! no_assocs ) {
+                await Promise.all([
+                    child.fetchSuggestedApps(user),
+                    child.fetchSubdomains(user),
+                ]);
+            }
+            const entry = await child.getSafeEntry();
+            if ( !no_thumbs && entry.associated_app ) {
                 const svc_appIcon = this.context.get('services').get('app-icon');
                 const icon_result = await svc_appIcon.get_icon_stream({
                     app_icon: entry.associated_app.icon,

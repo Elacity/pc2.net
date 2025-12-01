@@ -16,15 +16,28 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-const { BaseOperation } = require("../../../services/OperationTraceService");
+const { BaseOperation } = require('../../../services/OperationTraceService');
 
+/**
+ * Handles file upload operations to local disk storage.
+ * Extends BaseOperation to provide upload functionality with progress tracking.
+ */
 class LocalDiskUploadStrategy extends BaseOperation {
+    /**
+     * Creates a new LocalDiskUploadStrategy instance.
+     * @param {Object} parent - The parent storage strategy instance
+     */
     constructor (parent) {
         super();
         this.parent = parent;
         this.uid = null;
     }
 
+    /**
+     * Executes the upload operation by storing file data to local disk.
+     * Handles both buffer and stream-based uploads with progress tracking.
+     * @returns {Promise<void>} Resolves when the upload is complete
+     */
     async _run () {
         const { uid, file, storage_api } = this.values;
 
@@ -45,20 +58,37 @@ class LocalDiskUploadStrategy extends BaseOperation {
                 on_progress: evt => {
                     progress_tracker.set_total(file.size);
                     progress_tracker.set(evt.uploaded);
-                }
+                },
             });
         }
     }
 
-    post_insert () {}
+    /**
+     * Hook called after the operation is inserted into the trace.
+     */
+    post_insert () {
+    }
 }
 
+/**
+ * Handles file copy operations within local disk storage.
+ * Extends BaseOperation to provide copy functionality with progress tracking.
+ */
 class LocalDiskCopyStrategy extends BaseOperation {
+    /**
+     * Creates a new LocalDiskCopyStrategy instance.
+     * @param {Object} parent - The parent storage strategy instance
+     */
     constructor (parent) {
         super();
         this.parent = parent;
     }
 
+    /**
+     * Executes the copy operation by duplicating a file from source to destination.
+     * Updates progress tracker to indicate completion.
+     * @returns {Promise<void>} Resolves when the copy is complete
+     */
     async _run () {
         const { src_node, dst_storage, storage_api } = this.values;
         const { progress_tracker } = storage_api;
@@ -73,15 +103,31 @@ class LocalDiskCopyStrategy extends BaseOperation {
         progress_tracker.set(1);
     }
 
-    post_insert () {}
+    /**
+     * Hook called after the operation is inserted into the trace.
+     */
+    post_insert () {
+    }
 }
 
+/**
+ * Handles file deletion operations from local disk storage.
+ * Extends BaseOperation to provide delete functionality.
+ */
 class LocalDiskDeleteStrategy extends BaseOperation {
+    /**
+     * Creates a new LocalDiskDeleteStrategy instance.
+     * @param {Object} parent - The parent storage strategy instance
+     */
     constructor (parent) {
         super();
         this.parent = parent;
     }
 
+    /**
+     * Executes the delete operation by removing a file from local disk storage.
+     * @returns {Promise<void>} Resolves when the deletion is complete
+     */
     async _run () {
         const { node } = this.values;
 
@@ -91,22 +137,52 @@ class LocalDiskDeleteStrategy extends BaseOperation {
     }
 }
 
+/**
+ * Main strategy class for managing local disk storage operations.
+ * Provides factory methods for creating upload, copy, and delete operations.
+ */
 class LocalDiskStorageStrategy {
+    /**
+     * Creates a new LocalDiskStorageStrategy instance.
+     * @param {Object} config - Configuration object
+     * @param {Object} config.services - Services container for dependency injection
+     */
     constructor ({ services }) {
         this.svc_localDiskStorage = services.get('local-disk-storage');
     }
+
+    /**
+     * Creates a new upload operation instance.
+     * @returns {LocalDiskUploadStrategy} A new upload strategy instance
+     */
     create_upload () {
         return new LocalDiskUploadStrategy(this);
     }
+
+    /**
+     * Creates a new copy operation instance.
+     * @returns {LocalDiskCopyStrategy} A new copy strategy instance
+     */
     create_copy () {
         return new LocalDiskCopyStrategy(this);
     }
+
+    /**
+     * Creates a new delete operation instance.
+     * @returns {LocalDiskDeleteStrategy} A new delete strategy instance
+     */
     create_delete () {
         return new LocalDiskDeleteStrategy(this);
     }
 
-    async create_read_stream (uid) {
-        return await this.svc_localDiskStorage.create_read_stream({ key: uid });
+    /**
+     * Creates a readable stream for accessing file data from local disk storage.
+     * @param {string} uid - The unique identifier of the file to read
+     * @param {Object} [options={}] - Optional parameters for stream creation
+     * @returns {Promise<ReadableStream>} A readable stream for the file data
+     */
+    async create_read_stream (uid, options = {}) {
+        return await this.svc_localDiskStorage.create_read_stream(uid, options);
     }
 }
 

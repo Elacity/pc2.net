@@ -22,8 +22,8 @@ import UIItem from '../UI/UIItem.js';
 import item_icon from './item_icon.js';
 
 const refresh_item_container = function (el_item_container, options) {
-    // start a transaction
-    const transaction = new window.Transaction('refresh-item-container');
+    // start a transaction (if available)
+    const transaction = window.Transaction ? new window.Transaction('refresh-item-container') : { start: () => {}, end: () => {} };
     transaction.start();
 
     options = options || {};

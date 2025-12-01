@@ -144,13 +144,15 @@ async function UIWindowParticleLogin(options = {}) {
                         const cleanUrl = window.location.origin + window.location.pathname;
                         window.location.replace(cleanUrl);
                     }else{
-                        resolve(true);
+                        // Trigger login event FIRST to load desktop
+                        document.dispatchEvent(new Event("login", { bubbles: true }));
+                        
+                        // Wait a moment for desktop to start loading, then close login window
+                        setTimeout(() => {
+                            $(el_window).close();
+                            resolve(true);
+                        }, 500);
                     }
-                    
-                    $(el_window).close();
-                    
-                    // Trigger login event
-                    document.dispatchEvent(new Event("login", { bubbles: true }));
                     
                     // Show success notification
                     if (typeof UINotification !== 'undefined') {

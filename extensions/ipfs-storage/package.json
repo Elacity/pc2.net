@@ -1,0 +1,19 @@
+{
+    "name": "@elacity/ipfs-storage",
+    "version": "1.0.0",
+    "description": "IPFS storage extension for ElastOS",
+    "main": "main.js",
+    "author": "Elacity",
+    "license": "AGPL-3.0-only",
+    "puter": {
+        "type": "extension",
+        "provides": {
+            "services": [
+                "ipfs"
+            ]
+        }
+    },
+    "dependencies": {
+        "ipfs-http-client": "^60.0.1"
+    }
+}

@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>IPFS Storage Driver Test</title>
+    <script src="https://js.puter.com/v2/"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #1e1e1e;
+            color: #d4d4d4;
+        }
+        .test-section {
+            background: #252526;
+            border: 1px solid #3c3c3c;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        button {
+            background: #0e639c;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #1177bb;
+        }
+        .result {
+            background: #1e1e1e;
+            border: 1px solid #3c3c3c;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .success { color: #4ec9b0; }
+        .error { color: #f48771; }
+        h2 { color: #4ec9b0; border-bottom: 2px solid #3c3c3c; padding-bottom: 10px; }
+        h3 { color: #569cd6; }
+    </style>
+</head>
+<body>
+    <h1>🗄️ IPFS Storage Driver Test Suite</h1>
+    <p>Test the IPFS storage driver functionality</p>
+
+    <div class="test-section">
+        <h2>Test 1: Connect to IPFS Node</h2>
+        <button onclick="testConnect()">Test Connection</button>
+        <div id="connect-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 2: Upload File to IPFS</h2>
+        <button onclick="testUpload()">Upload Test File</button>
+        <div id="upload-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 3: Download File from IPFS</h2>
+        <p>Use CID from upload test above</p>
+        <input type="text" id="download-cid" placeholder="Enter CID from upload" style="width: 500px; padding: 8px;">
+        <button onclick="testDownload()">Download File</button>
+        <div id="download-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 4: List Files</h2>
+        <button onclick="testList()">List All Files</button>
+        <div id="list-result" class="result"></div>
+    </div>
+
+    <script>
+        async function testConnect() {
+            const resultDiv = document.getElementById('connect-result');
+            resultDiv.innerHTML = 'Testing connection...';
+            
+            try {
+                const result = await puter.drivers.call('storage', 'ipfs', 'connect', {
+                    nodeUrl: 'http://localhost:5001'
+                });
+                
+                resultDiv.innerHTML = `<span class="success">✅ SUCCESS</span>\n${JSON.stringify(result, null, 2)}`;
+            } catch (error) {
+                resultDiv.innerHTML = `<span class="error">❌ ERROR</span>\n${error.message}\n${error.stack || ''}`;
+            }
+        }
+
+        async function testUpload() {
+            const resultDiv = document.getElementById('upload-result');
+            resultDiv.innerHTML = 'Uploading test file...';
+            
+            try {
+                const testData = new TextEncoder().encode('Hello from ElastOS IPFS! Test at ' + new Date().toISOString());
+                
+                const result = await puter.drivers.call('storage', 'ipfs', 'upload', {
+                    file: testData,
+                    path: '/test-file-' + Date.now() + '.txt',
+                    encrypt: true
+                });
+                
+                // Auto-fill download CID field
+                document.getElementById('download-cid').value = result.cid;
+                
+                resultDiv.innerHTML = `<span class="success">✅ SUCCESS</span>\n${JSON.stringify(result, null, 2)}`;
+            } catch (error) {
+                resultDiv.innerHTML = `<span class="error">❌ ERROR</span>\n${error.message}\n${error.stack || ''}`;
+            }
+        }
+
+        async function testDownload() {
+            const resultDiv = document.getElementById('download-result');
+            const cid = document.getElementById('download-cid').value.trim();
+            
+            if (!cid) {
+                resultDiv.innerHTML = '<span class="error">❌ Please enter a CID</span>';
+                return;
+            }
+            
+            resultDiv.innerHTML = 'Downloading from IPFS...';
+            
+            try {
+                const result = await puter.drivers.call('storage', 'ipfs', 'download', {
+                    cid: cid,
+                    decrypt: true
+                });
+                
+                // Convert buffer to string if possible
+                let content = 'Binary data';
+                if (result.data) {
+                    try {
+                        content = new TextDecoder().decode(new Uint8Array(result.data));
+                    } catch (e) {
+                        content = 'Binary data (cannot decode as text)';
+                    }
+                }
+                
+                resultDiv.innerHTML = `<span class="success">✅ SUCCESS</span>\nCID: ${result.cid}\nEncrypted: ${result.encrypted}\nPath: ${result.path}\n\nContent:\n${content}`;
+            } catch (error) {
+                resultDiv.innerHTML = `<span class="error">❌ ERROR</span>\n${error.message}\n${error.stack || ''}`;
+            }
+        }
+
+        async function testList() {
+            const resultDiv = document.getElementById('list-result');
+            resultDiv.innerHTML = 'Listing files...';
+            
+            try {
+                const result = await puter.drivers.call('storage', 'ipfs', 'list', {});
+                
+                resultDiv.innerHTML = `<span class="success">✅ SUCCESS</span>\nTotal files: ${result.count}\n\n${JSON.stringify(result.files, null, 2)}`;
+            } catch (error) {
+                resultDiv.innerHTML = `<span class="error">❌ ERROR</span>\n${error.message}\n${error.stack || ''}`;
+            }
+        }
+
+        // Auto-test connection on load
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                console.log('Auto-testing IPFS connection...');
+                testConnect();
+            }, 1000);
+        });
+    </script>
+</body>
+</html>

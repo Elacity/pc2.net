@@ -57,7 +57,7 @@ class MountpointService extends BaseService {
         await svc_event.emit('create.filesystem-types', event);
 
         // Determine mountpoints configuration  
-        // ELACITY: Use dbfs (database filesystem) for persistence
+        // ELACITY: Use dbfs (database filesystem) for persistence by default
         const mountpoints = this.config.mountpoints ?? {
             '/': {
                 mounter: 'dbfs',

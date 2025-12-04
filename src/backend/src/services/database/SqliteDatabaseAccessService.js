@@ -170,6 +170,18 @@ class SqliteDatabaseAccessService extends BaseDatabaseAccessService {
             [36, [
                 '0039_add-expireAt-to-kv-store.sql',
             ]],
+            [37, [
+                '0040_add_user_metadata.sql',
+            ]],
+            [38, [
+                '0041_add_unique_constraint_user_uuid.sql',
+            ]],
+            [39, [
+                '0042_ipfs_storage.sql',
+            ]],
+            [40, [
+                '0043_ipfs_directories.sql',
+            ]],
         ];
 
         // Database upgrade logic

@@ -229,6 +229,16 @@ function generateDevHtml (options) {
     h += '<html lang="en">';
 
     h += '<head>';
+    // Import map for ES modules
+    if ( options.env === 'dev' ) {
+        h += `<script type="importmap">
+        {
+            "imports": {
+                "@heyputer/putility": "/node_modules/@heyputer/putility/index.js"
+            }
+        }
+        </script>`;
+    }
     h += `<title>${encode((options.title))}</title>`;
     h += `<meta name="author" content="${encode(options.company)}">`;
     // description
@@ -302,6 +312,29 @@ function generateDevHtml (options) {
     // This line is also present verbatim in `src/index.js` for production builds
     h += '<script>window.puter_gui_enabled = true;</script>';
 
+    // Initialize service_script_api_promise (normally done by backend)
+    if ( options.env === 'dev' ) {
+        h += `<script>
+            window.service_script_api_promise = (() => {
+                let resolve, reject;
+                const promise = new Promise((res, rej) => {
+                    resolve = res;
+                    reject = rej;
+                });
+                promise.resolve = resolve;
+                promise.reject = reject;
+                return promise;
+            })();
+            window.service_script = async fn => {
+                try {
+                    await fn(await window.service_script_api_promise);
+                } catch (e) {
+                    console.error('service_script(ERROR)', e);
+                }
+            };
+        </script>`;
+    }
+
     // DEV: load every JS library individually
     if ( options.env === 'dev' ) {
         for ( let i = 0; i < lib_paths.length; i++ ) {
@@ -340,11 +373,9 @@ function generateDevHtml (options) {
     if ( options.env === 'prod' ) {
         h += '<script src="/dist/gui.js"></script>';
     }
-    // DEV: load every JS file individually
+    // DEV: use bundled version to avoid module resolution issues
     else {
-        for ( let i = 0; i < js_paths.length; i++ ) {
-            h += `<script type="module" src="${js_paths[i]}"></script>`;
-        }
+        h += '<script src="/dist/bundle.min.js"></script>';
         // load GUI
         h += '<script type="module" src="/index.js"></script>';
     }

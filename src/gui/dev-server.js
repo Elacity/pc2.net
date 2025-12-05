@@ -62,6 +62,10 @@ app.get(['/', '/app/*', '/action/*'], (req, res) => {
         short_description: 'Puter is a privacy-first personal cloud that houses all your files, apps, and games in one private and secure place, accessible from anywhere at any time.',
     }));
 });
+
+// Serve particle-auth directory
+app.use('/particle-auth', express.static('../particle-auth'));
+
 app.use(express.static('./'));
 
 if ( env === 'prod' ) {
@@ -71,6 +75,8 @@ if ( env === 'prod' ) {
 
 if ( env === 'dev' ) {
     app.use(express.static('./src/'));
+    // Serve putility module from parent src directory
+    app.use('/node_modules/@heyputer/putility', express.static('../putility'));
 }
 
 export { app };

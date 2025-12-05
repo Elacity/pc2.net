@@ -95,8 +95,22 @@ async function UIWindowParticleLogin(options = {}) {
             
             const { type, payload } = event.data;
             
-            if (type === 'particle-auth-success') {
+            // Handle both old and new message types for compatibility
+            if (type === 'particle-auth-success' || type === 'particle-auth.success') {
                 handleAuthSuccess(payload, container, el_window);
+            }
+            
+            // Handle auth errors
+            if (type === 'particle-auth.error') {
+                console.error('[Particle Auth]:', payload?.message);
+                // Show error notification
+                if (typeof UINotification !== 'undefined') {
+                    new UINotification({
+                        type: 'error',
+                        message: payload?.message || 'Authentication failed',
+                        autoHide: true,
+                    });
+                }
             }
         };
         
@@ -119,8 +133,27 @@ async function UIWindowParticleLogin(options = {}) {
         
         // Set up message handler function that has access to options and resolve
         function handleAuthSuccess(authData, container, el_window) {
+            // If the iframe already called the backend and got a token, use that directly
+            if (authData.token && authData.user) {
+                console.log('[Particle Auth]: Using pre-authenticated data from iframe');
+                completeAuthentication(authData.token, authData.user, container, el_window);
+                return;
+            }
+            
             // Show loading state
             const processingOverlay = showProcessingOverlay(container);
+            
+            // Build request payload with Smart Account support
+            const requestPayload = {
+                address: authData.address,
+                chainId: authData.chainId,
+            };
+            
+            // Include Smart Account address if available (UniversalX)
+            if (authData.smartAccountAddress) {
+                requestPayload.smartAccountAddress = authData.smartAccountAddress;
+                console.log('[Particle Auth]: Authenticating with Smart Account', authData.smartAccountAddress);
+            }
             
             // Call Puter's backend to authenticate with Particle Network
             fetch(`${window.api_origin}/auth/particle`, {
@@ -128,46 +161,17 @@ async function UIWindowParticleLogin(options = {}) {
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify(authData),
+                body: JSON.stringify(requestPayload),
             })
             .then(response => response.json())
             .then(data => {
+                if (processingOverlay && processingOverlay.parentNode) {
+                    processingOverlay.parentNode.removeChild(processingOverlay);
+                }
+                
                 if (data.success) {
-                    // Update Puter's auth state
-                    window.update_auth_data(data.token, data.user);
-                    
-                    if(options.reload_on_success){
-                        sessionStorage.setItem('playChimeNextUpdate', 'yes');
-                        window.onbeforeunload = null;
-                        console.log('About to redirect, checking URL parameters:', window.location.search);
-                        // Replace with a clean URL to prevent password leakage
-                        const cleanUrl = window.location.origin + window.location.pathname;
-                        window.location.replace(cleanUrl);
-                    }else{
-                        // Trigger login event FIRST to load desktop
-                        document.dispatchEvent(new Event("login", { bubbles: true }));
-                        
-                        // Wait a moment for desktop to start loading, then close login window
-                        setTimeout(() => {
-                            $(el_window).close();
-                            resolve(true);
-                        }, 500);
-                    }
-                    
-                    // Show success notification
-                    if (typeof UINotification !== 'undefined') {
-                        new UINotification({
-                            type: 'success',
-                            message: 'Successfully logged in with Particle Network',
-                            autoHide: true,
-                        });
-                    }
+                    completeAuthentication(data.token, data.user, container, el_window);
                 } else {
-                    // Hide processing overlay
-                    if (processingOverlay && processingOverlay.parentNode) {
-                        processingOverlay.parentNode.removeChild(processingOverlay);
-                    }
-                    
                     // Show error
                     if (typeof UINotification !== 'undefined') {
                         new UINotification({
@@ -195,6 +199,45 @@ async function UIWindowParticleLogin(options = {}) {
                     });
                 }
             });
+        }
+        
+        // Complete the authentication flow
+        function completeAuthentication(token, user, container, el_window) {
+            // Update Puter's auth state
+            window.update_auth_data(token, user);
+            
+            // Log smart account info for debugging
+            if (user.smart_account_address) {
+                console.log('[Particle Auth]: Logged in with UniversalX Smart Account', user.smart_account_address);
+            }
+            
+            if(options.reload_on_success){
+                sessionStorage.setItem('playChimeNextUpdate', 'yes');
+                window.onbeforeunload = null;
+                console.log('About to redirect, checking URL parameters:', window.location.search);
+                // Replace with a clean URL to prevent password leakage
+                const cleanUrl = window.location.origin + window.location.pathname;
+                window.location.replace(cleanUrl);
+            }else{
+                // Trigger login event FIRST to load desktop
+                document.dispatchEvent(new Event("login", { bubbles: true }));
+                
+                // Wait a moment for desktop to start loading, then close login window
+                setTimeout(() => {
+                    $(el_window).close();
+                    resolve(true);
+                }, 500);
+            }
+            
+            // Show success notification
+            if (typeof UINotification !== 'undefined') {
+                const authType = user.auth_type === 'universalx' ? 'UniversalX Smart Account' : 'wallet';
+                new UINotification({
+                    type: 'success',
+                    message: `Successfully logged in with ${authType}`,
+                    autoHide: true,
+                });
+            }
         }
     });
 }

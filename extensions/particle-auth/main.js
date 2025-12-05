@@ -13,11 +13,15 @@
  * Particle Auth Extension for ElastOS
  * 
  * This extension provides Particle Network blockchain authentication
- * as an alternative to traditional email/password authentication.
+ * with UniversalX Smart Account support (ERC-4337).
+ * 
+ * Features:
+ * - Social login (Email, Google, Twitter, Discord)
+ * - Web3 wallets (MetaMask, WalletConnect, Coinbase Wallet)
+ * - Smart Account support with Universal Accounts
+ * - Cross-chain identity management
  */
 
-const express = require('express');
-const path = require('path');
 const ParticleAuthDriver = require('./drivers/ParticleAuthDriver');
 
 // Extension lifecycle events
@@ -36,13 +40,10 @@ extension.on('init', async event => {
         hasAppId: !!config.particle_app_id
     });
     
-    // Serve the Particle Auth GUI as static files from the extension's gui directory
-    const guiPath = path.join(__dirname, 'gui');
-    extension.log.info('[Particle Auth]: Setting up GUI from', guiPath);
-    
-    // Register the static file serving route
-    extension.use('/particle-auth', express.static(guiPath));
-    extension.log.info('[Particle Auth]: GUI route registered');
+    // NOTE: GUI is served by ParticleAuthGUIService in core (src/backend/src/services/)
+    // This is because extension.use() is not a valid Puter extension API.
+    // The core service uses __on_install.routes to register the static file serving.
+    extension.log.info('[Particle Auth]: GUI served by ParticleAuthGUIService in core');
 });
 
 // Create the 'auth' interface for Particle authentication

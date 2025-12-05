@@ -62,12 +62,42 @@ export default {
             h += `</div>`;
         }
         
-        // display user wallet address
-        if(window.user.wallet_address){
-            h += `<div class="settings-card">`;
-                h += `<div>`;
-                    h += `<strong style="display:block;">${i18n('wallet_address')}</strong>`;
-                    h += `<span class="username" style="display:block; margin-top:5px;">${html_encode(window.user.wallet_address)}</span>`;
+        // display user wallet addresses (EOA and Smart Account)
+        const walletAddr = window.user.wallet_address || '';
+        const smartAddr = window.user.smart_account_address || '';
+        console.log('[Settings Account] wallet_address:', walletAddr, 'smart_account_address:', smartAddr);
+        
+        if(walletAddr || smartAddr){
+            h += `<div class="settings-card" style="height: auto; min-height: 45px; flex-direction: column; align-items: flex-start; padding: 15px;">`;
+                h += `<div style="width: 100%;">`;
+                    // Show EOA wallet first
+                    if(walletAddr){
+                        h += `<div style="${smartAddr ? 'margin-bottom: 15px;' : ''}">`;
+                            h += `<strong style="display:block;">${smartAddr ? i18n('eoa_address') : i18n('wallet_address')}</strong>`;
+                            h += `<div style="display: flex; align-items: center; gap: 8px; margin-top: 5px;">`;
+                                h += `<span style="font-family: monospace; font-size: 12px; word-break: break-all;">${html_encode(walletAddr)}</span>`;
+                                h += `<span class="copy-address-btn" data-address="${html_encode(walletAddr)}" style="cursor: pointer; opacity: 0.6; flex-shrink: 0;" title="Copy address">`;
+                                    h += `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
+                                h += `</span>`;
+                            h += `</div>`;
+                            if(smartAddr){
+                                h += `<span style="display:block; margin-top:3px; font-size: 11px; color: #666;">Externally Owned Account</span>`;
+                            }
+                        h += `</div>`;
+                    }
+                    // Show Smart Account below EOA (UniversalX identity)
+                    if(smartAddr){
+                        h += `<div>`;
+                            h += `<strong style="display:block; color: #1976d2;">${i18n('smart_account_address')}</strong>`;
+                            h += `<div style="display: flex; align-items: center; gap: 8px; margin-top: 5px;">`;
+                                h += `<span style="font-family: monospace; font-size: 12px; word-break: break-all;">${html_encode(smartAddr)}</span>`;
+                                h += `<span class="copy-address-btn" data-address="${html_encode(smartAddr)}" style="cursor: pointer; opacity: 0.6; flex-shrink: 0;" title="Copy address">`;
+                                    h += `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
+                                h += `</span>`;
+                            h += `</div>`;
+                            h += `<span style="display:block; margin-top:3px; font-size: 11px; color: #666;">UniversalX Smart Account (ERC-4337)</span>`;
+                        h += `</div>`;
+                    }
                 h += `</div>`;
             h += `</div>`;
         }
@@ -96,6 +126,33 @@ export default {
         return h;
     },
     init: ($el_window) => {
+        const copyIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
+        const checkIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+
+        // Copy address to clipboard
+        $el_window.find('.copy-address-btn').on('click', function (e) {
+            const address = $(this).data('address');
+            const $btn = $(this);
+            navigator.clipboard.writeText(address).then(() => {
+                // Show checkmark
+                $btn.html(checkIcon);
+                $btn.css('opacity', '1');
+                $btn.attr('title', 'Copied!');
+                setTimeout(() => {
+                    $btn.html(copyIcon);
+                    $btn.css('opacity', '0.6');
+                    $btn.attr('title', 'Copy address');
+                }, 1500);
+            });
+        });
+
+        // Hover effect for copy buttons
+        $el_window.find('.copy-address-btn').on('mouseenter', function() {
+            $(this).css('opacity', '1');
+        }).on('mouseleave', function() {
+            $(this).css('opacity', '0.6');
+        });
+
         $el_window.find('.change-password').on('click', function (e) {
             UIWindowChangePassword({
                 window_options:{

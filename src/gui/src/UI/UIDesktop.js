@@ -66,7 +66,7 @@ async function UIDesktop(options) {
     });
 
     // Initialize toolbar auto-hide preference
-    window.toolbar_auto_hide_enabled = true; // Set default value
+    window.toolbar_auto_hide_enabled = false; // Set default value - toolbar visible by default
 
     // Load the toolbar auto-hide preference
     let toolbar_auto_hide_enabled_val = await puter.kv.get('toolbar_auto_hide_enabled');

@@ -302,7 +302,7 @@ function generateDevHtml (options) {
         <meta name="theme-color" content="#ffffff">`;
 
     // preload images when applicable
-    h += '<link rel="preload" as="image" href="./images/wallpaper.webp">';
+    h += '<link rel="preload" as="image" href="./images/wallpaper-elastos.jpg">';
     h += '</head>';
 
     h += '<body>';

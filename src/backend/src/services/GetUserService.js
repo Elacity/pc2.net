@@ -48,6 +48,8 @@ class GetUserService extends BaseService {
         this.id_properties.add('email');
         this.id_properties.add('referral_code');
         this.id_properties.add('wallet_address');
+        // UniversalX Smart Account address (ERC-4337) for Particle Network
+        this.id_properties.add('smart_account_address');
     }
 
     /**

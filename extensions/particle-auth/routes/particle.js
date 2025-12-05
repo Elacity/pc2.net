@@ -1,20 +1,17 @@
 /*
- * Copyright (C) 2024-present Puter Technologies Inc.
+ * Copyright (C) 2024-present Elacity & Puter Technologies Inc.
  *
- * This file is part of Puter.
+ * This file is part of ElastOS (Puter fork).
  *
- * Puter is free software: you can redistribute it and/or modify
+ * ElastOS is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
  * by the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ * Particle Network UniversalX Authentication Endpoint
+ * 
+ * Supports both EOA (wallet_address) and Smart Account (smart_account_address).
+ * Users are identified by their Smart Account address for Elacity content ownership.
  */
 const { v4: uuidv4 } = require('uuid');
 const APIError = require("../../api/APIError");
@@ -51,22 +48,54 @@ module.exports = eggspress('/auth/particle', {
         body: req.body,
     });
     
-    const { address, chainId } = req.body;
+    // Extract auth data - supports both EOA-only and UniversalX Smart Account
+    const { 
+        address,                // EOA wallet address (required)
+        chainId,               // Chain ID (optional)
+        smartAccountAddress,   // UniversalX Smart Account address (optional, but preferred)
+        particleUuid,          // Particle user UUID (optional)
+        particleEmail,         // Particle email if social login (optional)
+    } = req.body;
     
-    // Validate the address
+    // Validate the address (at minimum we need the EOA address)
     if (!address) {
         throw APIError.create('field_missing', null, {
             key: 'address',
         });
     }
     
+    // Normalize addresses
+    const eoaAddress = address.toLowerCase();
+    const smartAddress = smartAccountAddress?.toLowerCase() || null;
+    
+    // Log the auth attempt for debugging
+    console.log('[Particle Auth]: Auth attempt', {
+        eoaAddress,
+        smartAccountAddress: smartAddress,
+        chainId,
+        hasParticleUuid: !!particleUuid,
+        hasParticleEmail: !!particleEmail,
+    });
+    
     try {
-        // Check if a user with this wallet address already exists
-        let user = await get_user({ wallet_address: address.toLowerCase(), cached: false });
+        // Look up user by Smart Account first (preferred), then by EOA
+        let user = null;
+        
+        if (smartAddress) {
+            // Try to find by Smart Account address (UniversalX identity)
+            user = await get_user({ smart_account_address: smartAddress, cached: false });
+        }
         
         if (!user) {
-            // Create a new user with this wallet address
-            const username = `${address.toLowerCase()}`;
+            // Fall back to EOA lookup (legacy or first-time user)
+            user = await get_user({ wallet_address: eoaAddress, cached: false });
+        }
+        
+        if (!user) {
+            // Create a new user with wallet addresses
+            // Use Smart Account address as username if available (more stable identity)
+            const preferredAddress = smartAddress || eoaAddress;
+            const username = `${preferredAddress}`;
             const user_uuid = uuidv4();
             
             // Check if username exists, if so generate a random one
@@ -75,30 +104,36 @@ module.exports = eggspress('/auth/particle', {
                 await generate_random_username() : 
                 username;
             
-            // Create audit metadata
+            // Create audit metadata with full auth context
             const audit_metadata = {
                 ip: req.connection.remoteAddress,
                 ip_fwd: req.headers['x-forwarded-for'],
                 user_agent: req.headers['user-agent'],
                 origin: req.headers['origin'],
                 server: config.server_id,
-                wallet_address: address.toLowerCase(),
-                chain_id: chainId
+                wallet_address: eoaAddress,
+                smart_account_address: smartAddress,
+                chain_id: chainId,
+                particle_uuid: particleUuid,
+                particle_email: particleEmail,
+                auth_type: smartAddress ? 'universalx' : 'eoa',
             };
             
-            // Insert new user
+            // Insert new user with both EOA and Smart Account addresses
+            // Note: smart_account_address column must exist in user table
             const insert_res = await db.write(
                 `INSERT INTO user
                 (
-                    username, wallet_address, uuid, free_storage, 
+                    username, wallet_address, smart_account_address, uuid, free_storage, 
                     audit_metadata, signup_ip, signup_ip_forwarded, 
                     signup_user_agent, signup_origin, signup_server
                 ) 
                 VALUES 
-                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [
                     finalUsername,
-                    address.toLowerCase(),
+                    eoaAddress,
+                    smartAddress,
                     user_uuid,
                     config.storage_capacity,
                     JSON.stringify(audit_metadata),
@@ -109,6 +144,13 @@ module.exports = eggspress('/auth/particle', {
                     config.server_id ?? null,
                 ]
             );
+            
+            console.log('[Particle Auth]: Created new user', {
+                username: finalUsername,
+                eoaAddress,
+                smartAccountAddress: smartAddress,
+                authType: smartAddress ? 'universalx' : 'eoa',
+            });
             
             // Record activity
             await db.write(
@@ -129,6 +171,20 @@ module.exports = eggspress('/auth/particle', {
             // Generate default filesystem entries
             const svc_user = x.get('services').get('user');
             await svc_user.generate_default_fsentries({ user });
+        } else {
+            // User exists - update Smart Account if provided and not already set
+            if (smartAddress && !user.smart_account_address) {
+                await db.write(
+                    'UPDATE `user` SET `smart_account_address` = ? WHERE id = ? LIMIT 1',
+                    [smartAddress, user.id]
+                );
+                console.log('[Particle Auth]: Updated existing user with Smart Account', {
+                    userId: user.id,
+                    smartAccountAddress: smartAddress,
+                });
+                // Refresh user data
+                user = await get_user({ id: user.id, cached: false });
+            }
         }
         
         // Create session token using AuthService
@@ -153,7 +209,7 @@ module.exports = eggspress('/auth/particle', {
             referral_code = await svc_referralCode.gen_referral_code(user);
         }
         
-        // Return success with user data and JWT token
+        // Return success with user data including both addresses
         return res.json({
             success: true,
             token: token,
@@ -163,10 +219,13 @@ module.exports = eggspress('/auth/particle', {
                 email: user.email,
                 email_confirmed: 1,
                 wallet_address: user.wallet_address,
+                smart_account_address: user.smart_account_address || null,
                 created_at: user.created_at,
                 is_temp: false,
                 taskbar_items,
-                referral_code
+                referral_code,
+                // UniversalX metadata
+                auth_type: user.smart_account_address ? 'universalx' : 'eoa',
             }
         });
     } catch (error) {

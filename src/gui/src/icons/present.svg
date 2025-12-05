@@ -1,16 +1,43 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<svg width="59px" height="59px" stroke-width="0.5" viewBox="0 0 24 24" fill="none"
-    xmlns="http://www.w3.org/2000/svg" color="#000000">
-    <path d="M20 12V21.4C20 21.7314 19.7314 22 19.4 22H4.6C4.26863 22 4 21.7314 4 21.4V12" stroke="#000000"
-        stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"></path>
-    <path
-        d="M21.4 7H2.6C2.26863 7 2 7.26863 2 7.6V11.4C2 11.7314 2.26863 12 2.6 12H21.4C21.7314 12 22 11.7314 22 11.4V7.6C22 7.26863 21.7314 7 21.4 7Z"
-        stroke="#000000" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"></path>
-    <path d="M12 22V7" stroke="#000000" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"></path>
-    <path
-        d="M12 7H7.5C6.83696 7 6.20107 6.73661 5.73223 6.26777C5.26339 5.79893 5 5.16304 5 4.5C5 3.83696 5.26339 3.20107 5.73223 2.73223C6.20107 2.26339 6.83696 2 7.5 2C11 2 12 7 12 7Z"
-        stroke="#000000" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"></path>
-    <path
-        d="M12 7H16.5C17.163 7 17.7989 6.73661 18.2678 6.26777C18.7366 5.79893 19 5.16304 19 4.5C19 3.83696 18.7366 3.20107 18.2678 2.73223C17.7989 2.26339 17.163 2 16.5 2C13 2 12 7 12 7Z"
-        stroke="#000000" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"></path>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" width="48px"
+    height="48px" viewBox="0 0 48 48">
+    <g transform="translate(0, 0)">
+        <path d="M5 18V41C5 43.761 7.239 46 10 46H38C40.761 46 43 43.761 43 41V18H5Z"
+            fill="url(#nc-ui-5-0_linear_207_216)"></path>
+        <path d="M28 18H20V46H28V18Z" fill="url(#nc-ui-5-1_linear_207_216)"></path>
+        <path
+            d="M46 11.006H39.352C39.352 11.006 39.355 11.002 39.357 11H34.767C34.76 11 34.754 11.002 34.747 11.001C34.731 11.001 34.716 11.001 34.701 11H8.629C8.629 11 8.632 11.004 8.634 11.006H2C1.448 11.006 1 11.453 1 12.005V17.001C1 17.553 1.448 18 2 18H46C46.552 18 47 17.553 47 17.001V12.005C47 11.453 46.552 11.006 46 11.006Z"
+            fill="url(#nc-ui-5-2_linear_207_216)"></path>
+        <path
+            d="M9.00002 7.00498V6.99998C9.10802 4.70598 11.039 2.92398 13.334 2.99998C18.753 2.99998 21.57 8.46198 22.587 11H25.411C26.423 8.46498 29.236 2.99998 34.7 2.99998C36.975 2.93298 38.885 4.69698 39 6.96998C38.939 9.25098 37.045 11.05 34.766 11H39.356C40.369 9.89698 40.953 8.46698 40.999 6.96998C40.889 3.57698 38.059 0.908983 34.665 0.999983C28.699 0.999983 25.455 6.01698 23.999 9.19998C22.546 6.01698 19.311 0.999983 13.364 0.999983C9.96102 0.887983 7.11102 3.55598 6.99902 6.95898C6.99902 6.96298 6.99902 6.96698 6.99902 6.96998V7.03598C7.05002 8.50998 7.62802 9.91598 8.62802 11H13.299C11.009 11.084 9.08302 9.29598 8.99902 7.00498H9.00002Z"
+            fill="url(#nc-ui-5-3_linear_207_216)"></path>
+        <path d="M29 11H19V18H29V11Z" fill="url(#nc-ui-5-4_linear_207_216)"></path>
+        <path opacity="0.15" d="M43 18H5V20H43V18Z" fill="black"></path>
+        <defs>
+            <linearGradient id="nc-ui-5-0_linear_207_216" x1="24" y1="18" x2="24" y2="46"
+                gradientUnits="userSpaceOnUse">
+                <stop stop-color="#66a1ff"></stop>
+                <stop offset="1" stop-color="#1f6fe0"></stop>
+            </linearGradient>
+            <linearGradient id="nc-ui-5-1_linear_207_216" x1="24" y1="18" x2="24" y2="46"
+                gradientUnits="userSpaceOnUse">
+                <stop stop-color="#d6e8ff"></stop>
+                <stop offset="1" stop-color="#9ec8ff"></stop>
+            </linearGradient>
+            <linearGradient id="nc-ui-5-2_linear_207_216" x1="24" y1="11" x2="24" y2="18"
+                gradientUnits="userSpaceOnUse">
+                <stop stop-color="#9ecdff"></stop>
+                <stop offset="1" stop-color="#66b8ff"></stop>
+            </linearGradient>
+            <linearGradient id="nc-ui-5-3_linear_207_216" x1="23.999" y1="0.996582" x2="23.999" y2="11.0028"
+                gradientUnits="userSpaceOnUse">
+                <stop stop-color="#d6ecff"></stop>
+                <stop offset="1" stop-color="#9ed7ff"></stop>
+            </linearGradient>
+            <linearGradient id="nc-ui-5-4_linear_207_216" x1="24" y1="11" x2="24" y2="18"
+                gradientUnits="userSpaceOnUse">
+                <stop stop-color="#d6edff"></stop>
+                <stop offset="1" stop-color="#9ed8ff"></stop>
+            </linearGradient>
+        </defs>
+    </g>
 </svg>

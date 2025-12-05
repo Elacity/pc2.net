@@ -1,34 +1,60 @@
-<svg version="1.2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
-	<title>start-svg</title>
-	<style>
-		.s0 { opacity: .2;fill: #000000 } 
-		.s1 { fill: #69a2f5 } 
-		.s2 { opacity: .2;fill: #ffffff } 
-		.s3 { fill: #ffffff } 
-	</style>
-	<g id="Layer 1">
-		<path id="Layer" fill-rule="evenodd" class="s0" d="m24.5 47c-12.4 0-22.5-10-22.5-22.5 0-12.4 10.1-22.4 22.5-22.4 12.4 0 22.5 10 22.5 22.4 0 12.5-10.1 22.5-22.5 22.5z"/>
-		<path id="Layer" fill-rule="evenodd" class="s1" d="m24.5 45.9c-12.4 0-22.5-10.1-22.5-22.5 0-12.4 10.1-22.4 22.5-22.4 12.4 0 22.5 10 22.5 22.4 0 12.4-10.1 22.5-22.5 22.5z"/>
-		<path id="Layer" fill-rule="evenodd" class="s2" d="m24.5 1c-12.4 0-22.5 10-22.5 22.4q0 0.3 0.1 0.6c0.2-12.2 10.1-21.9 22.4-21.9 12.3 0 22.2 9.7 22.4 21.9q0.1-0.3 0.1-0.6c0-12.4-10.1-22.4-22.5-22.4z"/>
-		<path id="Layer" fill-rule="evenodd" class="s0" d="m11 14.2c0-1.1 0.9-2 2-2h2.8c1.1 0 2 0.9 2 2v2.7c0 1.1-0.9 2-2 2h-2.8c-1.1 0-2-0.9-2-2z"/>
-		<path id="Layer" fill-rule="evenodd" class="s0" d="m21.1 14.2c0-1.1 0.9-2 2-2h2.8c1.1 0 2 0.9 2 2v2.7c0 1.1-0.9 2-2 2h-2.8c-1.1 0-2-0.9-2-2z"/>
-		<path id="Layer" fill-rule="evenodd" class="s0" d="m31.2 14.2c0-1.1 0.9-2 2-2h2.8c1.1 0 2 0.9 2 2v2.7c0 1.1-0.9 2-2 2h-2.8c-1.1 0-2-0.9-2-2z"/>
-		<path id="Layer" fill-rule="evenodd" class="s0" d="m11 23.2c0-1.1 0.9-2 2-2h2.8c1.1 0 2 0.9 2 2v2.7c0 1.1-0.9 2-2 2h-2.8c-1.1 0-2-0.9-2-2z"/>
-		<path id="Layer" fill-rule="evenodd" class="s0" d="m21.1 23.2c0-1.1 0.9-2 2-2h2.8c1.1 0 2 0.9 2 2v2.7c0 1.1-0.9 2-2 2h-2.8c-1.1 0-2-0.9-2-2z"/>
-		<path id="Layer" fill-rule="evenodd" class="s0" d="m31.2 23.2c0-1.1 0.9-2 2-2h2.8c1.1 0 2 0.9 2 2v2.7c0 1.1-0.9 2-2 2h-2.8c-1.1 0-2-0.9-2-2z"/>
-		<path id="Layer" fill-rule="evenodd" class="s0" d="m11 32.2c0-1.1 0.9-2 2-2h2.8c1.1 0 2 0.9 2 2v2.7c0 1.1-0.9 2-2 2h-2.8c-1.1 0-2-0.9-2-2z"/>
-		<path id="Layer" fill-rule="evenodd" class="s0" d="m21.1 32.2c0-1.1 0.9-2 2-2h2.8c1.1 0 2 0.9 2 2v2.7c0 1.1-0.9 2-2 2h-2.8c-1.1 0-2-0.9-2-2z"/>
-		<path id="Layer" fill-rule="evenodd" class="s0" d="m31.2 32.2c0-1.1 0.9-2 2-2h2.8c1.1 0 2 0.9 2 2v2.7c0 1.1-0.9 2-2 2h-2.8c-1.1 0-2-0.9-2-2z"/>
-		<g id="Layer">
-			<path id="Layer" fill-rule="evenodd" class="s3" d="m11 13.1c0-1.1 0.9-2 2-2h2.8c1.1 0 2 0.9 2 2v2.7c0 1.1-0.9 2-2 2h-2.8c-1.1 0-2-0.9-2-2z"/>
-			<path id="Layer" fill-rule="evenodd" class="s3" d="m21.1 13.1c0-1.1 0.9-2 2-2h2.8c1.1 0 2 0.9 2 2v2.7c0 1.1-0.9 2-2 2h-2.8c-1.1 0-2-0.9-2-2z"/>
-			<path id="Layer" fill-rule="evenodd" class="s3" d="m31.2 13.1c0-1.1 0.9-2 2-2h2.8c1.1 0 2 0.9 2 2v2.7c0 1.1-0.9 2-2 2h-2.8c-1.1 0-2-0.9-2-2z"/>
-			<path id="Layer" fill-rule="evenodd" class="s3" d="m11 22.1c0-1.1 0.9-2 2-2h2.8c1.1 0 2 0.9 2 2v2.7c0 1.1-0.9 2-2 2h-2.8c-1.1 0-2-0.9-2-2z"/>
-			<path id="Layer" fill-rule="evenodd" class="s3" d="m21.1 22.1c0-1.1 0.9-2 2-2h2.8c1.1 0 2 0.9 2 2v2.7c0 1.1-0.9 2-2 2h-2.8c-1.1 0-2-0.9-2-2z"/>
-			<path id="Layer" fill-rule="evenodd" class="s3" d="m31.2 22.1c0-1.1 0.9-2 2-2h2.8c1.1 0 2 0.9 2 2v2.7c0 1.1-0.9 2-2 2h-2.8c-1.1 0-2-0.9-2-2z"/>
-			<path id="Layer" fill-rule="evenodd" class="s3" d="m11 31c0-1.1 0.9-2 2-2h2.8c1.1 0 2 0.9 2 2v2.8c0 1.1-0.9 2-2 2h-2.8c-1.1 0-2-0.9-2-2z"/>
-			<path id="Layer" fill-rule="evenodd" class="s3" d="m21.1 31c0-1.1 0.9-2 2-2h2.8c1.1 0 2 0.9 2 2v2.8c0 1.1-0.9 2-2 2h-2.8c-1.1 0-2-0.9-2-2z"/>
-			<path id="Layer" fill-rule="evenodd" class="s3" d="m31.2 31c0-1.1 0.9-2 2-2h2.8c1.1 0 2 0.9 2 2v2.8c0 1.1-0.9 2-2 2h-2.8c-1.1 0-2-0.9-2-2z"/>
-		</g>
-	</g>
+<?xml version="1.0"?>
+<svg width="48" height="48" xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg">
+ <g class="layer">
+  <title>Layer 1</title>
+  <g id="svg_1">
+   <path d="m41.9,0.5l-35.81,0c-3.09,0 -5.6,2.51 -5.6,5.6l0,35.81c0,3.09 2.51,5.6 5.6,5.6l35.81,0c3.09,0 5.6,-2.51 5.6,-5.6l0,-35.81c0,-3.09 -2.51,-5.6 -5.6,-5.6z" fill="url(#nc-ui-5-0_linear_207_127)" id="svg_2"/>
+   <path d="m13.93,32.95l-6.71,0c-0.62,0 -1.12,0.5 -1.12,1.12l0,6.71c0,0.62 0.5,1.12 1.12,1.12l6.71,0c0.62,0 1.12,-0.5 1.12,-1.12l0,-6.71c0,-0.62 -0.5,-1.12 -1.12,-1.12z" fill="url(#nc-ui-5-1_linear_207_127)" id="svg_3"/>
+   <path d="m13.93,19.52l-6.71,0c-0.62,0 -1.12,0.5 -1.12,1.12l0,6.71c0,0.62 0.5,1.12 1.12,1.12l6.71,0c0.62,0 1.12,-0.5 1.12,-1.12l0,-6.71c0,-0.62 -0.5,-1.12 -1.12,-1.12z" fill="url(#nc-ui-5-2_linear_207_127)" id="svg_4"/>
+   <path d="m13.93,6.1l-6.71,0c-0.62,0 -1.12,0.5 -1.12,1.12l0,6.71c0,0.62 0.5,1.12 1.12,1.12l6.71,0c0.62,0 1.12,-0.5 1.12,-1.12l0,-6.71c0,-0.62 -0.5,-1.12 -1.12,-1.12z" fill="url(#nc-ui-5-3_linear_207_127)" id="svg_5"/>
+   <path d="m27.36,32.95l-6.71,0c-0.62,0 -1.12,0.5 -1.12,1.12l0,6.71c0,0.62 0.5,1.12 1.12,1.12l6.71,0c0.62,0 1.12,-0.5 1.12,-1.12l0,-6.71c0,-0.62 -0.5,-1.12 -1.12,-1.12z" fill="url(#nc-ui-5-4_linear_207_127)" id="svg_6"/>
+   <path d="m27.36,19.52l-6.71,0c-0.62,0 -1.12,0.5 -1.12,1.12l0,6.71c0,0.62 0.5,1.12 1.12,1.12l6.71,0c0.62,0 1.12,-0.5 1.12,-1.12l0,-6.71c0,-0.62 -0.5,-1.12 -1.12,-1.12z" fill="url(#nc-ui-5-5_linear_207_127)" id="svg_7"/>
+   <path d="m27.36,6.1l-6.71,0c-0.62,0 -1.12,0.5 -1.12,1.12l0,6.71c0,0.62 0.5,1.12 1.12,1.12l6.71,0c0.62,0 1.12,-0.5 1.12,-1.12l0,-6.71c0,-0.62 -0.5,-1.12 -1.12,-1.12z" fill="url(#nc-ui-5-6_linear_207_127)" id="svg_8"/>
+   <path d="m40.79,32.95l-6.71,0c-0.62,0 -1.12,0.5 -1.12,1.12l0,6.71c0,0.62 0.5,1.12 1.12,1.12l6.71,0c0.62,0 1.12,-0.5 1.12,-1.12l0,-6.71c0,-0.62 -0.5,-1.12 -1.12,-1.12z" fill="url(#nc-ui-5-7_linear_207_127)" id="svg_9"/>
+   <path d="m40.79,19.52l-6.71,0c-0.62,0 -1.12,0.5 -1.12,1.12l0,6.71c0,0.62 0.5,1.12 1.12,1.12l6.71,0c0.62,0 1.12,-0.5 1.12,-1.12l0,-6.71c0,-0.62 -0.5,-1.12 -1.12,-1.12z" fill="url(#nc-ui-5-8_linear_207_127)" id="svg_10"/>
+   <path d="m40.79,6.1l-6.71,0c-0.62,0 -1.12,0.5 -1.12,1.12l0,6.71c0,0.62 0.5,1.12 1.12,1.12l6.71,0c0.62,0 1.12,-0.5 1.12,-1.12l0,-6.71c0,-0.62 -0.5,-1.12 -1.12,-1.12z" fill="url(#nc-ui-5-9_linear_207_127)" id="svg_11"/>
+   <defs transform="translate(45 45) scale(1.04762 1.02381) translate(-45 -45) translate(0.954543 1.95349) scale(1.02273 1.02326) translate(-0.954543 -1.95349) translate(0.933331 43.9091) scale(1.03056 1.03409) translate(-0.933331 -43.9091) translate(42.9057 0.461539) scale(1.01078 1.02747) translate(-42.9057 -0.461539) translate(0.447999 0.449198) scale(1 1.00535) translate(-0.447999 -0.449198) translate(0.447999 0.446809) scale(1.00267 1) translate(-0.447999 -0.446809)">
+    <linearGradient id="nc-ui-5-0_linear_207_127" x1="0.5" x2="0.5" y1="0" y2="1">
+     <stop stop-color="#e5e8f2"/>
+     <stop offset="1" stop-color="#d5dbea"/>
+    </linearGradient>
+    <linearGradient id="nc-ui-5-1_linear_207_127" x1="0.5" x2="0.5" y1="0" y2="1">
+     <stop stop-color="#5a8be4"/>
+     <stop offset="1" stop-color="#1552c5"/>
+    </linearGradient>
+    <linearGradient id="nc-ui-5-2_linear_207_127" x1="0.5" x2="0.5" y1="0" y2="1">
+     <stop stop-color="#5a8be4"/>
+     <stop offset="1" stop-color="#1552c5"/>
+    </linearGradient>
+    <linearGradient id="nc-ui-5-3_linear_207_127" x1="0.5" x2="0.5" y1="0" y2="1">
+     <stop stop-color="#5a8be4"/>
+     <stop offset="1" stop-color="#1552c5"/>
+    </linearGradient>
+    <linearGradient id="nc-ui-5-4_linear_207_127" x1="0.5" x2="0.5" y1="0" y2="1">
+     <stop stop-color="#5a8be4"/>
+     <stop offset="1" stop-color="#1552c5"/>
+    </linearGradient>
+    <linearGradient id="nc-ui-5-5_linear_207_127" x1="0.5" x2="0.5" y1="0" y2="1">
+     <stop stop-color="#5a8be4"/>
+     <stop offset="1" stop-color="#1552c5"/>
+    </linearGradient>
+    <linearGradient id="nc-ui-5-6_linear_207_127" x1="0.5" x2="0.5" y1="0" y2="1">
+     <stop stop-color="#5a8be4"/>
+     <stop offset="1" stop-color="#1552c5"/>
+    </linearGradient>
+    <linearGradient id="nc-ui-5-7_linear_207_127" x1="0.5" x2="0.5" y1="0" y2="1">
+     <stop stop-color="#5a8be4"/>
+     <stop offset="1" stop-color="#1552c5"/>
+    </linearGradient>
+    <linearGradient id="nc-ui-5-8_linear_207_127" x1="0.5" x2="0.5" y1="0" y2="1">
+     <stop stop-color="#5a8be4"/>
+     <stop offset="1" stop-color="#1552c5"/>
+    </linearGradient>
+    <linearGradient id="nc-ui-5-9_linear_207_127" x1="0.5" x2="0.5" y1="0" y2="1">
+     <stop stop-color="#5a8be4"/>
+     <stop offset="1" stop-color="#1552c5"/>
+    </linearGradient>
+   </defs>
+  </g>
+ </g>
 </svg>

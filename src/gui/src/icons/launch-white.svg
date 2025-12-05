@@ -1,9 +1,1 @@
-<?xml version="1.0" encoding="utf-8"?>
-<svg version="1.2" viewBox="0 0 24 24" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
-  <defs/>
-  <style>.a{fill:none}.b{fill:none;stroke:#000;stroke-linecap:round;stroke-linejoin:round;stroke-width:2}</style>
-  <path fill-rule="evenodd" class="a" d="m0 0h24v24h-24z"/>
-  <path class="b" d="m12 6h-6q-0.4 0-0.8 0.2-0.3 0.1-0.6 0.4-0.3 0.3-0.4 0.6-0.2 0.4-0.2 0.8v10q0 0.4 0.2 0.8 0.1 0.3 0.4 0.6 0.3 0.3 0.6 0.4 0.4 0.2 0.8 0.2h10q0.4 0 0.8-0.2 0.3-0.1 0.6-0.4 0.3-0.3 0.4-0.6 0.2-0.4 0.2-0.8v-6" style="stroke: rgb(255, 255, 255);"/>
-  <path class="b" d="m11 13l9-9" style="stroke: rgb(255, 255, 255);"/>
-  <path class="b" d="m15 4h5v5" style="stroke: rgb(255, 255, 255);"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" height="16" width="16" viewBox="0 0 16 16"><title>launch</title><g stroke-width="2" stroke-linejoin="round" fill="none" stroke="#ffffff" stroke-linecap="round" class="nc-icon-wrapper"><line x1="15.5" y1="0.5" x2="7.5" y2="8.5" stroke="#ffffff"></line> <polyline points="8.5,0.5 15.5,0.5 15.5,7.5 " stroke="#ffffff"></polyline> <path d="M12.5,9.5v5 c0,0.552-0.448,1-1,1h-10c-0.552,0-1-0.448-1-1v-10c0-0.552,0.448-1,1-1h5"></path></g></svg>

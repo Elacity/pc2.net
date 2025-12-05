@@ -97,6 +97,9 @@ extension.get('/whoami', { subdomain: 'api' }, async (req, res, next) => {
         otp: !!req.user.otp_enabled,
         human_readable_age: timeago.format(new Date(req.user.timestamp)),
         hasDevAccountAccess: !!req.actor.type.user.metadata?.hasDevAccountAccess,
+        // Wallet addresses for Particle Network / UniversalX auth
+        wallet_address: req.user.wallet_address || null,
+        smart_account_address: req.user.smart_account_address || null,
         ...(req.new_token ? { token: req.token } : {}),
     };
 
@@ -230,5 +233,8 @@ extension.post('/whoami', { subdomain: 'api' }, async (req, res) => {
         desktop_items: desktop_items,
         referral_code: req.user.referral_code,
         hasDevAccountAccess: !!req.actor.user.metadata?.hasDevAccountAccess,
+        // Wallet addresses for Particle Network / UniversalX auth
+        wallet_address: req.user.wallet_address || null,
+        smart_account_address: req.user.smart_account_address || null,
     }, whoami_common({ is_user, user: req.user })));
 });

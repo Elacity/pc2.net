@@ -1920,9 +1920,22 @@ $(document).on('click', '.user-options-menu-btn', async function (e) {
 
         // create menu items
         users_arr.forEach(l_user => {
+            // For wallet users, show Smart Account address if available, else EOA
+            let displayName = l_user.username;
+            let subtitle = '';
+            
+            if (l_user.smart_account_address) {
+                // Show Smart Account (truncated) with "Smart" label
+                displayName = l_user.smart_account_address.slice(0, 10) + '...' + l_user.smart_account_address.slice(-8);
+                subtitle = '<span style="display:block;font-size:10px;color:#666;margin-top:2px;">UniversalX Smart Account</span>';
+            } else if (l_user.wallet_address) {
+                // Show EOA address (truncated)
+                displayName = l_user.wallet_address.slice(0, 10) + '...' + l_user.wallet_address.slice(-8);
+            }
+            
             items.push(
                 {
-                    html: l_user.username,
+                    html: displayName + subtitle,
                     icon: l_user.username === window.user.username ? '✓' : '',
                     onClick: async function (val) {
                         // don't reload everything if clicked on already-logged-in user

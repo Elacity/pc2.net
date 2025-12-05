@@ -429,6 +429,8 @@ const en = {
         'server_timeout': 'The server took too long to respond. Please try again.',
         'signup_error': 'An error occurred during signup. Please try again.',
         wallet_address: 'Wallet Address',
+        smart_account_address: 'Smart Account',
+        eoa_address: 'EOA Wallet',
 
         // Welcome Window
         'welcome_title': 'Welcome to your Personal Internet Computer',

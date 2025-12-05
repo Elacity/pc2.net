@@ -1723,8 +1723,9 @@ window.refresh_desktop_background = function() {
             color: window.user.desktop_bg_color,
         });
     } else {
+        // Default Elastos wallpaper
         window.set_desktop_background({
-            color: '#171717',
+            url: '/images/wallpaper-elastos.jpg',
             fit: 'cover',
         });
     }

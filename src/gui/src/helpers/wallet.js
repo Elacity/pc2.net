@@ -286,9 +286,28 @@ export function sortTokensByValue(tokens) {
 /**
  * Get transaction type label
  * @param {string} type - Transaction type code
+ * @param {string} tag - Particle tag (optional, e.g., "transfer_v2", "buy", "swap")
  * @returns {string} Human readable label
  */
-export function getTransactionTypeLabel(type) {
+export function getTransactionTypeLabel(type, tag = null) {
+    // First check the tag from Particle Universal Account
+    if (tag) {
+        const tagLabels = {
+            'transfer_v2': type === 'send' ? 'Sent' : 'Received',
+            'buy': 'Bought',
+            'sell': 'Sold',
+            'swap': 'Swapped',
+            'receive': 'Received',
+            'contract_interaction': 'Contract',
+            'deposit': 'Deposited',
+            'withdraw': 'Withdrawn',
+        };
+        if (tagLabels[tag]) {
+            return tagLabels[tag];
+        }
+    }
+    
+    // Fallback to type-based labels
     const labels = {
         'send': 'Sent',
         'receive': 'Received',
@@ -297,6 +316,9 @@ export function getTransactionTypeLabel(type) {
         'contract': 'Contract Call',
         'mint': 'Minted',
         'burn': 'Burned',
+        'buy': 'Bought',
+        'sell': 'Sold',
+        'transfer': 'Transferred',
     };
     return labels[type?.toLowerCase()] || 'Transaction';
 }

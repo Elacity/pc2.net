@@ -3082,15 +3082,16 @@ label {
 
 .notification {
     min-height: 54px;
-    background: #ffffffcd;
+    background: #232324;
     backdrop-filter: blur(5px);
     z-index: 99999999;
     box-shadow: 0px 0px 17px -9px #000;
-    border: 1px solid #d5d5d5;
+    border: 1px solid #3a3a3a;
     margin-bottom: 10px;
     display: flex;
     flex-direction: row;
     pointer-events: all;
+    color: #ffffff;
 }
 
 .notification-wrapper {
@@ -3099,13 +3100,13 @@ label {
 
 .notification-close {
     position: absolute;
-    background: white;
+    background: #3a3a3a;
     border-radius: 100%;
     top: -6px;
     left: -6px;
     width: 13px;
     padding: 2px;
-    filter: drop-shadow(0px 0px 0.5px rgb(51, 51, 51));
+    filter: drop-shadow(0px 0px 0.5px rgb(51, 51, 51)) invert(1);
     z-index: 99999999;
     display: none;
 }
@@ -3121,7 +3122,8 @@ label {
     display: flex;
     justify-content: center;
     align-items: center;
-    filter: drop-shadow(0px 0px 0.5px rgb(51, 51, 51));
+    filter: drop-shadow(0px 0px 0.5px rgb(200, 200, 200));
+    opacity: 0.8;
 }
 
 .notification-icon img {
@@ -3150,7 +3152,7 @@ label {
     position: absolute;
     top: 40px;
     right: 10px;
-    z-index: 1000;
+    z-index: 99999999;
     padding-top: 30px;
     pointer-events: none;
 }

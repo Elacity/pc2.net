@@ -33,6 +33,7 @@ import {
     getExplorerUrl,
     getTransactionTypeLabel,
 } from '../helpers/wallet.js';
+import { CHAIN_INFO } from '../helpers/particle-constants.js';
 
 // Track sidebar instance and cleanup functions
 let sidebarInstance = null;
@@ -256,10 +257,10 @@ async function UIAccountSidebar(options = {}) {
                 background: #2563eb;
             }
             .action-btn.action-receive {
-                background: #10b981;
+                background: #3b82f6;
             }
             .action-btn.action-receive:hover {
-                background: #059669;
+                background: #2563eb;
             }
             .account-sidebar-tabs {
                 display: flex;
@@ -414,8 +415,8 @@ async function UIAccountSidebar(options = {}) {
     
     // Mode icons
     const universalIcon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>`;
-    // Elastos logo - simplified version of official logo
-    const elastosIcon = `<svg width="18" height="18" viewBox="0 0 1080 1080" fill="none"><path d="M793 533l-61-36-26-15c-10-6-22-6-32 0l-119 69c-10 6-22 6-32 0l-118-69c-10-6-22-6-32 0l-26 15-61 36c-21 13-21 43 0 55l104 60 135 78c10 6 22 6 32 0l135-78 104-60c19-12 19-42-2-55z" fill="url(#ela1)"/><path d="M793 406l-88-51c-10-6-22-6-32 0l-119 69c-10 6-22 6-32 0l-119-69c-10-6-22-6-32 0l-86 51c-21 13-21 43 0 55l62 36 42 24 135 78c10 6 22 6 32 0l135-78 42-24 62-36c20-12 20-42-2-55z" fill="url(#ela2)"/><defs><linearGradient id="ela1" x1="540" y1="731" x2="540" y2="478" gradientUnits="userSpaceOnUse"><stop stop-color="#F6921A"/><stop offset="1" stop-color="#B04200"/></linearGradient><linearGradient id="ela2" x1="540" y1="447" x2="540" y2="604" gradientUnits="userSpaceOnUse"><stop stop-color="#FFEEDC"/><stop offset="1" stop-color="#FFC382"/></linearGradient></defs></svg>`;
+    // Elastos logo - same size as Universal icon (cropped viewBox)
+    const elastosIcon = `<svg width="18" height="18" viewBox="230 330 620 420" fill="none"><path d="M793 533l-61-36-26-15c-10-6-22-6-32 0l-119 69c-10 6-22 6-32 0l-118-69c-10-6-22-6-32 0l-26 15-61 36c-21 13-21 43 0 55l104 60 135 78c10 6 22 6 32 0l135-78 104-60c19-12 19-42-2-55z" fill="url(#ela1)"/><path d="M793 406l-88-51c-10-6-22-6-32 0l-119 69c-10 6-22 6-32 0l-119-69c-10-6-22-6-32 0l-86 51c-21 13-21 43 0 55l62 36 42 24 135 78c10 6 22 6 32 0l135-78 42-24 62-36c20-12 20-42-2-55z" fill="url(#ela2)"/><defs><linearGradient id="ela1" x1="540" y1="731" x2="540" y2="478" gradientUnits="userSpaceOnUse"><stop stop-color="#F6921A"/><stop offset="1" stop-color="#B04200"/></linearGradient><linearGradient id="ela2" x1="540" y1="447" x2="540" y2="604" gradientUnits="userSpaceOnUse"><stop stop-color="#FFEEDC"/><stop offset="1" stop-color="#FFC382"/></linearGradient></defs></svg>`;
     
     // Get current mode
     const currentMode = walletService.getMode();
@@ -646,14 +647,56 @@ async function UIAccountSidebar(options = {}) {
         }
     });
     
-    // Transaction row click - open explorer
-    $sidebar.on('click', '.history-row', function() {
-        const txHash = $(this).data('tx-hash');
+    // Transaction row click - fetch details and open explorer
+    $sidebar.on('click', '.history-row', async function() {
+        const transactionId = $(this).data('transaction-id');
         const chainId = $(this).data('chain-id');
         
-        if (txHash && chainId) {
-            const url = getExplorerUrl(chainId, txHash, 'tx');
-            window.open(url, '_blank');
+        if (!transactionId) {
+            console.log('[UIAccountSidebar]: No transaction ID for click');
+            return;
+        }
+        
+        console.log('[UIAccountSidebar]: Fetching transaction details:', transactionId);
+        
+        // Show loading state
+        const $row = $(this);
+        $row.css('opacity', '0.5');
+        
+        try {
+            // Fetch full transaction details to get blockchain tx hash
+            const details = await walletService.getTransactionDetails(transactionId);
+            
+            console.log('[UIAccountSidebar]: Transaction details:', details);
+            
+            if (details.blockchainTxHash) {
+                const explorerChainId = details.chainId || chainId;
+                const url = getExplorerUrl(explorerChainId, details.blockchainTxHash, 'tx');
+                console.log('[UIAccountSidebar]: Opening explorer:', url);
+                window.open(url, '_blank');
+            } else {
+                // No blockchain tx hash yet - show notification
+                import('./UINotification.js').then(({ default: UINotification }) => {
+                    UINotification({
+                        icon: window.icons['info.svg'],
+                        title: 'Transaction Processing',
+                        text: 'Transaction is still being processed. Blockchain hash not yet available.',
+                        duration: 3000,
+                    });
+                });
+            }
+        } catch (error) {
+            console.error('[UIAccountSidebar]: Failed to get transaction details:', error);
+            import('./UINotification.js').then(({ default: UINotification }) => {
+                UINotification({
+                    icon: window.icons['warning.svg'],
+                    title: 'Error',
+                    text: 'Failed to get transaction details',
+                    duration: 3000,
+                });
+            });
+        } finally {
+            $row.css('opacity', '1');
         }
     });
     
@@ -857,11 +900,12 @@ function renderTokensList(tokens) {
 }
 
 /**
- * Render history list HTML
+ * Render history list HTML (Elacity pattern with chain badges)
  */
 function renderHistoryList(transactions) {
     const arrowUpIcon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>`;
     const arrowDownIcon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>`;
+    const swapIcon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 16V4m0 0L3 8m4-4l4 4m6 4v12m0 0l4-4m-4 4l-4-4"/></svg>`;
     
     if (!transactions || transactions.length === 0) {
         return `
@@ -877,26 +921,141 @@ function renderHistoryList(transactions) {
     }
     
     return transactions.map(tx => {
-        const txType = tx.type || (tx.from?.toLowerCase() === walletService.getAddress()?.toLowerCase() ? 'send' : 'receive');
+        // Determine transaction type
+        const txType = tx.type || 'transfer';
         const isOutgoing = txType === 'send';
+        const isSwap = txType === 'swap' || tx.tag === 'swap';
+        
+        // Get status badge
+        const statusBadge = getStatusBadge(tx.status || tx.statusCode);
+        
+        // Get chain info for badge overlay
+        const chainId = tx.chainId || tx.targetToken?.chainId;
+        const chainInfo = chainId ? CHAIN_INFO[chainId] : null;
+        
+        // Amount color based on direction
+        const textColor = isOutgoing ? '#ef4444' : '#22c55e';
+        
+        // Get symbol initial for fallback - always needed
+        const symbolInitial = (tx.symbol || '?').charAt(0).toUpperCase();
+        
+        // Get token icon - AVOID particle.network URLs (CORS blocked)
+        let rawIconUrl = tx.tokenIcon || tx.targetToken?.image || '';
+        
+        // Skip particle.network URLs - they're CORS blocked
+        const isBlockedUrl = rawIconUrl.includes('particle.network') || rawIconUrl.includes('static.particle');
+        
+        // Map common symbols to local token images (relative to /images/tokens/)
+        const symbolLower = (tx.symbol || '').toLowerCase();
+        const localTokenIcons = {
+            'usdc': '/images/tokens/USDC.png',
+            'usdt': '/images/tokens/USDT.png', 
+            'eth': '/images/tokens/ETH.png',
+            'btc': '/images/tokens/BTC.svg',
+            'sol': '/images/tokens/Sol.webp',
+            'bnb': '/images/tokens/BNB.png',
+            'mnt': '/images/tokens/MNT.webp',
+            'ela': '/images/tokens/ELA.png',
+        };
+        
+        // Use local icon if available, otherwise skip blocked URLs
+        const tokenIconUrl = localTokenIcons[symbolLower] || (isBlockedUrl ? null : rawIconUrl);
+        
+        // Token icon HTML - always have letter fallback ready
+        const tokenIconHtml = tokenIconUrl 
+            ? `<img src="${html_encode(tokenIconUrl)}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;background:#2a2a2a;" onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex';" /><div style="width:100%;height:100%;border-radius:50%;display:none;align-items:center;justify-content:center;background:linear-gradient(135deg,#3b82f6,#8b5cf6);"><span style="font-size:16px;font-weight:600;color:#fff;">${symbolInitial}</span></div>`
+            : `<div style="width:100%;height:100%;border-radius:50%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#3b82f6,#8b5cf6);"><span style="font-size:16px;font-weight:600;color:#fff;">${symbolInitial}</span></div>`;
+        
+        // Chain badge HTML (bottom-right corner overlay)
+        const chainBadgeHtml = chainInfo ? `
+            <div class="chain-badge" title="${html_encode(chainInfo.name)}" style="
+                position: absolute;
+                bottom: -2px;
+                right: -2px;
+                width: 18px;
+                height: 18px;
+                border-radius: 50%;
+                background-color: #1a1a1a;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                border: 2px solid #1a1a1a;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            ">
+                <img src="${html_encode(chainInfo.icon)}" alt="${html_encode(chainInfo.name)}" style="
+                    width: 14px;
+                    height: 14px;
+                    border-radius: 50%;
+                    object-fit: contain;
+                " onerror="this.parentElement.style.display='none';" />
+            </div>
+        ` : '';
+        
+        // Chain name with icon inline
+        const chainNameHtml = chainInfo ? `
+            <span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:#6b7280;">
+                • <img src="${html_encode(chainInfo.icon)}" style="width:12px;height:12px;border-radius:50%;" onerror="this.style.display='none';" />${html_encode(chainInfo.name)}
+            </span>
+        ` : '';
         
         return `
             <div class="history-row" 
-                 data-tx-hash="${html_encode(tx.hash || tx.transactionHash || '')}"
-                 data-chain-id="${html_encode(tx.chainId || '')}">
-                <div style="width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:${isOutgoing ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)'};color:${isOutgoing ? '#ef4444' : '#22c55e'};">
-                    ${isOutgoing ? arrowUpIcon : arrowDownIcon}
+                 data-transaction-id="${html_encode(tx.transactionId || '')}"
+                 data-chain-id="${html_encode(chainId || '')}">
+                <!-- Token Icon Container with Chain Badge -->
+                <div class="tx-icon-container" style="position:relative;width:40px;height:40px;flex-shrink:0;margin-right:12px;">
+                    <div style="width:40px;height:40px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.05);">
+                        ${tokenIconHtml}
+                    </div>
+                    ${chainBadgeHtml}
                 </div>
-                <div class="tx-info">
-                    <span class="tx-type">${getTransactionTypeLabel(txType)}</span>
-                    <span class="tx-time">${formatRelativeTime(tx.timestamp || tx.createdAt)}</span>
+                <div class="tx-info" style="flex:1;min-width:0;">
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <span class="tx-type">${getTransactionTypeLabel(txType, tx.tag)}</span>
+                        ${statusBadge}
+                    </div>
+                    <div style="display:flex;align-items:center;gap:4px;">
+                        <span class="tx-time" style="font-size:11px;color:#6b7280;">${formatRelativeTime(tx.timestamp || tx.createdAt)}</span>
+                        ${chainNameHtml}
+                    </div>
                 </div>
-                <div style="font-weight:600;color:${isOutgoing ? '#ef4444' : '#22c55e'};">
-                    ${isOutgoing ? '-' : '+'}${formatTokenBalance(tx.value || tx.amount)} ${html_encode(tx.symbol || 'ETH')}
+                <div style="text-align:right;">
+                    <div style="font-weight:600;color:${textColor};">
+                        ${isOutgoing ? '-' : '+'}${formatTokenBalance(tx.amount)} ${html_encode(tx.symbol || '')}
+                    </div>
+                    ${tx.amountInUSD ? `<div style="font-size:11px;color:#6b7280;">$${parseFloat(tx.amountInUSD).toFixed(2)}</div>` : ''}
                 </div>
             </div>
         `;
     }).join('');
+}
+
+/**
+ * Get status badge HTML
+ */
+function getStatusBadge(status) {
+    const statusConfig = {
+        'confirmed': { label: '✓', color: '#22c55e', bg: 'rgba(34, 197, 94, 0.1)' },
+        'pending': { label: '⏳', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.1)' },
+        'processing': { label: '⏳', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.1)' },
+        'failed': { label: '✕', color: '#ef4444', bg: 'rgba(239, 68, 68, 0.1)' },
+    };
+    
+    // Handle numeric status codes
+    let statusKey = status;
+    if (typeof status === 'number') {
+        statusKey = status === 1 || status === 7 ? 'confirmed' 
+                  : status === -1 ? 'failed' 
+                  : 'pending';
+    }
+    
+    const config = statusConfig[statusKey] || statusConfig['pending'];
+    
+    if (statusKey === 'confirmed') {
+        return ''; // Don't show badge for confirmed
+    }
+    
+    return `<span style="padding:1px 6px;border-radius:4px;font-size:10px;background:${config.bg};color:${config.color};">${config.label}</span>`;
 }
 
 /**

@@ -85,9 +85,6 @@ async function UIWindowParticleLogin(options = {}) {
         iframe.src = '/particle-auth';
         container.appendChild(iframe);
         
-        // Add loading indicator
-        showLoading(container);
-        
         // Set up message listener for communication from iframe
         const messageHandler = (event) => {
             // For security, you might want to check the origin
@@ -259,20 +256,20 @@ function showLoading(container) {
     loadingOverlay.style.flexDirection = 'column';
     loadingOverlay.style.alignItems = 'center';
     loadingOverlay.style.justifyContent = 'center';
-    loadingOverlay.style.backgroundColor = 'rgba(255, 255, 255, 0.9)';
+    loadingOverlay.style.backgroundColor = 'transparent';
     loadingOverlay.style.zIndex = '10';
     
     const spinner = loadingOverlay.querySelector('.loading-spinner');
     spinner.style.width = '40px';
     spinner.style.height = '40px';
-    spinner.style.border = '4px solid #f3f3f3';
-    spinner.style.borderTop = '4px solid #3498db';
+    spinner.style.border = '4px solid rgba(255, 255, 255, 0.2)';
+    spinner.style.borderTop = '4px solid #F6921A';
     spinner.style.borderRadius = '50%';
     spinner.style.animation = 'spin 1s linear infinite';
     
     const text = loadingOverlay.querySelector('.loading-text');
     text.style.marginTop = '15px';
-    text.style.color = '#333';
+    text.style.color = 'rgba(255, 255, 255, 0.8)';
     
     // Add keyframes for spinner animation
     if (!document.querySelector('style#particle-spinner-style')) {
@@ -307,20 +304,20 @@ function showProcessingOverlay(container) {
     processingOverlay.style.flexDirection = 'column';
     processingOverlay.style.alignItems = 'center';
     processingOverlay.style.justifyContent = 'center';
-    processingOverlay.style.backgroundColor = 'rgba(255, 255, 255, 0.9)';
+    processingOverlay.style.backgroundColor = 'transparent';
     processingOverlay.style.zIndex = '10';
     
     const spinner = processingOverlay.querySelector('.loading-spinner');
     spinner.style.width = '40px';
     spinner.style.height = '40px';
-    spinner.style.border = '4px solid #f3f3f3';
-    spinner.style.borderTop = '4px solid #3498db';
+    spinner.style.border = '4px solid rgba(255, 255, 255, 0.2)';
+    spinner.style.borderTop = '4px solid #F6921A';
     spinner.style.borderRadius = '50%';
     spinner.style.animation = 'spin 1s linear infinite';
     
     const text = processingOverlay.querySelector('.loading-text');
     text.style.marginTop = '15px';
-    text.style.color = '#333';
+    text.style.color = 'rgba(255, 255, 255, 0.8)';
     
     container.appendChild(processingOverlay);
     

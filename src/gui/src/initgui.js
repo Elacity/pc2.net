@@ -382,6 +382,7 @@ window.initgui = async function(options){
     // `auth_token` provided in URL, use it to log in
     // -------------------------------------------------------------------------------------
     else if(window.url_query_params.has('auth_token')){
+        console.log('[initgui]: Processing auth_token from URL');
         let query_param_auth_token = window.url_query_params.get('auth_token');
 
         puter.setAuthToken(query_param_auth_token);
@@ -411,10 +412,16 @@ window.initgui = async function(options){
             window.first_visit_ever = false;
             // show login progress window
             // UIWindowLoginInProgress({user_info: whoami});
-            // update auth data
-            window.update_auth_data(query_param_auth_token, whoami);
+            // update auth data - MUST await to ensure desktop_path is set before UIDesktop loads
+            await window.update_auth_data(query_param_auth_token, whoami);
+            
+            // For Particle auth redirects, do a clean reload to ensure full desktop initialization
+            // This matches how other login methods work (see UIWindowLogin.js)
+            window.onbeforeunload = null;
+            location.replace('/');
+            return; // Stop execution, page will reload
         }
-        // remove auth_token from URL
+        // remove auth_token from URL (only reached if whoami failed)
         window.history.pushState(null, document.title, '/');
     }
 
@@ -445,6 +452,7 @@ window.initgui = async function(options){
     // Authed
     // -------------------------------------------------------------------------------------
     if(window.is_auth()){
+        console.log('[initgui]: User is authed, proceeding with desktop initialization');
         // try to get user data using /whoami, only if that data is missing
         if(!whoami){
             try{
@@ -469,14 +477,17 @@ window.initgui = async function(options){
                 }
                 while(!is_verified)
             }
-            window.update_auth_data(whoami.token || window.auth_token, whoami);
+            // MUST await to ensure desktop_path is set before UIDesktop loads
+            await window.update_auth_data(whoami.token || window.auth_token, whoami);
 
             // -------------------------------------------------------------------------------------
             // Load desktop, only if we're not embedded in a popup
             // -------------------------------------------------------------------------------------
             if(!window.embedded_in_popup){
+                console.log('[initgui]: Loading desktop for path:', window.desktop_path);
                 await window.get_auto_arrange_data()
                 puter.fs.stat(window.desktop_path, async function(desktop_fsentry){
+                    console.log('[initgui]: puter.fs.stat callback, calling UIDesktop');
                     UIDesktop({desktop_fsentry: desktop_fsentry});
                 })
             }

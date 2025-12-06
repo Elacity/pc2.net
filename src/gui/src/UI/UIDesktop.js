@@ -751,10 +751,12 @@ async function UIDesktop(options) {
     // Set desktop height based on taskbar height
     $('.desktop').css('height', `calc(100vh - ${window.taskbar_height + window.toolbar_height}px)`)
 
+    console.log('[UIDesktop]: About to call UITaskbar, desktop exists:', $('.desktop').length > 0);
     // ---------------------------------------------------------------
-    // Taskbar
+    // Taskbar - MUST await since UITaskbar is async
     // ---------------------------------------------------------------
-    UITaskbar();
+    await UITaskbar();
+    console.log('[UIDesktop]: UITaskbar completed');
 
     // Update desktop dimensions after taskbar is initialized with position
     window.update_desktop_dimensions_for_taskbar();

@@ -176,7 +176,7 @@ async function UIAccountSidebar(options = {}) {
             }
             .account-sidebar-header {
                 padding: 60px 20px 20px;
-                border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+                border-bottom: none;
                 background: transparent;
             }
             .account-sidebar-profile {
@@ -280,8 +280,8 @@ async function UIAccountSidebar(options = {}) {
                 color: #e5e7eb;
             }
             .sidebar-tab.active {
-                color: #3b82f6;
-                border-bottom-color: #3b82f6;
+                color: #F6921A;
+                border-bottom-color: #F6921A;
             }
             .account-sidebar-content {
                 flex: 1;
@@ -351,6 +351,51 @@ async function UIAccountSidebar(options = {}) {
                 stroke: #4b5563;
                 margin-bottom: 16px;
             }
+            /* Mode Toggle Styles */
+            .wallet-mode-toggle {
+                display: flex;
+                gap: 8px;
+                padding: 0 20px 16px;
+            }
+            .mode-btn {
+                flex: 1;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 8px;
+                padding: 10px 12px;
+                border: 1px solid rgba(255, 255, 255, 0.15);
+                border-radius: 8px;
+                background: transparent;
+                color: #9ca3af;
+                font-size: 13px;
+                font-weight: 500;
+                cursor: pointer;
+                transition: all 0.2s ease;
+            }
+            .mode-btn:hover {
+                border-color: rgba(255, 255, 255, 0.3);
+                color: #fff;
+            }
+            .mode-btn.active {
+                background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(139, 92, 246, 0.2));
+                border-color: rgba(139, 92, 246, 0.5);
+                color: #fff;
+            }
+            .mode-btn.active.elastos {
+                background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(34, 197, 94, 0.2));
+                border-color: rgba(34, 197, 94, 0.5);
+            }
+            .mode-icon {
+                width: 18px;
+                height: 18px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            .mode-label {
+                font-size: 12px;
+            }
             @media (max-width: 768px) {
                 .account-sidebar {
                     width: 100%;
@@ -366,6 +411,17 @@ async function UIAccountSidebar(options = {}) {
     const sendIcon = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>`;
     const receiveIcon = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg>`;
     const copyIcon = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
+    
+    // Mode icons
+    const universalIcon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>`;
+    // Elastos logo - simplified version of official logo
+    const elastosIcon = `<svg width="18" height="18" viewBox="0 0 1080 1080" fill="none"><path d="M793 533l-61-36-26-15c-10-6-22-6-32 0l-119 69c-10 6-22 6-32 0l-118-69c-10-6-22-6-32 0l-26 15-61 36c-21 13-21 43 0 55l104 60 135 78c10 6 22 6 32 0l135-78 104-60c19-12 19-42-2-55z" fill="url(#ela1)"/><path d="M793 406l-88-51c-10-6-22-6-32 0l-119 69c-10 6-22 6-32 0l-119-69c-10-6-22-6-32 0l-86 51c-21 13-21 43 0 55l62 36 42 24 135 78c10 6 22 6 32 0l135-78 42-24 62-36c20-12 20-42-2-55z" fill="url(#ela2)"/><defs><linearGradient id="ela1" x1="540" y1="731" x2="540" y2="478" gradientUnits="userSpaceOnUse"><stop stop-color="#F6921A"/><stop offset="1" stop-color="#B04200"/></linearGradient><linearGradient id="ela2" x1="540" y1="447" x2="540" y2="604" gradientUnits="userSpaceOnUse"><stop stop-color="#FFEEDC"/><stop offset="1" stop-color="#FFC382"/></linearGradient></defs></svg>`;
+    
+    // Get current mode
+    const currentMode = walletService.getMode();
+    const displayAddress = currentMode === 'elastos' 
+        ? (window.user?.wallet_address || address) 
+        : address;
     
     // Build sidebar HTML
     const h = `
@@ -384,18 +440,30 @@ async function UIAccountSidebar(options = {}) {
             <div class="account-sidebar-header">
                 <div class="account-sidebar-profile">
                     <div class="account-avatar">
-                        ${getAvatarContent(address)}
+                        ${getAvatarContent(displayAddress)}
                     </div>
-                    <div class="account-address" data-address="${html_encode(address || '')}" title="${i18n('click_to_copy') || 'Click to copy'}">
-                        <span class="address-text">${truncateAddress(address || '0x0000...0000')}</span>
+                    <div class="account-address" data-address="${html_encode(displayAddress || '')}" title="${i18n('click_to_copy') || 'Click to copy'}">
+                        <span class="address-text">${truncateAddress(displayAddress || '0x0000...0000')}</span>
                         ${copyIcon}
                     </div>
                 </div>
                 
                 <div class="account-balance">
                     <span class="balance-amount">${formatUSD(walletData.totalBalance)}</span>
-                    <span class="balance-label">${i18n('total_balance') || 'Total Balance'}${isUA ? ' (Universal Account)' : ''}</span>
+                    <span class="balance-label">${i18n('total_balance') || 'Total Balance'}</span>
                 </div>
+            </div>
+            
+            <!-- Mode Toggle -->
+            <div class="wallet-mode-toggle">
+                <button class="mode-btn ${currentMode === 'universal' ? 'active' : ''}" data-mode="universal">
+                    <span class="mode-icon">${universalIcon}</span>
+                    <span class="mode-label">Universal</span>
+                </button>
+                <button class="mode-btn elastos ${currentMode === 'elastos' ? 'active' : ''}" data-mode="elastos">
+                    <span class="mode-icon">${elastosIcon}</span>
+                    <span class="mode-label">Elastos</span>
+                </button>
             </div>
             
             <!-- Action Buttons -->
@@ -486,6 +554,35 @@ async function UIAccountSidebar(options = {}) {
         });
     });
     
+    // Mode toggle buttons
+    $sidebar.on('click', '.mode-btn', async function() {
+        const mode = $(this).data('mode');
+        const currentMode = walletService.getMode();
+        
+        if (mode === currentMode) return;
+        
+        // Update button states
+        $sidebar.find('.mode-btn').removeClass('active');
+        $(this).addClass('active');
+        
+        // Show loading state
+        $sidebar.find('.balance-amount').text('...');
+        $sidebar.find('.tokens-list').html('<div class="empty-state"><p>Loading...</p></div>');
+        
+        // Switch mode in wallet service
+        try {
+            await walletService.setMode(mode);
+            
+            // Update address display
+            const newAddress = walletService.getAddress();
+            $sidebar.find('.account-address').attr('data-address', newAddress);
+            $sidebar.find('.address-text').text(truncateAddress(newAddress));
+            $sidebar.find('.account-avatar').html(getAvatarContent(newAddress));
+        } catch (error) {
+            console.error('[UIAccountSidebar]: Mode switch error:', error);
+        }
+    });
+    
     // Close button
     $sidebar.on('click', '.account-sidebar-close', function() {
         closeSidebar();
@@ -567,6 +664,7 @@ async function UIAccountSidebar(options = {}) {
     // Subscribe to wallet data updates - store for cleanup
     walletUnsubscribe = walletService.subscribe((data) => {
         console.log('[UIAccountSidebar]: Received wallet update:', {
+            mode: data.mode,
             totalBalance: data.totalBalance,
             tokensCount: data.tokens?.length,
             sidebarExists: !!sidebarInstance,
@@ -575,10 +673,27 @@ async function UIAccountSidebar(options = {}) {
         // Only update if sidebar still exists
         if (!sidebarInstance) return;
         
-        // Update balance
-        const formattedBalance = formatUSD(data.totalBalance);
+        // Update mode buttons
+        $sidebar.find('.mode-btn').removeClass('active');
+        $sidebar.find(`.mode-btn[data-mode="${data.mode}"]`).addClass('active');
+        
+        // Update balance - show ELA amount for Elastos mode, USD for Universal
+        let formattedBalance;
+        if (data.mode === 'elastos' && data.tokens?.length > 0) {
+            const elaToken = data.tokens.find(t => t.symbol === 'ELA');
+            formattedBalance = elaToken ? `${parseFloat(elaToken.balance).toFixed(4)} ELA` : '0 ELA';
+        } else {
+            formattedBalance = formatUSD(data.totalBalance);
+        }
         console.log('[UIAccountSidebar]: Setting balance to:', formattedBalance);
         $sidebar.find('.balance-amount').text(formattedBalance);
+        
+        // Update address display
+        if (data.address) {
+            $sidebar.find('.account-address').attr('data-address', data.address);
+            $sidebar.find('.address-text').text(truncateAddress(data.address));
+            $sidebar.find('.account-avatar').html(getAvatarContent(data.address));
+        }
         
         // Update tokens list
         $sidebar.find('.tokens-list').html(renderTokensList(data.tokens));
@@ -689,12 +804,45 @@ function renderTokensList(tokens) {
     // Sort by USD value
     const sortedTokens = sortTokensByValue(tokens);
     
+    // Token image paths (relative to gui/src/images/tokens/)
+    const tokenImages = {
+        'ELA': 'images/tokens/ELA.png',
+        'ETH': 'images/tokens/ETH.png',
+        'USDC': 'images/tokens/USDC.png',
+        'USDT': 'images/tokens/USDT.png',
+        'BNB': 'images/tokens/BNB.png',
+        'SOL': 'images/tokens/Sol.webp',
+        'BTC': 'images/tokens/BTC.svg',
+        'MNT': 'images/tokens/MNT.webp',
+        'MATIC': 'images/tokens/ETH.png', // Fallback to ETH style
+    };
+    
+    // Fallback styling for tokens without images
+    const getTokenIconStyle = (symbol) => {
+        const styles = {
+            'ELA': 'background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;',
+            'ETH': 'background:linear-gradient(135deg,#627eea,#3b52ce);color:#fff;',
+            'USDC': 'background:#2775ca;color:#fff;',
+            'USDT': 'background:#26a17b;color:#fff;',
+            'BNB': 'background:#f3ba2f;color:#000;',
+        };
+        return styles[symbol] || 'background:rgba(255,255,255,0.1);color:#9ca3af;';
+    };
+    
+    const getTokenIconHtml = (symbol) => {
+        const imgPath = tokenImages[symbol];
+        if (imgPath) {
+            return `<img src="${imgPath}" alt="${symbol}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" onerror="this.style.display='none';this.nextSibling.style.display='flex';" /><span style="display:none;width:100%;height:100%;align-items:center;justify-content:center;${getTokenIconStyle(symbol)}font-weight:600;font-size:12px;border-radius:50%;">${symbol ? symbol.slice(0, 2).toUpperCase() : '??'}</span>`;
+        }
+        return `<span style="display:flex;width:100%;height:100%;align-items:center;justify-content:center;${getTokenIconStyle(symbol)}font-weight:600;font-size:12px;border-radius:50%;">${symbol ? symbol.slice(0, 2).toUpperCase() : '??'}</span>`;
+    };
+    
     return sortedTokens.map(token => `
         <div class="token-row" 
              data-token-address="${html_encode(token.address || '')}"
              data-chain-id="${html_encode(token.chainId || '')}">
-            <div class="token-icon" style="display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.1);color:#9ca3af;font-weight:600;font-size:12px;">
-                ${token.symbol ? token.symbol.slice(0, 2).toUpperCase() : '??'}
+            <div class="token-icon" style="display:flex;align-items:center;justify-content:center;overflow:hidden;">
+                ${getTokenIconHtml(token.symbol)}
             </div>
             <div class="token-info">
                 <span class="token-symbol">${html_encode(token.symbol || 'Unknown')}</span>
@@ -769,11 +917,72 @@ function isAccountSidebarOpen() {
     return !!sidebarInstance;
 }
 
+/**
+ * Initialize edge hover trigger for opening sidebar
+ * Creates an invisible zone on the right edge of the screen
+ */
+function initEdgeHoverTrigger() {
+    // Remove existing trigger if any
+    $('#sidebar-edge-trigger').remove();
+    
+    // Create invisible edge trigger zone
+    const edgeTrigger = $(`
+        <div id="sidebar-edge-trigger" style="
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: 8px;
+            height: 100vh;
+            z-index: 9990;
+            cursor: e-resize;
+        "></div>
+    `);
+    
+    let hoverTimeout = null;
+    let isHovering = false;
+    
+    edgeTrigger.on('mouseenter', function() {
+        // Don't trigger if sidebar is already open or user not logged in
+        if (sidebarInstance || !window.user?.wallet_address) return;
+        
+        isHovering = true;
+        
+        // Small delay to prevent accidental triggers
+        hoverTimeout = setTimeout(() => {
+            if (isHovering && !sidebarInstance) {
+                UIAccountSidebar();
+            }
+        }, 150);
+    });
+    
+    edgeTrigger.on('mouseleave', function() {
+        isHovering = false;
+        if (hoverTimeout) {
+            clearTimeout(hoverTimeout);
+            hoverTimeout = null;
+        }
+    });
+    
+    $('body').append(edgeTrigger);
+}
+
+// Initialize edge trigger when DOM is ready
+$(document).ready(function() {
+    // Small delay to ensure app is initialized
+    setTimeout(initEdgeHoverTrigger, 1000);
+});
+
+// Re-initialize when user logs in
+$(document).on('user:logged_in', function() {
+    initEdgeHoverTrigger();
+});
+
 // Export for global access
 window.UIAccountSidebar = UIAccountSidebar;
 window.toggleAccountSidebar = toggleAccountSidebar;
 window.isAccountSidebarOpen = isAccountSidebarOpen;
+window.initEdgeHoverTrigger = initEdgeHoverTrigger;
 
 export default UIAccountSidebar;
-export { toggleAccountSidebar, isAccountSidebarOpen, closeSidebar };
+export { toggleAccountSidebar, isAccountSidebarOpen, closeSidebar, initEdgeHoverTrigger };
 

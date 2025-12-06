@@ -28,7 +28,21 @@
  */
 class WalletService {
     constructor() {
+        // Wallet mode: 'universal' (Smart Account + multi-chain) or 'elastos' (EOA + ELA)
+        this.walletMode = 'universal';
+        
+        // Universal Account wallet data
         this.walletData = {
+            tokens: [],
+            transactions: [],
+            totalBalance: 0,
+            lastUpdated: null,
+            isLoading: false,
+            error: null,
+        };
+        
+        // Elastos wallet data (separate cache)
+        this.elastosData = {
             tokens: [],
             transactions: [],
             totalBalance: 0,
@@ -45,6 +59,36 @@ class WalletService {
         
         // Initialize message listener
         this._initMessageListener();
+    }
+    
+    /**
+     * Get current wallet mode
+     * @returns {'universal' | 'elastos'}
+     */
+    getMode() {
+        return this.walletMode;
+    }
+    
+    /**
+     * Set wallet mode and refresh data
+     * @param {'universal' | 'elastos'} mode
+     */
+    async setMode(mode) {
+        if (mode !== 'universal' && mode !== 'elastos') {
+            console.error('[WalletService]: Invalid mode:', mode);
+            return;
+        }
+        
+        const previousMode = this.walletMode;
+        this.walletMode = mode;
+        
+        console.log('[WalletService]: Mode changed from', previousMode, 'to', mode);
+        
+        // Notify listeners of mode change
+        this._notifyListeners();
+        
+        // Refresh data for new mode
+        await this.refreshTokens();
     }
     
     /**
@@ -114,22 +158,32 @@ class WalletService {
     }
     
     /**
-     * Handle tokens response
+     * Handle tokens response (both requested and auto-pushed)
      */
     _handleTokensResponse(payload, requestId) {
-        const resolver = this.pendingRequests.get(requestId);
-        if (resolver) {
-            this.pendingRequests.delete(requestId);
-            
-            // Update cached data
-            this.walletData.tokens = payload.tokens || [];
-            this.walletData.totalBalance = this._calculateTotalBalance(this.walletData.tokens);
+        console.log('[WalletService]: Received tokens response:', { 
+            requestId, 
+            tokensCount: payload?.tokens?.length, 
+            totalBalance: payload?.totalBalance 
+        });
+        
+        // Always update cached data (even for auto-push with requestId 0)
+        if (payload?.tokens && payload.tokens.length > 0) {
+            this.walletData.tokens = payload.tokens;
+            this.walletData.totalBalance = payload.totalBalance || this._calculateTotalBalance(payload.tokens);
             this.walletData.lastUpdated = Date.now();
+            this.walletData.isLoading = false;
+            this.walletData.error = null;
             window.wallet_data = this.walletData;
             
             this._notifyListeners();
             $(document).trigger('wallet:data:updated', [this.walletData]);
-            
+        }
+        
+        // Resolve pending request if exists
+        const resolver = this.pendingRequests.get(requestId);
+        if (resolver) {
+            this.pendingRequests.delete(requestId);
             resolver.resolve(payload);
         }
     }
@@ -197,11 +251,25 @@ class WalletService {
             // Create a hidden iframe for wallet operations
             iframe = document.createElement('iframe');
             iframe.id = 'particle-wallet-iframe';
-            iframe.src = '/particle-auth?mode=wallet';
+            
+            // Pass user addresses via URL params so iframe can initialize UniversalAccount
+            // without needing to restore the ConnectKit session
+            const eoaAddress = window.user?.wallet_address || '';
+            const smartAddress = window.user?.smart_account_address || '';
+            const params = new URLSearchParams({
+                mode: 'wallet',
+                ...(eoaAddress && { address: eoaAddress }),
+                ...(smartAddress && { smartAddress: smartAddress }),
+            });
+            
+            iframe.src = `/particle-auth?${params.toString()}`;
             iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:none;visibility:hidden;';
             document.body.appendChild(iframe);
             
-            console.log('[WalletService]: Created hidden particle-auth iframe');
+            console.log('[WalletService]: Created hidden particle-auth iframe with addresses:', {
+                eoaAddress: eoaAddress ? `${eoaAddress.slice(0, 10)}...` : 'none',
+                smartAddress: smartAddress ? `${smartAddress.slice(0, 10)}...` : 'none',
+            });
             
             // Mark that we need to wait for iframe to load
             this._iframeReady = false;
@@ -297,13 +365,25 @@ class WalletService {
      * Notify all registered listeners of data changes
      */
     _notifyListeners() {
+        // Get the correct data based on current mode
+        const data = this.getData();
+        
         console.log('[WalletService]: Notifying', this.listeners.size, 'listeners with data:', {
-            totalBalance: this.walletData.totalBalance,
-            tokensCount: this.walletData.tokens?.length,
+            mode: this.walletMode,
+            totalBalance: data.totalBalance,
+            tokensCount: data.tokens?.length,
         });
+        
+        // Add mode to the data for UI awareness
+        const dataWithMode = {
+            ...data,
+            mode: this.walletMode,
+            address: this.getAddress(),
+        };
+        
         this.listeners.forEach(callback => {
             try {
-                callback(this.walletData);
+                callback(dataWithMode);
             } catch (e) {
                 console.error('[WalletService]: Listener error:', e);
             }
@@ -330,20 +410,29 @@ class WalletService {
     /**
      * Get wallet address (Smart Account preferred)
      */
+    /**
+     * Get wallet address based on current mode
+     * - Universal mode: Smart Account address (multi-chain)
+     * - Elastos mode: EOA address
+     */
     getAddress() {
         if (!window.user) return null;
-        return window.user.smart_account_address || window.user.wallet_address;
+        
+        if (this.walletMode === 'elastos') {
+            return window.user.wallet_address; // EOA for Elastos
+        }
+        return window.user.smart_account_address || window.user.wallet_address; // UA preferred
     }
     
     /**
-     * Get EOA address
+     * Get EOA address (always returns EOA regardless of mode)
      */
     getEOAAddress() {
         return window.user?.wallet_address || null;
     }
     
     /**
-     * Get Smart Account address
+     * Get Smart Account address (always returns UA regardless of mode)
      */
     getSmartAccountAddress() {
         return window.user?.smart_account_address || null;
@@ -357,6 +446,23 @@ class WalletService {
     }
     
     /**
+     * Get current wallet data based on mode
+     */
+    getData() {
+        if (this.walletMode === 'elastos') {
+            return this.elastosData;
+        }
+        return this.walletData;
+    }
+    
+    /**
+     * Get tokens based on current mode
+     */
+    getTokens() {
+        return this.getData().tokens;
+    }
+    
+    /**
      * Initialize wallet connection (create iframe if user is logged in)
      * Call this early in app initialization if user has a wallet
      */
@@ -364,7 +470,28 @@ class WalletService {
         if (this.isConnected()) {
             console.log('[WalletService]: User has wallet, initializing iframe...');
             this._getOrCreateIframe();
+            // Don't auto-fetch on init - let sidebar trigger it when opened
         }
+    }
+    
+    /**
+     * Wait for iframe to be ready (for use after login)
+     */
+    async waitForReady(timeout = 10000) {
+        if (this._iframeReady) return true;
+        
+        return new Promise((resolve) => {
+            const startTime = Date.now();
+            const checkReady = setInterval(() => {
+                if (this._iframeReady) {
+                    clearInterval(checkReady);
+                    resolve(true);
+                } else if (Date.now() - startTime > timeout) {
+                    clearInterval(checkReady);
+                    resolve(false);
+                }
+            }, 100);
+        });
     }
     
     /**
@@ -375,31 +502,17 @@ class WalletService {
     }
     
     /**
-     * Get current wallet data
-     */
-    getData() {
-        return this.walletData;
-    }
-    
-    /**
-     * Get token list
-     */
-    getTokens() {
-        return this.walletData.tokens;
-    }
-    
-    /**
-     * Get transaction history
+     * Get transaction history based on mode
      */
     getTransactions() {
-        return this.walletData.transactions;
+        return this.getData().transactions;
     }
     
     /**
-     * Get total balance in USD
+     * Get total balance in USD based on mode
      */
     getTotalBalance() {
-        return this.walletData.totalBalance;
+        return this.getData().totalBalance;
     }
     
     /**
@@ -410,33 +523,134 @@ class WalletService {
             return Promise.reject(new Error('Wallet not connected'));
         }
         
+        // Route to appropriate fetch method based on mode
+        if (this.walletMode === 'elastos') {
+            return this._fetchElastosTokens();
+        }
+        
+        return this._fetchUniversalTokens();
+    }
+    
+    /**
+     * Fetch tokens for Universal Account mode (multi-chain)
+     * Uses Particle's Universal Account API via iframe as PRIMARY method
+     */
+    async _fetchUniversalTokens() {
         this.walletData.isLoading = true;
         this._notifyListeners();
         
-        // Use direct API as PRIMARY method (faster and more reliable)
+        console.log('[WalletService]: Fetching Universal Account tokens via Particle API...');
+        
+        // PRIMARY METHOD: Use Particle iframe (Universal Account's getPrimaryAssets)
+        // This returns aggregated balances across ALL chains in one call
         try {
-            const tokens = await this._fetchTokensDirectly();
-            return { tokens, totalBalance: this._calculateTotalBalance(tokens) };
-        } catch (apiError) {
-            console.warn('[WalletService]: Direct API failed:', apiError.message);
+            const result = await Promise.race([
+                this._sendToIframe('particle-wallet.get-tokens', {
+                    address: this.getAddress(),
+                }),
+                new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('iframe timeout')), 15000)
+                )
+            ]);
             
-            // Fallback to iframe method (with short timeout)
-            try {
-                const result = await Promise.race([
-                    this._sendToIframe('particle-wallet.get-tokens', {
-                        address: this.getAddress(),
-                    }),
-                    new Promise((_, reject) => 
-                        setTimeout(() => reject(new Error('iframe timeout')), 3000)
-                    )
-                ]);
-                return result;
-            } catch (iframeError) {
+            console.log('[WalletService]: Particle API returned:', result);
+            
+            // Update wallet data from Particle response
+            if (result && result.tokens) {
+                this.walletData.tokens = result.tokens;
+                this.walletData.totalBalance = result.totalBalance || this._calculateTotalBalance(result.tokens);
+                this.walletData.lastUpdated = Date.now();
                 this.walletData.isLoading = false;
-                this.walletData.error = apiError.message;
+                this.walletData.error = null;
+                
                 this._notifyListeners();
-                throw apiError;
+                $(document).trigger('wallet:data:updated', [this.walletData]);
             }
+            
+            return result;
+        } catch (iframeError) {
+            console.warn('[WalletService]: Particle API failed:', iframeError.message);
+            
+            // Don't use direct RPC fallback - it causes rate limiting
+            // Just show empty state and let user retry manually
+            this.walletData.isLoading = false;
+            this.walletData.error = 'Unable to fetch balances. Please refresh.';
+            this._notifyListeners();
+            
+            return { tokens: [], totalBalance: 0 };
+        }
+    }
+    
+    /**
+     * Fetch ELA balance for Elastos mode
+     */
+    async _fetchElastosTokens() {
+        const address = this.getEOAAddress(); // Always use EOA for Elastos
+        if (!address) return { tokens: [], totalBalance: 0 };
+        
+        this.elastosData.isLoading = true;
+        this._notifyListeners();
+        
+        console.log('[WalletService]: Fetching Elastos ELA for EOA:', address);
+        
+        try {
+            // Elastos Mainnet RPC
+            const rpcUrl = 'https://api.elastos.io/eth';
+            
+            // Fetch native ELA balance
+            const response = await fetch(rpcUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    jsonrpc: '2.0',
+                    method: 'eth_getBalance',
+                    params: [address, 'latest'],
+                    id: 1,
+                }),
+            });
+            
+            const data = await response.json();
+            const tokens = [];
+            
+            if (!data.error && data.result) {
+                const balanceWei = BigInt(data.result || '0');
+                const balanceEla = Number(balanceWei) / 1e18;
+                
+                // Get ELA price (approximate)
+                const elaPrice = await this._getTokenPrice('ELA');
+                
+                tokens.push({
+                    symbol: 'ELA',
+                    name: 'Elastos',
+                    address: null, // Native token
+                    balance: balanceEla.toFixed(6),
+                    decimals: 18,
+                    chainId: 20, // Elastos ESC chain ID
+                    network: 'Elastos',
+                    usdValue: balanceEla * elaPrice,
+                    price: elaPrice,
+                    icon: null, // Will use default
+                });
+            }
+            
+            // Update Elastos data
+            this.elastosData.tokens = tokens;
+            this.elastosData.totalBalance = this._calculateTotalBalance(tokens);
+            this.elastosData.lastUpdated = Date.now();
+            this.elastosData.isLoading = false;
+            this.elastosData.error = null;
+            
+            this._notifyListeners();
+            $(document).trigger('wallet:data:updated', [this.elastosData]);
+            
+            console.log('[WalletService]: Elastos ELA balance:', tokens);
+            return { tokens, totalBalance: this.elastosData.totalBalance };
+        } catch (error) {
+            console.error('[WalletService]: Elastos fetch error:', error);
+            this.elastosData.isLoading = false;
+            this.elastosData.error = error.message;
+            this._notifyListeners();
+            throw error;
         }
     }
     
@@ -650,6 +864,7 @@ class WalletService {
                 'ETH': 'ethereum',
                 'MATIC': 'matic-network',
                 'BNB': 'binancecoin',
+                'ELA': 'elastos',
             };
             
             const id = ids[symbol];
@@ -663,7 +878,7 @@ class WalletService {
         } catch (error) {
             console.warn('[WalletService]: Price fetch failed:', error);
             // Fallback prices
-            const fallbackPrices = { 'ETH': 2000, 'MATIC': 0.5, 'BNB': 300 };
+            const fallbackPrices = { 'ETH': 2000, 'MATIC': 0.5, 'BNB': 300, 'ELA': 1.5 };
             return fallbackPrices[symbol] || 0;
         }
     }

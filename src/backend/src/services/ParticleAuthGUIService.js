@@ -41,6 +41,20 @@ class ParticleAuthGUIService extends BaseService {
         // ELACITY: Path from src/backend/src/services/ to src/particle-auth/
         const dirPath = _path.join(__dirname, '../../../particle-auth');
 
+        // Force no-cache for index.html to ensure fresh JS bundle references
+        app.get('/particle-auth', (req, res, next) => {
+            res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+            res.set('Pragma', 'no-cache');
+            res.set('Expires', '0');
+            next();
+        });
+        app.get('/particle-auth/index.html', (req, res, next) => {
+            res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+            res.set('Pragma', 'no-cache');
+            res.set('Expires', '0');
+            next();
+        });
+
         // Serve the Particle Auth React app BEFORE the default router
         app.use('/particle-auth', express.static(dirPath));
 

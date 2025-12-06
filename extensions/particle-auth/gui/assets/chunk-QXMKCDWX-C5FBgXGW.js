@@ -1,0 +1,1 @@
+import{_ as o,c as s,j as r}from"./index-BS_gOP9p.js";var e,a,i=o({"src/hooks/useWalletConnectors.ts"(){s(),e=()=>{const{config:t}=r();return t.walletConnectors},a=t=>e().find(n=>n.type===t)}});export{i,a as u};

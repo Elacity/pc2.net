@@ -120,7 +120,16 @@ class WalletService {
                     this._handleTransactionsResponse(payload, requestId);
                     break;
                 case 'particle-wallet.send-result':
+                    console.log('[WalletService]: Received send-result message:', { requestId, payload });
                     this._handleSendResult(payload, requestId);
+                    break;
+                case 'particle-wallet.transaction-status':
+                    console.log('[WalletService]: Received transaction-status message:', payload);
+                    this._handleTransactionStatus(payload);
+                    break;
+                case 'particle-wallet.transaction-details':
+                    console.log('[WalletService]: Received transaction-details message:', payload);
+                    this._handleTransactionDetails(payload, requestId);
                     break;
                 case 'particle-wallet.error':
                     this._handleError(payload, requestId);
@@ -198,6 +207,8 @@ class WalletService {
             
             // Update cached data
             this.walletData.transactions = payload.transactions || [];
+            this.walletData.hasMoreTransactions = payload.hasMore;
+            this.walletData.transactionsTotalCount = payload.totalCount;
             this.walletData.lastUpdated = Date.now();
             window.wallet_data = this.walletData;
             
@@ -209,21 +220,97 @@ class WalletService {
     }
     
     /**
+     * Handle transaction details response
+     */
+    _handleTransactionDetails(payload, requestId) {
+        const resolver = this.pendingRequests.get(requestId);
+        if (resolver) {
+            this.pendingRequests.delete(requestId);
+            
+            if (payload.error) {
+                resolver.reject(new Error(payload.error));
+            } else {
+                resolver.resolve(payload);
+            }
+        }
+    }
+    
+    /**
      * Handle send transaction result
      */
     _handleSendResult(payload, requestId) {
+        console.log('[WalletService]: Received send result:', { requestId, payload });
+        
         const resolver = this.pendingRequests.get(requestId);
         if (resolver) {
             this.pendingRequests.delete(requestId);
             
             if (payload.success) {
+                console.log('[WalletService]: Transaction successful:', payload.hash);
                 resolver.resolve(payload);
                 // Refresh balances after successful send
                 this.refreshTokens();
+            } else if (payload.requiresWalletUI) {
+                // Transaction requires the main Particle wallet UI
+                // Reject with a specific error that the UI can handle
+                console.log('[WalletService]: Transaction requires wallet UI');
+                const error = new Error('Transaction signing requires Particle wallet. Please use the Particle wallet interface to send tokens.');
+                error.requiresWalletUI = true;
+                resolver.reject(error);
             } else {
+                console.log('[WalletService]: Transaction failed:', payload.error);
                 resolver.reject(new Error(payload.error || 'Transaction failed'));
             }
+        } else {
+            console.warn('[WalletService]: No pending request found for requestId:', requestId);
         }
+    }
+    
+    /**
+     * Handle transaction status updates (confirmed/failed)
+     */
+    _handleTransactionStatus(payload) {
+        const { transactionId, status, txHash, error, message } = payload;
+        
+        console.log('[WalletService]: Transaction status update:', { transactionId, status, txHash });
+        
+        // Import UINotification dynamically to show notifications
+        import('../UI/UINotification.js').then(({ default: UINotification }) => {
+            if (status === 'confirmed') {
+                UINotification({
+                    icon: window.icons['checkmark.svg'],
+                    title: 'Transaction Confirmed ✓',
+                    text: txHash 
+                        ? `Transaction confirmed on chain. Hash: ${txHash.slice(0, 10)}...${txHash.slice(-8)}`
+                        : 'Transaction has been confirmed on the blockchain.',
+                    duration: 5000, // Auto-close after 5 seconds
+                });
+                
+                // Refresh balances after confirmation
+                this.refreshTokens();
+                
+            } else if (status === 'failed') {
+                UINotification({
+                    icon: window.icons['warning.svg'],
+                    title: 'Transaction Failed',
+                    text: error || 'The transaction failed on the blockchain.',
+                    duration: 5000, // Auto-close after 5 seconds
+                });
+                
+            } else if (status === 'timeout') {
+                UINotification({
+                    icon: window.icons['info.svg'],
+                    title: 'Status Check Timeout',
+                    text: message || 'Could not confirm transaction status. Please check your wallet.',
+                    duration: 5000, // Auto-close after 5 seconds
+                });
+            }
+        }).catch(err => {
+            console.error('[WalletService]: Failed to show notification:', err);
+        });
+        
+        // Trigger event for any listeners
+        $(document).trigger('wallet:transaction:status', [payload]);
     }
     
     /**
@@ -260,6 +347,8 @@ class WalletService {
                 mode: 'wallet',
                 ...(eoaAddress && { address: eoaAddress }),
                 ...(smartAddress && { smartAddress: smartAddress }),
+                // Cache-busting timestamp to force fresh load
+                _t: Date.now().toString(),
             });
             
             iframe.src = `/particle-auth?${params.toString()}`;
@@ -885,20 +974,80 @@ class WalletService {
     
     /**
      * Refresh transaction history
+     * @param {number} page - Page number (default 1)
+     * @param {number} pageSize - Items per page (default 20)
      */
-    async refreshTransactions() {
+    async refreshTransactions(page = 1, pageSize = 20) {
         if (!this.isConnected()) {
             return Promise.reject(new Error('Wallet not connected'));
         }
         
         try {
+            console.log('[WalletService]: Fetching transactions:', { page, pageSize });
+            
             const result = await this._sendToIframe('particle-wallet.get-transactions', {
                 address: this.getAddress(),
+                page,
+                pageSize,
+            });
+            
+            console.log('[WalletService]: Transactions response:', result);
+            
+            // Update wallet data with transactions
+            if (result && result.transactions) {
+                if (page === 1) {
+                    // Replace transactions for first page
+                    this.walletData.transactions = result.transactions;
+                } else {
+                    // Append for subsequent pages
+                    this.walletData.transactions = [
+                        ...this.walletData.transactions,
+                        ...result.transactions,
+                    ];
+                }
+                this.walletData.hasMoreTransactions = result.hasMore;
+                this.walletData.transactionsTotalCount = result.totalCount;
+                this.walletData.transactionsPage = page;
+            }
+            
+            this._notifyListeners();
+            
+            // Trigger specific event for transactions
+            $(document).trigger('wallet:transactions:updated', [this.walletData.transactions]);
+            
+            return result;
+        } catch (error) {
+            console.error('[WalletService]: Failed to fetch transactions:', error);
+            this.walletData.error = error.message;
+            this._notifyListeners();
+            throw error;
+        }
+    }
+    
+    /**
+     * Load more transactions (next page)
+     */
+    async loadMoreTransactions() {
+        const nextPage = (this.walletData.transactionsPage || 1) + 1;
+        return this.refreshTransactions(nextPage, 20);
+    }
+    
+    /**
+     * Get transaction details with blockchain tx hash
+     * @param {string} transactionId - Particle's internal transaction ID
+     */
+    async getTransactionDetails(transactionId) {
+        if (!this.isConnected()) {
+            return Promise.reject(new Error('Wallet not connected'));
+        }
+        
+        try {
+            const result = await this._sendToIframe('particle-wallet.get-transaction-details', {
+                transactionId,
             });
             return result;
         } catch (error) {
-            this.walletData.error = error.message;
-            this._notifyListeners();
+            console.error('[WalletService]: Failed to get transaction details:', error);
             throw error;
         }
     }
@@ -907,11 +1056,12 @@ class WalletService {
      * Send tokens using Universal Account
      * @param {Object} params - Send parameters
      * @param {string} params.to - Recipient address
-     * @param {string} params.amount - Amount to send
+     * @param {string} params.amount - Amount to send (human readable, e.g. "0.5")
      * @param {string} params.tokenAddress - Token contract address (null for native)
      * @param {number} params.chainId - Target chain ID
+     * @param {number} params.decimals - Token decimals (default 18)
      */
-    async sendTokens({ to, amount, tokenAddress, chainId }) {
+    async sendTokens({ to, amount, tokenAddress, chainId, decimals = 18 }) {
         if (!this.isConnected()) {
             return Promise.reject(new Error('Wallet not connected'));
         }
@@ -922,6 +1072,7 @@ class WalletService {
             amount,
             tokenAddress,
             chainId,
+            decimals,
         });
     }
     
@@ -929,7 +1080,7 @@ class WalletService {
      * Estimate gas fee for a transaction
      * @param {Object} params - Transaction parameters
      */
-    async estimateFee({ to, amount, tokenAddress, chainId }) {
+    async estimateFee({ to, amount, tokenAddress, chainId, decimals = 18 }) {
         if (!this.isConnected()) {
             return Promise.reject(new Error('Wallet not connected'));
         }
@@ -940,6 +1091,7 @@ class WalletService {
             amount,
             tokenAddress,
             chainId,
+            decimals,
         });
     }
     

@@ -23,6 +23,7 @@ import launch_app from '../helpers/launch_app.js';
 import UIContextMenu from './UIContextMenu.js';
 
 async function UITaskbar (options) {
+    console.log('[UITaskbar]: Starting initialization...');
     window.global_element_id++;
 
     options = options ?? {};
@@ -75,7 +76,14 @@ async function UITaskbar (options) {
         $('.desktop').addClass(`desktop-taskbar-position-${taskbar_position}`);
     }
 
+    console.log('[UITaskbar]: Appending taskbar to .desktop, desktop element exists:', $('.desktop').length > 0, 'taskbar_height:', window.taskbar_height, 'taskbar_position:', taskbar_position);
     $('.desktop').append(h);
+    
+    // Explicitly show the taskbar and desktop to ensure visibility
+    $('.taskbar').show();
+    $('.desktop').css('display', 'grid');
+    
+    console.log('[UITaskbar]: Taskbar appended, taskbar element exists:', $('.taskbar').length > 0, 'taskbar visible:', $('.taskbar').is(':visible'));
 
     //---------------------------------------------
     // add `Start` to taskbar

@@ -31,6 +31,9 @@ export default defineConfig([
             'src/backend/src/services/worker/dist/**/*.{js,cjs,mjs}',
             'src/backend/src/services/worker/src/**/*.{js,cjs,mjs}',
             'src/backend/src/services/worker/template/puter-portable.js',
+            
+            // Particle auth extension built files - bundled React app
+            'extensions/particle-auth/gui/**/*',
         ],
     },
     {

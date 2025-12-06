@@ -116,6 +116,17 @@ function UINotification (options) {
     // Show Notification
     $(el_notification).delay(100).show(0);
 
+    // Auto-close after duration (default: no auto-close, set to milliseconds to enable)
+    // e.g., options.duration = 5000 for 5 seconds
+    if (options.duration && typeof options.duration === 'number' && options.duration > 0) {
+        setTimeout(function () {
+            // Check if notification still exists before closing
+            if (document.getElementById(`ui-notification__${el_notification.dataset.elId}`)) {
+                close_notification(el_notification);
+            }
+        }, options.duration);
+    }
+
     // count notifications
     let count = $('.notification-container').find('.notification-wrapper').length;
     if ( count <= 1 ) {

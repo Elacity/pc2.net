@@ -42,9 +42,17 @@ import UIWindowWelcome from "./UIWindowWelcome.js"
 import launch_app from "../helpers/launch_app.js"
 import item_icon from "../helpers/item_icon.js"
 import UIWindowSearch from "./UIWindowSearch.js"
+import UIAccountSidebar from "./UIAccountSidebar.js"
+import walletService from "../services/WalletService.js"
 
 async function UIDesktop(options) {
     let h = '';
+
+    // Initialize wallet service early if user has a wallet
+    if (window.user?.wallet_address) {
+        console.log('[UIDesktop]: Initializing wallet service for:', window.user.wallet_address);
+        walletService.initialize();
+    }
 
     // Set up the desktop channel for communication between different tabs in the same browser
     window.channel = new BroadcastChannel('puter-desktop-channel');
@@ -1187,6 +1195,11 @@ async function UIDesktop(options) {
     // search button
     ht += `<div class="toolbar-btn search-btn" title="${i18n('toolbar.search')}" style="background-image:url('${window.icons['search.svg']}')"></div>`;
 
+    // wallet button - show for all users (wallet functionality available to everyone)
+    // Using data URI SVG to match other toolbar button styling
+    const walletSvg = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>')}`;
+    ht += `<div class="toolbar-btn wallet-btn" title="${i18n('wallet') || 'Wallet'}" style="background-image:url('${walletSvg}')"></div>`;
+
     //clock 
     ht += `<div id="clock" class="toolbar-clock" style="">12:00 AM Sun, Jan 01</div>`;
 
@@ -2109,6 +2122,11 @@ $(document).on('click', '.close-launch-popover', function () {
 
 $(document).on('click', '.search-btn', function () {
     UIWindowSearch();
+})
+
+// Wallet button - opens Account Sidebar
+$(document).on('click', '.wallet-btn', function () {
+    UIAccountSidebar();
 })
 
 $(document).on('click', '.toolbar-puter-logo', function () {

@@ -500,7 +500,45 @@ const en = {
         'window_folder_empty': 'This folder is empty',
 
         // Website Management
-        'manage_your_subdomains': 'Manage Your Subdomains'
+        'manage_your_subdomains': 'Manage Your Subdomains',
+
+        // Wallet / Account Sidebar
+        'wallet': 'Wallet',
+        'wallet_not_connected': 'Wallet Not Connected',
+        'please_connect_wallet': 'Please connect your wallet first.',
+        'total_balance': 'Total Balance',
+        'tokens': 'Tokens',
+        'history': 'History',
+        'send': 'Send',
+        'receive': 'Receive',
+        'send_tokens': 'Send Tokens',
+        'receive_tokens': 'Receive Tokens',
+        'token': 'Token',
+        'available': 'Available',
+        'recipient_address': 'Recipient Address',
+        'amount': 'Amount',
+        'estimated_fee': 'Estimated Fee',
+        'estimating': 'Estimating...',
+        'sending': 'Sending...',
+        'please_wait': 'Please wait for confirmation',
+        'transaction_sent': 'Transaction Sent',
+        'transaction_failed': 'Transaction Failed',
+        'invalid_address': 'Invalid address',
+        'insufficient_balance': 'Insufficient balance',
+        'no_tokens': 'No Tokens Found',
+        'tokens_will_appear': 'Your tokens will appear here',
+        'no_transactions': 'No Transactions Yet',
+        'transactions_will_appear': 'Your transaction history will appear here',
+        'copy_address': 'Copy Address',
+        'address_copied': 'Address Copied',
+        'copied': 'Copied!',
+        'click_to_copy': 'Click to copy',
+        'universal_account_address': 'Universal Account Address',
+        'wallet_address': 'Wallet Address',
+        'universal_account_info': 'This Universal Account address can receive tokens on any supported network. Funds are automatically unified across chains.',
+        'eoa_info': 'Send tokens to this address on the correct network to avoid loss of funds.',
+        'refresh': 'Refresh',
+        'close': 'Close'
     }
 };
 

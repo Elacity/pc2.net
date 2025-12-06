@@ -1,0 +1,649 @@
+/**
+ * Account Sidebar Styles
+ * Slide-out wallet panel with tokens, history, send/receive functionality
+ */
+
+/* ============================================
+   Sidebar Container & Animation
+   ============================================ */
+
+.account-sidebar {
+    position: fixed;
+    top: var(--toolbar-height, 45px);
+    right: -420px;
+    width: 400px;
+    height: calc(100vh - var(--toolbar-height, 45px));
+    background: var(--window-bg, rgba(255, 255, 255, 0.95));
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    box-shadow: -4px 0 20px rgba(0, 0, 0, 0.15);
+    z-index: 9998;
+    display: flex;
+    flex-direction: column;
+    transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border-left: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.account-sidebar.open {
+    right: 0;
+}
+
+.account-sidebar-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.3);
+    z-index: 9997;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.account-sidebar.open ~ .account-sidebar-backdrop,
+.account-sidebar-backdrop.visible {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* Close button */
+.account-sidebar-close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s ease;
+    z-index: 10;
+}
+
+.account-sidebar-close:hover {
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.account-sidebar-close img {
+    width: 16px;
+    height: 16px;
+    opacity: 0.6;
+}
+
+/* ============================================
+   Header Section
+   ============================================ */
+
+.account-sidebar-header {
+    padding: 24px 20px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    background: linear-gradient(180deg, rgba(59, 130, 246, 0.05) 0%, transparent 100%);
+}
+
+.account-sidebar-profile {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.account-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    font-weight: 600;
+    color: white;
+}
+
+.account-avatar img {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.account-address {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: rgba(0, 0, 0, 0.04);
+    border-radius: 20px;
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 13px;
+    color: #374151;
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.account-address:hover {
+    background: rgba(0, 0, 0, 0.08);
+}
+
+.account-address .copy-icon {
+    width: 14px;
+    height: 14px;
+    opacity: 0.5;
+}
+
+.account-address.copied {
+    background: rgba(34, 197, 94, 0.1);
+    color: #16a34a;
+}
+
+/* Balance Display */
+.account-balance {
+    text-align: center;
+    padding-top: 8px;
+}
+
+.balance-amount {
+    display: block;
+    font-size: 32px;
+    font-weight: 700;
+    color: #111827;
+    line-height: 1.2;
+}
+
+.balance-label {
+    display: block;
+    font-size: 13px;
+    color: #6b7280;
+    margin-top: 4px;
+}
+
+/* ============================================
+   Action Buttons
+   ============================================ */
+
+.account-sidebar-actions {
+    display: flex;
+    gap: 12px;
+    padding: 16px 20px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.action-btn {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 16px 12px;
+    border: none;
+    border-radius: 12px;
+    background: #3b82f6;
+    color: white;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.action-btn:hover {
+    background: #2563eb;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.action-btn:active {
+    transform: translateY(0);
+}
+
+.action-btn img {
+    width: 24px;
+    height: 24px;
+    filter: brightness(0) invert(1);
+}
+
+.action-btn.action-receive {
+    background: #10b981;
+}
+
+.action-btn.action-receive:hover {
+    background: #059669;
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+/* ============================================
+   Tab Navigation
+   ============================================ */
+
+.account-sidebar-tabs {
+    display: flex;
+    padding: 0 20px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    background: rgba(0, 0, 0, 0.02);
+}
+
+.sidebar-tab {
+    flex: 1;
+    padding: 14px 16px;
+    text-align: center;
+    font-size: 14px;
+    font-weight: 500;
+    color: #6b7280;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s ease;
+}
+
+.sidebar-tab:hover {
+    color: #374151;
+}
+
+.sidebar-tab.active {
+    color: #3b82f6;
+    border-bottom-color: #3b82f6;
+}
+
+/* ============================================
+   Tab Content
+   ============================================ */
+
+.account-sidebar-content {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.tab-content {
+    display: none;
+    height: 100%;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+/* ============================================
+   Tokens List
+   ============================================ */
+
+.tokens-list {
+    padding: 8px 0;
+}
+
+.token-row {
+    display: flex;
+    align-items: center;
+    padding: 12px 20px;
+    gap: 12px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.token-row:hover {
+    background: rgba(0, 0, 0, 0.03);
+}
+
+.token-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: #f3f4f6;
+    object-fit: contain;
+    flex-shrink: 0;
+}
+
+.token-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.token-symbol {
+    display: block;
+    font-size: 15px;
+    font-weight: 600;
+    color: #111827;
+}
+
+.token-network {
+    display: block;
+    font-size: 12px;
+    color: #9ca3af;
+    margin-top: 2px;
+}
+
+.token-balance {
+    text-align: right;
+    flex-shrink: 0;
+}
+
+.token-amount {
+    display: block;
+    font-size: 15px;
+    font-weight: 500;
+    color: #111827;
+}
+
+.token-usd {
+    display: block;
+    font-size: 12px;
+    color: #6b7280;
+    margin-top: 2px;
+}
+
+/* ============================================
+   History List
+   ============================================ */
+
+.history-list {
+    padding: 8px 0;
+}
+
+.history-row {
+    display: flex;
+    align-items: center;
+    padding: 12px 20px;
+    gap: 12px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.history-row:hover {
+    background: rgba(0, 0, 0, 0.03);
+}
+
+.tx-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.tx-icon.send {
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.tx-icon.send img {
+    filter: invert(27%) sepia(51%) saturate(2878%) hue-rotate(346deg) brightness(104%) contrast(97%);
+}
+
+.tx-icon.receive {
+    background: rgba(34, 197, 94, 0.1);
+}
+
+.tx-icon.receive img {
+    filter: invert(48%) sepia(79%) saturate(540%) hue-rotate(107deg) brightness(95%) contrast(92%);
+}
+
+.tx-icon img {
+    width: 20px;
+    height: 20px;
+}
+
+.tx-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.tx-type {
+    display: block;
+    font-size: 14px;
+    font-weight: 500;
+    color: #111827;
+}
+
+.tx-time {
+    display: block;
+    font-size: 12px;
+    color: #9ca3af;
+    margin-top: 2px;
+}
+
+.tx-amount {
+    font-size: 14px;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.tx-amount.send {
+    color: #ef4444;
+}
+
+.tx-amount.receive {
+    color: #22c55e;
+}
+
+.tx-status {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    text-transform: capitalize;
+}
+
+.tx-status.tx-pending {
+    background: rgba(234, 179, 8, 0.1);
+    color: #ca8a04;
+}
+
+.tx-status.tx-confirmed {
+    background: rgba(34, 197, 94, 0.1);
+    color: #16a34a;
+}
+
+.tx-status.tx-failed {
+    background: rgba(239, 68, 68, 0.1);
+    color: #dc2626;
+}
+
+/* ============================================
+   Empty States
+   ============================================ */
+
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 20px;
+    text-align: center;
+}
+
+.empty-state-icon {
+    width: 64px;
+    height: 64px;
+    margin-bottom: 16px;
+    opacity: 0.3;
+}
+
+.empty-state-title {
+    font-size: 16px;
+    font-weight: 500;
+    color: #374151;
+    margin-bottom: 8px;
+}
+
+.empty-state-text {
+    font-size: 14px;
+    color: #9ca3af;
+}
+
+/* ============================================
+   Loading States
+   ============================================ */
+
+.loading-skeleton {
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: skeleton-loading 1.5s infinite;
+    border-radius: 8px;
+}
+
+@keyframes skeleton-loading {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+.token-row.loading .token-icon {
+    background: #f0f0f0;
+}
+
+.token-row.loading .token-symbol,
+.token-row.loading .token-network,
+.token-row.loading .token-amount,
+.token-row.loading .token-usd {
+    height: 14px;
+    width: 60px;
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: skeleton-loading 1.5s infinite;
+    border-radius: 4px;
+}
+
+/* ============================================
+   Refresh Button
+   ============================================ */
+
+.refresh-btn {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.refresh-btn:hover {
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.refresh-btn img {
+    width: 16px;
+    height: 16px;
+    opacity: 0.6;
+}
+
+.refresh-btn.loading img {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* ============================================
+   Mobile Responsive
+   ============================================ */
+
+@media (max-width: 768px) {
+    .account-sidebar {
+        width: 100%;
+        right: -100%;
+    }
+    
+    .account-sidebar.open {
+        right: 0;
+    }
+}
+
+@media (max-width: 480px) {
+    .account-sidebar-header {
+        padding: 20px 16px;
+    }
+    
+    .account-sidebar-actions {
+        padding: 12px 16px;
+    }
+    
+    .token-row,
+    .history-row {
+        padding: 10px 16px;
+    }
+    
+    .balance-amount {
+        font-size: 28px;
+    }
+}
+
+/* ============================================
+   Dark Mode Support
+   ============================================ */
+
+@media (prefers-color-scheme: dark) {
+    .account-sidebar {
+        background: rgba(17, 24, 39, 0.95);
+        border-left-color: rgba(255, 255, 255, 0.1);
+    }
+    
+    .account-sidebar-header {
+        background: linear-gradient(180deg, rgba(59, 130, 246, 0.1) 0%, transparent 100%);
+        border-bottom-color: rgba(255, 255, 255, 0.08);
+    }
+    
+    .account-address {
+        background: rgba(255, 255, 255, 0.08);
+        color: #e5e7eb;
+    }
+    
+    .account-address:hover {
+        background: rgba(255, 255, 255, 0.12);
+    }
+    
+    .balance-amount {
+        color: #f9fafb;
+    }
+    
+    .balance-label {
+        color: #9ca3af;
+    }
+    
+    .account-sidebar-tabs {
+        background: rgba(255, 255, 255, 0.02);
+        border-bottom-color: rgba(255, 255, 255, 0.08);
+    }
+    
+    .sidebar-tab {
+        color: #9ca3af;
+    }
+    
+    .sidebar-tab:hover {
+        color: #e5e7eb;
+    }
+    
+    .token-row:hover,
+    .history-row:hover {
+        background: rgba(255, 255, 255, 0.05);
+    }
+    
+    .token-symbol,
+    .tx-type,
+    .token-amount {
+        color: #f9fafb;
+    }
+    
+    .account-sidebar-close {
+        background: rgba(255, 255, 255, 0.08);
+    }
+    
+    .account-sidebar-close:hover {
+        background: rgba(255, 255, 255, 0.15);
+    }
+    
+    .account-sidebar-close img {
+        filter: invert(1);
+    }
+}
+

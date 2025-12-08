@@ -11,7 +11,9 @@
  */
 
 import { getPC2Service } from '../services/PC2ConnectionService.js';
-import { logger } from '../helpers/logger.js';
+import { createLogger } from '../helpers/logger.js';
+
+const logger = createLogger('PC2Settings');
 
 /**
  * Opens the PC2 Settings panel

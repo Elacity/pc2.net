@@ -21,6 +21,7 @@ import UIWindowAccountSend from './UIWindowAccountSend.js';
 import UIWindowAccountReceive from './UIWindowAccountReceive.js';
 import UINotification from './UINotification.js';
 import walletService from '../services/WalletService.js';
+import { createLogger } from '../helpers/logger.js';
 import {
     truncateAddress,
     formatTokenBalance,
@@ -34,6 +35,8 @@ import {
     getTransactionTypeLabel,
 } from '../helpers/wallet.js';
 import { CHAIN_INFO } from '../helpers/particle-constants.js';
+
+const logger = createLogger('UIAccountSidebar');
 
 // Track sidebar instance and cleanup functions
 let sidebarInstance = null;
@@ -171,9 +174,17 @@ async function UIAccountSidebar(options = {}) {
                 align-items: center;
                 justify-content: center;
                 color: #fff;
+                transition: transform 0.2s ease;
             }
             .refresh-btn:hover {
                 background: rgba(255, 255, 255, 0.2);
+            }
+            .refresh-btn.loading svg {
+                animation: spin 1s linear infinite;
+            }
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
             }
             .account-sidebar-header {
                 padding: 60px 20px 20px;
@@ -215,6 +226,35 @@ async function UIAccountSidebar(options = {}) {
             }
             .account-address svg {
                 stroke: #9ca3af;
+            }
+            .solana-address-badge {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+            }
+            .solana-address-badge:hover {
+                background: linear-gradient(135deg,rgba(153,69,255,0.35),rgba(20,241,149,0.35)) !important;
+            }
+            .solana-address-badge svg {
+                stroke: #9ca3af;
+            }
+            .copy-btn {
+                cursor: pointer;
+                opacity: 0.7;
+                transition: opacity 0.2s, transform 0.2s;
+                display: inline-flex;
+                align-items: center;
+                padding: 2px;
+                border-radius: 4px;
+            }
+            .copy-btn:hover {
+                opacity: 1;
+                background: rgba(255, 255, 255, 0.1);
+                transform: scale(1.1);
+            }
+            .copy-btn svg {
+                width: 14px;
+                height: 14px;
             }
             .account-balance {
                 text-align: center;
@@ -412,6 +452,7 @@ async function UIAccountSidebar(options = {}) {
     const sendIcon = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>`;
     const receiveIcon = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg>`;
     const copyIcon = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
+    const externalLinkIcon = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>`;
     
     // Mode icons
     const universalIcon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>`;
@@ -433,7 +474,7 @@ async function UIAccountSidebar(options = {}) {
             </button>
             
             <!-- Refresh Button -->
-            <button class="refresh-btn" title="${i18n('refresh') || 'Refresh'}">
+            <button class="refresh-btn" title="${i18n('refresh') || 'Refresh balances'}">
                 ${refreshIcon}
             </button>
             
@@ -443,9 +484,15 @@ async function UIAccountSidebar(options = {}) {
                     <div class="account-avatar">
                         ${getAvatarContent(displayAddress)}
                     </div>
-                    <div class="account-address" data-address="${html_encode(displayAddress || '')}" title="${i18n('click_to_copy') || 'Click to copy'}">
-                        <span class="address-text">${truncateAddress(displayAddress || '0x0000...0000')}</span>
-                        ${copyIcon}
+                    <div class="account-addresses" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                        <div class="account-address" data-address="${html_encode(displayAddress || '')}" data-explorer-type="evm" title="Click to view on explorer">
+                            <span class="address-text">${truncateAddress(displayAddress || '0x0000...0000')}</span>
+                            <span class="copy-btn" title="Copy address">${copyIcon}</span>
+                        </div>
+                        <div class="solana-address-badge" id="solana-address-badge" data-address="" data-explorer-type="solana" title="Click to view on Solscan" style="display:none;background:linear-gradient(135deg,rgba(153,69,255,0.25),rgba(20,241,149,0.25));padding:6px 10px;border-radius:16px;font-size:12px;cursor:pointer;font-family:monospace;display:flex;align-items:center;gap:6px;">
+                            <span class="sol-addr-text" style="color:#e5e7eb;">Loading...</span>
+                            <span class="copy-btn" title="Copy address">${copyIcon}</span>
+                        </div>
                     </div>
                 </div>
                 
@@ -456,37 +503,37 @@ async function UIAccountSidebar(options = {}) {
             </div>
             
             <!-- Mode Toggle -->
-            <div class="wallet-mode-toggle">
-                <button class="mode-btn ${currentMode === 'universal' ? 'active' : ''}" data-mode="universal">
-                    <span class="mode-icon">${universalIcon}</span>
+            <div class="wallet-mode-toggle" role="group" aria-label="Wallet mode selection">
+                <button class="mode-btn ${currentMode === 'universal' ? 'active' : ''}" data-mode="universal" role="button" aria-pressed="${currentMode === 'universal'}" aria-label="Switch to Universal Account mode for multi-chain tokens">
+                    <span class="mode-icon" aria-hidden="true">${universalIcon}</span>
                     <span class="mode-label">Universal</span>
                 </button>
-                <button class="mode-btn elastos ${currentMode === 'elastos' ? 'active' : ''}" data-mode="elastos">
-                    <span class="mode-icon">${elastosIcon}</span>
+                <button class="mode-btn elastos ${currentMode === 'elastos' ? 'active' : ''}" data-mode="elastos" role="button" aria-pressed="${currentMode === 'elastos'}" aria-label="Switch to Elastos EOA mode for ELA tokens">
+                    <span class="mode-icon" aria-hidden="true">${elastosIcon}</span>
                     <span class="mode-label">Elastos</span>
                 </button>
             </div>
             
             <!-- Action Buttons -->
-            <div class="account-sidebar-actions">
-                <button class="action-btn action-send">
+            <div class="account-sidebar-actions" role="group" aria-label="Wallet actions">
+                <button class="action-btn action-send" role="button" aria-label="Send tokens to another wallet">
                     ${sendIcon}
                     <span>${i18n('send') || 'Send'}</span>
                 </button>
-                <button class="action-btn action-receive">
+                <button class="action-btn action-receive" role="button" aria-label="Receive tokens to your wallet">
                     ${receiveIcon}
                     <span>${i18n('receive') || 'Receive'}</span>
                 </button>
             </div>
             
             <!-- Tab Navigation -->
-            <div class="account-sidebar-tabs">
-                <div class="sidebar-tab active" data-tab="tokens">${i18n('tokens') || 'Tokens'}</div>
-                <div class="sidebar-tab" data-tab="history">${i18n('history') || 'History'}</div>
+            <div class="account-sidebar-tabs" role="tablist" aria-label="Wallet sections">
+                <div class="sidebar-tab active" data-tab="tokens" role="tab" aria-selected="true" tabindex="0">${i18n('tokens') || 'Tokens'}</div>
+                <div class="sidebar-tab" data-tab="history" role="tab" aria-selected="false" tabindex="-1">${i18n('history') || 'History'}</div>
             </div>
             
             <!-- Tab Content -->
-            <div class="account-sidebar-content">
+            <div class="account-sidebar-content" role="tabpanel" aria-label="Wallet content">
                 <div class="tab-content active" data-tab="tokens">
                     <div class="tokens-list">
                         ${renderTokensList(walletData.tokens)}
@@ -579,8 +626,11 @@ async function UIAccountSidebar(options = {}) {
             $sidebar.find('.account-address').attr('data-address', newAddress);
             $sidebar.find('.address-text').text(truncateAddress(newAddress));
             $sidebar.find('.account-avatar').html(getAvatarContent(newAddress));
+            
+            // Update Solana address visibility based on mode
+            updateSolanaAddressDisplay();
         } catch (error) {
-            console.error('[UIAccountSidebar]: Mode switch error:', error);
+            logger.error(' Mode switch error:', error);
         }
     });
     
@@ -601,36 +651,141 @@ async function UIAccountSidebar(options = {}) {
         }
     });
     
-    // Copy address
-    $sidebar.on('click', '.account-address', async function() {
-        const addr = $(this).data('address');
+    // Copy EVM address - only when clicking copy button
+    $sidebar.on('click', '.account-address .copy-btn', async function(e) {
+        e.stopPropagation(); // Prevent opening explorer
+        
+        const $parent = $(this).closest('.account-address');
+        const addr = $parent.data('address');
         const success = await copyToClipboard(addr);
         
         if (success) {
-            $(this).addClass('copied');
-            $(this).find('.address-text').text(i18n('copied') || 'Copied!');
+            $parent.addClass('copied');
+            $parent.find('.address-text').text(i18n('copied') || 'Copied!');
             
             setTimeout(() => {
-                $(this).removeClass('copied');
-                $(this).find('.address-text').text(truncateAddress(addr));
+                $parent.removeClass('copied');
+                $parent.find('.address-text').text(truncateAddress(addr));
             }, 2000);
         }
     });
     
-    // Refresh button
+    // Click EVM address container → Open explorer
+    $sidebar.on('click', '.account-address', function(e) {
+        // Skip if clicking copy button (handled above)
+        if ($(e.target).closest('.copy-btn').length) return;
+        
+        const currentMode = walletService.getMode();
+        let url = null;
+        
+        if (currentMode === 'elastos') {
+            // Elastos EOA mode → Elastos Explorer
+            const eoaAddress = walletService.getEOAAddress();
+            if (eoaAddress) {
+                url = `https://esc.elastos.io/address/${eoaAddress}`;
+            }
+        } else {
+            // Universal mode → DeBank for Smart Wallet
+            const smartAddress = walletService.getSmartAccountAddress();
+            if (smartAddress) {
+                url = `https://debank.com/profile/${smartAddress.toLowerCase()}`;
+            }
+        }
+        
+        if (url) {
+            logger.log('Opening explorer:', url);
+            window.open(url, '_blank');
+        }
+    });
+    
+    // Copy Solana address - only when clicking copy button
+    $sidebar.on('click', '.solana-address-badge .copy-btn', async function(e) {
+        e.stopPropagation(); // Prevent opening explorer
+        
+        const $parent = $(this).closest('.solana-address-badge');
+        const addr = $parent.data('address');
+        if (!addr) return;
+        
+        const success = await copyToClipboard(addr);
+        
+        if (success) {
+            $parent.addClass('copied');
+            $parent.find('.sol-addr-text').text(i18n('copied') || 'Copied!');
+            
+            setTimeout(() => {
+                $parent.removeClass('copied');
+                $parent.find('.sol-addr-text').text(truncateAddress(addr, 4, 4));
+            }, 2000);
+        }
+    });
+    
+    // Click Solana address container → Open Solscan
+    $sidebar.on('click', '.solana-address-badge', function(e) {
+        // Skip if clicking copy button (handled above)
+        if ($(e.target).closest('.copy-btn').length) return;
+        
+        const solanaAddress = $(this).data('address');
+        if (solanaAddress) {
+            const url = `https://solscan.io/account/${solanaAddress}`;
+            logger.log('Opening Solscan:', url);
+            window.open(url, '_blank');
+        }
+    });
+    
+    // Update Solana address display based on mode and availability
+    function updateSolanaAddressDisplay() {
+        const mode = walletService.getMode();
+        const solanaAddr = walletService.getSolanaAddress?.() || window.user?.solana_smart_account_address;
+        const $badge = $sidebar.find('#solana-address-badge');
+        
+        if (mode === 'universal' && solanaAddr) {
+            $badge.data('address', solanaAddr);
+            $badge.find('.sol-addr-text').text(truncateAddress(solanaAddr, 4, 4));
+            $badge.show();
+        } else {
+            $badge.hide();
+        }
+    }
+    
+    // Initial Solana address update
+    updateSolanaAddressDisplay();
+    
+    // Refresh button - follows Elacity pattern
     $sidebar.on('click', '.refresh-btn', async function() {
         const $btn = $(this);
-        if ($btn.hasClass('loading')) return;
+        if ($btn.hasClass('loading')) return; // Prevent concurrent refreshes
         
         $btn.addClass('loading');
+        logger.log(' Refreshing balances...');
         
         try {
-            await Promise.all([
-                walletService.refreshTokens(),
-                walletService.refreshTransactions(),
-            ]);
+            // Refresh tokens (calls Particle API getPrimaryAssets)
+            await walletService.refreshTokens();
+            
+            // Also refresh transactions
+            await walletService.refreshTransactions();
+            
+            // Get updated data and refresh UI
+            const newData = walletService.getData();
+            
+            // Update balance display
+            $sidebar.find('.balance-amount').text(formatUSD(newData.totalBalance || 0));
+            
+            // Update token list
+            const $tokenList = $sidebar.find('.token-list');
+            if ($tokenList.length && newData.tokens?.length > 0) {
+                $tokenList.html(renderTokenList(newData.tokens));
+            }
+            
+            // Update Solana address display
+            updateSolanaAddressDisplay();
+            
+            logger.log(' Balances refreshed successfully', {
+                totalBalance: newData.totalBalance,
+                tokensCount: newData.tokens?.length
+            });
         } catch (error) {
-            console.error('[AccountSidebar]: Refresh error:', error);
+            logger.error(' Refresh error:', error);
         } finally {
             $btn.removeClass('loading');
         }
@@ -651,28 +806,39 @@ async function UIAccountSidebar(options = {}) {
     $sidebar.on('click', '.history-row', async function() {
         const transactionId = $(this).data('transaction-id');
         const chainId = $(this).data('chain-id');
+        const currentMode = walletService.getMode();
         
         if (!transactionId) {
-            console.log('[UIAccountSidebar]: No transaction ID for click');
+            logger.log('No transaction ID for click');
             return;
         }
         
-        console.log('[UIAccountSidebar]: Fetching transaction details:', transactionId);
+        logger.log('Transaction click:', { transactionId, chainId, mode: currentMode });
         
         // Show loading state
         const $row = $(this);
         $row.css('opacity', '0.5');
         
         try {
-            // Fetch full transaction details to get blockchain tx hash
+            // For Elastos EOA mode, the transactionId IS the blockchain hash
+            // No need to call Particle API - open explorer directly
+            if (currentMode === 'elastos' && chainId === 20) {
+                const url = `https://esc.elastos.io/tx/${transactionId}`;
+                logger.log('Opening Elastos explorer:', url);
+                window.open(url, '_blank');
+                $row.css('opacity', '1');
+                return;
+            }
+            
+            // For Universal Account mode, fetch details from Particle
             const details = await walletService.getTransactionDetails(transactionId);
             
-            console.log('[UIAccountSidebar]: Transaction details:', details);
+            logger.log('Transaction details:', details);
             
             if (details.blockchainTxHash) {
                 const explorerChainId = details.chainId || chainId;
                 const url = getExplorerUrl(explorerChainId, details.blockchainTxHash, 'tx');
-                console.log('[UIAccountSidebar]: Opening explorer:', url);
+                logger.log('Opening explorer:', url);
                 window.open(url, '_blank');
             } else {
                 // No blockchain tx hash yet - show notification
@@ -686,7 +852,7 @@ async function UIAccountSidebar(options = {}) {
                 });
             }
         } catch (error) {
-            console.error('[UIAccountSidebar]: Failed to get transaction details:', error);
+            logger.error('Failed to get transaction details:', error);
             import('./UINotification.js').then(({ default: UINotification }) => {
                 UINotification({
                     icon: window.icons['warning.svg'],
@@ -706,7 +872,7 @@ async function UIAccountSidebar(options = {}) {
     
     // Subscribe to wallet data updates - store for cleanup
     walletUnsubscribe = walletService.subscribe((data) => {
-        console.log('[UIAccountSidebar]: Received wallet update:', {
+        logger.log(' Received wallet update:', {
             mode: data.mode,
             totalBalance: data.totalBalance,
             tokensCount: data.tokens?.length,
@@ -728,7 +894,7 @@ async function UIAccountSidebar(options = {}) {
         } else {
             formattedBalance = formatUSD(data.totalBalance);
         }
-        console.log('[UIAccountSidebar]: Setting balance to:', formattedBalance);
+        logger.log(' Setting balance to:', formattedBalance);
         $sidebar.find('.balance-amount').text(formattedBalance);
         
         // Update address display
@@ -856,7 +1022,6 @@ function renderTokensList(tokens) {
         'BNB': 'images/tokens/BNB.png',
         'SOL': 'images/tokens/Sol.webp',
         'BTC': 'images/tokens/BTC.svg',
-        'MNT': 'images/tokens/MNT.webp',
         'MATIC': 'images/tokens/ETH.png', // Fallback to ETH style
     };
     
@@ -991,10 +1156,11 @@ function renderHistoryList(transactions) {
             </div>
         ` : '';
         
-        // Chain name with icon inline
+        // Chain name with icon inline - use shortName if available for compact display
+        const displayChainName = chainInfo?.shortName || chainInfo?.name || '';
         const chainNameHtml = chainInfo ? `
             <span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:#6b7280;">
-                • <img src="${html_encode(chainInfo.icon)}" style="width:12px;height:12px;border-radius:50%;" onerror="this.style.display='none';" />${html_encode(chainInfo.name)}
+                • <img src="${html_encode(chainInfo.icon)}" style="width:12px;height:12px;border-radius:50%;" onerror="this.style.display='none';" />${html_encode(displayChainName)}
             </span>
         ` : '';
         

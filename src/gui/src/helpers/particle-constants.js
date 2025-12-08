@@ -76,7 +76,8 @@ export const CHAIN_INFO = {
         color: '#121212',
     },
     20: {
-        name: 'Elastos',
+        name: 'Elastos Smart Chain',
+        shortName: 'ESC',
         icon: 'https://static.particle.network/token-list/elastos/native.png',
         explorer: 'https://esc.elastos.io',
         chainType: 'evm',
@@ -88,6 +89,7 @@ export const CHAIN_INFO = {
  * Available networks for Universal Account transfers
  */
 export const AVAILABLE_NETWORKS = [
+    { name: 'Elastos Smart Chain', chainId: 20, chainType: 'evm' },
     { name: 'Base', chainId: 8453, chainType: 'evm' },
     { name: 'Ethereum', chainId: 1, chainType: 'evm' },
     { name: 'Arbitrum', chainId: 42161, chainType: 'evm' },
@@ -104,9 +106,10 @@ export const AVAILABLE_NETWORKS = [
  * Only these token/chain combinations work with Universal Account
  */
 export const PARTICLE_SUPPORTED_TOKENS = {
+    'Elastos Smart Chain': ['ELA'],
     'Solana': ['USDC', 'USDT', 'SOL'],
     'Ethereum': ['USDC', 'USDT', 'ETH', 'BTC'],
-    'Base': ['USDC', 'ETH', 'BTC'],
+    'Base': ['USDC', 'ETH', 'BTC', 'ELA'],
     'BNB Chain': ['USDC', 'USDT', 'ETH', 'BTC', 'BNB'],
     'Arbitrum': ['USDC', 'USDT', 'ETH', 'BTC'],
     'Optimism': ['USDC', 'USDT', 'ETH', 'BTC'],
@@ -121,6 +124,11 @@ export const PARTICLE_SUPPORTED_TOKENS = {
  * Native tokens use 0x0000000000000000000000000000000000000000
  */
 export const PARTICLE_CURRENCY_MAP = {
+    'Elastos Smart Chain': {
+        'ela': '0x0000000000000000000000000000000000000000', // Native ELA
+        'usdc': '0xA06be0F5950781cE28D965E5EFc6996e88a8C141', // USDC on Elastos
+        'eth': '0x802c3e839E4fDb10aF583E3E759239ec7703501e', // Wrapped ETH on Elastos
+    },
     'Solana': {
         'sol': '0x0000000000000000000000000000000000000000',
         'usdc': 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
@@ -190,21 +198,20 @@ export const TOKEN_NAMES = {
     'bnb': 'BNB',
     'pol': 'Polygon',
     'avax': 'Avalanche',
-    'mnt': 'Mantle',
 };
 
 /**
  * Token icons
  */
 export const TOKEN_ICONS = {
-    'usdc': 'https://static.particle.network/token-list/ethereum/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48.png',
-    'usdt': 'https://static.particle.network/token-list/ethereum/0xdAC17F958D2ee523a2206206994597C13D831ec7.png',
-    'eth': 'https://static.particle.network/token-list/ethereum/native.png',
-    'btc': 'https://static.particle.network/token-list/ethereum/0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599.png',
-    'sol': 'https://static.particle.network/token-list/solana/native.png',
-    'bnb': 'https://static.particle.network/token-list/bsc/native.png',
-    'pol': 'https://static.particle.network/token-list/polygon/native.png',
-    'avax': 'https://static.particle.network/token-list/avalanche/native.png',
+    // Use local images to avoid CORS issues with Particle Network CDN
+    'usdc': '/images/tokens/USDC.png',
+    'usdt': '/images/tokens/USDT.png',
+    'eth': '/images/tokens/ETH.png',
+    'btc': '/images/tokens/BTC.svg',
+    'sol': '/images/tokens/Sol.webp',
+    'bnb': '/images/tokens/BNB.png',
+    'ela': '/images/tokens/ELA.png',
 };
 
 // ============================================
@@ -227,16 +234,28 @@ export function getChainInfo(chainId) {
 
 /**
  * Get available networks for a specific token
- * Filters networks based on which chains support the token
+ * Filters networks based on which chains support the token and wallet mode
  * @param {string} tokenSymbol - Token symbol (e.g., "USDC")
+ * @param {string} [mode] - Wallet mode: 'universal' or 'elastos'. If 'elastos', only Elastos chain is shown. If 'universal', Elastos is excluded.
  * @returns {Array} Array of network objects that support this token
  */
-export function getAvailableNetworksForToken(tokenSymbol) {
+export function getAvailableNetworksForToken(tokenSymbol, mode = null) {
     const tokenUpper = tokenSymbol?.toUpperCase() || '';
     
-    return AVAILABLE_NETWORKS.filter((network) =>
+    let networks = AVAILABLE_NETWORKS.filter((network) =>
         PARTICLE_SUPPORTED_TOKENS[network.name]?.includes(tokenUpper)
     );
+    
+    // Filter based on wallet mode
+    if (mode === 'elastos') {
+        // Elastos mode: only show Elastos Smart Chain
+        networks = networks.filter(n => n.name === 'Elastos Smart Chain');
+    } else if (mode === 'universal') {
+        // Universal mode: exclude Elastos Smart Chain (Universal Account doesn't support it)
+        networks = networks.filter(n => n.name !== 'Elastos Smart Chain');
+    }
+    
+    return networks;
 }
 
 /**

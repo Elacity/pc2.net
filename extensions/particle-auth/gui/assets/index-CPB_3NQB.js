@@ -1,1 +1,0 @@
-import{b4 as c,r as a,b5 as f}from"./index-CblDMsYf.js";var s=function(n,r,e){e===void 0&&(e={});var u=c(n),t=a.useRef(null),i=a.useCallback(function(){t.current&&clearInterval(t.current)},[]);return a.useEffect(function(){if(!(!f(r)||r<0))return e.immediate&&u(),t.current=setInterval(u,r),i},[r,e.immediate]),i};export{s as u};

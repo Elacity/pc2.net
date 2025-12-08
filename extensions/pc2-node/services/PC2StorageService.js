@@ -3,8 +3,27 @@
  *
  * PC2 Storage Service
  * 
- * Bridges PC2 authentication with IPFS storage.
- * Ensures files are encrypted with wallet-derived keys and stored on IPFS.
+ * @deprecated This service is DEPRECATED. Use IPFSProvider instead.
+ * 
+ * The IPFSProvider (extensions/ipfs-storage/providers/IPFSProvider.js) now provides
+ * all storage functionality with proper integration into Puter's filesystem.
+ * It supports:
+ * - Wallet-based isolation (same as this service)
+ * - AES-256-GCM encryption (same as this service)
+ * - Direct integration with puter.fs.* API and file explorer
+ * 
+ * To enable IPFS storage, configure mountpoints in pc2.json config:
+ * {
+ *   "services": {
+ *     "mountpoint": {
+ *       "mountpoints": {
+ *         "/": { "mounter": "ipfs", "options": { "nodeUrl": "http://localhost:5001" } }
+ *       }
+ *     }
+ *   }
+ * }
+ * 
+ * This file is kept for reference only.
  */
 
 const crypto = require('crypto');

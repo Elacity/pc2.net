@@ -24,47 +24,79 @@ extension.on('preinit', event => {
 extension.on('init', async event => {
     extension.log.info('[PC2 Node]: Initialization started');
     
+    // PC2 Node extension is for standalone PC2 deployments.
+    // In the main Puter instance, we just log that it's loaded but don't initialize.
+    // The PC2 tables and functionality are only used when running as a personal cloud.
+    
     const config = extension.config || {};
     
-    // Check if this is first run (no owner yet)
-    const db = extension.services.get('database');
-    const nodeConfig = await db.read('SELECT * FROM pc2_config LIMIT 1');
+    // Check if PC2 mode is enabled via config
+    if (!config.pc2_enabled) {
+        extension.log.info('[PC2 Node]: PC2 mode not enabled. Extension loaded but inactive.');
+        extension.log.info('[PC2 Node]: To enable, set pc2_enabled: true in config.');
+        return;
+    }
     
-    if (nodeConfig.length === 0) {
-        // First run - generate setup token
-        const setupToken = crypto.randomBytes(32).toString('hex');
-        const tokenHash = crypto.createHash('sha256').update(setupToken).digest('hex');
-        const now = Math.floor(Date.now() / 1000);
+    try {
+        // Use extension data API
+        const { db } = extension.import('data');
         
-        await db.write(
-            `INSERT INTO pc2_config (node_name, setup_token_hash, setup_token_used, node_status, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?)`,
-            [config.node_name || 'My PC2', tokenHash, 0, 'AWAITING_OWNER', now, now]
-        );
+        // Create PC2 tables if they don't exist
+        await db.write(`
+            CREATE TABLE IF NOT EXISTS pc2_config (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                node_name VARCHAR(255) DEFAULT 'My PC2',
+                owner_wallet_address VARCHAR(42),
+                setup_token_hash VARCHAR(64),
+                setup_token_used INTEGER DEFAULT 0,
+                node_status VARCHAR(20) DEFAULT 'AWAITING_OWNER',
+                created_at INTEGER,
+                updated_at INTEGER
+            )
+        `);
         
-        // Display setup token prominently
-        console.log('\n');
-        console.log('═'.repeat(70));
-        console.log('║' + ' '.repeat(68) + '║');
-        console.log('║' + '  🔐 PC2 SETUP TOKEN - SAVE THIS! SHOWN ONLY ONCE!  '.padEnd(68) + '║');
-        console.log('║' + ' '.repeat(68) + '║');
-        console.log('═'.repeat(70));
-        console.log('║' + ' '.repeat(68) + '║');
-        console.log('║' + `  PC2-SETUP-${setupToken}  `.padEnd(68) + '║');
-        console.log('║' + ' '.repeat(68) + '║');
-        console.log('═'.repeat(70));
-        console.log('║' + ' '.repeat(68) + '║');
-        console.log('║' + '  Use this token to claim ownership from the browser.  '.padEnd(68) + '║');
-        console.log('║' + '  Without this token, no one can access your PC2 node.  '.padEnd(68) + '║');
-        console.log('║' + ' '.repeat(68) + '║');
-        console.log('═'.repeat(70));
-        console.log('\n');
+        // Check if this is first run (no owner yet)
+        const nodeConfig = await db.read('SELECT * FROM pc2_config LIMIT 1');
         
-        extension.log.info('[PC2 Node]: Setup token generated. Awaiting owner claim.');
-    } else if (nodeConfig[0].node_status === 'AWAITING_OWNER') {
-        extension.log.info('[PC2 Node]: Awaiting owner to claim node with setup token.');
-    } else {
-        extension.log.info('[PC2 Node]: Node is owned by ' + nodeConfig[0].owner_wallet_address);
+        if (!nodeConfig || nodeConfig.length === 0) {
+            // First run - generate setup token
+            const setupToken = crypto.randomBytes(32).toString('hex');
+            const tokenHash = crypto.createHash('sha256').update(setupToken).digest('hex');
+            const now = Math.floor(Date.now() / 1000);
+            
+            await db.write(
+                `INSERT INTO pc2_config (node_name, setup_token_hash, setup_token_used, node_status, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?)`,
+                [config.node_name || 'My PC2', tokenHash, 0, 'AWAITING_OWNER', now, now]
+            );
+            
+            // Display setup token prominently
+            console.log('\n');
+            console.log('═'.repeat(70));
+            console.log('║' + ' '.repeat(68) + '║');
+            console.log('║' + '  🔐 PC2 SETUP TOKEN - SAVE THIS! SHOWN ONLY ONCE!  '.padEnd(68) + '║');
+            console.log('║' + ' '.repeat(68) + '║');
+            console.log('═'.repeat(70));
+            console.log('║' + ' '.repeat(68) + '║');
+            console.log('║' + `  PC2-SETUP-${setupToken}  `.padEnd(68) + '║');
+            console.log('║' + ' '.repeat(68) + '║');
+            console.log('═'.repeat(70));
+            console.log('║' + ' '.repeat(68) + '║');
+            console.log('║' + '  Use this token to claim ownership from the browser.  '.padEnd(68) + '║');
+            console.log('║' + '  Without this token, no one can access your PC2 node.  '.padEnd(68) + '║');
+            console.log('║' + ' '.repeat(68) + '║');
+            console.log('═'.repeat(70));
+            console.log('\n');
+            
+            extension.log.info('[PC2 Node]: Setup token generated. Awaiting owner claim.');
+        } else if (nodeConfig[0].node_status === 'AWAITING_OWNER') {
+            extension.log.info('[PC2 Node]: Awaiting owner to claim node with setup token.');
+        } else {
+            extension.log.info('[PC2 Node]: Node is owned by ' + nodeConfig[0].owner_wallet_address);
+        }
+    } catch (error) {
+        extension.log.error('[PC2 Node]: Failed to initialize:', error.message);
+        extension.log.info('[PC2 Node]: PC2 features will be unavailable.');
     }
 });
 

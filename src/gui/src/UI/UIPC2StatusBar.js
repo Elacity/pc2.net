@@ -29,6 +29,11 @@ function initPC2StatusBar() {
                     display: flex;
                     align-items: center;
                     margin-left: 20px;
+                    z-index: 10001;
+                }
+                
+                .pc2-status-container:hover {
+                    z-index: 10002;
                 }
 
                 .pc2-status-bar {
@@ -140,18 +145,19 @@ function initPC2StatusBar() {
 
                 /* Dropdown Menu - positioned below for top toolbar */
                 .pc2-status-dropdown {
-                    position: absolute;
-                    top: 100%;
-                    right: 0;
-                    margin-top: 8px;
+                    position: fixed;
+                    top: 40px;
+                    right: auto;
+                    margin-top: 0;
                     background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
-                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    border: 1px solid rgba(255, 255, 255, 0.15);
                     border-radius: 12px;
                     min-width: 280px;
                     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
-                    z-index: 10000;
+                    z-index: 100000;
                     overflow: hidden;
                     display: none;
+                    transform: translateX(-50%);
                 }
 
                 .pc2-status-dropdown.visible {
@@ -368,7 +374,17 @@ function initPC2StatusBar() {
         // Toggle dropdown
         $statusBar.on('click', (e) => {
             e.stopPropagation();
+            e.preventDefault();
+            
+            // Position the dropdown below the icon
+            const rect = $statusBar[0].getBoundingClientRect();
+            $dropdown.css({
+                top: rect.bottom + 8 + 'px',
+                left: rect.left + (rect.width / 2) + 'px'
+            });
+            
             $dropdown.toggleClass('visible');
+            logger.log('[PC2]: Dropdown toggled', $dropdown.hasClass('visible'));
         });
 
         // Close dropdown when clicking outside

@@ -44,6 +44,7 @@ import item_icon from "../helpers/item_icon.js"
 import UIWindowSearch from "./UIWindowSearch.js"
 import UIAccountSidebar from "./UIAccountSidebar.js"
 import walletService from "../services/WalletService.js"
+import initPC2StatusBar from "./UIPC2StatusBar.js"
 
 async function UIDesktop(options) {
     let h = '';
@@ -757,6 +758,14 @@ async function UIDesktop(options) {
     // ---------------------------------------------------------------
     await UITaskbar();
     console.log('[UIDesktop]: UITaskbar completed');
+
+    // ---------------------------------------------------------------
+    // PC2 Status Bar - Shows connection status in taskbar
+    // ---------------------------------------------------------------
+    if (window.user?.wallet_address) {
+        console.log('[UIDesktop]: Initializing PC2 status bar');
+        initPC2StatusBar();
+    }
 
     // Update desktop dimensions after taskbar is initialized with position
     window.update_desktop_dimensions_for_taskbar();

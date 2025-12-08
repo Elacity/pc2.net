@@ -9,7 +9,9 @@
 
 import { getPC2Service } from '../services/PC2ConnectionService.js';
 import UIPC2SetupWizard from './UIPC2SetupWizard.js';
-import { logger } from '../helpers/logger.js';
+import { createLogger } from '../helpers/logger.js';
+
+const logger = createLogger('PC2StatusBar');
 
 /**
  * Initialize the PC2 status bar component

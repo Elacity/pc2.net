@@ -7,7 +7,9 @@
  * Handles ownership claiming, authentication, and API proxying.
  */
 
-import { logger } from '../helpers/logger.js';
+import { createLogger } from '../helpers/logger.js';
+
+const logger = createLogger('PC2');
 
 /**
  * @typedef {Object} PC2Config

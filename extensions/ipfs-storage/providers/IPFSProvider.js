@@ -89,13 +89,26 @@ class IPFSProvider {
     /**
      * Quick check if an entry exists by UUID/CID
      */
-    async quick_check({ selector }) {
+    async quick_check({ selector, context }) {
         if (!(selector instanceof NodeUIDSelector)) {
             return false;
         }
         
         try {
             const { db } = extension.import('data');
+            
+            // If context available, use user isolation
+            if (context) {
+                const userIdentifier = this._getUserIdentifier(context);
+                const userWhere = this._buildUserWhereClause(userIdentifier);
+                const rows = await db.read(
+                    `SELECT id FROM ipfs_files WHERE cid = ? AND ${userWhere.clause} LIMIT 1`,
+                    [selector.value, ...userWhere.params]
+                );
+                return rows && rows.length > 0;
+            }
+            
+            // Fallback to global check
             const rows = await db.read(
                 'SELECT id FROM ipfs_files WHERE cid = ? LIMIT 1',
                 [selector.value]
@@ -106,8 +119,12 @@ class IPFSProvider {
         }
     }
     
-    async stat({ selector }) {
+    async stat({ selector, context }) {
         const { db } = extension.import('data');
+        
+        // Get user identifier for isolation
+        const userIdentifier = context ? this._getUserIdentifier(context) : { type: 'user_id', value: 1 };
+        const userWhere = this._buildUserWhereClause(userIdentifier);
         
         let path;
         let entry = null;
@@ -130,20 +147,20 @@ class IPFSProvider {
                 };
             }
             
-            // Check ipfs_files first
+            // Check ipfs_files first - with user isolation
             let files = await db.read(
-                'SELECT * FROM ipfs_files WHERE file_path = ? LIMIT 1',
-                [path]
+                `SELECT * FROM ipfs_files WHERE file_path = ? AND ${userWhere.clause} LIMIT 1`,
+                [path, ...userWhere.params]
             );
             
             // Auto-create system folders if they don't exist
             if ((!files || !files[0]) && path === '/system') {
                 this.log?.info(`Auto-creating system folder: ${path}`);
-                await this._createSystemFolder(db, path);
+                await this._createSystemFolder(db, path, userIdentifier);
                 
                 files = await db.read(
-                    'SELECT * FROM ipfs_files WHERE file_path = ? LIMIT 1',
-                    [path]
+                    `SELECT * FROM ipfs_files WHERE file_path = ? AND ${userWhere.clause} LIMIT 1`,
+                    [path, ...userWhere.params]
                 );
             }
             
@@ -152,22 +169,22 @@ class IPFSProvider {
                 // This is a top-level folder (user home like /0x123...)
                 const username = path.substring(1);
                 this.log?.info(`Auto-creating user home folder: ${path}`);
-                await this._createUserHome(db, username, path);
+                await this._createUserHome(db, username, path, userIdentifier);
                 
                 files = await db.read(
-                    'SELECT * FROM ipfs_files WHERE file_path = ? LIMIT 1',
-                    [path]
+                    `SELECT * FROM ipfs_files WHERE file_path = ? AND ${userWhere.clause} LIMIT 1`,
+                    [path, ...userWhere.params]
                 );
             }
             
             // Auto-create standard subfolders (Pictures, Documents, etc.)
             if ((!files || !files[0]) && path.match(/^\/[^\/]+\/(Desktop|Documents|Pictures|Videos|Public)$/)) {
                 this.log?.info(`Auto-creating standard folder: ${path}`);
-                await this._createStandardFolder(db, path);
+                await this._createStandardFolder(db, path, userIdentifier);
                 
                 files = await db.read(
-                    'SELECT * FROM ipfs_files WHERE file_path = ? LIMIT 1',
-                    [path]
+                    `SELECT * FROM ipfs_files WHERE file_path = ? AND ${userWhere.clause} LIMIT 1`,
+                    [path, ...userWhere.params]
                 );
             }
             
@@ -201,9 +218,10 @@ class IPFSProvider {
                 };
             }
             
+            // Query by CID with user isolation
             const files = await db.read(
-                'SELECT * FROM ipfs_files WHERE cid = ? LIMIT 1',
-                [selector.value]
+                `SELECT * FROM ipfs_files WHERE cid = ? AND ${userWhere.clause} LIMIT 1`,
+                [selector.value, ...userWhere.params]
             );
             
             if (files && files[0]) {
@@ -225,64 +243,79 @@ class IPFSProvider {
         return entry;
     }
     
-    async _createSystemFolder(db, path) {
+    async _createSystemFolder(db, path, userIdentifier) {
         const now = Date.now();
-        const systemCid = 'QmSystem' + crypto.createHash('sha256').update('system').digest('hex').substring(0, 38);
+        const userKey = userIdentifier.type === 'wallet' ? userIdentifier.value : String(userIdentifier.value);
+        const systemCid = 'QmSystem' + crypto.createHash('sha256').update('system' + userKey).digest('hex').substring(0, 38);
+        
+        // Insert with both user_id and wallet_address for compatibility
+        const userId = userIdentifier.type === 'user_id' ? userIdentifier.value : 1;
+        const walletAddress = userIdentifier.type === 'wallet' ? userIdentifier.value : null;
         
         await db.write(
             `INSERT OR IGNORE INTO ipfs_files 
-            (user_id, file_path, file_name, cid, parent_cid, file_size, is_dir, is_encrypted, is_pinned, created_at, updated_at) 
+            (user_id, wallet_address, file_path, file_name, cid, parent_cid, file_size, is_dir, is_encrypted, is_pinned, created_at, updated_at) 
             VALUES (?, ?, ?, ?, 'root', 0, 1, 0, 0, ?, ?)`,
-            [1, path, 'system', systemCid, now, now]
+            [userId, walletAddress, path, 'system', systemCid, now, now]
         );
     }
     
-    async _createUserHome(db, username, path) {
+    async _createUserHome(db, username, path, userIdentifier) {
         const now = Date.now();
-        const homeCid = 'QmHome' + crypto.createHash('sha256').update(username).digest('hex').substring(0, 40);
+        const userKey = userIdentifier.type === 'wallet' ? userIdentifier.value : String(userIdentifier.value);
+        const homeCid = 'QmHome' + crypto.createHash('sha256').update(username + userKey).digest('hex').substring(0, 40);
+        
+        const userId = userIdentifier.type === 'user_id' ? userIdentifier.value : 1;
+        const walletAddress = userIdentifier.type === 'wallet' ? userIdentifier.value : null;
         
         await db.write(
             `INSERT OR IGNORE INTO ipfs_files 
-            (user_id, file_path, file_name, cid, parent_cid, file_size, is_dir, is_encrypted, is_pinned, created_at, updated_at) 
+            (user_id, wallet_address, file_path, file_name, cid, parent_cid, file_size, is_dir, is_encrypted, is_pinned, created_at, updated_at) 
             VALUES (?, ?, ?, ?, 'root', 0, 1, 0, 0, ?, ?)`,
-            [1, path, username, homeCid, now, now]
+            [userId, walletAddress, path, username, homeCid, now, now]
         );
         
         // Create standard subfolders
         const folders = ['Desktop', 'Documents', 'Pictures', 'Videos', 'Public'];
         for (const folder of folders) {
             const folderPath = `${path}/${folder}`;
-            const folderCid = 'QmDir' + crypto.createHash('sha256').update(folderPath).digest('hex').substring(0, 41);
+            const folderCid = 'QmDir' + crypto.createHash('sha256').update(folderPath + userKey).digest('hex').substring(0, 41);
             
             await db.write(
                 `INSERT OR IGNORE INTO ipfs_files 
-                (user_id, file_path, file_name, cid, parent_cid, file_size, is_dir, is_encrypted, is_pinned, created_at, updated_at) 
+                (user_id, wallet_address, file_path, file_name, cid, parent_cid, file_size, is_dir, is_encrypted, is_pinned, created_at, updated_at) 
                 VALUES (?, ?, ?, ?, ?, 0, 1, 0, 0, ?, ?)`,
-                [1, folderPath, folder, folderCid, homeCid, now, now]
+                [userId, walletAddress, folderPath, folder, folderCid, homeCid, now, now]
             );
         }
     }
     
-    async _createStandardFolder(db, path) {
+    async _createStandardFolder(db, path, userIdentifier) {
         const parts = path.split('/');
         const folderName = parts.pop();
         const parentPath = parts.join('/');
         const now = Date.now();
         
-        // Get parent CID
+        const userWhere = this._buildUserWhereClause(userIdentifier);
+        const userKey = userIdentifier.type === 'wallet' ? userIdentifier.value : String(userIdentifier.value);
+        
+        // Get parent CID with user isolation
         const parent = await db.read(
-            'SELECT cid FROM ipfs_files WHERE file_path = ? LIMIT 1',
-            [parentPath]
+            `SELECT cid FROM ipfs_files WHERE file_path = ? AND ${userWhere.clause} LIMIT 1`,
+            [parentPath, ...userWhere.params]
         );
         const parentCid = parent && parent[0] ? parent[0].cid : 'root';
         
-        const folderCid = 'QmDir' + crypto.createHash('sha256').update(path).digest('hex').substring(0, 41);
+        const folderCid = 'QmDir' + crypto.createHash('sha256').update(path + userKey).digest('hex').substring(0, 41);
+        
+        const userId = userIdentifier.type === 'user_id' ? userIdentifier.value : 1;
+        const walletAddress = userIdentifier.type === 'wallet' ? userIdentifier.value : null;
         
         await db.write(
             `INSERT OR IGNORE INTO ipfs_files 
-            (user_id, file_path, file_name, cid, parent_cid, file_size, is_dir, is_encrypted, is_pinned, created_at, updated_at) 
+            (user_id, wallet_address, file_path, file_name, cid, parent_cid, file_size, is_dir, is_encrypted, is_pinned, created_at, updated_at) 
             VALUES (?, ?, ?, ?, ?, 0, 1, 0, 0, ?, ?)`,
-            [1, path, folderName, folderCid, parentCid, now, now]
+            [userId, walletAddress, path, folderName, folderCid, parentCid, now, now]
         );
     }
 
@@ -290,14 +323,16 @@ class IPFSProvider {
      * Create a new file (required for uploads)
      */
     async write_new({ context, parent, name, file }) {
-        const parentEntry = await this.stat({ selector: parent.selector });
+        const parentEntry = await this.stat({ selector: parent.selector, context });
         if (!parentEntry) {
             throw new Error('Parent directory does not exist');
         }
         
         const fullPath = _path.join(parentEntry.path, name);
         const isPublic = fullPath.includes('/Public/');
-        const userId = this._getCurrentUserId(context);
+        const userIdentifier = this._getUserIdentifier(context);
+        const userId = userIdentifier.type === 'user_id' ? userIdentifier.value : 1;
+        const walletAddress = userIdentifier.type === 'wallet' ? userIdentifier.value : null;
         
         this.log?.info(`Creating new file: ${fullPath}`);
         
@@ -333,10 +368,11 @@ class IPFSProvider {
         
         await db.write(
             `INSERT INTO ipfs_files 
-            (user_id, file_path, file_name, cid, parent_cid, file_size, mime_type, is_dir, is_encrypted, is_pinned, created_at, updated_at) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, 1, ?, ?)`,
+            (user_id, wallet_address, file_path, file_name, cid, parent_cid, file_size, mime_type, is_dir, is_encrypted, is_pinned, created_at, updated_at) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 1, ?, ?)`,
             [
                 userId,
+                walletAddress,
                 fullPath,
                 name,
                 cidString,
@@ -359,13 +395,14 @@ class IPFSProvider {
      * Overwrite an existing file
      */
     async write_overwrite({ context, node, file }) {
-        const entry = await this.stat({ selector: node.selector });
+        const entry = await this.stat({ selector: node.selector, context });
         if (!entry) {
             throw new Error('File does not exist');
         }
         
         const isPublic = entry.path.includes('/Public/');
-        const userId = this._getCurrentUserId(context);
+        const userIdentifier = this._getUserIdentifier(context);
+        const userWhere = this._buildUserWhereClause(userIdentifier);
         
         this.log?.info(`Overwriting file: ${entry.path}`);
         
@@ -409,14 +446,14 @@ class IPFSProvider {
         await db.write(
             `UPDATE ipfs_files 
             SET cid = ?, file_size = ?, is_encrypted = ?, updated_at = ?
-            WHERE file_path = ? AND user_id = ?`,
+            WHERE file_path = ? AND ${userWhere.clause}`,
             [
                 newCidString,
                 buffer.length,
                 !isPublic && buffer.length > 0 ? 1 : 0,
                 now,
                 entry.path,
-                userId
+                ...userWhere.params
             ]
         );
         
@@ -426,7 +463,7 @@ class IPFSProvider {
     }
     
     async read({ context, node }) {
-        const entry = await this.stat({ selector: node.selector });
+        const entry = await this.stat({ selector: node.selector, context });
         if (!entry) {
             return null;
         }
@@ -453,17 +490,19 @@ class IPFSProvider {
     }
     
     async readdir({ context, node }) {
-        const entry = await this.stat({ selector: node.selector });
+        const entry = await this.stat({ selector: node.selector, context });
         if (!entry) {
             return [];
         }
         
         const { db } = extension.import('data');
+        const userIdentifier = this._getUserIdentifier(context);
+        const userWhere = this._buildUserWhereClause(userIdentifier);
         
-        // Get direct children
+        // Get direct children with user isolation
         const children = await db.read(
-            `SELECT cid FROM ipfs_files WHERE parent_cid = ?`,
-            [entry.uid]
+            `SELECT cid FROM ipfs_files WHERE parent_cid = ? AND ${userWhere.clause}`,
+            [entry.uid, ...userWhere.params]
         );
         
         return children.map(c => c.cid);
@@ -473,19 +512,22 @@ class IPFSProvider {
      * Create a directory
      */
     async mkdir({ context, parent, name }) {
-        const parentEntry = await this.stat({ selector: parent.selector });
+        const parentEntry = await this.stat({ selector: parent.selector, context });
         if (!parentEntry) {
             throw new Error('Parent directory does not exist');
         }
         
         const fullPath = _path.join(parentEntry.path, name);
-        const userId = this._getCurrentUserId(context);
+        const userIdentifier = this._getUserIdentifier(context);
+        const userId = userIdentifier.type === 'user_id' ? userIdentifier.value : 1;
+        const walletAddress = userIdentifier.type === 'wallet' ? userIdentifier.value : null;
+        const userKey = walletAddress || String(userId);
         
         this.log?.info(`Creating directory: ${fullPath}`);
         
-        // Generate a unique CID for the directory (hash of path + timestamp)
+        // Generate a unique CID for the directory (hash of path + timestamp + user)
         const dirId = crypto.createHash('sha256')
-            .update(fullPath + Date.now())
+            .update(fullPath + Date.now() + userKey)
             .digest('hex')
             .substring(0, 46);
         const dirCid = 'Qm' + dirId; // Fake CID format for directories
@@ -496,10 +538,11 @@ class IPFSProvider {
         
         await db.write(
             `INSERT INTO ipfs_files 
-            (user_id, file_path, file_name, cid, parent_cid, file_size, is_dir, is_encrypted, is_pinned, created_at, updated_at) 
-            VALUES (?, ?, ?, ?, ?, 0, 1, 0, 0, ?, ?)`,
+            (user_id, wallet_address, file_path, file_name, cid, parent_cid, file_size, is_dir, is_encrypted, is_pinned, created_at, updated_at) 
+            VALUES (?, ?, ?, ?, ?, ?, 0, 1, 0, 0, ?, ?)`,
             [
                 userId,
+                walletAddress,
                 fullPath,
                 name,
                 dirCid,
@@ -533,13 +576,44 @@ class IPFSProvider {
             if (context) {
                 const actor = context.get('actor');
                 if (actor && actor.type && actor.type.user) {
+                    // PC2 uses wallet_address for decentralized identity
                     return actor.type.user.wallet_address || actor.type.user.username;
                 }
             }
         } catch (e) {
             // Ignore
         }
-        return '0x0000000000000000000000000000000000000000';
+        return null; // Return null if no wallet - will fall back to user_id
+    }
+    
+    /**
+     * Get the current user identifier for database queries
+     * Uses wallet_address for PC2 mode, falls back to user_id
+     */
+    _getUserIdentifier(context) {
+        const walletAddress = this._getWalletAddress(context);
+        if (walletAddress && walletAddress.startsWith('0x')) {
+            return { type: 'wallet', value: walletAddress.toLowerCase() };
+        }
+        return { type: 'user_id', value: this._getCurrentUserId(context) };
+    }
+    
+    /**
+     * Build SQL WHERE clause for user isolation
+     * @param {object} identifier - Result from _getUserIdentifier
+     * @returns {object} { clause: string, params: array }
+     */
+    _buildUserWhereClause(identifier) {
+        if (identifier.type === 'wallet') {
+            return {
+                clause: 'wallet_address = ?',
+                params: [identifier.value]
+            };
+        }
+        return {
+            clause: 'user_id = ?',
+            params: [identifier.value]
+        };
     }
     
     _encryptFile(buffer, context) {

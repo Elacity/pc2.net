@@ -1,0 +1,27 @@
+{
+    "config_name": "PC2 - Personal Cloud Compute",
+    "$imports": ["config.json"],
+    
+    "_comment": "PC2 Configuration - Copy to volatile/config/pc2.json to use",
+    "_usage": "Start with: PUTER_CONFIG_PROFILE=pc2 npm start",
+    
+    "services": {
+        "mountpoint": {
+            "mountpoints": {
+                "/": {
+                    "mounter": "ipfs",
+                    "options": {
+                        "nodeUrl": "http://localhost:5001"
+                    }
+                }
+            }
+        }
+    },
+    
+    "pc2": {
+        "enabled": true,
+        "ipfs_node_url": "http://localhost:5001",
+        "storage_mode": "ipfs"
+    }
+}
+

@@ -449,6 +449,16 @@ class PC2GatewayService {
                 [uuid, shortAddress, walletAddress.toLowerCase(), now]
             );
         }
+
+        // Initialize storage for this wallet
+        try {
+            const storageService = this.services.get('pc2-storage');
+            if (storageService) {
+                await storageService.initializeWalletStorage(walletAddress);
+            }
+        } catch (e) {
+            console.warn('[PC2 Gateway]: Could not initialize storage:', e.message);
+        }
     }
 
     async _getUserForWallet(wallet) {

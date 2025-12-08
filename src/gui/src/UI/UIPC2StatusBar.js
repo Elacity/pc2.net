@@ -25,28 +25,30 @@ function initPC2StatusBar() {
         $('head').append(`
             <style id="pc2-status-styles">
                 .pc2-status-bar {
+                    position: relative;
                     display: flex;
                     align-items: center;
-                    gap: 6px;
-                    padding: 4px 10px;
-                    background: rgba(255, 255, 255, 0.08);
-                    border: 1px solid rgba(255, 255, 255, 0.15);
-                    border-radius: 16px;
+                    justify-content: center;
+                    width: 18px;
+                    height: 18px;
                     cursor: pointer;
                     transition: all 0.2s;
-                    margin-right: 8px;
-                    height: 24px;
+                    margin: 0 4px;
+                    opacity: 0.8;
                 }
 
                 .pc2-status-bar:hover {
-                    background: rgba(255, 255, 255, 0.15);
-                    border-color: rgba(255, 255, 255, 0.25);
+                    opacity: 1;
                 }
 
                 .pc2-status-indicator {
-                    width: 8px;
-                    height: 8px;
+                    position: absolute;
+                    bottom: -2px;
+                    right: -2px;
+                    width: 7px;
+                    height: 7px;
                     border-radius: 50%;
+                    border: 1.5px solid #1a1a2e;
                     transition: all 0.3s;
                 }
 
@@ -61,7 +63,7 @@ function initPC2StatusBar() {
 
                 .pc2-status-indicator.connected {
                     background: #4ade80;
-                    box-shadow: 0 0 8px rgba(74, 222, 128, 0.5);
+                    box-shadow: 0 0 6px rgba(74, 222, 128, 0.6);
                 }
 
                 .pc2-status-indicator.error {
@@ -74,18 +76,13 @@ function initPC2StatusBar() {
                 }
 
                 .pc2-status-text {
-                    font-size: 12px;
-                    color: rgba(255, 255, 255, 0.8);
-                    white-space: nowrap;
-                    max-width: 150px;
-                    overflow: hidden;
-                    text-overflow: ellipsis;
+                    display: none;
                 }
 
                 .pc2-status-icon {
-                    width: 16px;
-                    height: 16px;
-                    color: rgba(255, 255, 255, 0.6);
+                    width: 18px;
+                    height: 18px;
+                    color: rgba(255, 255, 255, 0.8);
                 }
 
                 /* Dropdown Menu - positioned below for top toolbar */
@@ -204,15 +201,14 @@ function initPC2StatusBar() {
         `);
     }
 
-    // Create status bar element
+    // Create status bar element - cloud icon with status dot
     const createStatusBar = () => {
         return $(`
-            <div class="pc2-status-bar" role="button" aria-label="PC2 Connection Status" tabindex="0">
-                <div class="pc2-status-indicator disconnected"></div>
-                <span class="pc2-status-text">Not Connected</span>
-                <svg class="pc2-status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+            <div class="pc2-status-bar" role="button" aria-label="PC2 Connection Status" tabindex="0" title="Personal Cloud (Not Connected)">
+                <svg class="pc2-status-icon" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM19 18H6c-2.21 0-4-1.79-4-4s1.79-4 4-4h.71C7.37 7.69 9.48 6 12 6c3.04 0 5.5 2.46 5.5 5.5v.5H19c1.66 0 3 1.34 3 3s-1.34 3-3 3z"/>
                 </svg>
+                <div class="pc2-status-indicator disconnected"></div>
             </div>
         `);
     };
@@ -338,7 +334,6 @@ function initPC2StatusBar() {
         // Update status display
         const updateStatus = (status, error) => {
             const $indicator = $statusBar.find('.pc2-status-indicator');
-            const $text = $statusBar.find('.pc2-status-text');
             const $connectionInfo = $dropdown.find('.pc2-connection-info');
             const $connectBtn = $dropdown.find('.pc2-connect-btn');
             const $disconnectBtn = $dropdown.find('.pc2-disconnect-btn');
@@ -349,7 +344,7 @@ function initPC2StatusBar() {
             switch (status) {
                 case 'connected':
                     const session = pc2Service.getSession();
-                    $text.text(session?.nodeName || 'Connected');
+                    $statusBar.attr('title', `Personal Cloud (${session?.nodeName || 'Connected'})`);
                     $connectionInfo.show().removeClass('error');
                     $connectionInfo.find('.pc2-connection-status-text').text('Connected');
                     $connectionInfo.find('.pc2-connection-url').text(pc2Service.getNodeUrl() || '');
@@ -358,13 +353,13 @@ function initPC2StatusBar() {
                     $disconnectBtn.show();
                     break;
                 case 'connecting':
-                    $text.text('Connecting...');
+                    $statusBar.attr('title', 'Personal Cloud (Connecting...)');
                     $connectionInfo.hide();
                     $connectBtn.hide();
                     $disconnectBtn.hide();
                     break;
                 case 'error':
-                    $text.text('Error');
+                    $statusBar.attr('title', `Personal Cloud (${error || 'Error'})`);
                     $connectionInfo.show().addClass('error');
                     $connectionInfo.find('.pc2-connection-status-text').text(error || 'Connection Error');
                     $connectionInfo.find('.pc2-status-indicator').removeClass('connected').addClass('error');
@@ -372,7 +367,7 @@ function initPC2StatusBar() {
                     $disconnectBtn.hide();
                     break;
                 default:
-                    $text.text('Not Connected');
+                    $statusBar.attr('title', 'Personal Cloud (Not Connected)');
                     $connectionInfo.hide();
                     $connectBtn.show();
                     $disconnectBtn.hide();

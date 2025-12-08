@@ -26,78 +26,50 @@ function initPC2StatusBar() {
     if (!$('#pc2-status-styles').length) {
         $('head').append(`
             <style id="pc2-status-styles">
-                .pc2-status-container {
-                    display: flex;
-                    align-items: center;
-                    margin-left: 20px;
-                }
-
-                .pc2-status-bar {
-                    position: relative;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    width: 17px;
-                    height: 17px;
-                    cursor: pointer;
-                    transition: all 0.2s;
-                    opacity: 0.8;
-                }
-
-                .pc2-status-bar:hover {
-                    opacity: 1;
-                }
-
                 .pc2-status-indicator {
                     position: absolute;
-                    bottom: -2px;
-                    right: -2px;
-                    width: 7px;
-                    height: 7px;
+                    bottom: -1px;
+                    right: -1px;
+                    width: 6px;
+                    height: 6px;
                     border-radius: 50%;
-                    border: 1.5px solid rgba(0, 0, 0, 0.3);
+                    border: 1px solid #222;
                     transition: all 0.3s;
+                    z-index: 1;
                 }
 
                 .pc2-status-indicator.disconnected {
-                    background: #6b7280;
+                    background: #f59e0b;
                 }
 
                 .pc2-status-indicator.connecting {
-                    background: #fbbf24;
+                    background: #f59e0b;
                     animation: pc2Pulse 1s ease-in-out infinite;
                 }
 
                 .pc2-status-indicator.connected {
-                    background: #4ade80;
-                    box-shadow: 0 0 6px rgba(74, 222, 128, 0.6);
+                    background: #22c55e;
                 }
 
                 .pc2-status-indicator.error {
-                    background: #f87171;
+                    background: #ef4444;
                 }
 
                 @keyframes pc2Pulse {
                     0%, 100% { opacity: 1; }
                     50% { opacity: 0.5; }
                 }
-
-                .pc2-status-icon {
-                    width: 17px;
-                    height: 17px;
-                    color: rgba(255, 255, 255, 0.8);
-                }
             </style>
         `);
     }
 
-    // Create status bar element - cloud icon with status dot
+    // Create cloud icon SVG as data URI (matching toolbar button style)
+    const cloudIconSvg = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM19 18H6c-2.21 0-4-1.79-4-4s1.79-4 4-4h.71C7.37 7.69 9.48 6 12 6c3.04 0 5.5 2.46 5.5 5.5v.5H19c1.66 0 3 1.34 3 3s-1.34 3-3 3z"/></svg>')}`;
+
+    // Create status bar element - using toolbar-btn class for consistent sizing/spacing
     const createStatusBar = () => {
         return $(`
-            <div class="pc2-status-bar toolbar-btn" role="button" aria-label="PC2 Connection Status" tabindex="0" title="Personal Cloud (Not Connected)">
-                <svg class="pc2-status-icon" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM19 18H6c-2.21 0-4-1.79-4-4s1.79-4 4-4h.71C7.37 7.69 9.48 6 12 6c3.04 0 5.5 2.46 5.5 5.5v.5H19c1.66 0 3 1.34 3 3s-1.34 3-3 3z"/>
-                </svg>
+            <div class="pc2-status-bar toolbar-btn" role="button" aria-label="PC2 Connection Status" tabindex="0" title="Personal Cloud (Not Connected)" style="background-image: url('${cloudIconSvg}'); position: relative;">
                 <div class="pc2-status-indicator disconnected"></div>
             </div>
         `);
@@ -113,29 +85,27 @@ function initPC2StatusBar() {
         const session = pc2Service.getSession?.() || {};
         const stats = pc2Service.getStats?.() || {};
 
-        // Status info with icon
-        const statusColor = currentStatus === 'connected' ? '#4ade80' : 
-                           currentStatus === 'connecting' ? '#fbbf24' : 
-                           currentStatus === 'error' ? '#f87171' : '#6b7280';
+        // Status dot color: orange if not connected, green if connected
+        const dotColor = currentStatus === 'connected' ? '#22c55e' : '#f59e0b';
         const statusText = currentStatus === 'connected' ? 'Connected' :
                           currentStatus === 'connecting' ? 'Connecting...' :
                           currentStatus === 'error' ? (currentError || 'Error') : 'Not Connected';
 
         items.push({
             html: `Personal Cloud`,
-            icon: `<svg style="width:16px; height:16px; opacity: 0.7;" viewBox="0 0 24 24" fill="currentColor"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/></svg>`,
+            icon: `<svg style="width:16px; height:16px;" viewBox="0 0 24 24" fill="currentColor"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/></svg>`,
             disabled: true
         });
 
         items.push({
-            html: `<span style="color: ${statusColor};">${statusText}</span>`,
-            icon: `<div style="width: 8px; height: 8px; border-radius: 50%; background: ${statusColor}; margin: 4px;"></div>`,
+            html: statusText,
+            icon: `<div style="width: 8px; height: 8px; border-radius: 50%; background: ${dotColor}; margin: 4px;"></div>`,
             disabled: true
         });
 
         if (currentStatus === 'connected' && session.nodeName) {
             items.push({
-                html: `<span style="font-size: 11px; opacity: 0.6;">Node: ${session.nodeName}</span>`,
+                html: `Node: ${session.nodeName}`,
                 disabled: true
             });
         }
@@ -181,7 +151,6 @@ function initPC2StatusBar() {
     const insertStatusBar = () => {
         // Remove existing
         $('.pc2-status-bar').remove();
-        $('.pc2-status-container').remove();
         
         // Find toolbar (top bar)
         const $toolbar = $('.toolbar');
@@ -193,21 +162,19 @@ function initPC2StatusBar() {
 
         const $statusBar = createStatusBar();
 
-        // Wrap in container (for spacing)
-        const $container = $('<div class="pc2-status-container"></div>');
-        $container.append($statusBar);
+        // Just use the statusBar directly (toolbar-btn has proper spacing)
 
         // Insert after the toolbar-spacer and before search button
         const $searchBtn = $toolbar.find('.search-btn');
         if ($searchBtn.length > 0) {
-            $searchBtn.before($container);
+            $searchBtn.before($statusBar);
         } else {
             // Fallback: insert before clock
             const $clock = $toolbar.find('#clock');
             if ($clock.length > 0) {
-                $clock.before($container);
+                $clock.before($statusBar);
             } else {
-                $toolbar.append($container);
+                $toolbar.append($statusBar);
             }
         }
 

@@ -1,0 +1,17 @@
+{
+  "name": "@elastos/pc2-node",
+  "version": "1.0.0",
+  "description": "PC2 Personal Cloud Node Extension - Secure decentralized personal cloud",
+  "main": "main.js",
+  "author": "Elacity",
+  "license": "AGPL-3.0",
+  "dependencies": {
+    "ethers": "^6.9.0",
+    "ws": "^8.14.2"
+  },
+  "peerDependencies": {
+    "@heyputer/backend": "*"
+  }
+}
+
+

@@ -109,6 +109,27 @@ CREATE TABLE IF NOT EXISTS `pc2_failed_auth` (
     `created_at` INTEGER NOT NULL
 );
 
+-- IPFS File Storage
+-- Tracks files stored in IPFS with wallet-based encryption
+CREATE TABLE IF NOT EXISTS `pc2_files` (
+    `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+    `wallet_address` VARCHAR(42) NOT NULL,
+    `file_path` TEXT NOT NULL,
+    `file_name` VARCHAR(255) NOT NULL,
+    `cid` VARCHAR(100),
+    `parent_cid` VARCHAR(100),
+    `file_size` INTEGER DEFAULT 0,
+    `mime_type` VARCHAR(100) DEFAULT 'application/octet-stream',
+    `is_dir` BOOLEAN DEFAULT 0,
+    `is_encrypted` BOOLEAN DEFAULT 1,
+    `is_pinned` BOOLEAN DEFAULT 1,
+    `encryption_nonce` TEXT,
+    `created_at` INTEGER NOT NULL,
+    `updated_at` INTEGER NOT NULL,
+    
+    UNIQUE(`wallet_address`, `file_path`)
+);
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS `idx_tethered_wallet` ON `pc2_tethered_wallets` (`wallet_address_lower`);
 CREATE INDEX IF NOT EXISTS `idx_tethered_active` ON `pc2_tethered_wallets` (`is_active`, `wallet_address_lower`);
@@ -118,5 +139,9 @@ CREATE INDEX IF NOT EXISTS `idx_session_expiry` ON `pc2_sessions` (`expires_at`)
 CREATE INDEX IF NOT EXISTS `idx_audit_wallet` ON `pc2_audit_log` (`wallet_address`, `created_at`);
 CREATE INDEX IF NOT EXISTS `idx_audit_action` ON `pc2_audit_log` (`action`, `created_at`);
 CREATE INDEX IF NOT EXISTS `idx_failed_auth_ip` ON `pc2_failed_auth` (`ip_address`, `created_at`);
+CREATE INDEX IF NOT EXISTS `idx_pc2_files_wallet` ON `pc2_files` (`wallet_address`);
+CREATE INDEX IF NOT EXISTS `idx_pc2_files_path` ON `pc2_files` (`wallet_address`, `file_path`);
+CREATE INDEX IF NOT EXISTS `idx_pc2_files_parent` ON `pc2_files` (`parent_cid`);
+CREATE INDEX IF NOT EXISTS `idx_pc2_files_cid` ON `pc2_files` (`cid`);
 
 

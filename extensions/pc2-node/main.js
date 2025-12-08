@@ -6,6 +6,12 @@
  * This extension enables secure, decentralized personal cloud connectivity.
  * Users can tether their wallet identity to their personal PC2 node and
  * access their cloud from anywhere in the world.
+ * 
+ * Features:
+ * - Wallet-based authentication (EOA signature)
+ * - IPFS decentralized storage
+ * - Wallet-derived file encryption
+ * - Secure WebSocket tunnel for remote access
  */
 
 const crypto = require('crypto');
@@ -67,15 +73,21 @@ extension.on('install.routes', event => {
     extension.log.info('[PC2 Node]: Registering routes');
     
     const { PC2Routes } = require('./routes/pc2');
+    const { StorageRoutes } = require('./routes/storage');
+    
     event.router.use('/pc2', PC2Routes);
+    event.router.use('/pc2/storage', StorageRoutes);
 });
 
-// Register the PC2 Gateway service
+// Register the PC2 services
 extension.on('install.services', event => {
     extension.log.info('[PC2 Node]: Registering services');
     
     const { PC2GatewayService } = require('./services/PC2GatewayService');
+    const { PC2StorageService } = require('./services/PC2StorageService');
+    
     event.services.registerService('pc2-gateway', PC2GatewayService);
+    event.services.registerService('pc2-storage', PC2StorageService);
 });
 
 // Grant permissions

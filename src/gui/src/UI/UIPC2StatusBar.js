@@ -29,15 +29,18 @@ function initPC2StatusBar() {
                     align-items: center;
                     gap: 6px;
                     padding: 4px 10px;
-                    background: rgba(255, 255, 255, 0.05);
-                    border-radius: 6px;
+                    background: rgba(255, 255, 255, 0.08);
+                    border: 1px solid rgba(255, 255, 255, 0.15);
+                    border-radius: 16px;
                     cursor: pointer;
                     transition: all 0.2s;
-                    margin-left: 8px;
+                    margin-right: 8px;
+                    height: 24px;
                 }
 
                 .pc2-status-bar:hover {
-                    background: rgba(255, 255, 255, 0.1);
+                    background: rgba(255, 255, 255, 0.15);
+                    border-color: rgba(255, 255, 255, 0.25);
                 }
 
                 .pc2-status-indicator {
@@ -85,12 +88,12 @@ function initPC2StatusBar() {
                     color: rgba(255, 255, 255, 0.6);
                 }
 
-                /* Dropdown Menu */
+                /* Dropdown Menu - positioned below for top toolbar */
                 .pc2-status-dropdown {
                     position: absolute;
-                    bottom: 100%;
+                    top: 100%;
                     right: 0;
-                    margin-bottom: 8px;
+                    margin-top: 8px;
                     background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
                     border: 1px solid rgba(255, 255, 255, 0.1);
                     border-radius: 12px;
@@ -103,11 +106,11 @@ function initPC2StatusBar() {
 
                 .pc2-status-dropdown.visible {
                     display: block;
-                    animation: pc2SlideUp 0.2s ease;
+                    animation: pc2SlideDown 0.2s ease;
                 }
 
-                @keyframes pc2SlideUp {
-                    from { opacity: 0; transform: translateY(10px); }
+                @keyframes pc2SlideDown {
+                    from { opacity: 0; transform: translateY(-10px); }
                     to { opacity: 1; transform: translateY(0); }
                 }
 
@@ -254,14 +257,15 @@ function initPC2StatusBar() {
         `);
     };
 
-    // Insert status bar into taskbar
+    // Insert status bar into top toolbar
     const insertStatusBar = () => {
         // Remove existing
         $('.pc2-status-bar').remove();
+        $('.pc2-status-container').remove();
         
-        // Find taskbar
-        const $taskbar = $('.taskbar');
-        if ($taskbar.length === 0) {
+        // Find toolbar (top bar)
+        const $toolbar = $('.toolbar');
+        if ($toolbar.length === 0) {
             // Try again later
             setTimeout(insertStatusBar, 1000);
             return;
@@ -271,16 +275,22 @@ function initPC2StatusBar() {
         const $dropdown = createDropdown();
 
         // Wrap in relative container
-        const $container = $('<div style="position: relative;"></div>');
+        const $container = $('<div class="pc2-status-container" style="position: relative; display: flex; align-items: center;"></div>');
         $container.append($statusBar);
         $container.append($dropdown);
 
-        // Insert before the clock if possible
-        const $clock = $taskbar.find('.clock');
-        if ($clock.length > 0) {
-            $clock.before($container);
+        // Insert after the toolbar-spacer and before search button
+        const $searchBtn = $toolbar.find('.search-btn');
+        if ($searchBtn.length > 0) {
+            $searchBtn.before($container);
         } else {
-            $taskbar.append($container);
+            // Fallback: insert before clock
+            const $clock = $toolbar.find('#clock');
+            if ($clock.length > 0) {
+                $clock.before($container);
+            } else {
+                $toolbar.append($container);
+            }
         }
 
         // Toggle dropdown

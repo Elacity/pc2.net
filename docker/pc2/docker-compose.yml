@@ -1,0 +1,99 @@
+# ElastOS PC2 - Docker Compose Configuration
+# 
+# Quick Start:
+#   docker-compose up -d
+#
+# First Run:
+#   1. Watch the logs for your setup token: docker-compose logs -f pc2
+#   2. Copy the PC2-SETUP-xxxxx token
+#   3. Open http://localhost:4100 in your browser
+#   4. Connect your wallet and enter the setup token
+#
+# Persistent Data:
+#   All data is stored in ./data directory
+#
+# Ports:
+#   4100 - Web interface
+#   4200 - WebSocket tunnel
+#   4001 - IPFS P2P (optional, for P2P file sharing)
+
+version: '3.8'
+
+services:
+  pc2:
+    build:
+      context: ../..
+      dockerfile: docker/pc2/Dockerfile
+    image: elastos/pc2:latest
+    container_name: pc2-node
+    restart: unless-stopped
+    
+    ports:
+      # Web interface - change left side to customize host port
+      - "4100:4100"
+      # WebSocket tunnel
+      - "4200:4200"
+      # IPFS P2P (optional - uncomment for P2P file sharing)
+      # - "4001:4001"
+    
+    volumes:
+      # Persistent data storage
+      - ./data:/data
+    
+    environment:
+      # Node configuration
+      - NODE_ENV=production
+      - PC2_PORT=4100
+      - PC2_WS_PORT=4200
+      
+      # Node name (shown in browser)
+      - PC2_NODE_NAME=My Personal Cloud
+      
+      # IPFS configuration
+      - IPFS_PROFILE=server
+      
+      # Optional: External URL (for production deployments)
+      # - PC2_PUBLIC_URL=https://my-pc2.example.com
+      
+      # Optional: Enable debug logging
+      # - DEBUG=true
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4100/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    # Resource limits (adjust based on your hardware)
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Optional: Watchtower for automatic updates
+  # Uncomment to enable automatic updates when new versions are released
+  # watchtower:
+  #   image: containrrr/watchtower
+  #   container_name: pc2-watchtower
+  #   restart: unless-stopped
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #   command: --interval 86400 pc2-node
+  #   environment:
+  #     - WATCHTOWER_CLEANUP=true
+
+networks:
+  default:
+    name: pc2-network
+

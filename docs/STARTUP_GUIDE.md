@@ -76,16 +76,19 @@ cd ../..
 ### Step 4: Configure Environment / 第四步：配置环境
 
 ```bash
-# Create .env file / 创建 .env 文件
-cat > .env << 'EOF'
-PARTICLE_PROJECT_ID=your_project_id
-PARTICLE_CLIENT_KEY=your_client_key
-PARTICLE_APP_ID=your_app_id
+# Create Particle Auth .env file (credentials already provided)
+# 创建 Particle Auth .env 文件（凭证已提供）
+cat > submodules/particle-auth/.env << 'EOF'
+VITE_PARTICLE_PROJECT_ID=01cdbdd6-b07e-45b5-81ca-7036e45dff0d
+VITE_PARTICLE_CLIENT_KEY=cMSSRMUCgciyuStuvPg2FSLKSovXDmrbvknJJnLU
+VITE_PARTICLE_APP_ID=1567a90d-9ff3-459a-bca8-d264685482cb
+VITE_WALLETCONNECT_PROJECT_ID=1bdbe1354abcf233007b7ce4f2b91886
+VITE_PUTER_API_URL=http://api.puter.localhost:4100
 EOF
 ```
 
-See [docs/ENV_SETUP.md](./ENV_SETUP.md) for how to get Particle credentials.  
-参见 [docs/ENV_SETUP.md](./ENV_SETUP.md) 了解如何获取 Particle 凭证。
+See [docs/ENV_SETUP.md](./ENV_SETUP.md) for more details.  
+更多详情参见 [docs/ENV_SETUP.md](./ENV_SETUP.md)。
 
 ### Step 5: Start Server / 第五步：启动服务器
 

@@ -115,9 +115,9 @@ async function UIPC2SetupWizard(options = {}) {
         </div>
 
         <div class="pc2-wizard-footer" style="display: flex; justify-content: flex-end; gap: 10px; padding: 16px 24px; border-top: 1px solid #eee; background: #fafafa;">
-            <button class="pc2-btn-cancel button button-default" style="padding: 8px 20px;">Cancel</button>
-            <button class="pc2-btn-back button button-default" style="padding: 8px 20px; display: none;">Back</button>
-            <button class="pc2-btn-next button button-primary" style="padding: 8px 20px;">
+            <button class="pc2-btn-cancel button button-default">Cancel</button>
+            <button class="pc2-btn-back button button-default" style="display: none;">Back</button>
+            <button class="pc2-btn-next button button-primary">
                 <span class="pc2-btn-text">Next</span>
                 <span class="pc2-btn-loading" style="display: none;">...</span>
             </button>

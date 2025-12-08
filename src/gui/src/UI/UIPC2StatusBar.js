@@ -25,15 +25,9 @@ function initPC2StatusBar() {
         $('head').append(`
             <style id="pc2-status-styles">
                 .pc2-status-container {
-                    position: relative;
                     display: flex;
                     align-items: center;
                     margin-left: 20px;
-                    z-index: 10001;
-                }
-                
-                .pc2-status-container:hover {
-                    z-index: 10002;
                 }
 
                 .pc2-status-bar {
@@ -352,10 +346,9 @@ function initPC2StatusBar() {
         const $statusBar = createStatusBar();
         const $dropdown = createDropdown();
 
-        // Wrap in relative container
-        const $container = $('<div class="pc2-status-container" style="position: relative; display: flex; align-items: center;"></div>');
+        // Wrap in container (for spacing)
+        const $container = $('<div class="pc2-status-container"></div>');
         $container.append($statusBar);
-        $container.append($dropdown);
 
         // Insert after the toolbar-spacer and before search button
         const $searchBtn = $toolbar.find('.search-btn');
@@ -371,33 +364,36 @@ function initPC2StatusBar() {
             }
         }
 
-        // Toggle dropdown
-        $statusBar.on('click', (e) => {
+        // Append dropdown to body (to avoid clipping)
+        $('body').append($dropdown);
+
+        logger.log('[PC2]: Status bar inserted, setting up click handlers');
+
+        // Use delegated event for click (more reliable)
+        $(document).on('click', '.pc2-status-bar', function(e) {
             e.stopPropagation();
             e.preventDefault();
             
             // Position the dropdown below the icon
-            const rect = $statusBar[0].getBoundingClientRect();
+            const rect = this.getBoundingClientRect();
             $dropdown.css({
-                top: rect.bottom + 8 + 'px',
-                left: rect.left + (rect.width / 2) + 'px'
+                top: (rect.bottom + 8) + 'px',
+                left: (rect.left + rect.width / 2) + 'px'
             });
             
             $dropdown.toggleClass('visible');
-            logger.log('[PC2]: Dropdown toggled', $dropdown.hasClass('visible'));
+            console.log('[PC2]: Dropdown toggled', $dropdown.hasClass('visible'));
         });
 
         // Close dropdown when clicking outside
-        $(document).on('click', () => {
-            $dropdown.removeClass('visible');
+        $(document).on('click', function(e) {
+            if (!$(e.target).closest('.pc2-status-bar, .pc2-status-dropdown').length) {
+                $dropdown.removeClass('visible');
+            }
         });
 
-        $dropdown.on('click', (e) => {
-            e.stopPropagation();
-        });
-
-        // Connect button
-        $dropdown.find('.pc2-connect-btn').on('click', () => {
+        // Dropdown item clicks
+        $(document).on('click', '.pc2-connect-btn', function() {
             $dropdown.removeClass('visible');
             UIPC2SetupWizard({
                 onSuccess: () => {
@@ -406,14 +402,12 @@ function initPC2StatusBar() {
             });
         });
 
-        // Disconnect button
-        $dropdown.find('.pc2-disconnect-btn').on('click', () => {
+        $(document).on('click', '.pc2-disconnect-btn', function() {
             pc2Service.disconnect();
             $dropdown.removeClass('visible');
         });
 
-        // Settings button
-        $dropdown.find('.pc2-settings-btn').on('click', () => {
+        $(document).on('click', '.pc2-settings-btn', function() {
             $dropdown.removeClass('visible');
             // TODO: Open PC2 settings panel
             import('./UIPC2Settings.js').then(({ default: UIPC2Settings }) => {

@@ -20,6 +20,7 @@
 import UIWindow from './UIWindow.js';
 import UINotification from './UINotification.js';
 import walletService from '../services/WalletService.js';
+import { createLogger } from '../helpers/logger.js';
 import {
     formatTokenBalance,
     formatUSD,
@@ -34,6 +35,8 @@ import {
     isValidAddressForChain,
     getNetworkByName,
 } from '../helpers/particle-constants.js';
+
+const logger = createLogger('UIWindowAccountSend');
 
 /**
  * UIWindowAccountSend - Modal dialog for sending tokens via Particle Universal Account
@@ -55,13 +58,14 @@ import {
 async function UIWindowAccountSend(options = {}) {
     const tokens = options.tokens || walletService.getTokens();
     const senderAddress = options.address || walletService.getAddress();
+    const walletMode = options.mode || walletService.getMode();
     
     // Get the first token with balance as default
     const defaultToken = tokens.find(t => parseFloat(t.balance) > 0) || tokens[0] || null;
     const defaultSymbol = defaultToken?.symbol?.toUpperCase() || 'USDC';
     
-    // Get available networks for default token
-    const defaultNetworks = getAvailableNetworksForToken(defaultSymbol);
+    // Get available networks for default token (filtered by wallet mode)
+    const defaultNetworks = getAvailableNetworksForToken(defaultSymbol, walletMode);
     const defaultNetwork = defaultNetworks[0] || AVAILABLE_NETWORKS[0];
     
     // Build token options HTML
@@ -119,7 +123,7 @@ async function UIWindowAccountSend(options = {}) {
             
             <!-- Network Selection -->
             <div class="form-group" style="margin-bottom: 20px;">
-                <label class="form-label">${i18n('network') || 'Network'}</label>
+                <label class="form-label">Network</label>
                 <div class="custom-dropdown" id="network-dropdown">
                     <div class="dropdown-selected" id="network-selected">
                         <img src="${html_encode(CHAIN_INFO[defaultNetwork?.chainId]?.icon || '')}" 
@@ -136,30 +140,39 @@ async function UIWindowAccountSend(options = {}) {
             
             <!-- Recipient Address -->
             <div class="form-group" style="margin-bottom: 20px;">
-                <label class="form-label">${i18n('recipient_address') || 'Recipient Address'}</label>
+                <label class="form-label" for="send-recipient">${i18n('recipient_address') || 'Recipient Address'}</label>
+                <div class="amount-input-wrapper">
                 <input type="text" 
                        id="send-recipient" 
-                       class="form-input"
-                       placeholder="0x... or Solana address"
-                       autocomplete="off"
-                       spellcheck="false">
-                <div id="recipient-error" class="form-error"></div>
+                           class="form-input amount-input"
+                       placeholder="0x..."
+                           autocomplete="off"
+                           spellcheck="false"
+                           aria-label="Recipient wallet address"
+                           aria-describedby="recipient-error"
+                           aria-required="true">
+                    <button id="paste-address-btn" type="button" class="max-button" aria-label="Paste address from clipboard">PASTE</button>
+                </div>
+                <div id="recipient-error" class="form-error" role="alert" aria-live="polite"></div>
             </div>
             
             <!-- Amount -->
             <div class="form-group" style="margin-bottom: 20px;">
-                <label class="form-label">${i18n('amount') || 'Amount'}</label>
+                <label class="form-label" for="send-amount">${i18n('amount') || 'Amount'}</label>
                 <div class="amount-input-wrapper">
                     <input type="text" 
                            id="send-amount" 
                            class="form-input amount-input"
                            placeholder="0.0"
                            inputmode="decimal"
-                           autocomplete="off">
-                    <button id="send-max-btn" type="button" class="max-button">MAX</button>
+                           autocomplete="off"
+                           aria-label="Amount to send"
+                           aria-describedby="amount-error amount-usd"
+                           aria-required="true">
+                    <button id="send-max-btn" type="button" class="max-button" aria-label="Set maximum available amount">MAX</button>
                 </div>
-                <div id="amount-error" class="form-error"></div>
-                <div id="amount-usd" class="amount-usd">≈ $0.00</div>
+                <div id="amount-error" class="form-error" role="alert" aria-live="polite"></div>
+                <div id="amount-usd" class="amount-usd" aria-live="polite">≈ $0.00</div>
             </div>
             
             <!-- Fee Estimation -->
@@ -179,7 +192,7 @@ async function UIWindowAccountSend(options = {}) {
             </div>
             
             <!-- Send Button -->
-            <button id="send-confirm-btn" type="button" class="send-button" disabled>
+            <button id="send-confirm-btn" type="button" class="send-button" disabled aria-label="Send tokens" aria-disabled="true">
                 ${i18n('send') || 'Send'}
             </button>
             
@@ -198,6 +211,15 @@ async function UIWindowAccountSend(options = {}) {
             
             .form-group {
                 margin-bottom: 20px;
+                position: relative;
+            }
+            
+            /* Ensure recipient input is always visible */
+            #send-recipient {
+                display: block !important;
+                visibility: visible !important;
+                position: relative;
+                z-index: 1;
             }
             
             .form-label {
@@ -209,13 +231,18 @@ async function UIWindowAccountSend(options = {}) {
             }
             
             .form-input {
+                display: block !important;
+                visibility: visible !important;
+                opacity: 1 !important;
                                width: 100%;
+                min-height: 44px;
                 padding: 12px 16px;
                                border: 1px solid #d1d5db;
                                border-radius: 8px;
                                font-size: 14px;
                                box-sizing: border-box;
                 transition: border-color 0.2s, box-shadow 0.2s;
+                background: #fff;
             }
             
             .form-input:focus {
@@ -225,18 +252,29 @@ async function UIWindowAccountSend(options = {}) {
             }
             
             .form-input.error {
+                display: block !important;
+                visibility: visible !important;
                 border-color: #ef4444;
+                background: #fff8f8;
+            }
+            
+            .form-input.error:focus {
+                border-color: #ef4444;
+                box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
             }
             
             .form-error {
                 color: #ef4444;
-                font-size: 13px;
+                font-size: 11px;
                 margin-top: 4px;
+                padding: 4px 8px;
+                background: rgba(239, 68, 68, 0.1);
+                border-radius: 4px;
                 display: none;
             }
             
             .form-error:not(:empty) {
-                display: block;
+                display: inline-block;
             }
             
             /* Custom Dropdown */
@@ -558,7 +596,7 @@ async function UIWindowAccountSend(options = {}) {
         // ============================================
         function updateNetworkOptions() {
             const symbol = selectedToken?.symbol?.toUpperCase() || 'USDC';
-            const availableNetworks = getAvailableNetworksForToken(symbol);
+            const availableNetworks = getAvailableNetworksForToken(symbol, walletMode);
             
             const networkOptionsHtml = availableNetworks.map(network => {
                 const chainInfo = CHAIN_INFO[network.chainId] || {};
@@ -603,9 +641,10 @@ async function UIWindowAccountSend(options = {}) {
             `);
             
             // Update address placeholder based on chain type
+            // Update placeholder based on chain type
             const placeholder = network.chainType === 'solana' 
-                ? 'Enter Solana address' 
-                : '0x...';
+                ? 'Enter Solana address (base58)' 
+                : '0x... (EVM address)';
             $window.find('#send-recipient').attr('placeholder', placeholder);
             
             // Re-validate address for new chain type
@@ -755,8 +794,8 @@ async function UIWindowAccountSend(options = {}) {
             
             if (recipient && !isValidAddressForChain(recipient, chainType)) {
                 const errorMsg = chainType === 'solana' 
-                    ? 'Invalid Solana address'
-                    : 'Invalid EVM address (should start with 0x)';
+                    ? '⚠ Invalid Solana address - enter a valid base58 address'
+                    : '⚠ Invalid address - should start with 0x followed by 40 hex characters';
                 $window.find('#recipient-error').text(errorMsg);
                 $window.find('#send-recipient').addClass('error');
                 isValid = false;
@@ -823,6 +862,17 @@ async function UIWindowAccountSend(options = {}) {
                 return;
             }
             
+            // For Elastos EOA mode, show standard gas fee (no Universal Account API)
+            if (walletMode === 'elastos') {
+                // Elastos Smart Chain has very low gas fees (~0.01 ELA or less)
+                $window.find('#fee-loading').hide();
+                $window.find('#fee-estimate').text('~0.001 ELA');
+                $window.find('#fee-free').hide();
+                $window.find('#fee-error').text('');
+                feeEstimate = { totalELA: 0.001, isElastosEOA: true };
+                return;
+            }
+            
             // Show loading state
             $window.find('#fee-loading').show();
             $window.find('#fee-estimate').text('--');
@@ -861,7 +911,7 @@ async function UIWindowAccountSend(options = {}) {
                     $window.find('#fee-error').text('');
                     
                 } catch (error) {
-                    console.error('[SendModal]: Fee estimation failed:', error);
+                    logger.error(' Fee estimation failed:', error);
                     $window.find('#fee-estimate').text('--');
                     $window.find('#fee-error').text('Could not estimate fee');
                     feeEstimate = null;
@@ -876,6 +926,20 @@ async function UIWindowAccountSend(options = {}) {
         // ============================================
         // INPUT HANDLERS
         // ============================================
+        
+        // Paste button click
+        $window.find('#paste-address-btn').on('click', async function() {
+            try {
+                const text = await navigator.clipboard.readText();
+                if (text) {
+                    $window.find('#send-recipient').val(text.trim());
+                    validateForm();
+                    debouncedEstimateFee();
+                }
+            } catch (err) {
+                logger.error(' Failed to paste:', err);
+            }
+        });
         
         // Recipient input
         $window.find('#send-recipient').on('input', function() {
@@ -925,7 +989,7 @@ async function UIWindowAccountSend(options = {}) {
                 // Ensure amount is a string (required by Particle SDK)
                 const amountStr = String(amount);
                 
-                console.log('[SendModal]: Sending transaction:', {
+                logger.log(' Sending transaction:', {
                     to: recipient,
                     amount: amountStr,
                     amountType: typeof amountStr,
@@ -933,6 +997,7 @@ async function UIWindowAccountSend(options = {}) {
                     chainId: selectedNetwork.chainId,
                     network: selectedNetwork.name,
                     token: selectedToken.symbol,
+                    mode: walletMode,
                 });
                 
                 // WalletService.sendTokens expects an OBJECT, not positional args!
@@ -942,6 +1007,7 @@ async function UIWindowAccountSend(options = {}) {
                     tokenAddress: tokenAddress,
                     chainId: selectedNetwork.chainId,
                     decimals: selectedToken.decimals || 18,
+                    mode: walletMode, // Pass mode so iframe knows if it's Elastos EOA
                 });
                 
                 // Success notification
@@ -957,7 +1023,7 @@ async function UIWindowAccountSend(options = {}) {
                 resolve(result);
                 
             } catch (error) {
-                console.error('[SendModal]: Send failed:', error);
+                logger.error(' Send failed:', error);
                 
                 // Restore form
                 $window.find('.send-modal-container > *:not(#sending-state)').show();

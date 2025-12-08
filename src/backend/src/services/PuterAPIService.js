@@ -55,6 +55,7 @@ class PuterAPIService extends BaseService {
         app.use(require('../routers/auth/delete-own-user'))
         app.use(require('../routers/auth/configure-2fa'))
         app.use(require('../routers/auth/particle'))
+        app.use(require('../routers/elastos-proxy'))
         app.use(require('../routers/drivers/call'))
         app.use(require('../routers/drivers/list-interfaces'))
         app.use(require('../routers/drivers/usage'))

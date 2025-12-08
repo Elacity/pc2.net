@@ -17,6 +17,26 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+import { createLogger } from '../helpers/logger.js';
+import { 
+    getEthereumProvider, 
+    hasEthereumProvider,
+    switchToElastos,
+    sendTransaction as sendEthTransaction,
+    estimateGas,
+    ELASTOS_CHAIN_CONFIG 
+} from '../helpers/ethereum-provider.js';
+
+// Import type definitions for JSDoc
+/** @typedef {import('../types/wallet.js').Token} Token */
+/** @typedef {import('../types/wallet.js').Transaction} Transaction */
+/** @typedef {import('../types/wallet.js').WalletData} WalletData */
+/** @typedef {import('../types/wallet.js').ElastosData} ElastosData */
+/** @typedef {import('../types/wallet.js').FeeEstimate} FeeEstimate */
+/** @typedef {import('../types/wallet.js').SendTransactionParams} SendTransactionParams */
+
+const logger = createLogger('WalletService');
+
 /**
  * WalletService - Manages wallet data communication with Particle Network
  * 
@@ -25,6 +45,8 @@
  * - Fetching transaction history
  * - Caching wallet data for performance
  * - Communication with particle-auth iframe
+ * 
+ * @class WalletService
  */
 class WalletService {
     constructor() {
@@ -75,20 +97,23 @@ class WalletService {
      */
     async setMode(mode) {
         if (mode !== 'universal' && mode !== 'elastos') {
-            console.error('[WalletService]: Invalid mode:', mode);
+            logger.error('Invalid mode:', mode);
             return;
         }
         
         const previousMode = this.walletMode;
         this.walletMode = mode;
         
-        console.log('[WalletService]: Mode changed from', previousMode, 'to', mode);
+        logger.log('Mode changed from', previousMode, 'to', mode);
         
         // Notify listeners of mode change
         this._notifyListeners();
         
-        // Refresh data for new mode
-        await this.refreshTokens();
+        // Refresh data for new mode (tokens AND transactions)
+        await Promise.all([
+            this.refreshTokens(),
+            this.refreshTransactions(),
+        ]);
     }
     
     /**
@@ -105,10 +130,39 @@ class WalletService {
             
             switch (type) {
                 case 'particle-wallet.ready':
-                    console.log('[WalletService]: Particle wallet ready signal received', payload);
+                    logger.log('Particle wallet ready signal received', payload);
                     this._iframeReady = true;
+                    // Store Solana address if provided
+                    if (payload?.solanaSmartAccountAddress && window.user) {
+                        window.user.solana_smart_account_address = payload.solanaSmartAccountAddress;
+                        logger.log('Stored Solana Smart Account:', payload.solanaSmartAccountAddress);
+                    }
                     // Automatically fetch data when ready
                     this.refreshTokens().catch(() => {});
+                    break;
+                    
+                case 'particle-wallet.address-mismatch':
+                    // ⚠️ SAFETY CHECK: Particle session has different user than expected
+                    // This can happen if browser cached an old Particle session
+                    logger.warn('⚠️ Address mismatch detected!', payload);
+                    logger.warn('Expected:', payload?.expected, 'Got:', payload?.actual);
+                    logger.warn('Reinitializing to fix mismatch...');
+                    
+                    // Force reinitialize with correct addresses
+                    this.reinitialize();
+                    break;
+                case 'particle-wallet.addresses-updated':
+                    logger.log('Addresses updated received', payload);
+                    // Store addresses
+                    if (window.user) {
+                        if (payload?.solanaSmartAccountAddress) {
+                            window.user.solana_smart_account_address = payload.solanaSmartAccountAddress;
+                            logger.log('Updated Solana Smart Account:', payload.solanaSmartAccountAddress);
+                        }
+                        if (payload?.smartAccountAddress) {
+                            window.user.smart_account_address = payload.smartAccountAddress;
+                        }
+                    }
                     break;
                 case 'particle-wallet.data':
                     this._handleWalletData(payload);
@@ -120,16 +174,20 @@ class WalletService {
                     this._handleTransactionsResponse(payload, requestId);
                     break;
                 case 'particle-wallet.send-result':
-                    console.log('[WalletService]: Received send-result message:', { requestId, payload });
+                    logger.log('Received send-result message:', { requestId, payload });
                     this._handleSendResult(payload, requestId);
                     break;
                 case 'particle-wallet.transaction-status':
-                    console.log('[WalletService]: Received transaction-status message:', payload);
+                    logger.log('Received transaction-status message:', payload);
                     this._handleTransactionStatus(payload);
                     break;
                 case 'particle-wallet.transaction-details':
-                    console.log('[WalletService]: Received transaction-details message:', payload);
+                    logger.log('Received transaction-details message:', payload);
                     this._handleTransactionDetails(payload, requestId);
+                    break;
+                case 'particle-wallet.fee-estimate':
+                    logger.log('Received fee-estimate message:', payload);
+                    this._handleFeeEstimate(payload, requestId);
                     break;
                 case 'particle-wallet.error':
                     this._handleError(payload, requestId);
@@ -170,7 +228,7 @@ class WalletService {
      * Handle tokens response (both requested and auto-pushed)
      */
     _handleTokensResponse(payload, requestId) {
-        console.log('[WalletService]: Received tokens response:', { 
+        logger.log('Received tokens response:', { 
             requestId, 
             tokensCount: payload?.tokens?.length, 
             totalBalance: payload?.totalBalance 
@@ -236,33 +294,67 @@ class WalletService {
     }
     
     /**
+     * Handle fee estimate response
+     */
+    _handleFeeEstimate(payload, requestId) {
+        logger.log('Processing fee estimate:', payload);
+        
+        const resolver = this.pendingRequests.get(requestId);
+        if (resolver) {
+            this.pendingRequests.delete(requestId);
+            
+            if (payload.success && payload.feeEstimate) {
+                logger.log('Fee estimate received:', payload.feeEstimate);
+                resolver.resolve(payload.feeEstimate);
+            } else if (payload.error) {
+                logger.error('Fee estimation failed:', payload.error);
+                resolver.reject(new Error(payload.error));
+            } else {
+                // Fallback to default estimate
+                resolver.resolve({
+                    total: '0.01',
+                    totalUSD: 0.01,
+                    gas: '0.01',
+                    gasUSD: 0.01,
+                    service: '0',
+                    serviceUSD: 0,
+                    lp: '0',
+                    lpUSD: 0,
+                    freeGasFee: false,
+                    freeServiceFee: true,
+                });
+            }
+        }
+    }
+    
+    /**
      * Handle send transaction result
      */
     _handleSendResult(payload, requestId) {
-        console.log('[WalletService]: Received send result:', { requestId, payload });
+        logger.log('Received send result:', { requestId, payload });
         
         const resolver = this.pendingRequests.get(requestId);
         if (resolver) {
             this.pendingRequests.delete(requestId);
             
             if (payload.success) {
-                console.log('[WalletService]: Transaction successful:', payload.hash);
+                logger.log('Transaction successful:', payload.hash);
                 resolver.resolve(payload);
                 // Refresh balances after successful send
                 this.refreshTokens();
             } else if (payload.requiresWalletUI) {
                 // Transaction requires the main Particle wallet UI
                 // Reject with a specific error that the UI can handle
-                console.log('[WalletService]: Transaction requires wallet UI');
+                logger.log('Transaction requires wallet UI');
                 const error = new Error('Transaction signing requires Particle wallet. Please use the Particle wallet interface to send tokens.');
                 error.requiresWalletUI = true;
                 resolver.reject(error);
             } else {
-                console.log('[WalletService]: Transaction failed:', payload.error);
+                logger.log('Transaction failed:', payload.error);
                 resolver.reject(new Error(payload.error || 'Transaction failed'));
             }
         } else {
-            console.warn('[WalletService]: No pending request found for requestId:', requestId);
+            logger.warn('No pending request found for requestId:', requestId);
         }
     }
     
@@ -272,7 +364,7 @@ class WalletService {
     _handleTransactionStatus(payload) {
         const { transactionId, status, txHash, error, message } = payload;
         
-        console.log('[WalletService]: Transaction status update:', { transactionId, status, txHash });
+        logger.log('Transaction status update:', { transactionId, status, txHash });
         
         // Import UINotification dynamically to show notifications
         import('../UI/UINotification.js').then(({ default: UINotification }) => {
@@ -306,7 +398,7 @@ class WalletService {
                 });
             }
         }).catch(err => {
-            console.error('[WalletService]: Failed to show notification:', err);
+            logger.error('Failed to show notification:', err);
         });
         
         // Trigger event for any listeners
@@ -355,7 +447,7 @@ class WalletService {
             iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:none;visibility:hidden;';
             document.body.appendChild(iframe);
             
-            console.log('[WalletService]: Created hidden particle-auth iframe with addresses:', {
+            logger.log('Created hidden particle-auth iframe with addresses:', {
                 eoaAddress: eoaAddress ? `${eoaAddress.slice(0, 10)}...` : 'none',
                 smartAddress: smartAddress ? `${smartAddress.slice(0, 10)}...` : 'none',
             });
@@ -363,7 +455,7 @@ class WalletService {
             // Mark that we need to wait for iframe to load
             this._iframeReady = false;
             iframe.onload = () => {
-                console.log('[WalletService]: Particle iframe loaded');
+                logger.log('Particle iframe loaded');
                 this._iframeReady = true;
             };
         }
@@ -379,7 +471,7 @@ class WalletService {
         const iframe = this._getOrCreateIframe();
         
         if (!iframe) {
-            console.warn('[WalletService]: Could not create particle auth iframe');
+            logger.warn('Could not create particle auth iframe');
             return Promise.reject(new Error('Wallet not connected'));
         }
         
@@ -404,14 +496,14 @@ class WalletService {
             // Wait for iframe to be ready before sending message
             const sendMessage = () => {
                 if (iframe.contentWindow) {
-                    console.log('[WalletService]: Sending message to iframe:', type);
+                    logger.log('Sending message to iframe:', type);
                     iframe.contentWindow.postMessage({
                         type,
                         requestId,
                         payload: data,
                     }, '*');
                 } else {
-                    console.warn('[WalletService]: iframe contentWindow not available');
+                    logger.warn('iframe contentWindow not available');
                     this.pendingRequests.delete(requestId);
                     reject(new Error('iframe not ready'));
                 }
@@ -419,7 +511,7 @@ class WalletService {
             
             // If iframe not ready, wait for ready signal or timeout
             if (!this._iframeReady) {
-                console.log('[WalletService]: Waiting for iframe to be ready...');
+                logger.log('Waiting for iframe to be ready...');
                 // Poll for ready state
                 let attempts = 0;
                 const maxAttempts = 30; // 15 seconds max
@@ -430,7 +522,7 @@ class WalletService {
                         sendMessage();
                     } else if (attempts >= maxAttempts) {
                         clearInterval(checkReady);
-                        console.warn('[WalletService]: Timeout waiting for iframe ready');
+                        logger.warn('Timeout waiting for iframe ready');
                         this.pendingRequests.delete(requestId);
                         reject(new Error('Wallet not ready - please ensure you are logged in'));
                     }
@@ -457,7 +549,7 @@ class WalletService {
         // Get the correct data based on current mode
         const data = this.getData();
         
-        console.log('[WalletService]: Notifying', this.listeners.size, 'listeners with data:', {
+        logger.log('Notifying', this.listeners.size, 'listeners with data:', {
             mode: this.walletMode,
             totalBalance: data.totalBalance,
             tokensCount: data.tokens?.length,
@@ -474,7 +566,7 @@ class WalletService {
             try {
                 callback(dataWithMode);
             } catch (e) {
-                console.error('[WalletService]: Listener error:', e);
+                logger.error('Listener error:', e);
             }
         });
     }
@@ -528,6 +620,13 @@ class WalletService {
     }
     
     /**
+     * Get Solana Smart Account address
+     */
+    getSolanaAddress() {
+        return window.user?.solana_smart_account_address || null;
+    }
+    
+    /**
      * Check if wallet is connected
      */
     isConnected() {
@@ -557,7 +656,7 @@ class WalletService {
      */
     initialize() {
         if (this.isConnected()) {
-            console.log('[WalletService]: User has wallet, initializing iframe...');
+            logger.log('User has wallet, initializing iframe...');
             this._getOrCreateIframe();
             // Don't auto-fetch on init - let sidebar trigger it when opened
         }
@@ -628,7 +727,7 @@ class WalletService {
         this.walletData.isLoading = true;
         this._notifyListeners();
         
-        console.log('[WalletService]: Fetching Universal Account tokens via Particle API...');
+        logger.log('Fetching Universal Account tokens via Particle API...');
         
         // PRIMARY METHOD: Use Particle iframe (Universal Account's getPrimaryAssets)
         // This returns aggregated balances across ALL chains in one call
@@ -642,7 +741,7 @@ class WalletService {
                 )
             ]);
             
-            console.log('[WalletService]: Particle API returned:', result);
+            logger.log('Particle API returned:', result);
             
             // Update wallet data from Particle response
             if (result && result.tokens) {
@@ -658,7 +757,7 @@ class WalletService {
             
             return result;
         } catch (iframeError) {
-            console.warn('[WalletService]: Particle API failed:', iframeError.message);
+            logger.warn('Particle API failed:', iframeError.message);
             
             // Don't use direct RPC fallback - it causes rate limiting
             // Just show empty state and let user retry manually
@@ -680,7 +779,7 @@ class WalletService {
         this.elastosData.isLoading = true;
         this._notifyListeners();
         
-        console.log('[WalletService]: Fetching Elastos ELA for EOA:', address);
+        logger.log('Fetching Elastos ELA for EOA:', address);
         
         try {
             // Elastos Mainnet RPC
@@ -732,14 +831,123 @@ class WalletService {
             this._notifyListeners();
             $(document).trigger('wallet:data:updated', [this.elastosData]);
             
-            console.log('[WalletService]: Elastos ELA balance:', tokens);
+            logger.log('Elastos ELA balance:', tokens);
             return { tokens, totalBalance: this.elastosData.totalBalance };
         } catch (error) {
-            console.error('[WalletService]: Elastos fetch error:', error);
+            logger.error('Elastos fetch error:', error);
             this.elastosData.isLoading = false;
             this.elastosData.error = error.message;
             this._notifyListeners();
             throw error;
+        }
+    }
+    
+    /**
+     * Fetch transaction history for Elastos EOA from blockchain explorer
+     */
+    async _fetchElastosTransactions(page = 1, pageSize = 20) {
+        logger.log('_fetchElastosTransactions CALLED, page:', page);
+        
+        const address = this.getEOAAddress();
+        logger.log('EOA Address for Elastos:', address);
+        
+        if (!address) {
+            logger.log('No EOA address for Elastos transactions');
+            return { transactions: [], hasMore: false };
+        }
+        
+        logger.log('Fetching Elastos transactions for:', address);
+        
+        try {
+            // Use our backend proxy to bypass CORS issues with esc.elastos.io
+            // (Their API returns duplicate Access-Control-Allow-Origin headers)
+            const apiUrl = `${window.api_origin}/api/elastos/transactions?address=${address}&page=${page}&pageSize=${pageSize}`;
+            
+            logger.log('Elastos API URL (via proxy):', apiUrl);
+            
+            const response = await fetch(apiUrl);
+            const data = await response.json();
+            
+            logger.log('Elastos API response status:', data.status, 'result count:', data.result?.length);
+            
+            if (data.status !== '1' || !data.result) {
+                logger.log('No Elastos transactions found or API error:', data.message);
+                this.elastosData.transactions = [];
+                this._notifyListeners();
+                return { transactions: [], hasMore: false };
+            }
+            
+            // Transform to our transaction format
+            const transactions = data.result.map(tx => {
+                const isOutgoing = tx.from.toLowerCase() === address.toLowerCase();
+                const value = Number(tx.value) / 1e18; // Convert from wei
+                const gasUsed = Number(tx.gasUsed || tx.gas || 0);
+                const gasPrice = Number(tx.gasPrice || 0);
+                const fee = (gasUsed * gasPrice) / 1e18;
+                
+                return {
+                    transactionId: tx.hash,
+                    hash: tx.hash,
+                    type: isOutgoing ? 'send' : 'receive',
+                    status: tx.txreceipt_status === '1' ? 'confirmed' : (tx.isError === '1' ? 'failed' : 'pending'),
+                    createdAt: new Date(Number(tx.timeStamp) * 1000).toISOString(),
+                    timestamp: Number(tx.timeStamp) * 1000,
+                    from: tx.from,
+                    to: tx.to,
+                    amount: value.toFixed(6),
+                    amountUSD: null, // Would need price lookup
+                    fee: fee.toFixed(6),
+                    feeUSD: null,
+                    chainId: 20,
+                    network: 'Elastos Smart Chain',
+                    networkIcon: '/images/tokens/ELA.png',
+                    // Include symbol at top level for renderHistoryList
+                    symbol: 'ELA',
+                    tokenIcon: '/images/tokens/ELA.png',
+                    token: {
+                        symbol: 'ELA',
+                        name: 'Elastos',
+                        decimals: 18,
+                        address: null,
+                    },
+                    blockNumber: Number(tx.blockNumber),
+                    explorerUrl: `https://esc.elastos.io/tx/${tx.hash}`,
+                };
+            });
+            
+            logger.log('Elastos transactions parsed:', transactions.length);
+            
+            // Update elastosData
+            if (page === 1) {
+                this.elastosData.transactions = transactions;
+            } else {
+                this.elastosData.transactions = [
+                    ...this.elastosData.transactions,
+                    ...transactions,
+                ];
+            }
+            this.elastosData.hasMoreTransactions = transactions.length >= pageSize;
+            this.elastosData.transactionsPage = page;
+            
+            logger.log('elastosData.transactions now has:', this.elastosData.transactions.length, 'items');
+            logger.log('First transaction:', this.elastosData.transactions[0]);
+            
+            this._notifyListeners();
+            
+            // Also trigger the jQuery event for transactions
+            $(document).trigger('wallet:transactions:updated', [this.elastosData.transactions]);
+            
+            return { 
+                transactions, 
+                hasMore: transactions.length >= pageSize,
+                totalCount: data.result.length 
+            };
+            
+        } catch (error) {
+            logger.error('Elastos transactions fetch error:', error);
+            this.elastosData.transactions = [];
+            this._notifyListeners();
+            return { transactions: [], hasMore: false };
         }
     }
     
@@ -751,7 +959,7 @@ class WalletService {
         const address = this.getAddress();
         if (!address) return [];
         
-        console.log('[WalletService]: Fetching tokens directly for:', address);
+        logger.log('Fetching tokens directly for:', address);
         
         // Major chains to check (with Particle chainIds)
         const chains = [
@@ -788,7 +996,7 @@ class WalletService {
         this._notifyListeners();
         $(document).trigger('wallet:data:updated', [this.walletData]);
         
-        console.log('[WalletService]: Fetched tokens:', allTokens);
+        logger.log('Fetched tokens:', allTokens);
         return allTokens;
     }
     
@@ -965,7 +1173,7 @@ class WalletService {
             const data = await response.json();
             return data[id]?.usd || 0;
         } catch (error) {
-            console.warn('[WalletService]: Price fetch failed:', error);
+            logger.warn('Price fetch failed:', error);
             // Fallback prices
             const fallbackPrices = { 'ETH': 2000, 'MATIC': 0.5, 'BNB': 300, 'ELA': 1.5 };
             return fallbackPrices[symbol] || 0;
@@ -982,8 +1190,13 @@ class WalletService {
             return Promise.reject(new Error('Wallet not connected'));
         }
         
+        // Route to appropriate fetch method based on mode
+        if (this.walletMode === 'elastos') {
+            return this._fetchElastosTransactions(page, pageSize);
+        }
+        
         try {
-            console.log('[WalletService]: Fetching transactions:', { page, pageSize });
+            logger.log('Fetching transactions:', { page, pageSize });
             
             const result = await this._sendToIframe('particle-wallet.get-transactions', {
                 address: this.getAddress(),
@@ -991,7 +1204,7 @@ class WalletService {
                 pageSize,
             });
             
-            console.log('[WalletService]: Transactions response:', result);
+            logger.log('Transactions response:', result);
             
             // Update wallet data with transactions
             if (result && result.transactions) {
@@ -1017,7 +1230,7 @@ class WalletService {
             
             return result;
         } catch (error) {
-            console.error('[WalletService]: Failed to fetch transactions:', error);
+            logger.error('Failed to fetch transactions:', error);
             this.walletData.error = error.message;
             this._notifyListeners();
             throw error;
@@ -1047,25 +1260,39 @@ class WalletService {
             });
             return result;
         } catch (error) {
-            console.error('[WalletService]: Failed to get transaction details:', error);
+            logger.error('Failed to get transaction details:', error);
             throw error;
         }
     }
     
     /**
-     * Send tokens using Universal Account
+     * Send tokens using Universal Account or Elastos EOA
      * @param {Object} params - Send parameters
      * @param {string} params.to - Recipient address
      * @param {string} params.amount - Amount to send (human readable, e.g. "0.5")
      * @param {string} params.tokenAddress - Token contract address (null for native)
      * @param {number} params.chainId - Target chain ID
      * @param {number} params.decimals - Token decimals (default 18)
+     * @param {string} params.mode - Wallet mode: 'universal' or 'elastos'
      */
-    async sendTokens({ to, amount, tokenAddress, chainId, decimals = 18 }) {
+    async sendTokens({ to, amount, tokenAddress, chainId, decimals = 18, mode }) {
         if (!this.isConnected()) {
             return Promise.reject(new Error('Wallet not connected'));
         }
         
+        // Use current mode if not specified
+        const walletMode = mode || this.walletMode;
+        
+        // ============================================
+        // ELASTOS EOA MODE: Use window.ethereum directly (MetaMask)
+        // NOT through Particle iframe!
+        // ============================================
+        if (walletMode === 'elastos' && chainId === 20) {
+            logger.log('Using Elastos EOA mode - direct MetaMask transaction');
+            return this._sendElastosEOATransaction({ to, amount, tokenAddress, decimals });
+        }
+        
+        // Universal Account mode: Use Particle iframe
         return this._sendToIframe('particle-wallet.send', {
             from: this.getAddress(),
             to,
@@ -1073,7 +1300,102 @@ class WalletService {
             tokenAddress,
             chainId,
             decimals,
+            mode: walletMode,
         });
+    }
+    
+    /**
+     * Send transaction via Elastos EOA using ethereum provider (MetaMask)
+     * This bypasses Particle entirely and uses the user's external wallet
+     * @param {Object} params - Transaction parameters
+     * @param {string} params.to - Recipient address  
+     * @param {string} params.amount - Amount to send
+     * @param {string} [params.tokenAddress] - Token contract (null for native ELA)
+     * @param {number} [params.decimals=18] - Token decimals
+     * @returns {Promise<{success: boolean, hash: string, status: string, isElastosEOA: boolean}>}
+     */
+    async _sendElastosEOATransaction({ to, amount, tokenAddress, decimals = 18 }) {
+        // Use safe provider accessor instead of window.ethereum
+        const provider = getEthereumProvider();
+        
+        if (!provider) {
+            throw new Error('No Ethereum wallet detected. Please install MetaMask to use Elastos EOA.');
+        }
+        
+        // EOA address is the user's wallet address (from Particle auth)
+        const fromAddress = window.user?.wallet_address || this.getAddress();
+        
+        if (!fromAddress) {
+            throw new Error('EOA address not available. Please reconnect your wallet.');
+        }
+        
+        logger.log('Using EOA address for Elastos:', fromAddress);
+        
+        try {
+            // Step 1: Switch to Elastos Smart Chain using helper
+            logger.log('Switching to Elastos Smart Chain...');
+            await switchToElastos();
+            
+            // Step 2: Build transaction
+            const amountStr = String(amount);
+            const amountInWei = BigInt(Math.floor(parseFloat(amountStr) * Math.pow(10, decimals))).toString(16);
+            
+            let txParams;
+            const isNativeELA = !tokenAddress || tokenAddress === '0x0000000000000000000000000000000000000000';
+            
+            if (isNativeELA) {
+                // Native ELA transfer
+                txParams = {
+                    from: fromAddress,
+                    to: to,
+                    value: '0x' + amountInWei,
+                };
+                logger.log('Sending native ELA:', txParams);
+            } else {
+                // ERC-20 token transfer
+                const recipientPadded = to.toLowerCase().replace('0x', '').padStart(64, '0');
+                const amountHex = BigInt(Math.floor(parseFloat(amountStr) * Math.pow(10, decimals))).toString(16).padStart(64, '0');
+                txParams = {
+                    from: fromAddress,
+                    to: tokenAddress, // ERC-20 contract address
+                    value: '0x0',
+                    data: '0xa9059cbb' + recipientPadded + amountHex, // transfer(address,uint256)
+                };
+                logger.log('Sending ERC-20 token:', txParams);
+            }
+            
+            // Step 3: Estimate gas and add buffer for Elastos chain
+            try {
+                const gasEstimate = await estimateGas(txParams);
+                // Add 20% buffer for safety
+                const gasWithBuffer = Math.ceil(parseInt(gasEstimate, 16) * 1.2);
+                txParams.gas = '0x' + gasWithBuffer.toString(16);
+                logger.log('Gas estimate with buffer:', txParams.gas);
+            } catch (gasError) {
+                // If gas estimation fails, use a safe default for ELA transfers
+                logger.warn('Gas estimation failed, using default:', gasError.message);
+                txParams.gas = isNativeELA ? '0x5208' : '0x15F90'; // 21000 for native, 90000 for ERC-20
+            }
+            
+            // Step 4: Send transaction via ethereum provider helper
+            const txHash = await sendEthTransaction(txParams);
+            
+            logger.log('Elastos EOA transaction sent:', txHash);
+            
+            // Notify listeners of success
+            this._notifyListeners();
+            
+            return {
+                success: true,
+                hash: txHash,
+                status: 'pending',
+                isElastosEOA: true,
+            };
+            
+        } catch (error) {
+            logger.error('Elastos EOA transaction failed:', error);
+            throw error;
+        }
     }
     
     /**
@@ -1133,13 +1455,82 @@ class WalletService {
             this.messageHandler = null;
         }
         
+        // Remove the iframe so a fresh one is created for the next user
+        this._destroyIframe();
+        
         this.listeners.clear();
         this.pendingRequests.clear();
+        
+        // Reset cached data
+        this.walletData = {
+            tokens: [],
+            transactions: [],
+            totalBalance: 0,
+            lastUpdated: null,
+            isLoading: false,
+            error: null,
+        };
+        this.elastosData = {
+            tokens: [],
+            transactions: [],
+            totalBalance: 0,
+            lastUpdated: null,
+            isLoading: false,
+            error: null,
+        };
+        this._iframeReady = false;
+    }
+    
+    /**
+     * Destroy the particle-auth iframe (called on logout)
+     */
+    _destroyIframe() {
+        const iframe = document.getElementById('particle-wallet-iframe');
+        if (iframe) {
+            logger.log('Destroying particle-wallet-iframe');
+            iframe.remove();
+        }
+        this._iframeReady = false;
+    }
+    
+    /**
+     * Reinitialize for a new user (call after login with different wallet)
+     */
+    reinitialize() {
+        logger.log('Reinitializing for new user:', window.user?.wallet_address);
+        this._destroyIframe();
+        this._iframeReady = false;
+        
+        // Reset data caches
+        this.walletData = {
+            tokens: [],
+            transactions: [],
+            totalBalance: 0,
+            lastUpdated: null,
+            isLoading: false,
+            error: null,
+        };
+        this.elastosData = {
+            tokens: [],
+            transactions: [],
+            totalBalance: 0,
+            lastUpdated: null,
+            isLoading: false,
+            error: null,
+        };
+        
+        // Create new iframe with current user's addresses
+        if (this.isConnected()) {
+            this._getOrCreateIframe();
+        }
     }
 }
 
 // Create singleton instance
 const walletService = new WalletService();
+
+// Expose on window for global access (needed for update_auth_data)
+window.walletService = walletService;
 
 // Export singleton
 export default walletService;

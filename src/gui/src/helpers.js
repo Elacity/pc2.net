@@ -486,6 +486,13 @@ window.update_auth_data = async (auth_token, user)=>{
 
     // re-initialize the Puter.js objects with the new auth token
     puter.setAuthToken(auth_token, window.api_origin)
+    
+    // Reinitialize wallet service for the new user (destroys old iframe, creates new one)
+    // This ensures the wallet sidebar shows the correct wallet for THIS user
+    if (window.walletService) {
+        console.log('[update_auth_data]: Reinitializing wallet service for new user:', user.wallet_address);
+        window.walletService.reinitialize();
+    }
 
     //update the logged_in_users array entry for this user
     if(window.user){

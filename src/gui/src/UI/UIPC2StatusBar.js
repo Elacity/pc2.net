@@ -24,17 +24,26 @@ function initPC2StatusBar() {
     if (!$('#pc2-status-styles').length) {
         $('head').append(`
             <style id="pc2-status-styles">
+                .pc2-status-container {
+                    position: relative;
+                    display: flex;
+                    align-items: center;
+                    margin-left: 20px;
+                }
+
                 .pc2-status-bar {
                     position: relative;
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    width: 18px;
-                    height: 18px;
+                    width: 17px;
+                    height: 17px;
                     cursor: pointer;
                     transition: all 0.2s;
-                    margin: 0 4px;
                     opacity: 0.8;
+                    background-size: contain;
+                    background-repeat: no-repeat;
+                    background-position: center;
                 }
 
                 .pc2-status-bar:hover {
@@ -80,9 +89,53 @@ function initPC2StatusBar() {
                 }
 
                 .pc2-status-icon {
-                    width: 18px;
-                    height: 18px;
+                    width: 17px;
+                    height: 17px;
                     color: rgba(255, 255, 255, 0.8);
+                }
+
+                /* Stats Section */
+                .pc2-stats-section {
+                    padding: 12px 16px;
+                    background: rgba(255, 255, 255, 0.02);
+                }
+
+                .pc2-stats-grid {
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 12px;
+                }
+
+                .pc2-stat-item {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 4px;
+                }
+
+                .pc2-stat-label {
+                    font-size: 10px;
+                    color: rgba(255, 255, 255, 0.4);
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
+                }
+
+                .pc2-stat-value {
+                    font-size: 14px;
+                    font-weight: 500;
+                    color: rgba(255, 255, 255, 0.9);
+                }
+
+                .pc2-stat-value.highlight {
+                    color: #4ade80;
+                }
+
+                .pc2-stat-value.warning {
+                    color: #fbbf24;
+                }
+
+                .pc2-stat-value.muted {
+                    color: rgba(255, 255, 255, 0.5);
+                    font-size: 12px;
                 }
 
                 /* Dropdown Menu - positioned below for top toolbar */
@@ -213,7 +266,7 @@ function initPC2StatusBar() {
         `);
     };
 
-    // Create dropdown menu
+    // Create dropdown menu with stats
     const createDropdown = () => {
         return $(`
             <div class="pc2-status-dropdown">
@@ -221,6 +274,29 @@ function initPC2StatusBar() {
                     <div class="pc2-dropdown-title">Personal Cloud</div>
                     <div class="pc2-dropdown-subtitle">ElastOS PC2</div>
                 </div>
+                
+                <!-- Stats Section (always visible) -->
+                <div class="pc2-stats-section">
+                    <div class="pc2-stats-grid">
+                        <div class="pc2-stat-item">
+                            <span class="pc2-stat-label">Status</span>
+                            <span class="pc2-stat-value pc2-stat-status muted">Not Connected</span>
+                        </div>
+                        <div class="pc2-stat-item">
+                            <span class="pc2-stat-label">Storage</span>
+                            <span class="pc2-stat-value pc2-stat-storage muted">—</span>
+                        </div>
+                        <div class="pc2-stat-item">
+                            <span class="pc2-stat-label">Files</span>
+                            <span class="pc2-stat-value pc2-stat-files muted">—</span>
+                        </div>
+                        <div class="pc2-stat-item">
+                            <span class="pc2-stat-label">Node</span>
+                            <span class="pc2-stat-value pc2-stat-node muted">—</span>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="pc2-connection-info" style="display: none;">
                     <div class="pc2-connection-status-row">
                         <div class="pc2-status-indicator connected"></div>
@@ -337,6 +413,10 @@ function initPC2StatusBar() {
             const $connectionInfo = $dropdown.find('.pc2-connection-info');
             const $connectBtn = $dropdown.find('.pc2-connect-btn');
             const $disconnectBtn = $dropdown.find('.pc2-disconnect-btn');
+            const $statStatus = $dropdown.find('.pc2-stat-status');
+            const $statStorage = $dropdown.find('.pc2-stat-storage');
+            const $statFiles = $dropdown.find('.pc2-stat-files');
+            const $statNode = $dropdown.find('.pc2-stat-node');
 
             $indicator.removeClass('disconnected connecting connected error');
             $indicator.addClass(status);
@@ -344,6 +424,7 @@ function initPC2StatusBar() {
             switch (status) {
                 case 'connected':
                     const session = pc2Service.getSession();
+                    const stats = pc2Service.getStats?.() || {};
                     $statusBar.attr('title', `Personal Cloud (${session?.nodeName || 'Connected'})`);
                     $connectionInfo.show().removeClass('error');
                     $connectionInfo.find('.pc2-connection-status-text').text('Connected');
@@ -351,12 +432,22 @@ function initPC2StatusBar() {
                     $connectionInfo.find('.pc2-status-indicator').removeClass('error').addClass('connected');
                     $connectBtn.hide();
                     $disconnectBtn.show();
+                    // Update stats
+                    $statStatus.text('Connected').removeClass('muted warning').addClass('highlight');
+                    $statStorage.text(stats.storage || 'IPFS').removeClass('muted');
+                    $statFiles.text(stats.files || '0').removeClass('muted');
+                    $statNode.text(session?.nodeName || 'PC2').removeClass('muted');
                     break;
                 case 'connecting':
                     $statusBar.attr('title', 'Personal Cloud (Connecting...)');
                     $connectionInfo.hide();
                     $connectBtn.hide();
                     $disconnectBtn.hide();
+                    // Update stats
+                    $statStatus.text('Connecting...').removeClass('muted highlight').addClass('warning');
+                    $statStorage.text('—').addClass('muted');
+                    $statFiles.text('—').addClass('muted');
+                    $statNode.text('—').addClass('muted');
                     break;
                 case 'error':
                     $statusBar.attr('title', `Personal Cloud (${error || 'Error'})`);
@@ -365,12 +456,22 @@ function initPC2StatusBar() {
                     $connectionInfo.find('.pc2-status-indicator').removeClass('connected').addClass('error');
                     $connectBtn.show();
                     $disconnectBtn.hide();
+                    // Update stats
+                    $statStatus.text('Error').removeClass('muted highlight warning').css('color', '#f87171');
+                    $statStorage.text('—').addClass('muted');
+                    $statFiles.text('—').addClass('muted');
+                    $statNode.text('—').addClass('muted');
                     break;
                 default:
                     $statusBar.attr('title', 'Personal Cloud (Not Connected)');
                     $connectionInfo.hide();
                     $connectBtn.show();
                     $disconnectBtn.hide();
+                    // Update stats
+                    $statStatus.text('Not Connected').addClass('muted').removeClass('highlight warning');
+                    $statStorage.text('—').addClass('muted');
+                    $statFiles.text('—').addClass('muted');
+                    $statNode.text('—').addClass('muted');
             }
         };
 

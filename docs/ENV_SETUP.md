@@ -3,25 +3,39 @@
 
 ---
 
-## Required Environment Variables / 必需的环境变量
+## Quick Setup (Recommended) / 快速设置（推荐）
 
-Create a `.env` file in the project root with:  
-在项目根目录创建 `.env` 文件：
+The Particle credentials are **already configured** for the pc2.net project.  
+pc2.net 项目的 Particle 凭证**已配置好**。
+
+Create file `submodules/particle-auth/.env` with:  
+创建文件 `submodules/particle-auth/.env`：
 
 ```bash
-# ═══════════════════════════════════════════════════════════════════════════
-# Particle Network Configuration (Required for wallet login)
-# Particle Network 配置（钱包登录必需）
-# ═══════════════════════════════════════════════════════════════════════════
+VITE_PARTICLE_PROJECT_ID=01cdbdd6-b07e-45b5-81ca-7036e45dff0d
+VITE_PARTICLE_CLIENT_KEY=cMSSRMUCgciyuStuvPg2FSLKSovXDmrbvknJJnLU
+VITE_PARTICLE_APP_ID=1567a90d-9ff3-459a-bca8-d264685482cb
+VITE_WALLETCONNECT_PROJECT_ID=1bdbe1354abcf233007b7ce4f2b91886
+VITE_PUTER_API_URL=http://api.puter.localhost:4100
+```
 
-PARTICLE_PROJECT_ID=your_project_id_here
-PARTICLE_CLIENT_KEY=your_client_key_here
-PARTICLE_APP_ID=your_app_id_here
+**One-liner to create the file / 一行命令创建文件:**
+```bash
+cat > submodules/particle-auth/.env << 'EOF'
+VITE_PARTICLE_PROJECT_ID=01cdbdd6-b07e-45b5-81ca-7036e45dff0d
+VITE_PARTICLE_CLIENT_KEY=cMSSRMUCgciyuStuvPg2FSLKSovXDmrbvknJJnLU
+VITE_PARTICLE_APP_ID=1567a90d-9ff3-459a-bca8-d264685482cb
+VITE_WALLETCONNECT_PROJECT_ID=1bdbe1354abcf233007b7ce4f2b91886
+VITE_PUTER_API_URL=http://api.puter.localhost:4100
+EOF
 ```
 
 ---
 
-## How to Get Particle Credentials / 如何获取 Particle 凭证
+## Alternative: Create Your Own Project / 替代方案：创建自己的项目
+
+If you want your own Particle project:  
+如果您想要自己的 Particle 项目：
 
 1. **Go to Particle Dashboard / 访问 Particle 仪表板**
    - URL: https://dashboard.particle.network/
@@ -31,15 +45,12 @@ PARTICLE_APP_ID=your_app_id_here
 
 3. **Create New Project / 创建新项目**
    - Click "Create Project" / 点击"创建项目"
-   - Enter project name: "ElastOS" / 输入项目名称: "ElastOS"
+   - Enter project name / 输入项目名称
 
 4. **Get Credentials / 获取凭证**
    - Go to Project Settings → API Keys
    - 进入项目设置 → API 密钥
-   - Copy:
-     - `Project ID` → `PARTICLE_PROJECT_ID`
-     - `Client Key` → `PARTICLE_CLIENT_KEY`
-     - `App ID` → `PARTICLE_APP_ID`
+   - Copy the values to your `.env` file
 
 ---
 

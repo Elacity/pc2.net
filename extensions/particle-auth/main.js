@@ -20,6 +20,12 @@
  * - Web3 wallets (MetaMask, WalletConnect, Coinbase Wallet)
  * - Smart Account support with Universal Accounts
  * - Cross-chain identity management
+ * 
+ * GUI Serving:
+ * The Particle Auth React app is served at /particle-auth/ by the 
+ * ParticleAuthGUIService registered in core. This is necessary because
+ * Puter extensions don't have a built-in way to serve static files.
+ * The GUI path is: src/particle-auth/ (built with Vite)
  */
 
 const ParticleAuthDriver = require('./drivers/ParticleAuthDriver');
@@ -40,10 +46,9 @@ extension.on('init', async event => {
         hasAppId: !!config.particle_app_id
     });
     
-    // NOTE: GUI is served by ParticleAuthGUIService in core (src/backend/src/services/)
-    // This is because extension.use() is not a valid Puter extension API.
-    // The core service uses __on_install.routes to register the static file serving.
-    extension.log.info('[Particle Auth]: GUI served by ParticleAuthGUIService in core');
+    // GUI is served by ParticleAuthGUIService in core at /particle-auth/
+    // The GUI is loaded as an iframe inside Puter desktop for embedded login
+    extension.log.info('[Particle Auth]: GUI served at /particle-auth/');
 });
 
 // Create the 'auth' interface for Particle authentication

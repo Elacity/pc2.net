@@ -13,20 +13,58 @@ const crypto = require('crypto');
 
 const PORT = 4200;
 
-// Generate a setup token
-const SETUP_TOKEN = `PC2-SETUP-${crypto.randomBytes(16).toString('hex')}`;
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 
-// Node state
-let nodeState = {
-    name: 'My Local PC2 (Mock)',
-    status: 'AWAITING_OWNER',
-    ownerWallet: null,
-    tetheredWallets: [],
-    sessions: new Map(),
-    files: [],
-    storageUsed: 0,
-    storageLimit: 10 * 1024 * 1024 * 1024 // 10GB
-};
+// State file location
+const STATE_FILE = path.join(os.tmpdir(), 'pc2-mock-state.json');
+
+// Load persisted state or create new
+let nodeState;
+let SETUP_TOKEN;
+
+try {
+    if (fs.existsSync(STATE_FILE)) {
+        const saved = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+        nodeState = saved.nodeState;
+        SETUP_TOKEN = saved.setupToken;
+        nodeState.sessions = new Map(saved.sessions || []);
+        console.log('\n📁 Loaded persisted state from', STATE_FILE);
+    } else {
+        throw new Error('No state file');
+    }
+} catch (e) {
+    // Generate new setup token
+    SETUP_TOKEN = `PC2-SETUP-${crypto.randomBytes(16).toString('hex')}`;
+    
+    // Node state
+    nodeState = {
+        name: 'My Local PC2 (Mock)',
+        status: 'AWAITING_OWNER',
+        ownerWallet: null,
+        tetheredWallets: [],
+        sessions: new Map(),
+        files: [],
+        storageUsed: 0,
+        storageLimit: 10 * 1024 * 1024 * 1024 // 10GB
+    };
+}
+
+// Save state function
+function saveState() {
+    try {
+        fs.writeFileSync(STATE_FILE, JSON.stringify({
+            nodeState: {
+                ...nodeState,
+                sessions: Array.from(nodeState.sessions.entries())
+            },
+            setupToken: SETUP_TOKEN
+        }));
+    } catch (e) {
+        console.error('Failed to save state:', e);
+    }
+}
 
 // Create HTTP server for REST endpoints
 const server = http.createServer((req, res) => {
@@ -114,6 +152,9 @@ function handleRequest(path, method, data, res) {
         
         console.log(`\n✅ Node claimed by wallet: ${walletAddress}\n`);
         
+        // Save state
+        saveState();
+        
         res.writeHead(200, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({
             success: true,
@@ -149,6 +190,9 @@ function handleRequest(path, method, data, res) {
         });
         
         console.log(`\n🔐 Session created for wallet: ${walletAddress}\n`);
+        
+        // Save state
+        saveState();
         
         res.writeHead(200, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({

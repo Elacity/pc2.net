@@ -94,29 +94,29 @@ export default {
                     </div>
                 </div>
                 
-                <!-- IPFS Section (Collapsible) -->
-                <div class="settings-card" style="cursor: pointer;" id="pc2-ipfs-toggle">
+                <!-- IPFS Section (Collapsible) - NOT using settings-card to avoid conflicts -->
+                <div id="pc2-ipfs-toggle" class="pc2-collapsible-header">
                     <strong>IPFS Node</strong>
-                    <div style="flex-grow:1; text-align: right; display: flex; align-items: center; justify-content: flex-end; gap: 8px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
                         <span class="pc2-ipfs-status" id="pc2-ipfs-status-dot" style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #888;"></span>
                         <span id="pc2-ipfs-status-text" style="font-size: 13px; color: #666;">Checking...</span>
                         <svg id="pc2-ipfs-caret" style="width: 16px; height: 16px; transition: transform 0.2s;" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>
                     </div>
                 </div>
                 
-                <div id="pc2-ipfs-details" style="display: none; padding: 0 15px 15px;">
-                    <div class="settings-card" style="margin-bottom: 8px;">
-                        <span style="font-size: 13px; color: #666;">Peer ID</span>
-                        <span id="pc2-ipfs-peer" style="font-size: 12px; font-family: monospace;">-</span>
+                <div id="pc2-ipfs-details" class="pc2-collapsible-content">
+                    <div class="pc2-info-row">
+                        <span>Peer ID</span>
+                        <span id="pc2-ipfs-peer" style="font-family: monospace; font-size: 12px;">-</span>
                     </div>
-                    <div class="settings-card" style="margin-bottom: 8px;">
-                        <span style="font-size: 13px; color: #666;">Version</span>
-                        <span id="pc2-ipfs-version" style="font-size: 13px;">-</span>
+                    <div class="pc2-info-row">
+                        <span>Version</span>
+                        <span id="pc2-ipfs-version">-</span>
                     </div>
-                    <div class="settings-card">
-                        <span style="font-size: 13px; color: #666;">Node URL</span>
+                    <div class="pc2-info-row">
+                        <span>Node URL</span>
                         <div style="display: flex; gap: 8px; align-items: center;">
-                            <input type="text" id="pc2-ipfs-url" value="http://localhost:5001" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; width: 160px; font-size: 12px;" />
+                            <input type="text" id="pc2-ipfs-url" value="http://localhost:5001" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; width: 150px; font-size: 12px;" />
                             <button class="button" id="pc2-ipfs-test" style="padding: 4px 10px; font-size: 12px;">Test</button>
                         </div>
                     </div>
@@ -126,24 +126,26 @@ export default {
                 <!-- Access Control Section -->
                 <h2 style="font-size: 15px; margin: 20px 0 10px; color: #333;">Access Control</h2>
                 
-                <div class="settings-card" style="flex-direction: column; align-items: stretch;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <div class="pc2-access-control-card">
+                    <div class="pc2-access-header">
                         <strong>Trusted Wallets</strong>
-                        <button class="button" id="pc2-invite-btn" style="padding: 6px 12px; font-size: 12px;">+ Invite</button>
+                        <button class="button" id="pc2-invite-btn">
+                            <span style="margin-right: 4px;">+</span> Invite
+                        </button>
                     </div>
                     
                     <!-- Inline invite form (hidden by default) -->
-                    <div id="pc2-invite-form" style="display: none; margin-bottom: 12px; padding: 12px; background: #f9fafb; border-radius: 6px;">
+                    <div id="pc2-invite-form" class="pc2-invite-form">
                         <div style="margin-bottom: 8px; font-size: 13px; color: #374151;">Enter wallet address to invite:</div>
                         <div style="display: flex; gap: 8px;">
-                            <input type="text" id="pc2-invite-input" placeholder="0x..." style="flex: 1; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px; font-family: monospace;" />
-                            <button class="button" id="pc2-invite-confirm" style="padding: 8px 16px; background: #3b82f6; color: white; border: none;">Add</button>
-                            <button class="button" id="pc2-invite-cancel" style="padding: 8px 12px;">Cancel</button>
+                            <input type="text" id="pc2-invite-input" placeholder="0x..." />
+                            <button class="button pc2-btn-primary" id="pc2-invite-confirm">Add</button>
+                            <button class="button" id="pc2-invite-cancel">Cancel</button>
                         </div>
-                        <div id="pc2-invite-error" style="margin-top: 8px; font-size: 12px; color: #dc2626;"></div>
+                        <div id="pc2-invite-error" class="pc2-error-text"></div>
                     </div>
                     
-                    <div id="pc2-wallets-list" style="width: 100%;">
+                    <div id="pc2-wallets-list">
                         <span style="color: #888; font-size: 13px;">Loading...</span>
                     </div>
                 </div>
@@ -171,12 +173,103 @@ export default {
                     0%, 100% { opacity: 1; }
                     50% { opacity: 0.5; }
                 }
+                
+                /* IPFS Collapsible Section */
+                .pc2-collapsible-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    padding: 12px 15px;
+                    margin: 0 0 1px;
+                    background: #fff;
+                    border: 1px solid #e5e7eb;
+                    border-radius: 6px;
+                    cursor: pointer;
+                    font-size: 13px;
+                    user-select: none;
+                }
+                .pc2-collapsible-header:hover {
+                    background: #f9fafb;
+                }
+                .pc2-collapsible-content {
+                    display: none;
+                    padding: 12px 15px;
+                    margin: -1px 0 0;
+                    background: #f9fafb;
+                    border: 1px solid #e5e7eb;
+                    border-top: none;
+                    border-radius: 0 0 6px 6px;
+                }
+                .pc2-info-row {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    padding: 8px 0;
+                    font-size: 13px;
+                    border-bottom: 1px solid #e5e7eb;
+                }
+                .pc2-info-row:last-of-type {
+                    border-bottom: none;
+                }
+                
+                /* Access Control Card - Dynamic height */
+                .pc2-access-control-card {
+                    border: 1px solid #e5e7eb;
+                    border-radius: 6px;
+                    background: #fff;
+                    padding: 15px;
+                    margin: 0 15px;
+                }
+                .pc2-access-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin-bottom: 12px;
+                }
+                .pc2-access-header .button {
+                    display: inline-flex;
+                    align-items: center;
+                    padding: 6px 14px;
+                    font-size: 13px;
+                }
+                
+                /* Invite Form */
+                .pc2-invite-form {
+                    display: none;
+                    margin-bottom: 12px;
+                    padding: 12px;
+                    background: #f3f4f6;
+                    border-radius: 6px;
+                }
+                .pc2-invite-form input {
+                    flex: 1;
+                    padding: 8px 12px;
+                    border: 1px solid #d1d5db;
+                    border-radius: 4px;
+                    font-size: 13px;
+                    font-family: monospace;
+                }
+                .pc2-invite-form .button {
+                    padding: 8px 14px;
+                }
+                .pc2-btn-primary {
+                    background: #3b82f6 !important;
+                    color: white !important;
+                    border: none !important;
+                }
+                .pc2-error-text {
+                    margin-top: 8px;
+                    font-size: 12px;
+                    color: #dc2626;
+                }
+                
+                /* Wallet Items */
                 .pc2-wallet-item {
                     display: flex;
                     align-items: center;
                     justify-content: space-between;
-                    padding: 8px 0;
-                    border-bottom: 1px solid #eee;
+                    padding: 10px 0;
+                    border-bottom: 1px solid #e5e7eb;
                 }
                 .pc2-wallet-item:last-child {
                     border-bottom: none;
@@ -201,9 +294,6 @@ export default {
                 .pc2-wallet-revoke:hover {
                     background: #fee2e2;
                     border-radius: 4px;
-                }
-                #pc2-ipfs-toggle:hover {
-                    background: #f9fafb;
                 }
             </style>
         `;
@@ -384,26 +474,26 @@ export default {
             }
         }
         
-        // IPFS section toggle - use event delegation and stop propagation
-        $el_window.find('#pc2-ipfs-toggle').on('click', function(e) {
+        // IPFS section toggle - simple show/hide
+        $el_window.on('click', '#pc2-ipfs-toggle', function(e) {
             e.preventDefault();
             e.stopPropagation();
             
             const $details = $el_window.find('#pc2-ipfs-details');
             const $caret = $el_window.find('#pc2-ipfs-caret');
+            const $header = $(this);
             
             if ($details.is(':visible')) {
-                $details.slideUp(200);
+                $details.slideUp(150);
                 $caret.css('transform', 'rotate(0deg)');
+                $header.css('border-radius', '6px');
             } else {
-                $details.slideDown(200);
+                $details.slideDown(150);
                 $caret.css('transform', 'rotate(180deg)');
+                $header.css('border-radius', '6px 6px 0 0');
             }
-        });
-        
-        // Prevent clicks inside IPFS details from bubbling up and closing
-        $el_window.find('#pc2-ipfs-details').on('click', function(e) {
-            e.stopPropagation();
+            
+            return false;
         });
         
         // IPFS test button
@@ -450,21 +540,24 @@ export default {
         const $inviteInput = $el_window.find('#pc2-invite-input');
         const $inviteError = $el_window.find('#pc2-invite-error');
         
-        $el_window.find('#pc2-invite-btn').on('click', function() {
+        $el_window.on('click', '#pc2-invite-btn', function(e) {
+            e.preventDefault();
             $inviteForm.slideDown(200);
-            $inviteInput.val('').focus();
+            setTimeout(() => $inviteInput.val('').focus(), 50);
             $inviteError.text('');
         });
         
         // Cancel invite
-        $el_window.find('#pc2-invite-cancel').on('click', function() {
+        $el_window.on('click', '#pc2-invite-cancel', function(e) {
+            e.preventDefault();
             $inviteForm.slideUp(200);
             $inviteInput.val('');
             $inviteError.text('');
         });
         
         // Confirm invite
-        $el_window.find('#pc2-invite-confirm').on('click', async function() {
+        $el_window.on('click', '#pc2-invite-confirm', async function(e) {
+            e.preventDefault();
             const wallet = $inviteInput.val().trim();
             $inviteError.text('');
             

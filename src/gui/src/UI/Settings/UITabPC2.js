@@ -129,8 +129,20 @@ export default {
                 <div class="settings-card" style="flex-direction: column; align-items: stretch;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                         <strong>Trusted Wallets</strong>
-                        <button class="button" id="pc2-invite-btn" style="padding: 4px 10px; font-size: 12px;">+ Invite</button>
+                        <button class="button" id="pc2-invite-btn" style="padding: 6px 12px; font-size: 12px;">+ Invite</button>
                     </div>
+                    
+                    <!-- Inline invite form (hidden by default) -->
+                    <div id="pc2-invite-form" style="display: none; margin-bottom: 12px; padding: 12px; background: #f9fafb; border-radius: 6px;">
+                        <div style="margin-bottom: 8px; font-size: 13px; color: #374151;">Enter wallet address to invite:</div>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="text" id="pc2-invite-input" placeholder="0x..." style="flex: 1; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px; font-family: monospace;" />
+                            <button class="button" id="pc2-invite-confirm" style="padding: 8px 16px; background: #3b82f6; color: white; border: none;">Add</button>
+                            <button class="button" id="pc2-invite-cancel" style="padding: 8px 12px;">Cancel</button>
+                        </div>
+                        <div id="pc2-invite-error" style="margin-top: 8px; font-size: 12px; color: #dc2626;"></div>
+                    </div>
+                    
                     <div id="pc2-wallets-list" style="width: 100%;">
                         <span style="color: #888; font-size: 13px;">Loading...</span>
                     </div>
@@ -372,8 +384,11 @@ export default {
             }
         }
         
-        // IPFS section toggle
-        $el_window.find('#pc2-ipfs-toggle').on('click', function() {
+        // IPFS section toggle - use event delegation and stop propagation
+        $el_window.find('#pc2-ipfs-toggle').on('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
             const $details = $el_window.find('#pc2-ipfs-details');
             const $caret = $el_window.find('#pc2-ipfs-caret');
             
@@ -384,6 +399,11 @@ export default {
                 $details.slideDown(200);
                 $caret.css('transform', 'rotate(180deg)');
             }
+        });
+        
+        // Prevent clicks inside IPFS details from bubbling up and closing
+        $el_window.find('#pc2-ipfs-details').on('click', function(e) {
+            e.stopPropagation();
         });
         
         // IPFS test button
@@ -425,18 +445,58 @@ export default {
             }
         });
         
-        // Invite button
-        $el_window.find('#pc2-invite-btn').on('click', async function() {
-            const wallet = prompt('Enter wallet address to invite:');
-            if (wallet && wallet.startsWith('0x') && wallet.length === 42) {
-                try {
-                    await pc2Service.request?.('POST', '/api/invite', { wallet });
-                    loadWallets();
-                } catch (error) {
-                    alert('Failed to invite: ' + error.message);
-                }
-            } else if (wallet) {
-                alert('Invalid wallet address. Must start with 0x and be 42 characters.');
+        // Invite button - show inline form
+        const $inviteForm = $el_window.find('#pc2-invite-form');
+        const $inviteInput = $el_window.find('#pc2-invite-input');
+        const $inviteError = $el_window.find('#pc2-invite-error');
+        
+        $el_window.find('#pc2-invite-btn').on('click', function() {
+            $inviteForm.slideDown(200);
+            $inviteInput.val('').focus();
+            $inviteError.text('');
+        });
+        
+        // Cancel invite
+        $el_window.find('#pc2-invite-cancel').on('click', function() {
+            $inviteForm.slideUp(200);
+            $inviteInput.val('');
+            $inviteError.text('');
+        });
+        
+        // Confirm invite
+        $el_window.find('#pc2-invite-confirm').on('click', async function() {
+            const wallet = $inviteInput.val().trim();
+            $inviteError.text('');
+            
+            if (!wallet) {
+                $inviteError.text('Please enter a wallet address');
+                return;
+            }
+            
+            if (!wallet.startsWith('0x') || wallet.length !== 42) {
+                $inviteError.text('Invalid address. Must start with 0x and be 42 characters.');
+                return;
+            }
+            
+            const $btn = $(this);
+            $btn.prop('disabled', true).text('Adding...');
+            
+            try {
+                await pc2Service.request?.('POST', '/api/invite', { wallet });
+                $inviteForm.slideUp(200);
+                $inviteInput.val('');
+                loadWallets();
+            } catch (error) {
+                $inviteError.text('Failed: ' + error.message);
+            } finally {
+                $btn.prop('disabled', false).text('Add');
+            }
+        });
+        
+        // Allow Enter key to submit
+        $inviteInput.on('keypress', function(e) {
+            if (e.which === 13) {
+                $el_window.find('#pc2-invite-confirm').click();
             }
         });
         

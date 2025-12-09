@@ -191,29 +191,6 @@ class PC2ConnectionService {
     }
     
     /**
-     * Get connection status
-     * @returns {'disconnected'|'connecting'|'connected'|'error'}
-     */
-    getStatus() {
-        return this.status;
-    }
-    
-    /**
-     * Get current config
-     * @returns {PC2Config|null}
-     */
-    getConfig() {
-        return this.config;
-    }
-    
-    /**
-     * Forget the PC2 node configuration
-     */
-    forget() {
-        this.clearConfig();
-    }
-    
-    /**
      * Get PC2 node stats
      * @returns {Promise<Object>}
      */

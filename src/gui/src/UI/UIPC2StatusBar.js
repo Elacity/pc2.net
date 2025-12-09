@@ -9,8 +9,8 @@
  */
 
 import { getPC2Service } from '../services/PC2ConnectionService.js';
+import UIPC2SetupWizard from './UIPC2SetupWizard.js';
 import UIContextMenu from './UIContextMenu.js';
-import UIWindowSettings from './Settings/UIWindowSettings.js';
 import { createLogger } from '../helpers/logger.js';
 
 const logger = createLogger('PC2StatusBar');
@@ -21,11 +21,6 @@ const logger = createLogger('PC2StatusBar');
  */
 function initPC2StatusBar() {
     const pc2Service = getPC2Service();
-    
-    // Register PC2 service in global services for settings tab access
-    if (globalThis.services && !globalThis.services.has('pc2')) {
-        globalThis.services.set('pc2', pc2Service);
-    }
     
     // Add minimal styles for the icon
     if (!$('#pc2-status-styles').length) {
@@ -151,8 +146,11 @@ function initPC2StatusBar() {
             items.push({
                 html: 'Connect to PC2',
                 onClick: () => {
-                    // Open Settings window with PC2 tab for connection
-                    UIWindowSettings({ tab: 'pc2' });
+                    UIPC2SetupWizard({
+                        onSuccess: () => {
+                            logger.log('[PC2]: Connected via wizard');
+                        },
+                    });
                 }
             });
         }
@@ -160,8 +158,12 @@ function initPC2StatusBar() {
         items.push({
             html: 'PC2 Settings',
             onClick: () => {
-                // Open Settings window with PC2 tab
-                UIWindowSettings({ tab: 'pc2' });
+                // Open Settings window with PC2 tab selected
+                import('./Settings/UIWindowSettings.js').then(({ default: UIWindowSettings }) => {
+                    UIWindowSettings({ tab: 'pc2' });
+                }).catch((err) => {
+                    logger.error('[PC2]: Failed to open settings:', err);
+                });
             }
         });
 

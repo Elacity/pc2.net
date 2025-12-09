@@ -230,7 +230,7 @@ class PC2ConnectionService {
 
         // Try to use stored session first if requested
         if (useStoredSession && this.session?.token) {
-            logger.log('[PC2]: Attempting to use stored session');
+            logger.log('[PC2]: Attempting to use stored session, token:', this.session.token.substring(0, 8) + '...');
             
             // Verify session is still valid
             try {
@@ -244,10 +244,13 @@ class PC2ConnectionService {
                     body: JSON.stringify({ walletAddress }),
                 });
 
+                logger.log('[PC2]: Session verify response:', response.status);
+                
                 if (response.ok) {
                     const result = await response.json();
+                    logger.log('[PC2]: Session verify result:', result);
                     if (result.valid) {
-                        logger.log('[PC2]: Stored session is valid, skipping signature');
+                        logger.log('[PC2]: ✅ Stored session is valid, skipping signature!');
                         this.config = {
                             nodeUrl,
                             nodeName: result.nodeName || this.session.nodeName || 'PC2 Node',
@@ -256,11 +259,17 @@ class PC2ConnectionService {
                         };
                         this._setStatus('connected');
                         return { success: true, sessionToken: this.session.token };
+                    } else {
+                        logger.log('[PC2]: Session marked as invalid by server');
                     }
+                } else {
+                    logger.log('[PC2]: Session verify failed with status:', response.status);
                 }
             } catch (e) {
-                logger.log('[PC2]: Stored session invalid or expired, will re-authenticate');
+                logger.log('[PC2]: Session verification error:', e);
             }
+        } else {
+            logger.log('[PC2]: No stored session to use, useStoredSession:', useStoredSession, 'has token:', !!this.session?.token);
         }
 
         // Need to sign new message

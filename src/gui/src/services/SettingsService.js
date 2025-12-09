@@ -19,12 +19,10 @@
 import { Service } from '../definitions.js';
 
 import AboutTab from '../UI/Settings/UITabAbout.js';
-import UsageTab from '../UI/Settings/UITabUsage.js';
 import AccountTab from '../UI/Settings/UITabAccount.js';
 import SecurityTab from '../UI/Settings/UITabSecurity.js';
 import PersonalizationTab from '../UI/Settings/UITabPersonalization.js';
 import LanguageTag from '../UI/Settings/UITabLanguage.js';
-import IPFSTab from '../UI/Settings/UITabIPFS.js';
 import PC2Tab from '../UI/Settings/UITabPC2.js';
 import UIElement from '../UI/UIElement.js';
 const TSettingsTab = use('ui.traits.TSettingsTab');
@@ -32,14 +30,14 @@ const TSettingsTab = use('ui.traits.TSettingsTab');
 export class SettingsService extends Service {
     #tabs = [];
     async _init () {
+        // Personal Cloud (PC2) first - the primary experience
+        // Usage & IPFS tabs removed - consolidated into PC2
         ;[
-            UsageTab,
+            PC2Tab,
             AccountTab,
             SecurityTab,
             PersonalizationTab,
             LanguageTag,
-            PC2Tab,
-            IPFSTab,
             AboutTab,
         ].forEach(tab => {
             this.register_tab(tab);

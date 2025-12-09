@@ -677,6 +677,14 @@ window.sendItemChangeEventToWatchingApps = function(item_uid, event_data){
  */
 
 window.show_save_account_notice_if_needed = function(message){
+    // Don't show save session modal when connected to PC2 (decentralized backend)
+    // PC2 users own their data and don't need to "save" sessions
+    // Check if API origin is pointing to PC2 (localhost:4200 or 127.0.0.1:4200)
+    const apiOrigin = window.api_origin || puter?.APIOrigin || '';
+    if (apiOrigin.includes('127.0.0.1:4200') || apiOrigin.includes('localhost:4200')) {
+        return;
+    }
+    
     puter.kv.get({
         key: "save_account_notice_shown",
     }).then(async function(value){
@@ -1857,6 +1865,40 @@ window.upload_items = async function(items, dest_path){
                     operation: 'upload',
                     data: files
                 });
+                
+                // Refresh the desktop container and any open Desktop windows if files were uploaded to desktop
+                // Normalize paths for comparison (handle trailing slashes and case differences)
+                const normalizedDestPath = dest_path ? dest_path.replace(/\/$/, '') : '';
+                const normalizedDesktopPath = window.desktop_path ? window.desktop_path.replace(/\/$/, '') : '';
+                
+                console.log('[upload_items] Checking if upload is to desktop:', {
+                    dest_path: normalizedDestPath,
+                    desktop_path: normalizedDesktopPath,
+                    match: normalizedDestPath === normalizedDesktopPath
+                });
+                
+                if (normalizedDestPath === normalizedDesktopPath) {
+                    console.log('[upload_items] Refreshing desktop container...');
+                    const el_desktop = document.querySelector('.desktop.item-container');
+                    if (el_desktop) {
+                        console.log('[upload_items] Desktop container found, refreshing...');
+                        // Import refresh_item_container
+                        const refreshModule = await import('./helpers/refresh_item_container.js');
+                        refreshModule.default(el_desktop);
+                    } else {
+                        console.warn('[upload_items] Desktop container not found!');
+                    }
+                    // Also refresh any open Desktop folder windows
+                    const desktopWindows = document.querySelectorAll(`.window[data-path="${window.desktop_path}"] .item-container`);
+                    console.log('[upload_items] Found', desktopWindows.length, 'open Desktop folder windows');
+                    for (const windowContainer of desktopWindows) {
+                        const refreshModule = await import('./helpers/refresh_item_container.js');
+                        refreshModule.default(windowContainer);
+                    }
+                } else {
+                    console.log('[upload_items] Upload not to desktop, skipping refresh');
+                }
+                
                 // close progress window after a bit of delay for a better UX
                 setTimeout(() => {
                     setTimeout(() => {

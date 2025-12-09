@@ -5,7 +5,7 @@
  * 
  * Consolidated tab for all personal cloud functionality:
  * - Connection status & node management
- * - Storage stats (IPFS-backed)
+ * - Storage stats
  * - Files & encryption
  * - Access control (trusted wallets)
  */
@@ -26,19 +26,19 @@ export default {
             <!-- Connection Status -->
             <div class="settings-card">
                 <strong>Connection</strong>
-                <div style="flex-grow:1; text-align: right;">
-                    <span class="pc2-status-indicator" id="pc2-status-dot" style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #888; margin-right: 6px;"></span>
+                <div style="flex-grow:1; text-align: right; display: flex; align-items: center; justify-content: flex-end; gap: 6px;">
+                    <span class="pc2-status-dot" id="pc2-status-dot"></span>
                     <span id="pc2-status-text" style="font-size: 13px;">Not Connected</span>
                 </div>
             </div>
             
             <!-- Not Connected State -->
             <div id="pc2-not-connected" style="display: none;">
-                <div class="settings-card" style="flex-direction: column; align-items: flex-start; gap: 12px;">
-                    <p style="margin: 0; font-size: 13px; color: #666;">
+                <div class="pc2-connect-card">
+                    <p>
                         Connect to your Personal Cloud node to store files on your own hardware using decentralized identity.
                     </p>
-                    <button class="button button-primary" id="pc2-connect-btn" style="background: #3b82f6; color: white;">
+                    <button class="button pc2-btn-primary" id="pc2-connect-btn">
                         Connect to PC2
                     </button>
                 </div>
@@ -94,35 +94,6 @@ export default {
                     </div>
                 </div>
                 
-                <!-- IPFS Section (Collapsible) - NOT using settings-card to avoid conflicts -->
-                <div id="pc2-ipfs-toggle" class="pc2-collapsible-header">
-                    <strong>IPFS Node</strong>
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <span class="pc2-ipfs-status" id="pc2-ipfs-status-dot" style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #888;"></span>
-                        <span id="pc2-ipfs-status-text" style="font-size: 13px; color: #666;">Checking...</span>
-                        <svg id="pc2-ipfs-caret" style="width: 16px; height: 16px; transition: transform 0.2s;" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>
-                    </div>
-                </div>
-                
-                <div id="pc2-ipfs-details" class="pc2-collapsible-content">
-                    <div class="pc2-info-row">
-                        <span>Peer ID</span>
-                        <span id="pc2-ipfs-peer" style="font-family: monospace; font-size: 12px;">-</span>
-                    </div>
-                    <div class="pc2-info-row">
-                        <span>Version</span>
-                        <span id="pc2-ipfs-version">-</span>
-                    </div>
-                    <div class="pc2-info-row">
-                        <span>Node URL</span>
-                        <div style="display: flex; gap: 8px; align-items: center;">
-                            <input type="text" id="pc2-ipfs-url" value="http://localhost:5001" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; width: 150px; font-size: 12px;" />
-                            <button class="button" id="pc2-ipfs-test" style="padding: 4px 10px; font-size: 12px;">Test</button>
-                        </div>
-                    </div>
-                    <div id="pc2-ipfs-test-result" style="margin-top: 8px;"></div>
-                </div>
-                
                 <!-- Access Control Section -->
                 <h2 style="font-size: 15px; margin: 20px 0 10px; color: #333;">Access Control</h2>
                 
@@ -151,22 +122,30 @@ export default {
                 </div>
                 
                 <!-- Actions -->
-                <div style="display: flex; gap: 10px; margin-top: 20px; padding: 0 15px;">
+                <div style="display: flex; gap: 10px; margin-top: 20px; padding: 0 15px 30px;">
                     <button class="button" id="pc2-disconnect-btn">Disconnect</button>
                     <button class="button" id="pc2-forget-btn" style="background: #fee2e2; color: #dc2626; border-color: #fecaca;">Forget Node</button>
                 </div>
             </div>
             
             <style>
-                .pc2-status-indicator.connected, .pc2-ipfs-status.connected {
-                    background: #22c55e !important;
+                /* Status Dot - inline next to text */
+                .pc2-status-dot {
+                    display: inline-block;
+                    width: 8px;
+                    height: 8px;
+                    border-radius: 50%;
+                    background: #9ca3af;
+                }
+                .pc2-status-dot.connected {
+                    background: #22c55e;
                     box-shadow: 0 0 4px #22c55e;
                 }
-                .pc2-status-indicator.disconnected, .pc2-ipfs-status.disconnected {
-                    background: #f59e0b !important;
+                .pc2-status-dot.disconnected {
+                    background: #f59e0b;
                 }
-                .pc2-status-indicator.connecting, .pc2-ipfs-status.checking {
-                    background: #f59e0b !important;
+                .pc2-status-dot.connecting {
+                    background: #f59e0b;
                     animation: pc2-pulse 1s infinite;
                 }
                 @keyframes pc2-pulse {
@@ -174,42 +153,19 @@ export default {
                     50% { opacity: 0.5; }
                 }
                 
-                /* IPFS Collapsible Section */
-                .pc2-collapsible-header {
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    padding: 12px 15px;
-                    margin: 0 0 1px;
-                    background: #fff;
+                /* Connect Card - Not Connected State */
+                .pc2-connect-card {
+                    margin: 0 15px 20px;
+                    padding: 20px;
                     border: 1px solid #e5e7eb;
                     border-radius: 6px;
-                    cursor: pointer;
-                    font-size: 13px;
-                    user-select: none;
-                }
-                .pc2-collapsible-header:hover {
                     background: #f9fafb;
                 }
-                .pc2-collapsible-content {
-                    display: none;
-                    padding: 12px 15px;
-                    margin: -1px 0 0;
-                    background: #f9fafb;
-                    border: 1px solid #e5e7eb;
-                    border-top: none;
-                    border-radius: 0 0 6px 6px;
-                }
-                .pc2-info-row {
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    padding: 8px 0;
+                .pc2-connect-card p {
+                    margin: 0 0 15px;
                     font-size: 13px;
-                    border-bottom: 1px solid #e5e7eb;
-                }
-                .pc2-info-row:last-of-type {
-                    border-bottom: none;
+                    color: #666;
+                    line-height: 1.5;
                 }
                 
                 /* Access Control Card - Dynamic height */
@@ -229,6 +185,7 @@ export default {
                 .pc2-access-header .button {
                     display: inline-flex;
                     align-items: center;
+                    justify-content: center;
                     padding: 6px 14px;
                     font-size: 13px;
                 }
@@ -250,8 +207,15 @@ export default {
                     font-family: monospace;
                 }
                 .pc2-invite-form .button {
-                    padding: 8px 14px;
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 8px 16px;
+                    font-size: 13px;
+                    min-width: 70px;
                 }
+                
+                /* Primary Button */
                 .pc2-btn-primary {
                     background: #3b82f6 !important;
                     color: white !important;
@@ -338,7 +302,6 @@ export default {
                 // Load all data
                 await Promise.all([
                     loadStorageStats(),
-                    loadIPFSStatus(),
                     loadWallets()
                 ]);
             } else {
@@ -372,35 +335,6 @@ export default {
                 logger.error('[PC2Tab] Failed to load storage stats:', error);
                 $el_window.find('#pc2-storage-used').text('-');
                 $el_window.find('#pc2-storage-limit').text('-');
-            }
-        }
-        
-        // Load IPFS node status
-        async function loadIPFSStatus() {
-            const $ipfsDot = $el_window.find('#pc2-ipfs-status-dot');
-            const $ipfsText = $el_window.find('#pc2-ipfs-status-text');
-            
-            $ipfsDot.removeClass('connected disconnected').addClass('checking');
-            $ipfsText.text('Checking...');
-            
-            try {
-                const result = await puter.drivers?.call?.('storage', 'ipfs', 'connect', {
-                    nodeUrl: $el_window.find('#pc2-ipfs-url').val() || 'http://localhost:5001'
-                });
-                
-                $ipfsDot.removeClass('checking disconnected').addClass('connected');
-                $ipfsText.text('Connected');
-                $el_window.find('#pc2-ipfs-peer').text(
-                    result.peerId ? `${result.peerId.substring(0, 12)}...` : '-'
-                );
-                $el_window.find('#pc2-ipfs-version').text(result.version || '-');
-                return true;
-            } catch (error) {
-                $ipfsDot.removeClass('checking connected').addClass('disconnected');
-                $ipfsText.text('Not Available');
-                $el_window.find('#pc2-ipfs-peer').text('-');
-                $el_window.find('#pc2-ipfs-version').text('-');
-                return false;
             }
         }
         
@@ -473,47 +407,6 @@ export default {
                 }
             }
         }
-        
-        // IPFS section toggle - simple show/hide
-        $el_window.on('click', '#pc2-ipfs-toggle', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            
-            const $details = $el_window.find('#pc2-ipfs-details');
-            const $caret = $el_window.find('#pc2-ipfs-caret');
-            const $header = $(this);
-            
-            if ($details.is(':visible')) {
-                $details.slideUp(150);
-                $caret.css('transform', 'rotate(0deg)');
-                $header.css('border-radius', '6px');
-            } else {
-                $details.slideDown(150);
-                $caret.css('transform', 'rotate(180deg)');
-                $header.css('border-radius', '6px 6px 0 0');
-            }
-            
-            return false;
-        });
-        
-        // IPFS test button
-        $el_window.find('#pc2-ipfs-test').on('click', async function() {
-            const $btn = $(this);
-            const $result = $el_window.find('#pc2-ipfs-test-result');
-            
-            $btn.prop('disabled', true).text('...');
-            $result.html('');
-            
-            const connected = await loadIPFSStatus();
-            
-            $btn.prop('disabled', false).text('Test');
-            
-            if (connected) {
-                $result.html('<span style="color: #22c55e; font-size: 12px;">✓ Connection successful</span>');
-            } else {
-                $result.html('<span style="color: #ef4444; font-size: 12px;">✗ Connection failed</span>');
-            }
-        });
         
         // Connect button
         $el_window.find('#pc2-connect-btn').on('click', async function() {

@@ -264,13 +264,19 @@ function initPC2StatusBar() {
         });
     });
 
-    // Auto-reconnect if we have saved config
+    // Auto-reconnect if we have saved config (silent mode - no signature prompts)
     setTimeout(async () => {
         if (pc2Service.isConfigured?.() && !pc2Service.isConnected?.()) {
-            logger.log('[PC2]: Auto-reconnecting to saved PC2 node...');
+            logger.log('[PC2]: Auto-reconnecting to saved PC2 node (silent mode)...');
             try {
-                await pc2Service.authenticate?.(pc2Service.getNodeUrl?.());
-                logger.log('[PC2]: Auto-reconnect successful');
+                // Use silentMode=true so we don't prompt for signatures
+                // If session is invalid, user will need to manually reconnect
+                const result = await pc2Service.authenticate?.(pc2Service.getNodeUrl?.(), true, true);
+                if (result?.success) {
+                    logger.log('[PC2]: Auto-reconnect successful');
+                } else {
+                    logger.log('[PC2]: Auto-reconnect skipped - session expired, manual reconnect needed');
+                }
             } catch (err) {
                 logger.log('[PC2]: Auto-reconnect failed:', err.message);
             }

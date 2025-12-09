@@ -61,6 +61,15 @@ class PC2ConnectionService {
         /** @type {number} */
         this.maxReconnectAttempts = 5;
         
+        /** @type {boolean} - Prevents concurrent auth attempts */
+        this._isAuthenticating = false;
+        
+        /** @type {Promise|null} - Current auth promise for deduplication */
+        this._authPromise = null;
+        
+        /** @type {Promise|null} - Queue for signing requests */
+        this._signQueue = null;
+        
         // Load saved config from localStorage
         this._loadConfig();
     }
@@ -220,9 +229,24 @@ class PC2ConnectionService {
      * Authenticate with an existing PC2 node (not owner)
      * @param {string} nodeUrl - The PC2 node URL
      * @param {boolean} useStoredSession - Try to use stored session first
+     * @param {boolean} silentMode - If true, don't prompt for signature if session is invalid (for auto-reconnect)
      * @returns {Promise<{success: boolean, sessionToken: string}>}
      */
-    async authenticate(nodeUrl, useStoredSession = true) {
+    async authenticate(nodeUrl, useStoredSession = true, silentMode = false) {
+        // Prevent concurrent authentication attempts - return existing promise if in progress
+        if (this._isAuthenticating) {
+            logger.log('[PC2]: Authentication already in progress, waiting for existing attempt...');
+            // Wait for existing attempt to complete
+            if (this._authPromise) {
+                return this._authPromise;
+            }
+            // If no promise yet, wait a tick and check again
+            await new Promise(resolve => setTimeout(resolve, 10));
+            if (this._authPromise) {
+                return this._authPromise;
+            }
+        }
+
         const walletAddress = window.user?.wallet_address;
         if (!walletAddress) {
             throw new Error('Wallet not connected');
@@ -258,6 +282,10 @@ class PC2ConnectionService {
                             status: 'connected',
                         };
                         this._setStatus('connected');
+                        
+                        // 🚀 Redirect API to PC2 on auto-reconnect too!
+                        this._redirectAPIToPC2(nodeUrl, this.session.token);
+                        
                         return { success: true, sessionToken: this.session.token };
                     } else {
                         logger.log('[PC2]: Session marked as invalid by server');
@@ -272,53 +300,76 @@ class PC2ConnectionService {
             logger.log('[PC2]: No stored session to use, useStoredSession:', useStoredSession, 'has token:', !!this.session?.token);
         }
 
-        // Need to sign new message
-        logger.log('[PC2]: Requesting new signature for authentication');
-        const nonce = Date.now().toString();
-        const message = JSON.stringify({
-            action: 'authenticate',
-            nodeUrl: nodeUrl,
-            nonce,
-            timestamp: Date.now(),
-        });
-
-        const signature = await this._signMessage(message);
-
-        const url = new URL('/api/auth', nodeUrl);
-        const response = await fetch(url.toString(), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                walletAddress,
-                signature,
-                message,
-                nonce,
-            }),
-        });
-
-        const result = await response.json();
-
-        if (!response.ok || !result.success) {
-            throw new Error(result.error || 'Authentication failed');
+        // In silent mode (auto-reconnect), don't prompt for signature - just fail silently
+        if (silentMode) {
+            logger.log('[PC2]: Silent mode - not prompting for signature');
+            this._setStatus('disconnected');
+            return { success: false, reason: 'Session expired, manual reconnect required' };
         }
 
-        // Save config and session
-        this.config = {
-            nodeUrl,
-            nodeName: result.nodeName || 'PC2 Node',
-            isOwner: result.isOwner || false,
-            status: 'connected',
-        };
-        this.session = {
-            token: result.sessionToken,
-            wallet: walletAddress,
-            nodeName: result.nodeName,
-        };
-        this._saveConfig();
-        this._setStatus('connected');
+        // Set flag and create promise to prevent concurrent auth attempts
+        this._isAuthenticating = true;
+        
+        this._authPromise = (async () => {
+            try {
+                // Need to sign new message (only when user explicitly requests connection)
+                logger.log('[PC2]: Requesting new signature for authentication');
+                const nonce = Date.now().toString();
+                const message = JSON.stringify({
+                    action: 'authenticate',
+                    nodeUrl: nodeUrl,
+                    nonce,
+                    timestamp: Date.now(),
+                });
 
-        logger.log('[PC2]: Authenticated successfully with new session');
-        return result;
+                const signature = await this._signMessage(message);
+
+                const url = new URL('/api/auth', nodeUrl);
+                const response = await fetch(url.toString(), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        walletAddress,
+                        signature,
+                        message,
+                        nonce,
+                    }),
+                });
+
+                const result = await response.json();
+
+                if (!response.ok || !result.success) {
+                    throw new Error(result.error || 'Authentication failed');
+                }
+
+                // Save config and session
+                this.config = {
+                    nodeUrl,
+                    nodeName: result.nodeName || 'PC2 Node',
+                    isOwner: result.isOwner || false,
+                    status: 'connected',
+                };
+                this.session = {
+                    token: result.sessionToken,
+                    wallet: walletAddress,
+                    nodeName: result.nodeName,
+                };
+                this._saveConfig();
+                this._setStatus('connected');
+
+                // 🚀 REDIRECT ALL PUTER API CALLS TO PC2 NODE
+                // This is the magic - your PC2 IS your backend!
+                this._redirectAPIToPC2(nodeUrl, result.sessionToken);
+
+                logger.log('[PC2]: Authenticated successfully - ALL API calls now go to your PC2!');
+                return result;
+            } finally {
+                this._isAuthenticating = false;
+                this._authPromise = null;
+            }
+        })();
+
+        return this._authPromise;
     }
 
     /**
@@ -378,64 +429,95 @@ class PC2ConnectionService {
      * @returns {Promise<{success: boolean, message: string}>}
      */
     async claimOwnership(nodeUrl, setupToken) {
+        // Prevent concurrent claim attempts
+        if (this._isAuthenticating) {
+            logger.log('[PC2]: Claim already in progress, waiting...');
+            if (this._authPromise) {
+                return this._authPromise;
+            }
+            await new Promise(resolve => setTimeout(resolve, 10));
+            if (this._authPromise) {
+                return this._authPromise;
+            }
+        }
+
         const walletAddress = window.user?.wallet_address;
         if (!walletAddress) {
             throw new Error('Wallet not connected');
         }
 
-        // Create message to sign
-        const message = JSON.stringify({
-            action: 'claim-ownership',
-            nodeUrl: nodeUrl,
-            timestamp: Date.now(),
-        });
-
-        // Sign with wallet
-        const signature = await this._signMessage(message);
-
-        // Try /api/claim first (mock server), then /pc2/claim-ownership (full server)
-        const endpoints = ['/api/claim', '/pc2/claim-ownership'];
-        let lastError = null;
+        this._isAuthenticating = true;
         
-        for (const endpoint of endpoints) {
+        this._authPromise = (async () => {
             try {
-                const url = new URL(endpoint, nodeUrl);
-                const response = await fetch(url.toString(), {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        walletAddress,
-                        setupToken,
-                        signature,
-                        message,
-                    }),
+                // Create message to sign
+                const message = JSON.stringify({
+                    action: 'claim-ownership',
+                    nodeUrl: nodeUrl,
+                    timestamp: Date.now(),
                 });
 
-                const result = await response.json();
+                // Sign with wallet
+                const signature = await this._signMessage(message);
 
-                if (response.ok && result.success) {
-                    // Save config
-                    this.config = {
-                        nodeUrl,
-                        nodeName: result.nodeName || 'My PC2',
-                        isOwner: true,
-                        status: 'disconnected',
-                    };
-                    this._saveConfig();
-                    this._setStatus('connected');
+                // Try /api/claim first (mock server), then /pc2/claim-ownership (full server)
+                const endpoints = ['/api/claim', '/pc2/claim-ownership'];
+                let lastError = null;
+                
+                for (const endpoint of endpoints) {
+                    try {
+                        const url = new URL(endpoint, nodeUrl);
+                        const response = await fetch(url.toString(), {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                walletAddress,
+                                setupToken,
+                                signature,
+                                message,
+                            }),
+                        });
 
-                    logger.log('[PC2]: Ownership claimed successfully');
-                    return result;
-                } else {
-                    lastError = result.error || 'Failed to claim ownership';
+                        const result = await response.json();
+
+                        if (response.ok && result.success) {
+                            // Save config AND session (important!)
+                            this.config = {
+                                nodeUrl,
+                                nodeName: result.nodeName || 'My PC2',
+                                isOwner: true,
+                                status: 'connected',
+                            };
+                            this.session = {
+                                token: result.sessionToken,
+                                wallet: walletAddress,
+                                nodeName: result.nodeName || 'My PC2',
+                            };
+                            this._saveConfig();
+                            this._setStatus('connected');
+
+                            // Redirect API to PC2 (same as authenticate)
+                            this._redirectAPIToPC2(nodeUrl, result.sessionToken);
+
+                            logger.log('[PC2]: Ownership claimed successfully - ALL API calls now go to your PC2!');
+                            return result;
+                        } else {
+                            lastError = result.error || 'Failed to claim ownership';
+                        }
+                    } catch (e) {
+                        lastError = e.message;
+                        continue;
+                    }
                 }
-            } catch (e) {
-                lastError = e.message;
-                continue;
+                
+                throw new Error(lastError || 'Failed to claim ownership');
+            } finally {
+                this._isAuthenticating = false;
+                this._authPromise = null;
             }
-        }
-        
-        throw new Error(lastError || 'Failed to claim ownership');
+        })();
+
+        return this._authPromise;
     }
 
     /**
@@ -528,6 +610,9 @@ class PC2ConnectionService {
         this.pendingRequests.clear();
         this.reconnectAttempts = 0;
         this._setStatus('disconnected');
+
+        // Restore original API (back to centralized Puter if that's where we started)
+        this._restoreOriginalAPI();
     }
 
     /**
@@ -579,27 +664,99 @@ class PC2ConnectionService {
 
     /**
      * Sign a message with the user's wallet
+     * Uses a queue to ensure only ONE signature request at a time
      * @param {string} message
      * @returns {Promise<string>}
      * @private
      */
     async _signMessage(message) {
-        if (typeof window.ethereum === 'undefined') {
-            throw new Error('MetaMask not available');
+        // Use a promise queue to ensure sequential signing
+        const doSign = async () => {
+            if (typeof window.ethereum === 'undefined') {
+                throw new Error('MetaMask not available');
+            }
+
+            const walletAddress = window.user?.wallet_address;
+            if (!walletAddress) {
+                throw new Error('Wallet address not available');
+            }
+
+            logger.log('[PC2]: Requesting wallet signature...');
+            
+            // Use personal_sign for message signing
+            const signature = await window.ethereum.request({
+                method: 'personal_sign',
+                params: [message, walletAddress],
+            });
+
+            return signature;
+        };
+
+        // Queue this signing request
+        if (this._signQueue) {
+            logger.log('[PC2]: Signature already in progress, queuing...');
+            // Wait for previous to complete, then check if we still need to sign
+            await this._signQueue;
+            // If we're now connected, skip signing
+            if (this.session?.token && this.status === 'connected') {
+                logger.log('[PC2]: Already connected after queue wait, skipping signature');
+                throw new Error('Connection already established');
+            }
         }
 
-        const walletAddress = window.user?.wallet_address;
-        if (!walletAddress) {
-            throw new Error('Wallet address not available');
-        }
-
-        // Use personal_sign for message signing
-        const signature = await window.ethereum.request({
-            method: 'personal_sign',
-            params: [message, walletAddress],
+        // Create and store the signing promise
+        this._signQueue = doSign().finally(() => {
+            this._signQueue = null;
         });
 
-        return signature;
+        return this._signQueue;
+    }
+
+    /**
+     * Redirect ALL Puter API calls to the user's PC2 node
+     * This is the core of decentralization - PC2 IS the backend!
+     * @param {string} nodeUrl - The PC2 node URL
+     * @param {string} sessionToken - The session token for authentication
+     * @private
+     */
+    _redirectAPIToPC2(nodeUrl, sessionToken) {
+        // Normalize URL - remove trailing slash to avoid double slashes in API calls
+        const normalizedUrl = nodeUrl.replace(/\/+$/, '');
+        
+        // Store original API origin so we can restore on disconnect
+        if (!this._originalAPIOrigin) {
+            this._originalAPIOrigin = window.api_origin;
+        }
+
+        // Update global API origin
+        window.api_origin = normalizedUrl;
+
+        // Update Puter SDK to use PC2 as the API backend
+        if (typeof puter !== 'undefined') {
+            puter.setAPIOrigin(normalizedUrl);
+            puter.setAuthToken(sessionToken);
+            logger.log('[PC2]: Puter SDK now pointing to your PC2:', normalizedUrl);
+        }
+
+        logger.log('[PC2]: 🚀 All API calls redirected to your Personal Cloud!');
+    }
+
+    /**
+     * Restore API calls to original Puter backend
+     * @private
+     */
+    _restoreOriginalAPI() {
+        if (this._originalAPIOrigin) {
+            window.api_origin = this._originalAPIOrigin;
+
+            if (typeof puter !== 'undefined') {
+                puter.setAPIOrigin(this._originalAPIOrigin);
+                // Clear the PC2 session token
+                // Note: User may need to re-login to centralized Puter
+            }
+
+            logger.log('[PC2]: API restored to:', this._originalAPIOrigin);
+        }
     }
 
     /**

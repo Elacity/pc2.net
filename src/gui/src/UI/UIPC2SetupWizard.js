@@ -212,7 +212,21 @@ async function UIPC2SetupWizard(options = {}) {
         else if (currentStep === 'error') showStep(1);
     });
 
-    $el.find('.pc2-btn-next').on('click', async () => {
+    // Prevent double-clicks
+    let isProcessing = false;
+    
+    // Use event delegation with namespace to ensure single handler
+    $el.find('.pc2-btn-next').off('click.pc2wizard').on('click.pc2wizard', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        
+        // Prevent double-click / multiple submissions
+        if (isProcessing) {
+            logger.log('[PC2Wizard]: Already processing, ignoring click');
+            return false;
+        }
+        
         if (currentStep === 'success') {
             $(el_window).close();
             onSuccess?.();
@@ -278,6 +292,8 @@ async function UIPC2SetupWizard(options = {}) {
         }
 
         if (currentStep === 3) {
+            // Set processing flag to prevent double-clicks
+            isProcessing = true;
             setLoading(true);
             try {
                 if (requiresSetupToken) {
@@ -297,6 +313,7 @@ async function UIPC2SetupWizard(options = {}) {
                 showError(err.message || 'Failed to connect');
             } finally {
                 setLoading(false);
+                isProcessing = false;
             }
         }
     });

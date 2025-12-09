@@ -231,21 +231,36 @@ async function UIPC2SetupWizard(options = {}) {
                 return;
             }
 
+            // Ensure URL has protocol
+            if (!nodeUrl.startsWith('http://') && !nodeUrl.startsWith('https://')) {
+                nodeUrl = 'http://' + nodeUrl;
+                $el.find('.pc2-node-url').val(nodeUrl);
+            }
+
             setLoading(true);
+            $el.find('.pc2-url-status').html('<span style="color: #666;">Checking node...</span>');
+            
             try {
                 // Check if node is reachable and get its status
-                const status = await pc2Service.checkNode?.(nodeUrl) || { requiresSetup: false };
-                requiresSetupToken = status.requiresSetup;
+                logger.log('[PC2Wizard]: Checking node status:', nodeUrl);
+                const status = await pc2Service.checkNodeStatus(nodeUrl);
+                logger.log('[PC2Wizard]: Node status:', status);
+                
+                // Node is reachable - check if it needs setup
+                requiresSetupToken = !status.hasOwner && status.status === 'AWAITING_OWNER';
+                
+                $el.find('.pc2-url-status').html(`<span style="color: #22c55e;">✓ ${status.nodeName} - ${requiresSetupToken ? 'Awaiting setup' : 'Ready'}</span>`);
                 
                 if (requiresSetupToken) {
                     showStep(2);
                 } else {
-                    // Show wallet address
+                    // Node already has owner - authenticate
                     $el.find('.pc2-wallet-address').text(window.user?.wallet_address || '');
                     showStep(3);
                 }
             } catch (err) {
-                $el.find('.pc2-url-status').html(`<span style="color: #ef4444;">${err.message || 'Could not connect to node'}</span>`);
+                logger.error('[PC2Wizard]: Check failed:', err);
+                $el.find('.pc2-url-status').html(`<span style="color: #ef4444;">✗ ${err.message || 'Could not connect to node'}</span>`);
             } finally {
                 setLoading(false);
             }
@@ -265,10 +280,20 @@ async function UIPC2SetupWizard(options = {}) {
         if (currentStep === 3) {
             setLoading(true);
             try {
-                const setupToken = requiresSetupToken ? $el.find('.pc2-setup-token').val()?.trim() : null;
-                await pc2Service.connect?.(nodeUrl, { setupToken });
-                showSuccess('Connected to your personal cloud');
+                if (requiresSetupToken) {
+                    // First-time setup - claim ownership
+                    const setupToken = $el.find('.pc2-setup-token').val()?.trim();
+                    logger.log('[PC2Wizard]: Claiming ownership...');
+                    await pc2Service.claimOwnership(nodeUrl, setupToken);
+                    showSuccess('Ownership claimed! Your personal cloud is ready.');
+                } else {
+                    // Existing node - authenticate
+                    logger.log('[PC2Wizard]: Authenticating...');
+                    await pc2Service.authenticate(nodeUrl);
+                    showSuccess('Connected to your personal cloud');
+                }
             } catch (err) {
+                logger.error('[PC2Wizard]: Connection failed:', err);
                 showError(err.message || 'Failed to connect');
             } finally {
                 setLoading(false);

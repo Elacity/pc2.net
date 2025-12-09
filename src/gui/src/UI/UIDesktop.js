@@ -74,13 +74,13 @@ async function UIDesktop(options) {
         }
     });
 
-    // Initialize toolbar auto-hide preference
-    window.toolbar_auto_hide_enabled = false; // Set default value - toolbar visible by default
+    // Initialize toolbar auto-hide preference - default is FALSE (toolbar always visible)
+    window.toolbar_auto_hide_enabled = false;
 
-    // Load the toolbar auto-hide preference
+    // Load the toolbar auto-hide preference - only enable if explicitly set to 'true'
     let toolbar_auto_hide_enabled_val = await puter.kv.get('toolbar_auto_hide_enabled');
-    if(toolbar_auto_hide_enabled_val === 'false' || toolbar_auto_hide_enabled_val === false){
-        window.toolbar_auto_hide_enabled = false;
+    if(toolbar_auto_hide_enabled_val === 'true' || toolbar_auto_hide_enabled_val === true){
+        window.toolbar_auto_hide_enabled = true;
     }
 
     // Modify the hide/show functions to use CSS rules that will apply to all icons, including future ones
@@ -1162,7 +1162,8 @@ async function UIDesktop(options) {
     let ht = '';
     let style = '';
     let class_name = '';
-    if(window.has_seen_toolbar_animation && !isMobile.phone && !isMobile.tablet){
+    // Only hide toolbar if auto-hide is enabled AND user has seen animation AND not on mobile
+    if(window.toolbar_auto_hide_enabled && window.has_seen_toolbar_animation && !isMobile.phone && !isMobile.tablet){
         style = 'top: -20px; width: 40px;';
         class_name = 'toolbar-hidden';
     }else{

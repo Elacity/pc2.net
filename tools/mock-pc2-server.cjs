@@ -29,8 +29,10 @@ try {
         const saved = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
         nodeState = saved.nodeState;
         SETUP_TOKEN = saved.setupToken;
-        nodeState.sessions = new Map(saved.sessions || []);
+        // Sessions are stored as array in nodeState, convert back to Map
+        nodeState.sessions = new Map(nodeState.sessions || []);
         console.log('\n📁 Loaded persisted state from', STATE_FILE);
+        console.log('   Sessions loaded:', nodeState.sessions.size);
     } else {
         throw new Error('No state file');
     }
@@ -87,17 +89,19 @@ const server = http.createServer((req, res) => {
     let body = '';
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
+        console.log(`[REQ] ${req.method} ${path} - Body: "${body.substring(0, 100)}"`);
         try {
             const data = body ? JSON.parse(body) : {};
-            handleRequest(path, req.method, data, res);
+            handleRequest(path, req.method, data, res, req);
         } catch (e) {
+            console.log(`[ERR] JSON parse failed for path ${path}:`, e.message, `Body was: "${body}"`);
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Invalid JSON' }));
         }
     });
 });
 
-function handleRequest(path, method, data, res) {
+function handleRequest(path, method, data, res, req) {
     console.log(`[${new Date().toISOString()}] ${method} ${path}`);
     
     // Health check
@@ -206,9 +210,18 @@ function handleRequest(path, method, data, res) {
     // Verify existing session
     if (path === '/api/auth/verify' && method === 'POST') {
         const { walletAddress } = data;
-        const authHeader = req.headers['authorization'];
+        const authHeader = req?.headers?.['authorization'];
+        
+        console.log(`\n🔍 Session verify request:`, {
+            walletAddress,
+            hasAuthHeader: !!authHeader,
+            authHeader: authHeader ? authHeader.substring(0, 20) + '...' : 'none',
+            hasSessions: nodeState.sessions.size,
+            dataKeys: Object.keys(data)
+        });
         
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            console.log('❌ No auth header or invalid format');
             res.writeHead(401, { 'Content-Type': 'application/json' });
             return res.end(JSON.stringify({ valid: false, error: 'No token provided' }));
         }
@@ -216,9 +229,24 @@ function handleRequest(path, method, data, res) {
         const token = authHeader.substring(7);
         const session = nodeState.sessions.get(token);
         
-        if (!session || session.wallet.toLowerCase() !== walletAddress.toLowerCase()) {
+        console.log('Token:', token.substring(0, 8) + '..., Session found:', !!session);
+        
+        if (!session) {
+            console.log('❌ Session not found in map');
             res.writeHead(401, { 'Content-Type': 'application/json' });
-            return res.end(JSON.stringify({ valid: false, error: 'Invalid session' }));
+            return res.end(JSON.stringify({ valid: false, error: 'Session not found' }));
+        }
+        
+        if (!walletAddress) {
+            console.log('❌ No walletAddress in request body');
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ valid: false, error: 'Missing walletAddress' }));
+        }
+        
+        if (session.wallet.toLowerCase() !== walletAddress.toLowerCase()) {
+            console.log('❌ Wallet mismatch:', session.wallet, 'vs', walletAddress);
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ valid: false, error: 'Wallet mismatch' }));
         }
         
         // Update last active

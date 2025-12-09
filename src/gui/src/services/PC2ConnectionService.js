@@ -87,6 +87,24 @@ class PC2ConnectionService {
                 this.config = JSON.parse(saved);
                 logger.log('[PC2]: Loaded saved config:', this.config?.nodeUrl);
             }
+            
+            // Load saved session
+            const savedSession = localStorage.getItem('pc2_session');
+            if (savedSession) {
+                const sessionData = JSON.parse(savedSession);
+                // Check if session is still valid (7 days)
+                const now = Date.now();
+                const sessionAge = now - (sessionData.timestamp || 0);
+                const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 days in ms
+                
+                if (sessionAge < maxAge) {
+                    this.session = sessionData.session;
+                    logger.log('[PC2]: Loaded valid session, expires in', Math.round((maxAge - sessionAge) / (24 * 60 * 60 * 1000)), 'days');
+                } else {
+                    logger.log('[PC2]: Saved session expired');
+                    localStorage.removeItem('pc2_session');
+                }
+            }
         } catch (e) {
             logger.error('[PC2]: Failed to load config:', e);
         }
@@ -102,6 +120,16 @@ class PC2ConnectionService {
                 localStorage.setItem('pc2_config', JSON.stringify(this.config));
             } else {
                 localStorage.removeItem('pc2_config');
+            }
+            
+            // Save session with timestamp
+            if (this.session) {
+                localStorage.setItem('pc2_session', JSON.stringify({
+                    session: this.session,
+                    timestamp: Date.now()
+                }));
+            } else {
+                localStorage.removeItem('pc2_session');
             }
         } catch (e) {
             logger.error('[PC2]: Failed to save config:', e);
@@ -191,14 +219,52 @@ class PC2ConnectionService {
     /**
      * Authenticate with an existing PC2 node (not owner)
      * @param {string} nodeUrl - The PC2 node URL
+     * @param {boolean} useStoredSession - Try to use stored session first
      * @returns {Promise<{success: boolean, sessionToken: string}>}
      */
-    async authenticate(nodeUrl) {
+    async authenticate(nodeUrl, useStoredSession = true) {
         const walletAddress = window.user?.wallet_address;
         if (!walletAddress) {
             throw new Error('Wallet not connected');
         }
 
+        // Try to use stored session first if requested
+        if (useStoredSession && this.session?.token) {
+            logger.log('[PC2]: Attempting to use stored session');
+            
+            // Verify session is still valid
+            try {
+                const url = new URL('/api/auth/verify', nodeUrl);
+                const response = await fetch(url.toString(), {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${this.session.token}`
+                    },
+                    body: JSON.stringify({ walletAddress }),
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    if (result.valid) {
+                        logger.log('[PC2]: Stored session is valid, skipping signature');
+                        this.config = {
+                            nodeUrl,
+                            nodeName: result.nodeName || this.session.nodeName || 'PC2 Node',
+                            isOwner: result.isOwner || false,
+                            status: 'connected',
+                        };
+                        this._setStatus('connected');
+                        return { success: true, sessionToken: this.session.token };
+                    }
+                }
+            } catch (e) {
+                logger.log('[PC2]: Stored session invalid or expired, will re-authenticate');
+            }
+        }
+
+        // Need to sign new message
+        logger.log('[PC2]: Requesting new signature for authentication');
         const nonce = Date.now().toString();
         const message = JSON.stringify({
             action: 'authenticate',
@@ -242,7 +308,7 @@ class PC2ConnectionService {
         this._saveConfig();
         this._setStatus('connected');
 
-        logger.log('[PC2]: Authenticated successfully');
+        logger.log('[PC2]: Authenticated successfully with new session');
         return result;
     }
 
@@ -461,6 +527,7 @@ class PC2ConnectionService {
     clearConfig() {
         this.disconnect();
         this.config = null;
+        this.session = null;
         this._saveConfig();
         logger.log('[PC2]: Configuration cleared');
     }

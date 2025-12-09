@@ -159,6 +159,37 @@ function handleRequest(path, method, data, res) {
         }));
     }
     
+    // Verify existing session
+    if (path === '/api/auth/verify' && method === 'POST') {
+        const { walletAddress } = data;
+        const authHeader = req.headers['authorization'];
+        
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ valid: false, error: 'No token provided' }));
+        }
+        
+        const token = authHeader.substring(7);
+        const session = nodeState.sessions.get(token);
+        
+        if (!session || session.wallet.toLowerCase() !== walletAddress.toLowerCase()) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ valid: false, error: 'Invalid session' }));
+        }
+        
+        // Update last active
+        session.lastActive = Date.now();
+        
+        console.log(`\n✅ Session verified for wallet: ${walletAddress}\n`);
+        
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({
+            valid: true,
+            nodeName: nodeState.name,
+            isOwner: nodeState.ownerWallet?.toLowerCase() === walletAddress.toLowerCase()
+        }));
+    }
+    
     // Get stats (requires auth)
     if (path === '/api/stats' && method === 'GET') {
         res.writeHead(200, { 'Content-Type': 'application/json' });

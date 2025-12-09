@@ -159,7 +159,91 @@ class PC2ConnectionService {
      * @returns {boolean}
      */
     isConnected() {
-        return this.status === 'connected' && this.ws?.readyState === WebSocket.OPEN;
+        return this.status === 'connected';
+    }
+    
+    /**
+     * Get PC2 node stats
+     * @returns {Promise<Object>}
+     */
+    async getStats() {
+        if (!this.config?.nodeUrl) {
+            throw new Error('No PC2 node configured');
+        }
+        
+        try {
+            const url = new URL('/api/stats', this.config.nodeUrl);
+            const response = await fetch(url.toString(), {
+                method: 'GET',
+                headers: { 'Content-Type': 'application/json' },
+            });
+            
+            if (response.ok) {
+                return response.json();
+            }
+        } catch (e) {
+            logger.error('[PC2]: Failed to get stats:', e);
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Authenticate with an existing PC2 node (not owner)
+     * @param {string} nodeUrl - The PC2 node URL
+     * @returns {Promise<{success: boolean, sessionToken: string}>}
+     */
+    async authenticate(nodeUrl) {
+        const walletAddress = window.user?.wallet_address;
+        if (!walletAddress) {
+            throw new Error('Wallet not connected');
+        }
+
+        const nonce = Date.now().toString();
+        const message = JSON.stringify({
+            action: 'authenticate',
+            nodeUrl: nodeUrl,
+            nonce,
+            timestamp: Date.now(),
+        });
+
+        const signature = await this._signMessage(message);
+
+        const url = new URL('/api/auth', nodeUrl);
+        const response = await fetch(url.toString(), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                walletAddress,
+                signature,
+                message,
+                nonce,
+            }),
+        });
+
+        const result = await response.json();
+
+        if (!response.ok || !result.success) {
+            throw new Error(result.error || 'Authentication failed');
+        }
+
+        // Save config and session
+        this.config = {
+            nodeUrl,
+            nodeName: result.nodeName || 'PC2 Node',
+            isOwner: result.isOwner || false,
+            status: 'connected',
+        };
+        this.session = {
+            token: result.sessionToken,
+            wallet: walletAddress,
+            nodeName: result.nodeName,
+        };
+        this._saveConfig();
+        this._setStatus('connected');
+
+        logger.log('[PC2]: Authenticated successfully');
+        return result;
     }
 
     /**
@@ -181,21 +265,35 @@ class PC2ConnectionService {
     /**
      * Check PC2 node status (no auth required)
      * @param {string} nodeUrl - The PC2 node URL to check
-     * @returns {Promise<{status: string, nodeName: string}>}
+     * @returns {Promise<{status: string, nodeName: string, hasOwner: boolean}>}
      */
     async checkNodeStatus(nodeUrl) {
-        const url = new URL('/pc2/status', nodeUrl);
+        // Try /api/info first (mock server), then /pc2/status (full server)
+        const endpoints = ['/api/info', '/api/health', '/pc2/status'];
         
-        const response = await fetch(url.toString(), {
-            method: 'GET',
-            headers: { 'Content-Type': 'application/json' },
-        });
+        for (const endpoint of endpoints) {
+            try {
+                const url = new URL(endpoint, nodeUrl);
+                const response = await fetch(url.toString(), {
+                    method: 'GET',
+                    headers: { 'Content-Type': 'application/json' },
+                });
 
-        if (!response.ok) {
-            throw new Error(`Failed to check node status: ${response.status}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    return {
+                        status: data.status || data.node_status || 'unknown',
+                        nodeName: data.name || data.node_name || 'PC2 Node',
+                        hasOwner: data.hasOwner || data.status === 'ACTIVE',
+                    };
+                }
+            } catch (e) {
+                // Try next endpoint
+                continue;
+            }
         }
-
-        return response.json();
+        
+        throw new Error('Failed to connect to PC2 node');
     }
 
     /**
@@ -220,36 +318,49 @@ class PC2ConnectionService {
         // Sign with wallet
         const signature = await this._signMessage(message);
 
-        // Send claim request
-        const url = new URL('/pc2/claim-ownership', nodeUrl);
-        const response = await fetch(url.toString(), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                walletAddress,
-                setupToken,
-                signature,
-                message,
-            }),
-        });
+        // Try /api/claim first (mock server), then /pc2/claim-ownership (full server)
+        const endpoints = ['/api/claim', '/pc2/claim-ownership'];
+        let lastError = null;
+        
+        for (const endpoint of endpoints) {
+            try {
+                const url = new URL(endpoint, nodeUrl);
+                const response = await fetch(url.toString(), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        walletAddress,
+                        setupToken,
+                        signature,
+                        message,
+                    }),
+                });
 
-        const result = await response.json();
+                const result = await response.json();
 
-        if (!response.ok) {
-            throw new Error(result.error || 'Failed to claim ownership');
+                if (response.ok && result.success) {
+                    // Save config
+                    this.config = {
+                        nodeUrl,
+                        nodeName: result.nodeName || 'My PC2',
+                        isOwner: true,
+                        status: 'disconnected',
+                    };
+                    this._saveConfig();
+                    this._setStatus('connected');
+
+                    logger.log('[PC2]: Ownership claimed successfully');
+                    return result;
+                } else {
+                    lastError = result.error || 'Failed to claim ownership';
+                }
+            } catch (e) {
+                lastError = e.message;
+                continue;
+            }
         }
-
-        // Save config
-        this.config = {
-            nodeUrl,
-            nodeName: result.nodeName || 'My PC2',
-            isOwner: true,
-            status: 'disconnected',
-        };
-        this._saveConfig();
-
-        logger.log('[PC2]: Ownership claimed successfully');
-        return result;
+        
+        throw new Error(lastError || 'Failed to claim ownership');
     }
 
     /**

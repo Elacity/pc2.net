@@ -80,10 +80,9 @@ function initPC2StatusBar() {
     let currentError = null;
 
     // Build menu items based on current status
-    const getMenuItems = () => {
+    const getMenuItems = (stats = null) => {
         const items = [];
         const session = pc2Service.getSession?.() || {};
-        const stats = pc2Service.getStats?.() || {};
 
         // Status dot color: orange if not connected, green if connected
         const dotColor = currentStatus === 'connected' ? '#22c55e' : '#f59e0b';
@@ -106,6 +105,29 @@ function initPC2StatusBar() {
         if (currentStatus === 'connected' && session.nodeName) {
             items.push({
                 html: `<span style="color: #fff;">Node: ${session.nodeName}</span>`,
+                disabled: true
+            });
+        }
+
+        // Show stats if connected
+        if (currentStatus === 'connected' && stats) {
+            items.push('-');
+            
+            const formatBytes = (bytes) => {
+                if (!bytes || bytes === 0) return '0 B';
+                const k = 1024;
+                const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
+            };
+            
+            items.push({
+                html: `<span style="color: #aaa; font-size: 11px;">Storage: ${formatBytes(stats.storage?.used || 0)} / ${formatBytes(stats.storage?.limit || 0)}</span>`,
+                disabled: true
+            });
+            
+            items.push({
+                html: `<span style="color: #aaa; font-size: 11px;">Files: ${stats.files || 0}</span>`,
                 disabled: true
             });
         }
@@ -209,7 +231,7 @@ function initPC2StatusBar() {
     insertStatusBar();
 
     // Use delegated event for click - opens UIContextMenu
-    $(document).on('click', '.pc2-status-bar', function(e) {
+    $(document).on('click', '.pc2-status-bar', async function(e) {
         e.stopPropagation();
         e.preventDefault();
         
@@ -220,6 +242,16 @@ function initPC2StatusBar() {
             return;
         }
 
+        // Fetch stats if connected
+        let stats = null;
+        if (currentStatus === 'connected') {
+            try {
+                stats = await pc2Service.getStats?.();
+            } catch (err) {
+                logger.log('[PC2]: Failed to get stats:', err);
+            }
+        }
+
         UIContextMenu({
             id: 'pc2-menu',
             parent_element: $(this),
@@ -227,9 +259,22 @@ function initPC2StatusBar() {
                 top: pos.bottom + 10, 
                 left: pos.left + (pos.width / 2) - 100
             },
-            items: getMenuItems()
+            items: getMenuItems(stats)
         });
     });
+
+    // Auto-reconnect if we have saved config
+    setTimeout(async () => {
+        if (pc2Service.isConfigured?.() && !pc2Service.isConnected?.()) {
+            logger.log('[PC2]: Auto-reconnecting to saved PC2 node...');
+            try {
+                await pc2Service.authenticate?.(pc2Service.getNodeUrl?.());
+                logger.log('[PC2]: Auto-reconnect successful');
+            } catch (err) {
+                logger.log('[PC2]: Auto-reconnect failed:', err.message);
+            }
+        }
+    }, 2000); // Wait 2 seconds after desktop loads
 }
 
 export default initPC2StatusBar;

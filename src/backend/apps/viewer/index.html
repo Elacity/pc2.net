@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta name="description" content="" />
+    <meta charset="utf-8">
+    <title>Viewer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="author" content="">
+    <!-- CSS -->
+    <link rel="stylesheet" href="css/normalize.css">
+    <link rel="stylesheet" href="jquery-pintura/pintura.min.css">
+    <link rel="stylesheet" href="css/style.css">
+    <!-- Preload images -->
+    <link rel="preload" as="image" href="./img/magnifier-zoom-in.svg">
+    <link rel="preload" as="image" href="./img/magnifier-zoom-out.svg">
+</head>
+
+<body style="padding:0; margin: 0; height:calc(100vh); width:100%;">
+    <button id="save-btn" disabled>Save</button>
+    <div class="my-editor" style="height:calc(100vh); width:100%;">
+    </div>
+    <!-- JS -->
+    <script src="./js/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
+    <script src="https://js.puter.com/v2/"></script>
+    <script src="./jquery-pintura/pintura.min.js"></script>
+    <script src="./jquery-pintura/useEditorWithJQuery-iife.js"></script>
+    <script src="./js/Viewer.js"></script>
+</body>

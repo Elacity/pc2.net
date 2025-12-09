@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta name="description" content="" />
+    <meta charset="utf-8">
+    <title>Editor</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="author" content="">
+    <!-- CSS -->
+    <link rel="stylesheet" href="./css/normalize.css">
+    <link rel="stylesheet" href="./css/printjs.min.css">
+    <link rel="stylesheet" href="./css/style.css">
+    <!-- Preload images -->
+    <link rel="preload" as="image" href="./img/check-active.svg">
+    <link rel="preload" as="image" href="./img/check.svg">
+    <link rel="preload" as="image" href="./img/icon.svg">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+
+<body>
+    <!-- editor -->
+    <div id="editor"></div>
+    <!-- status bar -->
+    <div class="status-bar">
+        <div class="doc-stats" style="float:left; display:none; margin-left:10px;">
+            Paragraphs: <span id="paragraph-count">0</span>, 
+            Words: <span id="word-count">0</span>, 
+            Letters: <span id="letter-count">0</span>
+        </div>
+        Line <span id="pos-line">1</span>, Column <span id="pos-column">1</span>
+    </div>
+    <!-- hidden file input element -->
+    <div style="display:none;">
+        <input type="file" id="file-input" />
+        <h3>Contents of the file:</h3>
+        <pre id="file-content"></pre>
+    </div>
+    <!-- printer -->
+    <pre id="printer"></pre>
+    <!-- JS -->
+    <script src="https://js.puter.com/v2/"></script>
+    <script src="./js/printjs.min.js"></script>
+    <script src="./js/html-entities.js"></script>
+    <script src="./js/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
+    <script src="./js/monaco-editor/min/vs/loader.js"></script>
+    <script src="./js/editor.js"></script>
+</body>
+
+</html>

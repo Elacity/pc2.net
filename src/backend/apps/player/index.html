@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta name="description" content="" />
+    <meta charset="utf-8">
+    <title>Player</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <meta name="author" content="">
+    <!-- CSS -->
+    <!-- <link rel="stylesheet" href="css/normalize.css"> -->
+    <!-- Preload images -->
+    <!-- <link rel="preload" as="image" href="./img/arrow-left.svg"> -->
+    <style>
+        #player{
+            width: 100%;
+            height: 100%;
+            background-color: black;
+        }
+    </style>
+</head>
+
+<body style="padding:0; margin: 0; height:calc(100vh); background-size: contain; width:100%; background-position: center; background-repeat: no-repeat;">
+    <video id="player" width="320" height="240" controls autoplay></video>
+    <!-- JS -->
+    <script src="./js/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
+    <script src="https://js.puter.com/v2/"></script>
+    <script src="./js/html-entities.js"></script>
+    <script>
+    let curfile;
+
+    puter.ui.onItemsOpened (async (items)=>{
+        if(items.length > 0){
+            curfile = items[0];
+            puter.ui.setWindowTitle(curfile.name);
+            open_file(curfile)
+        }
+    })
+
+    async function open_file(cfile){
+        curfile = cfile;
+        //update player
+        $("#player").html(`<source src="${html_encode(curfile.readURL)}"></source>`);
+        // change window title
+        puter.ui.setWindowTitle(curfile.name);
+        // restart video
+        $("#player").get(0).load();
+        $("#player").get(0).play();
+    }
+
+    $('#player').on('dragover', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+    })
+    $('#player').on('dragenter', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+    })
+
+    $('#player').on('drop', async function (e) {
+        if (e.originalEvent.dataTransfer && e.originalEvent.dataTransfer.files.length) {
+            e.preventDefault();
+            e.stopPropagation();
+            let URL = window.URL || window.webkitURL
+            let file = e.originalEvent.dataTransfer.files[0];
+            // set file name 
+            default_file_name = file.name;
+            // change window title
+            puter.ui.setWindowTitle(file.name)
+            // curfile is dead
+            curfile = undefined;
+            // read content
+            $("#player").html(`<source src="${html_encode(URL.createObjectURL(file))}"></source>`);
+            // restart video
+            $("#player").get(0).load();
+            $("#player").get(0).play();
+        }
+    });
+    </script>
+</body>
+
+</html>

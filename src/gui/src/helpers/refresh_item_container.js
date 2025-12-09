@@ -29,6 +29,7 @@ const refresh_item_container = function (el_item_container, options) {
     options = options || {};
 
     let container_path =  $(el_item_container).attr('data-path');
+    console.log('[refresh_item_container] Refreshing container:', container_path, 'element classes:', $(el_item_container).attr('class'));
     let el_window = $(el_item_container).closest('.window');
     let el_window_head_icon = $(el_window).find('.window-head-icon');
     const loading_spinner = $(el_item_container).find('.explorer-loading-spinner');
@@ -114,11 +115,16 @@ const refresh_item_container = function (el_item_container, options) {
     $(el_item_container).find('.item').removeItems();
 
     // get items
-    puter.fs.readdir({ path: container_path, consistency: options.consistency ?? 'eventual' }).then((fsentries) => {
+    // Use 'strong' consistency for Desktop to ensure fresh data (Desktop cache can be stale)
+    const consistency = (container_path === window.desktop_path) ? 'strong' : (options.consistency ?? 'eventual');
+    puter.fs.readdir({ path: container_path, consistency: consistency }).then((fsentries) => {
+        console.log(`[refresh_item_container] readdir returned ${fsentries ? fsentries.length : 0} entries for: ${container_path} (consistency: ${consistency})`);
+        
         // Check if the same folder is still loading since el_item_container's
         // data-path might have changed by other operations while waiting for the response to this `readdir`.
         if ( $(el_item_container).attr('data-path') !== container_path )
         {
+            console.warn(`[refresh_item_container] Container path changed during readdir: ${container_path} -> ${$(el_item_container).attr('data-path')}`);
             return;
         }
 
@@ -182,7 +188,9 @@ const refresh_item_container = function (el_item_container, options) {
                     }
                 }
 
-                const item_path = fsentry.path ?? path.join($(el_window).attr('data-path'), fsentry.name);
+                // For desktop background, el_window is null, so use container_path instead
+                const parentPath = $(el_window).attr('data-path') || container_path;
+                const item_path = fsentry.path ?? path.join(parentPath, fsentry.name);
                 // render any item but Trash/AppData
                 if ( item_path !== window.trash_path && item_path !== window.appdata_path ) {
                     // if this is trash, get original name from item metadata
@@ -234,7 +242,9 @@ const refresh_item_container = function (el_item_container, options) {
                     });
                     window.sort_items(el_item_container, $(el_item_container).attr('data-sort_by'), $(el_item_container).attr('data-sort_order'));
                 } catch (e) {
-                    // Ignored
+                    // Log error for debugging (but don't break the UI)
+                    console.warn('[refresh_item_container]: Failed to add Trash icon to desktop:', e);
+                    console.warn('[refresh_item_container]: Trash path:', window.trash_path);
                 }
             }
             // sort items

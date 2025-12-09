@@ -1058,8 +1058,33 @@ async function UIDesktop(options) {
     // we don't need to get the desktop items if we're in embedded or fullpage mode
     // because the items aren't visible anyway and we don't need to waste bandwidth/server resources
     //-------------------------------------------
-    /* if (!window.is_embedded && !window.is_fullpage_mode) {
-        refresh_item_container(el_desktop, { fadeInItems: true })
+    if (!window.is_embedded && !window.is_fullpage_mode) {
+        // Ensure el_desktop is the correct element (with .item-container class)
+        // Try both selectors in case the element structure is different
+        let desktopContainer = document.querySelector('.desktop.item-container');
+        if (!desktopContainer) {
+            // Fallback: try just .desktop and check if it has item-container class
+            const el_desktop = document.querySelector('.desktop');
+            if (el_desktop && $(el_desktop).hasClass('item-container')) {
+                desktopContainer = el_desktop;
+            }
+        }
+        
+        if (desktopContainer) {
+            console.log('[UIDesktop] About to refresh desktop container:', {
+                el_desktop: desktopContainer,
+                desktop_path: window.desktop_path,
+                data_path: $(desktopContainer).attr('data-path'),
+                matches: $(desktopContainer).attr('data-path') === window.desktop_path,
+                hasItemContainer: $(desktopContainer).hasClass('item-container'),
+                hasDesktop: $(desktopContainer).hasClass('desktop')
+            });
+            refresh_item_container(desktopContainer, { fadeInItems: true });
+        } else {
+            console.error('[UIDesktop] Desktop container not found! Tried .desktop.item-container and .desktop');
+            console.error('[UIDesktop] Available .desktop elements:', document.querySelectorAll('.desktop').length);
+            console.error('[UIDesktop] Available .item-container elements:', document.querySelectorAll('.item-container').length);
+        }
 
         // Show welcome window if user hasn't already seen it and hasn't directly navigated to an app 
         if (!window.url_paths[0]?.toLocaleLowerCase() === 'app' || !window.url_paths[1]) {
@@ -1073,7 +1098,7 @@ async function UIDesktop(options) {
                 }, 1000);
             }
         }
-    } */
+    }
 
     // -------------------------------------------
     // Selectable

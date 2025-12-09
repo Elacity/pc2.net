@@ -25,6 +25,7 @@ import SecurityTab from '../UI/Settings/UITabSecurity.js';
 import PersonalizationTab from '../UI/Settings/UITabPersonalization.js';
 import LanguageTag from '../UI/Settings/UITabLanguage.js';
 import IPFSTab from '../UI/Settings/UITabIPFS.js';
+import PC2Tab from '../UI/Settings/UITabPC2.js';
 import UIElement from '../UI/UIElement.js';
 const TSettingsTab = use('ui.traits.TSettingsTab');
 
@@ -37,6 +38,7 @@ export class SettingsService extends Service {
             SecurityTab,
             PersonalizationTab,
             LanguageTag,
+            PC2Tab,
             IPFSTab,
             AboutTab,
         ].forEach(tab => {

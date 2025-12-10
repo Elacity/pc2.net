@@ -109,6 +109,38 @@ class PC2ConnectionService {
                 if (sessionAge < maxAge) {
                     this.session = sessionData.session;
                     logger.log('[PC2]: Loaded valid session, expires in', Math.round((maxAge - sessionAge) / (24 * 60 * 60 * 1000)), 'days');
+                    
+                    // 🚀 EARLY REDIRECTION: Redirect API calls immediately if we have valid session
+                    // This prevents SDK initialization from calling api.puter.com endpoints
+                    if (this.config?.nodeUrl && this.session?.token) {
+                        const nodeUrl = this.config.nodeUrl.replace(/\/+$/, '');
+                        
+                        // Set window.api_origin immediately (SDK will use this when it loads)
+                        window.api_origin = nodeUrl;
+                        
+                        // If puter SDK is already loaded, redirect it now
+                        if (typeof puter !== 'undefined') {
+                            puter.setAPIOrigin(nodeUrl);
+                            puter.setAuthToken(this.session.token);
+                            logger.log('[PC2]: Early API redirection applied (SDK already loaded)');
+                        } else {
+                            // SDK not loaded yet - set up a MutationObserver or polling to catch when SDK loads
+                            // Use a simple polling approach to check for puter SDK
+                            const checkSDK = setInterval(() => {
+                                if (typeof puter !== 'undefined') {
+                                    clearInterval(checkSDK);
+                                    puter.setAPIOrigin(nodeUrl);
+                                    puter.setAuthToken(this.session.token);
+                                    logger.log('[PC2]: Early API redirection applied (SDK detected)');
+                                }
+                            }, 50); // Check every 50ms
+                            
+                            // Stop polling after 5 seconds (SDK should load by then)
+                            setTimeout(() => clearInterval(checkSDK), 5000);
+                            
+                            logger.log('[PC2]: Early API redirection will be applied when SDK loads');
+                        }
+                    }
                 } else {
                     logger.log('[PC2]: Saved session expired');
                     localStorage.removeItem('pc2_session');

@@ -199,6 +199,84 @@ function calculateSize(node) {
 }
 
 /**
+ * Find a node by UUID and return both the node and its path
+ * @param {Object} filesystem - The filesystem to search
+ * @param {string} uuid - The UUID to search for (can be full UUID or just the UUID part)
+ * @returns {{node: Object|null, path: string|null}} - The found node and its path, or null if not found
+ */
+function findNodeByUuid(filesystem, uuid) {
+    let foundNode = null;
+    let foundPath = null;
+    
+    // UUIDs are stored as: uuid-${path.replace(/\//g, '-')}
+    // So "uuid--path" means the path started with "/" (becomes "-")
+    // We need to match exactly as stored
+    
+    function searchRecursive(node, currentPath = '/') {
+        // Check if this node matches
+        if (node.uuid) {
+            // Try exact match first
+            if (node.uuid === uuid) {
+                foundNode = node;
+                foundPath = currentPath;
+                return true;
+            }
+            
+            // Also try matching the UUID part (in case format differs slightly)
+            // Extract the part after "uuid-" for comparison
+            const nodeUuidPart = node.uuid.replace(/^uuid-+/, '');
+            const searchUuidPart = uuid.replace(/^uuid-+/, '');
+            
+            if (nodeUuidPart === searchUuidPart && nodeUuidPart.length > 0) {
+                foundNode = node;
+                foundPath = currentPath;
+                return true;
+            }
+        }
+        
+        // Search children
+        if (node.children) {
+            for (const [name, child] of Object.entries(node.children)) {
+                const childPath = currentPath === '/' ? `/${name}` : `${currentPath}/${name}`;
+                if (searchRecursive(child, childPath)) {
+                    return true;
+                }
+            }
+        }
+        
+        return false;
+    }
+    
+    searchRecursive(filesystem['/']);
+    
+    if (foundNode) {
+        console.log(`   ✅ Found node by UUID: ${uuid} → ${foundPath}`);
+    } else {
+        console.warn(`   ⚠️  Node not found by UUID: ${uuid}`);
+        // Debug: list some UUIDs to see format
+        console.warn(`   🔍 Sample UUIDs in filesystem (first 5):`);
+        let count = 0;
+        function listUuids(node, path = '/') {
+            if (count >= 5) return;
+            if (node.uuid) {
+                console.warn(`      ${node.uuid} (path: ${path})`);
+                count++;
+            }
+            if (node.children) {
+                for (const [name, child] of Object.entries(node.children)) {
+                    const childPath = path === '/' ? `/${name}` : `${path}/${name}`;
+                    listUuids(child, childPath);
+                    if (count >= 5) return;
+                }
+            }
+        }
+        listUuids(filesystem['/']);
+    }
+    
+    return { node: foundNode, path: foundPath };
+}
+
+/**
  * Count total files in filesystem
  */
 function countFiles(filesystem) {
@@ -505,6 +583,10 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
     // Don't log socket.io to avoid spam
     if (!path.includes('socket.io')) {
         console.log(`[${new Date().toISOString()}] ${method} ${path}`);
+        // Debug logging for move endpoint
+        if (path === '/move' || path.includes('move')) {
+            console.log(`   🔍 MOVE REQUEST DEBUG - path: "${path}", method: "${method}", data type: ${typeof data}, data keys:`, data ? Object.keys(data) : 'null');
+        }
     }
     
     // Health check
@@ -1370,11 +1452,17 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
         
         for (const [name, child] of Object.entries(children)) {
             const childPath = normalizedPath === '/' ? `/${name}` : `${normalizedPath}/${name}`;
+            
+            // For Trash items, display original_name if available (for restore functionality)
+            const displayName = (normalizedPath.includes('/Trash') && child.original_name) 
+                ? child.original_name 
+                : name;
+            
             entries.push({
                 id: child.id || Math.floor(Math.random() * 10000),
                 uid: child.uuid || `uuid-${childPath.replace(/\//g, '-')}`,
                 uuid: child.uuid || `uuid-${childPath.replace(/\//g, '-')}`,
-                name: name,
+                name: displayName, // Use original_name in Trash, otherwise use actual name
                 path: childPath,
                 is_dir: child.type === 'dir',
                 is_empty: child.type === 'dir' ? Object.keys(child.children || {}).length === 0 : false,
@@ -1382,6 +1470,12 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
                 created: child.created ? new Date(child.created).toISOString() : new Date().toISOString(),
                 modified: child.modified ? new Date(child.modified).toISOString() : new Date().toISOString(),
                 type: child.mimeType || (child.type === 'dir' ? null : 'application/octet-stream'),
+                // Include restore metadata if in Trash
+                ...(normalizedPath.includes('/Trash') && child.original_name ? {
+                    original_name: child.original_name,
+                    original_path: child.original_path,
+                    trashed_ts: child.trashed_ts,
+                } : {}),
             });
         }
         
@@ -1459,35 +1553,225 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
     
     // /mkdir - Create directory (Puter format)
     if (path === '/mkdir' && method === 'POST') {
-        const dirPath = data.path;
-        if (!dirPath) {
+        console.log(`\n📁 MKDIR (Puter) REQUEST - path: ${path}, method: ${method}`);
+        console.log(`   Data keys:`, Object.keys(data || {}));
+        console.log(`   Data:`, JSON.stringify(data).substring(0, 300));
+        
+        // Puter's validation: path is required
+        if (data.path === undefined) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
             return res.end(JSON.stringify({ message: 'path is required' }));
         }
+        if (data.path === '' || data.path === null) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ message: data.path === '' ? 'path cannot be empty' : 'path cannot be null' }));
+        }
+        if (typeof data.path !== 'string') {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ message: 'path must be a string' }));
+        }
         
-        const normalizedPath = dirPath.startsWith('/') ? dirPath : '/' + dirPath;
-        console.log(`\n📁 MKDIR (Puter): ${normalizedPath}`);
+        const dirPath = data.path;
+        const parentPath = data.parent;
+        const createMissingParents = data.create_missing_parents ?? data.create_missing_ancestors ?? false;
+        const overwrite = data.overwrite ?? false;
+        const dedupeName = data.dedupe_name ?? data.change_name ?? false;
+        
+        // Puter normalizes: if parent is not provided, extract it from path
+        // This matches Puter's behavior in hl_mkdir.js lines 273-276
+        let requestedPath = dirPath;
+        let normalizedPath;
+        let targetName;
+        let actualParentPath;
+        
+        if (parentPath) {
+            // Parent + name format (e.g., parent: "/Documents", path: "NewFolder")
+            actualParentPath = parentPath.startsWith('/') ? parentPath : '/' + parentPath;
+            targetName = dirPath; // In this case, path is the name
+            normalizedPath = actualParentPath === '/' ? `/${targetName}` : `${actualParentPath}/${targetName}`;
+        } else {
+            // Full path format (e.g., path: "/Documents/NewFolder")
+            // Extract parent and basename like Puter does
+            normalizedPath = dirPath.startsWith('/') ? dirPath : '/' + dirPath;
+            const pathParts = normalizedPath.split('/').filter(p => p);
+            targetName = pathParts.pop();
+            actualParentPath = pathParts.length > 0 ? '/' + pathParts.join('/') : '/';
+        }
+        
+        // Handle ~ (home directory) in parent path
+        const authHeader = req.headers['authorization'];
+        if (actualParentPath.startsWith('~') && authHeader && authHeader.startsWith('Bearer ')) {
+            const token = authHeader.split(' ')[1];
+            const session = nodeState.sessions.get(token);
+            if (session && session.wallet) {
+                actualParentPath = actualParentPath.replace('~', `/${session.wallet}`);
+                normalizedPath = `${actualParentPath}/${targetName}`;
+            }
+        }
+        
+        // Normalize paths
+        normalizedPath = normalizedPath.replace(/\/+/g, '/');
+        actualParentPath = actualParentPath.replace(/\/+/g, '/');
+        
+        console.log(`   📁 MKDIR: Creating "${targetName}" in parent "${actualParentPath}" → "${normalizedPath}"`);
+        
+        // Track which parent directories already existed BEFORE creation
+        const parentDirsCreated = [];
+        const pathParts = normalizedPath.split('/').filter(p => p);
+        
+        // Check which parent directories already existed (before ensureDir)
+        const existingParents = new Set();
+        let currentPath = '/';
+        for (let i = 0; i < pathParts.length - 1; i++) {
+            currentPath = currentPath === '/' ? `/${pathParts[i]}` : `${currentPath}/${pathParts[i]}`;
+            const existingNode = getNode(nodeState.filesystem, currentPath);
+            if (existingNode) {
+                existingParents.add(currentPath);
+            }
+        }
+        
+        // Check if directory already exists
+        const existingDir = getNode(nodeState.filesystem, normalizedPath);
+        if (existingDir && existingDir.type === 'dir') {
+            if (overwrite) {
+                // Overwrite: remove existing directory first
+                const parentPath = normalizedPath.substring(0, normalizedPath.lastIndexOf('/')) || '/';
+                const parent = getNode(nodeState.filesystem, parentPath);
+                if (parent && parent.children) {
+                    delete parent.children[targetName];
+                }
+            } else if (dedupeName) {
+                // Dedupe: add number suffix
+                const lastDot = targetName.lastIndexOf('.');
+                const hasExtension = lastDot > 0;
+                const baseName = hasExtension ? targetName.substring(0, lastDot) : targetName;
+                const extension = hasExtension ? targetName.substring(lastDot) : '';
+                
+                let counter = 1;
+                let newDirName;
+                do {
+                    newDirName = `${baseName} (${counter})${extension}`;
+                    counter++;
+                } while (getNode(nodeState.filesystem, (normalizedPath.substring(0, normalizedPath.lastIndexOf('/')) || '/') + '/' + newDirName) && counter < 1000);
+                
+                targetName = newDirName;
+                normalizedPath = (normalizedPath.substring(0, normalizedPath.lastIndexOf('/')) || '/') + '/' + newDirName;
+                requestedPath = normalizedPath;
+            } else {
+                // Already exists and no overwrite/dedupe - return error
+                res.writeHead(409, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ error: 'Directory already exists' }));
+            }
+        }
         
         // Create the directory and all parents
         ensureDir(nodeState.filesystem, normalizedPath);
+        
+        // Now check which parents were created (those that didn't exist before)
+        currentPath = '/';
+        for (let i = 0; i < pathParts.length - 1; i++) {
+            currentPath = currentPath === '/' ? `/${pathParts[i]}` : `${currentPath}/${pathParts[i]}`;
+            if (!existingParents.has(currentPath)) {
+                // This parent was created - add to parent_dirs_created
+                const createdNode = getNode(nodeState.filesystem, currentPath);
+                if (createdNode) {
+                    parentDirsCreated.push({
+                        id: Math.floor(Math.random() * 10000),
+                        uid: createdNode.uuid || `uuid-${currentPath.replace(/\//g, '-')}`,
+                        uuid: createdNode.uuid || `uuid-${currentPath.replace(/\//g, '-')}`,
+                        name: pathParts[i],
+                        path: currentPath,
+                        is_dir: true,
+                        is_empty: Object.keys(createdNode.children || {}).length === 0,
+                        size: 0,
+                        created: new Date(createdNode.created || Date.now()).toISOString(),
+                        modified: new Date(createdNode.modified || Date.now()).toISOString(),
+                        type: null,
+                    });
+                }
+            }
+        }
+        
         saveState();
         
         const node = getNode(nodeState.filesystem, normalizedPath);
-        const parentPath = normalizedPath.substring(0, normalizedPath.lastIndexOf('/')) || '/';
+        if (!node) {
+            console.error(`   ❌ CRITICAL: Failed to create directory: ${normalizedPath}`);
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'Failed to create directory' }));
+        }
         
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        return res.end(JSON.stringify({
+        const nodeUuid = node.uuid || `uuid-${normalizedPath.replace(/\//g, '-')}`;
+        
+        // Puter format: entry + parent_dirs_created + requested_path
+        // Match the format returned by readdir for consistency
+        const response = {
             id: Math.floor(Math.random() * 10000),
-            uid: `uuid-${normalizedPath.replace(/\//g, '-')}`,
-            uuid: `uuid-${normalizedPath.replace(/\//g, '-')}`,
-            name: normalizedPath.split('/').pop(),
+            uid: nodeUuid,
+            uuid: nodeUuid,
+            name: targetName,
             path: normalizedPath,
             is_dir: true,
-            is_empty: true,
+            is_empty: Object.keys(node.children || {}).length === 0,
             size: 0,
-            created: new Date().toISOString(),
-            modified: new Date().toISOString(),
-        }));
+            created: new Date(node.created || Date.now()).toISOString(),
+            modified: new Date(node.modified || Date.now()).toISOString(),
+            createdAt: new Date(node.created || Date.now()).toISOString(),
+            updatedAt: new Date(node.modified || Date.now()).toISOString(),
+            type: null,
+            mimeType: null,
+            parent_dirs_created: parentDirsCreated, // Array of created parent directories
+            requested_path: requestedPath, // Original requested path
+        };
+        
+        console.log(`   ✅ MKDIR successful: ${normalizedPath}, parent_dirs_created: ${parentDirsCreated.length}`);
+        console.log(`   📤 Sending response:`, JSON.stringify(response, null, 2).substring(0, 500));
+        
+        // Emit socket events for real-time updates (like Puter does)
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            const token = authHeader.split(' ')[1];
+            const session = nodeState.sessions.get(token);
+            if (session) {
+                const parentDirPath = normalizedPath.substring(0, normalizedPath.lastIndexOf('/')) || '/';
+                
+                // Emit item.added for the created directory
+                emitSocketEvent('item.added', {
+                    id: response.id,
+                    uid: response.uuid,
+                    uuid: response.uuid,
+                    name: response.name,
+                    path: response.path,
+                    is_dir: true,
+                    is_empty: response.is_empty,
+                    size: 0,
+                    created: response.created,
+                    modified: response.modified,
+                    type: null,
+                    dirpath: parentDirPath,
+                    original_client_socket_id: data.original_client_socket_id || null,
+                }, session.wallet);
+                
+                console.log(`   📡 Emitted item.added for: ${response.path}`);
+                
+                // Also emit for any parent directories that were created
+                for (const parentEntry of parentDirsCreated) {
+                    const parentDirPathForParent = parentEntry.path.substring(0, parentEntry.path.lastIndexOf('/')) || '/';
+                    emitSocketEvent('item.added', {
+                        ...parentEntry,
+                        dirpath: parentDirPathForParent,
+                        original_client_socket_id: data.original_client_socket_id || null,
+                    }, session.wallet);
+                    console.log(`   📡 Emitted item.added for parent: ${parentEntry.path}`);
+                }
+            } else {
+                console.warn(`   ⚠️  No session found for token, skipping socket events`);
+            }
+        } else {
+            console.warn(`   ⚠️  No auth header, skipping socket events`);
+        }
+        
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify(response));
     }
     
     // /delete - Delete file/folder (Puter format)
@@ -1555,41 +1839,67 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
                 if (sourceParent && sourceParent.children && sourceParent.children[name]) {
                     const trashNode = getNode(nodeState.filesystem, trashPath);
                     if (trashNode && trashNode.type === 'dir') {
-                        // Move file to Trash with unique name (using UUID to avoid conflicts)
                         const sourceNode = sourceParent.children[name];
-                        const uniqueName = `${sourceNode.uuid || name}_${Date.now()}`;
                         
-                        trashNode.children[uniqueName] = {
+                        // Check if file with same name already exists in Trash
+                        // If so, add timestamp suffix to make it unique
+                        let trashFileName = name;
+                        if (trashNode.children && trashNode.children[name]) {
+                            // File with same name exists, add timestamp suffix
+                            const lastDot = name.lastIndexOf('.');
+                            const hasExtension = lastDot > 0;
+                            const baseName = hasExtension ? name.substring(0, lastDot) : name;
+                            const extension = hasExtension ? name.substring(lastDot) : '';
+                            const timestamp = Date.now();
+                            trashFileName = `${baseName} (${timestamp})${extension}`;
+                        }
+                        
+                        // Move file to Trash - keep original name visible, store metadata for restore
+                        trashNode.children[trashFileName] = {
                             ...sourceNode,
-                            name: uniqueName,
-                            // Store original metadata
-                            original_name: name,
-                            original_path: normalizedPath,
-                            trashed_ts: Math.round(Date.now() / 1000),
+                            name: trashFileName, // Display name in Trash (may have timestamp if duplicate)
+                            // Store original metadata for restore
+                            original_name: name, // Original filename (for restore)
+                            original_path: normalizedPath, // Original location (for restore)
+                            trashed_ts: Math.round(Date.now() / 1000), // Timestamp when deleted
                         };
                         
                         delete sourceParent.children[name];
-                        console.log(`   ✅ Moved to Trash: ${name} → ${uniqueName}`);
+                        console.log(`   ✅ Moved to Trash: ${name} → ${trashFileName} (original_name: ${name})`);
                         
                         // Emit socket events for real-time updates
-                        // Match Puter's format: item.removed = { path, descendants_only }
                         const session = nodeState.sessions.get(token);
                         if (session) {
-                            const trashItemPath = `${trashPath}/${uniqueName}`;
+                            const trashItemPath = `${trashPath}/${trashFileName}`;
+                            
+                            // Emit item.removed from original location
                             emitSocketEvent('item.removed', {
                                 path: normalizedPath,
                                 descendants_only: false
                             }, session.wallet);
-                            // item.added should include full file entry (like Puter's node.getSafeEntry())
-                            emitSocketEvent('item.added', {
-                                path: trashItemPath,
+                            
+                            // Emit item.added to Trash - use original_name for display
+                            const trashEntry = {
+                                id: Math.floor(Math.random() * 10000),
                                 uid: sourceNode.uuid,
                                 uuid: sourceNode.uuid,
-                                name: uniqueName,
+                                name: name, // Display original name in Trash (not the unique filename)
+                                path: trashItemPath,
                                 is_dir: sourceNode.type === 'dir',
-                                dirpath: trashPath, // Parent directory path (required by frontend)
-                                original_client_socket_id: null
-                            }, session.wallet);
+                                is_empty: sourceNode.type === 'dir' ? Object.keys(sourceNode.children || {}).length === 0 : false,
+                                size: sourceNode.size || 0,
+                                created: sourceNode.created ? new Date(sourceNode.created).toISOString() : new Date().toISOString(),
+                                modified: sourceNode.modified ? new Date(sourceNode.modified).toISOString() : new Date().toISOString(),
+                                type: sourceNode.mimeType || (sourceNode.type === 'dir' ? null : 'application/octet-stream'),
+                                dirpath: trashPath,
+                                original_client_socket_id: null,
+                                // Include metadata for restore functionality
+                                original_name: name,
+                                original_path: normalizedPath,
+                                trashed_ts: Math.round(Date.now() / 1000),
+                            };
+                            
+                            emitSocketEvent('item.added', trashEntry, session.wallet);
                         }
                     } else {
                         // Trash doesn't exist, permanent delete
@@ -1619,55 +1929,873 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
         return res.end(JSON.stringify({}));
     }
     
+    // /rename - Rename file/folder (Puter format)
+    if (path === '/rename' && method === 'POST') {
+        console.log(`\n✏️  RENAME (Puter) REQUEST - path: ${path}, method: ${method}`);
+        console.log(`   Data keys:`, Object.keys(data || {}));
+        console.log(`   Data:`, JSON.stringify(data).substring(0, 300));
+        
+        // Puter rename endpoint expects: path (or uid) and new_name
+        const filePath = data.path || data.uid;
+        const newName = data.new_name;
+        
+        if (!filePath) {
+            console.warn(`   ⚠️  Missing path/uid parameter`);
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'path or uid is required' }));
+        }
+        
+        if (!newName) {
+            console.warn(`   ⚠️  Missing new_name parameter`);
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'new_name is required' }));
+        }
+        
+        if (typeof newName !== 'string') {
+            console.warn(`   ⚠️  new_name must be a string`);
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'new_name must be a string' }));
+        }
+        
+        // Validate filename (basic validation - no slashes, null bytes, etc.)
+        if (newName.includes('/') || newName.includes('\0') || newName.trim() === '') {
+            console.warn(`   ⚠️  Invalid filename: ${newName}`);
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'Invalid filename' }));
+        }
+        
+        // Handle UUID-based path
+        let targetPath = null;
+        let targetNode = null;
+        let targetParent = null;
+        let targetName = null;
+        let targetParentPath = null;
+        
+        if (filePath.startsWith('uuid-') || filePath.includes('uuid-')) {
+            // Path is a UUID - find the file by UUID
+            console.log(`   🔍 Path is UUID: ${filePath}`);
+            const uuidResult = findNodeByUuid(nodeState.filesystem, filePath);
+            if (!uuidResult.node || !uuidResult.path) {
+                console.warn(`   ⚠️  File not found by UUID: ${filePath}`);
+                res.writeHead(404, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ error: 'File not found by UUID' }));
+            }
+            targetNode = uuidResult.node;
+            targetPath = uuidResult.path;
+            targetName = targetPath.split('/').pop();
+            targetParentPath = targetPath.substring(0, targetPath.lastIndexOf('/')) || '/';
+            targetParent = getNode(nodeState.filesystem, targetParentPath);
+        } else {
+            // Path is a regular path
+            targetPath = filePath.startsWith('/') ? filePath : '/' + filePath;
+            
+            // Handle ~ (home directory)
+            const authHeader = req.headers['authorization'];
+            if (targetPath.startsWith('~') && authHeader && authHeader.startsWith('Bearer ')) {
+                const token = authHeader.split(' ')[1];
+                const session = nodeState.sessions.get(token);
+                if (session && session.wallet) {
+                    targetPath = targetPath.replace('~', `/${session.wallet}`);
+                }
+            }
+            
+            targetPath = targetPath.replace(/\/+/g, '/');
+            targetNode = getNode(nodeState.filesystem, targetPath);
+            targetName = targetPath.split('/').pop();
+            targetParentPath = targetPath.substring(0, targetPath.lastIndexOf('/')) || '/';
+            targetParent = getNode(nodeState.filesystem, targetParentPath);
+        }
+        
+        if (!targetNode) {
+            console.warn(`   ⚠️  File not found: ${targetPath}`);
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'File not found' }));
+        }
+        
+        if (!targetParent) {
+            console.warn(`   ⚠️  Parent directory not found: ${targetParentPath}`);
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'Parent directory not found' }));
+        }
+        
+        // Check if a file with the new name already exists in the same directory
+        if (targetParent.children && targetParent.children[newName] && targetParent.children[newName] !== targetNode) {
+            console.warn(`   ⚠️  File with name "${newName}" already exists in directory`);
+            res.writeHead(409, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'Item with same name already exists', entry_name: newName }));
+        }
+        
+        const oldPath = targetPath;
+        const newPath = targetParentPath === '/' ? `/${newName}` : `${targetParentPath}/${newName}`;
+        
+        console.log(`   ✏️  RENAME: ${oldPath} → ${newPath}`);
+        
+        // Update the node's name and path
+        targetNode.name = newName;
+        targetNode.path = newPath;
+        targetNode.modified = Date.now();
+        
+        // Move the node in the parent's children object
+        if (targetParent.children) {
+            // Remove old entry
+            delete targetParent.children[targetName];
+            // Add new entry with new name
+            targetParent.children[newName] = targetNode;
+            
+            // If it's a directory, update all children's paths recursively
+            if (targetNode.type === 'dir' && targetNode.children) {
+                function updateChildPaths(node, oldParentPath, newParentPath) {
+                    node.path = newParentPath === '/' ? `/${node.name}` : `${newParentPath}/${node.name}`;
+                    if (node.children) {
+                        for (const child of Object.values(node.children)) {
+                            updateChildPaths(child, oldParentPath, newParentPath);
+                        }
+                    }
+                }
+                for (const child of Object.values(targetNode.children)) {
+                    updateChildPaths(child, oldPath, newPath);
+                }
+            }
+        }
+        
+        saveState();
+        
+        // Build response matching Puter's format
+        const nodeUuid = targetNode.uuid || `uuid-${newPath.replace(/\//g, '-')}`;
+        const mime = require('mime-types');
+        const contentType = mime.contentType(newName);
+        
+        const response = {
+            uid: nodeUuid,
+            name: newName,
+            is_dir: targetNode.type === 'dir',
+            path: newPath,
+            old_path: oldPath,
+            type: contentType || null,
+            associated_app: {}, // Mock server doesn't track apps
+            original_client_socket_id: data.original_client_socket_id || null,
+        };
+        
+        console.log(`   ✅ RENAME successful: ${oldPath} → ${newPath}`);
+        
+        // Emit socket event for real-time updates (Puter uses 'item.renamed', not 'item.added')
+        const authHeader = req.headers['authorization'];
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            const token = authHeader.split(' ')[1];
+            const session = nodeState.sessions.get(token);
+            if (session) {
+                emitSocketEvent('item.renamed', response, session.wallet);
+                console.log(`   📡 Emitted item.renamed for: ${newPath}`);
+            }
+        }
+        
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify(response));
+    }
+    
     // /move - Move file/folder (Puter format)
     if (path === '/move' && method === 'POST') {
-        const { source, dest, new_name } = data;
+        console.log(`\n🔄 MOVE (Puter) REQUEST - path: ${path}, method: ${method}`);
+        console.log(`   Data keys:`, Object.keys(data || {}));
+        console.log(`   Data:`, JSON.stringify(data).substring(0, 300));
+        
+        // Support both parameter formats: Puter uses 'source'/'dest', but also check 'from'/'to'
+        const source = data.source || data.from;
+        const dest = data.destination || data.dest || data.to;
+        const new_name = data.new_name || data.name;
+        
+        if (!source) {
+            console.warn(`   ⚠️  Missing source parameter. Data keys:`, Object.keys(data || {}));
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'source is required' }));
+        }
+        
+        // Handle ~ (home directory)
+        const authHeader = req.headers['authorization'];
+        
+        // Check if source is a UUID (Puter uses UUIDs for file identification)
+        let srcPath = null;
+        let srcNode = null;
+        let srcParent = null;
+        let srcName = null;
+        let srcParentPath = null;
+        
+        if (source.startsWith('uuid-') || source.includes('uuid-')) {
+            // Source is a UUID - need to find the file by UUID
+            console.log(`   🔍 Source is UUID: ${source}`);
+            const uuidResult = findNodeByUuid(nodeState.filesystem, source);
+            if (!uuidResult.node || !uuidResult.path) {
+                console.warn(`   ⚠️  File not found by UUID: ${source}`);
+                res.writeHead(404, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ error: 'Source file not found by UUID' }));
+            }
+            srcNode = uuidResult.node;
+            srcPath = uuidResult.path;
+            srcParentPath = srcPath.substring(0, srcPath.lastIndexOf('/')) || '/';
+            srcName = srcPath.split('/').pop();
+            srcParent = getNode(nodeState.filesystem, srcParentPath);
+            console.log(`   ✅ Found file by UUID: ${srcPath}`);
+        } else {
+            // Source is a path
+            srcPath = source.startsWith('/') ? source : '/' + source;
+            if (srcPath.startsWith('~') && authHeader && authHeader.startsWith('Bearer ')) {
+                const token = authHeader.split(' ')[1];
+                const session = nodeState.sessions.get(token);
+                if (session && session.wallet) {
+                    srcPath = srcPath.replace('~', `/${session.wallet}`);
+                }
+            }
+            
+            // Normalize path
+            srcPath = srcPath.replace(/\/+/g, '/');
+            
+            // Get source node
+            srcParentPath = srcPath.substring(0, srcPath.lastIndexOf('/')) || '/';
+            srcName = srcPath.split('/').pop();
+            srcParent = getNode(nodeState.filesystem, srcParentPath);
+            
+            if (!srcParent) {
+                console.warn(`   ⚠️  Source parent not found: ${srcParentPath}`);
+                res.writeHead(404, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ error: 'Source parent not found' }));
+            }
+            
+            if (!srcParent.children || !srcParent.children[srcName]) {
+                console.warn(`   ⚠️  Source not found: ${srcName} in ${srcParentPath}`);
+                console.warn(`   ⚠️  Available children:`, Object.keys(srcParent.children || {}));
+                res.writeHead(404, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ error: 'Source not found' }));
+            }
+            
+            srcNode = srcParent.children[srcName];
+        }
+        
+        // RESTORE DETECTION: If source is in Trash, always use original_name for the filename
+        // This handles both drag-and-drop restore and explicit restore
+        const isFromTrash = srcPath.includes('/Trash/') && srcNode && srcNode.original_name;
+        
+        // Handle destination
+        let destPath = dest ? (dest.startsWith('/') ? dest : '/' + dest) : srcPath.substring(0, srcPath.lastIndexOf('/')) || '/';
+        if (destPath.startsWith('~') && authHeader && authHeader.startsWith('Bearer ')) {
+            const token = authHeader.split(' ')[1];
+            const session = nodeState.sessions.get(token);
+            if (session && session.wallet) {
+                destPath = destPath.replace('~', `/${session.wallet}`);
+            }
+        }
+        
+        // Normalize destination path
+        destPath = destPath.replace(/\/+/g, '/');
+        
+        // If moving from Trash, use original_name (unless new_name is explicitly provided)
+        if (isFromTrash && !new_name) {
+            new_name = srcNode.original_name;
+            console.log(`   ♻️  RESTORE: Using original_name "${new_name}" from Trash metadata`);
+        }
+        
+        console.log(`   🔄 MOVE: ${srcPath} → ${destPath}${new_name ? ' (rename to: ' + new_name + ')' : ''}${isFromTrash ? ' [FROM TRASH]' : ''}`);
+        
+        // Ensure destination parent exists
+        ensureDir(nodeState.filesystem, destPath);
+        const destParent = getNode(nodeState.filesystem, destPath);
+        
+        if (!destParent) {
+            console.warn(`   ⚠️  Failed to create/get destination parent: ${destPath}`);
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'Failed to create destination' }));
+        }
+        
+        // Move the node
+        // If from Trash, prefer original_name over srcName (which is the UUID trash filename)
+        let finalName = new_name || (isFromTrash ? (srcNode.original_name || srcName) : srcName);
+        
+        // Handle duplicate names - add number suffix like macOS (same as upload handler)
+        if (destParent.children && destParent.children[finalName]) {
+            console.log(`   📝 File "${finalName}" already exists in destination, adding number suffix`);
+            // Extract name and extension
+            const lastDot = finalName.lastIndexOf('.');
+            const hasExtension = lastDot > 0;
+            const baseName = hasExtension ? finalName.substring(0, lastDot) : finalName;
+            const extension = hasExtension ? finalName.substring(lastDot) : '';
+            
+            // Find the next available number
+            let counter = 1;
+            let newFileName;
+            do {
+                newFileName = `${baseName} (${counter})${extension}`;
+                counter++;
+            } while (destParent.children[newFileName] && counter < 1000); // Safety limit
+            
+            console.log(`   📝 Using name: "${newFileName}"`);
+            finalName = newFileName;
+        }
+        
+        // Perform the move
+        if (!destParent.children) {
+            destParent.children = {};
+        }
+        
+        // Calculate final path before moving
+        const finalPath = destPath === '/' ? `/${finalName}` : `${destPath}/${finalName}`;
+        
+        // Ensure srcNode has all required properties with defaults
+        const nodeUuid = srcNode.uuid || `uuid-${finalPath.replace(/\//g, '-')}`;
+        const nodeType = srcNode.type || 'file';
+        const nodeSize = srcNode.size || 0;
+        const nodeCreated = srcNode.created || Date.now();
+        const nodeMimeType = srcNode.mimeType || (nodeType === 'dir' ? null : 'application/octet-stream');
+        
+        // Move the node (preserve all properties with safe defaults)
+        const movedNode = {
+            ...srcNode,
+            name: finalName, // Always use the new name
+            path: finalPath, // Update path
+            uuid: nodeUuid, // Preserve or set UUID
+            type: nodeType, // Ensure type exists
+            size: nodeSize, // Ensure size exists
+            created: nodeCreated, // Preserve created timestamp
+            modified: Date.now(), // Update modified timestamp
+            mimeType: nodeMimeType, // Ensure mimeType exists
+            // Preserve children if it's a directory
+            ...(nodeType === 'dir' && srcNode.children ? { children: srcNode.children } : {}),
+            // Preserve content if it's a file
+            ...(nodeType === 'file' && srcNode.content !== undefined ? { content: srcNode.content } : {}),
+            // Preserve isBase64 flag if it exists
+            ...(srcNode.isBase64 !== undefined ? { isBase64: srcNode.isBase64 } : {}),
+        };
+        
+        // If moving from Trash, clean trash metadata (whether auto-restore or drag-and-drop)
+        if (isFromTrash) {
+            delete movedNode.original_name;
+            delete movedNode.original_path;
+            delete movedNode.trashed_ts;
+            
+            // Recursively clean trash metadata from directory children
+            if (movedNode.type === 'dir' && movedNode.children) {
+                function cleanTrashMetadata(node) {
+                    delete node.original_name;
+                    delete node.original_path;
+                    delete node.trashed_ts;
+                    if (node.children) {
+                        for (const child of Object.values(node.children)) {
+                            cleanTrashMetadata(child);
+                        }
+                    }
+                }
+                for (const child of Object.values(movedNode.children)) {
+                    cleanTrashMetadata(child);
+                }
+            }
+        }
+        
+        destParent.children[finalName] = movedNode;
+        
+        // Remove from source parent
+        if (srcParent && srcParent.children && srcParent.children[srcName]) {
+            delete srcParent.children[srcName];
+        }
+        
+        // Emit socket events for real-time updates
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            const token = authHeader.split(' ')[1];
+            const session = nodeState.sessions.get(token);
+            if (session) {
+                // Emit item.removed from source
+                emitSocketEvent('item.removed', {
+                    path: srcPath,
+                    descendants_only: false
+                }, session.wallet);
+                
+                // Emit item.added to destination (must match Puter's format exactly)
+                emitSocketEvent('item.added', {
+                    id: Math.floor(Math.random() * 10000),
+                    uid: movedNode.uuid,
+                    uuid: movedNode.uuid,
+                    name: finalName,
+                    path: finalPath,
+                    is_dir: movedNode.type === 'dir',
+                    is_empty: movedNode.type === 'dir' ? Object.keys(movedNode.children || {}).length === 0 : false,
+                    size: movedNode.size || 0,
+                    created: movedNode.created ? new Date(movedNode.created).toISOString() : new Date().toISOString(),
+                    modified: movedNode.modified ? new Date(movedNode.modified).toISOString() : new Date().toISOString(),
+                    type: movedNode.mimeType || (movedNode.type === 'dir' ? null : 'application/octet-stream'),
+                    dirpath: destPath, // Parent directory path (required by frontend)
+                    original_client_socket_id: null
+                }, session.wallet);
+            }
+        }
+        
+        saveState();
+        
+        console.log(`   ✅ Move successful: ${srcPath} → ${finalPath}`);
+        
+        // Return response in Puter's expected format (must match readdir entry format)
+        if (!movedNode) {
+            console.error(`   ❌ CRITICAL: movedNode is undefined after move!`);
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'Internal error: moved node not found' }));
+        }
+        
+        // Use the values we already set when creating the node (they're guaranteed to exist)
+        const responseNodeType = movedNode.type || 'file';
+        const responseNodeUuid = movedNode.uuid || `uuid-${finalPath.replace(/\//g, '-')}`;
+        const responseNodeSize = movedNode.size || 0;
+        const responseNodeCreated = movedNode.created || Date.now();
+        const responseNodeModified = movedNode.modified || Date.now();
+        const responseNodeMimeType = movedNode.mimeType || (responseNodeType === 'dir' ? null : 'application/octet-stream');
+        const responseIsDir = responseNodeType === 'dir';
+        const responseIsEmpty = responseIsDir ? Object.keys(movedNode.children || {}).length === 0 : false;
+        
+        // Puter's backend returns: { moved: <file entry>, old_path: <string>, overwritten: <entry|undefined>, parent_dirs_created: [] }
+        // The moved entry should match readdir format (which works)
+        const movedEntry = {
+            id: movedNode.id || Math.floor(Math.random() * 10000),
+            uid: responseNodeUuid,
+            uuid: responseNodeUuid,
+            name: finalName, // Always use finalName, not movedNode.name (which might be old)
+            path: finalPath,
+            is_dir: responseIsDir,
+            is_empty: responseIsEmpty,
+            size: responseNodeSize,
+            created: new Date(responseNodeCreated).toISOString(),
+            modified: new Date(responseNodeModified).toISOString(),
+            // Use same type format as readdir (mimeType or null for dirs)
+            type: responseNodeMimeType || (responseIsDir ? null : 'application/octet-stream'),
+        };
+        
+        // Validate moved entry has all required fields
+        if (!movedEntry.name || !movedEntry.path || movedEntry.uuid === undefined) {
+            console.error(`   ❌ CRITICAL: Moved entry missing required fields:`, movedEntry);
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'Internal error: invalid response format' }));
+        }
+        
+        // Return in Puter's exact format: { moved: <entry>, old_path: <string> }
+        const response = {
+            moved: movedEntry,
+            old_path: srcPath,
+        };
+        
+        // Log the full response for debugging
+        console.log(`   📤 Sending response (Puter format):`, JSON.stringify(response, null, 2));
+        console.log(`   📤 Moved entry has name:`, !!movedEntry.name, `name value:`, movedEntry.name);
+        
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify(response));
+    }
+    
+    // /copy - Copy file/folder (Puter format)
+    if (path === '/copy' && method === 'POST') {
+        console.log(`\n📋 COPY (Puter) REQUEST - path: ${path}, method: ${method}`);
+        console.log(`   Data keys:`, Object.keys(data || {}));
+        
+        // Support both parameter formats: Puter uses 'source'/'destination'
+        const source = data.source;
+        const dest = data.destination || data.dest;
+        const new_name = data.new_name || data.name;
+        const overwrite = data.overwrite ?? false;
+        const dedupe_name = data.dedupe_name ?? data.change_name ?? false;
+        
+        if (!source) {
+            console.warn(`   ⚠️  Missing source parameter. Data keys:`, Object.keys(data || {}));
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'source is required' }));
+        }
+        
+        // Handle ~ (home directory)
+        const authHeader = req.headers['authorization'];
+        
+        // Check if source is a UUID (Puter uses UUIDs for file identification)
+        let srcPath = null;
+        let srcNode = null;
+        let srcParent = null;
+        let srcName = null;
+        
+        if (source.startsWith('uuid-') || source.includes('uuid-')) {
+            // Source is a UUID - need to find the file by UUID
+            console.log(`   🔍 Source is UUID: ${source}`);
+            const uuidResult = findNodeByUuid(nodeState.filesystem, source);
+            if (!uuidResult.node || !uuidResult.path) {
+                console.warn(`   ⚠️  File not found by UUID: ${source}`);
+                res.writeHead(404, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ error: 'Source file not found by UUID' }));
+            }
+            srcNode = uuidResult.node;
+            srcPath = uuidResult.path;
+            srcName = srcPath.split('/').pop();
+            srcParent = getNode(nodeState.filesystem, srcPath.substring(0, srcPath.lastIndexOf('/')) || '/');
+            console.log(`   ✅ Found file by UUID: ${srcPath}`);
+        } else {
+            // Source is a path
+            srcPath = source.startsWith('/') ? source : '/' + source;
+            if (srcPath.startsWith('~') && authHeader && authHeader.startsWith('Bearer ')) {
+                const token = authHeader.split(' ')[1];
+                const session = nodeState.sessions.get(token);
+                if (session && session.wallet) {
+                    srcPath = srcPath.replace('~', `/${session.wallet}`);
+                }
+            }
+            srcPath = srcPath.replace(/\/+/g, '/');
+            srcNode = getNode(nodeState.filesystem, srcPath);
+            if (!srcNode) {
+                console.warn(`   ⚠️  Source not found: ${srcPath}`);
+                res.writeHead(404, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ error: 'Source file not found' }));
+            }
+            srcName = srcPath.split('/').pop();
+            srcParent = getNode(nodeState.filesystem, srcPath.substring(0, srcPath.lastIndexOf('/')) || '/');
+        }
+        
+        // Handle destination
+        let destPath = dest ? (dest.startsWith('/') ? dest : '/' + dest) : srcPath.substring(0, srcPath.lastIndexOf('/')) || '/';
+        if (destPath.startsWith('~') && authHeader && authHeader.startsWith('Bearer ')) {
+            const token = authHeader.split(' ')[1];
+            const session = nodeState.sessions.get(token);
+            if (session && session.wallet) {
+                destPath = destPath.replace('~', `/${session.wallet}`);
+            }
+        }
+        
+        // Normalize destination path
+        destPath = destPath.replace(/\/+/g, '/');
+        
+        console.log(`   📋 COPY: ${srcPath} → ${destPath}${new_name ? ' (rename to: ' + new_name + ')' : ''}`);
+        
+        // Ensure destination parent exists
+        ensureDir(nodeState.filesystem, destPath);
+        const destParent = getNode(nodeState.filesystem, destPath);
+        
+        if (!destParent) {
+            console.warn(`   ⚠️  Failed to create/get destination parent: ${destPath}`);
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'Failed to create destination' }));
+        }
+        
+        // Determine final name
+        let finalName = new_name || srcName;
+        
+        // Handle duplicate names
+        let overwritten = undefined;
+        if (destParent.children && destParent.children[finalName]) {
+            if (overwrite) {
+                // Overwrite existing file
+                overwritten = {
+                    id: Math.floor(Math.random() * 10000),
+                    uid: destParent.children[finalName].uuid || `uuid-${destPath}/${finalName}`.replace(/\//g, '-'),
+                    uuid: destParent.children[finalName].uuid || `uuid-${destPath}/${finalName}`.replace(/\//g, '-'),
+                    name: finalName,
+                    path: destPath === '/' ? `/${finalName}` : `${destPath}/${finalName}`,
+                    is_dir: destParent.children[finalName].type === 'dir',
+                    is_empty: destParent.children[finalName].type === 'dir' ? Object.keys(destParent.children[finalName].children || {}).length === 0 : false,
+                    size: destParent.children[finalName].size || 0,
+                    created: new Date(destParent.children[finalName].created || Date.now()).toISOString(),
+                    modified: new Date(destParent.children[finalName].modified || Date.now()).toISOString(),
+                    type: destParent.children[finalName].mimeType || (destParent.children[finalName].type === 'dir' ? null : 'application/octet-stream'),
+                };
+                // Delete existing file
+                delete destParent.children[finalName];
+            } else if (dedupe_name) {
+                // Add number suffix
+                const lastDot = finalName.lastIndexOf('.');
+                const hasExtension = lastDot > 0;
+                const baseName = hasExtension ? finalName.substring(0, lastDot) : finalName;
+                const extension = hasExtension ? finalName.substring(lastDot) : '';
+                
+                let counter = 1;
+                let newFileName;
+                do {
+                    newFileName = `${baseName} (${counter})${extension}`;
+                    counter++;
+                } while (destParent.children[newFileName] && counter < 1000);
+                
+                finalName = newFileName;
+            } else {
+                res.writeHead(409, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ error: 'Destination already exists' }));
+            }
+        }
+        
+        // Perform the copy
+        if (!destParent.children) {
+            destParent.children = {};
+        }
+        
+        // Calculate final path
+        const finalPath = destPath === '/' ? `/${finalName}` : `${destPath}/${finalName}`;
+        
+        // Deep copy the node (recursive for directories)
+        function deepCopyNode(node) {
+            const copy = {
+                ...node,
+                name: finalName,
+                path: finalPath,
+                uuid: `uuid-${finalPath.replace(/\//g, '-')}`, // New UUID for copy
+                modified: Date.now(),
+            };
+            
+            if (node.type === 'dir' && node.children) {
+                copy.children = {};
+                for (const [childName, childNode] of Object.entries(node.children)) {
+                    copy.children[childName] = deepCopyNode(childNode);
+                }
+            }
+            
+            return copy;
+        }
+        
+        destParent.children[finalName] = deepCopyNode(srcNode);
+        
+        // Emit socket events for real-time updates
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            const token = authHeader.split(' ')[1];
+            const session = nodeState.sessions.get(token);
+            if (session) {
+                const copiedNode = destParent.children[finalName];
+                emitSocketEvent('item.added', {
+                    id: Math.floor(Math.random() * 10000),
+                    uid: copiedNode.uuid,
+                    uuid: copiedNode.uuid,
+                    name: finalName,
+                    path: finalPath,
+                    is_dir: copiedNode.type === 'dir',
+                    is_empty: copiedNode.type === 'dir' ? Object.keys(copiedNode.children || {}).length === 0 : false,
+                    size: copiedNode.size || 0,
+                    created: copiedNode.created ? new Date(copiedNode.created).toISOString() : new Date().toISOString(),
+                    modified: copiedNode.modified ? new Date(copiedNode.modified).toISOString() : new Date().toISOString(),
+                    type: copiedNode.mimeType || (copiedNode.type === 'dir' ? null : 'application/octet-stream'),
+                    dirpath: destPath,
+                    original_client_socket_id: null
+                }, session.wallet);
+            }
+        }
+        
+        saveState();
+        
+        console.log(`   ✅ Copy successful: ${srcPath} → ${finalPath}`);
+        
+        // Puter's copy returns: [{ copied: <entry>, overwritten: <entry|undefined> }]
+        const copiedNode = destParent.children[finalName];
+        const copiedEntry = {
+            id: Math.floor(Math.random() * 10000),
+            uid: copiedNode.uuid,
+            uuid: copiedNode.uuid,
+            name: finalName,
+            path: finalPath,
+            is_dir: copiedNode.type === 'dir',
+            is_empty: copiedNode.type === 'dir' ? Object.keys(copiedNode.children || {}).length === 0 : false,
+            size: copiedNode.size || 0,
+            created: new Date(copiedNode.created || Date.now()).toISOString(),
+            modified: new Date(copiedNode.modified || Date.now()).toISOString(),
+            type: copiedNode.mimeType || (copiedNode.type === 'dir' ? null : 'application/octet-stream'),
+        };
+        
+        const response = [{
+            copied: copiedEntry,
+            overwritten: overwritten,
+        }];
+        
+        console.log(`   📤 Sending response (Puter format):`, JSON.stringify(response, null, 2));
+        
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify(response));
+    }
+    
+    // /restore - Restore file/folder from Trash (Puter format)
+    // Note: Puter may use /move for restore, but we implement /restore for clarity
+    if (path === '/restore' && method === 'POST') {
+        console.log(`\n♻️  RESTORE (Puter) REQUEST - path: ${path}, method: ${method}`);
+        
+        const source = data.source || data.paths?.[0]; // Support both formats
+        const destination = data.destination; // Optional - if not provided, use original_path
         
         if (!source) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
             return res.end(JSON.stringify({ error: 'source is required' }));
         }
         
-        const srcPath = source.startsWith('/') ? source : '/' + source;
-        let destPath = dest ? (dest.startsWith('/') ? dest : '/' + dest) : srcPath.substring(0, srcPath.lastIndexOf('/')) || '/';
-        
-        console.log(`\n🔄 MOVE (Puter): ${srcPath} → ${destPath}${new_name ? '/' + new_name : ''}`);
-        
-        // Get source node
-        const srcParentPath = srcPath.substring(0, srcPath.lastIndexOf('/')) || '/';
-        const srcName = srcPath.split('/').pop();
-        const srcParent = getNode(nodeState.filesystem, srcParentPath);
-        
-        if (!srcParent || !srcParent.children[srcName]) {
-            res.writeHead(404, { 'Content-Type': 'application/json' });
-            return res.end(JSON.stringify({ error: 'Source not found' }));
+        const authHeader = req.headers['authorization'];
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'Authentication required' }));
         }
         
-        // Ensure destination parent exists
+        const token = authHeader.split(' ')[1];
+        const session = nodeState.sessions.get(token);
+        if (!session || !session.wallet) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'Invalid session' }));
+        }
+        
+        ensureUserHomeDirectory(session.wallet);
+        const trashPath = `/${session.wallet}/Trash`;
+        
+        // Resolve source path (could be UUID or path)
+        let srcPath = null;
+        let srcNode = null;
+        let srcParent = null;
+        let srcName = null;
+        
+        if (source.startsWith('uuid-') || source.includes('uuid-')) {
+            const uuidResult = findNodeByUuid(nodeState.filesystem, source);
+            if (!uuidResult.node || !uuidResult.path) {
+                res.writeHead(404, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ error: 'Source file not found by UUID' }));
+            }
+            srcNode = uuidResult.node;
+            srcPath = uuidResult.path;
+            srcName = srcPath.split('/').pop();
+            srcParent = getNode(nodeState.filesystem, srcPath.substring(0, srcPath.lastIndexOf('/')) || '/');
+        } else {
+            srcPath = source.startsWith('/') ? source : '/' + source;
+            srcPath = srcPath.replace(/\/+/g, '/');
+            srcNode = getNode(nodeState.filesystem, srcPath);
+            if (!srcNode) {
+                res.writeHead(404, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ error: 'Source file not found' }));
+            }
+            srcName = srcPath.split('/').pop();
+            srcParent = getNode(nodeState.filesystem, srcPath.substring(0, srcPath.lastIndexOf('/')) || '/');
+        }
+        
+        // Verify source is in Trash
+        if (!srcPath.includes('/Trash/')) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'Source must be in Trash' }));
+        }
+        
+        // Get original metadata (stored during delete)
+        const originalName = srcNode.original_name || srcName;
+        const originalPath = srcNode.original_path;
+        
+        if (!originalPath) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'Cannot restore: original path not found' }));
+        }
+        
+        // Determine destination
+        let destPath = destination;
+        if (!destPath) {
+            // Use original path's parent directory
+            destPath = originalPath.substring(0, originalPath.lastIndexOf('/')) || '/';
+        } else {
+            destPath = destPath.startsWith('/') ? destPath : '/' + destPath;
+            destPath = destPath.replace(/\/+/g, '/');
+        }
+        
+        // Ensure destination exists
         ensureDir(nodeState.filesystem, destPath);
         const destParent = getNode(nodeState.filesystem, destPath);
         
-        // Move the node
-        const finalName = new_name || srcName;
-        destParent.children[finalName] = {
-            ...srcParent.children[srcName],
+        if (!destParent) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'Failed to create destination' }));
+        }
+        
+        // Determine final name (use original name)
+        let finalName = originalName;
+        
+        // Handle duplicate names - add number suffix if needed
+        if (destParent.children && destParent.children[finalName]) {
+            console.log(`   📝 File "${finalName}" already exists in destination, adding number suffix`);
+            const lastDot = finalName.lastIndexOf('.');
+            const hasExtension = lastDot > 0;
+            const baseName = hasExtension ? finalName.substring(0, lastDot) : finalName;
+            const extension = hasExtension ? finalName.substring(lastDot) : '';
+            
+            let counter = 1;
+            let newFileName;
+            do {
+                newFileName = `${baseName} (${counter})${extension}`;
+                counter++;
+            } while (destParent.children[newFileName] && counter < 1000);
+            
+            finalName = newFileName;
+        }
+        
+        // Calculate final path
+        const finalPath = destPath === '/' ? `/${finalName}` : `${destPath}/${finalName}`;
+        
+        // Restore the node (remove trash metadata, restore original name)
+        if (!destParent.children) {
+            destParent.children = {};
+        }
+        
+        // Create restored node (remove trash-specific metadata)
+        const restoredNode = {
+            ...srcNode,
             name: finalName,
-            modified: Date.now()
+            path: finalPath,
+            uuid: srcNode.uuid || `uuid-${finalPath.replace(/\//g, '-')}`,
+            modified: Date.now(),
         };
-        delete srcParent.children[srcName];
+        
+        // Remove trash metadata
+        delete restoredNode.original_name;
+        delete restoredNode.original_path;
+        delete restoredNode.trashed_ts;
+        
+        // If it's a directory, recursively clean trash metadata from children
+        if (restoredNode.type === 'dir' && restoredNode.children) {
+            function cleanTrashMetadata(node) {
+                delete node.original_name;
+                delete node.original_path;
+                delete node.trashed_ts;
+                if (node.children) {
+                    for (const child of Object.values(node.children)) {
+                        cleanTrashMetadata(child);
+                    }
+                }
+            }
+            for (const child of Object.values(restoredNode.children)) {
+                cleanTrashMetadata(child);
+            }
+        }
+        
+        destParent.children[finalName] = restoredNode;
+        
+        // Remove from Trash
+        if (srcParent && srcParent.children && srcParent.children[srcName]) {
+            delete srcParent.children[srcName];
+        }
+        
+        // Emit socket events
+        emitSocketEvent('item.removed', {
+            path: srcPath,
+            descendants_only: false
+        }, session.wallet);
+        
+        const restoredEntry = {
+            id: Math.floor(Math.random() * 10000),
+            uid: restoredNode.uuid,
+            uuid: restoredNode.uuid,
+            name: finalName,
+            path: finalPath,
+            is_dir: restoredNode.type === 'dir',
+            is_empty: restoredNode.type === 'dir' ? Object.keys(restoredNode.children || {}).length === 0 : false,
+            size: restoredNode.size || 0,
+            created: new Date(restoredNode.created || Date.now()).toISOString(),
+            modified: new Date(restoredNode.modified || Date.now()).toISOString(),
+            type: restoredNode.mimeType || (restoredNode.type === 'dir' ? null : 'application/octet-stream'),
+        };
+        
+        emitSocketEvent('item.added', {
+            ...restoredEntry,
+            dirpath: destPath,
+            original_client_socket_id: null
+        }, session.wallet);
         
         saveState();
         
-        const finalPath = destPath === '/' ? `/${finalName}` : `${destPath}/${finalName}`;
+        console.log(`   ✅ Restore successful: ${srcPath} → ${finalPath}`);
+        
+        // Puter's restore likely uses same format as move: { moved: <entry>, old_path: <string> }
+        const response = {
+            moved: restoredEntry,
+            old_path: srcPath,
+        };
         
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        return res.end(JSON.stringify({
-            id: Math.floor(Math.random() * 10000),
-            uid: `uuid-${finalPath.replace(/\//g, '-')}`,
-            name: finalName,
-            path: finalPath,
-            is_dir: destParent.children[finalName].type === 'dir',
-        }));
+        return res.end(JSON.stringify(response));
     }
     
     // ═══════════════════════════════════════════════════════════════════
@@ -2277,6 +3405,35 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
         console.log(`\n⏰ CACHE TIMESTAMP: ${Date.now()}`);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({ timestamp: Date.now() }));
+    }
+    
+    // /whoami - Get current user info (Puter SDK endpoint)
+    if (path === '/whoami' && method === 'GET') {
+        console.log(`\n👤 WHOAMI`);
+        
+        // Check for auth token
+        const authHeader = req.headers['authorization'];
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'Unauthorized' }));
+        }
+        
+        const token = authHeader.substring(7);
+        const session = nodeState.sessions.get(token);
+        
+        if (!session) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'Invalid session' }));
+        }
+        
+        // Return user info in Puter's expected format
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({
+            username: session.wallet.substring(0, 6) + '...' + session.wallet.substring(session.wallet.length - 4),
+            address: session.wallet,
+            is_owner: nodeState.ownerWallet?.toLowerCase() === session.wallet.toLowerCase(),
+            node_name: nodeState.name
+        }));
     }
     
     // /get-launch-apps - List of installed apps
@@ -3009,6 +4166,7 @@ server.listen(PORT, () => {
     console.log('  POST /api/files/write  - Write/create file');
     console.log('  POST /api/files/mkdir  - Create directory');
     console.log('  POST /api/files/move   - Move/rename file');
+    console.log('  POST /rename           - Rename file/folder');
     console.log('  POST /api/files/delete - Delete file/folder');
     console.log('');
     console.log('🌐 PUTER API FORMAT (for frontend integration):');

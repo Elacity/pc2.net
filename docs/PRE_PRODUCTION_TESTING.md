@@ -20,6 +20,10 @@
 
 ## 🧪 LOCAL TESTING (Mock Server) - Complete These First
 
+**📖 See detailed testing guide**: [`docs/MOCK_SERVER_TESTING_GUIDE.md`](./MOCK_SERVER_TESTING_GUIDE.md)
+
+**📊 Track results**: [`docs/MOCK_SERVER_TESTING_RESULTS.md`](./MOCK_SERVER_TESTING_RESULTS.md)
+
 ### 1. Core Functionality Testing
 
 #### File Operations

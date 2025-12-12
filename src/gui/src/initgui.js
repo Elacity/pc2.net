@@ -169,6 +169,12 @@ window.initgui = async function(options){
     window.url_paths = url_paths
 
     let picked_a_user_for_sdk_login = false;
+    
+    // Initialize url_query_params early so it's available for all code
+    // This must be done before any code tries to use window.url_query_params
+    if (!window.url_query_params) {
+        window.url_query_params = new URLSearchParams(window.location.search);
+    }
 
     // Check for auth token in URL params (for apps launched with token)
     // This handles 'puter.auth.token' param that apps receive when launched
@@ -222,8 +228,10 @@ window.initgui = async function(options){
     // This tag sets the width of the viewport to the device width, and locks the zoom level to 1 (prevents user scaling).
     $('head').append(`<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">`);
 
-    // GET query params provided
-    window.url_query_params = new URLSearchParams(window.location.search);
+    // GET query params provided (already initialized earlier, but ensure it exists here for compatibility)
+    if (!window.url_query_params) {
+        window.url_query_params = new URLSearchParams(window.location.search);
+    }
 
     // will hold the result of the whoami API call
     let whoami;

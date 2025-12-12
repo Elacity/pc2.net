@@ -23,6 +23,25 @@
     <!-- JS -->
     <script src="./js/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
     <script src="https://js.puter.com/v2/"></script>
+    <script>
+        // Initialize Puter SDK with auth token and API origin from URL params
+        // This prevents the SDK from showing login screen when app is opened
+        (function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const authToken = urlParams.get('puter.auth.token');
+            const apiOrigin = urlParams.get('puter.api_origin');
+            
+            if (authToken && typeof puter !== 'undefined') {
+                puter.setAuthToken(authToken);
+                console.log('[Viewer]: Auth token set from URL params');
+            }
+            
+            if (apiOrigin && typeof puter !== 'undefined') {
+                puter.setAPIOrigin(apiOrigin);
+                console.log('[Viewer]: API origin set to:', apiOrigin);
+            }
+        })();
+    </script>
     <script src="./jquery-pintura/pintura.min.js"></script>
     <script src="./jquery-pintura/useEditorWithJQuery-iife.js"></script>
     <script src="./js/Viewer.js"></script>

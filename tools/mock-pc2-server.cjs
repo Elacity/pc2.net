@@ -3930,10 +3930,29 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
             }));
         }
         
-        // Return user info in Puter's expected format (matching commit 0cc69cc7)
+        // SIMPLIFIED AUTH: Verify session wallet is admin wallet
         const walletAddress = session.wallet;
+        const normalizedWallet = walletAddress.toLowerCase();
+        const normalizedAdmin = nodeState.ownerWallet?.toLowerCase();
+        
+        if (!normalizedAdmin || normalizedWallet !== normalizedAdmin) {
+            // Session wallet is not admin - return unauthenticated
+            console.log(`   ⚠️  Session wallet ${walletAddress} is not admin wallet - returning unauthenticated state`);
+            res.writeHead(200, { 
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            });
+            return res.end(JSON.stringify({
+                username: null,
+                address: null,
+                is_owner: false,
+                node_name: nodeState.name || 'PC2 Node'
+            }));
+        }
+        
+        // Return user info in Puter's expected format (matching commit 0cc69cc7)
         const smartAccountAddress = session.smart_account_address || null;
-        console.log(`   ✅ Authenticated user: ${walletAddress}`);
+        console.log(`   ✅ Authenticated admin user: ${walletAddress}`);
         if (smartAccountAddress) {
             console.log(`   ✅ Smart Account (UniversalX): ${smartAccountAddress}`);
         }
@@ -4460,6 +4479,32 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
         // Normalize wallet address (keep original case for display, but use lowercase for storage)
         const normalizedWallet = walletAddress.toLowerCase();
         const displayWallet = walletAddress; // Keep original case
+        
+        // SIMPLIFIED AUTH: Verify wallet is admin wallet (or set as admin if first time)
+        if (!nodeState.ownerWallet) {
+            // First-time setup: Set this wallet as admin
+            console.log(`   ⚠️  No admin wallet configured - setting ${displayWallet} as admin (first-time setup)`);
+            nodeState.ownerWallet = displayWallet;
+            nodeState.status = 'ONLINE';
+            saveState();
+        } else {
+            // Verify wallet is admin wallet
+            const normalizedAdmin = nodeState.ownerWallet.toLowerCase();
+            if (normalizedWallet !== normalizedAdmin) {
+                console.log(`   ❌ Authentication rejected: ${displayWallet} is not the admin wallet`);
+                console.log(`   ℹ️  Admin wallet: ${nodeState.ownerWallet}`);
+                res.writeHead(403, { 
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+                    'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+                });
+                return res.end(JSON.stringify({ 
+                    error: 'Only admin wallet can authenticate to this PC2 node',
+                    admin_wallet: nodeState.ownerWallet
+                }));
+            }
+        }
         
         // Check if wallet already has a session
         let session = null;

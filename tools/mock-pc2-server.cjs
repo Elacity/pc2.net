@@ -430,6 +430,94 @@ function parseMultipart(body, boundary, bodyBuffer) {
     return parts;
 }
 
+/**
+ * Generate production HTML for ElastOS frontend
+ * This creates the index.html that loads the built frontend files
+ */
+function generateProductionHtml() {
+    const apiOrigin = `http://localhost:${PORT}`;
+    
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ElastOS - Personal Cloud</title>
+    <meta name="description" content="ElastOS is a privacy-first personal cloud that houses all your files, apps, and games in one private and secure place, accessible from anywhere at any time.">
+    
+    <!-- Favicons -->
+    <link rel="apple-touch-icon" sizes="57x57" href="/favicons/apple-icon-57x57.png">
+    <link rel="apple-touch-icon" sizes="60x60" href="/favicons/apple-icon-60x60.png">
+    <link rel="apple-touch-icon" sizes="72x72" href="/favicons/apple-icon-72x72.png">
+    <link rel="apple-touch-icon" sizes="76x76" href="/favicons/apple-icon-76x76.png">
+    <link rel="apple-touch-icon" sizes="114x114" href="/favicons/apple-icon-114x114.png">
+    <link rel="apple-touch-icon" sizes="120x120" href="/favicons/apple-icon-120x120.png">
+    <link rel="apple-touch-icon" sizes="144x144" href="/favicons/apple-icon-144x144.png">
+    <link rel="apple-touch-icon" sizes="152x152" href="/favicons/apple-icon-152x152.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/favicons/apple-icon-180x180.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="/favicons/android-icon-192x192.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicons/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="96x96" href="/favicons/favicon-96x96.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicons/favicon-16x16.png">
+    <link rel="manifest" href="/manifest.json">
+    
+    <!-- Styles -->
+    <link rel="stylesheet" href="/bundle.min.css">
+    
+    <!-- Initialize API origin before SDK loads -->
+    <script>
+        // Auto-detect API origin from current page URL (same origin = no CORS!)
+        // This implements the "Puter on PC2" architecture - frontend and backend on same origin
+        window.api_origin = window.location.origin;
+        console.log('[PC2]: Auto-detected API origin (same origin):', window.api_origin);
+        window.puter_gui_enabled = true;
+        
+        // Initialize service_script_api_promise (normally done by backend)
+        window.service_script_api_promise = (() => {
+            let resolve, reject;
+            const promise = new Promise((res, rej) => {
+                resolve = res;
+                reject = rej;
+            });
+            promise.resolve = resolve;
+            promise.reject = reject;
+            return promise;
+        })();
+        window.service_script = async fn => {
+            try {
+                await fn(await window.service_script_api_promise);
+            } catch (e) {
+                console.error('service_script(ERROR)', e);
+            }
+        };
+    </script>
+</head>
+<body>
+    <!-- Load GUI bundle -->
+    <script src="/bundle.min.js"></script>
+    <script src="/gui.js"></script>
+    
+    <!-- Initialize GUI -->
+    <script type="text/javascript">
+        window.addEventListener('load', function() {
+            if (typeof gui === 'function') {
+                // Pass undefined for api_origin - let frontend auto-detect from window.location.origin
+                gui({
+                    api_origin: undefined, // Will auto-detect from window.location.origin
+                    title: 'ElastOS',
+                    max_item_name_length: 150,
+                    require_email_verification_to_publish_website: false,
+                    short_description: 'ElastOS is a privacy-first personal cloud that houses all your files, apps, and games in one private and secure place, accessible from anywhere at any time.',
+                });
+            } else {
+                console.error('GUI function not found. Make sure bundle.min.js and gui.js are loaded.');
+            }
+        });
+    </script>
+</body>
+</html>`;
+}
+
 // Create HTTP server for REST endpoints
 const server = http.createServer((req, res) => {
     // CORS headers
@@ -451,6 +539,107 @@ const server = http.createServer((req, res) => {
         urlPath = urlPath.slice(0, -1);
     }
     
+    // ============================================================
+    // PHASE 1: Serve ElastOS Frontend (Puter UI) from PC2 Node
+    // ============================================================
+    // Serve static files from built frontend (dist/) directory
+    // This implements the "Puter on PC2" architecture vision
+    if (req.method === 'GET') {
+        const guiDistPath = path.join(__dirname, '../src/gui/dist');
+        
+        // Check if this is a request for a static file (not an API endpoint)
+        const isApiPath = urlPath.startsWith('/api/') || 
+                         urlPath.startsWith('/auth/') || 
+                         urlPath.startsWith('/drivers/') ||
+                         urlPath.startsWith('/cache/') ||
+                         urlPath.startsWith('/whoami') ||
+                         urlPath.startsWith('/version') ||
+                         urlPath.startsWith('/get-launch-apps') ||
+                         urlPath.startsWith('/kv/') ||
+                         urlPath.startsWith('/hosting/') ||
+                         urlPath.startsWith('/socket.io/') ||
+                         urlPath.startsWith('/stat') ||
+                         urlPath.startsWith('/readdir') ||
+                         urlPath.startsWith('/read') ||
+                         urlPath.startsWith('/write') ||
+                         urlPath.startsWith('/mkdir') ||
+                         urlPath.startsWith('/delete') ||
+                         urlPath.startsWith('/move') ||
+                         urlPath.startsWith('/batch') ||
+                         urlPath.startsWith('/open_item') ||
+                         urlPath.startsWith('/file');
+        
+        // If not an API path, try to serve static file
+        if (!isApiPath && fs.existsSync(guiDistPath)) {
+            let filePath = urlPath === '/' ? '/index.html' : urlPath;
+            if (!filePath.startsWith('/')) filePath = '/' + filePath;
+            
+            // For SPA routing, serve index.html for non-file paths
+            const fullPath = path.join(guiDistPath, filePath);
+            const safePath = path.normalize(fullPath);
+            
+            // Security: ensure path is within guiDistPath
+            if (!safePath.startsWith(path.normalize(guiDistPath))) {
+                // Path traversal attempt - fall through to API handler
+            } else if (fs.existsSync(safePath) && fs.statSync(safePath).isFile()) {
+                // Serve static file
+                const ext = path.extname(safePath).toLowerCase();
+                const mimeTypes = {
+                    '.html': 'text/html',
+                    '.js': 'application/javascript',
+                    '.css': 'text/css',
+                    '.json': 'application/json',
+                    '.png': 'image/png',
+                    '.jpg': 'image/jpeg',
+                    '.jpeg': 'image/jpeg',
+                    '.svg': 'image/svg+xml',
+                    '.woff': 'font/woff',
+                    '.woff2': 'font/woff2',
+                    '.ttf': 'font/ttf',
+                    '.wasm': 'application/wasm',
+                    '.ico': 'image/x-icon',
+                    '.xml': 'application/xml',
+                    '.txt': 'text/plain',
+                };
+                
+                const contentType = mimeTypes[ext] || 'application/octet-stream';
+                const fileContent = fs.readFileSync(safePath);
+                
+                res.writeHead(200, { 
+                    'Content-Type': contentType,
+                    'Cache-Control': 'no-cache',
+                    'Access-Control-Allow-Origin': '*'
+                });
+                res.end(fileContent);
+                return;
+            } else if (fs.existsSync(safePath) && fs.statSync(safePath).isDirectory()) {
+                // Try index.html in directory
+                const indexPath = path.join(safePath, 'index.html');
+                if (fs.existsSync(indexPath)) {
+                    const fileContent = fs.readFileSync(indexPath);
+                    res.writeHead(200, { 
+                        'Content-Type': 'text/html',
+                        'Access-Control-Allow-Origin': '*'
+                    });
+                    res.end(fileContent);
+                    return;
+                }
+            }
+            
+            // SPA fallback: serve generated index.html for all non-API routes
+            // This allows client-side routing to work
+            // Always generate HTML on-the-fly (build process doesn't create index.html)
+            const indexHtml = generateProductionHtml();
+            res.writeHead(200, { 
+                'Content-Type': 'text/html',
+                'Access-Control-Allow-Origin': '*'
+            });
+            res.end(indexHtml);
+            return;
+        }
+    }
+    
+    // ============================================================
     // Handle static file serving for apps (before body collection for GET requests)
     // Apps are served from subdomains: viewer.localhost:4200, player.localhost:4200, etc.
     const hostname = req.headers.host || `localhost:${PORT}`;

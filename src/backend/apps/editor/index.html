@@ -48,15 +48,32 @@
             const authToken = urlParams.get('puter.auth.token');
             const apiOrigin = urlParams.get('puter.api_origin');
             
-            if (authToken && typeof puter !== 'undefined') {
-                puter.setAuthToken(authToken);
-                console.log('[Editor]: Auth token set from URL params');
+            function initializeSDK() {
+                if (typeof puter === 'undefined') {
+                    setTimeout(initializeSDK, 10);
+                    return;
+                }
+                
+                if (authToken) {
+                    try {
+                        puter.setAuthToken(authToken);
+                        console.log('[Editor]: ✅ Auth token set from URL params');
+                    } catch (e) {
+                        console.error('[Editor]: Failed to set auth token:', e);
+                    }
+                }
+                
+                if (apiOrigin) {
+                    try {
+                        puter.setAPIOrigin(apiOrigin);
+                        console.log('[Editor]: ✅ API origin set to:', apiOrigin);
+                    } catch (e) {
+                        console.error('[Editor]: Failed to set API origin:', e);
+                    }
+                }
             }
             
-            if (apiOrigin && typeof puter !== 'undefined') {
-                puter.setAPIOrigin(apiOrigin);
-                console.log('[Editor]: API origin set to:', apiOrigin);
-            }
+            initializeSDK();
         })();
     </script>
     <script src="./js/printjs.min.js"></script>

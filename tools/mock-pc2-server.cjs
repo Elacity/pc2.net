@@ -637,7 +637,27 @@ const server = http.createServer((req, res) => {
                 console.log(`\n🌐 GET ${urlPath} - Serving Particle Auth page`);
                 const particleAuthPath = path.join(particleAuthDir, 'index.html');
                 if (fs.existsSync(particleAuthPath)) {
-                    const html = fs.readFileSync(particleAuthPath, 'utf8');
+                    let html = fs.readFileSync(particleAuthPath, 'utf8');
+                    
+                    // Extract API origin from URL params and inject it into the page
+                    // This allows the Particle Auth React app to know where to send auth requests
+                    // Critical for PC2 deployment where each node has its own URL/IP
+                    const url = new URL(req.url, `http://${req.headers.host}`);
+                    const apiOrigin = url.searchParams.get('api_origin') || `http://${req.headers.host}`;
+                    
+                    // Inject API origin as a script before the React app loads
+                    const apiOriginScript = `
+    <script>
+        // Set API origin for Particle Auth React app
+        // This is injected by the PC2 server based on the deployment URL
+        window.PUTER_API_ORIGIN = ${JSON.stringify(apiOrigin)};
+        console.log('[Particle Auth]: API origin set to:', window.PUTER_API_ORIGIN);
+    </script>
+`;
+                    
+                    // Insert the script right after <head> tag
+                    html = html.replace('<head>', `<head>${apiOriginScript}`);
+                    
                     res.writeHead(200, { 
                         'Content-Type': 'text/html',
                         'Cache-Control': 'no-cache',

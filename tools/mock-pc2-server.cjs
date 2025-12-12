@@ -713,7 +713,21 @@ const server = http.createServer((req, res) => {
                     
                     // Insert the script right after <head> tag, before any other scripts
                     // This ensures it runs before the React app module loads
-                    html = html.replace('<head>', `<head>${apiOriginScript}`);
+                    // Use more flexible regex to match <head> with or without attributes
+                    const beforeReplace = html;
+                    html = html.replace(/<head[^>]*>/i, (match) => {
+                        console.log(`[Particle Auth]: Injecting script after: ${match}`);
+                        return `${match}${apiOriginScript}`;
+                    });
+                    
+                    if (html === beforeReplace) {
+                        console.warn('[Particle Auth]: ⚠️ Script injection failed - <head> tag not found or already replaced');
+                        // Fallback: try inserting before first <script> tag
+                        html = html.replace(/<script/i, `${apiOriginScript}<script`);
+                        console.log('[Particle Auth]: Attempted fallback injection before first <script> tag');
+                    } else {
+                        console.log('[Particle Auth]: ✅ Script successfully injected');
+                    }
                     
                     res.writeHead(200, { 
                         'Content-Type': 'text/html',

@@ -137,6 +137,22 @@ class WalletService {
                         window.user.solana_smart_account_address = payload.solanaSmartAccountAddress;
                         logger.log('Stored Solana Smart Account:', payload.solanaSmartAccountAddress);
                     }
+                    // Store wallet address in window.user for auto-authentication
+                    if (payload?.address && !window.user) {
+                        window.user = { wallet_address: payload.address };
+                    } else if (payload?.address && window.user) {
+                        window.user.wallet_address = payload.address;
+                    }
+                    // Dispatch DOM event for auto-authentication listeners
+                    window.dispatchEvent(new CustomEvent('particle-wallet.ready', {
+                        detail: {
+                            address: payload?.address,
+                            eoaAddress: payload?.eoaAddress,
+                            smartAccountAddress: payload?.smartAccountAddress,
+                            solanaSmartAccountAddress: payload?.solanaSmartAccountAddress,
+                            ...payload
+                        }
+                    }));
                     // Automatically fetch data when ready
                     this.refreshTokens().catch(() => {});
                     break;

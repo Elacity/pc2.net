@@ -52,20 +52,94 @@ window.gui = async (options) => {
     window.gui_origin = options.gui_origin ?? options.app_origin ?? 'https://puter.com';
     window.app_domain = options.app_domain ?? new URL(window.gui_origin).hostname;
     window.hosting_domain = options.hosting_domain ?? 'puter.site';
-    window.api_origin = options.api_origin ?? 'https://api.puter.com';
+    
+    // 🚀 Check for PC2 node connection BEFORE setting api_origin
+    // This ensures PC2 node URL is used instead of api.puter.com
+    let pc2ApiOrigin = null;
+    try {
+        const savedConfig = localStorage.getItem('pc2_config');
+        const savedSession = localStorage.getItem('pc2_session');
+        console.log('[PC2]: Checking localStorage for PC2 config...', { hasConfig: !!savedConfig, hasSession: !!savedSession });
+        if (savedConfig && savedSession) {
+            const config = JSON.parse(savedConfig);
+            const sessionData = JSON.parse(savedSession);
+            const now = Date.now();
+            const sessionAge = now - (sessionData.timestamp || 0);
+            const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 days
+            console.log('[PC2]: Config check:', { nodeUrl: config?.nodeUrl, hasToken: !!sessionData?.session?.token, sessionAge, maxAge, isValid: sessionAge < maxAge });
+            if (config?.nodeUrl && sessionData?.session?.token && sessionAge < maxAge) {
+                pc2ApiOrigin = config.nodeUrl.replace(/\/+$/, '');
+                console.log('[PC2]: ✅ Early API origin set to PC2 node:', pc2ApiOrigin);
+            } else {
+                console.log('[PC2]: ⚠️ PC2 config exists but session invalid or expired');
+            }
+        } else {
+            console.log('[PC2]: ⚠️ No PC2 config/session in localStorage');
+        }
+    } catch (e) {
+        console.warn('[PC2]: Failed to check PC2 config, using default API origin:', e);
+    }
+    
+    // Set api_origin - use PC2 node if available, otherwise use default
+    // If we're on puter.localhost (local dev), default to mock PC2 server
+    const hostname = typeof window !== 'undefined' && window.location ? window.location.hostname : '';
+    console.log('[PC2]: Current hostname:', hostname);
+    if (!pc2ApiOrigin && (hostname === 'puter.localhost' || hostname === 'localhost' || hostname.includes('localhost'))) {
+        pc2ApiOrigin = 'http://127.0.0.1:4200';
+        console.log('[PC2]: 🚀 Local dev detected, defaulting to mock PC2 server:', pc2ApiOrigin);
+    }
+    
+    window.api_origin = pc2ApiOrigin || options.api_origin || 'https://api.puter.com';
+    console.log('[PC2]: Final window.api_origin set to:', window.api_origin);
+    
+    // Protect window.api_origin from being overwritten by SDK
+    let _protectedApiOrigin = window.api_origin;
+    Object.defineProperty(window, 'api_origin', {
+        get: function() {
+            return _protectedApiOrigin;
+        },
+        set: function(value) {
+            // Only allow setting if it's the PC2 node URL or if we haven't set a PC2 URL
+            if (pc2ApiOrigin && value !== pc2ApiOrigin && !value.includes('127.0.0.1:4200') && !value.includes('localhost:4200')) {
+                console.warn('[PC2]: ⚠️ Attempted to overwrite api_origin with:', value, '- keeping PC2 node URL:', _protectedApiOrigin);
+                return; // Don't allow overwriting
+            }
+            // Also protect against api.puter.localhost construction
+            if (value && value.includes('api.puter.localhost')) {
+                console.warn('[PC2]: ⚠️ SDK tried to set api.puter.localhost, redirecting to PC2 node:', _protectedApiOrigin);
+                return; // Don't allow api.puter.localhost
+            }
+            console.log('[PC2]: api_origin changed to:', value);
+            _protectedApiOrigin = value;
+        },
+        configurable: true
+    });
     window.max_item_name_length = options.max_item_name_length ?? 500;
     window.require_email_verification_to_publish_website = options.require_email_verification_to_publish_website ?? true;
     window.disable_temp_users = options.disable_temp_users ?? false;
     window.co_isolation_enabled = options.co_isolation_enabled;
 
+    // 🚀 Ensure window.api_origin is set and protected BEFORE SDK loads
+    // This prevents SDK from using default api.puter.com during initialization
+    console.log('[PC2]: Pre-SDK load - window.api_origin:', window.api_origin);
+    
     // DEV: Load the initgui.js file if we are in development mode
     if ( !window.gui_env || window.gui_env === 'dev' ) {
         await window.loadScript('/sdk/puter.dev.js');
+        // Immediately set API origin after SDK loads
+        if (window.puter && typeof window.puter.setAPIOrigin === 'function') {
+            console.log('[PC2]: SDK loaded, setting API origin to:', window.api_origin);
+            window.puter.setAPIOrigin(window.api_origin);
+        }
     }
 
     if ( window.gui_env === 'dev2' ) {
         await window.loadScript('/puter.js/v2');
         await window.loadCSS('/dist/bundle.min.css');
+        if (window.puter && typeof window.puter.setAPIOrigin === 'function') {
+            console.log('[PC2]: SDK loaded, setting API origin to:', window.api_origin);
+            window.puter.setAPIOrigin(window.api_origin);
+        }
     }
 
     // PROD: load the minified bundles if we are in production mode
@@ -75,6 +149,10 @@ window.gui = async (options) => {
         await window.loadScript('https://js.puter.com/v2/');
         // Load the minified bundles
         await window.loadCSS('/dist/bundle.min.css');
+        if (window.puter && typeof window.puter.setAPIOrigin === 'function') {
+            console.log('[PC2]: SDK loaded, setting API origin to:', window.api_origin);
+            window.puter.setAPIOrigin(window.api_origin);
+        }
     }
 
     // Load Cloudflare Turnstile script

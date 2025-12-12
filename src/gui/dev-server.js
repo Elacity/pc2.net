@@ -21,6 +21,7 @@ import { generateDevHtml, build } from './utils.js';
 import { argv } from 'node:process';
 import chalk from 'chalk';
 import dotenv from 'dotenv';
+import http from 'http';
 dotenv.config();
 
 const app = express();
@@ -51,6 +52,124 @@ startServer(1);
 
 // build the GUI
 build();
+
+// Proxy API requests to mock PC2 server for local development
+// This handles requests to api.puter.localhost:4100 and forwards them to 127.0.0.1:4200
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.use(express.raw({ type: 'application/octet-stream', limit: '50mb' }));
+
+app.use((req, res, next) => {
+    // Check if this is an API request that should be proxied to mock server
+    const isApiRequest = req.path.startsWith('/auth/') || 
+                        req.path.startsWith('/whoami') ||
+                        req.path.startsWith('/version') ||
+                        req.path.startsWith('/read') ||
+                        req.path.startsWith('/cache/') ||
+                        req.path.startsWith('/mkdir') ||
+                        req.path.startsWith('/write') ||
+                        req.path.startsWith('/delete') ||
+                        req.path.startsWith('/move') ||
+                        req.path.startsWith('/readdir') ||
+                        req.path.startsWith('/stat') ||
+                        req.path.startsWith('/socket.io/');
+    
+    if (isApiRequest) {
+        // Handle CORS preflight (OPTIONS) requests
+        if (req.method === 'OPTIONS') {
+            console.log(`[Dev Server Proxy]: OPTIONS ${req.path} -> http://127.0.0.1:4200${req.url}`);
+            res.writeHead(200, {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+                'Access-Control-Max-Age': '86400'
+            });
+            return res.end();
+        }
+        
+        console.log(`[Dev Server Proxy]: ${req.method} ${req.path} -> http://127.0.0.1:4200${req.url}`);
+        
+        // Prepare headers (remove host to avoid conflicts)
+        const headers = { ...req.headers };
+        delete headers.host;
+        delete headers['content-length']; // Let Node.js calculate this
+        
+        const options = {
+            hostname: '127.0.0.1',
+            port: 4200,
+            path: req.url,
+            method: req.method,
+            headers: headers
+        };
+        
+        const proxyReq = http.request(options, (proxyRes) => {
+            // Ensure CORS headers are present
+            const corsHeaders = {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+            };
+            
+            // Copy response headers and add CORS
+            Object.keys(proxyRes.headers).forEach(key => {
+                if (key.toLowerCase() !== 'content-encoding') { // Avoid double encoding
+                    res.setHeader(key, proxyRes.headers[key]);
+                }
+            });
+            
+            // Override/add CORS headers
+            Object.keys(corsHeaders).forEach(key => {
+                res.setHeader(key, corsHeaders[key]);
+            });
+            
+            res.statusCode = proxyRes.statusCode;
+            
+            // Pipe response
+            proxyRes.pipe(res);
+        });
+        
+        proxyReq.on('error', (err) => {
+            console.error(`[Dev Server Proxy]: Error proxying to mock server:`, err.message);
+            if (!res.headersSent) {
+                res.writeHead(502, {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+                    'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+                });
+                res.end(JSON.stringify({ error: 'Mock server not available', details: err.message }));
+            }
+        });
+        
+        // Handle request body
+        if (req.body && Object.keys(req.body).length > 0) {
+            const bodyStr = Buffer.isBuffer(req.body) ? req.body : 
+                          typeof req.body === 'string' ? req.body : 
+                          JSON.stringify(req.body);
+            proxyReq.write(bodyStr);
+            proxyReq.end();
+        } else if (req.method === 'POST' || req.method === 'PUT') {
+            // For POST/PUT, collect raw body if available
+            let bodyData = Buffer.alloc(0);
+            req.on('data', (chunk) => {
+                bodyData = Buffer.concat([bodyData, chunk]);
+            });
+            req.on('end', () => {
+                if (bodyData.length > 0) {
+                    proxyReq.write(bodyData);
+                }
+                proxyReq.end();
+            });
+        } else {
+            // For GET/OPTIONS, no body
+            proxyReq.end();
+        }
+        
+        return;
+    }
+    
+    next();
+});
 
 app.get(['/', '/app/*', '/action/*'], (req, res) => {
     res.send(generateDevHtml({

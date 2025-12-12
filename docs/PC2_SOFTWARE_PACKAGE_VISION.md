@@ -400,3 +400,4 @@ PC2 is:
 5. **Deploy:** Test on Raspberry Pi, VPS, Mac
 
 **Status:** Ready to implement! 🚀
+

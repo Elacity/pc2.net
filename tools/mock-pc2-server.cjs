@@ -472,18 +472,70 @@ function generateProductionHtml() {
         console.log('[PC2]: Auto-detected API origin (same origin):', window.api_origin);
         window.puter_gui_enabled = true;
         
+        // PHASE 1: Intercept fetch calls to redirect api.puter.com to local server
+        // This ensures SDK calls go to PC2 node even if SDK hasn't been configured yet
+        const originalFetch = window.fetch;
+        window.fetch = function(...args) {
+            const url = args[0];
+            if (typeof url === 'string') {
+                if (url.includes('api.puter.com')) {
+                    // Replace api.puter.com domain with local origin (handle both http and https, with or without :443)
+                    const apiPattern = 'https?:\\\\/\\\\/api\\\\.puter\\\\.com(:443)?';
+                    const apiRegex = new RegExp(apiPattern, 'g');
+                    let localUrl = url.replace(apiRegex, window.location.origin);
+                    console.log('[PC2]: Intercepting fetch:', url, '->', localUrl);
+                    args[0] = localUrl;
+                }
+            } else if (url && typeof url === 'object' && url.url) {
+                // Request object
+                if (url.url.includes('api.puter.com')) {
+                    const apiPattern = 'https?:\\\\/\\\\/api\\\\.puter\\\\.com(:443)?';
+                    const apiRegex = new RegExp(apiPattern, 'g');
+                    url.url = url.url.replace(apiRegex, window.location.origin);
+                    console.log('[PC2]: Intercepting fetch (Request object):', url.url);
+                }
+            }
+            return originalFetch.apply(this, args);
+        };
+        
+        // Also intercept XMLHttpRequest
+        const originalXHROpen = XMLHttpRequest.prototype.open;
+        XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+            if (typeof url === 'string' && url.includes('api.puter.com')) {
+                // Replace api.puter.com domain with local origin (handle both http and https, with or without :443)
+                const apiPattern = 'https?:\\\\/\\\\/api\\\\.puter\\\\.com(:443)?';
+                const apiRegex = new RegExp(apiPattern, 'g');
+                let localUrl = url.replace(apiRegex, window.location.origin);
+                console.log('[PC2]: Intercepting XHR:', url, '->', localUrl);
+                url = localUrl;
+            }
+            return originalXHROpen.call(this, method, url, ...rest);
+        };
+        
+        // Also set window.puter_api_origin if SDK checks for it
+        window.puter_api_origin = window.location.origin;
+        
         // Initialize service_script_api_promise (normally done by backend)
-        window.service_script_api_promise = (() => {
-            let resolve, reject;
-            const promise = new Promise((res, rej) => {
-                resolve = res;
-                reject = rej;
-            });
-            promise.resolve = resolve;
-            promise.reject = reject;
-            return promise;
-        })();
-        window.service_script = async fn => {
+        // SDK expects service_script_api_promise.resolve() to be callable
+        // Create a Promise-like object with resolve/reject methods
+        let serviceScriptResolve, serviceScriptReject;
+        const serviceScriptPromise = new Promise((resolve, reject) => {
+            serviceScriptResolve = resolve;
+            serviceScriptReject = reject;
+        });
+        // Create wrapper object that has both Promise interface and resolve/reject methods
+        const serviceScriptAPI = {
+            then: serviceScriptPromise.then.bind(serviceScriptPromise),
+            catch: serviceScriptPromise.catch.bind(serviceScriptPromise),
+            finally: serviceScriptPromise.finally.bind(serviceScriptPromise),
+            resolve: serviceScriptResolve,
+            reject: serviceScriptReject
+        };
+        // Set on both window and globalThis for SDK compatibility
+        window.service_script_api_promise = serviceScriptAPI;
+        globalThis.service_script_api_promise = serviceScriptAPI;
+        
+        window.service_script = async function(fn) {
             try {
                 await fn(await window.service_script_api_promise);
             } catch (e) {
@@ -500,7 +552,9 @@ function generateProductionHtml() {
     <!-- Initialize GUI -->
     <script type="text/javascript">
         window.addEventListener('load', function() {
+            console.log('[PC2]: Window loaded, checking for gui function...');
             if (typeof gui === 'function') {
+                console.log('[PC2]: ✅ gui() function found, initializing...');
                 // Pass undefined for api_origin - let frontend auto-detect from window.location.origin
                 gui({
                     api_origin: undefined, // Will auto-detect from window.location.origin
@@ -508,9 +562,13 @@ function generateProductionHtml() {
                     max_item_name_length: 150,
                     require_email_verification_to_publish_website: false,
                     short_description: 'ElastOS is a privacy-first personal cloud that houses all your files, apps, and games in one private and secure place, accessible from anywhere at any time.',
+                }).then(() => {
+                    console.log('[PC2]: ✅ gui() initialization completed');
+                }).catch((e) => {
+                    console.error('[PC2]: ❌ gui() initialization failed:', e);
                 });
             } else {
-                console.error('GUI function not found. Make sure bundle.min.js and gui.js are loaded.');
+                console.error('[PC2]: ❌ GUI function not found. Make sure bundle.min.js and gui.js are loaded.');
             }
         });
     </script>
@@ -548,6 +606,7 @@ const server = http.createServer((req, res) => {
         const guiDistPath = path.join(__dirname, '../src/gui/dist');
         
         // Check if this is a request for a static file (not an API endpoint)
+        // Note: /images/ is explicitly allowed as a static file path
         const isApiPath = urlPath.startsWith('/api/') || 
                          urlPath.startsWith('/auth/') || 
                          urlPath.startsWith('/drivers/') ||
@@ -568,6 +627,62 @@ const server = http.createServer((req, res) => {
                          urlPath.startsWith('/batch') ||
                          urlPath.startsWith('/open_item') ||
                          urlPath.startsWith('/file');
+        
+        // Special handling for /particle-auth route and its assets
+        if (urlPath === '/particle-auth' || urlPath.startsWith('/particle-auth/')) {
+            const particleAuthDir = path.join(__dirname, '../src/particle-auth');
+            
+            // Handle /particle-auth (serve index.html)
+            if (urlPath === '/particle-auth') {
+                console.log(`\n🌐 GET ${urlPath} - Serving Particle Auth page`);
+                const particleAuthPath = path.join(particleAuthDir, 'index.html');
+                if (fs.existsSync(particleAuthPath)) {
+                    const html = fs.readFileSync(particleAuthPath, 'utf8');
+                    res.writeHead(200, { 
+                        'Content-Type': 'text/html',
+                        'Cache-Control': 'no-cache',
+                        'Access-Control-Allow-Origin': '*'
+                    });
+                    res.end(html);
+                    return;
+                } else {
+                    console.warn(`⚠️ Particle Auth HTML not found at: ${particleAuthPath}`);
+                }
+            }
+            // Handle /particle-auth/assets/* (serve static assets)
+            else if (urlPath.startsWith('/particle-auth/assets/')) {
+                const assetPath = urlPath.replace('/particle-auth', '');
+                const fullPath = path.join(particleAuthDir, assetPath);
+                const safePath = path.normalize(fullPath);
+                
+                // Security: ensure path is within particleAuthDir
+                if (safePath.startsWith(path.normalize(particleAuthDir)) && fs.existsSync(safePath) && fs.statSync(safePath).isFile()) {
+                    const ext = path.extname(safePath).toLowerCase();
+                    const mimeTypes = {
+                        '.js': 'application/javascript',
+                        '.css': 'text/css',
+                        '.json': 'application/json',
+                        '.png': 'image/png',
+                        '.jpg': 'image/jpeg',
+                        '.jpeg': 'image/jpeg',
+                        '.svg': 'image/svg+xml',
+                        '.woff': 'font/woff',
+                        '.woff2': 'font/woff2',
+                        '.ttf': 'font/ttf',
+                        '.wasm': 'application/wasm',
+                    };
+                    const contentType = mimeTypes[ext] || 'application/octet-stream';
+                    const fileContent = fs.readFileSync(safePath);
+                    res.writeHead(200, { 
+                        'Content-Type': contentType,
+                        'Cache-Control': 'no-cache',
+                        'Access-Control-Allow-Origin': '*'
+                    });
+                    res.end(fileContent);
+                    return;
+                }
+            }
+        }
         
         // If not an API path, try to serve static file
         if (!isApiPath && fs.existsSync(guiDistPath)) {
@@ -1209,44 +1324,9 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
     // ═══════════════════════════════════════════════════════════════════
     
     // /whoami - Get current user info
-    if (path === '/whoami' && method === 'GET') {
-        // Get session from Authorization header
-        const authHeader = req.headers['authorization'];
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            res.writeHead(401, { 'Content-Type': 'application/json' });
-            return res.end(JSON.stringify({ error: 'Unauthorized' }));
-        }
-        
-        const token = authHeader.split(' ')[1];
-        // Session token IS the key in the Map
-        const session = nodeState.sessions.get(token);
-        
-        if (!session) {
-            res.writeHead(401, { 'Content-Type': 'application/json' });
-            return res.end(JSON.stringify({ error: 'Invalid session' }));
-        }
-        
-        const walletAddress = session.wallet;
-        console.log(`\n👤 WHOAMI: ${walletAddress}`);
-        
-        // Ensure user's home directory structure exists
-        ensureUserHomeDirectory(walletAddress);
-        
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        return res.end(JSON.stringify({
-            id: 1,
-            uuid: walletAddress,
-            username: walletAddress,
-            wallet_address: walletAddress,
-            email: null,
-            email_confirmed: true,
-            is_temp: false,
-            taskbar_items: [],
-            desktop_bg_url: null,
-            desktop_bg_color: '#1a1a2e',
-            desktop_bg_fit: 'cover',
-        }));
-    }
+    // OLD /whoami endpoint - REMOVED (duplicate, using new one at line ~3761)
+    // This old endpoint was returning 401 for unauthenticated users, blocking the UI
+    // The new endpoint returns unauthenticated state (username: null) to allow login UI
     
     // /stat - Get file/folder info (Puter format)
     if (path === '/stat' && (method === 'GET' || method === 'POST')) {
@@ -1254,13 +1334,30 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
         const url = new URL(req.url, `http://localhost:${PORT}`);
         let filePath = data.path || data.file || data.subject || url.searchParams.get('path') || url.searchParams.get('file') || '/';
         
-        // Handle ~ (home directory) - replace with wallet directory if session exists
+        // Get auth token (from header or body)
         const authHeader = req.headers['authorization'];
-        if (filePath.startsWith('~') && authHeader && authHeader.startsWith('Bearer ')) {
-            const token = authHeader.split(' ')[1];
+        let token = null;
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            token = authHeader.split(' ')[1];
+        } else if (data.auth_token) {
+            token = data.auth_token;
+        }
+        
+        // Handle ~ (home directory) or paths starting with truncated wallet address
+        if (token) {
             const session = nodeState.sessions.get(token);
             if (session && session.wallet) {
-                filePath = filePath.replace('~', `/${session.wallet}`);
+                // Replace ~ with full wallet address
+                if (filePath.startsWith('~')) {
+                    filePath = filePath.replace('~', `/${session.wallet}`);
+                }
+                // Also handle truncated wallet addresses like /0x34da...3dc3
+                // Match pattern: /0x[0-9a-f]{4}...[0-9a-f]{4}
+                const truncatedPattern = /^\/0x[0-9a-f]{4}\.\.\.[0-9a-f]{4}/i;
+                if (truncatedPattern.test(filePath)) {
+                    filePath = filePath.replace(truncatedPattern, `/${session.wallet}`);
+                    console.log(`   Replaced truncated wallet address with full: ${filePath}`);
+                }
             }
         }
         
@@ -1274,6 +1371,20 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
         }
         
         console.log(`\n📊 STAT (Puter): ${normalizedPath}`);
+        
+        // Ensure user home directory exists if path starts with wallet address
+        // Token was already extracted above, reuse it
+        if (token) {
+            const session = nodeState.sessions.get(token);
+            if (session && session.wallet) {
+                ensureUserHomeDirectory(session.wallet);
+                // Also check if path starts with wallet address (even if not using ~)
+                const pathParts = normalizedPath.split('/').filter(Boolean);
+                if (pathParts.length > 0 && pathParts[0].toLowerCase() === session.wallet.toLowerCase()) {
+                    ensureUserHomeDirectory(session.wallet);
+                }
+            }
+        }
         
         let node = getNode(nodeState.filesystem, normalizedPath);
         
@@ -1372,6 +1483,9 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
         const createdTimestamp = node.created || Date.now();
         const modifiedTimestamp = node.modified || Date.now();
         
+        // Determine if folder is public (only "Public" folder should be shared)
+        const isPublic = normalizedPath.includes('/Public') && normalizedPath.split('/').pop() === 'Public';
+        
         res.writeHead(200, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({
             id: node.id || Math.floor(Math.random() * 10000),
@@ -1389,6 +1503,7 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
             parent_id: parentPath ? Math.floor(Math.random() * 10000) : null,
             parent_uid: parentPath ? `uuid-${parentPath.replace(/\//g, '-')}` : null,
             immutable: false,
+            is_public: isPublic, // Only Public folder should be marked as public/shared
         }));
     }
     
@@ -1486,6 +1601,23 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
     if (path === '/read' && method === 'GET') {
         const url = new URL(req.url, `http://localhost:${PORT}`);
         let filePath = url.searchParams.get('file') || '/';
+        
+        // Special case: .__puter_gui.json - return empty object even without auth
+        // This allows Puter GUI to initialize properly
+        // NOTE: Puter backend returns 'application/octet-stream' for /read endpoint
+        // The SDK uses responseType='blob' and expects to call .text() on the blob
+        if (filePath === '~/.__puter_gui.json' || filePath.endsWith('.__puter_gui.json')) {
+            console.log(`\n📖 READ (Puter): ${filePath} - Returning empty config for .__puter_gui.json`);
+            const emptyConfig = '{}';
+            res.writeHead(200, { 
+                'Content-Type': 'application/octet-stream', // Match Puter backend format
+                'Content-Length': Buffer.byteLength(emptyConfig, 'utf8'),
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+            });
+            return res.end(emptyConfig);
+        }
         
         // Handle ~ (home directory)
         const authHeader = req.headers['authorization'];
@@ -1589,15 +1721,39 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
         let dirPath = data.path || data.subject || '/';
         console.log(`   Initial dirPath: ${dirPath}`);
         
-        // Handle ~ (home directory)
+        // Get auth token (from header or body)
         const authHeader = req.headers['authorization'];
-        if (dirPath.startsWith('~') && authHeader && authHeader.startsWith('Bearer ')) {
-            const token = authHeader.split(' ')[1];
+        let token = null;
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            token = authHeader.split(' ')[1];
+        } else if (data.auth_token) {
+            token = data.auth_token;
+        }
+        
+        // Handle ~ (home directory) or paths starting with truncated wallet address
+        if (token) {
             const session = nodeState.sessions.get(token);
             if (session && session.wallet) {
-                dirPath = dirPath.replace('~', `/${session.wallet}`);
-                console.log(`   Replaced ~ with wallet: ${dirPath}`);
+                console.log(`   🔍 Checking path replacement for: ${dirPath}, wallet: ${session.wallet}`);
+                // Replace ~ with full wallet address
+                if (dirPath.startsWith('~')) {
+                    dirPath = dirPath.replace('~', `/${session.wallet}`);
+                    console.log(`   ✅ Replaced ~ with wallet: ${dirPath}`);
+                }
+                // Also handle truncated wallet addresses like /0x34da...3dc3
+                // Match pattern: /0x[0-9a-f]{4}...[0-9a-f]{4}
+                const truncatedPattern = /^\/0x[0-9a-f]{4}\.\.\.[0-9a-f]{4}/i;
+                console.log(`   🔍 Testing truncated pattern on: ${dirPath}, matches: ${truncatedPattern.test(dirPath)}`);
+                if (truncatedPattern.test(dirPath)) {
+                    const oldPath = dirPath;
+                    dirPath = dirPath.replace(truncatedPattern, `/${session.wallet}`);
+                    console.log(`   ✅ Replaced truncated wallet address: ${oldPath} -> ${dirPath}`);
+                }
+            } else {
+                console.warn(`   ⚠️  No session or wallet. Token: ${token ? token.substring(0, 8) + '...' : 'null'}, Session: ${session ? 'exists' : 'null'}`);
             }
+        } else {
+            console.warn(`   ⚠️  No token found for path replacement`);
         }
         
         // Normalize path: remove double slashes, ensure starts with /
@@ -1612,12 +1768,26 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
         console.log(`\n📂 READDIR (Puter): ${normalizedPath}`);
         
         // Ensure user home directory exists (creates standard dirs if needed)
-        if (authHeader && authHeader.startsWith('Bearer ')) {
-            const token = authHeader.split(' ')[1];
+        // Token was already extracted above in the path replacement section, reuse it
+        if (token) {
             const session = nodeState.sessions.get(token);
             if (session && session.wallet) {
+                console.log(`   🔑 Session wallet: ${session.wallet}`);
                 ensureUserHomeDirectory(session.wallet);
+                // Verify directory was created
+                const homePath = `/${session.wallet}`;
+                const homeNode = getNode(nodeState.filesystem, homePath);
+                if (homeNode) {
+                    console.log(`   ✅ Home directory exists: ${homePath}`);
+                    console.log(`   📁 Home directory children:`, Object.keys(homeNode.children || {}));
+                } else {
+                    console.warn(`   ⚠️  Home directory NOT found after ensureUserHomeDirectory: ${homePath}`);
+                }
+            } else {
+                console.warn(`   ⚠️  No session or wallet in session. Session:`, session ? 'exists' : 'null', 'Token:', token.substring(0, 8) + '...');
             }
+        } else {
+            console.warn(`   ⚠️  No auth token found (checked header and body)`);
         }
         
         const node = getNode(nodeState.filesystem, normalizedPath);
@@ -1674,6 +1844,9 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
                 ? child.original_name 
                 : name;
             
+            // Only "Public" folder should be marked as public/shared
+            const isPublic = name === 'Public' && child.type === 'dir';
+            
             entries.push({
                 id: child.id || Math.floor(Math.random() * 10000),
                 uid: child.uuid || `uuid-${childPath.replace(/\//g, '-')}`,
@@ -1686,6 +1859,7 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
                 created: child.created ? new Date(child.created).toISOString() : new Date().toISOString(),
                 modified: child.modified ? new Date(child.modified).toISOString() : new Date().toISOString(),
                 type: child.mimeType || (child.type === 'dir' ? null : 'application/octet-stream'),
+                is_public: isPublic, // Only Public folder should be marked as public/shared
                 // Include restore metadata if in Trash
                 ...(normalizedPath.includes('/Trash') && child.original_name ? {
                     original_name: child.original_name,
@@ -3723,34 +3897,68 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
         // Check for auth token
         const authHeader = req.headers['authorization'];
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            res.writeHead(401, { 
+            // PHASE 1: Return unauthenticated state instead of 401
+            // This allows the frontend to show login UI instead of blocking
+            console.log(`   ⚠️  No auth token - returning unauthenticated state`);
+            res.writeHead(200, { 
                 'Content-Type': 'application/json',
                 'Access-Control-Allow-Origin': '*'
             });
-            return res.end(JSON.stringify({ error: 'Unauthorized' }));
+            return res.end(JSON.stringify({
+                username: null,
+                address: null,
+                is_owner: false,
+                node_name: nodeState.name || 'PC2 Node'
+            }));
         }
         
         const token = authHeader.substring(7);
         const session = nodeState.sessions.get(token);
         
         if (!session) {
-            res.writeHead(401, { 
+            // Also return unauthenticated state for invalid session
+            console.log(`   ⚠️  Invalid session - returning unauthenticated state`);
+            res.writeHead(200, { 
                 'Content-Type': 'application/json',
                 'Access-Control-Allow-Origin': '*'
             });
-            return res.end(JSON.stringify({ error: 'Invalid session' }));
+            return res.end(JSON.stringify({
+                username: null,
+                address: null,
+                is_owner: false,
+                node_name: nodeState.name || 'PC2 Node'
+            }));
         }
         
-        // Return user info in Puter's expected format
+        // Return user info in Puter's expected format (matching commit 0cc69cc7)
+        const walletAddress = session.wallet;
+        const smartAccountAddress = session.smart_account_address || null;
+        console.log(`   ✅ Authenticated user: ${walletAddress}`);
+        if (smartAccountAddress) {
+            console.log(`   ✅ Smart Account (UniversalX): ${smartAccountAddress}`);
+        }
+        
         res.writeHead(200, { 
             'Content-Type': 'application/json',
             'Access-Control-Allow-Origin': '*'
         });
         return res.end(JSON.stringify({
-            username: session.wallet.substring(0, 6) + '...' + session.wallet.substring(session.wallet.length - 4),
-            address: session.wallet,
-            is_owner: nodeState.ownerWallet?.toLowerCase() === session.wallet.toLowerCase(),
-            node_name: nodeState.name
+            id: 1,
+            uuid: walletAddress,
+            username: walletAddress,
+            wallet_address: walletAddress,
+            smart_account_address: smartAccountAddress,
+            email: null,
+            email_confirmed: true,
+            is_temp: false,
+            taskbar_items: [],
+            desktop_bg_url: '/images/flint-2.jpg', // PC2 default background: Flint 2.jpg
+            desktop_bg_color: null, // Use image instead of color
+            desktop_bg_fit: 'cover',
+            token: token, // Include token in response
+            auth_type: smartAccountAddress ? 'universalx' : 'wallet',
+            is_owner: nodeState.ownerWallet?.toLowerCase() === walletAddress.toLowerCase(),
+            node_name: nodeState.name || 'PC2 Node'
         }));
     }
     
@@ -4234,9 +4442,10 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
         console.log(`\n🔐 PARTICLE AUTH REQUEST`);
         console.log(`   Data keys:`, Object.keys(data || {}));
         
-        // Particle Auth sends wallet address and signature
+        // Particle Auth sends wallet address, Smart Account address (UniversalX), and signature
         // For mock server, we'll create/verify a session based on wallet address
         const walletAddress = data.address || data.walletAddress || data.eoaAddress;
+        const smartAccountAddress = data.smartAccountAddress || data.smart_account_address;
         
         if (!walletAddress) {
             res.writeHead(400, { 
@@ -4248,53 +4457,71 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
             return res.end(JSON.stringify({ error: 'Wallet address required' }));
         }
         
-        // Normalize wallet address
+        // Normalize wallet address (keep original case for display, but use lowercase for storage)
         const normalizedWallet = walletAddress.toLowerCase();
+        const displayWallet = walletAddress; // Keep original case
         
         // Check if wallet already has a session
         let session = null;
+        let sessionToken = null;
         for (const [token, sess] of nodeState.sessions.entries()) {
             if (sess.wallet && sess.wallet.toLowerCase() === normalizedWallet) {
                 session = sess;
+                sessionToken = token;
                 break;
             }
         }
         
         // Create new session if needed
         if (!session) {
-            const sessionToken = crypto.randomBytes(32).toString('hex');
+            sessionToken = crypto.randomBytes(32).toString('hex');
             session = {
-                wallet: normalizedWallet,
+                wallet: displayWallet, // Store original case for display
+                smart_account_address: smartAccountAddress || null, // Store Smart Account if provided
                 createdAt: Date.now(),
                 expiresAt: Date.now() + (7 * 24 * 60 * 60 * 1000) // 7 days
             };
             nodeState.sessions.set(sessionToken, session);
             ensureUserHomeDirectory(normalizedWallet);
             saveState();
-            console.log(`   ✅ Created new session for wallet: ${normalizedWallet}`);
-        }
-        
-        // Find the session token
-        let sessionToken = null;
-        for (const [token, sess] of nodeState.sessions.entries()) {
-            if (sess === session) {
-                sessionToken = token;
-                break;
+            console.log(`   ✅ Created new session for wallet: ${displayWallet}`);
+            if (smartAccountAddress) {
+                console.log(`   ✅ Smart Account (UniversalX): ${smartAccountAddress}`);
+            }
+        } else {
+            // Update existing session with Smart Account if provided
+            if (smartAccountAddress && !session.smart_account_address) {
+                session.smart_account_address = smartAccountAddress;
+                console.log(`   ✅ Updated session with Smart Account: ${smartAccountAddress}`);
             }
         }
         
-        // Return session token and user info (frontend expects success: true)
+        // Return session token and user info in Puter format (frontend expects success: true)
+        const userResponse = {
+            id: 1,
+            uuid: displayWallet,
+            username: displayWallet,
+            wallet_address: displayWallet,
+            smart_account_address: smartAccountAddress || session.smart_account_address || null,
+            email: null,
+            email_confirmed: true,
+            is_temp: false,
+            taskbar_items: [],
+            desktop_bg_url: '/images/flint-2.jpg', // PC2 default background: Flint 2.jpg
+            desktop_bg_color: null, // Use image instead of color
+            desktop_bg_fit: 'cover',
+            token: sessionToken,
+            auth_type: smartAccountAddress ? 'universalx' : 'wallet'
+        };
+        
         const response = {
             success: true,
             token: sessionToken,
-            user: {
-                id: normalizedWallet,
-                username: normalizedWallet.substring(0, 10) + '...',
-                email: null
-            }
+            user: userResponse
         };
         
         console.log(`   ✅ Returning auth response with token: ${sessionToken.substring(0, 16)}...`);
+        console.log(`   ✅ User wallet: ${displayWallet}, Smart Account: ${smartAccountAddress || session.smart_account_address || 'none'}`);
         
         res.writeHead(200, { 
             'Content-Type': 'application/json',

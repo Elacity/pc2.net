@@ -152,6 +152,7 @@ if(jQuery){
 }
 
 window.initgui = async function(options){
+    console.log('[initgui]: 🚀 Starting initgui()...');
     // 🚀 Initialize PC2ConnectionService EARLY to redirect API calls before SDK initializes
     // This prevents SDK from calling api.puter.com or constructing api.puter.localhost URLs
     try {
@@ -162,6 +163,7 @@ window.initgui = async function(options){
     }
     
     const url = new URL(window.location).href;
+    console.log('[initgui]: URL:', url);
     window.url = url;
     const url_paths = window.location.pathname.split('/').filter(element => element);
     window.url_paths = url_paths
@@ -805,97 +807,29 @@ window.initgui = async function(options){
     // -------------------------------------------------------------------------------------
     // Un-authed but not first visit -> try to log in/sign up
     // -------------------------------------------------------------------------------------
+    console.log('[initgui]: Checking authentication status...');
+    console.log('[initgui]: window.is_auth():', window.is_auth());
+    console.log('[initgui]: window.logged_in_users.length:', window.logged_in_users?.length || 0);
+    
     if(!window.is_auth()){
-        if(window.logged_in_users.length > 0){
-            UIWindowSessionList();
+        console.log('[initgui]: ❌ User is NOT authenticated');
+        // PC2: Always show Particle login directly (skip Puter session list)
+        // This ensures users see Particle Auth instead of Puter's standard login UI
+        console.log('[initgui]: Showing Particle login (PC2 mode - skipping session list)...');
+        // ELACITY: Embed Particle Auth inside the OS instead of redirecting
+        // Set reload_on_success to false so the desktop loads via the "login" event
+        console.log('[initgui]: Calling UIWindowParticleLogin()...');
+        await UIWindowParticleLogin({ reload_on_success: false });
+        console.log('[initgui]: ✅ UIWindowParticleLogin() completed');
+    } else {
+        console.log('[initgui]: ✅ User IS authenticated');
+        // -------------------------------------------------------------------------------------
+        // Desktop Background
+        // Only load after authentication to avoid black background showing during login
+        // -------------------------------------------------------------------------------------
+        if(!window.is_fullpage_mode && !window.embedded_in_popup){
+            window.refresh_desktop_background();
         }
-        else{
-            // 🚀 LOCAL DEV: Auto-authenticate if wallet is already connected
-            const isLocalDev = window.location.hostname === 'puter.localhost' || 
-                               window.location.hostname === 'localhost' || 
-                               window.location.hostname.includes('localhost');
-            
-            if (isLocalDev) {
-                // Listen for wallet ready event from WalletService or Particle Auth iframe
-                const autoAuthHandler = async (event) => {
-                    const walletAddress = event.detail?.address || 
-                                         event.detail?.eoaAddress ||
-                                         window.user?.wallet_address;
-                    
-                    if (walletAddress && !window.is_auth()) {
-                        console.log('[initgui]: 🚀 Local dev - Auto-authenticating with wallet:', walletAddress);
-                        
-                        try {
-                            // Auto-authenticate by calling Particle Auth endpoint directly
-                            const apiOrigin = window.api_origin || 'http://127.0.0.1:4200';
-                            const authResponse = await fetch(`${apiOrigin}/auth/particle`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ address: walletAddress })
-                            });
-                            
-                            if (authResponse.ok) {
-                                const authData = await authResponse.json();
-                                if (authData.success && authData.token) {
-                                    console.log('[initgui]: ✅ Auto-authentication successful');
-                                    window.auth_token = authData.token;
-                                    localStorage.setItem('auth_token', authData.token);
-                                    puter.setAuthToken(authData.token);
-                                    
-                                    // Get user info and proceed with desktop initialization
-                                    try {
-                                        whoami = await puter.os.user({query: 'icon_size=64'});
-                                        if (whoami) {
-                                            await window.update_auth_data(authData.token, whoami);
-                                            // Desktop will be loaded below in the authed section
-                                            if (!window.embedded_in_popup) {
-                                                console.log('[initgui]: Loading desktop for path:', window.desktop_path);
-                                                await window.get_auto_arrange_data();
-                                                puter.fs.stat(window.desktop_path, async function(desktop_fsentry){
-                                                    console.log('[initgui]: puter.fs.stat callback, calling UIDesktop');
-                                                    UIDesktop({desktop_fsentry: desktop_fsentry});
-                                                });
-                                            }
-                                            // Remove listener and skip Particle Auth UI
-                                            window.removeEventListener('particle-wallet.ready', autoAuthHandler);
-                                            return;
-                                        }
-                                    } catch (e) {
-                                        console.error('[initgui]: Failed to get user info after auto-auth:', e);
-                                    }
-                                }
-                            } else {
-                                console.warn('[initgui]: Auto-auth request failed:', authResponse.status);
-                            }
-                        } catch (e) {
-                            console.warn('[initgui]: Auto-auth failed:', e);
-                        }
-                    }
-                };
-                
-                // Listen for wallet ready event (from WalletService)
-                window.addEventListener('particle-wallet.ready', autoAuthHandler);
-                
-                // Also check immediately if wallet is already available (fallback)
-                setTimeout(async () => {
-                    const walletAddress = window.user?.wallet_address;
-                    if (walletAddress && !window.is_auth()) {
-                        autoAuthHandler({ detail: { address: walletAddress } });
-                    }
-                }, 1000); // Wait 1 second for wallet to initialize
-            }
-            
-            // ELACITY: Embed Particle Auth inside the OS instead of redirecting
-            // Set reload_on_success to false so the desktop loads via the "login" event
-            await UIWindowParticleLogin({ reload_on_success: false });
-        }
-    }
-    // -------------------------------------------------------------------------------------
-    // Desktop Background
-    // Only load after authentication to avoid black background showing during login
-    // -------------------------------------------------------------------------------------
-    else if(!window.is_fullpage_mode && !window.embedded_in_popup){
-        window.refresh_desktop_background();
     }
 
     // -------------------------------------------------------------------------------------
@@ -1444,6 +1378,10 @@ window.initgui = async function(options){
             }
         }
 
+        // PC2: Clear all logged_in_users on logout to ensure Particle login is shown
+        // This prevents the Puter session list from appearing after logout
+        window.logged_in_users = [];
+        
         // update logged_in_users in local storage
         localStorage.setItem('logged_in_users', JSON.stringify(window.logged_in_users));
 

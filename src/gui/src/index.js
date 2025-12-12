@@ -82,9 +82,24 @@ window.gui = async (options) => {
     
     // Set api_origin - use PC2 node if available, otherwise use default
     // PHASE 1: Auto-detect same origin if api_origin is undefined (Puter on PC2 architecture)
-    if (!options.api_origin && typeof window !== 'undefined' && window.location) {
+    // Priority: 1) Same origin (if already set by HTML), 2) PC2 config, 3) Same origin (auto-detect), 4) Default
+    
+    // Check if window.api_origin was already set by HTML to same origin
+    const currentApiOrigin = typeof window !== 'undefined' ? window.api_origin : null;
+    const currentOrigin = typeof window !== 'undefined' && window.location ? window.location.origin : null;
+    const isAlreadySameOrigin = currentApiOrigin && currentOrigin && currentApiOrigin === currentOrigin;
+    
+    if (isAlreadySameOrigin) {
+        // Already set to same origin by HTML - keep it!
+        console.log('[PC2]: ✅ Same-origin API already set by HTML:', currentApiOrigin);
+        // Don't change it - it's already correct
+    } else if (pc2ApiOrigin) {
+        // Use PC2 node from config
+        window.api_origin = pc2ApiOrigin;
+        console.log('[PC2]: ✅ Using PC2 node from config:', pc2ApiOrigin);
+    } else if (!options.api_origin && currentOrigin) {
         // If no api_origin provided, use same origin (frontend and backend on same server)
-        window.api_origin = window.location.origin;
+        window.api_origin = currentOrigin;
         console.log('[PC2]: 🚀 Same-origin detected (Puter on PC2), using:', window.api_origin);
     } else {
         // Legacy: If we're on puter.localhost (local dev), default to mock PC2 server
@@ -95,17 +110,32 @@ window.gui = async (options) => {
             console.log('[PC2]: 🚀 Local dev detected, defaulting to mock PC2 server:', pc2ApiOrigin);
         }
         
-        window.api_origin = pc2ApiOrigin || options.api_origin || 'https://api.puter.com';
-        console.log('[PC2]: Final window.api_origin set to:', window.api_origin);
+        // Only set default if we don't already have a same-origin API set
+        if (!currentApiOrigin || currentApiOrigin !== currentOrigin) {
+            window.api_origin = pc2ApiOrigin || options.api_origin || 'https://api.puter.com';
+            console.log('[PC2]: Final window.api_origin set to:', window.api_origin);
+        } else {
+            console.log('[PC2]: ✅ Preserving same-origin API:', currentApiOrigin);
+        }
     }
     
     // Protect window.api_origin from being overwritten by SDK
+    // PHASE 1: If we're on same origin (Puter on PC2), protect it from being changed
+    const isSameOrigin = typeof window !== 'undefined' && window.location && 
+                        window.api_origin === window.location.origin;
+    
     let _protectedApiOrigin = window.api_origin;
     Object.defineProperty(window, 'api_origin', {
         get: function() {
             return _protectedApiOrigin;
         },
         set: function(value) {
+            // PHASE 1: If same origin is set, never allow it to be changed
+            if (isSameOrigin && value !== window.location.origin) {
+                console.warn('[PC2]: ⚠️ Attempted to overwrite same-origin API with:', value, '- keeping same origin:', _protectedApiOrigin);
+                return; // Don't allow overwriting same origin
+            }
+            
             // Only allow setting if it's the PC2 node URL or if we haven't set a PC2 URL
             if (pc2ApiOrigin && value !== pc2ApiOrigin && !value.includes('127.0.0.1:4200') && !value.includes('localhost:4200')) {
                 console.warn('[PC2]: ⚠️ Attempted to overwrite api_origin with:', value, '- keeping PC2 node URL:', _protectedApiOrigin);
@@ -115,6 +145,11 @@ window.gui = async (options) => {
             if (value && value.includes('api.puter.localhost')) {
                 console.warn('[PC2]: ⚠️ SDK tried to set api.puter.localhost, redirecting to PC2 node:', _protectedApiOrigin);
                 return; // Don't allow api.puter.localhost
+            }
+            // Also protect against api.puter.com when we have same origin
+            if (isSameOrigin && value && value.includes('api.puter.com')) {
+                console.warn('[PC2]: ⚠️ SDK tried to set api.puter.com, keeping same origin:', _protectedApiOrigin);
+                return; // Don't allow api.puter.com when same origin is set
             }
             console.log('[PC2]: api_origin changed to:', value);
             _protectedApiOrigin = value;

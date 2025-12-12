@@ -645,68 +645,74 @@ const server = http.createServer((req, res) => {
                     const url = new URL(req.url, `http://${req.headers.host}`);
                     const apiOrigin = url.searchParams.get('api_origin') || `http://${req.headers.host}`;
                     
-                    // Inject API origin and interception scripts before the React app loads
+                    // Inject API origin and interception scripts IMMEDIATELY before any other scripts
                     // This ensures Particle Auth works with any PC2 node URL/IP
+                    // Must run before React app loads to intercept all API calls
                     const apiOriginScript = `
     <script>
-        // Set API origin for Particle Auth React app
-        // This is injected by the PC2 server based on the deployment URL
-        window.PUTER_API_ORIGIN = ${JSON.stringify(apiOrigin)};
-        console.log('[Particle Auth]: API origin set to:', window.PUTER_API_ORIGIN);
-        
-        // Intercept API calls to redirect them to the PC2 node
-        // This is critical for PC2 deployment where each node has its own URL/IP
-        const currentOrigin = window.location.origin;
-        
-        // Intercept fetch requests
-        const originalFetch = window.fetch;
-        window.fetch = function(...args) {
-            let url = args[0];
-            if (typeof url === 'string') {
-                // Replace api.puter.com, api.puter.localhost, or any api.puter.* with current origin
-                // Handles any port number (e.g., api.puter.localhost:4100)
-                if (url.includes('api.puter.')) {
-                    const interceptedUrl = url.replace(/https?:\\/\\/api\\.puter\\.[^/]+(:\\d+)?/, currentOrigin);
-                    console.log('[Particle Auth]: Intercepting fetch:', url, '->', interceptedUrl);
-                    args[0] = interceptedUrl;
+        (function() {
+            // Set API origin for Particle Auth React app
+            // This is injected by the PC2 server based on the deployment URL
+            window.PUTER_API_ORIGIN = ${JSON.stringify(apiOrigin)};
+            console.log('[Particle Auth]: ✅ API origin set to:', window.PUTER_API_ORIGIN);
+            
+            // Intercept API calls to redirect them to the PC2 node
+            // This is critical for PC2 deployment where each node has its own URL/IP
+            const currentOrigin = window.location.origin;
+            console.log('[Particle Auth]: Current origin:', currentOrigin);
+            
+            // More robust regex pattern to match any api.puter.* domain with optional port
+            const apiPuterPattern = /https?:\\/\\/api\\.puter\\.[^\\/:]+(?:\\:\\d+)?/gi;
+            
+            // Intercept fetch requests - must intercept before React app loads
+            const originalFetch = window.fetch;
+            window.fetch = function(...args) {
+                let url = args[0];
+                if (typeof url === 'string') {
+                    if (url.includes('api.puter.')) {
+                        const interceptedUrl = url.replace(apiPuterPattern, currentOrigin);
+                        console.log('[Particle Auth]: 🔄 Intercepting fetch:', url, '->', interceptedUrl);
+                        args[0] = interceptedUrl;
+                    }
+                } else if (url && typeof url === 'object' && url.url) {
+                    // Request object
+                    if (url.url.includes('api.puter.')) {
+                        url.url = url.url.replace(apiPuterPattern, currentOrigin);
+                        console.log('[Particle Auth]: 🔄 Intercepting fetch (Request object):', url.url);
+                    }
                 }
-            } else if (url && typeof url === 'object' && url.url) {
-                // Request object
-                if (url.url.includes('api.puter.')) {
-                    url.url = url.url.replace(/https?:\\/\\/api\\.puter\\.[^/]+(:\\d+)?/, currentOrigin);
-                    console.log('[Particle Auth]: Intercepting fetch (Request object):', url.url);
+                return originalFetch.apply(this, args);
+            };
+            
+            // Intercept XMLHttpRequest
+            const originalXHROpen = XMLHttpRequest.prototype.open;
+            XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+                if (typeof url === 'string') {
+                    if (url.includes('api.puter.')) {
+                        const interceptedUrl = url.replace(apiPuterPattern, currentOrigin);
+                        console.log('[Particle Auth]: 🔄 Intercepting XHR:', url, '->', interceptedUrl);
+                        url = interceptedUrl;
+                    }
                 }
-            }
-            return originalFetch.apply(this, args);
-        };
-        
-        // Intercept XMLHttpRequest
-        const originalXHROpen = XMLHttpRequest.prototype.open;
-        XMLHttpRequest.prototype.open = function(method, url, ...rest) {
-            if (typeof url === 'string') {
-                // Replace api.puter.com, api.puter.localhost, or any api.puter.* with current origin
-                // Handles any port number (e.g., api.puter.localhost:4100)
-                if (url.includes('api.puter.')) {
-                    const interceptedUrl = url.replace(/https?:\\/\\/api\\.puter\\.[^/]+(:\\d+)?/, currentOrigin);
-                    console.log('[Particle Auth]: Intercepting XHR:', url, '->', interceptedUrl);
-                    url = interceptedUrl;
+                return originalXHROpen.call(this, method, url, ...rest);
+            };
+            
+            // Listen for postMessage from parent window with API origin
+            window.addEventListener('message', function(event) {
+                if (event.origin !== window.location.origin) return;
+                if (event.data && event.data.type === 'puter-api-origin') {
+                    window.PUTER_API_ORIGIN = event.data.apiOrigin;
+                    console.log('[Particle Auth]: ✅ Received API origin from parent:', window.PUTER_API_ORIGIN);
                 }
-            }
-            return originalXHROpen.call(this, method, url, ...rest);
-        };
-        
-        // Listen for postMessage from parent window with API origin
-        window.addEventListener('message', function(event) {
-            if (event.origin !== window.location.origin) return;
-            if (event.data && event.data.type === 'puter-api-origin') {
-                window.PUTER_API_ORIGIN = event.data.apiOrigin;
-                console.log('[Particle Auth]: Received API origin from parent:', window.PUTER_API_ORIGIN);
-            }
-        });
+            });
+            
+            console.log('[Particle Auth]: ✅ Interception scripts loaded and active');
+        })();
     </script>
 `;
                     
-                    // Insert the script right after <head> tag
+                    // Insert the script right after <head> tag, before any other scripts
+                    // This ensures it runs before the React app module loads
                     html = html.replace('<head>', `<head>${apiOriginScript}`);
                     
                     res.writeHead(200, { 

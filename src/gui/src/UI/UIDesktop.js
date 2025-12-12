@@ -1987,7 +1987,7 @@ $(document).on('click', '.user-options-menu-btn', async function (e) {
         // Show smart_account_address (UniversalX) second if it exists
         if (window.user.smart_account_address) {
             const displayName = window.user.smart_account_address.slice(0, 10) + '...' + window.user.smart_account_address.slice(-8);
-            const subtitle = '<span style="display:block;font-size:10px;color:#666;margin-top:2px;">UniversalX Smart Account</span>';
+            const subtitle = '<span style="display:block;font-size:10px;color:#666;margin-top:2px;margin-left:0;padding-left:0;text-align:left;">UniversalX Smart Account</span>';
             items.push({
                 html: displayName + subtitle,
                 icon: '',

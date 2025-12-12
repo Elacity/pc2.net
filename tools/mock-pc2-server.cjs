@@ -598,6 +598,81 @@ const server = http.createServer((req, res) => {
     }
     
     // ============================================================
+    // PHASE 0: Handle app subdomains FIRST (before main GUI)
+    // ============================================================
+    // Apps are served from subdomains: viewer.localhost:4200, player.localhost:4200, etc.
+    // This must run BEFORE main GUI serving to prevent apps from getting GUI HTML
+    const hostname = req.headers.host || `localhost:${PORT}`;
+    const subdomain = hostname.split('.')[0];
+    const appSubdomains = ['viewer', 'player', 'pdf', 'editor', 'terminal'];
+    
+    if (appSubdomains.includes(subdomain) && req.method === 'GET') {
+        const appsDir = path.join(__dirname, '../src/backend/apps', subdomain);
+        
+        if (fs.existsSync(appsDir)) {
+            let filePath = urlPath === '/' ? '/index.html' : urlPath;
+            if (!filePath.startsWith('/')) filePath = '/' + filePath;
+            
+            const fullPath = path.join(appsDir, filePath);
+            const safePath = path.normalize(fullPath);
+            
+            // Security: ensure path is within appsDir
+            if (!safePath.startsWith(path.normalize(appsDir))) {
+                res.writeHead(403, { 'Content-Type': 'text/plain' });
+                res.end('Forbidden');
+                return;
+            }
+            
+            // Check if file exists
+            if (fs.existsSync(safePath) && fs.statSync(safePath).isFile()) {
+                const ext = path.extname(safePath).toLowerCase();
+                const mimeTypes = {
+                    '.html': 'text/html',
+                    '.js': 'application/javascript',
+                    '.css': 'text/css',
+                    '.json': 'application/json',
+                    '.png': 'image/png',
+                    '.jpg': 'image/jpeg',
+                    '.jpeg': 'image/jpeg',
+                    '.svg': 'image/svg+xml',
+                    '.woff': 'font/woff',
+                    '.woff2': 'font/woff2',
+                    '.ttf': 'font/ttf',
+                    '.wasm': 'application/wasm',
+                };
+                
+                const contentType = mimeTypes[ext] || 'application/octet-stream';
+                const fileContent = fs.readFileSync(safePath);
+                
+                console.log(`\n📱 GET ${urlPath} (${subdomain} app) - Serving: ${safePath}`);
+                
+                res.writeHead(200, { 
+                    'Content-Type': contentType,
+                    'Cache-Control': 'no-cache'
+                });
+                res.end(fileContent);
+                return;
+            } else if (fs.existsSync(safePath) && fs.statSync(safePath).isDirectory()) {
+                // Try index.html in directory
+                const indexPath = path.join(safePath, 'index.html');
+                if (fs.existsSync(indexPath)) {
+                    const fileContent = fs.readFileSync(indexPath);
+                    console.log(`\n📱 GET ${urlPath} (${subdomain} app) - Serving directory index: ${indexPath}`);
+                    res.writeHead(200, { 'Content-Type': 'text/html' });
+                    res.end(fileContent);
+                    return;
+                }
+            }
+        }
+        
+        // If app files don't exist, return 404 (don't fall through to GUI)
+        console.warn(`\n⚠️  App file not found for ${subdomain}: ${urlPath}`);
+        res.writeHead(404, { 'Content-Type': 'text/plain' });
+        res.end('App file not found');
+        return;
+    }
+    
+    // ============================================================
     // PHASE 1: Serve ElastOS Frontend (Puter UI) from PC2 Node
     // ============================================================
     // Serve static files from built frontend (dist/) directory
@@ -843,75 +918,6 @@ const server = http.createServer((req, res) => {
             res.end(indexHtml);
             return;
         }
-    }
-    
-    // ============================================================
-    // Handle static file serving for apps (before body collection for GET requests)
-    // Apps are served from subdomains: viewer.localhost:4200, player.localhost:4200, etc.
-    const hostname = req.headers.host || `localhost:${PORT}`;
-    const subdomain = hostname.split('.')[0];
-    
-    // Check if this is an app subdomain request
-    const appSubdomains = ['viewer', 'player', 'pdf', 'editor', 'terminal'];
-    if (appSubdomains.includes(subdomain) && req.method === 'GET') {
-        // Try to serve from local apps directory
-        const appsDir = path.join(__dirname, '../src/backend/apps', subdomain);
-        
-        if (fs.existsSync(appsDir)) {
-            let filePath = urlPath === '/' ? '/index.html' : urlPath;
-            if (!filePath.startsWith('/')) filePath = '/' + filePath;
-            
-            const fullPath = path.join(appsDir, filePath);
-            const safePath = path.normalize(fullPath);
-            
-            // Security: ensure path is within appsDir
-            if (!safePath.startsWith(path.normalize(appsDir))) {
-                res.writeHead(403, { 'Content-Type': 'text/plain' });
-                res.end('Forbidden');
-                return;
-            }
-            
-            // Check if file exists
-            if (fs.existsSync(safePath) && fs.statSync(safePath).isFile()) {
-                const ext = path.extname(safePath).toLowerCase();
-                const mimeTypes = {
-                    '.html': 'text/html',
-                    '.js': 'application/javascript',
-                    '.css': 'text/css',
-                    '.json': 'application/json',
-                    '.png': 'image/png',
-                    '.jpg': 'image/jpeg',
-                    '.jpeg': 'image/jpeg',
-                    '.svg': 'image/svg+xml',
-                    '.woff': 'font/woff',
-                    '.woff2': 'font/woff2',
-                    '.ttf': 'font/ttf',
-                    '.wasm': 'application/wasm',
-                };
-                
-                const contentType = mimeTypes[ext] || 'application/octet-stream';
-                const fileContent = fs.readFileSync(safePath);
-                
-                res.writeHead(200, { 
-                    'Content-Type': contentType,
-                    'Cache-Control': 'no-cache'
-                });
-                res.end(fileContent);
-                return;
-            } else if (fs.existsSync(safePath) && fs.statSync(safePath).isDirectory()) {
-                // Try index.html in directory
-                const indexPath = path.join(safePath, 'index.html');
-                if (fs.existsSync(indexPath)) {
-                    const fileContent = fs.readFileSync(indexPath);
-                    res.writeHead(200, { 'Content-Type': 'text/html' });
-                    res.end(fileContent);
-                    return;
-                }
-            }
-        }
-        
-        // If app files don't exist locally, fall through to handleRequest
-        // (which will return 404 or handle API requests)
     }
     
     // Collect body as buffer for multipart

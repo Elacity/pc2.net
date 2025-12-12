@@ -81,16 +81,23 @@ window.gui = async (options) => {
     }
     
     // Set api_origin - use PC2 node if available, otherwise use default
-    // If we're on puter.localhost (local dev), default to mock PC2 server
-    const hostname = typeof window !== 'undefined' && window.location ? window.location.hostname : '';
-    console.log('[PC2]: Current hostname:', hostname);
-    if (!pc2ApiOrigin && (hostname === 'puter.localhost' || hostname === 'localhost' || hostname.includes('localhost'))) {
-        pc2ApiOrigin = 'http://127.0.0.1:4200';
-        console.log('[PC2]: 🚀 Local dev detected, defaulting to mock PC2 server:', pc2ApiOrigin);
+    // PHASE 1: Auto-detect same origin if api_origin is undefined (Puter on PC2 architecture)
+    if (!options.api_origin && typeof window !== 'undefined' && window.location) {
+        // If no api_origin provided, use same origin (frontend and backend on same server)
+        window.api_origin = window.location.origin;
+        console.log('[PC2]: 🚀 Same-origin detected (Puter on PC2), using:', window.api_origin);
+    } else {
+        // Legacy: If we're on puter.localhost (local dev), default to mock PC2 server
+        const hostname = typeof window !== 'undefined' && window.location ? window.location.hostname : '';
+        console.log('[PC2]: Current hostname:', hostname);
+        if (!pc2ApiOrigin && (hostname === 'puter.localhost' || hostname === 'localhost' || hostname.includes('localhost'))) {
+            pc2ApiOrigin = 'http://127.0.0.1:4200';
+            console.log('[PC2]: 🚀 Local dev detected, defaulting to mock PC2 server:', pc2ApiOrigin);
+        }
+        
+        window.api_origin = pc2ApiOrigin || options.api_origin || 'https://api.puter.com';
+        console.log('[PC2]: Final window.api_origin set to:', window.api_origin);
     }
-    
-    window.api_origin = pc2ApiOrigin || options.api_origin || 'https://api.puter.com';
-    console.log('[PC2]: Final window.api_origin set to:', window.api_origin);
     
     // Protect window.api_origin from being overwritten by SDK
     let _protectedApiOrigin = window.api_origin;

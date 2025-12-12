@@ -2026,7 +2026,7 @@ $(document).on('click', '.user-options-menu-btn', async function (e) {
             if (l_user.smart_account_address) {
                 // Show Smart Account (truncated) with "Smart" label
                 displayName = l_user.smart_account_address.slice(0, 10) + '...' + l_user.smart_account_address.slice(-8);
-                subtitle = '<span style="display:block;font-size:10px;color:#666;margin-top:2px;">UniversalX Smart Account</span>';
+                subtitle = '<span style="display:block;font-size:10px;color:#666;margin-top:2px;margin-left:0;padding-left:0;text-align:left;">UniversalX Smart Account</span>';
             } else if (l_user.wallet_address) {
                 // Show EOA address (truncated)
                 displayName = l_user.wallet_address.slice(0, 10) + '...' + l_user.wallet_address.slice(-8);

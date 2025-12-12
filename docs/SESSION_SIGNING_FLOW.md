@@ -186,3 +186,4 @@ UIWindowParticleLogin({ reload_on_success: false })
   2. Creates new session (7 days)
 
 Both happen automatically in the same authentication flow! 🎉
+

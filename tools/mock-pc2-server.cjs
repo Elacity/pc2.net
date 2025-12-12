@@ -175,14 +175,16 @@ function ensureDir(filesystem, dirPath) {
             // Use existing directory (preserve original case)
             current = current.children[foundKey];
         } else {
-            // Create new directory
+            // Create new directory with UUID
+            const nodeUuid = `uuid-${currentPath.replace(/\//g, '-')}`;
             current.children[part] = {
                 type: 'dir',
                 name: part,
                 children: {},
-                created: Date.now()
+                created: Date.now(),
+                uuid: nodeUuid // Set UUID so findNodeByUuid can find it
             };
-            console.log(`   Created dir: ${currentPath}`);
+            console.log(`   Created dir: ${currentPath} (uuid: ${nodeUuid})`);
             current = current.children[part];
         }
     }
@@ -240,6 +242,31 @@ function findNodeByUuid(filesystem, uuid) {
                 foundNode = node;
                 foundPath = currentPath;
                 return true;
+            }
+            
+            // Also try case-insensitive match (UUIDs might have case differences)
+            if (node.uuid.toLowerCase() === uuid.toLowerCase()) {
+                foundNode = node;
+                foundPath = currentPath;
+                return true;
+            }
+        }
+        
+        // Also check if current path matches UUID pattern (fallback for nodes without UUID)
+        // UUID format: uuid--wallet-Desktop-New Folder (9)
+        // Path format: /wallet/Desktop/New Folder (9)
+        if (uuid.startsWith('uuid-')) {
+            const uuidPathPart = uuid.replace(/^uuid-+/, '').replace(/^0x[0-9a-f]+-/, '');
+            const pathToMatch = currentPath.replace(/^\/0x[0-9a-f]+\//, '');
+            // Compare path parts (handle spaces and parentheses)
+            if (uuidPathPart.replace(/-/g, '/') === pathToMatch || 
+                uuidPathPart.replace(/-/g, ' ').replace(/\//g, '/') === pathToMatch.replace(/\//g, '/')) {
+                // This might be the node, but only if it exists
+                if (node && (node.type === 'dir' || node.type === 'file')) {
+                    foundNode = node;
+                    foundPath = currentPath;
+                    return true;
+                }
             }
         }
         
@@ -608,16 +635,58 @@ const server = http.createServer((req, res) => {
     
     if (appSubdomains.includes(subdomain) && req.method === 'GET') {
         const appsDir = path.join(__dirname, '../src/backend/apps', subdomain);
+        const appsBuildDir = path.join(__dirname, '../src/backend/apps/build');
         
         if (fs.existsSync(appsDir)) {
             let filePath = urlPath === '/' ? '/index.html' : urlPath;
             if (!filePath.startsWith('/')) filePath = '/' + filePath;
             
-            const fullPath = path.join(appsDir, filePath);
+            // Handle build/ paths (browser normalizes ../build/ to build/)
+            // Also handle ../build/ directly if browser doesn't normalize
+            // Also handle web/ paths for PDF.js resources (cmaps, standard_fonts, etc.)
+            // Also handle images/ paths for PDF.js toolbar icons
+            let fullPath;
+            if (filePath.startsWith('/build/') || filePath.startsWith('build/')) {
+                // Browser normalized ../build/pdf.js to /build/pdf.js
+                const buildRelativePath = filePath.replace(/^\/?build\//, '');
+                fullPath = path.join(appsBuildDir, buildRelativePath);
+            } else if (filePath.startsWith('/../build/') || filePath.includes('../build/')) {
+                // Direct ../build/ path (if not normalized)
+                const buildRelativePath = filePath.replace(/^\/+\.\.\/build\//, '').replace(/^\.\.\/build\//, '');
+                fullPath = path.join(appsBuildDir, buildRelativePath);
+            } else if (filePath.startsWith('/web/') || filePath.startsWith('web/')) {
+                // PDF.js web resources (cmaps, standard_fonts, etc.) - try in build/web first, then apps/web
+                const webRelativePath = filePath.replace(/^\/?web\//, '');
+                const buildWebPath = path.join(appsBuildDir, 'web', webRelativePath);
+                const appsWebPath = path.join(path.dirname(appsDir), 'web', webRelativePath);
+                if (fs.existsSync(buildWebPath)) {
+                    fullPath = buildWebPath;
+                } else if (fs.existsSync(appsWebPath)) {
+                    fullPath = appsWebPath;
+                } else {
+                    fullPath = buildWebPath; // Will return 404, but path is valid
+                }
+            } else if (filePath.startsWith('/images/') || filePath.startsWith('images/')) {
+                // PDF.js images/ directory (toolbar icons, etc.) - serve from apps/pdf/images/
+                const imagesRelativePath = filePath.replace(/^\/?images\//, '');
+                fullPath = path.join(appsDir, 'images', imagesRelativePath);
+            } else {
+                // Remove leading slash for path.join to work correctly
+                const relativePath = filePath.startsWith('/') ? filePath.slice(1) : filePath;
+                fullPath = path.join(appsDir, relativePath);
+            }
+            
             const safePath = path.normalize(fullPath);
             
-            // Security: ensure path is within appsDir
-            if (!safePath.startsWith(path.normalize(appsDir))) {
+            // Security: ensure path is within appsDir, appsBuildDir, apps/web, or apps/pdf/images
+            const normalizedAppsDir = path.normalize(appsDir);
+            const normalizedAppsBuildDir = path.normalize(appsBuildDir);
+            const normalizedAppsWebDir = path.normalize(path.join(path.dirname(appsDir), 'web'));
+            const normalizedAppsImagesDir = path.normalize(path.join(appsDir, 'images'));
+            if (!safePath.startsWith(normalizedAppsDir) && 
+                !safePath.startsWith(normalizedAppsBuildDir) && 
+                !safePath.startsWith(normalizedAppsWebDir) &&
+                !safePath.startsWith(normalizedAppsImagesDir)) {
                 res.writeHead(403, { 'Content-Type': 'text/plain' });
                 res.end('Forbidden');
                 return;
@@ -635,10 +704,15 @@ const server = http.createServer((req, res) => {
                     '.jpg': 'image/jpeg',
                     '.jpeg': 'image/jpeg',
                     '.svg': 'image/svg+xml',
+                    '.gif': 'image/gif',
+                    '.cur': 'image/x-icon', // Cursor files
                     '.woff': 'font/woff',
                     '.woff2': 'font/woff2',
                     '.ttf': 'font/ttf',
                     '.wasm': 'application/wasm',
+                    '.pdf': 'application/pdf',
+                    '.map': 'application/json', // Source maps
+                    '.properties': 'text/plain', // Locale files
                 };
                 
                 const contentType = mimeTypes[ext] || 'application/octet-stream';
@@ -648,7 +722,8 @@ const server = http.createServer((req, res) => {
                 
                 res.writeHead(200, { 
                     'Content-Type': contentType,
-                    'Cache-Control': 'no-cache'
+                    'Cache-Control': 'no-cache',
+                    'Access-Control-Allow-Origin': '*'
                 });
                 res.end(fileContent);
                 return;
@@ -656,8 +731,88 @@ const server = http.createServer((req, res) => {
                 // Try index.html in directory
                 const indexPath = path.join(safePath, 'index.html');
                 if (fs.existsSync(indexPath)) {
-                    const fileContent = fs.readFileSync(indexPath);
-                    console.log(`\n📱 GET ${urlPath} (${subdomain} app) - Serving directory index: ${indexPath}`);
+                    let fileContent = fs.readFileSync(indexPath).toString();
+                    
+                    // Inject API interception and SDK initialization for PDF app (like viewer app)
+                    if (subdomain === 'pdf') {
+                        const urlParams = new URL(req.url, `http://localhost:${PORT}`);
+                        const authToken = urlParams.searchParams.get('puter.auth.token');
+                        const apiOrigin = urlParams.searchParams.get('puter.api_origin') || `http://127.0.0.1:${PORT}`;
+                        
+                        // Inject API interception script BEFORE viewer.js loads
+                        const apiInterceptionScript = `
+    <script>
+        // CRITICAL: Intercept API calls BEFORE PDF.js loads to redirect to PC2 node
+        // This must run FIRST, before any other scripts
+        (function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const apiOrigin = urlParams.get('puter.api_origin') || window.location.origin;
+            const currentOrigin = window.location.origin;
+            
+            console.log('[PDF Viewer]: 🔧 Setting up API interception, API origin:', apiOrigin);
+            
+            // Intercept fetch requests - redirect api.puter.* to PC2 node
+            // Also handle relative URLs that need to be resolved to the API origin
+            const originalFetch = window.fetch;
+            window.fetch = function(...args) {
+                let url = args[0];
+                if (typeof url === 'string') {
+                    if (url.includes('api.puter.')) {
+                        const interceptedUrl = url.replace(/https?:\/\/api\.puter\.[^\/:]+(?::\d+)?/gi, apiOrigin);
+                        console.log('[PDF Viewer]: 🔄 Intercepting fetch:', url, '->', interceptedUrl);
+                        args[0] = interceptedUrl;
+                    } else if (url.startsWith('/file') || url.startsWith('/read')) {
+                        // Relative URLs like /file?uid=... need to be resolved to full URL
+                        try {
+                            const fullUrl = new URL(url, apiOrigin);
+                            console.log('[PDF Viewer]: 🔄 Resolving relative URL:', url, '->', fullUrl.href);
+                            args[0] = fullUrl.href;
+                        } catch (e) {
+                            console.warn('[PDF Viewer]: ⚠️ Failed to resolve URL:', url, e);
+                        }
+                    }
+                } else if (url && typeof url === 'object' && url.url) {
+                    if (url.url.includes('api.puter.')) {
+                        url.url = url.url.replace(/https?:\/\/api\.puter\.[^\/:]+(?::\d+)?/gi, apiOrigin);
+                        console.log('[PDF Viewer]: 🔄 Intercepting fetch (Request object):', url.url);
+                    } else if (typeof url.url === 'string' && (url.url.startsWith('/file') || url.url.startsWith('/read'))) {
+                        try {
+                            url.url = new URL(url.url, apiOrigin).href;
+                            console.log('[PDF Viewer]: 🔄 Resolving relative URL (Request object):', url.url);
+                        } catch (e) {
+                            console.warn('[PDF Viewer]: ⚠️ Failed to resolve URL:', url.url, e);
+                        }
+                    }
+                }
+                return originalFetch.apply(this, args);
+            };
+            
+            // Intercept XMLHttpRequest
+            const originalXHROpen = XMLHttpRequest.prototype.open;
+            XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+                if (typeof url === 'string' && url.includes('api.puter.')) {
+                    const interceptedUrl = url.replace(/https?:\/\/api\.puter\.[^\/:]+(?::\d+)?/gi, apiOrigin);
+                    console.log('[PDF Viewer]: 🔄 Intercepting XHR:', url, '->', interceptedUrl);
+                    url = interceptedUrl;
+                }
+                return originalXHROpen.call(this, method, url, ...rest);
+            };
+            
+            console.log('[PDF Viewer]: ✅ API interception active');
+        })();
+    </script>`;
+                        
+                        // Inject before viewer.js script tag
+                        fileContent = fileContent.replace(
+                            '<script src="viewer.js"></script>',
+                            apiInterceptionScript + '\n  <script src="viewer.js"></script>'
+                        );
+                        
+                        console.log(`\n📱 GET ${urlPath} (${subdomain} app) - Serving directory index with API interception: ${indexPath}`);
+                    } else {
+                        console.log(`\n📱 GET ${urlPath} (${subdomain} app) - Serving directory index: ${indexPath}`);
+                    }
+                    
                     res.writeHead(200, { 'Content-Type': 'text/html' });
                     res.end(fileContent);
                     return;
@@ -918,6 +1073,92 @@ const server = http.createServer((req, res) => {
             res.end(indexHtml);
             return;
         }
+    }
+    
+    // ============================================================
+    // Handle socket.io GET requests BEFORE body collection
+    // ============================================================
+    // Socket.io polling uses GET requests and must be handled immediately
+    if (req.method === 'GET' && urlPath.includes('socket.io')) {
+        const url = new URL(req.url, `http://localhost:${PORT}`);
+        const transport = url.searchParams.get('transport') || 'polling';
+        const eio = url.searchParams.get('EIO') || '4';
+        const sid = url.searchParams.get('sid');
+        
+        // If we have a session ID, this is a polling request - return events or empty
+        if (sid && transport === 'polling') {
+            // Get session wallet from Authorization header or cookie
+            const authHeader = req.headers['authorization'];
+            let wallet = null;
+            if (authHeader && authHeader.startsWith('Bearer ')) {
+                const token = authHeader.split(' ')[1];
+                const session = nodeState.sessions.get(token);
+                if (session) {
+                    wallet = session.wallet;
+                    // Update or create socket session
+                    if (!nodeState.socketSessions.has(sid)) {
+                        nodeState.socketSessions.set(sid, { wallet, lastPoll: Date.now() });
+                    } else {
+                        nodeState.socketSessions.get(sid).lastPoll = Date.now();
+                    }
+                }
+            }
+            
+            // Get events for this wallet (room-based filtering)
+            const normalizedWallet = wallet ? wallet.toLowerCase() : null;
+            const events = nodeState.pendingEvents.filter(evt => {
+                const matches = !evt.wallet || evt.wallet === normalizedWallet || normalizedWallet === null;
+                return matches;
+            });
+            
+            if (events.length > 0) {
+                console.log(`   📤 Socket.io polling: Returning ${events.length} events to wallet: ${normalizedWallet || 'broadcast'}`);
+            }
+            
+            // Clear sent events (prevent duplicate delivery)
+            if (events.length > 0) {
+                nodeState.pendingEvents = nodeState.pendingEvents.filter(evt => !events.includes(evt));
+            }
+            
+            // Format events as socket.io Engine.IO packets
+            let response = '';
+            if (events.length > 0) {
+                const packets = events.map(evt => {
+                    return `42["${evt.event}",${JSON.stringify(evt.data)}]`;
+                }).join('');
+                response = `${events.length}:${packets}`;
+            } else {
+                // Empty polling response: "1:" (1 packet, empty content)
+                response = '1:';
+            }
+            
+            res.writeHead(200, { 
+                'Content-Type': 'text/plain',
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Credentials': 'true',
+                'Cache-Control': 'no-cache'
+            });
+            return res.end(response);
+        }
+        
+        // Initial handshake - return socket.io handshake
+        const newSid = `mock-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        const handshake = {
+            sid: newSid,
+            upgrades: [],
+            pingInterval: 25000,
+            pingTimeout: 5000
+        };
+        
+        const response = `0${JSON.stringify(handshake)}`;
+        
+        res.writeHead(200, { 
+            'Content-Type': 'text/plain',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Credentials': 'true',
+            'Set-Cookie': `io=${newSid}; Path=/; HttpOnly`
+        });
+        return res.end(response);
     }
     
     // Collect body as buffer for multipart
@@ -1664,6 +1905,7 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
                 targetNode.mimeType.startsWith('image/') ||
                 targetNode.mimeType.startsWith('video/') ||
                 targetNode.mimeType.startsWith('audio/') ||
+                targetNode.mimeType === 'application/pdf' ||
                 targetNode.mimeType === 'application/octet-stream'
             );
             
@@ -1782,6 +2024,7 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
                 node.mimeType.startsWith('image/') ||
                 node.mimeType.startsWith('video/') ||
                 node.mimeType.startsWith('audio/') ||
+                node.mimeType === 'application/pdf' ||
                 node.mimeType === 'application/octet-stream'
             );
             
@@ -2217,8 +2460,6 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
             }
         }
         
-        saveState();
-        
         const node = getNode(nodeState.filesystem, normalizedPath);
         if (!node) {
             console.error(`   ❌ CRITICAL: Failed to create directory: ${normalizedPath}`);
@@ -2226,7 +2467,11 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
             return res.end(JSON.stringify({ error: 'Failed to create directory' }));
         }
         
+        // Ensure UUID is set on the node (ensureDir should have set it, but double-check)
         const nodeUuid = node.uuid || `uuid-${normalizedPath.replace(/\//g, '-')}`;
+        if (!node.uuid) {
+            node.uuid = nodeUuid; // Store UUID on node for findNodeByUuid to work
+        }
         
         // Puter format: entry + parent_dirs_created + requested_path
         // Match the format returned by readdir for consistency
@@ -2252,11 +2497,20 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
         console.log(`   ✅ MKDIR successful: ${normalizedPath}, parent_dirs_created: ${parentDirsCreated.length}`);
         console.log(`   📤 Sending response:`, JSON.stringify(response, null, 2).substring(0, 500));
         
+        // Send response FIRST (before any blocking operations like saveState)
+        // This ensures the frontend gets the response immediately
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(response));
+        
         // Emit socket events for real-time updates (like Puter does)
+        // Do this AFTER sending response so it doesn't block
         if (session && walletAddress) {
                 const parentDirPath = normalizedPath.substring(0, normalizedPath.lastIndexOf('/')) || '/';
                 
                 // Emit item.added for the created directory
+                // NOTE: For mkdir, we DON'T send original_client_socket_id because the frontend
+                // needs to receive the socket event to add the item to DOM, then activate rename editor
+                // The frontend's create_folder success callback looks for the item and activates rename
                 emitSocketEvent('item.added', {
                     id: response.id,
                     uid: response.uuid,
@@ -2270,7 +2524,8 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
                     modified: response.modified,
                     type: null,
                     dirpath: parentDirPath,
-                    original_client_socket_id: data.original_client_socket_id || null,
+                    // Don't send original_client_socket_id for mkdir - frontend needs the socket event
+                    // original_client_socket_id: data.original_client_socket_id || null,
                 }, session.wallet);
                 
                 console.log(`   📡 Emitted item.added for: ${response.path}`);
@@ -2289,8 +2544,11 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
                 console.warn(`   ⚠️  No session found for token, skipping socket events`);
             }
         
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        return res.end(JSON.stringify(response));
+        // Save state AFTER sending response (non-blocking, but do it synchronously for now)
+        // TODO: Make this async to avoid any potential blocking
+        saveState();
+        
+        return;
     }
     
     // /delete - Delete file/folder (Puter format)
@@ -2299,11 +2557,21 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
         console.log(`   Data keys:`, Object.keys(data || {}));
         console.log(`   Data:`, JSON.stringify(data).substring(0, 300));
         
-        const paths = data.paths;
-        if (!paths || !Array.isArray(paths)) {
-            console.warn(`   ⚠️  Invalid paths parameter:`, paths);
+        // Handle both array and single string path (Puter SDK may pass either)
+        let paths = data.paths;
+        if (!paths) {
+            console.warn(`   ⚠️  Missing paths parameter`);
             res.writeHead(400, { 'Content-Type': 'application/json' });
-            return res.end(JSON.stringify({ error: 'paths must be an array' }));
+            return res.end(JSON.stringify({ error: 'paths is required' }));
+        }
+        // Convert single string to array for consistent processing
+        if (typeof paths === 'string') {
+            paths = [paths];
+        }
+        if (!Array.isArray(paths)) {
+            console.warn(`   ⚠️  Invalid paths parameter (not array or string):`, paths);
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'paths must be an array or string' }));
         }
         
         // Get session to find user's Trash directory
@@ -2463,11 +2731,15 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
                             
                             emitSocketEvent('item.added', trashEntry, session.wallet);
                         }
+                        
+                        // CRITICAL: Save state after moving to trash so it persists
+                        saveState();
                     } else {
                         // Trash doesn't exist, permanent delete
                         const sizeToRemove = calculateSize(sourceParent.children[name]);
                         nodeState.storageUsed -= sizeToRemove;
                         delete sourceParent.children[name];
+                        saveState();
                     }
                 }
             } else {
@@ -2481,6 +2753,7 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
                     const sizeToRemove = calculateSize(parent.children[name]);
                     nodeState.storageUsed -= sizeToRemove;
                     delete parent.children[name];
+                    saveState();
                 }
             }
         }
@@ -2687,16 +2960,91 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
             console.log(`   🔍 Source is UUID: ${source}`);
             const uuidResult = findNodeByUuid(nodeState.filesystem, source);
             if (!uuidResult.node || !uuidResult.path) {
-                console.warn(`   ⚠️  File not found by UUID: ${source}`);
-                res.writeHead(404, { 'Content-Type': 'application/json' });
-                return res.end(JSON.stringify({ error: 'Source file not found by UUID' }));
+                // Fallback: Try to extract path from UUID format (uuid--path)
+                // UUID format: uuid--0x...-Desktop-New Folder (9)
+                // Extract path part after wallet address
+                // Fallback: Try to extract path from UUID format (uuid--path)
+                // UUID format: uuid--0x...-Desktop-New Folder (9)
+                // Extract wallet and path parts
+                const uuidPathMatch = source.match(/uuid--(0x[0-9a-f]+)-(.+)/);
+                if (uuidPathMatch) {
+                    const wallet = uuidPathMatch[1];
+                    const pathPart = uuidPathMatch[2];
+                    // Reconstruct path: /wallet/Desktop/New Folder (9)
+                    // UUID format: Desktop-New Folder (9) -> path: Desktop/New Folder (9)
+                    // Need to replace dashes with slashes, but preserve spaces in folder names
+                    // Strategy: Replace dashes that separate path components, but keep spaces
+                    let reconstructedPath = `/${wallet}/${pathPart}`;
+                    // Replace dashes with slashes (this handles Desktop-New Folder -> Desktop/New Folder)
+                    reconstructedPath = reconstructedPath.replace(/-/g, '/');
+                    console.log(`   🔄 Fallback: Trying reconstructed path: ${reconstructedPath}`);
+                    let fallbackNode = getNode(nodeState.filesystem, reconstructedPath);
+                    
+                    if (!fallbackNode) {
+                        // Try with case-insensitive search (folder names might have different case)
+                        const pathParts = reconstructedPath.split('/');
+                        const walletPart = pathParts[1];
+                        const restParts = pathParts.slice(2);
+                        // Try to find with case-insensitive matching
+                        let current = getNode(nodeState.filesystem, `/${walletPart}`);
+                        if (current) {
+                            for (const part of restParts) {
+                                if (!current.children) break;
+                                let found = false;
+                                for (const [name, child] of Object.entries(current.children)) {
+                                    if (name.toLowerCase() === part.toLowerCase()) {
+                                        current = child;
+                                        found = true;
+                                        break;
+                                    }
+                                }
+                                if (!found) break;
+                            }
+                            if (current && current !== getNode(nodeState.filesystem, `/${walletPart}`)) {
+                                fallbackNode = current;
+                                // Reconstruct actual path with correct case
+                                const actualParts = [walletPart];
+                                let temp = getNode(nodeState.filesystem, `/${walletPart}`);
+                                for (const part of restParts) {
+                                    for (const [name, child] of Object.entries(temp.children || {})) {
+                                        if (name.toLowerCase() === part.toLowerCase()) {
+                                            actualParts.push(name);
+                                            temp = child;
+                                            break;
+                                        }
+                                    }
+                                }
+                                reconstructedPath = '/' + actualParts.join('/');
+                            }
+                        }
+                    }
+                    
+                    if (fallbackNode) {
+                        srcNode = fallbackNode;
+                        srcPath = reconstructedPath;
+                        srcParentPath = srcPath.substring(0, srcPath.lastIndexOf('/')) || '/';
+                        srcName = srcPath.split('/').pop();
+                        srcParent = getNode(nodeState.filesystem, srcParentPath);
+                        console.log(`   ✅ Found file by path fallback: ${srcPath}`);
+                    } else {
+                        console.warn(`   ⚠️  File not found by UUID or path fallback: ${source}`);
+                        console.warn(`   ⚠️  Tried path: ${reconstructedPath}`);
+                        res.writeHead(404, { 'Content-Type': 'application/json' });
+                        return res.end(JSON.stringify({ error: 'Source file not found by UUID' }));
+                    }
+                } else {
+                    console.warn(`   ⚠️  File not found by UUID and cannot parse UUID format: ${source}`);
+                    res.writeHead(404, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ error: 'Source file not found by UUID' }));
+                }
+            } else {
+                srcNode = uuidResult.node;
+                srcPath = uuidResult.path;
+                srcParentPath = srcPath.substring(0, srcPath.lastIndexOf('/')) || '/';
+                srcName = srcPath.split('/').pop();
+                srcParent = getNode(nodeState.filesystem, srcParentPath);
+                console.log(`   ✅ Found file by UUID: ${srcPath}`);
             }
-            srcNode = uuidResult.node;
-            srcPath = uuidResult.path;
-            srcParentPath = srcPath.substring(0, srcPath.lastIndexOf('/')) || '/';
-            srcName = srcPath.split('/').pop();
-            srcParent = getNode(nodeState.filesystem, srcParentPath);
-            console.log(`   ✅ Found file by UUID: ${srcPath}`);
         } else {
             // Source is a path
             srcPath = source.startsWith('/') ? source : '/' + source;
@@ -3364,119 +3712,6 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
     // ADDITIONAL PUTER API ENDPOINTS (required for full desktop functionality)
     // ═══════════════════════════════════════════════════════════════════
     
-    // /socket.io - WebSocket endpoint (handled earlier in request flow, but keep as fallback)
-    // This should not be reached if socket.io is handled in req.on('end')
-    if (path.includes('socket.io')) {
-        // This is a fallback - socket.io should be handled in req.on('end') before body parsing
-        res.writeHead(200, { 
-            'Content-Type': 'text/plain',
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Credentials': 'true'
-        });
-        return res.end('1:');
-    }
-    
-    // Legacy socket.io handler (should not be reached)
-    if (false && path.includes('socket.io')) {
-        // Parse query params
-        const url = new URL(req.url, `http://localhost:${PORT}`);
-        const transport = url.searchParams.get('transport') || 'polling';
-        const eio = url.searchParams.get('EIO') || '4';
-        const sid = url.searchParams.get('sid');
-        
-        // If we have a session ID, this is a polling request - return events or empty
-        if (sid && transport === 'polling') {
-            // Get session wallet from Authorization header
-            const authHeader = req.headers['authorization'];
-            let wallet = null;
-            if (authHeader && authHeader.startsWith('Bearer ')) {
-                const token = authHeader.split(' ')[1];
-                const session = nodeState.sessions.get(token);
-                if (session) {
-                    wallet = session.wallet;
-                    // Update or create socket session
-                    if (!nodeState.socketSessions.has(sid)) {
-                        nodeState.socketSessions.set(sid, { wallet, lastPoll: Date.now() });
-                    } else {
-                        nodeState.socketSessions.get(sid).lastPoll = Date.now();
-                    }
-                }
-            }
-            
-            // Get events for this wallet (room-based filtering, like Puter)
-            // In Puter, sockets join rooms by user.id. In PC2, we use wallet address as the room
-            // Normalize wallet addresses for case-insensitive comparison
-            const normalizedWallet = wallet ? wallet.toLowerCase() : null;
-            const events = nodeState.pendingEvents.filter(evt => {
-                // Send events to matching wallet (room) or broadcast events (wallet === null means broadcast)
-                // This matches Puter's pattern: svc_socketio.send({ room: user.id }, 'item.removed', data)
-                const matches = !evt.wallet || evt.wallet === normalizedWallet || normalizedWallet === null;
-                if (matches && events.length === 0) {
-                    // Log first matching event for debugging
-                    console.log(`   📥 Polling: Found ${nodeState.pendingEvents.length} total events, filtering for wallet: ${normalizedWallet || 'broadcast'}`);
-                }
-                return matches;
-            });
-            
-            if (events.length > 0) {
-                console.log(`   📤 Polling: Returning ${events.length} events to wallet: ${normalizedWallet || 'broadcast'}`);
-            }
-            
-            // Clear sent events (prevent duplicate delivery)
-            if (events.length > 0) {
-                nodeState.pendingEvents = nodeState.pendingEvents.filter(evt => !events.includes(evt));
-            }
-            
-            // Format events as socket.io Engine.IO packets
-            // Socket.io polling format: packetCount + packets
-            // Each packet format: packetType + data
-            // Type 42 = EVENT with namespace (default namespace)
-            // Format: 42["eventName", {...data}]
-            let response = '';
-            if (events.length > 0) {
-                const packets = events.map(evt => {
-                    // Match Puter's event format exactly
-                    // Puter sends: svc_socketio.send({ room: user.id }, 'item.removed', data)
-                    // This becomes: 42["item.removed", data] in socket.io polling
-                    return `42["${evt.event}",${JSON.stringify(evt.data)}]`;
-                }).join('');
-                response = `${events.length}:${packets}`;
-            } else {
-                // Empty polling response: "1:" (1 packet, empty content)
-                // This tells socket.io client there are no new events
-                response = '1:';
-            }
-            
-            res.writeHead(200, { 
-                'Content-Type': 'text/plain',
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Credentials': 'true',
-                'Cache-Control': 'no-cache'
-            });
-            return res.end(response);
-        }
-        
-        // Initial handshake - return socket.io handshake
-        // Format: 0{"sid":"...","upgrades":[],"pingInterval":25000,"pingTimeout":5000}
-        const newSid = `mock-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        const handshake = {
-            sid: newSid,
-            upgrades: [], // No websocket upgrade available
-            pingInterval: 25000,
-            pingTimeout: 5000
-        };
-        
-        // Socket.io Engine.IO protocol format: packet type (0 = open) + JSON
-        const response = `0${JSON.stringify(handshake)}`;
-        
-        res.writeHead(200, { 
-            'Content-Type': 'text/plain',
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Credentials': 'true',
-            'Set-Cookie': `io=${newSid}; Path=/; HttpOnly`
-        });
-        return res.end(response);
-    }
     
     // /suggest_apps - Suggest apps for a file (fallback when open_item fails)
     if (path === '/suggest_apps' && method === 'POST') {

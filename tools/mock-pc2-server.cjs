@@ -664,10 +664,17 @@ const server = http.createServer((req, res) => {
             let url = args[0];
             if (typeof url === 'string') {
                 // Replace api.puter.com, api.puter.localhost, or any api.puter.* with current origin
-                if (url.includes('api.puter.com') || url.includes('api.puter.localhost') || url.match(/api\\.puter\\.[^/]+/)) {
+                // Handles any port number (e.g., api.puter.localhost:4100)
+                if (url.includes('api.puter.')) {
                     const interceptedUrl = url.replace(/https?:\\/\\/api\\.puter\\.[^/]+(:\\d+)?/, currentOrigin);
                     console.log('[Particle Auth]: Intercepting fetch:', url, '->', interceptedUrl);
                     args[0] = interceptedUrl;
+                }
+            } else if (url && typeof url === 'object' && url.url) {
+                // Request object
+                if (url.url.includes('api.puter.')) {
+                    url.url = url.url.replace(/https?:\\/\\/api\\.puter\\.[^/]+(:\\d+)?/, currentOrigin);
+                    console.log('[Particle Auth]: Intercepting fetch (Request object):', url.url);
                 }
             }
             return originalFetch.apply(this, args);
@@ -678,7 +685,8 @@ const server = http.createServer((req, res) => {
         XMLHttpRequest.prototype.open = function(method, url, ...rest) {
             if (typeof url === 'string') {
                 // Replace api.puter.com, api.puter.localhost, or any api.puter.* with current origin
-                if (url.includes('api.puter.com') || url.includes('api.puter.localhost') || url.match(/api\\.puter\\.[^/]+/)) {
+                // Handles any port number (e.g., api.puter.localhost:4100)
+                if (url.includes('api.puter.')) {
                     const interceptedUrl = url.replace(/https?:\\/\\/api\\.puter\\.[^/]+(:\\d+)?/, currentOrigin);
                     console.log('[Particle Auth]: Intercepting XHR:', url, '->', interceptedUrl);
                     url = interceptedUrl;

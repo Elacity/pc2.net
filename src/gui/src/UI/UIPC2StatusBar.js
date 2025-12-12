@@ -83,12 +83,35 @@ function initPC2StatusBar() {
     const getMenuItems = (stats = null) => {
         const items = [];
         const session = pc2Service.getSession?.() || {};
+        
+        // SIMPLIFIED AUTH: In "Puter on PC2" mode, connection status = authentication status
+        // If we're accessing the PC2 node directly, we're already "connected" - status reflects auth
+        const isAuthenticated = window.is_auth && window.is_auth();
+        const isPC2Mode = window.api_origin && (
+            window.api_origin.includes('127.0.0.1:4200') || 
+            window.api_origin.includes('localhost:4200') ||
+            window.location.origin === window.api_origin
+        );
+        
+        // In PC2 mode, use authentication status instead of separate connection status
+        let effectiveStatus = currentStatus;
+        let effectiveStatusText = currentStatus === 'connected' ? 'Connected' :
+                                 currentStatus === 'connecting' ? 'Connecting...' :
+                                 currentStatus === 'error' ? (currentError || 'Error') : 'Not Connected';
+        
+        if (isPC2Mode) {
+            // In PC2 mode: authenticated = connected, not authenticated = not connected
+            if (isAuthenticated) {
+                effectiveStatus = 'connected';
+                effectiveStatusText = 'Connected';
+            } else {
+                effectiveStatus = 'disconnected';
+                effectiveStatusText = 'Not Connected';
+            }
+        }
 
         // Status dot color: orange if not connected, green if connected
-        const dotColor = currentStatus === 'connected' ? '#22c55e' : '#f59e0b';
-        const statusText = currentStatus === 'connected' ? 'Connected' :
-                          currentStatus === 'connecting' ? 'Connecting...' :
-                          currentStatus === 'error' ? (currentError || 'Error') : 'Not Connected';
+        const dotColor = effectiveStatus === 'connected' ? '#22c55e' : '#f59e0b';
 
         items.push({
             html: `<span style="color: #fff;">Personal Cloud</span>`,
@@ -97,14 +120,15 @@ function initPC2StatusBar() {
         });
 
         items.push({
-            html: `<span style="color: #fff;">${statusText}</span>`,
+            html: `<span style="color: #fff;">${effectiveStatusText}</span>`,
             icon: `<div style="width: 8px; height: 8px; border-radius: 50%; background: ${dotColor}; margin: 4px;"></div>`,
             disabled: true
         });
 
-        if (currentStatus === 'connected' && session.nodeName) {
+        if (effectiveStatus === 'connected' && (session.nodeName || isPC2Mode)) {
+            const nodeName = session.nodeName || (isPC2Mode ? 'This PC2 Node' : 'PC2 Node');
             items.push({
-                html: `<span style="color: #fff;">Node: ${session.nodeName}</span>`,
+                html: `<span style="color: #fff;">Node: ${nodeName}</span>`,
                 disabled: true
             });
         }
@@ -135,24 +159,53 @@ function initPC2StatusBar() {
         items.push('-');
 
         // Action buttons
-        if (currentStatus === 'connected') {
-            items.push({
-                html: 'Disconnect',
-                onClick: () => {
-                    pc2Service.disconnect?.();
-                }
-            });
-        } else if (currentStatus !== 'connecting') {
-            items.push({
-                html: 'Connect to PC2',
-                onClick: () => {
-                    UIPC2SetupWizard({
-                        onSuccess: () => {
-                            logger.log('[PC2]: Connected via wizard');
-                        },
-                    });
-                }
-            });
+        // SIMPLIFIED AUTH: In PC2 mode, "Connect" = Sign In (authentication)
+        if (isPC2Mode) {
+            if (effectiveStatus === 'connected') {
+                // Already authenticated - show disconnect (logout)
+                items.push({
+                    html: 'Sign Out',
+                    onClick: () => {
+                        if (window.logout) {
+                            window.logout();
+                        }
+                    }
+                });
+            } else {
+                // Not authenticated - show sign in (triggers Particle Auth)
+                items.push({
+                    html: 'Sign In',
+                    onClick: () => {
+                        // Trigger Particle Auth login
+                        import('./UIWindowParticleLogin.js').then(({ default: UIWindowParticleLogin }) => {
+                            UIWindowParticleLogin({ reload_on_success: false });
+                        }).catch((err) => {
+                            logger.error('[PC2]: Failed to open login:', err);
+                        });
+                    }
+                });
+            }
+        } else {
+            // Legacy mode: separate PC2 connection
+            if (effectiveStatus === 'connected') {
+                items.push({
+                    html: 'Disconnect',
+                    onClick: () => {
+                        pc2Service.disconnect?.();
+                    }
+                });
+            } else if (effectiveStatus !== 'connecting') {
+                items.push({
+                    html: 'Connect to PC2',
+                    onClick: () => {
+                        UIPC2SetupWizard({
+                            onSuccess: () => {
+                                logger.log('[PC2]: Connected via wizard');
+                            },
+                        });
+                    }
+                });
+            }
         }
 
         items.push({
@@ -208,17 +261,66 @@ function initPC2StatusBar() {
             currentStatus = status;
             currentError = error;
             
+            // SIMPLIFIED AUTH: In PC2 mode, check authentication status
+            const isPC2Mode = window.api_origin && (
+                window.api_origin.includes('127.0.0.1:4200') || 
+                window.api_origin.includes('localhost:4200') ||
+                window.location.origin === window.api_origin
+            );
+            
+            let effectiveStatus = status;
+            if (isPC2Mode && window.is_auth) {
+                // In PC2 mode, use authentication status
+                effectiveStatus = window.is_auth() ? 'connected' : 'disconnected';
+            }
+            
             const $indicator = $statusBar.find('.pc2-status-indicator');
             $indicator.removeClass('disconnected connecting connected error');
-            $indicator.addClass(status);
+            $indicator.addClass(effectiveStatus);
 
             const session = pc2Service.getSession?.() || {};
-            const statusText = status === 'connected' ? (session.nodeName || 'Connected') :
-                              status === 'connecting' ? 'Connecting...' :
-                              status === 'error' ? (error || 'Error') : 'Not Connected';
+            let statusText = effectiveStatus === 'connected' ? (session.nodeName || 'Connected') :
+                            effectiveStatus === 'connecting' ? 'Connecting...' :
+                            effectiveStatus === 'error' ? (error || 'Error') : 'Not Connected';
+            
+            // In PC2 mode, show authentication-based status
+            if (isPC2Mode) {
+                statusText = window.is_auth && window.is_auth() ? 'Connected' : 'Not Connected';
+            }
             
             $statusBar.attr('title', `Personal Cloud (${statusText})`);
         };
+        
+        // Also listen for authentication changes in PC2 mode
+        if (window.is_auth) {
+            // Check auth status periodically and update
+            const checkAuthStatus = () => {
+                const isPC2Mode = window.api_origin && (
+                    window.api_origin.includes('127.0.0.1:4200') || 
+                    window.api_origin.includes('localhost:4200') ||
+                    window.location.origin === window.api_origin
+                );
+                if (isPC2Mode) {
+                    const isAuth = window.is_auth();
+                    updateStatus(isAuth ? 'connected' : 'disconnected');
+                }
+            };
+            
+            // Check immediately
+            checkAuthStatus();
+            
+            // Check on user object changes (login/logout events)
+            const originalUser = window.user;
+            const checkUserChange = setInterval(() => {
+                if (window.user !== originalUser) {
+                    checkAuthStatus();
+                }
+            }, 1000);
+            
+            // Also listen for login event
+            $(document).on('login', checkAuthStatus);
+            $(document).on('logout', checkAuthStatus);
+        }
 
         // Subscribe to status changes
         if (pc2Service.onStatusChange) {

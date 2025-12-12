@@ -152,6 +152,15 @@ if(jQuery){
 }
 
 window.initgui = async function(options){
+    // 🚀 Initialize PC2ConnectionService EARLY to redirect API calls before SDK initializes
+    // This prevents SDK from calling api.puter.com or constructing api.puter.localhost URLs
+    try {
+        const { getPC2Service } = await import('./services/PC2ConnectionService.js');
+        getPC2Service(); // Initialize singleton - this will set window.api_origin if session exists
+    } catch (e) {
+        console.warn('[initgui]: Failed to initialize PC2ConnectionService early:', e);
+    }
+    
     const url = new URL(window.location).href;
     window.url = url;
     const url_paths = window.location.pathname.split('/').filter(element => element);
@@ -801,6 +810,81 @@ window.initgui = async function(options){
             UIWindowSessionList();
         }
         else{
+            // 🚀 LOCAL DEV: Auto-authenticate if wallet is already connected
+            const isLocalDev = window.location.hostname === 'puter.localhost' || 
+                               window.location.hostname === 'localhost' || 
+                               window.location.hostname.includes('localhost');
+            
+            if (isLocalDev) {
+                // Listen for wallet ready event from WalletService or Particle Auth iframe
+                const autoAuthHandler = async (event) => {
+                    const walletAddress = event.detail?.address || 
+                                         event.detail?.eoaAddress ||
+                                         window.user?.wallet_address;
+                    
+                    if (walletAddress && !window.is_auth()) {
+                        console.log('[initgui]: 🚀 Local dev - Auto-authenticating with wallet:', walletAddress);
+                        
+                        try {
+                            // Auto-authenticate by calling Particle Auth endpoint directly
+                            const apiOrigin = window.api_origin || 'http://127.0.0.1:4200';
+                            const authResponse = await fetch(`${apiOrigin}/auth/particle`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ address: walletAddress })
+                            });
+                            
+                            if (authResponse.ok) {
+                                const authData = await authResponse.json();
+                                if (authData.success && authData.token) {
+                                    console.log('[initgui]: ✅ Auto-authentication successful');
+                                    window.auth_token = authData.token;
+                                    localStorage.setItem('auth_token', authData.token);
+                                    puter.setAuthToken(authData.token);
+                                    
+                                    // Get user info and proceed with desktop initialization
+                                    try {
+                                        whoami = await puter.os.user({query: 'icon_size=64'});
+                                        if (whoami) {
+                                            await window.update_auth_data(authData.token, whoami);
+                                            // Desktop will be loaded below in the authed section
+                                            if (!window.embedded_in_popup) {
+                                                console.log('[initgui]: Loading desktop for path:', window.desktop_path);
+                                                await window.get_auto_arrange_data();
+                                                puter.fs.stat(window.desktop_path, async function(desktop_fsentry){
+                                                    console.log('[initgui]: puter.fs.stat callback, calling UIDesktop');
+                                                    UIDesktop({desktop_fsentry: desktop_fsentry});
+                                                });
+                                            }
+                                            // Remove listener and skip Particle Auth UI
+                                            window.removeEventListener('particle-wallet.ready', autoAuthHandler);
+                                            return;
+                                        }
+                                    } catch (e) {
+                                        console.error('[initgui]: Failed to get user info after auto-auth:', e);
+                                    }
+                                }
+                            } else {
+                                console.warn('[initgui]: Auto-auth request failed:', authResponse.status);
+                            }
+                        } catch (e) {
+                            console.warn('[initgui]: Auto-auth failed:', e);
+                        }
+                    }
+                };
+                
+                // Listen for wallet ready event (from WalletService)
+                window.addEventListener('particle-wallet.ready', autoAuthHandler);
+                
+                // Also check immediately if wallet is already available (fallback)
+                setTimeout(async () => {
+                    const walletAddress = window.user?.wallet_address;
+                    if (walletAddress && !window.is_auth()) {
+                        autoAuthHandler({ detail: { address: walletAddress } });
+                    }
+                }, 1000); // Wait 1 second for wallet to initialize
+            }
+            
             // ELACITY: Embed Particle Auth inside the OS instead of redirecting
             // Set reload_on_success to false so the desktop loads via the "login" event
             await UIWindowParticleLogin({ reload_on_success: false });

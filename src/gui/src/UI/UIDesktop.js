@@ -731,8 +731,18 @@ async function UIDesktop(options) {
     }
 
     // update local user preferences
+    const showHiddenFilesVal = await puter.kv.get('user_preferences.show_hidden_files');
+    let showHiddenFiles = false;
+    if (showHiddenFilesVal !== null && showHiddenFilesVal !== undefined) {
+        try {
+            showHiddenFiles = JSON.parse(showHiddenFilesVal);
+        } catch (e) {
+            showHiddenFiles = showHiddenFilesVal === 'true' || showHiddenFilesVal === true;
+        }
+    }
+    
     const user_preferences = {
-        show_hidden_files: JSON.parse(await puter.kv.get('user_preferences.show_hidden_files')),
+        show_hidden_files: showHiddenFiles,
         language: await puter.kv.get('user_preferences.language'),
         clock_visible: await puter.kv.get('user_preferences.clock_visible'),
     };

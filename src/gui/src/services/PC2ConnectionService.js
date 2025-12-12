@@ -70,6 +70,9 @@ class PC2ConnectionService {
         /** @type {Promise|null} - Queue for signing requests */
         this._signQueue = null;
         
+        /** @type {boolean} - Tracks if user explicitly disconnected (prevents auto-reconnect) */
+        this._explicitlyDisconnected = false;
+        
         // Load saved config from localStorage
         this._loadConfig();
     }
@@ -91,6 +94,16 @@ class PC2ConnectionService {
      */
     _loadConfig() {
         try {
+            // Check if user explicitly disconnected - if so, don't auto-reconnect
+            const explicitDisconnect = localStorage.getItem('pc2_explicitly_disconnected');
+            if (explicitDisconnect === 'true') {
+                logger.log('[PC2]: User explicitly disconnected - skipping auto-reconnect');
+                this._explicitlyDisconnected = true;
+                // Clear the flag so it doesn't persist forever
+                localStorage.removeItem('pc2_explicitly_disconnected');
+                return; // Don't load config or session
+            }
+            
             const saved = localStorage.getItem('pc2_config');
             if (saved) {
                 this.config = JSON.parse(saved);
@@ -123,6 +136,16 @@ class PC2ConnectionService {
                             puter.setAPIOrigin(nodeUrl);
                             puter.setAuthToken(this.session.token);
                             logger.log('[PC2]: Early API redirection applied (SDK already loaded)');
+                            
+                            // Force socket.io to reconnect to the new origin
+                            try {
+                                if (puter.io && puter.io.connected) {
+                                    logger.log('[PC2]: Disconnecting socket.io to force reconnect to PC2 node');
+                                    puter.io.disconnect();
+                                }
+                            } catch (e) {
+                                logger.log('[PC2]: Socket.io will reconnect on next use');
+                            }
                         } else {
                             // SDK not loaded yet - set up a MutationObserver or polling to catch when SDK loads
                             // Use a simple polling approach to check for puter SDK
@@ -132,6 +155,16 @@ class PC2ConnectionService {
                                     puter.setAPIOrigin(nodeUrl);
                                     puter.setAuthToken(this.session.token);
                                     logger.log('[PC2]: Early API redirection applied (SDK detected)');
+                                    
+                                    // Force socket.io to reconnect to the new origin
+                                    try {
+                                        if (puter.io && puter.io.connected) {
+                                            logger.log('[PC2]: Disconnecting socket.io to force reconnect to PC2 node');
+                                            puter.io.disconnect();
+                                        }
+                                    } catch (e) {
+                                        logger.log('[PC2]: Socket.io will reconnect on next use');
+                                    }
                                 }
                             }, 50); // Check every 50ms
                             
@@ -315,6 +348,10 @@ class PC2ConnectionService {
                         };
                         this._setStatus('connected');
                         
+                        // Clear explicit disconnect flag since we're auto-reconnecting
+                        this._explicitlyDisconnected = false;
+                        localStorage.removeItem('pc2_explicitly_disconnected');
+                        
                         // 🚀 Redirect API to PC2 on auto-reconnect too!
                         this._redirectAPIToPC2(nodeUrl, this.session.token);
                         
@@ -388,6 +425,10 @@ class PC2ConnectionService {
                 };
                 this._saveConfig();
                 this._setStatus('connected');
+                
+                // Clear explicit disconnect flag since user is reconnecting
+                this._explicitlyDisconnected = false;
+                localStorage.removeItem('pc2_explicitly_disconnected');
 
                 // 🚀 REDIRECT ALL PUTER API CALLS TO PC2 NODE
                 // This is the magic - your PC2 IS your backend!
@@ -527,6 +568,10 @@ class PC2ConnectionService {
                             };
                             this._saveConfig();
                             this._setStatus('connected');
+                            
+                            // Clear explicit disconnect flag since user is connecting
+                            this._explicitlyDisconnected = false;
+                            localStorage.removeItem('pc2_explicitly_disconnected');
 
                             // Redirect API to PC2 (same as authenticate)
                             this._redirectAPIToPC2(nodeUrl, result.sessionToken);
@@ -574,8 +619,8 @@ class PC2ConnectionService {
             return;
         }
 
-        // Disconnect existing connection
-        this.disconnect();
+        // Disconnect existing connection (not explicit - we're reconnecting)
+        this.disconnect(false);
 
         this._setStatus('connecting');
 
@@ -625,8 +670,9 @@ class PC2ConnectionService {
 
     /**
      * Disconnect from PC2 node
+     * @param {boolean} explicit - If true, marks as explicit disconnect (prevents auto-reconnect on refresh)
      */
-    disconnect() {
+    disconnect(explicit = true) {
         if (this.reconnectTimer) {
             clearTimeout(this.reconnectTimer);
             this.reconnectTimer = null;
@@ -643,6 +689,17 @@ class PC2ConnectionService {
         this.reconnectAttempts = 0;
         this._setStatus('disconnected');
 
+        // If explicit disconnect, clear saved config/session and mark as explicitly disconnected
+        if (explicit) {
+            this._explicitlyDisconnected = true;
+            this.config = null;
+            this.session = null;
+            this._saveConfig(); // This will clear localStorage
+            // Set flag to prevent auto-reconnect on next page load
+            localStorage.setItem('pc2_explicitly_disconnected', 'true');
+            logger.log('[PC2]: Explicitly disconnected - will not auto-reconnect on refresh');
+        }
+
         // Restore original API (back to centralized Puter if that's where we started)
         this._restoreOriginalAPI();
     }
@@ -651,10 +708,11 @@ class PC2ConnectionService {
      * Clear PC2 configuration (forget node)
      */
     clearConfig() {
-        this.disconnect();
+        this.disconnect(true); // Explicit disconnect
         this.config = null;
         this.session = null;
         this._saveConfig();
+        localStorage.setItem('pc2_explicitly_disconnected', 'true');
         logger.log('[PC2]: Configuration cleared');
     }
 
@@ -768,6 +826,22 @@ class PC2ConnectionService {
             puter.setAPIOrigin(normalizedUrl);
             puter.setAuthToken(sessionToken);
             logger.log('[PC2]: Puter SDK now pointing to your PC2:', normalizedUrl);
+            
+            // Force socket.io to reconnect to the new origin
+            // Puter SDK's socket.io might have already connected to api.puter.com
+            // We need to disconnect and let it reconnect to the PC2 node
+            try {
+                // Check if Puter SDK has a socket.io instance we can access
+                if (puter.io && puter.io.connected) {
+                    logger.log('[PC2]: Disconnecting socket.io to force reconnect to PC2 node');
+                    puter.io.disconnect();
+                    // Socket.io will automatically reconnect to the new origin
+                }
+            } catch (e) {
+                // Socket.io might not be accessible directly, that's okay
+                // It should reconnect automatically when the next event is emitted
+                logger.log('[PC2]: Socket.io will reconnect on next use');
+            }
         }
 
         logger.log('[PC2]: 🚀 All API calls redirected to your Personal Cloud!');

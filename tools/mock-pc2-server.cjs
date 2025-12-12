@@ -74,12 +74,21 @@ function emitSocketEvent(event, data, wallet = null) {
         nodeState.pendingEvents = [];
     }
     
-    nodeState.pendingEvents.push({
+    // Normalize wallet address to lowercase for consistent matching
+    const normalizedWallet = wallet ? wallet.toLowerCase() : null;
+    
+    const eventEntry = {
         event,
         data,
-        wallet,
+        wallet: normalizedWallet,
         timestamp: Date.now()
-    });
+    };
+    
+    nodeState.pendingEvents.push(eventEntry);
+    
+    // Log event emission for debugging
+    console.log(`   🔔 Socket event emitted: ${event} for wallet: ${normalizedWallet || 'broadcast'}, pendingEvents count: ${nodeState.pendingEvents.length}`);
+    
     // Keep only last 100 events to prevent memory issues
     if (nodeState.pendingEvents.length > 100) {
         nodeState.pendingEvents = nodeState.pendingEvents.slice(-100);
@@ -1291,11 +1300,25 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
         
         // Handle ~ (home directory)
         const authHeader = req.headers['authorization'];
-        if (filePath.startsWith('~') && authHeader && authHeader.startsWith('Bearer ')) {
-            const token = authHeader.split(' ')[1];
-            const session = nodeState.sessions.get(token);
-            if (session && session.wallet) {
-                filePath = filePath.replace('~', `/${session.wallet}`);
+        let walletAddress = null;
+        if (filePath.startsWith('~')) {
+            if (authHeader && authHeader.startsWith('Bearer ')) {
+                const token = authHeader.split(' ')[1];
+                const session = nodeState.sessions.get(token);
+                if (session && session.wallet) {
+                    walletAddress = session.wallet;
+                    filePath = filePath.replace('~', `/${session.wallet}`);
+                }
+            }
+            // If no auth header but path starts with ~, we can't resolve the path
+            // Return proper error that SDK will handle
+            if (!walletAddress && filePath.startsWith('~/')) {
+                console.log(`\n📖 READ (Puter): ${filePath} - No auth header, cannot resolve ~ path`);
+                res.writeHead(404, { 
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                });
+                return res.end(JSON.stringify({ error: { code: 'subject_does_not_exist', message: 'File not found' } }));
             }
         }
         
@@ -1312,9 +1335,13 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
         
         const node = getNode(nodeState.filesystem, normalizedPath);
         if (!node || node.type === 'dir') {
+            // Return proper error code that SDK expects for missing files
             console.warn(`   ⚠️  File not found at: ${normalizedPath}`);
-            res.writeHead(404, { 'Content-Type': 'application/json' });
-            return res.end(JSON.stringify({ error: 'File not found' }));
+            res.writeHead(404, { 
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            });
+            return res.end(JSON.stringify({ error: { code: 'subject_does_not_exist', message: 'File not found' } }));
         }
         
         console.log(`   ✅ Found: ${node.name}, size: ${node.size || 0} bytes, isBase64: ${node.isBase64 || false}`);
@@ -1571,6 +1598,19 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
             return res.end(JSON.stringify({ message: 'path must be a string' }));
         }
         
+        // Get session and ensure user home directory exists (like readdir does)
+        const authHeader = req.headers['authorization'];
+        let session = null;
+        let walletAddress = null;
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            const token = authHeader.split(' ')[1];
+            session = nodeState.sessions.get(token);
+            if (session && session.wallet) {
+                walletAddress = session.wallet;
+                ensureUserHomeDirectory(walletAddress);
+            }
+        }
+        
         const dirPath = data.path;
         const parentPath = data.parent;
         const createMissingParents = data.create_missing_parents ?? data.create_missing_ancestors ?? false;
@@ -1598,14 +1638,39 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
             actualParentPath = pathParts.length > 0 ? '/' + pathParts.join('/') : '/';
         }
         
-        // Handle ~ (home directory) in parent path
-        const authHeader = req.headers['authorization'];
-        if (actualParentPath.startsWith('~') && authHeader && authHeader.startsWith('Bearer ')) {
-            const token = authHeader.split(' ')[1];
-            const session = nodeState.sessions.get(token);
-            if (session && session.wallet) {
-                actualParentPath = actualParentPath.replace('~', `/${session.wallet}`);
+        // Handle ~ (home directory) and wallet-relative paths
+        if (walletAddress) {
+            // Replace ~ with wallet address in full path
+            if (normalizedPath.startsWith('~/')) {
+                normalizedPath = normalizedPath.replace('~/', `/${walletAddress}/`);
+                const pathParts = normalizedPath.split('/').filter(p => p);
+                targetName = pathParts.pop();
+                actualParentPath = pathParts.length > 0 ? '/' + pathParts.join('/') : '/';
+            }
+            // Replace ~ with wallet address in parent path
+            if (actualParentPath.startsWith('~/')) {
+                actualParentPath = actualParentPath.replace('~/', `/${walletAddress}/`);
                 normalizedPath = `${actualParentPath}/${targetName}`;
+            }
+            // If path is relative (doesn't start with /), assume it's relative to wallet home
+            if (!normalizedPath.startsWith('/')) {
+                normalizedPath = `/${walletAddress}/${normalizedPath}`;
+                const pathParts = normalizedPath.split('/').filter(p => p);
+                targetName = pathParts.pop();
+                actualParentPath = pathParts.length > 0 ? '/' + pathParts.join('/') : '/';
+            }
+            // If path starts with / but doesn't include wallet address, prepend wallet address
+            // (e.g., "/Desktop/NewFolder" -> "/{wallet}/Desktop/NewFolder")
+            else if (normalizedPath.startsWith('/') && !normalizedPath.startsWith(`/${walletAddress}/`)) {
+                // Check if it's a standard directory name (Desktop, Documents, etc.)
+                const firstPart = normalizedPath.split('/').filter(p => p)[0];
+                const standardDirs = ['Desktop', 'Documents', 'Public', 'Pictures', 'Videos', 'Trash'];
+                if (standardDirs.includes(firstPart)) {
+                    normalizedPath = `/${walletAddress}${normalizedPath}`;
+                    const pathParts = normalizedPath.split('/').filter(p => p);
+                    targetName = pathParts.pop();
+                    actualParentPath = pathParts.length > 0 ? '/' + pathParts.join('/') : '/';
+                }
             }
         }
         
@@ -1728,10 +1793,7 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
         console.log(`   📤 Sending response:`, JSON.stringify(response, null, 2).substring(0, 500));
         
         // Emit socket events for real-time updates (like Puter does)
-        if (authHeader && authHeader.startsWith('Bearer ')) {
-            const token = authHeader.split(' ')[1];
-            const session = nodeState.sessions.get(token);
-            if (session) {
+        if (session && walletAddress) {
                 const parentDirPath = normalizedPath.substring(0, normalizedPath.lastIndexOf('/')) || '/';
                 
                 // Emit item.added for the created directory
@@ -1766,9 +1828,6 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
             } else {
                 console.warn(`   ⚠️  No session found for token, skipping socket events`);
             }
-        } else {
-            console.warn(`   ⚠️  No auth header, skipping socket events`);
-        }
         
         res.writeHead(200, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify(response));
@@ -1776,8 +1835,13 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
     
     // /delete - Delete file/folder (Puter format)
     if (path === '/delete' && method === 'POST') {
+        console.log(`\n🗑️  DELETE (Puter) REQUEST - path: ${path}, method: ${method}`);
+        console.log(`   Data keys:`, Object.keys(data || {}));
+        console.log(`   Data:`, JSON.stringify(data).substring(0, 300));
+        
         const paths = data.paths;
         if (!paths || !Array.isArray(paths)) {
+            console.warn(`   ⚠️  Invalid paths parameter:`, paths);
             res.writeHead(400, { 'Content-Type': 'application/json' });
             return res.end(JSON.stringify({ error: 'paths must be an array' }));
         }
@@ -1785,23 +1849,46 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
         // Get session to find user's Trash directory
         const authHeader = req.headers['authorization'];
         let trashPath = null;
+        let token = null;
+        let session = null;
         if (authHeader && authHeader.startsWith('Bearer ')) {
-            const token = authHeader.split(' ')[1];
-            const session = nodeState.sessions.get(token);
+            token = authHeader.split(' ')[1];
+            session = nodeState.sessions.get(token);
             if (session && session.wallet) {
                 ensureUserHomeDirectory(session.wallet);
                 trashPath = `/${session.wallet}/Trash`;
             }
         }
         
-        console.log(`\n🗑️  DELETE (Puter): ${paths.join(', ')}`);
+        console.log(`   🗑️  DELETE: Processing ${paths.length} path(s): ${paths.join(', ')}`);
         
         for (const targetPath of paths) {
-            if (!targetPath || targetPath === '/') continue;
+            if (!targetPath || targetPath === '/') {
+                console.warn(`   ⚠️  Skipping invalid path: ${targetPath}`);
+                continue;
+            }
+            
+            // Handle UUID-based paths (Puter uses UUIDs for file identification)
+            let actualPath = targetPath;
+            let targetNode = null;
+            
+            if (targetPath.startsWith('uuid-') || targetPath.includes('uuid-')) {
+                console.log(`   🔍 Path is UUID: ${targetPath}`);
+                const uuidResult = findNodeByUuid(nodeState.filesystem, targetPath);
+                if (!uuidResult.node || !uuidResult.path) {
+                    console.warn(`   ⚠️  File not found by UUID: ${targetPath}`);
+                    continue; // Skip this path, continue with others
+                }
+                targetNode = uuidResult.node;
+                actualPath = uuidResult.path;
+                console.log(`   ✅ Resolved UUID to path: ${actualPath}`);
+            }
+            
+            // Use actualPath (resolved from UUID if needed)
+            const normalizedPath = actualPath.startsWith('/') ? actualPath : '/' + actualPath;
             
             // Don't delete if already in Trash (permanent delete)
-            if (targetPath.includes('/Trash/')) {
-                const normalizedPath = targetPath.startsWith('/') ? targetPath : '/' + targetPath;
+            if (normalizedPath.includes('/Trash/')) {
                 const parentPath = normalizedPath.substring(0, normalizedPath.lastIndexOf('/')) || '/';
                 const name = normalizedPath.split('/').pop();
                 const parent = getNode(nodeState.filesystem, parentPath);
@@ -1831,12 +1918,28 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
             
             // Move to Trash (if Trash exists)
             if (trashPath) {
-                const normalizedPath = targetPath.startsWith('/') ? targetPath : '/' + targetPath;
                 const parentPath = normalizedPath.substring(0, normalizedPath.lastIndexOf('/')) || '/';
                 const name = normalizedPath.split('/').pop();
                 const sourceParent = getNode(nodeState.filesystem, parentPath);
                 
-                if (sourceParent && sourceParent.children && sourceParent.children[name]) {
+                console.log(`   📂 Attempting to delete: ${normalizedPath} (parent: ${parentPath}, name: ${name})`);
+                
+                if (!sourceParent) {
+                    console.warn(`   ⚠️  Parent directory not found: ${parentPath}`);
+                    continue;
+                }
+                
+                if (!sourceParent.children) {
+                    console.warn(`   ⚠️  Parent has no children: ${parentPath}`);
+                    continue;
+                }
+                
+                if (!sourceParent.children[name]) {
+                    console.warn(`   ⚠️  File/folder not found: ${name} in ${parentPath}`);
+                    continue;
+                }
+                
+                if (sourceParent.children[name]) {
                     const trashNode = getNode(nodeState.filesystem, trashPath);
                     if (trashNode && trashNode.type === 'dir') {
                         const sourceNode = sourceParent.children[name];
@@ -1868,7 +1971,6 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
                         console.log(`   ✅ Moved to Trash: ${name} → ${trashFileName} (original_name: ${name})`);
                         
                         // Emit socket events for real-time updates
-                        const session = nodeState.sessions.get(token);
                         if (session) {
                             const trashItemPath = `${trashPath}/${trashFileName}`;
                             
@@ -2843,11 +2945,22 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
             
             // Get events for this wallet (room-based filtering, like Puter)
             // In Puter, sockets join rooms by user.id. In PC2, we use wallet address as the room
+            // Normalize wallet addresses for case-insensitive comparison
+            const normalizedWallet = wallet ? wallet.toLowerCase() : null;
             const events = nodeState.pendingEvents.filter(evt => {
                 // Send events to matching wallet (room) or broadcast events (wallet === null means broadcast)
                 // This matches Puter's pattern: svc_socketio.send({ room: user.id }, 'item.removed', data)
-                return !evt.wallet || evt.wallet === wallet || wallet === null;
+                const matches = !evt.wallet || evt.wallet === normalizedWallet || normalizedWallet === null;
+                if (matches && events.length === 0) {
+                    // Log first matching event for debugging
+                    console.log(`   📥 Polling: Found ${nodeState.pendingEvents.length} total events, filtering for wallet: ${normalizedWallet || 'broadcast'}`);
+                }
+                return matches;
             });
+            
+            if (events.length > 0) {
+                console.log(`   📤 Polling: Returning ${events.length} events to wallet: ${normalizedWallet || 'broadcast'}`);
+            }
             
             // Clear sent events (prevent duplicate delivery)
             if (events.length > 0) {
@@ -3401,9 +3514,16 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
     }
     
     // /cache/last-change-timestamp - Cache timestamp for Puter SDK
+    // This endpoint doesn't require auth (SDK calls it during initialization)
     if (path === '/cache/last-change-timestamp' && method === 'GET') {
         console.log(`\n⏰ CACHE TIMESTAMP: ${Date.now()}`);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.writeHead(200, { 
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+        });
+        // Return timestamp (SDK expects this format)
         return res.end(JSON.stringify({ timestamp: Date.now() }));
     }
     
@@ -3414,7 +3534,10 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
         // Check for auth token
         const authHeader = req.headers['authorization'];
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            res.writeHead(401, { 'Content-Type': 'application/json' });
+            res.writeHead(401, { 
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            });
             return res.end(JSON.stringify({ error: 'Unauthorized' }));
         }
         
@@ -3422,12 +3545,18 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
         const session = nodeState.sessions.get(token);
         
         if (!session) {
-            res.writeHead(401, { 'Content-Type': 'application/json' });
+            res.writeHead(401, { 
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            });
             return res.end(JSON.stringify({ error: 'Invalid session' }));
         }
         
         // Return user info in Puter's expected format
-        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.writeHead(200, { 
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*'
+        });
         return res.end(JSON.stringify({
             username: session.wallet.substring(0, 6) + '...' + session.wallet.substring(session.wallet.length - 4),
             address: session.wallet,
@@ -3715,6 +3844,80 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
     if (path === '/drivers/call' && method === 'POST') {
         console.log(`\n🔧 DRIVER CALL:`, JSON.stringify(data).substring(0, 200));
         
+        // Extract auth token
+        const authHeader = req.headers['authorization'];
+        let session = null;
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            const sessionToken = authHeader.substring(7);
+            session = nodeState.sessions.get(sessionToken);
+        }
+        
+        // Handle puter-kvstore requests (for key-value storage)
+        if (data.interface === 'puter-kvstore') {
+            console.log(`   💾 KV Store: method=${data.method}, key=${data.args?.key || 'N/A'}`);
+            
+            // KV store requires authentication
+            if (!session) {
+                console.log(`   ⚠️  No session found, returning unauthorized`);
+                res.writeHead(200, { 
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                });
+                return res.end(JSON.stringify({ success: false, error: 'Unauthorized' }));
+            }
+            
+            // Initialize KV store for this wallet if needed
+            if (!nodeState.kvStore) {
+                nodeState.kvStore = new Map();
+            }
+            
+            const wallet = session.wallet;
+            const key = data.args?.key;
+            
+            if (data.method === 'get') {
+                const walletKey = `${wallet}:${key}`;
+                const value = nodeState.kvStore.get(walletKey);
+                console.log(`   ✅ KV GET: key="${key}", value:`, value !== undefined ? value : 'null');
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                // Return null if not found (SDK expects null, not undefined)
+                return res.end(JSON.stringify({ success: true, result: value !== undefined ? value : null }));
+            } else if (data.method === 'set') {
+                const walletKey = `${wallet}:${key}`;
+                const value = data.args?.value !== undefined ? data.args.value : data.args?.va; // Handle typo in SDK
+                nodeState.kvStore.set(walletKey, value);
+                saveState();
+                console.log(`   ✅ KV SET: key="${key}", value:`, value);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ success: true, result: value }));
+            } else if (data.method === 'list') {
+                // List keys matching pattern (e.g., 'user_preferences.default_apps.*')
+                const pattern = data.args?.pattern || key;
+                const prefix = pattern.replace(/\*$/, ''); // Remove trailing *
+                const walletPrefix = `${wallet}:${prefix}`;
+                const matchingKeys = [];
+                
+                for (const [storedKey, storedValue] of nodeState.kvStore.entries()) {
+                    if (storedKey.startsWith(walletPrefix)) {
+                        const keyWithoutWallet = storedKey.substring(wallet.length + 1); // Remove "wallet:"
+                        matchingKeys.push(keyWithoutWallet);
+                    }
+                }
+                
+                console.log(`   ✅ KV LIST: pattern="${pattern}", found ${matchingKeys.length} keys`);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ success: true, result: matchingKeys }));
+            } else if (data.method === 'delete') {
+                const walletKey = `${wallet}:${key}`;
+                const deleted = nodeState.kvStore.delete(walletKey);
+                if (deleted) {
+                    saveState();
+                }
+                console.log(`   ✅ KV DELETE: key="${key}", deleted:`, deleted);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ success: true, result: deleted }));
+            }
+        }
+        
         // Handle puter-apps.read requests (for app lookups)
         if (data.interface === 'puter-apps' && data.method === 'read') {
             const appName = data.args?.id?.name;
@@ -3782,8 +3985,41 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
             }
         }
         
+        // Handle puter-hosting requests (for hosting sites)
+        if (data.interface === 'puter-hosting' && data.method === 'list') {
+            console.log(`   🌐 Hosting LIST`);
+            // Hosting list requires authentication
+            if (!session) {
+                console.log(`   ⚠️  No session found, returning unauthorized`);
+                res.writeHead(200, { 
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                });
+                return res.end(JSON.stringify({ success: false, error: 'Unauthorized' }));
+            }
+            // Return empty array (no sites for now) - MUST be an array, not null
+            console.log(`   ✅ Returning empty array for hosting sites`);
+            res.writeHead(200, { 
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            });
+            return res.end(JSON.stringify({ success: true, result: [] }));
+        }
+        
+        // Handle other driver interfaces that might not require auth
+        // (e.g., puter-apps.read can work without auth for public apps)
+        if (data.interface === 'puter-apps' && data.method === 'read') {
+            // Apps lookup doesn't require auth (public app info)
+            // This is handled earlier in the function, but keep for reference
+        }
+        
         // Default: return empty success for other driver calls
-        res.writeHead(200, { 'Content-Type': 'application/json' });
+        // Some driver calls might not require auth, so return success with null result
+        console.log(`   ⚠️  Unknown driver call: interface=${data.interface}, method=${data.method}`);
+        res.writeHead(200, { 
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*'
+        });
         return res.end(JSON.stringify({ success: true, result: null }));
     }
     
@@ -3791,6 +4027,333 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
     if (path === '/auth/check' && method === 'GET') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({ logged_in: true }));
+    }
+    
+    // /auth/particle - Particle Auth endpoint (for wallet authentication)
+    if (path === '/auth/particle' && method === 'OPTIONS') {
+        // Handle CORS preflight
+        res.writeHead(200, {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            'Access-Control-Max-Age': '86400'
+        });
+        return res.end();
+    }
+    
+    if (path === '/auth/particle' && method === 'POST') {
+        console.log(`\n🔐 PARTICLE AUTH REQUEST`);
+        console.log(`   Data keys:`, Object.keys(data || {}));
+        
+        // Particle Auth sends wallet address and signature
+        // For mock server, we'll create/verify a session based on wallet address
+        const walletAddress = data.address || data.walletAddress || data.eoaAddress;
+        
+        if (!walletAddress) {
+            res.writeHead(400, { 
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'POST, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+            });
+            return res.end(JSON.stringify({ error: 'Wallet address required' }));
+        }
+        
+        // Normalize wallet address
+        const normalizedWallet = walletAddress.toLowerCase();
+        
+        // Check if wallet already has a session
+        let session = null;
+        for (const [token, sess] of nodeState.sessions.entries()) {
+            if (sess.wallet && sess.wallet.toLowerCase() === normalizedWallet) {
+                session = sess;
+                break;
+            }
+        }
+        
+        // Create new session if needed
+        if (!session) {
+            const sessionToken = crypto.randomBytes(32).toString('hex');
+            session = {
+                wallet: normalizedWallet,
+                createdAt: Date.now(),
+                expiresAt: Date.now() + (7 * 24 * 60 * 60 * 1000) // 7 days
+            };
+            nodeState.sessions.set(sessionToken, session);
+            ensureUserHomeDirectory(normalizedWallet);
+            saveState();
+            console.log(`   ✅ Created new session for wallet: ${normalizedWallet}`);
+        }
+        
+        // Find the session token
+        let sessionToken = null;
+        for (const [token, sess] of nodeState.sessions.entries()) {
+            if (sess === session) {
+                sessionToken = token;
+                break;
+            }
+        }
+        
+        // Return session token and user info (frontend expects success: true)
+        const response = {
+            success: true,
+            token: sessionToken,
+            user: {
+                id: normalizedWallet,
+                username: normalizedWallet.substring(0, 10) + '...',
+                email: null
+            }
+        };
+        
+        console.log(`   ✅ Returning auth response with token: ${sessionToken.substring(0, 16)}...`);
+        
+        res.writeHead(200, { 
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+        });
+        return res.end(JSON.stringify(response));
+    }
+    
+    // /auth/grant-user-app - Grant user app token (for desktop initialization)
+    if (path === '/auth/grant-user-app' && method === 'OPTIONS') {
+        // Handle CORS preflight
+        res.writeHead(200, {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            'Access-Control-Max-Age': '86400'
+        });
+        return res.end();
+    }
+    
+    if (path === '/auth/grant-user-app' && method === 'POST') {
+        console.log(`\n🔑 GRANT USER APP TOKEN`);
+        
+        // Extract auth token from header
+        const authHeader = req.headers['authorization'];
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            res.writeHead(401, {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            });
+            return res.end(JSON.stringify({ error: 'Unauthorized' }));
+        }
+        
+        const sessionToken = authHeader.substring(7);
+        
+        // Find session
+        const session = nodeState.sessions.get(sessionToken);
+        if (!session) {
+            res.writeHead(401, {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            });
+            return res.end(JSON.stringify({ error: 'Invalid session' }));
+        }
+        
+        // Parse request body
+        let requestData = {};
+        try {
+            if (data && typeof data === 'object') {
+                requestData = data;
+            } else if (rawBody) {
+                requestData = JSON.parse(rawBody.toString());
+            }
+        } catch (e) {
+            console.warn('   ⚠️  Failed to parse request body:', e.message);
+        }
+        
+        // Generate app token (similar to session token but for app access)
+        const appToken = crypto.randomBytes(32).toString('hex');
+        
+        // Store app token (optional - can reuse session token)
+        if (!nodeState.appTokens) {
+            nodeState.appTokens = new Map();
+        }
+        nodeState.appTokens.set(appToken, {
+            wallet: session.wallet,
+            createdAt: Date.now(),
+            expiresAt: Date.now() + (7 * 24 * 60 * 60 * 1000) // 7 days
+        });
+        
+        console.log(`   ✅ Granted app token for wallet: ${session.wallet}`);
+        
+        // Return app token
+        const response = {
+            token: appToken,
+            expires_at: Date.now() + (7 * 24 * 60 * 60 * 1000)
+        };
+        
+        res.writeHead(200, {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+        });
+        return res.end(JSON.stringify(response));
+    }
+    
+    // /auth/get-user-app-token - Get app token for popup authentication
+    if (path === '/auth/get-user-app-token' && method === 'OPTIONS') {
+        res.writeHead(200, {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            'Access-Control-Max-Age': '86400'
+        });
+        return res.end();
+    }
+    
+    if (path === '/auth/get-user-app-token' && method === 'POST') {
+        console.log(`\n🔑 GET USER APP TOKEN`);
+        
+        const authHeader = req.headers['authorization'];
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            res.writeHead(401, {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            });
+            return res.end(JSON.stringify({ error: 'Unauthorized' }));
+        }
+        
+        const sessionToken = authHeader.substring(7);
+        const session = nodeState.sessions.get(sessionToken);
+        if (!session) {
+            res.writeHead(401, {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            });
+            return res.end(JSON.stringify({ error: 'Invalid session' }));
+        }
+        
+        // Parse request body
+        let requestData = {};
+        try {
+            if (data && typeof data === 'object') {
+                requestData = data;
+            } else if (rawBody) {
+                requestData = JSON.parse(rawBody.toString());
+            }
+        } catch (e) {
+            console.warn('   ⚠️  Failed to parse request body:', e.message);
+        }
+        
+        // Generate app token (can reuse session token or generate new one)
+        const appToken = sessionToken; // Reuse session token for simplicity
+        
+        console.log(`   ✅ Returning app token for wallet: ${session.wallet}`);
+        
+        const response = {
+            token: appToken,
+            expires_at: session.expiresAt
+        };
+        
+        res.writeHead(200, {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+        });
+        return res.end(JSON.stringify(response));
+    }
+    
+    // /kv/* or /api/kv/* - Key-value storage (for user preferences, etc.)
+    if ((path.startsWith('/kv/') || path.startsWith('/api/kv/')) && (method === 'GET' || method === 'POST')) {
+        console.log(`\n💾 KV STORE: ${method} ${path}`);
+        const key = path.startsWith('/api/kv/') ? path.substring(8) : path.substring(4); // Remove '/kv/' or '/api/kv/' prefix
+        console.log(`   Key: ${key}`);
+        
+        // Extract auth token
+        const authHeader = req.headers['authorization'];
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            res.writeHead(401, {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            });
+            return res.end(JSON.stringify({ error: 'Unauthorized' }));
+        }
+        
+        const sessionToken = authHeader.substring(7);
+        const session = nodeState.sessions.get(sessionToken);
+        if (!session) {
+            res.writeHead(401, {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            });
+            return res.end(JSON.stringify({ error: 'Invalid session' }));
+        }
+        
+        // Initialize KV store for this wallet if needed
+        if (!nodeState.kvStore) {
+            nodeState.kvStore = new Map();
+        }
+        
+        const walletKey = `${session.wallet}:${key}`;
+        
+        if (method === 'GET') {
+            const value = nodeState.kvStore.get(walletKey);
+            console.log(`   Value for key "${key}":`, value !== undefined ? value : 'null');
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            });
+            // Return null as JSON string if not found (SDK expects null, not undefined)
+            // The SDK will parse this, so we need to return the JSON string "null"
+            if (value === undefined) {
+                return res.end('null');
+            }
+            // If value is already a string, return it as-is (don't double-stringify)
+            if (typeof value === 'string') {
+                return res.end(value);
+            }
+            // Otherwise stringify the value
+            return res.end(JSON.stringify(value));
+        } else if (method === 'POST') {
+            // Parse request body
+            let requestData = {};
+            try {
+                if (data && typeof data === 'object') {
+                    requestData = data;
+                } else if (rawBody) {
+                    requestData = JSON.parse(rawBody.toString());
+                }
+            } catch (e) {
+                console.warn('   ⚠️  Failed to parse KV request body:', e.message);
+            }
+            
+            const value = requestData.value !== undefined ? requestData.value : requestData;
+            nodeState.kvStore.set(walletKey, value);
+            saveState();
+            
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            });
+            return res.end(JSON.stringify({ success: true }));
+        }
+    }
+    
+    // /hosting/list or /api/hosting/list - List hosting sites
+    if ((path === '/hosting/list' || path === '/api/hosting/list') && method === 'GET') {
+        console.log(`\n🌐 HOSTING LIST: ${method} ${path}`);
+        const authHeader = req.headers['authorization'];
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            res.writeHead(401, {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            });
+            return res.end(JSON.stringify({ error: 'Unauthorized' }));
+        }
+        
+        console.log(`   ✅ Returning empty array for hosting sites`);
+        // Return empty array (no sites for now) - MUST be an array, not null
+        res.writeHead(200, {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*'
+        });
+        return res.end(JSON.stringify([]));
     }
     
     // /writeFile - Write file using signed URL (for editor saves)
@@ -4125,6 +4688,19 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
     if (path === '/contactUs' && method === 'POST') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({ success: true }));
+    }
+    
+    // /version - Get server version info
+    if (path === '/version' && method === 'GET') {
+        res.writeHead(200, { 
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*'
+        });
+        return res.end(JSON.stringify({
+            version: '2.5.1',
+            server: 'localhost',
+            deployed: new Date().toISOString()
+        }));
     }
     
     // 404 for unknown routes

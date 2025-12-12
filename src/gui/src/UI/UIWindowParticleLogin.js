@@ -153,34 +153,63 @@ async function UIWindowParticleLogin(options = {}) {
             }
             
             // Call Puter's backend to authenticate with Particle Network
-            fetch(`${window.api_origin}/auth/particle`, {
+            // FORCE mock PC2 server for local development (iframe may have different window.api_origin)
+            let apiOrigin;
+            const isLocalDev = window.location.hostname === 'puter.localhost' || 
+                               window.location.hostname === 'localhost' || 
+                               window.location.hostname.includes('localhost') ||
+                               window.location.hostname === '127.0.0.1';
+            
+            if (isLocalDev) {
+                // Always use mock PC2 server for local dev, regardless of window.api_origin
+                apiOrigin = 'http://127.0.0.1:4200';
+                console.log('[Particle Auth]: 🚀 Local dev detected, forcing mock PC2 server:', apiOrigin);
+            } else {
+                // Production: use window.api_origin or default
+                apiOrigin = window.api_origin || 'https://api.puter.com';
+                console.log('[Particle Auth]: Using API origin:', apiOrigin);
+            }
+            console.log('[Particle Auth]: Calling auth endpoint:', `${apiOrigin}/auth/particle`);
+            console.log('[Particle Auth]: Request payload:', JSON.stringify(requestPayload));
+            
+            fetch(`${apiOrigin}/auth/particle`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify(requestPayload),
             })
-            .then(response => response.json())
+            .then(response => {
+                console.log('[Particle Auth]: Response status:', response.status, response.statusText);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                return response.json();
+            })
             .then(data => {
+                console.log('[Particle Auth]: Response data:', data);
+                
                 if (processingOverlay && processingOverlay.parentNode) {
                     processingOverlay.parentNode.removeChild(processingOverlay);
                 }
                 
-                if (data.success) {
+                if (data && data.success) {
+                    console.log('[Particle Auth]: ✅ Authentication successful, token:', data.token?.substring(0, 16) + '...');
                     completeAuthentication(data.token, data.user, container, el_window);
                 } else {
+                    console.warn('[Particle Auth]: ❌ Authentication failed, data:', data);
                     // Show error
                     if (typeof UINotification !== 'undefined') {
                         new UINotification({
                             type: 'error',
-                            message: data.message || 'Authentication failed',
+                            message: data?.message || 'Authentication failed',
                             autoHide: true,
                         });
                     }
                 }
             })
             .catch(error => {
-                console.error('Particle auth error:', error);
+                console.error('[Particle Auth]: ❌ Fetch error:', error);
                 
                 // Hide processing overlay
                 if (processingOverlay && processingOverlay.parentNode) {

@@ -35,6 +35,7 @@ async function UIWindowParticleLogin(options = {}) {
         `;
     
         // Create the window
+        console.log('[UIWindowParticleLogin]: Creating window...');
         const el_window = await UIWindow({
         title: null,
         app: 'particle-auth',
@@ -72,9 +73,21 @@ async function UIWindowParticleLogin(options = {}) {
             'overflow': 'hidden'
         }
     });
-    
+        console.log('[UIWindowParticleLogin]: ✅ Window created:', el_window);
+        
+        // Ensure window is visible (fix display: none issue)
+        $(el_window).css('display', 'block');
+        $(el_window).show();
+        console.log('[UIWindowParticleLogin]: Window display after show():', $(el_window).css('display'));
+        
         // Get the container element
         const container = $(el_window).find('#particle-auth-container')[0];
+        console.log('[UIWindowParticleLogin]: Container element:', container);
+        
+        if (!container) {
+            console.error('[UIWindowParticleLogin]: ❌ Container not found!');
+            return;
+        }
         
         // Create and append iframe with full content visible
         const iframe = document.createElement('iframe');
@@ -83,7 +96,9 @@ async function UIWindowParticleLogin(options = {}) {
         iframe.style.border = 'none';
         iframe.style.overflow = 'hidden';
         iframe.src = '/particle-auth';
+        console.log('[UIWindowParticleLogin]: Creating iframe with src:', iframe.src);
         container.appendChild(iframe);
+        console.log('[UIWindowParticleLogin]: ✅ Iframe appended to container');
         
         // Set up message listener for communication from iframe
         const messageHandler = (event) => {

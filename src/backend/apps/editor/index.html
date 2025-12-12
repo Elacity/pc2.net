@@ -40,6 +40,32 @@
     <!-- printer -->
     <pre id="printer"></pre>
     <!-- JS -->
+    <script>
+        // CRITICAL: Intercept API calls BEFORE SDK loads to redirect to PC2 node
+        (function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const apiOrigin = urlParams.get('puter.api_origin') || window.location.origin;
+            
+            const originalFetch = window.fetch;
+            window.fetch = function(...args) {
+                let url = args[0];
+                if (typeof url === 'string' && url.includes('api.puter.')) {
+                    args[0] = url.replace(/https?:\/\/api\.puter\.[^\/:]+(?::\d+)?/gi, apiOrigin);
+                } else if (url && typeof url === 'object' && url.url && url.url.includes('api.puter.')) {
+                    url.url = url.url.replace(/https?:\/\/api\.puter\.[^\/:]+(?::\d+)?/gi, apiOrigin);
+                }
+                return originalFetch.apply(this, args);
+            };
+            
+            const originalXHROpen = XMLHttpRequest.prototype.open;
+            XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+                if (typeof url === 'string' && url.includes('api.puter.')) {
+                    url = url.replace(/https?:\/\/api\.puter\.[^\/:]+(?::\d+)?/gi, apiOrigin);
+                }
+                return originalXHROpen.call(this, method, url, ...rest);
+            };
+        })();
+    </script>
     <script src="https://js.puter.com/v2/"></script>
     <script>
         // Initialize Puter SDK with auth token and API origin from URL params

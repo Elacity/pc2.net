@@ -21,6 +21,49 @@
     <div class="my-editor" style="height:calc(100vh); width:100%;">
     </div>
     <!-- JS -->
+    <script>
+        // CRITICAL: Intercept API calls BEFORE SDK loads to redirect to PC2 node
+        // This must run FIRST, before any other scripts
+        (function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const apiOrigin = urlParams.get('puter.api_origin') || window.location.origin;
+            const currentOrigin = window.location.origin;
+            
+            console.log('[Viewer]: 🔧 Setting up API interception, API origin:', apiOrigin);
+            
+            // Intercept fetch requests - redirect api.puter.* to PC2 node
+            const originalFetch = window.fetch;
+            window.fetch = function(...args) {
+                let url = args[0];
+                if (typeof url === 'string') {
+                    if (url.includes('api.puter.')) {
+                        const interceptedUrl = url.replace(/https?:\/\/api\.puter\.[^\/:]+(?::\d+)?/gi, apiOrigin);
+                        console.log('[Viewer]: 🔄 Intercepting fetch:', url, '->', interceptedUrl);
+                        args[0] = interceptedUrl;
+                    }
+                } else if (url && typeof url === 'object' && url.url) {
+                    if (url.url.includes('api.puter.')) {
+                        url.url = url.url.replace(/https?:\/\/api\.puter\.[^\/:]+(?::\d+)?/gi, apiOrigin);
+                        console.log('[Viewer]: 🔄 Intercepting fetch (Request object):', url.url);
+                    }
+                }
+                return originalFetch.apply(this, args);
+            };
+            
+            // Intercept XMLHttpRequest
+            const originalXHROpen = XMLHttpRequest.prototype.open;
+            XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+                if (typeof url === 'string' && url.includes('api.puter.')) {
+                    const interceptedUrl = url.replace(/https?:\/\/api\.puter\.[^\/:]+(?::\d+)?/gi, apiOrigin);
+                    console.log('[Viewer]: 🔄 Intercepting XHR:', url, '->', interceptedUrl);
+                    url = interceptedUrl;
+                }
+                return originalXHROpen.call(this, method, url, ...rest);
+            };
+            
+            console.log('[Viewer]: ✅ API interception active');
+        })();
+    </script>
     <script src="./js/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
     <script src="https://js.puter.com/v2/"></script>
     <script>
@@ -32,6 +75,8 @@
             const authToken = urlParams.get('puter.auth.token');
             const apiOrigin = urlParams.get('puter.api_origin');
             
+            console.log('[Viewer]: 📋 URL params - authToken:', authToken ? 'present' : 'missing', 'apiOrigin:', apiOrigin);
+            
             // Wait for SDK to be available, then set auth immediately
             function initializeSDK() {
                 if (typeof puter === 'undefined') {
@@ -40,14 +85,18 @@
                     return;
                 }
                 
+                console.log('[Viewer]: ✅ SDK loaded, setting auth...');
+                
                 // SDK is loaded, set auth token and API origin immediately
                 if (authToken) {
                     try {
                         puter.setAuthToken(authToken);
                         console.log('[Viewer]: ✅ Auth token set from URL params');
                     } catch (e) {
-                        console.error('[Viewer]: Failed to set auth token:', e);
+                        console.error('[Viewer]: ❌ Failed to set auth token:', e);
                     }
+                } else {
+                    console.warn('[Viewer]: ⚠️ No auth token in URL params!');
                 }
                 
                 if (apiOrigin) {
@@ -55,8 +104,10 @@
                         puter.setAPIOrigin(apiOrigin);
                         console.log('[Viewer]: ✅ API origin set to:', apiOrigin);
                     } catch (e) {
-                        console.error('[Viewer]: Failed to set API origin:', e);
+                        console.error('[Viewer]: ❌ Failed to set API origin:', e);
                     }
+                } else {
+                    console.warn('[Viewer]: ⚠️ No API origin in URL params!');
                 }
             }
             

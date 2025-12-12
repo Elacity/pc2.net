@@ -26,20 +26,42 @@
     <script>
         // Initialize Puter SDK with auth token and API origin from URL params
         // This prevents the SDK from showing login screen when app is opened
+        // Must run immediately after SDK loads, before any auth checks
         (function() {
             const urlParams = new URLSearchParams(window.location.search);
             const authToken = urlParams.get('puter.auth.token');
             const apiOrigin = urlParams.get('puter.api_origin');
             
-            if (authToken && typeof puter !== 'undefined') {
-                puter.setAuthToken(authToken);
-                console.log('[Viewer]: Auth token set from URL params');
+            // Wait for SDK to be available, then set auth immediately
+            function initializeSDK() {
+                if (typeof puter === 'undefined') {
+                    // SDK not loaded yet, wait a bit and try again
+                    setTimeout(initializeSDK, 10);
+                    return;
+                }
+                
+                // SDK is loaded, set auth token and API origin immediately
+                if (authToken) {
+                    try {
+                        puter.setAuthToken(authToken);
+                        console.log('[Viewer]: ✅ Auth token set from URL params');
+                    } catch (e) {
+                        console.error('[Viewer]: Failed to set auth token:', e);
+                    }
+                }
+                
+                if (apiOrigin) {
+                    try {
+                        puter.setAPIOrigin(apiOrigin);
+                        console.log('[Viewer]: ✅ API origin set to:', apiOrigin);
+                    } catch (e) {
+                        console.error('[Viewer]: Failed to set API origin:', e);
+                    }
+                }
             }
             
-            if (apiOrigin && typeof puter !== 'undefined') {
-                puter.setAPIOrigin(apiOrigin);
-                console.log('[Viewer]: API origin set to:', apiOrigin);
-            }
+            // Start initialization immediately
+            initializeSDK();
         })();
     </script>
     <script src="./jquery-pintura/pintura.min.js"></script>

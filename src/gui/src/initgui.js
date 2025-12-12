@@ -170,6 +170,23 @@ window.initgui = async function(options){
 
     let picked_a_user_for_sdk_login = false;
 
+    // Check for auth token in URL params (for apps launched with token)
+    // This handles 'puter.auth.token' param that apps receive when launched
+    const urlAuthToken = window.url_query_params.get('puter.auth.token');
+    if (urlAuthToken) {
+        console.log('[initgui]: Found puter.auth.token in URL params, setting SDK auth token');
+        puter.setAuthToken(urlAuthToken);
+        window.auth_token = urlAuthToken;
+    }
+    
+    // Check for API origin in URL params (for apps)
+    const urlApiOrigin = window.url_query_params.get('puter.api_origin');
+    if (urlApiOrigin) {
+        console.log('[initgui]: Found puter.api_origin in URL params, setting SDK API origin:', urlApiOrigin);
+        puter.setAPIOrigin(urlApiOrigin);
+        window.api_origin = urlApiOrigin;
+    }
+
     // update SDK if auth_token is different from the one in the SDK
     if(window.auth_token && puter.authToken !== window.auth_token)
         puter.setAuthToken(window.auth_token);

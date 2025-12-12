@@ -95,8 +95,15 @@ async function UIWindowParticleLogin(options = {}) {
         iframe.style.height = '100%';
         iframe.style.border = 'none';
         iframe.style.overflow = 'hidden';
-        iframe.src = '/particle-auth';
+        
+        // Pass API origin to Particle Auth iframe so it knows where to send auth requests
+        // This is critical for PC2 deployment - each node has its own URL/IP
+        const apiOrigin = window.api_origin || window.location.origin;
+        const iframeUrl = new URL('/particle-auth', window.location.origin);
+        iframeUrl.searchParams.set('api_origin', apiOrigin);
+        iframe.src = iframeUrl.toString();
         console.log('[UIWindowParticleLogin]: Creating iframe with src:', iframe.src);
+        console.log('[UIWindowParticleLogin]: API origin passed to iframe:', apiOrigin);
         container.appendChild(iframe);
         console.log('[UIWindowParticleLogin]: ✅ Iframe appended to container');
         
@@ -128,8 +135,18 @@ async function UIWindowParticleLogin(options = {}) {
         
         window.addEventListener('message', messageHandler);
         
-        // Remove loading overlay when iframe is loaded
+        // Remove loading overlay when iframe is loaded and send API origin
         iframe.onload = () => {
+            // Send API origin to Particle Auth iframe via postMessage
+            // This ensures the React app knows where to send auth requests
+            // Critical for PC2 deployment where each node has its own URL/IP
+            const apiOrigin = window.api_origin || window.location.origin;
+            iframe.contentWindow?.postMessage({
+                type: 'puter-api-origin',
+                apiOrigin: apiOrigin
+            }, window.location.origin);
+            console.log('[UIWindowParticleLogin]: Sent API origin to iframe:', apiOrigin);
+            
             setTimeout(() => {
                 const loadingOverlay = container.querySelector('.loading-overlay');
                 if (loadingOverlay && loadingOverlay.parentNode) {

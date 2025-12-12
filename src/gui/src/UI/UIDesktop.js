@@ -1969,7 +1969,42 @@ $(document).on('click', '.user-options-menu-btn', async function (e) {
     }
 
     // -------------------------------------------
-    // Logged in users
+    // Current user's wallet addresses (if both exist, show both)
+    // -------------------------------------------
+    if (window.user && (window.user.wallet_address || window.user.smart_account_address)) {
+        // Show wallet_address (UAE wallet) first if it exists
+        if (window.user.wallet_address) {
+            const displayName = window.user.wallet_address.slice(0, 10) + '...' + window.user.wallet_address.slice(-8);
+            items.push({
+                html: displayName,
+                icon: '✓',
+                onClick: async function () {
+                    // Already on this wallet, do nothing
+                }
+            });
+        }
+        
+        // Show smart_account_address (UniversalX) second if it exists
+        if (window.user.smart_account_address) {
+            const displayName = window.user.smart_account_address.slice(0, 10) + '...' + window.user.smart_account_address.slice(-8);
+            const subtitle = '<span style="display:block;font-size:10px;color:#666;margin-top:2px;">UniversalX Smart Account</span>';
+            items.push({
+                html: displayName + subtitle,
+                icon: '',
+                onClick: async function () {
+                    // Already on this account, do nothing
+                }
+            });
+        }
+        
+        // Add separator if there are other logged in users
+        if (window.logged_in_users.length > 0) {
+            items.push('-');
+        }
+    }
+
+    // -------------------------------------------
+    // Logged in users (other users, not current)
     // -------------------------------------------
     if (window.logged_in_users.length > 0) {
         let users_arr = window.logged_in_users;
@@ -1977,8 +2012,13 @@ $(document).on('click', '.user-options-menu-btn', async function (e) {
         // bring logged in user's item to top
         users_arr.sort(function (x, y) { return x.uuid === window.user.uuid ? -1 : y.uuid == window.user.uuid ? 1 : 0; });
 
-        // create menu items
+        // create menu items (skip current user since we already added it above)
         users_arr.forEach(l_user => {
+            // Skip current user - we already added it above
+            if (l_user.uuid === window.user.uuid) {
+                return;
+            }
+            
             // For wallet users, show Smart Account address if available, else EOA
             let displayName = l_user.username;
             let subtitle = '';
@@ -1995,11 +2035,8 @@ $(document).on('click', '.user-options-menu-btn', async function (e) {
             items.push(
                 {
                     html: displayName + subtitle,
-                    icon: l_user.username === window.user.username ? '✓' : '',
+                    icon: '',
                     onClick: async function (val) {
-                        // don't reload everything if clicked on already-logged-in user
-                        if (l_user.username === window.user.username)
-                            return;
                         // update auth data
                         window.update_auth_data(l_user.auth_token, l_user);
                         // refresh

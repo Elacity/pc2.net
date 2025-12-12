@@ -822,8 +822,36 @@ window.create_folder = async(basedir, appendto_element)=>{
             path: dirname + '/'+folder_name,
             rename: true,
             overwrite: false,
-            success: function (data){
-                const el_created_dir = $(appendto_element).find('.item[data-path="'+html_encode(dirname)+'/'+html_encode(data.name)+'"]');
+            success: async function (data){
+                let el_created_dir = $(appendto_element).find('.item[data-path="'+html_encode(dirname)+'/'+html_encode(data.name)+'"]');
+                
+                // If folder not found in DOM (socket event didn't arrive), add it manually
+                if(el_created_dir.length === 0){
+                    // Create the folder item in DOM immediately (item_icon is already imported at top)
+                    UIItem({
+                        appendTo: appendto_element,
+                        uid: data.uid || data.uuid,
+                        immutable: false,
+                        path: data.path,
+                        icon: await item_icon(data),
+                        name: data.name,
+                        size: data.size || 0,
+                        type: data.type || null,
+                        modified: data.modified || new Date().toISOString(),
+                        is_dir: true,
+                        is_selected: false,
+                        is_shared: data.is_shared || false,
+                        has_website: false,
+                        suggested_apps: data.suggested_apps,
+                    });
+                    
+                    // Sort items after adding
+                    window.sort_items(appendto_element, $(appendto_element).attr('data-sort_by'), $(appendto_element).attr('data-sort_order'));
+                    
+                    // Find the newly created element
+                    el_created_dir = $(appendto_element).find('.item[data-path="'+html_encode(dirname)+'/'+html_encode(data.name)+'"]');
+                }
+                
                 if(el_created_dir.length > 0){
                     window.activate_item_name_editor(el_created_dir);
 
@@ -1201,17 +1229,40 @@ window.delete_item = async function(el_item, descendants_only = false){
     });
 
     try{
-        await puter.fs.delete({
-            paths: $(el_item).attr('data-path'),
-            descendantsOnly: descendants_only,
-            recursive: true,
+        // Use move to trash (same as drag-to-trash) for consistency
+        // This ensures deletion works the same way as dragging to trash
+        const trash_path = window.trash_path || '/' + window.user.username + '/Trash';
+        const item_uid = $(el_item).attr('data-uid');
+        const item_name = $(el_item).attr('data-name');
+        
+        // Move to trash with metadata (same as drag-to-trash logic)
+        const metadata = {
+            original_name: item_name,
+            original_path: $(el_item).attr('data-path'),
+            trashed_ts: Math.round(Date.now() / 1000),
+        };
+        
+        await puter.fs.move({
+            source: item_uid, // Use UUID like drag-to-trash does
+            destination: trash_path,
+            newName: item_uid, // Use UUID as filename in trash (same as drag-to-trash)
+            newMetadata: metadata,
+            excludeSocketID: window.socket?.id,
         });
+        
+        // Update trash icon to full
+        if(window.socket)
+            window.socket.emit('trash.is_empty', {is_empty: false});
+        $(`[data-app="trash"]`).find('.taskbar-icon > img').attr('src', window.icons['trash-full.svg']);
+        $(`.item[data-path="${html_encode(trash_path)}" i], .item[data-shortcut_to_path="${html_encode(trash_path)}" i]`).find('.item-icon > img').attr('src', window.icons['trash-full.svg']);
+        $(`.window[data-path="${html_encode(trash_path)}" i]`).find('.window-head-icon').attr('src', window.icons['trash-full.svg']);
+        
         // fade out item 
-        $(`.item[data-uid='${$(el_item).attr('data-uid')}']`).fadeOut(150, function(){
+        $(`.item[data-uid='${item_uid}']`).fadeOut(150, function(){
             // find all parent windows that contain this item
-            let parent_windows = $(`.item[data-uid='${$(el_item).attr('data-uid')}']`).closest('.window');
+            let parent_windows = $(`.item[data-uid='${item_uid}']`).closest('.window');
             // remove item from DOM
-            $(`.item[data-uid='${$(el_item).attr('data-uid')}']`).removeItems();
+            $(`.item[data-uid='${item_uid}']`).removeItems();
             // update parent windows' item counts
             $(parent_windows).each(function(index){
                 window.update_explorer_footer_item_count(this);
@@ -1221,7 +1272,7 @@ window.delete_item = async function(el_item, descendants_only = false){
             $(`.item[data-shortcut_to_path="${html_encode($(el_item).attr('data-path'))}" i]`).attr(`data-shortcut_to_path`, '');
         });
     }catch(err){
-        UIAlert(err.responseText);
+        UIAlert(err.responseText || err.message || 'Failed to delete item');
     }
 }
 

@@ -189,3 +189,4 @@ node tools/mock-pc2-server.cjs
 - [ ] 7-day session persistence
 - [ ] Clear error messages
 - [ ] Server logs show correct behavior
+

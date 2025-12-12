@@ -201,7 +201,12 @@ window.gui = async (options) => {
     await window.loadScript('https://challenges.cloudflare.com/turnstile/v0/api.js', { defer: true });
 
     // 🚀 Launch the GUI 🚀
-    window.initgui(options);
+    try {
+        await window.initgui(options);
+    } catch (error) {
+        console.error('[PC2]: ❌ initgui() failed:', error);
+        throw error; // Re-throw so the caller can handle it
+    }
 };
 
 /**

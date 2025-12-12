@@ -1432,6 +1432,11 @@ span.header-sort-icon img {
 .window-body-app {
     height: calc(100% - 30px);
 }
+
+/* When window is maximized, window-body-app should take full height */
+.window[data-is_maximized="1"] .window-body-app {
+    height: 100%;
+}
 .window-with-menubar .window-body-app {
     height: calc(100% - 65px);
 }

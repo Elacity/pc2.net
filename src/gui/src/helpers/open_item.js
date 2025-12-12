@@ -212,11 +212,15 @@ Please try recreating the link.`);
     // Does the user have a preference for this file type?
     //----------------------------------------------------------------
     else if ( !associated_app_name && !is_dir && window.user_preferences[`default_apps${path.extname(item_path).toLowerCase()}`] ) {
+        // PDF files should open maximized by default (like puter.com)
+        const isPdf = path.extname(item_path).toLowerCase() === '.pdf';
+        const shouldMaximize = options.maximized !== undefined ? options.maximized : isPdf;
+        
         launch_app({
             name: window.user_preferences[`default_apps${path.extname(item_path).toLowerCase()}`],
             file_path: item_path,
             window_title: path.basename(item_path),
-            maximized: options.maximized,
+            maximized: shouldMaximize,
             file_uid: file_uid,
         });
     }
@@ -329,6 +333,10 @@ Please try recreating the link.`);
         // First suggested app is default app to open this item
         //---------------------------------------------
         else {
+            // PDF files should open maximized by default (like puter.com)
+            const isPdf = path.extname(item_path).toLowerCase() === '.pdf';
+            const shouldMaximize = options.maximized !== undefined ? options.maximized : isPdf;
+            
             launch_app({
                 name: suggested_apps[0].name,
                 token: open_item_meta.token,
@@ -336,7 +344,7 @@ Please try recreating the link.`);
                 app_obj: suggested_apps[0],
                 window_title: path.basename(item_path),
                 file_uid: fsuid,
-                maximized: options.maximized,
+                maximized: shouldMaximize,
                 file_signature: open_item_meta.signature,
             });
         }

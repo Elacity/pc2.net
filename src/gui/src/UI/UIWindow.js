@@ -582,6 +582,15 @@ async function UIWindow(options) {
 
         // Use taskbar position-aware window positioning
         window.update_maximized_window_for_taskbar(el_window);
+        
+        // Ensure iframe and window-body take full height when maximized
+        $(el_window).find('.window-body-app').css({
+            'height': '100%',
+        });
+        $(el_window).find('.window-app-iframe').css({
+            'height': '100%',
+            'width': '100%',
+        });
     }
 
     // when a window is created, focus is brought to it and 
@@ -1648,7 +1657,7 @@ async function UIWindow(options) {
     // Click On The `Scale` Button 
     // (the little rectangle in the window head)
     // --------------------------------------------------------
-    if(options.is_resizable){
+    if(options.is_resizable && el_window_head_scale_btn){
         $(el_window_head_scale_btn).click(function () {
             window.scale_window(el_window);
         })
@@ -3451,6 +3460,15 @@ window.scale_window = (el_window)=>{
 
         // Use taskbar position-aware window positioning
         window.update_maximized_window_for_taskbar(el_window);
+        
+        // Ensure iframe and window-body take full height when maximized
+        $(el_window).find('.window-body-app').css({
+            'height': '100%',
+        });
+        $(el_window).find('.window-app-iframe').css({
+            'height': '100%',
+            'width': '100%',
+        });
 
         // hide toolbar
         if(!isMobile.phone && !isMobile.tablet){
@@ -3466,6 +3484,15 @@ window.scale_window = (el_window)=>{
             'width': $(el_window).attr('data-width-before-maxim'),
             'height': $(el_window).attr('data-height-before-maxim'),
             'transform': 'none',
+        });
+        
+        // Reset iframe and window-body height to auto when not maximized
+        $(el_window).find('.window-body-app').css({
+            'height': '',
+        });
+        $(el_window).find('.window-app-iframe').css({
+            'height': '',
+            'width': '',
         });
     
         // maximize icon
@@ -3890,5 +3917,47 @@ async function saveSidebarOrder(order) {
         console.error('Error saving sidebar order:', err);
     }
 }
+
+// Function to update maximized window position based on taskbar position
+window.update_maximized_window_for_taskbar = (el_window) => {
+    const taskbar_position = window.taskbar_position || 'bottom';
+    const taskbar_height = window.taskbar_height || 50;
+    const toolbar_height = window.toolbar_height || 0;
+    
+    if (taskbar_position === 'bottom') {
+        $(el_window).css({
+            'top': '0',
+            'left': '0',
+            'width': '100%',
+            'height': `calc(100% - ${taskbar_height + toolbar_height}px)`,
+            'transform': 'none',
+        });
+    } else if (taskbar_position === 'left') {
+        $(el_window).css({
+            'top': `${toolbar_height}px`,
+            'left': `${taskbar_height}px`,
+            'width': `calc(100% - ${taskbar_height}px)`,
+            'height': `calc(100% - ${toolbar_height}px)`,
+            'transform': 'none',
+        });
+    } else if (taskbar_position === 'right') {
+        $(el_window).css({
+            'top': `${toolbar_height}px`,
+            'left': '0',
+            'width': `calc(100% - ${taskbar_height}px)`,
+            'height': `calc(100% - ${toolbar_height}px)`,
+            'transform': 'none',
+        });
+    } else {
+        // Default to bottom if unknown position
+        $(el_window).css({
+            'top': '0',
+            'left': '0',
+            'width': '100%',
+            'height': `calc(100% - ${taskbar_height + toolbar_height}px)`,
+            'transform': 'none',
+        });
+    }
+};
 
 export default UIWindow;

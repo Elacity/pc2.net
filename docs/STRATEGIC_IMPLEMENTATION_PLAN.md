@@ -60,26 +60,28 @@
 
 ### ⚠️ Current Architecture Limitations
 
-#### 1. **Separate Services**
-- ❌ Frontend runs on `puter.localhost:4100` (dev server)
-- ❌ Backend runs on `127.0.0.1:4200` (mock server)
-- ❌ Requires two processes to run
-- ❌ CORS complexity
+#### 1. **Separate Services** ✅ **RESOLVED**
+- ✅ Frontend served by mock server at `127.0.0.1:4200`
+- ✅ Backend runs on `127.0.0.1:4200` (same server)
+- ✅ Single process to run
+- ✅ No CORS complexity (same-origin)
 
-#### 2. **Connection Setup Required**
-- ❌ User must configure connection
-- ❌ Must set API origin manually
-- ❌ Not "connected by default"
+#### 2. **Connection Setup Required** ✅ **RESOLVED**
+- ✅ Auto-detected same-origin API
+- ✅ No manual configuration needed
+- ✅ "Connected by default" - accessing PC2 IS accessing Puter
 
-#### 3. **Not Self-Contained**
-- ❌ Frontend not built into PC2 node
-- ❌ No single executable/package
-- ❌ Requires separate build processes
+#### 3. **Not Self-Contained** ⚠️ **PARTIALLY RESOLVED**
+- ✅ Frontend served by PC2 node (mock server)
+- ⚠️ Still using mock server (not production node)
+- ⚠️ No single executable/package yet
+- ⚠️ Requires build process (but frontend is built-in)
 
-#### 4. **Development-Only**
-- ❌ Mock server (in-memory, no persistence)
-- ❌ No production deployment
-- ❌ No installable package
+#### 4. **Development-Only** ⚠️ **STILL APPLIES**
+- ⚠️ Mock server (in-memory, no persistence)
+- ⚠️ No production deployment
+- ⚠️ No installable package
+- **Next:** Phase 2 will address this
 
 ---
 

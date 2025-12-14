@@ -10,6 +10,7 @@
 
 const http = require('http');
 const crypto = require('crypto');
+const { exec, spawn } = require('child_process');
 
 const PORT = 4200;
 
@@ -17,8 +18,479 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
+// Try to load sharp for thumbnail generation (optional dependency)
+let sharp = null;
+try {
+    sharp = require('sharp');
+    console.log('✅ Sharp loaded - image thumbnail generation enabled');
+} catch (e) {
+    console.log('⚠️  Sharp not available - image thumbnails will be disabled');
+    console.log('   💡 Install sharp for thumbnail support: npm install sharp');
+}
+
+// Note: PDF thumbnail support requires pdfjs-dist and canvas
+// These will be loaded dynamically in generateThumbnail if needed
+
+// AI/LLM Configuration
+// Set OLLAMA_HOST to your Ollama instance URL (default: http://localhost:11434)
+// Set OLLAMA_MODEL to the model name (default: deepseek-r1:1.5b)
+const OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://localhost:11434';
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'deepseek-r1:1.5b';
+const AI_ENABLED = process.env.AI_ENABLED !== 'false'; // Enable by default
+const AUTO_SETUP_OLLAMA = process.env.AUTO_SETUP_OLLAMA !== 'false'; // Auto-setup by default
+
+// Check if Ollama is available
+async function checkOllamaAvailable() {
+    return new Promise((resolve) => {
+        const ollamaUrl = new URL('/api/tags', OLLAMA_HOST);
+        const req = http.request({
+            hostname: ollamaUrl.hostname,
+            port: ollamaUrl.port || (ollamaUrl.protocol === 'https:' ? 443 : 80),
+            path: ollamaUrl.pathname,
+            method: 'GET',
+            timeout: 2000
+        }, (res) => {
+            resolve(res.statusCode === 200);
+        });
+
+        req.on('error', () => resolve(false));
+        req.on('timeout', () => {
+            req.destroy();
+            resolve(false);
+        });
+        req.end();
+    });
+}
+
+// Check if model is available in Ollama
+async function checkModelAvailable() {
+    return new Promise((resolve) => {
+        const ollamaUrl = new URL('/api/tags', OLLAMA_HOST);
+        const req = http.request({
+            hostname: ollamaUrl.hostname,
+            port: ollamaUrl.port || (ollamaUrl.protocol === 'https:' ? 443 : 80),
+            path: ollamaUrl.pathname,
+            method: 'GET',
+            timeout: 2000
+        }, (res) => {
+            let body = '';
+            res.on('data', chunk => body += chunk.toString());
+            res.on('end', () => {
+                try {
+                    const data = JSON.parse(body);
+                    const models = data.models || [];
+                    const modelExists = models.some(m => m.name === OLLAMA_MODEL || m.name.includes(OLLAMA_MODEL.split(':')[0]));
+                    resolve(modelExists);
+                } catch {
+                    resolve(false);
+                }
+            });
+        });
+
+        req.on('error', () => resolve(false));
+        req.on('timeout', () => {
+            req.destroy();
+            resolve(false);
+        });
+        req.end();
+    });
+}
+
+// Auto-setup Ollama (check if installed, start service, download model)
+async function setupOllama() {
+    if (!AUTO_SETUP_OLLAMA || !AI_ENABLED) {
+        return false;
+    }
+
+    console.log('\n🤖 Checking Ollama setup...');
+    
+    // Check if Ollama is running
+    const isRunning = await checkOllamaAvailable();
+    if (isRunning) {
+        console.log('   ✅ Ollama is running');
+        
+        // Check if model is available, download if missing
+        const modelAvailable = await checkModelAvailable();
+        if (modelAvailable) {
+            console.log(`   ✅ Model ${OLLAMA_MODEL} is available`);
+            return true;
+        } else {
+            console.log(`   📥 Model ${OLLAMA_MODEL} not found, downloading automatically...`);
+            console.log(`   ⏳ This may take a few minutes (model size: ~1.1GB)...`);
+            
+            return new Promise((resolve) => {
+                exec(`ollama pull ${OLLAMA_MODEL}`, (error, stdout, stderr) => {
+                    if (error) {
+                        console.log(`   ❌ Failed to download model: ${error.message}`);
+                        console.log(`   💡 Run manually: ollama pull ${OLLAMA_MODEL}`);
+                        resolve(false);
+                    } else {
+                        console.log(`   ✅ Model ${OLLAMA_MODEL} downloaded successfully!`);
+                        resolve(true);
+                    }
+                });
+            });
+        }
+    }
+
+    // Try to start Ollama
+    console.log('   ⚠️  Ollama not running, attempting to start...');
+    
+    return new Promise((resolve) => {
+        // Check if ollama command exists
+        exec('which ollama', (error) => {
+            if (error) {
+                console.log('   ❌ Ollama not installed');
+                console.log('   💡 Quick install:');
+                console.log('      macOS/Linux: ./tools/setup-ollama.sh');
+                console.log('      Or: curl -fsSL https://ollama.com/install.sh | sh');
+                console.log('      Windows: .\\tools\\setup-ollama.ps1');
+                console.log('      Or download from: https://ollama.com/download');
+                resolve(false);
+                return;
+            }
+
+            // Try to start Ollama in background
+            console.log('   🔄 Starting Ollama service...');
+            const ollamaProcess = spawn('ollama', ['serve'], {
+                detached: true,
+                stdio: 'ignore'
+            });
+            ollamaProcess.unref();
+
+            // Wait a bit and check if it started
+            setTimeout(async () => {
+                const started = await checkOllamaAvailable();
+                if (started) {
+                    console.log('   ✅ Ollama started successfully');
+                    
+                    // Check/download model
+                    const modelAvailable = await checkModelAvailable();
+                    if (!modelAvailable) {
+                        console.log(`   📥 Model ${OLLAMA_MODEL} not found, downloading automatically...`);
+                        console.log(`   ⏳ This may take a few minutes (model size: ~1.1GB)...`);
+                        exec(`ollama pull ${OLLAMA_MODEL}`, (error, stdout, stderr) => {
+                            if (error) {
+                                console.log(`   ❌ Failed to download model: ${error.message}`);
+                                console.log(`   💡 Run manually: ollama pull ${OLLAMA_MODEL}`);
+                                resolve(false);
+                            } else {
+                                console.log(`   ✅ Model ${OLLAMA_MODEL} downloaded successfully!`);
+                                resolve(true);
+                            }
+                        });
+                    } else {
+                        console.log(`   ✅ Model ${OLLAMA_MODEL} is already available`);
+                        resolve(true);
+                    }
+                } else {
+                    console.log('   ⚠️  Ollama may need manual start: ollama serve');
+                    resolve(false);
+                }
+            }, 3000);
+        });
+    });
+}
+
 // State file location
 const STATE_FILE = path.join(os.tmpdir(), 'pc2-mock-state.json');
+
+// Note: Thumbnails are stored as base64 data URLs in file entries (matching Puter's implementation)
+// No separate thumbnail directory needed
+
+/**
+ * Check if a mime type supports thumbnails (images, videos, PDFs, and text files)
+ * Matching Puter's HTTPThumbnailService supported types + text files
+ */
+function supportsThumbnails(mimeType) {
+    if (!mimeType) return false;
+    return mimeType.startsWith('image/') || 
+           mimeType.startsWith('video/') || 
+           mimeType === 'application/pdf' ||
+           mimeType === 'text/plain' ||
+           mimeType.startsWith('text/');
+}
+
+/**
+ * Generate thumbnail for an image or video file
+ * Returns base64 data URL (matching Puter's format) or null if generation fails
+ * Puter uses: data:image/png;base64,{base64}
+ */
+async function generateThumbnail(filePath, fileContent, mimeType, fileUuid) {
+    if (!sharp || !supportsThumbnails(mimeType)) {
+        return null;
+    }
+    
+    try {
+        // Convert content to buffer
+        let buffer;
+        if (Buffer.isBuffer(fileContent)) {
+            buffer = fileContent;
+        } else if (typeof fileContent === 'string') {
+            // Try base64 decode first (most common for binary files)
+            try {
+                buffer = Buffer.from(fileContent, 'base64');
+                // Verify it's valid base64 by checking if decode worked
+                // If the string is not base64, Buffer.from will still create a buffer
+                // but we can check if re-encoding matches
+                const reencoded = buffer.toString('base64');
+                if (reencoded !== fileContent && fileContent.length > 0) {
+                    // Not valid base64, treat as binary string
+                    buffer = Buffer.from(fileContent, 'binary');
+                }
+            } catch (e) {
+                // Not base64, treat as binary string
+                buffer = Buffer.from(fileContent, 'binary');
+            }
+        } else {
+            return null;
+        }
+        
+        // Skip if buffer is empty
+        if (!buffer || buffer.length === 0) {
+            return null;
+        }
+        
+        if (mimeType.startsWith('image/')) {
+            // Generate thumbnail for image - matching Puter's NAPIThumbnailService
+            // Puter uses: resize(128) and returns PNG as base64 data URL
+            const thumbnailBuffer = await sharp(buffer)
+                .resize(128) // Match Puter's size (128px)
+                .png() // Match Puter's format (PNG)
+                .toBuffer();
+            
+            // Return as base64 data URL (matching Puter's format)
+            const base64 = thumbnailBuffer.toString('base64');
+            return `data:image/png;base64,${base64}`;
+        } else if (mimeType.startsWith('video/')) {
+            // For videos, we need ffmpeg to extract a frame
+            // Puter's HTTPThumbnailService supports videos but uses an external service
+            // For mock server, we'll use ffmpeg if available
+            try {
+                const { execSync } = require('child_process');
+                const tempVideoPath = path.join(os.tmpdir(), `pc2-video-${fileUuid}.tmp`);
+                const tempFramePath = path.join(os.tmpdir(), `pc2-video-frame-${fileUuid}.jpg`);
+                
+                // Write video buffer to temp file (ffmpeg needs a file, not stdin for most formats)
+                fs.writeFileSync(tempVideoPath, buffer);
+                
+                // Extract first frame using ffmpeg
+                // -ss 0: seek to 0 seconds
+                // -vframes 1: extract 1 frame
+                // -vf scale: resize to 128px max while maintaining aspect ratio
+                // -q:v 2: high quality JPEG
+                execSync(`ffmpeg -i "${tempVideoPath}" -ss 0 -vframes 1 -vf "scale=128:128:force_original_aspect_ratio=decrease" -q:v 2 "${tempFramePath}"`, {
+                    stdio: 'ignore', // Suppress ffmpeg output
+                    timeout: 30000 // 30 second timeout
+                });
+                
+                // Read the extracted frame
+                if (fs.existsSync(tempFramePath)) {
+                    const frameBuffer = fs.readFileSync(tempFramePath);
+                    const thumbnailBuffer = await sharp(frameBuffer)
+                        .resize(128)
+                        .png()
+                        .toBuffer();
+                    
+                    // Clean up temp files
+                    try { fs.unlinkSync(tempVideoPath); } catch (e) {}
+                    try { fs.unlinkSync(tempFramePath); } catch (e) {}
+                    
+                    const base64 = thumbnailBuffer.toString('base64');
+                    return `data:image/png;base64,${base64}`;
+                }
+                
+                // Clean up on failure
+                try { fs.unlinkSync(tempVideoPath); } catch (e) {}
+                return null;
+            } catch (error) {
+                // ffmpeg not available or failed - return null
+                console.warn(`   ⚠️  Video thumbnail generation failed (ffmpeg may not be installed):`, error.message);
+                return null;
+            }
+        } else if (mimeType === 'application/pdf') {
+            // For PDFs, generate thumbnail from first page using pdfjs-dist + canvas
+            // This is completely internal - no external service needed
+            try {
+                // Dynamically load required dependencies
+                let pdfjs, createCanvas;
+                
+                // pdfjs-dist v4+ uses ES modules, use legacy build for Node.js
+                try {
+                    // Use legacy build (recommended for Node.js)
+                    const pdfjsModule = await import('pdfjs-dist/legacy/build/pdf.mjs');
+                    pdfjs = pdfjsModule;
+                } catch (e) {
+                    console.warn(`   ⚠️  PDF.js not available - PDF thumbnails disabled`);
+                    console.warn(`   💡 Install pdfjs-dist: npm install pdfjs-dist`);
+                    console.warn(`   Error:`, e.message);
+                    return null;
+                }
+                
+                // Get getDocument from the module
+                const getDocument = pdfjs.getDocument;
+                if (!getDocument) {
+                    console.warn(`   ⚠️  PDF.js getDocument not found in module`);
+                    return null;
+                }
+                
+                try {
+                    const canvasModule = require('canvas');
+                    createCanvas = canvasModule.createCanvas;
+                } catch (e) {
+                    console.warn(`   ⚠️  Canvas not available - PDF thumbnails disabled`);
+                    console.warn(`   💡 Install canvas: npm install canvas`);
+                    console.warn(`   💡 Note: Canvas requires native compilation`);
+                    console.warn(`   💡 On macOS: brew install pkg-config cairo pango libpng jpeg giflib librsvg`);
+                    return null;
+                }
+                
+                if (!createCanvas || !sharp) {
+                    return null;
+                }
+                
+                // PDF.js v4+ requires Uint8Array, not Buffer
+                // Convert Buffer to Uint8Array
+                const uint8Array = buffer instanceof Uint8Array 
+                    ? buffer 
+                    : new Uint8Array(buffer);
+                
+                // Load PDF document
+                const loadingTask = getDocument({ data: uint8Array });
+                const pdfDocument = await loadingTask.promise;
+                
+                // Get first page
+                const page = await pdfDocument.getPage(1);
+                
+                // Calculate scale to fit 128px width (thumbnail size)
+                const viewport = page.getViewport({ scale: 1.0 });
+                const scale = 128 / viewport.width;
+                const scaledViewport = page.getViewport({ scale });
+                
+                // Create canvas and render page
+                const canvas = createCanvas(scaledViewport.width, scaledViewport.height);
+                const context = canvas.getContext('2d');
+                
+                const renderContext = {
+                    canvasContext: context,
+                    viewport: scaledViewport
+                };
+                
+                await page.render(renderContext).promise;
+                
+                // Convert canvas to PNG buffer
+                const pdfImageBuffer = canvas.toBuffer('image/png');
+                
+                // Use sharp to ensure consistent format and size (128x128)
+                const thumbnailBuffer = await sharp(pdfImageBuffer)
+                    .resize(128, 128, {
+                        fit: 'inside',
+                        withoutEnlargement: true
+                    })
+                    .png() // Match Puter's format (PNG)
+                    .toBuffer();
+                
+                const base64 = thumbnailBuffer.toString('base64');
+                return `data:image/png;base64,${base64}`;
+            } catch (error) {
+                console.warn(`   ⚠️  PDF thumbnail generation failed:`, error.message);
+                if (error.stack) {
+                    console.warn(`   Stack:`, error.stack.split('\n').slice(0, 3).join('\n'));
+                }
+                return null;
+            }
+        } else if (mimeType === 'text/plain' || mimeType.startsWith('text/')) {
+            // For text files, generate a thumbnail showing text preview
+            // This is completely internal - no external service needed
+            try {
+                // Dynamically load canvas if available
+                let createCanvas;
+                try {
+                    createCanvas = require('canvas').createCanvas;
+                } catch (e) {
+                    // Canvas not available - return null (text thumbnails optional)
+                    return null;
+                }
+                
+                if (!createCanvas || !sharp) {
+                    return null;
+                }
+                
+                // Convert buffer to text (handle UTF-8)
+                let textContent;
+                if (Buffer.isBuffer(buffer)) {
+                    textContent = buffer.toString('utf8');
+                } else {
+                    textContent = String(buffer);
+                }
+                
+                // Limit text length for thumbnail (first 500 chars)
+                const previewText = textContent.substring(0, 500);
+                const lines = previewText.split('\n').slice(0, 10); // First 10 lines max
+                const displayText = lines.join('\n');
+                
+                // Create canvas for text preview
+                const canvasWidth = 128;
+                const canvasHeight = 128;
+                const canvas = createCanvas(canvasWidth, canvasHeight);
+                const ctx = canvas.getContext('2d');
+                
+                // Background (light gray)
+                ctx.fillStyle = '#f5f5f5';
+                ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+                
+                // Text styling
+                ctx.fillStyle = '#333333';
+                ctx.font = '10px monospace';
+                ctx.textBaseline = 'top';
+                
+                // Draw text with padding
+                const padding = 8;
+                const lineHeight = 12;
+                const maxWidth = canvasWidth - (padding * 2);
+                
+                let y = padding;
+                for (const line of lines) {
+                    if (y + lineHeight > canvasHeight - padding) break;
+                    
+                    // Truncate line if too long
+                    let displayLine = line;
+                    const metrics = ctx.measureText(displayLine);
+                    if (metrics.width > maxWidth) {
+                        // Truncate and add ellipsis
+                        while (ctx.measureText(displayLine + '...').width > maxWidth && displayLine.length > 0) {
+                            displayLine = displayLine.slice(0, -1);
+                        }
+                        displayLine += '...';
+                    }
+                    
+                    ctx.fillText(displayLine, padding, y);
+                    y += lineHeight;
+                }
+                
+                // Convert canvas to PNG buffer
+                const textImageBuffer = canvas.toBuffer('image/png');
+                
+                // Use sharp to ensure consistent format
+                const thumbnailBuffer = await sharp(textImageBuffer)
+                    .resize(128, 128)
+                    .png()
+                    .toBuffer();
+                
+                const base64 = thumbnailBuffer.toString('base64');
+                return `data:image/png;base64,${base64}`;
+            } catch (error) {
+                console.warn(`   ⚠️  Text file thumbnail generation failed:`, error.message);
+                return null;
+            }
+        }
+    } catch (error) {
+        console.warn(`   ⚠️  Thumbnail generation failed for ${filePath}:`, error.message);
+        return null;
+    }
+    
+    return null;
+}
 
 // Load persisted state or create new
 let nodeState;
@@ -733,23 +1205,24 @@ const server = http.createServer((req, res) => {
                 if (fs.existsSync(indexPath)) {
                     let fileContent = fs.readFileSync(indexPath).toString();
                     
-                    // Inject API interception and SDK initialization for PDF app (like viewer app)
-                    if (subdomain === 'pdf') {
+                    // Inject API interception and SDK initialization for PDF and editor apps
+                    if (subdomain === 'pdf' || subdomain === 'editor') {
                         const urlParams = new URL(req.url, `http://localhost:${PORT}`);
                         const authToken = urlParams.searchParams.get('puter.auth.token');
                         const apiOrigin = urlParams.searchParams.get('puter.api_origin') || `http://127.0.0.1:${PORT}`;
                         
-                        // Inject API interception script BEFORE viewer.js loads
+                        // Inject API interception script BEFORE app scripts load
+                        const appName = subdomain === 'pdf' ? 'PDF Viewer' : 'Editor';
                         const apiInterceptionScript = `
     <script>
-        // CRITICAL: Intercept API calls BEFORE PDF.js loads to redirect to PC2 node
+        // CRITICAL: Intercept API calls BEFORE app loads to redirect to PC2 node
         // This must run FIRST, before any other scripts
         (function() {
             const urlParams = new URLSearchParams(window.location.search);
             const apiOrigin = urlParams.get('puter.api_origin') || window.location.origin;
             const currentOrigin = window.location.origin;
             
-            console.log('[PDF Viewer]: 🔧 Setting up API interception, API origin:', apiOrigin);
+            console.log('[${appName}]: 🔧 Setting up API interception, API origin:', apiOrigin);
             
             // Intercept fetch requests - redirect api.puter.* to PC2 node
             // Also handle relative URLs that need to be resolved to the API origin
@@ -802,11 +1275,20 @@ const server = http.createServer((req, res) => {
         })();
     </script>`;
                         
-                        // Inject before viewer.js script tag
-                        fileContent = fileContent.replace(
-                            '<script src="viewer.js"></script>',
-                            apiInterceptionScript + '\n  <script src="viewer.js"></script>'
-                        );
+                        // Inject before app scripts load
+                        if (subdomain === 'pdf') {
+                            // Inject before viewer.js script tag
+                            fileContent = fileContent.replace(
+                                '<script src="viewer.js"></script>',
+                                apiInterceptionScript + '\n  <script src="viewer.js"></script>'
+                            );
+                        } else if (subdomain === 'editor') {
+                            // Inject before Puter SDK script tag (which loads before editor.js)
+                            fileContent = fileContent.replace(
+                                '<script src="https://js.puter.com/v2/"></script>',
+                                apiInterceptionScript + '\n    <script src="https://js.puter.com/v2/"></script>'
+                            );
+                        }
                         
                         console.log(`\n📱 GET ${urlPath} (${subdomain} app) - Serving directory index with API interception: ${indexPath}`);
                     } else {
@@ -1164,7 +1646,7 @@ const server = http.createServer((req, res) => {
     // Collect body as buffer for multipart
     const chunks = [];
     req.on('data', chunk => chunks.push(chunk));
-    req.on('end', () => {
+    req.on('end', async () => {
         const bodyBuffer = Buffer.concat(chunks);
         const body = bodyBuffer.length > 0 ? bodyBuffer.toString('utf8') : '';
         
@@ -1195,7 +1677,7 @@ const server = http.createServer((req, res) => {
                 try {
                     const formData = parseMultipart(body, boundary, bodyBuffer);
                     console.log(`   ✅ Parsed form data keys:`, Object.keys(formData));
-                    handleRequest(urlPath, req.method, formData, res, req, body, bodyBuffer);
+                    await handleRequest(urlPath, req.method, formData, res, req, body, bodyBuffer);
                     return;
                 } catch (e) {
                     console.error(`   ❌ Multipart parse error:`, e.message);
@@ -1214,11 +1696,11 @@ const server = http.createServer((req, res) => {
         try {
             // Only parse body for POST requests with content
             const data = (body && body.trim() && body.trim().startsWith('{')) ? JSON.parse(body) : {};
-            handleRequest(urlPath, req.method, data, res, req, body, bodyBuffer);
+            await handleRequest(urlPath, req.method, data, res, req, body, bodyBuffer);
         } catch (e) {
             // If JSON parsing fails for file APIs, try URL params
             if (urlPath === '/stat' || urlPath === '/read' || urlPath === '/df' || urlPath === '/batch') {
-                handleRequest(urlPath, req.method, {}, res, req, body, bodyBuffer);
+                await handleRequest(urlPath, req.method, {}, res, req, body, bodyBuffer);
             } else {
                 console.log(`[ERR] JSON parse failed for path ${urlPath}:`, e.message);
                 if (!res.headersSent) {
@@ -1230,7 +1712,7 @@ const server = http.createServer((req, res) => {
     });
 });
 
-function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
+async function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
     // Don't log socket.io to avoid spam
     if (!path.includes('socket.io')) {
         console.log(`[${new Date().toISOString()}] ${method} ${path}`);
@@ -1240,15 +1722,18 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
         }
     }
     
-    // Health check
-    if (path === '/api/health') {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        return res.end(JSON.stringify({ 
-            status: 'ok',
-            node_name: nodeState.name,
-            node_status: nodeState.status
-        }));
-    }
+        // Health check
+        if (path === '/api/health') {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ 
+                status: 'ok',
+                node_name: nodeState.name,
+                node_status: nodeState.status
+            }));
+        }
+        
+        // Note: Thumbnails are now returned as base64 data URLs in the entry object
+        // (matching Puter's implementation), so no separate thumbnail serving endpoint needed
     
     // Get node info
     if (path === '/api/info' && method === 'GET') {
@@ -1412,6 +1897,153 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
             nodeName: nodeState.name,
             isOwner: nodeState.ownerWallet?.toLowerCase() === walletAddress.toLowerCase()
         }));
+    }
+    
+    // AI Chat endpoint - forwards to Ollama
+    if ((path === '/api/ai/chat' || path === '/api/v2/ai/chat') && method === 'POST') {
+        if (!AI_ENABLED) {
+            res.writeHead(503, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ 
+                error: { 
+                    code: 'ai_service_unavailable', 
+                    message: 'AI service is disabled. Set AI_ENABLED=true to enable.' 
+                } 
+            }));
+        }
+
+        let requestBody = '';
+        req.on('data', chunk => {
+            requestBody += chunk.toString();
+        });
+
+        req.on('end', async () => {
+            try {
+                const puterRequest = JSON.parse(requestBody);
+                
+                // Extract prompt from Puter SDK format
+                // Puter SDK sends: { prompt: "...", stream: false }
+                const prompt = puterRequest.prompt || puterRequest.message || '';
+                const stream = puterRequest.stream !== undefined ? puterRequest.stream : false;
+
+                if (!prompt) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ 
+                        error: { 
+                            code: 'invalid_request', 
+                            message: 'Prompt is required' 
+                        } 
+                    }));
+                }
+
+                // Forward to Ollama
+                const ollamaUrl = new URL('/api/chat', OLLAMA_HOST);
+                const ollamaRequest = {
+                    model: OLLAMA_MODEL,
+                    messages: [
+                        {
+                            role: 'user',
+                            content: prompt
+                        }
+                    ],
+                    stream: stream
+                };
+
+                console.log(`\n🤖 AI Chat Request:`);
+                console.log(`   Prompt: ${prompt.substring(0, 100)}${prompt.length > 100 ? '...' : ''}`);
+                console.log(`   Model: ${OLLAMA_MODEL}`);
+                console.log(`   Ollama: ${OLLAMA_HOST}`);
+
+                // Make request to Ollama
+                const ollamaReq = http.request({
+                    hostname: ollamaUrl.hostname,
+                    port: ollamaUrl.port || (ollamaUrl.protocol === 'https:' ? 443 : 80),
+                    path: ollamaUrl.pathname,
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Content-Length': Buffer.byteLength(JSON.stringify(ollamaRequest))
+                    }
+                }, (ollamaRes) => {
+                    let ollamaBody = '';
+                    
+                    ollamaRes.on('data', (chunk) => {
+                        ollamaBody += chunk.toString();
+                    });
+
+                    ollamaRes.on('end', () => {
+                        try {
+                            if (ollamaRes.statusCode !== 200) {
+                                console.error(`   ❌ Ollama error: ${ollamaRes.statusCode} - ${ollamaBody}`);
+                                res.writeHead(502, { 'Content-Type': 'application/json' });
+                                return res.end(JSON.stringify({ 
+                                    error: { 
+                                        code: 'ai_service_error', 
+                                        message: `Ollama service error: ${ollamaBody}` 
+                                    } 
+                                }));
+                            }
+
+                            const ollamaResponse = JSON.parse(ollamaBody);
+                            
+                            // Extract response text from Ollama format
+                            // Ollama returns: { message: { content: "..." }, done: true }
+                            const responseText = ollamaResponse.message?.content || ollamaResponse.response || ollamaBody;
+
+                            console.log(`   ✅ Response: ${responseText.substring(0, 100)}${responseText.length > 100 ? '...' : ''}`);
+
+                            // Return in Puter SDK expected format (just the text string)
+                            res.writeHead(200, { 
+                                'Content-Type': 'application/json',
+                                'Access-Control-Allow-Origin': '*',
+                                'Access-Control-Allow-Methods': 'POST, OPTIONS',
+                                'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+                            });
+                            // Puter SDK expects the response to be directly usable as text
+                            return res.end(JSON.stringify(responseText));
+
+                        } catch (parseError) {
+                            console.error(`   ❌ Failed to parse Ollama response: ${parseError.message}`);
+                            res.writeHead(502, { 'Content-Type': 'application/json' });
+                            return res.end(JSON.stringify({ 
+                                error: { 
+                                    code: 'ai_parse_error', 
+                                    message: 'Failed to parse AI service response' 
+                                } 
+                            }));
+                        }
+                    });
+                });
+
+                ollamaReq.on('error', (error) => {
+                    console.error(`   ❌ Ollama connection error: ${error.message}`);
+                    console.error(`   💡 Make sure Ollama is running: ollama serve`);
+                    console.error(`   💡 Or install: curl -fsSL https://ollama.com/install.sh | sh`);
+                    
+                    res.writeHead(503, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ 
+                        error: { 
+                            code: 'ai_service_unavailable', 
+                            message: `Cannot connect to Ollama at ${OLLAMA_HOST}. Make sure Ollama is running.` 
+                        } 
+                    }));
+                });
+
+                ollamaReq.write(JSON.stringify(ollamaRequest));
+                ollamaReq.end();
+
+            } catch (error) {
+                console.error(`   ❌ AI request error: ${error.message}`);
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ 
+                    error: { 
+                        code: 'internal_error', 
+                        message: error.message 
+                    } 
+                }));
+            }
+        });
+
+        return; // Don't continue processing
     }
     
     // Get stats (requires auth)
@@ -1824,8 +2456,7 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
         // Determine if folder is public (only "Public" folder should be shared)
         const isPublic = normalizedPath.includes('/Public') && normalizedPath.split('/').pop() === 'Public';
         
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        return res.end(JSON.stringify({
+        const response = {
             id: node.id || Math.floor(Math.random() * 10000),
             uid: node.uuid || `uuid-${normalizedPath.replace(/\//g, '-')}`,
             uuid: node.uuid || `uuid-${normalizedPath.replace(/\//g, '-')}`,
@@ -1842,7 +2473,15 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
             parent_uid: parentPath ? `uuid-${parentPath.replace(/\//g, '-')}` : null,
             immutable: false,
             is_public: isPublic, // Only Public folder should be marked as public/shared
-        }));
+        };
+        
+        // Include thumbnail if available
+        if (node.thumbnail) {
+            response.thumbnail = node.thumbnail;
+        }
+        
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify(response));
     }
     
     // /file - Read file via signed URL (Puter format - used by apps)
@@ -1962,18 +2601,63 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
         const authHeader = req.headers['authorization'];
         let walletAddress = null;
         if (filePath.startsWith('~')) {
+            let token = null;
+            // Try to get token from Authorization header first
             if (authHeader && authHeader.startsWith('Bearer ')) {
-                const token = authHeader.split(' ')[1];
+                token = authHeader.split(' ')[1];
+            } else {
+                // Fallback: try to get token from URL query parameters (for editor iframe)
+                // The editor might pass token in the read_url query string
+                const tokenParam = url.searchParams.get('token') || url.searchParams.get('puter.auth.token') || url.searchParams.get('auth_token');
+                if (tokenParam) {
+                    token = tokenParam;
+                }
+            }
+            
+            // If still no token, try to get from Referer header (editor iframe URL)
+            if (!token && req.headers.referer) {
+                try {
+                    const refererUrl = new URL(req.headers.referer);
+                    const refererToken = refererUrl.searchParams.get('puter.auth.token');
+                    if (refererToken) {
+                        token = refererToken;
+                        console.log(`   🔓 Found token in Referer header: ${refererToken.substring(0, 20)}...`);
+                    } else {
+                        console.log(`   ⚠️  Referer header present but no token found: ${req.headers.referer.substring(0, 100)}...`);
+                    }
+                } catch (e) {
+                    console.warn(`   ⚠️  Failed to parse Referer URL: ${e.message}`);
+                }
+            } else if (!token) {
+                console.log(`   ⚠️  No Referer header found. Headers: ${JSON.stringify(Object.keys(req.headers))}`);
+            }
+            
+            if (token) {
                 const session = nodeState.sessions.get(token);
                 if (session && session.wallet) {
                     walletAddress = session.wallet;
                     filePath = filePath.replace('~', `/${session.wallet}`);
+                    console.log(`   🔓 Resolved ~ path using token, wallet: ${walletAddress}`);
+                } else {
+                    console.warn(`   ⚠️  Token found but no session: ${token.substring(0, 20)}...`);
+                    // Fallback: Try to find wallet from any existing session
+                    // This handles cases where editor iframe has a different token
+                    if (nodeState.sessions.size > 0) {
+                        // Get the first session's wallet (in a single-user setup, this should work)
+                        const firstSession = Array.from(nodeState.sessions.values())[0];
+                        if (firstSession && firstSession.wallet) {
+                            walletAddress = firstSession.wallet;
+                            filePath = filePath.replace('~', `/${walletAddress}`);
+                            console.log(`   🔓 Fallback: Using wallet from existing session: ${walletAddress}`);
+                        }
+                    }
                 }
             }
+            
             // If no auth header but path starts with ~, we can't resolve the path
             // Return proper error that SDK will handle
             if (!walletAddress && filePath.startsWith('~/')) {
-                console.log(`\n📖 READ (Puter): ${filePath} - No auth header, cannot resolve ~ path`);
+                console.log(`\n📖 READ (Puter): ${filePath} - No auth token found (header, URL, or Referer), cannot resolve ~ path`);
                 res.writeHead(404, { 
                     'Content-Type': 'application/json',
                     'Access-Control-Allow-Origin': '*'
@@ -2187,7 +2871,7 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
             // Only "Public" folder should be marked as public/shared
             const isPublic = name === 'Public' && child.type === 'dir';
             
-            entries.push({
+            const entry = {
                 id: child.id || Math.floor(Math.random() * 10000),
                 uid: child.uuid || `uuid-${childPath.replace(/\//g, '-')}`,
                 uuid: child.uuid || `uuid-${childPath.replace(/\//g, '-')}`,
@@ -2206,7 +2890,14 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
                     original_path: child.original_path,
                     trashed_ts: child.trashed_ts,
                 } : {}),
-            });
+            };
+            
+            // Include thumbnail if available
+            if (child.thumbnail) {
+                entry.thumbnail = child.thumbnail;
+            }
+            
+            entries.push(entry);
         }
         
         console.log(`   ✅ Returning ${entries.length} entries from readdir`);
@@ -2251,34 +2942,53 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
         
         const fileSize = Buffer.byteLength(fileContent, 'utf8');
         const oldSize = parent.children[fileName]?.size || 0;
+        const fileUuid = parent.children[fileName]?.uuid || `uuid-${normalizedPath.replace(/\//g, '-')}`;
+        const mimeType = data.type || 'application/octet-stream';
+        
+        // Generate thumbnail for images/videos
+        let thumbnailUrl = null;
+        if (supportsThumbnails(mimeType)) {
+            thumbnailUrl = await generateThumbnail(normalizedPath, fileContent, mimeType, fileUuid);
+            if (thumbnailUrl) {
+                console.log(`   🖼️  Thumbnail generated: ${thumbnailUrl}`);
+            }
+        }
         
         parent.children[fileName] = {
             type: 'file',
             name: fileName,
             content: fileContent,
             size: fileSize,
-            mimeType: data.type || 'application/octet-stream',
+            mimeType: mimeType,
             created: parent.children[fileName]?.created || Date.now(),
             modified: Date.now(),
-            uuid: parent.children[fileName]?.uuid || `uuid-${normalizedPath.replace(/\//g, '-')}`,
+            uuid: fileUuid,
+            thumbnail: thumbnailUrl, // Store thumbnail URL
         };
         
         nodeState.storageUsed += (fileSize - oldSize);
         saveState();
         
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        return res.end(JSON.stringify({
+        const response = {
             id: Math.floor(Math.random() * 10000),
-            uid: parent.children[fileName].uuid,
-            uuid: parent.children[fileName].uuid,
+            uid: fileUuid,
+            uuid: fileUuid,
             name: fileName,
             path: normalizedPath,
             is_dir: false,
             size: fileSize,
             created: new Date(parent.children[fileName].created).toISOString(),
             modified: new Date(parent.children[fileName].modified).toISOString(),
-            type: parent.children[fileName].mimeType,
-        }));
+            type: mimeType,
+        };
+        
+        // Include thumbnail if available
+        if (thumbnailUrl) {
+            response.thumbnail = thumbnailUrl;
+        }
+        
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify(response));
     }
     
     // /mkdir - Create directory (Puter format)
@@ -4105,6 +4815,26 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
                     const existingFile = parentNode.children[fileName];
                     const now = Date.now();
                     
+                    const fileUuid = existingFile?.uuid || `uuid-${filePath.replace(/\//g, '-')}`;
+                    
+                    // Generate thumbnail for images/videos
+                    let thumbnailUrl = null;
+                    if (supportsThumbnails(mimeType)) {
+                        // For base64 content, decode it for thumbnail generation
+                        let contentForThumbnail = storedContent;
+                        if (isBase64 && typeof storedContent === 'string') {
+                            try {
+                                contentForThumbnail = Buffer.from(storedContent, 'base64');
+                            } catch (e) {
+                                console.warn(`   ⚠️  Failed to decode base64 for thumbnail: ${e.message}`);
+                            }
+                        }
+                        thumbnailUrl = await generateThumbnail(filePath, contentForThumbnail, mimeType, fileUuid);
+                        if (thumbnailUrl) {
+                            console.log(`   🖼️  Thumbnail generated: ${thumbnailUrl}`);
+                        }
+                    }
+                    
                     parentNode.children[fileName] = {
                         type: 'file',
                         name: fileName,
@@ -4114,7 +4844,8 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
                         mimeType: mimeType,
                         created: existingFile?.created || now, // Preserve original creation time
                         modified: now, // Update modified time on upload
-                        uuid: existingFile?.uuid || `uuid-${filePath.replace(/\//g, '-')}`,
+                        uuid: fileUuid,
+                        thumbnail: thumbnailUrl, // Store thumbnail URL
                     };
                     
                     // Verify the node was created correctly
@@ -4137,28 +4868,38 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
                     
                     const fileEntry = {
                         id: Math.floor(Math.random() * 10000),
-                        uid: parentNode.children[fileName].uuid,
-                        uuid: parentNode.children[fileName].uuid,
+                        uid: fileUuid,
+                        uuid: fileUuid,
                         name: fileName,
                         path: filePath,
                         is_dir: false,
                         is_empty: false,
                         size: fileSize,
-                        created: new Date(parentNode.children[fileName].created).toISOString(),
-                        modified: new Date(parentNode.children[fileName].modified).toISOString(),
-                        type: parentNode.children[fileName].mimeType,
+                        created: new Date(savedNode.created).toISOString(),
+                        modified: new Date(savedNode.modified).toISOString(),
+                        type: savedNode.mimeType,
                     };
+                    
+                    // Include thumbnail if available
+                    if (thumbnailUrl) {
+                        fileEntry.thumbnail = thumbnailUrl;
+                    }
                     
                     results.push(fileEntry);
                     
                     // Emit socket event for real-time update
                     if (walletAddress) {
                         console.log(`   📡 Emitting item.added event for: ${fileName}, dirpath: ${targetPath}`);
-                        emitSocketEvent('item.added', {
+                        const socketEventData = {
                             ...fileEntry,
                             dirpath: targetPath, // Parent directory path (required by frontend)
                             original_client_socket_id: null
-                        }, walletAddress);
+                        };
+                        // Include thumbnail in socket event if available
+                        if (thumbnailUrl) {
+                            socketEventData.thumbnail = thumbnailUrl;
+                        }
+                        emitSocketEvent('item.added', socketEventData, walletAddress);
                     } else {
                         console.warn(`   ⚠️  No wallet address, skipping socket event for: ${fileName}`);
                     }
@@ -4761,6 +5502,163 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
             // This is handled earlier in the function, but keep for reference
         }
         
+        // Handle puter-chat-completion (AI chat via Ollama)
+        if (data.interface === 'puter-chat-completion' && data.method === 'complete') {
+            if (!AI_ENABLED) {
+                console.log(`   ❌ AI service disabled`);
+                res.writeHead(200, { 
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                });
+                return res.end(JSON.stringify({ 
+                    success: false, 
+                    error: { 
+                        code: 'ai_service_unavailable', 
+                        message: 'AI service is disabled' 
+                    } 
+                }));
+            }
+
+            const messages = data.args?.messages || [];
+            const lastMessage = messages[messages.length - 1];
+            const prompt = lastMessage?.content || '';
+
+            if (!prompt) {
+                console.log(`   ❌ No prompt provided`);
+                res.writeHead(200, { 
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                });
+                return res.end(JSON.stringify({ 
+                    success: false, 
+                    error: { 
+                        code: 'invalid_request', 
+                        message: 'Prompt is required' 
+                    } 
+                }));
+            }
+
+            console.log(`   🤖 AI Chat Request: ${prompt.substring(0, 100)}${prompt.length > 100 ? '...' : ''}`);
+            console.log(`   Model: ${OLLAMA_MODEL}, Ollama: ${OLLAMA_HOST}`);
+
+            // Forward to Ollama
+            const ollamaUrl = new URL('/api/chat', OLLAMA_HOST);
+            const ollamaRequest = {
+                model: OLLAMA_MODEL,
+                messages: messages.map(msg => ({
+                    role: msg.role || 'user',
+                    content: msg.content
+                })),
+                stream: false
+            };
+
+            const ollamaReq = http.request({
+                hostname: ollamaUrl.hostname,
+                port: ollamaUrl.port || (ollamaUrl.protocol === 'https:' ? 443 : 80),
+                path: ollamaUrl.pathname,
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Content-Length': Buffer.byteLength(JSON.stringify(ollamaRequest))
+                },
+                timeout: 60000 // 60 second timeout for AI responses
+            }, (ollamaRes) => {
+                let ollamaBody = '';
+                
+                ollamaRes.on('data', (chunk) => {
+                    ollamaBody += chunk.toString();
+                });
+
+                ollamaRes.on('end', () => {
+                    try {
+                        if (ollamaRes.statusCode !== 200) {
+                            console.error(`   ❌ Ollama error: ${ollamaRes.statusCode} - ${ollamaBody}`);
+                            res.writeHead(200, { 
+                                'Content-Type': 'application/json',
+                                'Access-Control-Allow-Origin': '*'
+                            });
+                            return res.end(JSON.stringify({ 
+                                success: false,
+                                error: { 
+                                    code: 'ai_service_error', 
+                                    message: `Ollama service error: ${ollamaBody}` 
+                                } 
+                            }));
+                        }
+
+                        const ollamaResponse = JSON.parse(ollamaBody);
+                        const responseText = ollamaResponse.message?.content || ollamaResponse.response || '';
+
+                        console.log(`   ✅ Response: ${responseText.substring(0, 100)}${responseText.length > 100 ? '...' : ''}`);
+
+                        // Return in Puter SDK expected format
+                        res.writeHead(200, { 
+                            'Content-Type': 'application/json',
+                            'Access-Control-Allow-Origin': '*'
+                        });
+                        return res.end(JSON.stringify({ 
+                            success: true,
+                            result: {
+                                content: responseText,
+                                role: 'assistant'
+                            }
+                        }));
+
+                    } catch (parseError) {
+                        console.error(`   ❌ Failed to parse Ollama response: ${parseError.message}`);
+                        res.writeHead(200, { 
+                            'Content-Type': 'application/json',
+                            'Access-Control-Allow-Origin': '*'
+                        });
+                        return res.end(JSON.stringify({ 
+                            success: false,
+                            error: { 
+                                code: 'ai_parse_error', 
+                                message: 'Failed to parse AI service response' 
+                            } 
+                        }));
+                    }
+                });
+            });
+
+            ollamaReq.on('error', (error) => {
+                console.error(`   ❌ Ollama connection error: ${error.message}`);
+                console.error(`   💡 Make sure Ollama is running: ollama serve`);
+                
+                res.writeHead(200, { 
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                });
+                return res.end(JSON.stringify({ 
+                    success: false,
+                    error: { 
+                        code: 'ai_service_unavailable', 
+                        message: `Cannot connect to Ollama at ${OLLAMA_HOST}. Make sure Ollama is running.` 
+                    } 
+                }));
+            });
+
+            ollamaReq.on('timeout', () => {
+                ollamaReq.destroy();
+                console.error(`   ❌ Ollama request timeout`);
+                res.writeHead(200, { 
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                });
+                return res.end(JSON.stringify({ 
+                    success: false,
+                    error: { 
+                        code: 'ai_timeout', 
+                        message: 'AI service request timed out' 
+                    } 
+                }));
+            });
+
+            ollamaReq.write(JSON.stringify(ollamaRequest));
+            ollamaReq.end();
+            return; // Don't continue processing
+        }
+
         // Default: return empty success for other driver calls
         // Some driver calls might not require auth, so return success with null result
         console.log(`   ⚠️  Unknown driver call: interface=${data.interface}, method=${data.method}`);
@@ -5503,13 +6401,18 @@ function handleRequest(path, method, data, res, req, rawBody, bodyBuffer) {
 }
 
 // Start server
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
     console.log('\n');
     console.log('═'.repeat(70));
     console.log('║' + ' '.repeat(68) + '║');
     console.log('║' + '  🚀 MOCK PC2 SERVER RUNNING  '.padEnd(68) + '║');
     console.log('║' + ' '.repeat(68) + '║');
     console.log('═'.repeat(70));
+    
+    // Auto-setup Ollama if AI is enabled
+    if (AI_ENABLED) {
+        await setupOllama();
+    }
     console.log('║' + ' '.repeat(68) + '║');
     console.log('║' + `  URL: http://localhost:${PORT}  `.padEnd(68) + '║');
     console.log('║' + ' '.repeat(68) + '║');
@@ -5547,7 +6450,34 @@ server.listen(PORT, () => {
     console.log('  POST /readdir  - List directory contents');
     console.log('  POST /delete   - Delete files/folders');
     console.log('  POST /move     - Move/rename file');
+    console.log('  POST /api/ai/chat - AI chat (forwards to Ollama)');
     console.log('\n');
+    if (AI_ENABLED) {
+        console.log('🤖 AI Configuration:');
+        console.log(`   Ollama Host: ${OLLAMA_HOST}`);
+        console.log(`   Model: ${OLLAMA_MODEL}`);
+        console.log(`   Status: ${AI_ENABLED ? '✅ Enabled' : '❌ Disabled'}`);
+        console.log(`   Auto-Setup: ${AUTO_SETUP_OLLAMA ? '✅ Enabled' : '❌ Disabled'}`);
+        console.log('   💡 To disable: Set AI_ENABLED=false');
+        console.log('   💡 To change model: Set OLLAMA_MODEL=deepseek-r1:7b');
+        console.log('   💡 To change host: Set OLLAMA_HOST=http://localhost:11434');
+        console.log('   💡 To disable auto-setup: Set AUTO_SETUP_OLLAMA=false');
+        console.log('\n');
+        
+        // Auto-setup Ollama in background (non-blocking)
+        setupOllama().then(success => {
+            if (success) {
+                console.log('✅ AI is ready! All AI features will work locally and privately.');
+            } else {
+                console.log('⚠️  AI setup incomplete. AI features may not work until Ollama is configured.');
+            }
+        }).catch(err => {
+            console.log(`⚠️  AI setup error: ${err.message}`);
+        });
+    } else {
+        console.log('🤖 AI: ❌ Disabled (set AI_ENABLED=true to enable)');
+        console.log('\n');
+    }
 });
 
 // Handle shutdown

@@ -8,6 +8,7 @@
 import { IPFSStorage } from './ipfs.js';
 import { DatabaseManager, FileMetadata } from './database.js';
 import { normalize, join, dirname } from 'path';
+import { logger } from '../utils/logger.js';
 
 export interface FileContent {
   content: Buffer | string;
@@ -50,8 +51,25 @@ export class FilesystemManager {
       await this.ensureDirectory(parentPath, walletAddress);
     }
 
-    // Store file content in IPFS
-    const ipfsHash = await this.ipfs.storeFile(content, { pin: true });
+    // Store file content in IPFS (or use database-only mode if IPFS unavailable)
+    let ipfsHash: string;
+    try {
+      // Check if IPFS is ready, then try to store file
+      if (this.ipfs && this.ipfs.isReady()) {
+        ipfsHash = await this.ipfs.storeFile(content, { pin: true });
+      } else {
+        throw new Error('IPFS not initialized');
+      }
+    } catch (error) {
+      // Database-only mode: generate a content-based hash as placeholder
+      // Files will be stored in database metadata only (no IPFS storage)
+      // Note: Files uploaded in this mode cannot be read back until IPFS is fixed
+      const contentBuffer = Buffer.isBuffer(content) ? content : Buffer.from(content, 'utf8');
+      const crypto = await import('crypto');
+      const hash = crypto.createHash('sha256').update(contentBuffer).digest('hex');
+      ipfsHash = `db-only-${hash.substring(0, 32)}`;
+      logger.warn(`[Filesystem] IPFS unavailable, using database-only mode for: ${normalizedPath}. File metadata saved but content cannot be retrieved until IPFS is available.`);
+    }
 
     // Calculate size
     const size = Buffer.isBuffer(content) 
@@ -84,6 +102,7 @@ export class FilesystemManager {
 
   /**
    * Read file (retrieve from IPFS using CID from database)
+   * Falls back to database-only mode if IPFS unavailable
    */
   async readFile(path: string, walletAddress: string): Promise<Buffer> {
     const normalizedPath = this.normalizePath(path);
@@ -96,6 +115,12 @@ export class FilesystemManager {
 
     if (metadata.is_dir) {
       throw new Error(`Path is a directory: ${path}`);
+    }
+
+    // If IPFS hash indicates database-only mode, we can't retrieve content
+    // This is a limitation until IPFS is fixed or we implement database storage
+    if (metadata.ipfs_hash && metadata.ipfs_hash.startsWith('db-only-')) {
+      throw new Error(`File stored in database-only mode. IPFS required to read content. Path: ${path}`);
     }
 
     if (!metadata.ipfs_hash) {

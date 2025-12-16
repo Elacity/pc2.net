@@ -17,9 +17,21 @@ export interface FileContent {
 
 export class FilesystemManager {
   constructor(
-    private ipfs: IPFSStorage,
+    private ipfs: IPFSStorage | null,
     private db: DatabaseManager
-  ) {}
+  ) {
+    // Validate that IPFS is available if provided
+    if (ipfs && !ipfs.isReady()) {
+      throw new Error('IPFSStorage provided but not initialized. Call initialize() first.');
+    }
+  }
+  
+  /**
+   * Check if IPFS is available
+   */
+  private isIPFSAvailable(): boolean {
+    return this.ipfs !== null && this.ipfs.isReady();
+  }
 
   /**
    * Normalize file path
@@ -50,7 +62,11 @@ export class FilesystemManager {
       await this.ensureDirectory(parentPath, walletAddress);
     }
 
-    // Store file content in IPFS
+    // Store file content in IPFS (if available)
+    if (!this.isIPFSAvailable() || !this.ipfs) {
+      throw new Error('IPFS is not available. File storage requires IPFS to be initialized.');
+    }
+    
     const ipfsHash = await this.ipfs.storeFile(content, { pin: true });
 
     // Calculate size
@@ -102,7 +118,11 @@ export class FilesystemManager {
       throw new Error(`File has no IPFS hash: ${path}`);
     }
 
-    // Retrieve file content from IPFS
+    // Retrieve file content from IPFS (if available)
+    if (!this.isIPFSAvailable() || !this.ipfs) {
+      throw new Error('IPFS is not available. Cannot retrieve file content.');
+    }
+    
     return await this.ipfs.getFile(metadata.ipfs_hash);
   }
 
@@ -234,7 +254,7 @@ export class FilesystemManager {
       }
     } else {
       // For files, unpin from IPFS (optional - allows garbage collection)
-      if (metadata.ipfs_hash) {
+      if (metadata.ipfs_hash && this.isIPFSAvailable() && this.ipfs) {
         try {
           await this.ipfs.unpinFile(metadata.ipfs_hash);
         } catch (error) {

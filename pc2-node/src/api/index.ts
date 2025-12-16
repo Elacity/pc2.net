@@ -1,4 +1,5 @@
 import express, { Express, Request, Response } from 'express';
+import multer from 'multer';
 import { DatabaseManager, FilesystemManager } from '../storage/index.js';
 import { Config } from '../config/loader.js';
 import { Server as SocketIOServer } from 'socket.io';
@@ -104,6 +105,7 @@ export function setupAPI(app: Express): void {
   app.post('/stat', authenticate, handleStat); // Also support POST for /stat
   app.post('/readdir', authenticate, handleReaddir);
   app.get('/read', authenticate, handleRead);
+  app.post('/read', authenticate, handleRead); // Also support POST for /read
   app.post('/write', authenticate, handleWrite);
   app.post('/mkdir', authenticate, handleMkdir);
   app.post('/delete', authenticate, handleDelete);
@@ -112,7 +114,16 @@ export function setupAPI(app: Express): void {
   // Additional filesystem endpoints
   app.get('/df', authenticate, handleDF);
   app.post('/df', authenticate, handleDF);
-  app.post('/batch', authenticate, handleBatch);
+  
+  // Batch endpoint with multer for multipart file uploads
+  const upload = multer({ 
+    storage: multer.memoryStorage(),
+    limits: {
+      fileSize: 100 * 1024 * 1024 // 100MB max file size
+    }
+  });
+  
+  app.post('/batch', authenticate, upload.any(), handleBatch);
 
   // File signing (require auth)
   app.post('/sign', authenticate, handleSign);

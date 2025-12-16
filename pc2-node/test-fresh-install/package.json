@@ -23,20 +23,33 @@
   "author": "Elacity",
   "license": "AGPL-3.0",
   "dependencies": {
-    "express": "^4.18.2",
-    "socket.io": "^4.7.2",
-    "ipfs-core": "^0.18.1",
+    "@chainsafe/libp2p-yamux": "^8.0.1",
+    "@helia/strings": "^5.0.3",
+    "@helia/unixfs": "^6.0.4",
+    "@libp2p/mplex": "^12.0.10",
+    "@libp2p/noise": "^1.0.1",
+    "@libp2p/tcp": "^11.0.9",
+    "@libp2p/websockets": "^10.1.2",
+    "@types/multer": "^2.0.0",
     "better-sqlite3": "^9.2.2",
+    "blockstore-fs": "^3.0.2",
     "cors": "^2.8.5",
-    "dotenv": "^16.3.1"
+    "datastore-fs": "^11.0.2",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "helia": "^6.0.14",
+    "libp2p": "^3.1.2",
+    "multer": "^2.0.2",
+    "multiformats": "^13.4.2",
+    "socket.io": "^4.7.2"
   },
   "devDependencies": {
-    "@types/node": "^20.10.5",
-    "@types/express": "^4.17.21",
     "@types/better-sqlite3": "^7.6.8",
     "@types/cors": "^2.8.17",
-    "typescript": "^5.3.3",
-    "nodemon": "^3.0.2"
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.10.5",
+    "nodemon": "^3.0.2",
+    "typescript": "^5.3.3"
   },
   "engines": {
     "node": ">=20.18.0"

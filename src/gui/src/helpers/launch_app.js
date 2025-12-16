@@ -57,12 +57,23 @@ const launch_app = async (options) => {
     }
     else
     {
-        app_info = await puter.apps.get(options.name, { icon_size: 64 });
+        try {
+            app_info = await puter.apps.get(options.name, { icon_size: 64 });
+            if (!app_info) {
+                console.error(`[launch_app] App "${options.name}" not found`);
+                throw new Error(`App "${options.name}" not found`);
+            }
+        } catch (error) {
+            console.error(`[launch_app] Failed to get app info for "${options.name}":`, error);
+            throw new Error(`Failed to launch app "${options.name}": ${error.message || error}`);
+        }
     }
 
     // For backward compatibility reasons we need to make sure that both `uuid` and `uid` are set
-    app_info.uuid = app_info.uuid ?? app_info.uid;
-    app_info.uid = app_info.uid ?? app_info.uuid;
+    if (app_info && typeof app_info === 'object') {
+        app_info.uuid = app_info.uuid ?? app_info.uid;
+        app_info.uid = app_info.uid ?? app_info.uuid;
+    }
 
     // If no `options.name` is provided, use the app name from the app_info
     options.name = options.name ?? app_info.name;

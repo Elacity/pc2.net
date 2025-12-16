@@ -1,0 +1,31 @@
+# Build outputs
+dist/
+frontend/*
+
+# Runtime data
+data/*
+
+# Dependencies
+node_modules/
+
+# Configuration (user-specific)
+config/config.json
+
+# Logs
+*.log
+logs/
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+

@@ -244,12 +244,13 @@ export async function handleWrite(req: AuthenticatedRequest, res: Response): Pro
   const filesystem = (req.app.locals.filesystem as FilesystemManager | undefined);
   const io = (req.app.locals.io as SocketIOServer | undefined);
 
-  logger.info('[Write] Request received', {
+  logger.info(`[${req.path}] Request received`, {
     contentType: req.headers['content-type'],
     hasFile: !!(req as any).file,
     bodyKeys: Object.keys(req.body || {}),
     method: req.method,
-    path: req.path
+    path: req.path,
+    url: req.url
   });
 
   if (!filesystem) {
@@ -376,6 +377,26 @@ export async function handleWrite(req: AuthenticatedRequest, res: Response): Pro
       message: error instanceof Error ? error.message : 'Unknown error'
     });
   }
+}
+
+/**
+ * Upload endpoint (alias for /write with multipart support)
+ * POST /upload
+ * Supports multipart/form-data uploads
+ */
+export async function handleUpload(req: AuthenticatedRequest, res: Response): Promise<void> {
+  logger.info('[Upload] Request received', {
+    contentType: req.headers['content-type'],
+    hasFile: !!(req as any).file,
+    bodyKeys: Object.keys(req.body || {}),
+    method: req.method,
+    path: req.path,
+    url: req.url,
+    query: req.query
+  });
+  
+  // Redirect to handleWrite which supports both JSON and multipart
+  await handleWrite(req, res);
 }
 
 /**

@@ -57,23 +57,27 @@ async function main() {
   }
 
   // Initialize IPFS (optional - server works without it)
+  // Set up local filesystem storage path (fallback when IPFS unavailable)
+  const LOCAL_STORAGE_PATH = join(dirname(DB_PATH), 'files');
+  
   try {
     ipfs = new IPFSStorage({
       repoPath: IPFS_REPO_PATH
     });
     await ipfs.initialize();
     
-    // Create filesystem manager
-    filesystem = new FilesystemManager(ipfs, db);
-    logger.info('✅ Filesystem manager initialized');
+    // Create filesystem manager with IPFS
+    filesystem = new FilesystemManager(ipfs, db, LOCAL_STORAGE_PATH);
+    logger.info('✅ Filesystem manager initialized (IPFS mode)');
   } catch (error) {
     logger.error('❌ Failed to initialize IPFS:', error instanceof Error ? error.message : 'Unknown error');
-    logger.warn('   File storage will not be available');
-    logger.warn('   Server will continue without IPFS (database-only mode)');
-    // Don't exit - server can still run without IPFS (for development)
-    // Set to null to prevent any further IPFS operations
+    logger.warn('   File storage will use local filesystem fallback');
+    logger.info(`   Local storage path: ${LOCAL_STORAGE_PATH}`);
+    
+    // Create filesystem manager without IPFS (uses local filesystem fallback)
+    filesystem = new FilesystemManager(null, db, LOCAL_STORAGE_PATH);
+    logger.info('✅ Filesystem manager initialized (local filesystem mode)');
     ipfs = null;
-    filesystem = null;
   }
 
   // Check owner status

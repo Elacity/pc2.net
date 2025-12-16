@@ -139,7 +139,19 @@ export function setupAPI(app: Express): void {
   // Additional filesystem endpoints
   app.get('/df', authenticate, handleDF);
   app.post('/df', authenticate, handleDF);
-  app.post('/batch', authenticate, handleBatch);
+  // /batch endpoint for multipart file uploads (used by SDK for drag-and-drop)
+  app.post('/batch', authenticate, (req: any, res: Response, next: any) => {
+    const upload = req.app.locals.upload;
+    if (upload) {
+      // Check if request is multipart
+      const contentType = req.headers['content-type'] || '';
+      if (contentType.includes('multipart/form-data')) {
+        // Use .any() to accept multiple files
+        return upload.any()(req, res, next);
+      }
+    }
+    next();
+  }, handleBatch);
 
   // File signing (require auth)
   app.post('/sign', authenticate, handleSign);

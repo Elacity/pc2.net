@@ -28,8 +28,10 @@
 #### 1. **Desktop UI Working**
 - ✅ Desktop displays files and folders
 - ✅ File operations (upload, download, create, delete)
-- ✅ Real-time updates (via polling)
-- ✅ App launching (Terminal, Editor, Viewer, Player)
+- ✅ Real-time updates (via WebSocket/Socket.io)
+- ✅ App launching (Terminal, Editor, Viewer, Player, PDF, Recorder, Solitaire)
+- ✅ Desktop UI fully functional - toolbar, taskbar, bin icon all visible
+- ✅ Desktop initialization working - `/stat` and `/readdir` endpoints properly handle user paths
 
 #### 2. **Authentication System**
 - ✅ Particle Auth integration
@@ -275,7 +277,12 @@
 - ✅ Fixed desktop UI (bin, toolbar) display
 - ✅ Improved error handling (kvstore, JSON parsing)
 - ✅ Added multipart/form-data support for file uploads
+- ✅ Fixed `/stat` endpoint - now returns directory stats for all user paths (resolves 404 errors preventing desktop initialization)
+- ✅ Fixed `/readdir` endpoint - includes Trash/bin on Desktop even when filesystem not initialized
+- ✅ Desktop UI fully functional - toolbar, taskbar, bin icon all visible and working
+- ✅ Added comprehensive logging to `/stat` and `/drivers/call` for debugging
 - ⚠️ File uploads still need testing (multipart support added, awaiting verification)
+- ⚠️ App launching needs verification (endpoints fixed, awaiting user testing)
 
 ---
 

@@ -290,7 +290,11 @@ export default {
         
         // Get auth token for PC2 mode API calls
         function getAuthToken() {
-            // Try PC2 service session first
+            // Try window.auth_token first (most reliable - set by SDK)
+            if (window.auth_token) {
+                return window.auth_token;
+            }
+            // Try PC2 service session
             const session = pc2Service.getSession?.();
             if (session?.token) {
                 return session.token;

@@ -1,0 +1,304 @@
+#!/usr/bin/env node
+/**
+ * Generate Index HTML
+ * 
+ * Generates index.html for production build
+ * This file is needed for SPA routing to work
+ */
+
+import { writeFileSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+const PROJECT_ROOT = join(__dirname, '../..');
+const TARGET_DIR = join(PROJECT_ROOT, 'pc2-node/frontend');
+const INDEX_HTML = join(TARGET_DIR, 'index.html');
+
+const HTML_TEMPLATE = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ElastOS - Personal Cloud</title>
+    <link rel="stylesheet" href="/bundle.min.css">
+    
+    <!-- Initialize API origin before SDK loads -->
+    <script>
+        // Auto-detect API origin from current page URL (same origin = no CORS!)
+        window.api_origin = window.location.origin;
+        console.log('[PC2]: Auto-detected API origin:', window.api_origin);
+        window.puter_gui_enabled = true;
+        
+        // Extract auth_token from URL if present (SDK sometimes uses URL-based auth)
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlToken = urlParams.get('auth_token') || urlParams.get('token');
+        if (urlToken) {
+            window.auth_token = urlToken;
+            localStorage.setItem('auth_token', urlToken);
+            console.log('[PC2]: ✅ Extracted auth token from URL, length:', urlToken.length, 'prefix:', urlToken.substring(0, 8) + '...');
+            // Clean URL (remove token for security)
+            const newUrl = window.location.pathname + (window.location.hash || '');
+            window.history.replaceState({}, '', newUrl);
+            
+            // Validate token format (should be 64 hex characters)
+            if (urlToken.length !== 64 || !/^[0-9a-f]+$/i.test(urlToken)) {
+                console.warn('[PC2]: ⚠️ Token format looks invalid (expected 64 hex chars, got', urlToken.length + ')');
+            }
+        }
+        
+        // Intercept fetch calls to redirect api.puter.com to local server
+        // Also ensure Authorization header is included if token is available
+        const originalFetch = window.fetch;
+        window.fetch = function(...args) {
+            const url = args[0];
+            let options = args[1] || {};
+            
+            // Get token from various sources
+            const getToken = () => {
+                return window.auth_token || 
+                       localStorage.getItem('auth_token') ||
+                       (window.puter && window.puter.auth_token) ||
+                       null;
+            };
+            
+            const token = getToken();
+            
+            if (typeof url === 'string') {
+                if (url.includes('api.puter.com')) {
+                    const apiPattern = /https?:\\/\\/api\\.puter\\.com(:443)?/g;
+                    let localUrl = url.replace(apiPattern, window.location.origin);
+                    console.log('[PC2]: Intercepting fetch:', url, '->', localUrl);
+                    
+                    // Ensure Authorization header is set if token is available
+                    if (token && (!options.headers || !options.headers['Authorization'])) {
+                        options.headers = options.headers || {};
+                        if (typeof options.headers === 'object' && !Array.isArray(options.headers)) {
+                            options.headers['Authorization'] = 'Bearer ' + token;
+                        }
+                    }
+                    
+                    args[0] = localUrl;
+                    args[1] = options;
+                }
+            } else if (url && typeof url === 'object' && url.url) {
+                if (url.url.includes('api.puter.com')) {
+                    const apiPattern = /https?:\\/\\/api\\.puter\\.com(:443)?/g;
+                    url.url = url.url.replace(apiPattern, window.location.origin);
+                    console.log('[PC2]: Intercepting fetch (Request object):', url.url);
+                    
+                    // For Request objects, we can't modify headers after creation
+                    // But we can create a new Request with the token
+                    if (token && !url.headers.get('Authorization')) {
+                        const newHeaders = new Headers(url.headers);
+                        newHeaders.set('Authorization', 'Bearer ' + token);
+                        args[0] = new Request(url.url, {
+                            method: url.method,
+                            headers: newHeaders,
+                            body: url.body,
+                            mode: url.mode,
+                            credentials: url.credentials,
+                            cache: url.cache,
+                            redirect: url.redirect,
+                            referrer: url.referrer,
+                            integrity: url.integrity
+                        });
+                    }
+                }
+            }
+            return originalFetch.apply(this, args);
+        };
+        
+        // Intercept XMLHttpRequest to redirect and inject auth token
+        const originalXHROpen = XMLHttpRequest.prototype.open;
+        const originalXHRSetRequestHeader = XMLHttpRequest.prototype.setRequestHeader;
+        
+        XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+            // Store the URL for later use in send()
+            this._url = url;
+            this._originalMethod = method;
+            
+            if (typeof url === 'string' && url.includes('api.puter.com')) {
+                const apiPattern = /https?:\\/\\/api\\.puter\\.com(:443)?/g;
+                let localUrl = url.replace(apiPattern, window.location.origin);
+                console.log('[PC2]: Intercepting XHR:', url, '->', localUrl);
+                url = localUrl;
+                
+                // Store the intercepted URL on the XHR object
+                this._interceptedUrl = localUrl;
+                this._url = localUrl; // Also update _url
+            }
+            return originalXHROpen.call(this, method, url, ...rest);
+        };
+        
+        // Intercept setRequestHeader to ensure Authorization is set
+        XMLHttpRequest.prototype.setRequestHeader = function(header, value) {
+            // Get token from various sources
+            const getToken = () => {
+                return window.auth_token || 
+                       localStorage.getItem('auth_token') ||
+                       (window.puter && window.puter.auth_token) ||
+                       null;
+            };
+            
+            // If this is an intercepted request and Authorization is not set, inject token
+            if (this._interceptedUrl && header.toLowerCase() !== 'authorization') {
+                const token = getToken();
+                if (token) {
+                    // Set Authorization header first
+                    originalXHRSetRequestHeader.call(this, 'Authorization', 'Bearer ' + token);
+                }
+            }
+            
+            return originalXHRSetRequestHeader.call(this, header, value);
+        };
+        
+        // Intercept send() to inject token right before sending AND capture token from responses
+        const originalXHRSend = XMLHttpRequest.prototype.send;
+        XMLHttpRequest.prototype.send = function(data) {
+            const xhr = this;
+            const originalOnReadyStateChange = xhr.onreadystatechange;
+            
+            // Get token from various sources
+            const getToken = () => {
+                return window.auth_token || 
+                       localStorage.getItem('auth_token') ||
+                       (window.puter && window.puter.auth_token) ||
+                       null;
+            };
+            
+            // Check if this is a localhost request (intercepted or direct)
+            // We need to inject token for ALL localhost API requests, not just intercepted ones
+            const url = this._interceptedUrl || this._url || '';
+            const isLocalAPIRequest = url.includes('localhost:4202') || 
+                                     url.includes(window.location.origin) ||
+                                     (url.startsWith('/') && !url.startsWith('//'));
+            
+            if (isLocalAPIRequest && !url.includes('socket.io') && !url.includes('particle-auth')) {
+                const token = getToken();
+                if (token) {
+                    try {
+                        // Inject Authorization header right before sending
+                        originalXHRSetRequestHeader.call(this, 'Authorization', 'Bearer ' + token);
+                        
+                        // Also add token to URL query params (SDK sometimes expects this)
+                        // Only for GET requests to avoid breaking POST body
+                        if (this._originalMethod === 'GET' && !url.includes('auth_token=') && !url.includes('token=')) {
+                            const separator = url.includes('?') ? '&' : '?';
+                            const newUrl = url + separator + 'auth_token=' + encodeURIComponent(token);
+                            // Update the URL by reopening (this is a bit hacky but works)
+                            // Actually, we can't change the URL after open() - so we'll rely on header + query param from middleware
+                        }
+                        
+                        console.log('[PC2]: ✅ Injected auth token into XHR request:', url || 'local API', 'token:', token.substring(0, 8) + '...');
+                    } catch (e) {
+                        console.error('[PC2]: ❌ Failed to inject token:', e);
+                    }
+                } else {
+                    console.warn('[PC2]: ⚠️ No token available for request:', url || 'local API');
+                }
+            }
+            
+            // Wrap onreadystatechange to capture token from auth responses
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4 && xhr.status === 200) {
+                    try {
+                        const responseText = xhr.responseText;
+                        if (responseText) {
+                            const response = JSON.parse(responseText);
+                            // Capture token from auth responses
+                            if (response.token || response.auth_token) {
+                                const token = response.token || response.auth_token;
+                                window.auth_token = token;
+                                localStorage.setItem('auth_token', token);
+                                console.log('[PC2]: ✅ Captured auth token from response');
+                            }
+                        }
+                    } catch (e) {
+                        // Not JSON or parsing failed, ignore
+                    }
+                }
+                if (originalOnReadyStateChange) {
+                    originalOnReadyStateChange.call(this);
+                }
+            };
+            
+            return originalXHRSend.call(this, data);
+        };
+        
+        // Set window.puter_api_origin if SDK checks for it
+        window.puter_api_origin = window.location.origin;
+        
+        // Initialize service_script_api_promise (normally done by backend)
+        let serviceScriptResolve, serviceScriptReject;
+        const serviceScriptPromise = new Promise((resolve, reject) => {
+            serviceScriptResolve = resolve;
+            serviceScriptReject = reject;
+        });
+        const serviceScriptAPI = {
+            then: serviceScriptPromise.then.bind(serviceScriptPromise),
+            catch: serviceScriptPromise.catch.bind(serviceScriptPromise),
+            finally: serviceScriptPromise.finally.bind(serviceScriptPromise),
+            resolve: serviceScriptResolve,
+            reject: serviceScriptReject
+        };
+        window.service_script_api_promise = serviceScriptAPI;
+        globalThis.service_script_api_promise = serviceScriptAPI;
+        
+        window.service_script = async function(fn) {
+            try {
+                await fn(await window.service_script_api_promise);
+            } catch (e) {
+                console.error('service_script(ERROR)', e);
+            }
+        };
+        
+    </script>
+</head>
+<body>
+    <div id="app"></div>
+    <!-- Load GUI bundle -->
+    <script src="/bundle.min.js"></script>
+    <script src="/gui.js"></script>
+    
+    <!-- Initialize GUI -->
+    <script type="text/javascript">
+        window.addEventListener('load', function() {
+            console.log('[PC2]: Window loaded, checking for gui function...');
+            if (typeof gui === 'function') {
+                console.log('[PC2]: ✅ gui() function found, initializing...');
+                gui({
+                    api_origin: undefined, // Will auto-detect from window.location.origin
+                    title: 'ElastOS',
+                    max_item_name_length: 150,
+                    require_email_verification_to_publish_website: false,
+                    short_description: 'ElastOS is a privacy-first personal cloud that houses all your files, apps, and games in one private and secure place, accessible from anywhere at any time.',
+                }).then(() => {
+                    console.log('[PC2]: ✅ gui() initialization completed');
+                }).catch((e) => {
+                    console.error('[PC2]: ❌ gui() initialization failed:', e);
+                });
+            } else {
+                console.error('[PC2]: ❌ GUI function not found. Make sure bundle.min.js and gui.js are loaded.');
+            }
+        });
+    </script>
+</body>
+</html>`;
+
+function main() {
+  console.log('📄 Generating index.html...');
+  
+  try {
+    writeFileSync(INDEX_HTML, HTML_TEMPLATE, 'utf8');
+    console.log(`   ✅ Created: ${INDEX_HTML}`);
+  } catch (error) {
+    console.error(`   ❌ Failed to create index.html: ${error.message}`);
+    process.exit(1);
+  }
+}
+
+main();
+

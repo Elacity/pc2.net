@@ -1,0 +1,160 @@
+/**
+ * WebSocket Server
+ * 
+ * Real-time communication using Socket.io
+ * Replaces polling with WebSocket for instant updates
+ */
+
+import { Server as HTTPServer } from 'http';
+import { Server as SocketIOServer, Socket } from 'socket.io';
+import { DatabaseManager } from '../storage/database.js';
+import { SocketUser } from './events.js';
+
+export interface WebSocketOptions {
+  database?: DatabaseManager;
+}
+
+// Extend Socket interface to include user
+interface AuthenticatedSocket extends Socket {
+  user?: SocketUser;
+}
+
+/**
+ * Setup WebSocket server with authentication
+ */
+export function setupWebSocket(
+  server: HTTPServer,
+  options: WebSocketOptions = {}
+): SocketIOServer {
+  const { database } = options;
+
+  const io = new SocketIOServer(server, {
+    cors: {
+      origin: '*', // In production, restrict to specific origins
+      methods: ['GET', 'POST'],
+      credentials: true
+    },
+    path: '/socket.io/',
+    transports: ['websocket', 'polling'] // Fallback to polling if WebSocket fails
+  });
+
+  // Authentication middleware (optional - allow connection without auth, require auth for operations)
+  io.use((socket: AuthenticatedSocket, next) => {
+    // Get session token from handshake
+    const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.replace('Bearer ', '');
+
+    // Allow connection without token (client will authenticate later)
+    if (!token) {
+      console.log(`🔌 WebSocket: Client connecting without auth (will require auth for operations): ${socket.id}`);
+      return next();
+    }
+
+    if (!database) {
+      console.warn('⚠️  WebSocket: Database not available, skipping authentication');
+      return next();
+    }
+
+    // Verify session token
+    const session = database.getSession(token);
+    if (!session) {
+      // Don't reject connection - just don't attach user
+      console.warn(`⚠️  WebSocket: Invalid session token for ${socket.id}`);
+      return next();
+    }
+
+    // Check if session is expired
+    if (session.expires_at < Date.now()) {
+      console.warn(`⚠️  WebSocket: Expired session token for ${socket.id}`);
+      return next();
+    }
+
+    // Attach user info to socket
+    socket.user = {
+      wallet_address: session.wallet_address,
+      smart_account_address: session.smart_account_address,
+      session_token: token
+    };
+
+    next();
+  });
+
+  // Connection handling
+  io.on('connection', (socket: AuthenticatedSocket) => {
+    // Allow connection without auth (client will authenticate later)
+    if (!socket.user) {
+      console.log(`🔌 WebSocket: Client connected without authentication: ${socket.id}`);
+      // Send connection confirmation (without user info)
+      socket.emit('connected', {
+        authenticated: false,
+        message: 'Connection established. Authentication required for operations.',
+        timestamp: new Date().toISOString()
+      });
+      return;
+    }
+
+    const { wallet_address } = socket.user;
+    const room = `user:${wallet_address}`;
+
+    // Join user's room (for per-user broadcasts)
+    socket.join(room);
+    console.log(`✅ WebSocket client connected: ${socket.id} (wallet: ${wallet_address.slice(0, 6)}...${wallet_address.slice(-4)})`);
+
+    // Send connection confirmation
+    socket.emit('connected', {
+      authenticated: true,
+      wallet_address: wallet_address,
+      room: room,
+      timestamp: new Date().toISOString()
+    });
+
+    // Handle ping/pong for connection health
+    socket.on('ping', () => {
+      socket.emit('pong', { timestamp: Date.now() });
+    });
+
+    // Handle client events (if needed)
+    socket.on('file:subscribe', (data: { path?: string }) => {
+      // Client can subscribe to specific file changes
+      if (data.path) {
+        socket.join(`file:${wallet_address}:${data.path}`);
+        console.log(`📁 Client subscribed to file: ${data.path}`);
+      }
+    });
+
+    socket.on('file:unsubscribe', (data: { path?: string }) => {
+      if (data.path) {
+        socket.leave(`file:${wallet_address}:${data.path}`);
+      }
+    });
+
+    // Handle disconnection
+    socket.on('disconnect', (reason) => {
+      console.log(`🔌 WebSocket client disconnected: ${socket.id} (reason: ${reason})`);
+    });
+
+    // Handle errors
+    socket.on('error', (error) => {
+      console.error(`❌ WebSocket error for ${socket.id}:`, error);
+    });
+  });
+
+  // Make io available globally for event broadcasting
+  (io as any).database = database;
+
+  return io;
+}
+
+/**
+ * Get WebSocket server instance (for event broadcasting)
+ * This will be set by setupWebSocket
+ */
+let globalIO: SocketIOServer | null = null;
+
+export function setGlobalIO(io: SocketIOServer): void {
+  globalIO = io;
+}
+
+export function getGlobalIO(): SocketIOServer | null {
+  return globalIO;
+}
+

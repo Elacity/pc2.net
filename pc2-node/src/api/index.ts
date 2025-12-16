@@ -5,7 +5,7 @@ import { Server as SocketIOServer } from 'socket.io';
 import { authenticate, corsMiddleware, errorHandler } from './middleware.js';
 import { handleWhoami } from './whoami.js';
 import { handleParticleAuth, handleGrantUserApp, handleGetUserAppToken } from './auth.js';
-import { handleStat, handleReaddir, handleRead, handleWrite, handleMkdir, handleDelete, handleMove } from './filesystem.js';
+import { handleStat, handleReaddir, handleRead, handleWrite, handleWriteFile, handleMkdir, handleDelete, handleMove } from './filesystem.js';
 import { handleSign, handleVersion, handleOSUser, handleKV, handleRAO, handleContactUs, handleDriversCall, handleGetWallets } from './other.js';
 import { handleAPIInfo, handleGetLaunchApps, handleDF, handleBatch, handleCacheTimestamp, handleStats } from './info.js';
 import { handleFile } from './file.js';
@@ -104,7 +104,26 @@ export function setupAPI(app: Express): void {
   app.post('/stat', authenticate, handleStat); // Also support POST for /stat
   app.post('/readdir', authenticate, handleReaddir);
   app.get('/read', authenticate, handleRead);
-  app.post('/write', authenticate, handleWrite);
+  // /write supports both JSON and multipart/form-data
+  app.post('/write', authenticate, (req: any, res: Response, next: any) => {
+    const upload = req.app.locals.upload;
+    if (upload) {
+      // Check if request is multipart
+      const contentType = req.headers['content-type'] || '';
+      if (contentType.includes('multipart/form-data')) {
+        return upload.single('file')(req, res, next);
+      }
+    }
+    next();
+  }, handleWrite);
+  // /writeFile for signed URL uploads (multipart only)
+  app.post('/writeFile', (req: any, res: Response, next: any) => {
+    const upload = req.app.locals.upload;
+    if (upload) {
+      return upload.single('file')(req, res, next);
+    }
+    next();
+  }, handleWriteFile);
   app.post('/mkdir', authenticate, handleMkdir);
   app.post('/delete', authenticate, handleDelete);
   app.post('/move', authenticate, handleMove);

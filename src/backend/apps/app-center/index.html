@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>App Center - PC2</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            height: 100vh;
+            overflow: hidden;
+        }
+        .app-center-container {
+            display: flex;
+            height: 100vh;
+            background: white;
+        }
+        .sidebar {
+            width: 240px;
+            background: white;
+            border-right: 1px solid #e0e0e0;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        .add-app-btn {
+            width: 100%;
+            background: #1976d2;
+            color: white;
+            border: none;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 30px;
+        }
+        .add-app-btn:hover {
+            background: #1565c0;
+        }
+        .add-app-icon {
+            width: 20px;
+            height: 20px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+        }
+        .featured-link {
+            color: #1976d2;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 14px;
+            display: block;
+            margin-bottom: 20px;
+            padding: 8px 0;
+        }
+        .categories-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 12px;
+            margin-top: 20px;
+        }
+        .category-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 8px;
+            border-radius: 6px;
+            cursor: pointer;
+            color: #333;
+            font-size: 14px;
+            margin-bottom: 4px;
+            transition: background 0.2s;
+        }
+        .category-item:hover {
+            background: #f5f5f5;
+        }
+        .category-icon {
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+        }
+        .main-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 30px;
+        }
+        .search-bar {
+            width: 100%;
+            max-width: 600px;
+            padding: 12px 16px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            margin-bottom: 30px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: white;
+        }
+        .search-bar input {
+            flex: 1;
+            border: none;
+            outline: none;
+            font-size: 14px;
+        }
+        .search-icon {
+            color: #999;
+        }
+        .apps-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 24px;
+        }
+        .app-card {
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 12px;
+            padding: 20px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .app-card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            transform: translateY(-2px);
+        }
+        .app-header {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+        .app-icon-large {
+            width: 80px;
+            height: 80px;
+            border-radius: 12px;
+            flex-shrink: 0;
+            background: #f5f5f5;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        .app-icon-large img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .app-info {
+            flex: 1;
+        }
+        .app-name {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 4px;
+        }
+        .app-users {
+            font-size: 12px;
+            color: #999;
+            margin-bottom: 8px;
+        }
+        .app-category {
+            display: inline-block;
+            background: #f0f0f0;
+            color: #666;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .app-description {
+            color: #666;
+            font-size: 14px;
+            line-height: 1.5;
+            margin-bottom: 16px;
+        }
+        .app-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .open-btn {
+            flex: 1;
+            background: #1976d2;
+            color: white;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .open-btn:hover {
+            background: #1565c0;
+        }
+        .action-icon {
+            width: 36px;
+            height: 36px;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: #666;
+        }
+        .action-icon:hover {
+            background: #f5f5f5;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-center-container">
+        <div class="sidebar">
+            <button class="add-app-btn">
+                <div class="add-app-icon">📦</div>
+                Add your app!
+            </button>
+            <a href="#" class="featured-link">Featured</a>
+            <div class="categories-title">Categories</div>
+            <div class="category-item">
+                <div class="category-icon">🎮</div>
+                <span>Games</span>
+            </div>
+            <div class="category-item">
+                <div class="category-icon">📊</div>
+                <span>Productivity</span>
+            </div>
+            <div class="category-item">
+                <div class="category-icon">📷</div>
+                <span>Photo & Video</span>
+            </div>
+            <div class="category-item">
+                <div class="category-icon">&lt;/&gt;</div>
+                <span>Developer Tools</span>
+            </div>
+            <div class="category-item">
+                <div class="category-icon">🎨</div>
+                <span>Graphics & Design</span>
+            </div>
+            <div class="category-item">
+                <div class="category-icon">🔧</div>
+                <span>Utilities</span>
+            </div>
+            <div class="category-item">
+                <div class="category-icon">🎵</div>
+                <span>Music & Audio</span>
+            </div>
+            <div class="category-item">
+                <div class="category-icon">🍿</div>
+                <span>Entertainment</span>
+            </div>
+            <div class="category-item">
+                <div class="category-icon">🎓</div>
+                <span>Education</span>
+            </div>
+            <div class="category-item">
+                <div class="category-icon">💰</div>
+                <span>Finance</span>
+            </div>
+            <div class="category-item">
+                <div class="category-icon">💼</div>
+                <span>Business</span>
+            </div>
+            <div class="category-item">
+                <div class="category-icon">🌿</div>
+                <span>Lifestyle</span>
+            </div>
+        </div>
+        <div class="main-content">
+            <div class="search-bar">
+                <span class="search-icon">🔍</span>
+                <input type="text" placeholder="Search apps..." id="searchInput">
+            </div>
+            <div class="apps-grid" id="appsGrid">
+                <div class="empty-state">Loading apps...</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://js.puter.com/v2/"></script>
+    <script>
+        (async () => {
+            try {
+                await puter.init();
+                console.log('[App Center] Puter SDK initialized');
+                
+                const response = await fetch('/get-launch-apps');
+                const data = await response.json();
+                
+                const appsGrid = document.getElementById('appsGrid');
+                appsGrid.innerHTML = '';
+                
+                const allApps = [...(data.recommended || []), ...(data.all || [])]
+                    .filter((app, index, self) => 
+                        app && 
+                        app.name !== 'app-center' && 
+                        app.name !== 'about' &&
+                        index === self.findIndex(a => a.name === app.name)
+                    );
+                
+                if (allApps.length === 0) {
+                    appsGrid.innerHTML = '<div class="empty-state">No apps available yet</div>';
+                    return;
+                }
+                
+                allApps.forEach(app => {
+                    const appCard = document.createElement('div');
+                    appCard.className = 'app-card';
+                    appCard.onclick = () => {
+                        if (app.index_url) {
+                            puter.apps.launch(app.name);
+                        }
+                    };
+                    
+                    const categoryMap = {
+                        'viewer': 'Photo & Video',
+                        'player': 'Entertainment',
+                        'pdf': 'Utilities',
+                        'editor': 'Productivity',
+                        'terminal': 'Developer Tools',
+                        'camera': 'Photo & Video',
+                        'recorder': 'Utilities',
+                        'solitaire-frvr': 'Games'
+                    };
+                    
+                    appCard.innerHTML = `
+                        <div class="app-header">
+                            <div class="app-icon-large">
+                                ${app.icon ? `<img src="${app.icon}" alt="${app.title}" />` : '📱'}
+                            </div>
+                            <div class="app-info">
+                                <div class="app-name">${app.title || app.name}</div>
+                                <div class="app-users">Available</div>
+                                <span class="app-category">${categoryMap[app.name] || 'Utilities'}</span>
+                            </div>
+                        </div>
+                        <div class="app-description">
+                            ${getAppDescription(app.name)}
+                        </div>
+                        <div class="app-actions">
+                            <button class="open-btn">Open</button>
+                            <div class="action-icon">🔗</div>
+                            <div class="action-icon">⬇</div>
+                        </div>
+                    `;
+                    
+                    appsGrid.appendChild(appCard);
+                });
+                
+                // Search functionality
+                const searchInput = document.getElementById('searchInput');
+                searchInput.addEventListener('input', (e) => {
+                    const query = e.target.value.toLowerCase();
+                    const cards = appsGrid.querySelectorAll('.app-card');
+                    cards.forEach(card => {
+                        const name = card.querySelector('.app-name').textContent.toLowerCase();
+                        const desc = card.querySelector('.app-description').textContent.toLowerCase();
+                        if (name.includes(query) || desc.includes(query)) {
+                            card.style.display = '';
+                        } else {
+                            card.style.display = 'none';
+                        }
+                    });
+                });
+            } catch (error) {
+                console.error('[App Center] Error loading apps:', error);
+                document.getElementById('appsGrid').innerHTML = '<div class="empty-state">Error loading apps. Please refresh the page.</div>';
+            }
+        })();
+        
+        function getAppDescription(name) {
+            const descriptions = {
+                'viewer': 'View and manage your images and photos',
+                'player': 'Play video and audio files',
+                'pdf': 'View and read PDF documents',
+                'editor': 'Edit text files and code',
+                'terminal': 'Command line interface for your PC2 node',
+                'camera': 'Capture photos using your webcam',
+                'recorder': 'Record audio from your microphone',
+                'solitaire-frvr': 'Classic solitaire card game'
+            };
+            return descriptions[name] || 'Application for your PC2 node';
+        }
+    </script>
+</body>
+</html>

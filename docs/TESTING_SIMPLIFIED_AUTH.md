@@ -190,3 +190,18 @@ node tools/mock-pc2-server.cjs
 - [ ] Clear error messages
 - [ ] Server logs show correct behavior
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

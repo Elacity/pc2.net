@@ -1,0 +1,710 @@
+<!DOCTYPE html><html lang="en"><head>
+<link rel="manifest" href="https://solitaire.frvr.com/assets/manifest.3b0d52c5.json"><script id="frvr-sdk" src="https://solitaire.frvr.com/frvr-sdk.min.js"></script><script id="frvr-channel-web" src="https://solitaire.frvr.com/frvr-channel-web.min.js"></script><script>function getSubchannelName(){return this.is=window.__FRVR.platformIs,this.is.microsoftPwa?"microsoftPwa":this.is.crazyGames?"crazyGames":this.is.game8||this.is.harman||this.is.huaweiquickapp?void 0:"default"}function setupAdConfigsForXS(){FRVRConfig.ads.subchannels&&(Config.ads={web:{microsoftPwa:{interstitial:{maxfrequency:3e4,providers:{"microsoft-interstitial":{timeout:500,priority:1},"frvr-sdk-interstitial":{placementIds:{interstitial:"frvr.com_videoad_interstitial",reward:"frvr.com_videoad_rewarded"},propertyId:"frvr.com",timeout:500,priority:1}}},reward:{providers:{"microsoft-reward":{timeout:500,priority:1},"frvr-sdk-reward":{placementIds:{interstitial:"frvr.com_videoad_interstitial",reward:"frvr.com_videoad_rewarded"},propertyId:"frvr.com",timeout:500,priority:1}}},banner:{}},crazyGames:{interstitial:{maxfrequency:3e4,providers:{"crazygames-interstitial":{timeout:500,priority:1}}},reward:{providers:{"crazygames-reward":{timeout:500,priority:1}}},banner:{}},default:{interstitial:{maxfrequency:3e4,providers:{"frvr-sdk-interstitial":{placementIds:{interstitial:"frvr.com_videoad_interstitial",reward:"frvr.com_videoad_rewarded"},propertyId:"frvr.com",timeout:500,priority:1}}},reward:{providers:{"frvr-sdk-reward":{placementIds:{interstitial:"frvr.com_videoad_interstitial",reward:"frvr.com_videoad_rewarded"},propertyId:"frvr.com",timeout:500,priority:1}}},banner:{}}}[getSubchannelName()]})}function setupAdConfigsForSDK(){if(FRVRConfig.ads.subchannels){var r=FRVRConfig.ads.subchannels[getSubchannelName()];r&&(r.providers&&(FRVR.config.ads.providers=r.providers,FRVR.config.ads.remote=r.remote),r.throttling&&(FRVR.config.ads.throttling=r.throttling))}}</script><script>window.frvrEnv="prod",window.FRVRConfig={gameId:"solitaire",cloudStorage:{playerStorage:{gameId:"GLCBH4W"}},social:{syncFriendsOnLogin:!1},iap:{},ads:{autoInit:!1,throttling:{maxfrequency:1e4},providers:[],subchannels:{microsoftPwa:{providers:[{name:"microsoft",type:"interstitial",priority:1,remote:!1,config:{timeout:500,priority:1}},{name:"adsbygoogle-interstitial",type:"interstitial",priority:1,remote:!1,config:{placementIds:{interstitial:"frvr.com_videoad_interstitial",reward:"frvr.com_videoad_rewarded"},propertyId:"frvr.com",alias:"GLCBH4W",timeout:500,priority:1}},{name:"microsoft",type:"reward",priority:1,remote:!1,config:{timeout:500,priority:1}},{name:"adsbygoogle-reward",type:"reward",priority:1,remote:!1,config:{placementIds:{interstitial:"frvr.com_videoad_interstitial",reward:"frvr.com_videoad_rewarded"},propertyId:"frvr.com",alias:"GLCBH4W",timeout:500,priority:1}}],throttling:{maxfrequency:3e4,initTimeBlock:3e4},remote:!1},crazyGames:{providers:[{name:"crazygames",type:"interstitial",priority:1,remote:!1,config:{timeout:500,priority:1}},{name:"crazygames",type:"reward",priority:1,remote:!1,config:{timeout:500,priority:1}}],remote:!1},default:{providers:[{name:"adsbygoogle-interstitial",type:"interstitial",priority:1,remote:!1,config:{placementIds:{interstitial:"frvr.com_videoad_interstitial",reward:"frvr.com_videoad_rewarded"},propertyId:"frvr.com",alias:"GLCBH4W",timeout:500,priority:1}},{name:"adsbygoogle-reward",type:"reward",priority:1,remote:!1,config:{placementIds:{interstitial:"frvr.com_videoad_interstitial",reward:"frvr.com_videoad_rewarded"},propertyId:"frvr.com",alias:"GLCBH4W",timeout:500,priority:1}}],remote:!1}}},auth:{enableAnonymousLogin:!0,facebookSdk:{permissions:"gaming_profile,gaming_user_picture"}},features:{gameId:"GLCBH4W",defaultFeatures:{facebookAdIds:{bannerId:"2335686886442929_6131770326834547",interstitialId:"2335686886442929_7071260239552213",rewardId:""},simpleGameOver:{enabled:!0},gameEndNotification:{duration:2e3,enabled:!0,failContent:"No more moves",failTitle:"AW SNAP!",successContent:"Level complete",successTitle:"GREAT JOB!"},gameoverAdV2:{enabled:!0,placement:"end"},scheduledMessages:{templates:["default-0","default-1","default-2","default-3","default-4"]}}},shop:{gameId:"GLCBH4W"}};</script>
+    <script></script>
+    <script>window.__FRVR=window.__FRVR||{},window.__FRVR.startTime=Date.now(),window.__FRVR.gameIsLoaded=!1,window.__FRVR.createErrorHandler=function(n){return function(o){console.error(n,o)}};</script>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-type" content="text/html; charset=utf-8">
+
+    <!--
+    /**
+    * @author Chris Benjaminsen http://chrisbenjaminsen.com/ @benjaminsen
+    */
+    /** @license
+    Solitaire FRVR 3.7.48
+    More info at http://frvr.com
+
+    Copyright (c) 2013+ FRVR Limited
+
+    All Rights Reserved!
+    FRVR is a registered trademark of FRVR Limited
+    */
+    /**
+    Well hello there!
+
+    I see you are interested in the details of how this game was made!
+    It's written using a custom HTML5 engine built around PixiJS.
+
+    While I can't tell you more on the how, there is much more on the why to be find at 
+    http://blog.chrisbenjaminsen.com where I write frequent status updates on the games I build
+    under the FRVR brand - - including a 100% honest track record of money earned and spend.
+
+    Hack on!
+    Chris Benjaminsen
+    chrisbenjaminsen.com
+
+    - - - - - - - - - - - - - -
+
+    Solitaire FRVR would not be possible without the following open source projects:
+
+    pixi.js - v2.2.3
+    Copyright (c) 2012-2014, Mat Groves
+    http://goodboydigital.com/
+    pixi.js is licensed under the MIT License.
+    http://www.opensource.org/licenses/mit-license.php
+    Mat Groves http://matgroves.com/ @Doormat23
+    */
+    -->
+
+      
+
+    <link rel="canonical" href="index.html">
+
+        <link rel="alternate" hreflang="ru" href="https://solitaire.frvr.com/ru/">
+
+        <link rel="alternate" hreflang="zh-Hans" href="https://solitaire.frvr.com/zh-Hans/">
+
+      <link rel="icon" type="image/png" href="https://solitaire.frvr.com/assets/favicon.894962e6.png">
+
+    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Solitaire FRVR">
+<meta name="theme-color" content="#202020">
+<meta name="HandheldFriendly" content="true">
+<meta name="format-detection" content="telephone=no">
+<meta name="msapplication-tap-highlight" content="no">
+<meta name="google" content="notranslate">
+
+    <link rel="apple-touch-icon" sizes="60x60" href="https://solitaire.frvr.com/assets/icon60x60.7c199270.png">
+    <link rel="apple-touch-icon" sizes="76x76" href="https://solitaire.frvr.com/assets/icon76x76.d2e07f7a.png">
+    <link rel="apple-touch-icon" sizes="120x120" href="https://solitaire.frvr.com/assets/icon120x120.d7922a71.png">
+    <link rel="apple-touch-icon" sizes="196x196" href="https://solitaire.frvr.com/assets/icon196x196.220187d7.png">
+    <link rel="apple-touch-icon" sizes="256x256" href="https://solitaire.frvr.com/assets/icon256x256.cb791562.png">
+    <link rel="apple-touch-icon" sizes="1024x1024" href="https://solitaire.frvr.com/assets/icon1024x1024.ff2fe9d9.png">
+
+    <link rel="me" href="https://twitter.com/FRVRGames">
+
+        <meta name="facebook_label" content="Play Solitaire Online for free - Klondike, draw 1 and draw 3!">
+
+        <meta property="og:title" content="Play Solitaire Online for free">
+        <meta property="og:description" content="Play Solitaire online for free right now! No download or registration required. Play full screen. Draw 1 and draw 3 game modes!">
+        <meta property="og:site_name" content="Solitaire FRVR">
+        <meta property="og:url" content="https://solitaire.frvr.com/">
+        <meta property="og:type" content="game">
+        <meta property="og:locale" content="en">
+        <meta property="og:image" content="/assets/facebook01.8acd0e6b.png">
+        <meta property="fb:app_id" content="315616748615462">
+
+        <meta name="twitter:card" content="summary_large_image">
+        <meta name="twitter:site" content="@FRVRGames">
+        <meta name="twitter:creator" content="@Benjaminsen">
+        <meta name="twitter:title" content="Play Solitaire Online for free - Klondike, draw 1 and draw 3!">
+        <meta name="twitter:image" content="/game/i/web/twitter01.png">
+        <meta name="twitter:description" content="Play Solitaire online for free right now! No download or registration required. Play full screen. Draw 1 and draw 3 game modes!">
+
+        <meta name="twitter:app:name:iphone" content="Solitaire FRVR">
+        <meta name="twitter:app:id:iphone" content="911820971">
+        <meta name="twitter:app:name:ipad" content="Solitaire FRVR">
+        <meta name="twitter:app:id:ipad" content="911820971">
+
+        <meta name="twitter:app:name:googleplay" content="Solitaire FRVR">
+        <meta name="twitter:app:id:googleplay" content="com.frvr.solitaire">
+
+    <meta name="description" content="Play Solitaire online for free right now! No download or registration required. Play full screen. Draw 1 and draw 3 game modes!">
+    <meta name="keywords" content="">
+
+    <title>Play Solitaire Online for free - Klondike, draw 1 and draw 3!</title>
+
+    <style>
+
+body {
+    background:#c8c8c8;
+    overflow:hidden;
+    position:fixed;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    border:0px;padding:0px;margin:0px;
+    width:100%;
+    height:100%;
+    padding-top: constant(safe-area-inset-top);
+    overscroll-behavior: none;
+}
+
+preloader{
+    display:block;
+    width:100%;
+    height:100%;
+    background: #FEFEFE;
+    position:fixed;
+    z-index:5;
+}
+preloader.dark {
+    background: #1C1C1C;
+}
+
+preloader canvas, preloader img{
+    position: fixed;
+}
+
+preloader loadbar{
+    display:none;
+    position:fixed;
+    border:1px solid #A4A4A4;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+preloader loadbar div{
+    display:block;
+    width:0%;
+    height:100%;
+    background-color:#02BDFF;
+}
+
+#gameCanvas{
+    position: fixed;
+    top:0px;
+    left:0px;
+    width:0px;
+    height:0px;
+    background-color:#000000
+}
+
+#overlay{
+    position:absolute;
+    z-index:3;
+    left:50%;
+    transform: translate(-50%, -50%);
+    visibility:hidden;
+    bottom:3px;
+    overflow:hidden;
+    text-align: center;
+}
+
+#overlay div{
+    float:left;
+}
+
+#overlay.cn {
+    margin-left: -190px;
+}
+
+/* Google+ share button */
+#overlay.cn div#___plusone_0 {
+    width: 68px !important;
+}
+
+#overlay.cn div#___plusone_0 iframe {
+    position: relative !important;
+    top: -4px !important;
+}
+
+/* Sina Weibo share button */
+#overlay wb\:share-button iframe {
+    width: 105px !important;
+}
+
+/* QZone share button */
+#overlay iframe[version="1.0"] {
+    position: relative !important;
+    top: -2px;
+}
+
+@-ms-viewport{width:100%}
+
+content{
+    background-color:#ffffff;
+    display: block;
+    padding:20px;
+    height:100%;
+    overflow:scroll;
+}
+
+content metadata{
+    float:right;
+    margin-left:10px;
+    text-align:center;
+}
+
+h1{
+    margin:0px;
+    font-weight:100;
+    font-size:50px;
+}
+a{
+    line-height:2em;
+}
+h3{
+    margin-bottom:0px;
+}
+
+#pwa_prompt {
+    height: 100%;
+    width: 100%;
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    margin: 0 auto;
+    background-color: rgba(0,0,0,0.85);
+    text-align: center;
+    color: white;
+}
+
+#pwa_prompt.hidden {
+    display: none;
+}
+
+#pwa_prompt .close {
+    display: block;
+    position: absolute;
+    top: 5px;
+    right: 2%;
+    cursor: pointer;
+    height: 48px;
+    width: 48px;
+    background-color: white;
+    text-align: center;
+    line-height: 48px;
+    color: black;
+    font-size: 32px;
+    border-radius: 50%;
+
+}
+
+#pwa_prompt img {
+    display: block;
+    max-width: 60%;
+    max-height: 33%;
+    margin: 20px auto;
+    margin-top: 30px;
+}
+
+#pwa_prompt span.copy {
+    display: block;
+    font-weight: bold;
+    font-size: 32px;
+}
+
+#pwa_prompt span.copy.arrow {
+    font-size: 64px;
+}
+
+@media screen and (max-height: 400px) {
+    #pwa_prompt img {
+        margin-bottom: 10px;
+    }
+    #pwa_prompt span.copy {
+        font-size: 24px;
+    }
+    #pwa_prompt span.copy.arrow {
+        font-size: 48px;
+    }
+}
+
+@keyframes w{0%{transform:rotate(0deg);}20%{transform:rotate(-3deg) scale(1.4) translate(0px,-5px);}50%{transform:rotate(3deg) scale(1.4) translate(0px,-5px);}80%{transform:rotate(-3deg) scale(1.4) translate(0px,-5px);}100%{transform:rotate(0deg);}}
+.w {animation:w 1.5s 1;}
+
+</style>
+
+    <style>
+.ad-window {
+    position: absolute;
+    background-color: black;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+}
+
+.ad-header-base {
+    position: absolute;
+    left: 0px;
+    right: 0px;
+    top: 0px;
+    background: #FFFFFF;
+    z-index: 2;
+}
+
+.ad-header-portrait-sm {
+    height: 28px;
+}
+
+.ad-header-portrait-md {
+    height: 28px;
+}
+
+.ad-header-portrait-lg {
+    height: 48px;
+}
+
+.ad-header-landscape-sm {
+    height: 42px;
+}
+
+.ad-header-landscape-md {
+    height: 42px;
+}
+
+.ad-header-landscape-lg {
+    height: 42px;
+}
+
+.ad-footer-base {
+    position: absolute;
+    background-color: white;
+    width: 100%;
+    bottom: 0px;
+    z-index: 2;
+}
+
+.ad-footer-portrait-sm {
+    height: 99px;
+}
+
+.ad-footer-portrait-md {
+    height: 118px;
+}
+
+.ad-footer-portrait-lg {
+    height: 155px;
+}
+
+.ad-footer-landscape-sm {
+    height: 80px;
+}
+
+.ad-footer-landscape-md {
+    height: 96px;
+}
+
+.ad-footer-landscape-lg {
+    height: 128px;
+}
+
+.ad-close-button-base {
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    padding: 8px;
+
+    position: absolute;
+    border: none;
+    outline: none;
+
+    background: #FF0029;
+
+    color: #FFFFFF;
+
+    box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.08);
+    border-radius: 99px;
+    z-index: 3;
+}
+
+.ad-close-button-portrait-sm {
+    width: 40px;
+    height: 40px;
+    right: 32px;
+    top: 8px;
+
+    font-size: 20px; 
+}
+
+.ad-close-button-portrait-md {
+    width: 40px;
+    height: 40px;
+    right: 32px;
+    top: 8px;
+
+    font-size: 20px; 
+}
+
+.ad-close-button-portrait-lg {
+    width: 40px;
+    height: 40px;
+    right: 32px;
+    top: 8px;
+
+    font-size: 20px; 
+}
+
+.ad-close-button-landscape-sm {
+    width: 60px;
+    height: 60px;
+    right: 64px;
+    top: 12px;
+
+    font-size: 35px; 
+}
+
+.ad-close-button-landscape-md {
+    width: 60px;
+    height: 60px;
+    right: 64px;
+    top: 12px;
+
+    font-size: 35px; 
+}
+
+.ad-close-button-landscape-lg {
+    width: 60px;
+    height: 60px;
+    right: 64px;
+    top: 12px;
+
+    font-size: 35px; 
+}
+
+.ad-play-button-base {
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    padding: 0px;
+
+    position: absolute;
+    z-index: 3;
+
+    font-family: 'Poppins Arial';
+    font-style: normal;
+    font-weight: 700;
+
+    color: #FFFFFF;
+
+    background: linear-gradient(90deg, #E8913D, #D83839, #E8913D);
+    border-radius: 99px;
+    border: none;
+    outline: none;
+
+    animation-duration: 2s;
+    animation-iteration-count: infinite;
+}
+
+.ad-portrait-play-button-sm {
+    width: 234px;
+    height: 62px;
+    left: calc(50% - 234px/2);
+    bottom: 68px;
+
+    font-size: 26px;
+    line-height: 39px;
+
+    animation-name: portrait-play-button-anim-sm;
+}
+
+.ad-portrait-play-button-md {
+    width: 256px;
+    height: 68px;
+    left: calc(50% - 256px/2);
+    bottom: 84px;
+
+    font-size: 32px;
+    line-height: 48px;
+
+    animation-name: portrait-play-button-anim-md;
+}
+
+.ad-portrait-play-button-lg {
+    width: 374px;
+    height: 104px;
+    left: calc(50% - 374px/2);
+    bottom: 103px;
+
+    font-size: 48px;
+    line-height: 72px;
+
+    animation-name: portrait-play-button-anim-lg;
+}
+
+.ad-landscape-play-button-sm {
+    width: 301px;
+    height: 80px;
+    left: 128px;
+    bottom: 40px;
+
+    font-size: 36px;
+    line-height: 54px;
+
+    animation-name: landscape-play-button-anim-sm;
+}
+
+.ad-landscape-play-button-md {
+    width: 384px;
+    height: 96px;
+    left: 128px;
+    bottom: 48px;
+
+    font-size: 48px;
+    line-height: 572px;
+
+    animation-name: landscape-play-button-anim-md;
+}
+
+.ad-landscape-play-button-lg {
+    width: 384px;
+    height: 96px;
+    left: 128px;
+    bottom: 80px;
+
+    font-size: 48px;
+    line-height: 572px;
+
+    animation-name: landscape-play-button-anim-md;
+}
+
+@keyframes portrait-play-button-anim-sm {
+   from {background-position-x: 0px;}
+   to {background-position-x: 234px;}
+}
+
+@keyframes portrait-play-button-anim-md {
+   from {background-position-x: 0px;}
+   to {background-position-x: 256px;}
+}
+
+@keyframes portrait-play-button-anim-lg {
+   from {background-position-x: 0px;}
+   to {background-position-x: 374px;}
+}
+
+@keyframes landscape-play-button-anim-sm {
+   from {background-position-x: 0px;}
+   to {background-position-x: 301px;}
+}
+
+@keyframes landscape-play-button-anim-md {
+   from {background-position-x: 0px;}
+   to {background-position-x: 384px;}
+}
+
+.ad-logo-base {
+    position: absolute;
+    z-index: 3;
+}
+
+.ad-portrait-logo-sm {
+    width: 52px;
+    height: 52px;
+    left: calc(50% - 52px/2);
+    bottom: 8px;
+}
+
+.ad-portrait-logo-md {
+    width: 64px;
+    height: 64px;
+    left: calc(50% - 64px/2);
+    bottom: 13px;
+}
+
+.ad-portrait-logo-lg {
+    width: 64px;
+    height: 64px;
+    left: calc(50% - 64px/2);
+    bottom: 24px;
+}
+
+.ad-landscape-logo-sm {
+    width: 182px;
+    height: 42px;
+    right: 128px;
+    bottom: 19px;
+}
+
+.ad-landscape-logo-md {
+    width: 213px;
+    height: 48px;
+    right: 128px;
+    bottom: 24px;
+}
+
+.ad-landscape-logo-lg {
+    width: 213px;
+    height: 48px;
+    right: 128px;
+    bottom: 40px;
+}
+
+.ad-image-sm {
+    position: absolute;
+    margin: auto;
+    display: block;
+    z-index: 1;
+}
+
+</style>
+
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"VideoGame","name":"Play Solitaire Online for free","description":"","url":"https://solitaire.frvr.com/","playMode":"SinglePlayer","applicationCategory":"Game","aggregateRating":{"@type":"AggregateRating","ratingValue":"4.6","bestRating":5,"worstRating":1,"ratingCount":"2945"}}</script>
+
+    <script type="application/json" class="cohort">{"version":"3.7.48","name":"solitaire","gaPath":"solitaire/3.7.48/","vpath":"./","spath":"assets/index.ee603678.js","legacyCoords":false,"configJs":{"id":"solitaire","version":"3.7.48","build":"251128367","gaId":"UA-54081731-1","gaGameId":null},"moreJson":{"ab_tests":{},"track-gma":{"currencies":"coin","itemtypes":"unknown","channelMapping":{"web_safari_ios,web_chrome_ios,web_edge,web_firefox,web_opera,web_safari,web_chrome,":"web"},"customDimensions01":"android,ios,samsung_galaxy_store,facebook_instant,facebook_rooms,bixby,samsung_instant_play,huawei_quick_app,crazy_games,discord,microsoft_pwa,frvr,other","events":{"game_loaded":"'addProgressionEvent','Complete',name,,,loading_time","game_play_start":"'addProgressionEvent','Start',level_id","game_continue_used":"'addProgressionEvent','Start',level_id","game_end":"'addProgressionEvent','Complete',level_id,,,value","game_end-lose":"'addProgressionEvent','Fail',level_id,,,value","tutorial_step_completed":"'addDesignEvent',name:value","fps":"'addDesignEvent',name,value"}},"track-ga":{"gaIds":{"all":"G-8CR3QVSC2J"},"state":"{appId=app_id,appName=app_name,appVersion=app_version,metric1=play_session_count,dimension2=cohort,dimension4=play_session_id,dimension3=device_id,metric2=days_elapsed,metric3=days_played,dimension5=channel,dimension6=entry_point,dimension7=utm_string,dimension8=screen,dimension9=facebook_context,metric4=currency_amount,metric5=missions_completed,metric6=progression,metric7=games_played}","events":{"default":"name,,value,_params","options_change":"name,option_name:option_value","game_end":"name,level_id,game_duration","game_play_start,game_continue_used":"name,level_id","keepalive,new_user,mission_success":"name","coin_spent,tutorial_step_completed,session_start":"name,,value","game_loaded":"name,,loading_time","social_engage,engage":"'engage',engage_id:button_placement,1","play_with_friend":"name,,1","share,invite":"name,button_placement,1","cross_promotion_show":"name,button_placement,1","cross_promotion_click,cross_promotion_success,cross_promotion_failure":"name,target_game,1","ad_mandatory_request":"name,,value,{_merge=_params,dimension13=provider}","ad_mandatory_response":"name,ad_response,value,{_merge=_params,dimension13=provider}","ad_mandatory_show":"name,,value,{_merge=_params,dimension13=provider}","ad_mandatory_finish":"name,ad_result,value,{_merge=_params,dimension13=provider}","ad_mandatory_blocked":"name,,value,{_merge=_params,dimension13=provider}","ad_mandatory_pass":"name,,value,{_merge=_params,dimension13=provider}","ad_mandatory_throttled":"name,throttle_type,value,{_merge=_params,dimension13=provider}","ad_rewarded_request":"name,,value,{_merge=_params,dimension13=provider}","ad_rewarded_response":"name,ad_response,value,{_merge=_params,dimension13=provider}","ad_rewarded_show":"name,,value,{_merge=_params,dimension13=provider}","ad_rewarded_finish":"name,ad_result,value,{_merge=_params,dimension13=provider}","ad_rewarded_blocked":"name,,value,{_merge=_params,dimension13=provider}","ad_rewarded_pass":"name,,value,{_merge=_params,dimension13=provider}","ad_rewarded_throttled":"name,throttle_type,value,{_merge=_params,dimension13=provider}","chatbot_noshow,chatbot_show,chatbot_success,chatbot_issubscribed,chatbot_useraborted":"name,,","chatbot_error":"name,reason,"}},"track-facebook_events":{"blacklist":"iap_request_payment,iap_request_payment_success","events":{"default":"name,{_merge=state,_merge=_params}","ftue":"'COMPLETED_TUTORIAL',{SUCCESS=completed,STEP_NUMBER=step_number,STEP_NAME=step_name,STEP_NUMBER=ftue_step_number,STEP_NAME=ftue_step_name}","ad_rewarded_finish":"'AD_IMPRESSION',{AD_TYPE='rewarded_video',SUCCESS=value}","ad_mandatory_finish":"'AD_IMPRESSION',{AD_TYPE='interstitial',SUCCESS=value}","coin_spent":"'SPENT_CREDITS',{AMOUNT=amount,DESCRIPTION='coins',CONTENT=product}","gem_spent":"'SPENT_CREDITS',{AMOUNT=amount,DESCRIPTION='gems',CONTENT=product}","gem_get":"'UNLOCKED_ACHIEVEMENT',{QUANTITY=value,DESCRIPTION='gem_get'}","popup_claim_reward":"'UNLOCKED_ACHIEVEMENT',{DESCRIPTION='claim_reward'}","levelup_newlevel":"'ACHIEVED_LEVEL',{LEVEL=level}","iap_request_payment":"'INITIATED_CHECKOUT',{CONTENT_ID=productId,NUM_ITEMS='1'}","iap_request_payment_success":"'PURCHASED',{CONTENT_ID=productId,NUM_ITEMS='1'}","iap_request_payment_failed":"'CHECKOUT_CANCELED',{CONTENT_ID=productId,NUM_ITEMS='1'}","rate":"'RATED',{MAX_RATING_VALUE=max_rating_value,RATE=rate_value}"}},"track-frvr":{"state":"{app_version,engine_version,app_build,cohort,channel,development,games_played,play_session_id,play_session_count,days_elapsed,facebook_player_id,facebook_context_type,facebook_entrypoint,utm_source,utm_medium,utm_campaign,utm_term,utm_content,facebook_referral_player_id,remote_user_id,non_interaction,device_width,device_height,global_user_id,web_url,script_version,social_session_id,ab_exp,ab_cohort_name,ab_cohort_weight,page_session_id,fb_instant_game_ad_id,fb_segment}","events":{"default":"name,value,{_merge=state,_merge=_params}"}}},"jsSize":500000,"supportedLanguages":["ru","zh-Hans"],"buildJson":{"buildTime":"Fri Nov 28 2025 12:13:04 GMT+0000 (Coordinated Universal Time)","fsxBuildId":"251128367","repos":{"game-solitaire":{"branch":"master","hash":"828c903933eef6ecc158a94d38a96b3fb231ae7b","dirty":false,"dir":"/__w/command-center/command-center/game-solitaire"},"@frvraps/frvr-xs-builder":{"branch":"master","hash":"890615673100a8d9747529294c8c889c8cec79f3","dirty":true,"dir":"/frvr/frvr-tools/packages/frvr-xs-builder","repository":"git://github.com/frvraps/frvr-tools.git"},"@frvraps/frvr-xs":{"branch":"master","hash":"890615673100a8d9747529294c8c889c8cec79f3","dirty":true,"dir":"/frvr/frvr-tools/packages/frvr-xs","repository":"git://github.com/frvraps/frvr-tools.git"}},"options":{"gameName":"solitaire","verbose":false,"vitejsVerbose":false,"reheatCache":false,"unsloppify":{"hoistBlockFunctions":true,"importify":true,"declareVars":true,"unclashReserved":true,"correctOctals":true,"replaceTopLevelthis":false},"embedImages":["svgoatlas"],"open":false,"vconsole":false,"emptyOutDir":true,"platform":"web","debug":false,"sizeProfiler":false,"minify":true,"beautify":false,"externalJsSync":false,"inlineJs":false,"localizationStyle":"alc","zipFile":false,"zipPwd":"","preview":false,"https":true,"sprinkle":[{"from":"adstxt/ads.txt","to":"ads.txt"}],"strictMode":false,"babelify":true,"screenshot":false,"buildId":false,"removeOldStyleCp":false,"dictionaries":["/__w/command-center/command-center/game-solitaire/game/languages/ru.json","/__w/command-center/command-center/game-solitaire/game/languages/zh-cn.json","/__w/command-center/command-center/game-solitaire/game/languages/zh-Hans.json"],"outDir":"/frvr/frvr-out/Builds/solitaire/solitaire.web"},"timeStamp":1764331984087,"argv":["/usr/bin/node","/usr/bin/fsx","build","solitaire","--platform","web"]}}</script>
+  
+</head>
+  <body>
+
+    <!-- TODO debugcode, move me to provider -->
+    <div id="debug" style="position:absolute; color:red; left:40px; z-index: 9999999"></div>
+
+      <script>window.__antialias=!1;</script>
+
+      <script>(window.__FRVR.buildTimePlatform="web",function(){var e;window.__FRVR.getChannel=function(){var r="frvr",n={chromeWrapper:"chromeos",androidWrapper:"android",iOSWrapper:"ios",rcs:"rcs",samsungAppStore:"samsung_galaxy_store",facebookInstant:"facebook_instant",facebookRooms:"facebook_rooms",facebookAppWeb:"facebook_canvasweb",facebookApp:"facebook_canvas",samsungBixby:"bixby",samsungGameLauncher:"samsung_game_launcher",samsungInstantPlay:"samsung_instant_play",spilGamesWrapper:"spil",vkru:"vkru",okru:"okru",kik:"kik",twitter:"twitter",twitch:"twitch",hago:"hago",oppoGlobal:"oppo_global",tMobile:"tmobile",huawei:"huawei",huaweiquickapp:"huawei_quick_app",yandex:"yandex",crazyGames:"crazy_games",lgtv:"lg_tv",jioStb:"jio_stb",myJio:"jio_my",jioGameslite:"jio_gameslite",rocketChat:"rocket_chat",ufone:"ufone",game8:"game8",snapchat:"snapchat",mailonline:"mail_online",discord:"discord",harman:"harman",microsoftPwa:"microsoft_pwa",aaos:"aaos"};if(e)return e;var t=window.__FRVR.platformIs;for(var o in n)t[o]&&(r=n[o]);if(window.__FRVR.getGoogleAdSenseGameChannelId){var a={7978894035:"samsung_game_launcher",7640790291:"bixby",3704760038:"legacy_samsung_daily",4056808137:"frvr",3238562380:"samsung_instant_play",5374938192:"frvr",5362404538:"frvr",9165482691:"frvr",1661744930:"frvr",1781508157:"frvr",1526015108:"legacy_samsung_browser_us",9152813246:"legacy_samsung_gl_fallback",1570234097:"bixby",6159024522:"telenorpk",9547456458:"huawei_quick_app",4901070532:"frvr",5509479103:"frvr",4687607673:"frvr",7772201439:"frvr",5781080938:"frvr",7859627468:"bixby",6225636036:"frvr",9257964653:"frvr",9997971842:"legacy_samsung_gl_pwa",1810535265:"frvr",6879406107:"frvr",5664912848:"frvr",7871893264:"oppo_global",6905222938:"1001spill",1074763396:"frvr",4822698373:"huawei",3917207338:"frvr",3091839955:"frvr",9511672440:"frvr",9609759920:"frvr",8846287731:"frvr",1912410415:"frvr",3463089052:"frvr",3138478138:"spil",3609613151:"frvr",7259516105:"frvr",8260783143:"frvr",4791934430:"frvr",5304245228:"frvr",4196077731:"frvr",7517011737:"ga",1420430092:"frvr",6341560802:"frvr",3188724532:"frvr",7430391555:"samsung_galaxy_store_pwa",6142190935:"frvr",2410146e3:"spil",6238202936:"frvr",2165771095:"frvr",7169566203:"frvr",7116648941:"frvr",9484119302:"frvr",8289067739:"crazy_games",4942292965:"frvr",4111954147:"samsung_instant_daily",9508446909:"mozilla_lite",6581072258:"frvr",6305391737:"frvr",7721350107:"frvr",5689634745:"frvr",4407671492:"frvr",8793151713:"mynet",6701854007:"frvr",8166612510:"frvr",1204043211:"frvr",8540348735:"frvr",8092992494:"frvr",3050063345:"frvr",6105016100:"frvr",5383746593:"frvr",2155121367:"frvr",4481639214:"frvr",9167804042:"frvr",2633738716:"frvr",5732840388:"frvr",1136474154:"frvr",3868538934:"frvr",6791411817:"frvr",4001058104:"spil",8323344707:"frvr",1511956590:"frvr",5337609782:"frvr",7647348124:"frvr",9465676615:"frvr",8699389853:"frvr",8288405339:"ga",1601204168:"frvr",6738957149:"frvr",3143968130:"spil",3660984936:"legacy_all_samsung_browser",6672071330:"ga",9944902462:"frvr",4216099801:"ga",9810477030:"frvr",4127083129:"frvr",9831349735:"mediatrust",1651142765:"frvr",2402315798:"frvr",3217022605:"rcs",8209630496:"frvr",7348809119:"frvr",1907949320:"frvr",7711130568:"frvr",6682900564:"frvr",8220757253:"frvr",9226003469:"frvr",6459119768:"ga",3297429215:"frvr",2066412442:"frvr",9610826637:"spil",5428378892:"frvr",3718604937:"ga",7010263033:"frvr",5533541335:"spil",5393940535:"spil",6680931602:"frvr",8135642444:"frvr",5195338130:"ga",2443106993:"frvr",9841433446:"frvr",9471076165:"spil",8645981334:"clickjogos",9750454053:"spil",5496116299:"spil",9095657336:"spil",5196972230:"frvr",1711991335:"spil",1463804937:"plonga",6650691459:"frvr",7854536931:"spil",4185858062:"frvr",1559694722:"frvr",4196397436:"ga",5791200697:"frvr",8838890658:"frvr",6592001260:"frvr",8990371880:"rocketchat",3078524176:"frvr",1414057592:"spil",1721816412:"spil",7627870781:"samsung_instant_browser_us",7257814137:"spil",6687910134:"mfogs",6388800833:"frvr",6794212012:"mailonline",2719344539:"spil",6005657456:"frvr",4761469737:"spil",8260978605:"frvr",4899645641:"frvr",5570875049:"tron",3275762232:"spil",1433925895:"spil",7925670440:"taboola",3587369568:"squid",3982547231:"frvr",4388062450:"spil",8471269857:"bixby",1323020937:"spil",3605255281:"bixby",9085283107:"frvr",1873844328:"legacy_samsung_browser_m4s",8924310391:"bixby",7269966843:"tmobile",1075554580:"adsenseforgamestest2",1098459098:"frvr",8199816817:"xiaomi"}[window.__FRVR.getGoogleAdSenseGameChannelId()];a&&(r=a)}return e=r,r};var r=window.location.href;window.__FRVR.getQueryString=function(e){var n=r;e=e.replace(/[\[\]]/g,"\\$&");var t=new RegExp("[?&]"+e+"(=([^&#]*)|&|#|$)","i").exec(n);return t?t[2]?decodeURIComponent(t[2].replace(/\+/g," ")):"":null},window.__FRVR.platformIs=new function(e,r,n,t){var o,a=this;a[window.__FRVR.buildTimePlatform]=!0,a.android=/(android)/i.test(n)&&!/(Windows)/i.test(n),a.androidVersion=(o=navigator.userAgent.toLowerCase().match(/android\s([0-9\.]*)/),parseFloat(o?o[1]:0)),a.aaos="car"==window.__FRVR.getQueryString("aaos"),a.ci="1"==window.__FRVR.getQueryString("ci_run"),a.firefoxMobile=/(Mobile)/i.test(n)&&/(Firefox)/i.test(n),a.slow=a.android&&a.androidVersion<6,a.iOS=/(ipod|iphone|ipad)/i.test(n)||/(Macintosh)/i.test(n)&&"ontouchend"in document,a.windowsMobile=/(IEMobile)/i.test(n),a.silk=/(silk)/i.test(n),a.clay=/(clay\.io)/i.test(t),a.facebookApp=/(fb_canvas)/i.test(t),a.facebookAppWeb=/(fb_canvas_web)/i.test(t),a.iframed=e.top!==e.self,a.standalone="standalone"in r&&r.standalone,a.mobileiOSDevice=n.match(/iPhone/i)||n.match(/iPod/i),a.kongregate=/(kongregateiframe)/i.test(t),a.kik=/(kik_canvas)/i.test(t),a.twitter=/(twitter)/gi.test(n),a.chrome=/Chrome\//.test(n),a.safari=!!navigator.userAgent.match(/Version\/[\d\.]+.*Safari/),a.badWebkit=/AppleWebKit\/605\.1\.15/i.test(n)&&/iPhone OS 15_[0|1|2]/i.test(n),a.secureConnection=0==window.location.protocol.indexOf("https"),a.facebookInstant=!!window.FBInstant,a.facebookRooms=window.isFacebookRooms,a.spilGamesWrapper=/(spilgames)/i.test(t),a.social="on"==window.__FRVR.getQueryString("social"),a.advertisementIsDisabled="off"==window.__FRVR.getQueryString("ads"),a.advertisementInterstitialDisabled="off"==window.__FRVR.getQueryString("int"),a.advertisementOverlayEnabled=!a.iframed||a.spilGamesWrapper||window.__FRVR.getQueryString("partnerid"),a.nosoc="1"==window.__FRVR.getQueryString("nosoc"),a.development=null!=window.__FRVR.getQueryString("development")?"true"==window.__FRVR.getQueryString("development"):null,a.facebookAd=/(\/\?fb)/i.test(t),a.mobile=a.android||a.windowsMobile||a.iOS||a.silk||a.firefoxMobile,a.mobileWrapper=e.iOSWrapper||e.androidWrapper||!1,a.iOSWrapper=e.iOSWrapper||!1,a.iPhoneXOrLater="true"==window.__FRVR.getQueryString("iPhoneXOrLater"),a.iMessageContext="true"==window.__FRVR.getQueryString("iMessage"),a.androidWrapper=e.androidWrapper||!1,a.chromeWrapper=e.isChromeWrapper||!1,a.samsungAppStore="samsung"==window.__FRVR.getQueryString("androidStore"),a.appWrapper=e.iOSWrapper||e.androidWrapper||a.samsungAppStore,a.usingWebGLRenderer=!1,a.usingCanvasRenderer=!1,a.jioStb=!!a["jio-stb"],a.myJio=!!a.myjio,a.jioGameslite=!!a["jio-gameslite"],a.jio=a.jioStb||a.myJio||a.jioGameslite,a.twitch=""==window.__FRVR.getQueryString("twitch"),a.vkru=""==window.__FRVR.getQueryString("vkru"),a.okru=""==window.__FRVR.getQueryString("okru"),a.tMobile=""==window.__FRVR.getQueryString("tmobile"),a.pwa=""==window.__FRVR.getQueryString("pwa"),a.windowsApp=""==window.__FRVR.getQueryString("windowsapp"),a.microsoftPwa=window.document&&window.document.referrer&&-1!==document.referrer.indexOf("app-info://platform/microsoft-store")||""==window.__FRVR.getQueryString("mspwa")||window.__FRVR.getQueryString("msstart_sdk_init"),a.enableAppStoreLinks=!0,a.samsungGalaxyStorePWA=""==window.__FRVR.getQueryString("samsung")&&"galaxystore"==window.__FRVR.getQueryString("source"),a.samsungGameLauncherPWA=(""==window.__FRVR.getQueryString("pwa")||""==window.__FRVR.getQueryString("samsung"))&&"gamelauncher"==window.__FRVR.getQueryString("source"),a.samsungGameLauncher=!!window.FRVRInstant||(""==window.__FRVR.getQueryString("gamelauncher")||"gamelauncher"==window.__FRVR.getQueryString("source")),a.samsungBixby=""==window.__FRVR.getQueryString("samsung")&&!a.samsungGalaxyStorePWA,a.samsungBrowserUK=""==window.__FRVR.getQueryString("samsungbuk"),a.samsungBrowserUS=""==window.__FRVR.getQueryString("samsungbus"),a.samsungBrowserSEA=""==window.__FRVR.getQueryString("samsungbsea"),a.samsungBrowser=""==window.__FRVR.getQueryString("samsungbrowser"),a.samsungGLFallback=""==window.__FRVR.getQueryString("gl_fallback"),a.samsungInstantPlay=!!window.GSInstant,a.samsung=a.samsungGalaxyStorePWA||a.samsungGameLauncherPWA||a.samsungGameLauncher||a.samsungBixby||a.samsungBrowserUK||a.samsungBrowserUK||a.samsungBrowserUS||a.samsungBrowserSEA||a.samsungBrowser||a.samsungGLFallback||a.samsungInstantPlay,a.rcs=window.__FRVR.getQueryString("rcsid"),a.snapchat=!!window.sc,a.rcsKr=""==window.__FRVR.getQueryString("rcskr"),a.huaweiquickapp=""==window.__FRVR.getQueryString("huaweiquickapp"),a.huawei=""==window.__FRVR.getQueryString("huawei")||a.huaweiquickapp,a.mozilla=""==window.__FRVR.getQueryString("mozilla"),a.miniclip=""==window.__FRVR.getQueryString("miniclip"),a.chromeOSDevice="true"==window.__FRVR.getQueryString("isChromeOSDevice"),a.opera=!!e.opr&&!!e.opr.addons||!!e.opera||n.indexOf(" OPR/")>=0,a.yandex=!!window.YaGames,a.firefox=void 0!==e.InstallTrigger,a.edge=/(edge|edgios|edga)\/((\d+)?[\w\.]+)/i.test(n),a.oppoGlobal=""==window.__FRVR.getQueryString("oppo"),a.lgtv=""==window.__FRVR.getQueryString("lgtv"),a.crazyGames="8289067739"==window.__FRVR.getQueryString("partnerid"),a.mynet=""==window.__FRVR.getQueryString("mynet"),a.ufone="8416254215"==window.__FRVR.getQueryString("partnerid"),a.game8=""==window.__FRVR.getQueryString("game8"),a.mailonline="6794212012"==window.__FRVR.getQueryString("partnerid"),a.disableNativeBridge=""==window.__FRVR.getQueryString("disableNativeBridge"),a.partnerWrapper=!a.disableNativeBridge&&(a.mynet||a.tMobile||a.ufone||a.mailonline)&&(a.iOS||a.android),a.rocketChat=""==window.__FRVR.getQueryString("rocketchat"),a.discord="discord"===window.__FRVR.buildTimePlatform,a.harman=""==window.__FRVR.getQueryString("harman"),a.progressiveWebAppEnabled=!(a.chromeOSDevice||a.iframed||a.appWrapper||a.twitch||a.vkru||a.okru||a.facebookInstant||a.partnerWrapper),a.tv=a.jioStb||a.lgTV}(window,navigator,navigator.userAgent,document.location)}(),function(){var e=document.getElementById("ab-experiment"),r=e&&JSON.parse(e.innerHTML);function n(e,n){var t=JSON.parse(e.innerHTML);t.cohortName=e.getAttribute("data-cohort-name"),t.cohortWeight=e.__weight,t.cohortIdx=parseInt(e.getAttribute("data-cohort-idx")),t.selectionReason=n,t.experiment=r,window.__FRVR.cohort=function(){return t}}var t=document.getElementsByClassName("cohort");if(1===t.length)return n(t[0],"single");for(var o=0,a=URLSearchParams&&new URLSearchParams(window.location.search),i=a&&a.get("force-cohort"),s=0;s<t.length;s++){var d=t[s].getAttribute("data-weight");t[s].__weight=d&&parseInt(d)||100;var l=t[s].getAttribute("data-cohort-name");if(i&&l===i)return window.__FRVR.keepurl=!0,n(t[s],"forced");o+=t[s].__weight}var c=r.name+":"+window.__FRVR.globalUserId(),u=Math.abs(function(e){for(var r=e.length-1,n=5381;r;r--)n=e.charCodeAt(r)+(n<<5)+n;return n}(c))%o;for(s=0;s<t.length;s++){var g=t[s].__weight;if(u<g)return n(t[s],"user-id-random");u-=g}}(),window.FRVR)&&((FRVR=window.FRVR).config=JSON.parse(JSON.stringify(FRVRConfig)));if(function(){var e=window.FRVR,r=2,n=256|1024,t=128,o=16;const a=(e=>{const r=["127.0.0.1","localhost"].includes(window.location.hostname),n=e.iOSWrapper||e.androidWrapper;return e.crazyGames||r&&!n})(window.__FRVR.platformIs);"true"===window.__FRVR.getQueryString("forceConsent")||a||(e.config.consent={providerName:"cookiepro",config:{websiteKey:window.__FRVR.platformIs.samsungInstantPlay?"2a27de4c-12f8-4596-9a17-1283124f8823":"acd0a7d3-539e-483c-8c17-484beca00b4d"}},window.__FRVR.consent={VENDORS:{GOOGLE:755},ANALYTICS:n,AD_ANALYTICS:t,PERSONALISED_ADS:o,COOKIES:r,hasConsent:r=>e.consentProvider.hasConsentForAny(r),onConsentChanged:r=>{e.consentProvider.onConsentChanged(r)},show:()=>{e.consentProvider.consentToTerms()},isReady:()=>e.consentProvider.hasLoaded()})}(),window.FRVR){function whenLoggedIn(){let e=!0;return new Promise(((r,n)=>{FRVR.auth.isLoggedIn()?r():FRVR.auth.isLoggingIn()?FRVR.auth.addStatusChangeListener((n=>{e&&n&&(e=!1,r())})):n(new Error("Not an auto-login platform"))}))}var FRVR;setupAdConfigsForSDK(),(FRVR=window.FRVR).init(window.frvrEnv),window.FRVR.tracker.addExtraFieldFunction((function(e){e.app_build=__FRVR.cohort().configJs.build,e.app_version=__FRVR.cohort().version})),window.__FRVR.initPromise=FRVR.bootstrapper.init().then((function(){return whenLoggedIn().then((()=>FRVR.features.getFeatures([]))).catch((e=>{console.error("BOOT FRVR error",e)}))})),window.__FRVR.completePromise=new Promise(((e,r)=>{window.__FRVR.completeReady={resolve:e,reject:r}}))}!function(e){var r="/coeus.frvr.com/v1/tm5",n=[];function t(){if(e.isReady())for(;n.length>0;)F(n.shift())}(e=e||{hasConsent:function(e){return!0},onConsentChanged:function(e){},isReady:function(){return!0}}).onConsentChanged(t);var o=null,a=function(e){n.length<100&&n.push(e),o&&clearTimeout(o),o=setTimeout(t,1)},i=navigator&&"function"==typeof navigator.sendBeacon,s=!1,d={protocol_version:"f",app_version:"av",engine_version:"ev",development:"dv",app_build:"ab",cohort:"co",channel:"ch",games_played:"gp",play_session_id:"pi",play_session_count:"pc",days_elapsed:"de",facebook_player_id:"fi",facebook_context_type:"fc",facebook_entrypoint:"fe",facebook_referral_player_id:"fr",utm_source:"us",utm_medium:"um",utm_campaign:"uc",utm_term:"ut",utm_content:"uo",remote_user_id:"ru",global_user_id:"guid",device_width:"dw",device_height:"dh",non_interaction:"ni",country:"ct",event:"e",game:"g",user:"u",client_time:"t",value:"v",provider:"ao",ad_result:"ar",ad_response:"ag",ad_point:"ap",transport:"tr",web_url:"wu",retry:"r",label:"l",advertisement_id:"ai",script_version:"xv",cache_buster:"n",page_session_id:"si"},l=new function(){try{var e="__frvrLocalStorageTest__";window.localStorage.setItem(e,e),window.localStorage.removeItem(e),this.storage=window.localStorage,this.type="localStorage"}catch(e){this.storage={},this.type="in-memory"}this.setItem=function(e,r){this.storage[e]=r},this.getItem=function(e){return this.storage[e]},this.getStorageType=function(){return this.type}};function c(e){var r=e||"-";function n(){return(65536*(1+Math.random())|0).toString(16).substring(1)}var t=(new Date).getTime().toString(16).slice(0,11)+(65536*(1+Math.random())|0).toString(16).substring(1,2);return n()+n()+r+n()+r+n()+r+n()+r+t}var u="in-memory",g=c(),w=c(),p=c();function _(e,r,n){"localhost:8080"!==window.location.host&&-1==(window.location.search||"").indexOf("ci_run")&&(n=void 0!==n?n:5,e(r,(function(){if(n>0){var t=5e3*(Math.pow(2,5-n)+Math.random());r.r=5-n+1,setTimeout(_.bind(void 0,e,r,--n),t)}})))}function m(e,r,n){if(navigator.sendBeacon(e,JSON.stringify(r)))return!0;n()}function f(e,r,n){var t=new XMLHttpRequest;t.overrideMimeType&&t.overrideMimeType("text/plain; charset=UTF-8");try{t.open("POST",e,!0),t.setRequestHeader("Content-type","text/plain; charset=UTF-8"),t.withCredentials=!0,t.onreadystatechange=function(){if(4==t.readyState){var e=t.status;t=t.onreadystatechange=null,200!=(e=parseInt(e))&&204!=e?n():s=!0}},t.send(JSON.stringify(r))}catch(e){n()}}function v(e,r,n){r.n=Math.random();var t=document.createElement("img");t.onload=function(){s=!0,t.onerror=t.onload=null},t.onerror=function(){n(),t.onerror=null},t.src=e+"?"+function(e){var r=[];for(var n in e)r.push(encodeURIComponent(n)+"="+(void 0!==e[n]&&null!=e[n]?encodeURIComponent(e[n]):""));return r.join("&")}(r),document.body.appendChild(t)}function R(e,r){return i&&s?(r.transport="bcn",m.bind(void 0,e)):XMLHttpRequest?(r.transport="xhr",f.bind(void 0,e)):(r.transport="img",v.bind(void 0,e+"/i"))}function h(e){var r={};for(var n in e)void 0!==e[n]&&null!=e[n]&&(r[d[n]||n]=e[n]);return r}function b(){if(!e.hasConsent(e.COOKIES))return p;var r=l.getItem("pageSessionId");return r||(r=p,l.setItem("pageSessionId",r)),r}window.__FRVR.globalUserId=function(){if(!e.hasConsent(e.COOKIES))return g;var r;if(document&&document.cookie){var n=document.cookie.match("^(?:.*_frvr=([^;]*)).*$");r=n&&n[1]||g;var t=new Date;t.setDate(t.getDate()+730),document.cookie="_frvr="+r+"; path=/; expires="+new Date(t).toUTCString()+"; domain="+function(){for(var e=document.location.hostname.split("."),r=e.length-1;r>=0;r--){var n=e.slice(r).join(".");if(document.cookie="get_tld=test;domain=."+n+";",document.cookie.indexOf("get_tld")>-1)return document.cookie="get_tld=;domain=."+n+";expires=Thu, 01 Jan 1970 00:00:01 GMT;",n}return""}()+";",u="cookie"}else(r=l.getItem("globalUserId"))||(r=g,l.setItem("globalUserId",r)),u=l.getStorageType();return r};var y=[],S=void 0;function F(e){for(var n=e.channel,t=window.__FRVR.globalUserId(),o=(b(),0);o<y.length;o++)y[o](e);var a="unknown://";document&&document.location&&document.location.protocol&&(a=document.location.protocol),a=S||a;var i=void 0;document&&document.location&&document.location.href&&(i=document.location.href);var s=[a,r,e.context||"_unspecified_",t].join("/");e.app_version=e.app_version||"0.0.0",e.app_build=e.app_build||"000000",e.channel=n||e.channel,e.web_url=i,e.script_version="2.0.0",e.protocol_version=5,e.page_session_id=e.page_session_id||b(),e.play_session_id=e.play_session_id||null,e.cache_buster=Math.random(),e.global_user_id=t,e.global_user_id_source=u;var d=60*(new Date).getTimezoneOffset()*1e3;e.client_time=new Date(Date.now()-d).toISOString().slice(0,-1),_(R(s,e),h(e))}exports=window.__FRVR.analytics={},exports.logDiscoveryPageView=function(e){(e=e||{}).event="discovery_page_view",a(e)},exports.logAdImpression=function(e){(e=e||{}).event="ad_impression",a(e)},exports.setProtocolOverride=function(e){S=e},exports.getPageSessionId=b,exports.getPlaySessionId=function(){if(!e.hasConsent(e.COOKIES))return w;var r=l.getItem("playSessionId");return r&&parseInt(l.getItem("playSessionIdTimeStamp"))+18e5<Date.now()&&(r=null),r||(r=w,l.setItem("playSessionId",r)),l.setItem("playSessionIdTimeStamp",Date.now()),r},exports.compressContext=h,exports.extraFieldFunctions=y,exports.logEvent=function(e,r){"object"==typeof e&&(r=e,e="__unspecified"),(r=r||{}).event=e,a(r)}}(window.__FRVR.consent),window.__FRVR.initPromise.then((()=>{exports=window.__FRVR.analytics||{},exports.compressContext=e=>e,exports.extraFieldFunctions=FRVR.tracker.extraFieldFunctions,exports.logEvent=FRVR.tracker.logEvent})),window.__FRVR.initPromise.then((()=>{var e=window.__FRVR,r=e.cohort().buildJson||{};e.fsxBuildId=r.fsxBuildId;try{e.XSEngineBranch=r.repos["@frvraps/frvr-xs"].branch}catch(e){console.warn("Could not determine __FRVR.XSEngineBranch")}try{e.XSEngineBranch&&0===e.XSEngineBranch.indexOf("release/")&&(e.XSEngineVersion=e.XSEngineBranch.slice(8))}catch(e){}e.analytics.extraFieldFunctions.push((function(r){r.context=e.cohort().name||"_no_game_",r.app_build=e.cohort().configJs.build,r.app_version=e.cohort().version,r.channel=e.getChannel()})),(window.androidWrapper||window.iOSWrapper)&&e.analytics.setProtocolOverride?.("https://"),window.FRVR||e.analytics.logEvent("page_loading")})),window.version=window.__FRVR.cohort().version,window.gameid=window.__FRVR.cohort().name,window.gaPath=window.__FRVR.cohort().gaPath,window.vpath=window.__FRVR.cohort().vpath,window.spath=window.__FRVR.cohort().spath,window.extsize=window.__FRVR.cohort().jsSize,window._jsonData=window.__FRVR.cohort().moreJson,window.LEGACY_COORD_SYSTEM=!1,window.initTime=window.__FRVR.startTime;var preloader=document.createElement("preloader");if(document.body.appendChild(preloader),!window.console||!console.log){var fn=function(){};console={log:fn,debug:fn,info:fn,warn:fn,error:fn}}Host={Localize:{languages:window.__FRVR.cohort().supportedLanguages},dataUrlsSupported:function(){var e=document.createElement("canvas");return e.toDataURL&&0==e.toDataURL("image/png").indexOf("data:image/png")}()},function(e,r,n,t){var o="GameAnalytics";e[o]=e[o]||function(){(e[o].q=e[o].q||[]).push(arguments)}}(window,document),window.embeddedFiles={},window.embedFiles=function(e,r){for(var n=0;n<e.length;n++){var t=r[n];window.embeddedFiles[e[n]]=t}},window.embeddedAssets={},window.loadAssets=function(e,r,n){for(var t=0;t<e.length;t++){var o=e[t],a=r[t];window.embeddedAssets[o]=a?[a,n[t]]:n[t]}},function(){var e=0;window.htmlprogress=function(r,n){e=Math.max(n/r,e)};var r=0,n=setInterval((function(){e<.5&&(e+=(.5-e)/100),r+=(e-r)/10,window.__FRVR.platformSpecificProgress&&window.__FRVR.platformSpecificProgress(r)}),50);window.htmlclean=function(){window.__FRVR.gameIsLoaded=!0,preloader&&preloader.parentNode&&preloader.parentNode.removeChild(preloader),clearInterval(n),window.__FRVR.platformSpecificCleanup&&window.__FRVR.platformSpecificCleanup()}}(),function(){"use strict";var e,r;if(!window.FBInstant&&!window.GSInstant){var n="|q|T~(a(a(a_^L_|P(5|P(5{F)>{F)>`o(5`o(5^!<W^!<W^K_^L]&^K[`{g[^{g[N^K?n^K?o^L?n^L[z|P]c|P^o^L^o^K]&^K?Z{x?E{8>@{3>4{l>h{L>``}?O`-?S`N?V](=5^N<-^L<-|P=n|P=n{P=2{P>D{7>x|v?f|I?Z{x>L`x=n`x=n^!>K^!>6^+>6`z>L`x|k{x|P{8{{{3{&{l{s{L|H`}|Y`-|d`N|g](`*^N^?^L^?|P`y|P`y{P`!{P{O{7{7|v|q|I|k{x{V`x`y`x`y^!{V^!{-^+{-`z{V`x~<><X_|o=i|o?h`+[|]![$|D)-^HEkq=hM;k+;k_[/<t~<>)+(D[+<u]2)T`2),`6=i`6=6`1=]`q>O|E),uCzx7p<1P;kE;k~,!x:nq=oE;k/.k~[/<t`T[$?U<tmAl~<>)+(DEBl~<O(j(T`j>Y^??A]=?T]M>9[9>f[o=;[K=i?D>|?X?m?.?[?.?[[d[i[<[4]#[$[/<t~<>_(p[/<u?p>N>/[4<N[I=^=i?D).?M)4?@(w]GY8k^g~[/<t<j(![X=icAl~)&_<>6Al~)I(i)9?E).>4)Z>I(<=o(!)`<[<U<m<<<Y=e<1=1<-=*=L=`=i~)&_<>=2=><<>^)f=|){<=)^<[(v?B([?v)t?^<O[I=2=>[/<t~_<N<>=p(!)B(Ucmj=A(w?C";-1==location.search.indexOf("theme=light")&&(-1!=location.search.indexOf("theme=dark")||window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches)&&preloader.classList&&preloader.classList.add&&(preloader.classList.add("dark"),n=n.replace("(a(a(a","<><><>")),e=function(e,r){function n(e){for(var r={},n=0;n<e.length;n++)r[e[n]]=n;return r}var t=n("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/!#$&*-,.:;@()<=>?[]^`{|}"),o=n("()<=>?[]^`{|}"),a=0;function i(){var e,n,i=r[a++];switch(i){case"_":e=0;break;case"~":e=1;break;case"%":e=149932;break;case"'":e=-149932;break;case"@":e=(e=t[r[a++]]+74*t[r[a++]]+5476*t[r[a++]]+405224*t[r[a++]])/100-149932;break;default:e=void 0!==(n=o[i])?88*n+t[r[a++]]:(e=t[i]+74*t[r[a++]]+5476*t[r[a++]])/100-2026}return e}function s(){return i()?"rgb("+i()+","+i()+","+i()+")":"rgba("+i()+","+i()+","+i()+","+i()+")"}var d=document.createElement("canvas");d.width=i(),d.height=i();var l=d.getContext("2d");l.scale(1,1);for(var c,u=[d],g=0;g<e.length;g++)switch(e[g]){case"4":var w=getNewCanvasObject();w.width=i(),w.height=i(),l=w.getContext("2d"),u.push(w);break;case"b":var p=l.createPattern(l.canvas,"no-repeat"),_=u.pop();releaseCanvas(_),(l=u[u.length-1].getContext("2d")).fillStyle=p;break;case"t":c=l.createLinearGradient(i(),i(),i(),i());break;case"D":c=l.createRadialGradient(i(),i(),i(),i(),i(),i());break;case"8":c.addColorStop(i(),s());break;case"F":l.fillStyle=c;break;case"f":l.save();break;case"/":l.bezierCurveTo(i(),i(),i(),i(),i(),i());break;case"p":l.strokeStyle=s();break;case"w":l.lineCap="butt";break;case"y":l.lineJoin="miter";break;case"9":l.miterLimit=i();break;case"6":l.fillStyle=s();break;case"n":l.beginPath();break;case"q":l.closePath();break;case"o":l.fill();break;case"P":l.stroke();break;case"r":l.restore();break;case"2":l.arc(i(),i(),i(),i(),i(),1===i());break;case"m":l.moveTo(i(),i());break;case"l":l.lineTo(i(),i());break;case"5":l.quadraticCurveTo(i(),i(),i(),i());break;case"C":l.clip();break;case"E":l.lineWidth=i();break;case"A":l.transform(i(),i(),i(),i(),i(),i());break;case"u":l.translate(i(),i());break;case"V":l.scale(i(),i());break;case"0":l.rotate(i());break;case"K":l.globalAlpha=i();break;case"G":l.strokeStyle=c;break;default:console.error("unhandled",e[g])}return a=0,i(),i(),d}("6nmllllllllllmlllllllllllm/l//llll/lmlll/m/l//llll/lmlll/o6nm/l2mo6nm//l22mot88Fnm//l//mo6nm/lll/mot88Fnm/l//o6nm/ll/lmo6nm/o",n);var t=document.createElement("loadbar");setTimeout((function(){t&&(t.style.display="block")}),500),r=document.createElement("div"),preloader.appendChild(t),t.appendChild(r),preloader.appendChild(e)}var o=0,a=0;function i(){if(!window.FBInstant&&!window.GSInstant){var r=document.documentElement.clientWidth,n=Math.min(window.innerHeight,document.documentElement.clientHeight);if(o!=r||a!=n){o=r,a=n;var i=.6*Math.min(r,n)>>0,s=.978260869*i>>0,d=(n-1.15*s)/2>>0;t.style.width=e.style.width=i+"px",e.style.height=s+"px",t.style.left=e.style.left=((r-i)/2>>0)+"px",e.style.top=d+"px",t.style.height=(i/40>>0)+"px",t.style.top=d+1.15*s+"px"}}}i(),window.__FRVR.platformSpecificProgress=function(e){r&&(r.style.width=(100*e>>0)+"%"),i()},window.__FRVR.platformSpecificCleanup=function(){e&&(e.width=e.height=1),t=r=e=preloader=null}}();</script>
+      <canvas id="gameCanvas"></canvas>
+      <script>var cs=document.getElementById("gameCanvas").style;cs.width=cs.height="100%";</script>
+
+        <div id="overlay"></div>
+
+        <div id="overlay"></div>
+
+      <content itemscope="" itemtype="https://schema.org/VideoGame">
+  <h1 itemprop="name">Solitaire FRVR</h1>
+  <meta itemprop="url" content="https://solitaire.frvr.com/">
+  <div itemprop="author" itemscope="" itemtype="http://schema.org/Organization">
+    <p style="margin-top:0px"><span itemprop="name"><a itemprop="url" href="http://frvr.com/">By FRVR</a></span></p>
+  </div>
+
+  <metadata>
+    <!--<img itemprop="image" src="" data-original="/game/./i/web/icon196x196.png"/>-->
+    <meta itemprop="playMode" content="SinglePlayer">
+    <p>Genre: <span itemprop="genre"></span></p>
+
+    <div itemscope="" itemtype="http://schema.org/AggregateRating" itemprop="aggregateRating">
+      <div>Average Rating: <b itemprop="ratingValue">4.6</b>/<b itemprop="bestRating">5</b></div>
+      <meta itemprop="ratingCount" content="2945">
+    </div>
+
+    <link itemprop="applicationCategory" content="Game">
+    <link itemprop="applicationSubCategory" content="Board, Puzzle">
+    <span itemprop="offers" itemscope="" itemtype="http://schema.org/Offer">
+      <meta itemprop="price" content="$0">
+      <meta itemprop="priceCurrency" content="USD">
+      <link itemprop="availability" href="http://schema.org/InStock">
+    </span>
+    <meta itemprop="contentRating" content="Everyone">
+    <meta itemprop="playMode" content="SinglePlayer">
+  </metadata>
+
+  <p><a href="index.html">Please enable JavaScript to play now!</a></p>
+
+  <h2>More information</h2>
+  <ul>
+    <li><a href="https://frvr.com/">FRVR Website</a></li>
+    <li><a href="http://news.frvr.com">FRVR News</a></li>
+    <li><a href="https://twitter.com/frvrgames">FRVR on Twitter</a></li>
+    <li><a href="https://www.facebook.com/frvrgames">FRVR on Facebook</a></li>
+    <li><a href="https://plus.google.com/+Frvrgames">FRVR on Google+</a></li>
+  </ul>
+  <h2>More great games</h2>
+  <ul>
+
+  </ul>
+  <h2>More platforms</h2>
+  <ul>
+
+  </ul>
+
+  <p><a href="https://frvr.com/">Always get the greatest new games on frvr.com</a></p>
+</content>
+
+      <script>!function(){function n(n){return function(o,e,t,i,a){e instanceof Error&&(a=e,e=void 0);var r=window.__FRVR.cohort().configJs,d=(((a=a||new Error(o)).stack||"").split("\n")[1]||"").split(":"),s=d.pop()||void 0,w=d.pop()||void 0;t=t||a.lineNumber||a.lineno||a.line||w||"",i=i||a.columnNumber||a.colno||a.column||s||"",e=e||a.sourceURL||"",o=o||a.message||a.toString&&a.toString()||"";var c=function(n){var o=[],e=(n&&n.stack||"").split("\n");e.shift();for(var t=0;t<e.length;t++)o.push(e[t].replace(/^\s*at\s+/g,"").replace(/(https?:\/\/[^\/]+)?/g,"").replace(/https?:\/\/[^\/]+/g,"").replace(/\/?game\/[^\/]+\/[^\/]+/g,"").replace(/:?<anonymous>:?/g,"").replace(/^([^ ]+)\s+\(/g,"$1(").replace(/^([0-9]+:[0-9]+$)/g,"($1)"));return o}(a)||[],g=e+": "+t+": "+i;window.Host&&Host.Log&&Host.Log(n+" Error: "+o+": "+g+"\nStack: "+c.join("\n")),console.error(n+" Error",o+": "+g,a),g+=": "+c.join("|").substr(0,150);var l=r.id+" "+r.version+" "+r.build+" "+n+" Error",p=Date.now()-(window.__FRVR.startTime||0);window.gax&&(gax("send","event",l,o,g,p),gax("send","exception",{exDescription:l+": "+o+": "+g}))}}window.onerror=n("JavaScript"),window.__FRVR.createErrorHandler=n;var o=n("Promise");window.onunhandledrejection=function(n){var e=n&&n.reason||{};o("onunhandledrejection error",void 0,void 0,void 0,e)}}(),function(){var n=window.__FRVR.cohort().configJs;window.ga=function(){console.warn("Stubbed ga() being called:",arguments)},window.gax=function(){console.warn("Stubbed gax() being called;",arguments)},window.gaAppInfo={appId:"com.frvr."+n.id,appName:n.id,appVersion:n.version,appBuild:n.build},window.initGoogle=function(){window.dataLayer=window.dataLayer||[],window.gtag=function(){dataLayer.push(arguments)},window.gtag("js",new Date),window.gtag("set",window.gaAppInfo),window.gtag("config","G-8CR3QVSC2J")}}(),function(){var n,o,e,t,i,a;window.__FRVR.cohort().configJs;window.ga=void 0,n=window,o=document,e="script",t="gtag",n.GoogleAnalyticsObject=t,n[t]=n[t]||function(){(n[t].q=n[t].q||[]).push(arguments)},n[t].l=1*new Date,i=o.createElement(e),a=o.getElementsByTagName(e)[0],i.async=1,i.src="https://www.googletagmanager.com/gtag/js?id=G-8CR3QVSC2J",a.parentNode.insertBefore(i,a),window.gax=function(){let n=Array.from(arguments);"send"===n[0]&&n.shift(),gtag.apply(this,n)},window.ga=console.log}(),function(){var n=window.__FRVR.externalJsRequest=new XMLHttpRequest;n.addEventListener("load",(function(n){var o=document.createElement("script");o.setAttribute("id","___externalJs"),o.setAttribute("spath",window.spath),o.text=n.target.responseText,document.documentElement.appendChild(o)})),n.addEventListener("progress",(function(n){n.lengthComputable?window.htmlprogress(n.total,.7*n.loaded):window.htmlprogress(window.extsize||5e5,n.loaded)}),!1),void 0!==window.spath&&(n.open("GET",spath),n.send())}(),ga((function(){setTimeout((function(){window.__FRVR.keepurl||window.XS&&XS.is.oppoGlobal||(window.location.hash="",window.history&&window.history.replaceState instanceof Function&&window.history.replaceState({},document.title,"./"))}),5e3)}));</script>
+
+      <script></script>
+
+    <script>!function(){var e=window._jsonData||{};e.scitylana&&(ga("provide","scitylana",(function(e,n){var t=[],i=!1,a=/^&|&$/gi,r=/&tid=([^&]+)&/,o=e.get("sendHitTask");e.set("sendHitTask",(function(d){o(d),i||function(){for(var e in n){var a=n[e];("any"===e||"undefined"!=typeof XS&&XS.is[e])&&-1===t.indexOf(a)&&t.push(a)}"undefined"!=typeof XS&&XS.is&&(i=!0)}();for(var s=d.get("hitPayload")+"&cd1="+encodeURIComponent(function(e){var n=(new Date).getTime(),t=window._sl_order;t>=n?t++:t=n,window._sl_order=t;var i=document.referrer?1:0;return"sl=1&u="+(e.get("userId")||e.get("clientId"))+"&t="+t+"&r="+i}(e)),c=0;c<t.length;c++)d.set("hitPayload",("&"+s+"&").replace(r,"&tid="+t[c]+"&").replace(a,""),!0),o(d)}))})),ga("require","scitylana",e.scitylana))}(),window.initGoogle();</script>
+
+    <span id="inline-checksum" data-checksum="0b8b5936a905d8fd6ce358815084ae5b"></span>
+  
+
+
+</body></html><!--
+     Local Variables:
+     mode: web
+     End:
+-->

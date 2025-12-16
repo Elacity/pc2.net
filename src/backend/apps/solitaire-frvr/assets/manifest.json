@@ -1,0 +1,48 @@
+{
+  "short_name": "Solitaire FRVR",
+  "name": "Solitaire FRVR",
+  "icons": [
+    {
+      "src": "/assets/pwa-icon192x192.698c810a.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/assets/pwa-icon512x512.285849e5.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/assets/pwa-feature-icon.668ba116.png",
+      "type": "image/png",
+      "sizes": "468x384"
+    },
+    {
+      "src": "/assets/landscape-thumbnail.8338c152.png",
+      "type": "image/png",
+      "sizes": "1920x1080"
+    }
+  ],
+  "start_url": "/?pwa",
+  "background_color": "#3367D6",
+  "display": "standalone",
+  "gcm_sender_id": "482941778795",
+  "theme_color": "#3367D6",
+  "orientation": "portrait",
+  "ms_start_compatible": true,
+  "categories": [
+    "frvrgames",
+    "benjaminsen",
+    "brianmeidell"
+  ],
+  "_msstart": {
+    "leaderboards": {
+      "default": {
+        "score_type": "Numeric",
+        "score_order_by": "Desc"
+      }
+    }
+  }
+}

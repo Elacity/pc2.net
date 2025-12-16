@@ -279,9 +279,48 @@ export default {
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
         }
         
+        // Check if we're in PC2 mode (self-hosted)
+        function isPC2Mode() {
+            return window.api_origin && (
+                window.api_origin.includes('127.0.0.1:4200') || 
+                window.api_origin.includes('localhost:4200') ||
+                window.location.origin === window.api_origin
+            );
+        }
+        
+        // Get auth token for PC2 mode API calls
+        function getAuthToken() {
+            // Try PC2 service session first
+            const session = pc2Service.getSession?.();
+            if (session?.token) {
+                return session.token;
+            }
+            // Fallback to localStorage
+            try {
+                const savedSession = localStorage.getItem('pc2_session');
+                if (savedSession) {
+                    const sessionData = JSON.parse(savedSession);
+                    return sessionData.session?.token || null;
+                }
+            } catch (e) {
+                // Ignore localStorage errors
+            }
+            return null;
+        }
+        
         // Update UI based on connection status
         async function updateUI() {
-            const isConnected = pc2Service.isConnected?.() || false;
+            // SIMPLIFIED AUTH: In PC2 mode, connection status = authentication status
+            const pc2Mode = isPC2Mode();
+            
+            // In PC2 mode, use authentication status; otherwise use service connection status
+            let isConnected;
+            if (pc2Mode) {
+                isConnected = window.is_auth && window.is_auth() || false;
+            } else {
+                isConnected = pc2Service.isConnected?.() || false;
+            }
+            
             const isConfigured = pc2Service.isConfigured?.() || false;
             
             if (isConnected) {
@@ -292,7 +331,9 @@ export default {
                 
                 // Populate node info
                 const session = pc2Service.getSession?.() || {};
-                $el_window.find('#pc2-node-name').text(session.nodeName || 'My PC2 Node');
+                // In PC2 mode, show "This PC2 Node" to match status bar
+                const nodeName = pc2Mode ? 'This PC2 Node' : (session.nodeName || 'My PC2 Node');
+                $el_window.find('#pc2-node-name').text(nodeName);
                 $el_window.find('#pc2-wallet').text(
                     window.user?.wallet_address 
                         ? `${window.user.wallet_address.slice(0, 6)}...${window.user.wallet_address.slice(-4)}`
@@ -315,12 +356,60 @@ export default {
         // Load storage stats from PC2
         async function loadStorageStats() {
             try {
-                const stats = await pc2Service.getStats?.();
+                let stats;
+                // In PC2 mode, use direct fetch (we're already on the node)
+                if (isPC2Mode() && window.api_origin) {
+                    try {
+                        const url = new URL('/api/stats', window.api_origin);
+                        const authToken = getAuthToken();
+                        const headers = {
+                            'Content-Type': 'application/json'
+                        };
+                        if (authToken) {
+                            headers['Authorization'] = `Bearer ${authToken}`;
+                        }
+                        
+                        logger.log('[PC2Tab] Fetching stats from:', url.toString());
+                        const response = await fetch(url.toString(), {
+                            method: 'GET',
+                            headers
+                        });
+                        
+                        if (response.ok) {
+                            stats = await response.json();
+                            logger.log('[PC2Tab] Stats loaded successfully:', stats);
+                        } else {
+                            const errorText = await response.text().catch(() => '');
+                            logger.error('[PC2Tab] Stats request failed:', response.status, response.statusText, errorText);
+                            // Try without auth token if first attempt failed
+                            if (authToken && response.status === 401) {
+                                logger.log('[PC2Tab] Retrying without auth token...');
+                                const retryResponse = await fetch(url.toString(), {
+                                    method: 'GET',
+                                    headers: { 'Content-Type': 'application/json' }
+                                });
+                                if (retryResponse.ok) {
+                                    stats = await retryResponse.json();
+                                    logger.log('[PC2Tab] Stats loaded without auth:', stats);
+                                }
+                            }
+                        }
+                    } catch (fetchError) {
+                        logger.error('[PC2Tab] Fetch error:', fetchError);
+                        throw fetchError;
+                    }
+                } else {
+                    // Legacy mode: use service method
+                    stats = await pc2Service.getStats?.();
+                }
+                
                 if (stats) {
                     const used = stats.storageUsed || stats.storage?.used || 0;
                     const limit = stats.storageLimit || stats.storage?.limit || 10 * 1024 * 1024 * 1024;
                     const files = stats.filesCount || stats.files || 0;
                     const encrypted = stats.encryptedCount || 0;
+                    
+                    logger.log('[PC2Tab] Parsed stats - used:', used, 'limit:', limit, 'files:', files);
                     
                     $el_window.find('#pc2-storage-used').text(formatBytes(used));
                     $el_window.find('#pc2-storage-limit').text(formatBytes(limit));
@@ -330,11 +419,15 @@ export default {
                     // Update progress bar
                     const percent = Math.min(100, (used / limit) * 100);
                     $el_window.find('#pc2-storage-bar').css('width', `${percent}%`);
+                } else {
+                    logger.warn('[PC2Tab] No stats data received');
                 }
             } catch (error) {
                 logger.error('[PC2Tab] Failed to load storage stats:', error);
                 $el_window.find('#pc2-storage-used').text('-');
                 $el_window.find('#pc2-storage-limit').text('-');
+                $el_window.find('#pc2-files-count').text('-');
+                $el_window.find('#pc2-encrypted-count').text('-');
             }
         }
         
@@ -342,7 +435,30 @@ export default {
         async function loadWallets() {
             const $list = $el_window.find('#pc2-wallets-list');
             try {
-                const result = await pc2Service.request?.('GET', '/api/wallets');
+                let result;
+                // In PC2 mode, use direct fetch (we're already on the node)
+                if (isPC2Mode() && window.api_origin) {
+                    const url = new URL('/api/wallets', window.api_origin);
+                    const authToken = getAuthToken();
+                    const headers = {
+                        'Content-Type': 'application/json'
+                    };
+                    if (authToken) {
+                        headers['Authorization'] = `Bearer ${authToken}`;
+                    }
+                    const response = await fetch(url.toString(), {
+                        method: 'GET',
+                        headers
+                    });
+                    if (response.ok) {
+                        result = await response.json();
+                    } else {
+                        throw new Error(`Failed to load wallets: ${response.status}`);
+                    }
+                } else {
+                    // Legacy mode: use WebSocket tunnel
+                    result = await pc2Service.request?.('GET', '/api/wallets');
+                }
                 const wallets = result?.wallets || [];
                 
                 if (wallets.length === 0) {
@@ -383,7 +499,28 @@ export default {
                     const wallet = $(this).data('wallet');
                     if (confirm(`Revoke access for ${wallet.slice(0, 6)}...${wallet.slice(-4)}?`)) {
                         try {
+                            // In PC2 mode, use direct fetch (we're already on the node)
+                            if (isPC2Mode() && window.api_origin) {
+                                const url = new URL('/api/revoke', window.api_origin);
+                                const authToken = getAuthToken();
+                                const headers = {
+                                    'Content-Type': 'application/json'
+                                };
+                                if (authToken) {
+                                    headers['Authorization'] = `Bearer ${authToken}`;
+                                }
+                                const response = await fetch(url.toString(), {
+                                    method: 'POST',
+                                    headers,
+                                    body: JSON.stringify({ wallet })
+                                });
+                                if (!response.ok) {
+                                    throw new Error(`Failed to revoke: ${response.status}`);
+                                }
+                            } else {
+                                // Legacy mode: use WebSocket tunnel
                             await pc2Service.request?.('POST', '/api/revoke', { wallet });
+                            }
                             loadWallets();
                         } catch (error) {
                             alert('Failed to revoke: ' + error.message);
@@ -468,7 +605,29 @@ export default {
             $btn.prop('disabled', true).text('Adding...');
             
             try {
+                // In PC2 mode, use direct fetch (we're already on the node)
+                if (isPC2Mode() && window.api_origin) {
+                    const url = new URL('/api/invite', window.api_origin);
+                    const authToken = getAuthToken();
+                    const headers = {
+                        'Content-Type': 'application/json'
+                    };
+                    if (authToken) {
+                        headers['Authorization'] = `Bearer ${authToken}`;
+                    }
+                    const response = await fetch(url.toString(), {
+                        method: 'POST',
+                        headers,
+                        body: JSON.stringify({ wallet })
+                    });
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({ error: `Failed: ${response.status}` }));
+                        throw new Error(errorData.error || `Failed: ${response.status}`);
+                    }
+                } else {
+                    // Legacy mode: use WebSocket tunnel
                 await pc2Service.request?.('POST', '/api/invite', { wallet });
+                }
                 $inviteForm.slideUp(200);
                 $inviteInput.val('');
                 loadWallets();

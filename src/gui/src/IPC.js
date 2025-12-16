@@ -50,7 +50,17 @@ window.ipc_handlers = {};
  * Precautions are taken to ensure proper usage of appInstanceIDs and other sensitive information.
  */
 const ipc_listener = async (event, handled) => {
+    // Debug: Log ALL messages to see what's coming through
+    if (event.data && (event.data.msg === 'showSaveFilePicker' || event.data.msg === 'showOpenFilePicker')) {
+        console.log('[IPC.js]: 🔍 Message received (before filtering):', event.data.msg, 'appInstanceID:', event.data.appInstanceID, 'env:', event.data.env, 'origin:', event.origin, 'full data:', event.data);
+    }
+    
     const app_env = event.data?.env ?? 'app';
+
+    // Debug: Log all messages from apps
+    if (app_env === 'app' && event.data?.msg) {
+        console.log('[IPC.js]: 📥 Received message:', event.data.msg, 'appInstanceID:', event.data.appInstanceID, 'full data:', event.data);
+    }
 
     // Only process messages from apps
     if ( app_env !== 'app' )
@@ -82,10 +92,12 @@ const ipc_listener = async (event, handled) => {
 
     // `appInstanceID` is required
     if ( ! event.data.appInstanceID ) {
-        console.error('appInstanceID is needed');
+        console.error('appInstanceID is needed', event.data);
+        console.error('Available app_instance_ids:', Array.from(window.app_instance_ids || []));
         return handled.resolve(false);
     } else if ( ! window.app_instance_ids.has(event.data.appInstanceID) ) {
-        console.error('appInstanceID is invalid');
+        console.error('appInstanceID is invalid:', event.data.appInstanceID);
+        console.error('Available app_instance_ids:', Array.from(window.app_instance_ids || []));
         return handled.resolve(false);
     }
 
@@ -1644,7 +1656,14 @@ const ipc_listener = async (event, handled) => {
             title: i18n('Save As…'),
             is_dir: true,
             is_saveFileDialog: true,
-            saveFileDialog_default_filename: event.data.suggestedName ?? '',
+            saveFileDialog_default_filename: (() => {
+                let filename = event.data.suggestedName ?? '';
+                // For editor app, ensure .txt extension if none provided
+                if (app_name === 'editor' && filename && !filename.includes('.')) {
+                    filename = filename + '.txt';
+                }
+                return filename;
+            })(),
             selectable_body: false,
             iframe_msg_uid: msg_id,
             center: true,
@@ -1653,6 +1672,12 @@ const ipc_listener = async (event, handled) => {
             onSaveFileDialogSave: async function (target_path, el_filedialog_window) {
                 $(el_filedialog_window).find('.window-disable-mask, .busy-indicator').show();
                 let busy_init_ts = Date.now();
+
+                // Ensure .txt extension is added if no extension provided (for editor app)
+                if (app_name === 'editor' && !target_path.includes('.')) {
+                    target_path = target_path + '.txt';
+                    console.log('[IPC.js]: ✅ Added .txt extension to target_path:', target_path);
+                }
 
                 if ( event.data.url ) {
                     await handle_url_save({ target_path });
@@ -1910,6 +1935,9 @@ const ipc_listener = async (event, handled) => {
 
 if ( ! window.when_puter_happens ) window.when_puter_happens = [];
 window.when_puter_happens.push(async () => {
+    // Expose ipc_listener globally for debugging/direct access
+    window.ipc_listener_direct = ipc_listener;
+    
     await puter.services.wait_for_init(['xd-incoming']);
     const svc_xdIncoming = puter.services.get('xd-incoming');
     svc_xdIncoming.register_filter_listener(ipc_listener);

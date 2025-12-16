@@ -21,7 +21,7 @@
 </head>
 
 <body style="padding:0; margin: 0; height:calc(100vh); background-size: contain; width:100%; background-position: center; background-repeat: no-repeat;">
-    <video id="player" width="320" height="240" controls autoplay></video>
+    <video id="player" width="320" height="240" controls autoplay preload="auto" crossorigin="anonymous" playsinline></video>
     <!-- JS -->
     <script>
         // CRITICAL: Intercept API calls BEFORE SDK loads to redirect to PC2 node
@@ -50,7 +50,7 @@
         })();
     </script>
     <script src="./js/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
-    <script src="https://js.puter.com/v2/"></script>
+    <script src="./js/puter-sdk/puter-sdk-v2.js"></script>
     <script>
         // Initialize Puter SDK with auth token and API origin from URL params
         (function() {
@@ -100,13 +100,78 @@
 
     async function open_file(cfile){
         curfile = cfile;
-        //update player
-        $("#player").html(`<source src="${html_encode(curfile.readURL)}"></source>`);
+        //update player - set source correctly for seeking to work
+        const video = $("#player").get(0);
+        
+        // Pause and reset video first
+        video.pause();
+        video.currentTime = 0;
+        
+        // Clear existing sources - use direct src assignment for better seeking support
+        video.innerHTML = '';
+        
+        // Set source directly on video element (better for seeking than <source> element)
+        const videoUrl = html_encode(curfile.readURL);
+        video.src = videoUrl;
+        
+        // Try to detect MIME type from file extension for type hint
+        const ext = curfile.name.split('.').pop().toLowerCase();
+        const mimeTypes = {
+            'mp4': 'video/mp4',
+            'webm': 'video/webm',
+            'ogg': 'video/ogg',
+            'mov': 'video/quicktime',
+            'avi': 'video/x-msvideo',
+            'mkv': 'video/x-matroska'
+        };
+        if (mimeTypes[ext]) {
+            video.type = mimeTypes[ext];
+        }
+        
         // change window title
         puter.ui.setWindowTitle(curfile.name);
-        // restart video
-        $("#player").get(0).load();
-        $("#player").get(0).play();
+        
+        // Load video - this will enable seeking once metadata is loaded
+        video.load();
+        
+        // Wait for metadata to load before playing (enables seeking)
+        const playWhenReady = function() {
+            if (video.readyState >= 1) { // HAVE_METADATA
+                video.play().catch(err => {
+                    console.log('[Player]: Autoplay blocked, user interaction required:', err);
+                });
+            } else {
+                setTimeout(playWhenReady, 100);
+            }
+        };
+        
+        video.addEventListener('loadedmetadata', function() {
+            console.log('[Player]: Video metadata loaded, duration:', video.duration);
+            console.log('[Player]: Seekable ranges:', video.seekable.length);
+            if (video.seekable.length > 0) {
+                console.log('[Player]: Seekable from', video.seekable.start(0), 'to', video.seekable.end(0));
+            }
+            playWhenReady();
+        }, { once: true });
+        
+        // Also handle canplay event for better compatibility
+        video.addEventListener('canplay', function() {
+            console.log('[Player]: Video can play, seeking should work now');
+        }, { once: true });
+        
+        // Enable seeking explicitly - log when seeking happens
+        video.addEventListener('seeking', function() {
+            console.log('[Player]: 🔍 Seeking to:', video.currentTime, 'seconds');
+        });
+        
+        video.addEventListener('seeked', function() {
+            console.log('[Player]: ✅ Seeked to:', video.currentTime, 'seconds');
+        });
+        
+        // Log any errors
+        video.addEventListener('error', function(e) {
+            console.error('[Player]: Video error:', e, 'code:', video.error?.code, 'message:', video.error?.message);
+        });
     }
 
     $('#player').on('dragover', function(e) {
@@ -130,11 +195,23 @@
             puter.ui.setWindowTitle(file.name)
             // curfile is dead
             curfile = undefined;
-            // read content
-            $("#player").html(`<source src="${html_encode(URL.createObjectURL(file))}"></source>`);
-            // restart video
-            $("#player").get(0).load();
-            $("#player").get(0).play();
+            // read content - set source directly for better seeking support
+            const video = $("#player").get(0);
+            // Pause and reset first
+            video.pause();
+            video.currentTime = 0;
+            // Clear existing sources
+            video.innerHTML = '';
+            // Set source directly on video element
+            video.src = URL.createObjectURL(file);
+            video.type = file.type || 'video/mp4';
+            // restart video - this ensures seeking is enabled
+            video.load();
+            // Wait for metadata to load before playing (enables seeking)
+            video.addEventListener('loadedmetadata', function() {
+                console.log('[Player]: Drag-drop video loaded, duration:', video.duration);
+                video.play();
+            }, { once: true });
         }
     });
     </script>

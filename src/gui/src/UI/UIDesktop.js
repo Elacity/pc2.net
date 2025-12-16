@@ -1206,7 +1206,7 @@ async function UIDesktop(options) {
 
     ht += `<div class="toolbar hide-scrollbar ${class_name}" style="${style}">`;
     // logo
-    ht += `<div class="toolbar-btn toolbar-puter-logo" title="Puter" style="margin-left: 10px; width:107px;"><img src="/images/elastos-logo.webp" draggable="false" style="display:block; width:107px; height:17px"></div>`;
+    ht += `<div class="toolbar-btn toolbar-puter-logo" title="ElastOS" style="margin-left: 10px; width:107px;"><img src="/images/elastos-logo.webp" draggable="false" style="display:block; width:107px; height:17px"></div>`;
 
 
     // clock spacer

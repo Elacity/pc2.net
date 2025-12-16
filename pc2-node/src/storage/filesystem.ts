@@ -8,8 +8,6 @@
 import { IPFSStorage } from './ipfs.js';
 import { DatabaseManager, FileMetadata } from './database.js';
 import { normalize, join, dirname } from 'path';
-import { logger } from '../utils/logger.js';
-import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'fs';
 
 export interface FileContent {
   content: Buffer | string;
@@ -18,23 +16,10 @@ export interface FileContent {
 }
 
 export class FilesystemManager {
-  private localStoragePath: string | null = null;
-
   constructor(
-    private ipfs: IPFSStorage | null,
-    private db: DatabaseManager,
-    localStoragePath?: string
-  ) {
-    // Set up local filesystem storage path (fallback when IPFS unavailable)
-    if (localStoragePath) {
-      this.localStoragePath = localStoragePath;
-      // Ensure storage directory exists
-      if (!existsSync(this.localStoragePath)) {
-        mkdirSync(this.localStoragePath, { recursive: true });
-        logger.info(`[Filesystem] Created local storage directory: ${this.localStoragePath}`);
-      }
-    }
-  }
+    private ipfs: IPFSStorage,
+    private db: DatabaseManager
+  ) {}
 
   /**
    * Normalize file path
@@ -65,47 +50,8 @@ export class FilesystemManager {
       await this.ensureDirectory(parentPath, walletAddress);
     }
 
-    // Store file content in IPFS (or use local filesystem fallback if IPFS unavailable)
-    let ipfsHash: string;
-    const contentBuffer = Buffer.isBuffer(content) ? content : Buffer.from(content, 'utf8');
-    
-    try {
-      // Check if IPFS is ready, then try to store file
-      if (this.ipfs && this.ipfs.isReady()) {
-        ipfsHash = await this.ipfs.storeFile(content, { pin: true });
-      } else {
-        throw new Error('IPFS not initialized');
-      }
-    } catch (error) {
-      // Fallback: Store file on local filesystem (similar to mock server's in-memory storage)
-      if (this.localStoragePath) {
-        // Create a safe filename from the path
-        const safePath = normalizedPath.replace(/[^a-zA-Z0-9/_\-.]/g, '_');
-        const filePath = join(this.localStoragePath, safePath);
-        
-        // Ensure parent directory exists
-        const fileDir = dirname(filePath);
-        if (!existsSync(fileDir)) {
-          mkdirSync(fileDir, { recursive: true });
-        }
-        
-        // Write file to disk
-        writeFileSync(filePath, contentBuffer);
-        
-        // Generate hash for metadata
-        const crypto = await import('crypto');
-        const hash = crypto.createHash('sha256').update(contentBuffer).digest('hex');
-        ipfsHash = `local-${hash.substring(0, 32)}`;
-        
-        logger.info(`[Filesystem] IPFS unavailable, stored file locally: ${filePath}`);
-      } else {
-        // No local storage path configured - use placeholder hash
-        const crypto = await import('crypto');
-        const hash = crypto.createHash('sha256').update(contentBuffer).digest('hex');
-        ipfsHash = `db-only-${hash.substring(0, 32)}`;
-        logger.warn(`[Filesystem] IPFS unavailable and no local storage configured for: ${normalizedPath}. File metadata saved but content cannot be retrieved.`);
-      }
-    }
+    // Store file content in IPFS
+    const ipfsHash = await this.ipfs.storeFile(content, { pin: true });
 
     // Calculate size
     const size = Buffer.isBuffer(content) 
@@ -138,7 +84,6 @@ export class FilesystemManager {
 
   /**
    * Read file (retrieve from IPFS using CID from database)
-   * Falls back to database-only mode if IPFS unavailable
    */
   async readFile(path: string, walletAddress: string): Promise<Buffer> {
     const normalizedPath = this.normalizePath(path);
@@ -153,39 +98,12 @@ export class FilesystemManager {
       throw new Error(`Path is a directory: ${path}`);
     }
 
-    // Check if file is stored locally (fallback mode)
-    if (metadata.ipfs_hash && metadata.ipfs_hash.startsWith('local-')) {
-      if (!this.localStoragePath) {
-        throw new Error(`File stored locally but local storage path not configured. Path: ${path}`);
-      }
-      
-      // Reconstruct file path from normalized path
-      const safePath = normalizedPath.replace(/[^a-zA-Z0-9/_\-.]/g, '_');
-      const filePath = join(this.localStoragePath, safePath);
-      
-      if (!existsSync(filePath)) {
-        throw new Error(`Local file not found: ${filePath}`);
-      }
-      
-      // Read file from local filesystem
-      return readFileSync(filePath);
-    }
-
-    // If IPFS hash indicates database-only mode (no local storage), we can't retrieve content
-    if (metadata.ipfs_hash && metadata.ipfs_hash.startsWith('db-only-')) {
-      throw new Error(`File stored in database-only mode. IPFS or local storage required to read content. Path: ${path}`);
-    }
-
     if (!metadata.ipfs_hash) {
       throw new Error(`File has no IPFS hash: ${path}`);
     }
 
     // Retrieve file content from IPFS
-    if (!this.ipfs || !this.ipfs.isReady()) {
-      throw new Error(`IPFS not available and file not stored locally. Path: ${path}`);
-    }
-    
-    return await this.ipfs!.getFile(metadata.ipfs_hash);
+    return await this.ipfs.getFile(metadata.ipfs_hash);
   }
 
   /**
@@ -316,7 +234,7 @@ export class FilesystemManager {
       }
     } else {
       // For files, unpin from IPFS (optional - allows garbage collection)
-      if (metadata.ipfs_hash && this.ipfs && this.ipfs.isReady()) {
+      if (metadata.ipfs_hash) {
         try {
           await this.ipfs.unpinFile(metadata.ipfs_hash);
         } catch (error) {

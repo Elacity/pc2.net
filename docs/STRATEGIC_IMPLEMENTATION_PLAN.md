@@ -231,18 +231,22 @@
     - Cache headers
   - **Time:** 3-4 hours
 
-#### 2.4 IPFS Integration ⚠️ **PARTIAL**
+#### 2.4 IPFS Integration ✅ **COMPLETE**
 - [x] **Task:** Replace in-memory filesystem with IPFS
-  - ✅ IPFS integration code implemented
-  - ⚠️ IPFS initialization failing due to `Promise.withResolvers` (Node.js version issue)
-  - ✅ Server continues in database-only mode when IPFS unavailable
-  - **File:** `pc2-node/src/storage/ipfs.js`
+  - ✅ Migrated from deprecated `ipfs-core` 0.18 to modern `helia` library
+  - ✅ Added `Promise.withResolvers` polyfill for Node.js 20 compatibility
+  - ✅ Configured libp2p with TCP/WebSocket transports, Noise encryption, Yamux multiplexing
+  - ✅ IPFS node initializes successfully with Helia
+  - ✅ Removed WebRTC transport (not needed for Node.js, was causing certificate errors)
+  - ✅ Server continues in database-only mode when IPFS unavailable (graceful fallback)
+  - **File:** `pc2-node/src/storage/ipfs.ts`
   - **Features:**
-    - Initialize IPFS node
-    - Store files on IPFS
+    - Initialize IPFS node using Helia
+    - Store files on IPFS using `@helia/unixfs`
     - Retrieve files from IPFS
+    - Pin/unpin files
     - Metadata in SQLite
-  - **Time:** 1-2 days
+  - **Time:** 1-2 days (completed 2025-12-16)
 
 #### 2.5 SQLite Database ✅
 - [x] **Task:** Add persistent storage

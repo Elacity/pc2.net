@@ -1854,12 +1854,19 @@ window.upload_items = async function(items, dest_path){
     let upload_progress_window;
     let opid;
 
+    console.log('[upload_items] Starting upload', {
+        itemsCount: items?.length || 0,
+        dest_path: dest_path,
+        desktop_path: window.desktop_path
+    });
+
     if(dest_path == window.trash_path){
         UIAlert('Uploading to trash is not allowed!');
         return;
     }
 
-    puter.fs.upload(
+    try {
+        puter.fs.upload(
         // what to upload
         items, 
         // where to upload
@@ -1962,7 +1969,14 @@ window.upload_items = async function(items, dest_path){
             },
             // error
             error: async function(err){
-                upload_progress_window.show_error(i18n('error_uploading_files'), err.message);
+                console.error('[upload_items] Upload error:', err);
+                console.error('[upload_items] Error details:', {
+                    message: err?.message,
+                    stack: err?.stack,
+                    name: err?.name,
+                    error: err
+                });
+                upload_progress_window.show_error(i18n('error_uploading_files'), err.message || 'Unknown upload error');
                 // remove from active_uploads
                 delete window.active_uploads[opid];
             },
@@ -1973,6 +1987,16 @@ window.upload_items = async function(items, dest_path){
             }
         }
     );
+    } catch (error) {
+        console.error('[upload_items] Failed to call puter.fs.upload:', error);
+        console.error('[upload_items] Error details:', {
+            message: error?.message,
+            stack: error?.stack,
+            name: error?.name,
+            error: error
+        });
+        UIAlert('Failed to start upload: ' + (error?.message || 'Unknown error'));
+    }
 }
 
 window.empty_trash = async function(){

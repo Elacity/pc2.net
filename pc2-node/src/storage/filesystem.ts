@@ -185,7 +185,7 @@ export class FilesystemManager {
       throw new Error(`IPFS not available and file not stored locally. Path: ${path}`);
     }
     
-    return await this.ipfs.getFile(metadata.ipfs_hash);
+    return await this.ipfs!.getFile(metadata.ipfs_hash);
   }
 
   /**
@@ -316,7 +316,7 @@ export class FilesystemManager {
       }
     } else {
       // For files, unpin from IPFS (optional - allows garbage collection)
-      if (metadata.ipfs_hash) {
+      if (metadata.ipfs_hash && this.ipfs && this.ipfs.isReady()) {
         try {
           await this.ipfs.unpinFile(metadata.ipfs_hash);
         } catch (error) {

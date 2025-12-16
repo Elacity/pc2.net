@@ -180,11 +180,11 @@
 
 ---
 
-### Phase 2: Production PC2 Node (Week 2-3)
+### Phase 2: Production PC2 Node (Week 2-3) ✅ **IN PROGRESS**
 **Goal:** Create production-ready PC2 node with frontend built-in
 
-#### 2.1 Create PC2 Node Package Structure
-- [ ] **Task:** Design package structure
+#### 2.1 Create PC2 Node Package Structure ✅
+- [x] **Task:** Design package structure
   - **Directory:**
     ```
     pc2-node/
@@ -203,8 +203,8 @@
     ```
   - **Time:** 2 hours
 
-#### 2.2 Build Process Integration
-- [ ] **Task:** Create build process
+#### 2.2 Build Process Integration ✅
+- [x] **Task:** Create build process
   - **File:** `pc2-node/package.json`
   - **Scripts:**
     ```json
@@ -219,8 +219,8 @@
     ```
   - **Time:** 2 hours
 
-#### 2.3 Static File Serving (Production)
-- [ ] **Task:** Implement static file serving
+#### 2.3 Static File Serving (Production) ✅
+- [x] **Task:** Implement static file serving
   - **File:** `pc2-node/src/static.js`
   - **Features:**
     - Serve files from `frontend/` directory
@@ -229,8 +229,11 @@
     - Cache headers
   - **Time:** 3-4 hours
 
-#### 2.4 IPFS Integration
-- [ ] **Task:** Replace in-memory filesystem with IPFS
+#### 2.4 IPFS Integration ⚠️ **PARTIAL**
+- [x] **Task:** Replace in-memory filesystem with IPFS
+  - ✅ IPFS integration code implemented
+  - ⚠️ IPFS initialization failing due to `Promise.withResolvers` (Node.js version issue)
+  - ✅ Server continues in database-only mode when IPFS unavailable
   - **File:** `pc2-node/src/storage/ipfs.js`
   - **Features:**
     - Initialize IPFS node
@@ -239,8 +242,11 @@
     - Metadata in SQLite
   - **Time:** 1-2 days
 
-#### 2.5 SQLite Database
-- [ ] **Task:** Add persistent storage
+#### 2.5 SQLite Database ✅
+- [x] **Task:** Add persistent storage
+  - ✅ Database schema implemented
+  - ✅ User sessions, file metadata, settings stored in SQLite
+  - ✅ Migrations system in place
   - **File:** `pc2-node/src/storage/database.js`
   - **Schema:**
     - Users (wallet addresses)
@@ -249,8 +255,11 @@
     - Settings
   - **Time:** 1 day
 
-#### 2.6 Real WebSocket (Socket.io)
-- [ ] **Task:** Replace polling with WebSocket
+#### 2.6 Real WebSocket (Socket.io) ✅
+- [x] **Task:** Replace polling with WebSocket
+  - ✅ Socket.io server implemented
+  - ✅ Real-time file change broadcasting
+  - ✅ Multi-tab sync working
   - **File:** `pc2-node/src/server.js`
   - **Features:**
     - Real-time file updates
@@ -258,7 +267,15 @@
     - Event broadcasting
   - **Time:** 1 day
 
-**Phase 2 Deliverable:** Production PC2 node with frontend built-in
+**Phase 2 Deliverable:** ✅ **MOSTLY COMPLETE** - Production PC2 node with frontend built-in
+
+**Recent Progress (2025-12-16):**
+- ✅ Fixed app launching - `/drivers/call` body parsing for `text/plain;actually=json`
+- ✅ Added missing endpoints (`/auth/get-user-app-token`, POST `/df`)
+- ✅ Fixed desktop UI (bin, toolbar) display
+- ✅ Improved error handling (kvstore, JSON parsing)
+- ✅ Added multipart/form-data support for file uploads
+- ⚠️ File uploads still need testing (multipart support added, awaiting verification)
 
 ---
 

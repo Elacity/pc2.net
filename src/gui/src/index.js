@@ -102,10 +102,10 @@ window.gui = async (options) => {
         window.api_origin = currentOrigin;
         console.log('[PC2]: 🚀 Same-origin detected (Puter on PC2), using:', window.api_origin);
     } else {
-        // Legacy: If we're on puter.localhost (local dev), default to mock PC2 server
+        // Legacy: If we're on elastos.localhost or puter.localhost (local dev), default to mock PC2 server
         const hostname = typeof window !== 'undefined' && window.location ? window.location.hostname : '';
         console.log('[PC2]: Current hostname:', hostname);
-        if (!pc2ApiOrigin && (hostname === 'puter.localhost' || hostname === 'localhost' || hostname.includes('localhost'))) {
+        if (!pc2ApiOrigin && (hostname === 'elastos.localhost' || hostname === 'puter.localhost' || hostname === 'localhost' || hostname.includes('localhost'))) {
             pc2ApiOrigin = 'http://127.0.0.1:4200';
             console.log('[PC2]: 🚀 Local dev detected, defaulting to mock PC2 server:', pc2ApiOrigin);
         }

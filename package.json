@@ -1,10 +1,10 @@
 {
-  "name": "puter.com",
+  "name": "elastos-desktop",
   "version": "2.5.1",
-  "author": "Puter Technologies Inc.",
+  "author": "ElastOS Technologies Inc.",
   "license": "AGPL-3.0-only",
-  "description": "Desktop environment in the browser!",
-  "homepage": "https://puter.com",
+  "description": "ElastOS - Desktop environment in the browser!",
+  "homepage": "https://elastos.org",
   "type": "module",
   "main": "exports.js",
   "directories": {

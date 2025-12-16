@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Recorder - PC2</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a1a;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .recorder-container {
+            text-align: center;
+            max-width: 600px;
+        }
+        .visualizer {
+            width: 100%;
+            height: 200px;
+            background: #2a2a2a;
+            border-radius: 8px;
+            margin: 20px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        .waveform {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            height: 100%;
+        }
+        .bar {
+            width: 4px;
+            background: #ff6900;
+            border-radius: 2px;
+            transition: height 0.1s;
+        }
+        .controls {
+            margin-top: 20px;
+        }
+        button {
+            background: #ff6900;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 50%;
+            width: 70px;
+            height: 70px;
+            cursor: pointer;
+            font-size: 24px;
+            margin: 0 10px;
+        }
+        button:hover { background: #ff7a1a; }
+        button:disabled { background: #555; cursor: not-allowed; }
+        .status {
+            margin-top: 20px;
+            color: #999;
+            font-size: 18px;
+        }
+        .time {
+            font-size: 32px;
+            font-weight: bold;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="recorder-container">
+        <h1>Recorder</h1>
+        <div class="visualizer" id="visualizer">
+            <div class="waveform" id="waveform"></div>
+        </div>
+        <div class="time" id="time">00:00</div>
+        <div class="controls">
+            <button id="recordBtn">🎤</button>
+            <button id="stopBtn" disabled>⏹</button>
+        </div>
+        <div class="status" id="status">Ready to record</div>
+        <audio id="audio" controls style="margin-top: 20px; width: 100%; display: none;"></audio>
+    </div>
+
+    <script>
+        const recordBtn = document.getElementById('recordBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const status = document.getElementById('status');
+        const time = document.getElementById('time');
+        const audio = document.getElementById('audio');
+        const waveform = document.getElementById('waveform');
+        
+        let mediaRecorder = null;
+        let audioChunks = [];
+        let startTime = null;
+        let timerInterval = null;
+
+        // Create waveform bars
+        for (let i = 0; i < 50; i++) {
+            const bar = document.createElement('div');
+            bar.className = 'bar';
+            bar.style.height = '10px';
+            waveform.appendChild(bar);
+        }
+
+        const bars = waveform.querySelectorAll('.bar');
+
+        recordBtn.onclick = async () => {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                audioChunks = [];
+
+                mediaRecorder.ondataavailable = (event) => {
+                    audioChunks.push(event.data);
+                };
+
+                mediaRecorder.onstop = () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    audio.src = audioUrl;
+                    audio.style.display = 'block';
+                    
+                    // Create download link
+                    const link = document.createElement('a');
+                    link.href = audioUrl;
+                    link.download = 'recording-' + Date.now() + '.wav';
+                    link.textContent = 'Download Recording';
+                    link.style.color = '#ff6900';
+                    link.style.marginTop = '10px';
+                    link.style.display = 'block';
+                    status.appendChild(link);
+                };
+
+                mediaRecorder.start();
+                recordBtn.disabled = true;
+                stopBtn.disabled = false;
+                status.textContent = 'Recording...';
+                startTime = Date.now();
+                
+                timerInterval = setInterval(() => {
+                    const elapsed = Math.floor((Date.now() - startTime) / 1000);
+                    const mins = Math.floor(elapsed / 60).toString().padStart(2, '0');
+                    const secs = (elapsed % 60).toString().padStart(2, '0');
+                    time.textContent = `${mins}:${secs}`;
+                }, 1000);
+
+                // Animate waveform
+                const animateWaveform = () => {
+                    bars.forEach((bar, i) => {
+                        const height = 10 + Math.random() * 150;
+                        bar.style.height = height + 'px';
+                    });
+                    if (mediaRecorder && mediaRecorder.state === 'recording') {
+                        requestAnimationFrame(animateWaveform);
+                    }
+                };
+                animateWaveform();
+            } catch (error) {
+                status.textContent = 'Error: ' + error.message;
+            }
+        };
+
+        stopBtn.onclick = () => {
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+                mediaRecorder.stream.getTracks().forEach(track => track.stop());
+                recordBtn.disabled = false;
+                stopBtn.disabled = true;
+                status.textContent = 'Recording stopped';
+                clearInterval(timerInterval);
+                
+                // Reset waveform
+                bars.forEach(bar => bar.style.height = '10px');
+            }
+        };
+    </script>
+</body>
+</html>

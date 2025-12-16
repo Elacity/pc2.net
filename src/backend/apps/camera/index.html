@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camera - PC2</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a1a;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .camera-container {
+            text-align: center;
+        }
+        video {
+            max-width: 100%;
+            border-radius: 8px;
+            background: #000;
+        }
+        .controls {
+            margin-top: 20px;
+        }
+        button {
+            background: #4b5563;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 0 10px;
+        }
+        button:hover { background: #5b6675; }
+        .status {
+            margin-top: 20px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <div class="camera-container">
+        <h1>Camera</h1>
+        <video id="video" autoplay playsinline></video>
+        <div class="controls">
+            <button id="startBtn">Start Camera</button>
+            <button id="stopBtn" disabled>Stop Camera</button>
+            <button id="captureBtn" disabled>Capture Photo</button>
+        </div>
+        <div class="status" id="status">Click "Start Camera" to begin</div>
+        <canvas id="canvas" style="display: none;"></canvas>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const captureBtn = document.getElementById('captureBtn');
+        const status = document.getElementById('status');
+        const canvas = document.getElementById('canvas');
+        let stream = null;
+
+        startBtn.onclick = async () => {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                captureBtn.disabled = false;
+                status.textContent = 'Camera active';
+            } catch (error) {
+                status.textContent = 'Error: ' + error.message;
+            }
+        };
+
+        stopBtn.onclick = () => {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                video.srcObject = null;
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+                captureBtn.disabled = true;
+                status.textContent = 'Camera stopped';
+            }
+        };
+
+        captureBtn.onclick = () => {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            const dataUrl = canvas.toDataURL('image/png');
+            const link = document.createElement('a');
+            link.download = 'photo-' + Date.now() + '.png';
+            link.href = dataUrl;
+            link.click();
+            status.textContent = 'Photo captured!';
+        };
+    </script>
+</body>
+</html>

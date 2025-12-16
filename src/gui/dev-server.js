@@ -175,7 +175,7 @@ app.get(['/', '/app/*', '/action/*'], (req, res) => {
     res.send(generateDevHtml({
         env: env,
         api_origin: 'https://api.puter.com',
-        title: 'Puter',
+        title: 'ElastOS',
         max_item_name_length: 150,
         require_email_verification_to_publish_website: false,
         short_description: 'Puter is a privacy-first personal cloud that houses all your files, apps, and games in one private and secure place, accessible from anywhere at any time.',

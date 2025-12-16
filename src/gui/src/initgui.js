@@ -49,6 +49,29 @@ import { ExecService } from './services/ExecService.js';
 import { DebugService } from './services/DebugService.js';
 import { privacy_aware_path } from './util/desktop.js';
 
+// DEBUG: Add global message listener to see ALL messages before xd-incoming filtering
+// Also try to directly call ipc_listener if xd-incoming is filtering it out
+if (typeof window !== 'undefined') {
+    window.addEventListener('message', async (event) => {
+        if (event.data && (event.data.msg === 'showSaveFilePicker' || event.data.msg === 'showOpenFilePicker')) {
+            const sourceInfo = event.source ? (event.source === window ? 'self' : (event.source.location ? 'cross-origin-frame' : 'unknown-source')) : 'no-source';
+            console.log('[initgui.js]: 🔍 RAW window message received:', event.data.msg, 'appInstanceID:', event.data.appInstanceID, 'env:', event.data.env, 'origin:', event.origin, 'source:', sourceInfo, 'full data:', event.data);
+            
+            // Try to directly call ipc_listener if it's available (bypass xd-incoming filter)
+            if (window.ipc_listener_direct) {
+                console.log('[initgui.js]: 🚀 Attempting direct ipc_listener call (bypassing xd-incoming)');
+                const handled = { resolve: (val) => console.log('[initgui.js]: ipc_listener handled:', val) };
+                try {
+                    await window.ipc_listener_direct(event, handled);
+                } catch (e) {
+                    console.error('[initgui.js]: Direct ipc_listener call failed:', e);
+                }
+            }
+        }
+    }, false);
+    console.log('[initgui.js]: ✅ Global message listener registered');
+}
+
 const launch_services = async function (options) {
     // === Services Data Structures ===
     const services_l_ = [];
@@ -1322,7 +1345,7 @@ window.initgui = async function(options){
                 update_title_based_on_uploads();
             }
         }else if(window.active_uploads){
-            document.title = window.doc_title_before_blur ?? 'Puter';
+            document.title = window.doc_title_before_blur ?? 'ElastOS';
         }
     });
 
@@ -1453,6 +1476,13 @@ function requestOpenerOrigin() {
 
         // Set up the listener for the response
         window.addEventListener('message', handleMessage, false);
+
+        // DEBUG: Add raw message listener to see ALL messages
+        window.addEventListener('message', (event) => {
+            if (event.data && (event.data.msg === 'showSaveFilePicker' || event.data.msg === 'showOpenFilePicker')) {
+                console.log('[initgui.js]: 🔍 RAW message received:', event.data.msg, 'appInstanceID:', event.data.appInstanceID, 'origin:', event.origin, 'source:', event.source, 'full data:', event.data);
+            }
+        }, false);
 
         // Send the request to the opener
         window.opener.postMessage({ msg: 'requestOrigin' }, '*');

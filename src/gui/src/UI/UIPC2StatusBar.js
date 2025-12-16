@@ -160,18 +160,9 @@ function initPC2StatusBar() {
 
         // Action buttons
         // SIMPLIFIED AUTH: In PC2 mode, "Connect" = Sign In (authentication)
+        // Note: Sign Out removed - users can use Log Out from profile dropdown instead
         if (isPC2Mode) {
-            if (effectiveStatus === 'connected') {
-                // Already authenticated - show disconnect (logout)
-                items.push({
-                    html: 'Sign Out',
-                    onClick: () => {
-                        if (window.logout) {
-                            window.logout();
-                        }
-                    }
-                });
-            } else {
+            if (effectiveStatus !== 'connected') {
                 // Not authenticated - show sign in (triggers Particle Auth)
                 items.push({
                     html: 'Sign In',
@@ -240,17 +231,23 @@ function initPC2StatusBar() {
 
         // Just use the statusBar directly (toolbar-btn has proper spacing)
 
-        // Insert after the toolbar-spacer and before search button
+        // Insert before wallet button (to the left of wallet icon)
+        const $walletBtn = $toolbar.find('.wallet-btn');
+        if ($walletBtn.length > 0) {
+            $walletBtn.before($statusBar);
+        } else {
+            // Fallback: insert before search button
         const $searchBtn = $toolbar.find('.search-btn');
         if ($searchBtn.length > 0) {
             $searchBtn.before($statusBar);
         } else {
-            // Fallback: insert before clock
+                // Final fallback: insert before clock
             const $clock = $toolbar.find('#clock');
             if ($clock.length > 0) {
                 $clock.before($statusBar);
             } else {
                 $toolbar.append($statusBar);
+                }
             }
         }
 

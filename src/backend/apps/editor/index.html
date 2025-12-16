@@ -45,6 +45,14 @@
         (function() {
             const urlParams = new URLSearchParams(window.location.search);
             const apiOrigin = urlParams.get('puter.api_origin') || window.location.origin;
+            const appInstanceId = urlParams.get('puter.app_instance_id');
+            
+            // Store app instance ID globally for SDK to use
+            if (appInstanceId) {
+                window.puterAppInstanceID = appInstanceId;
+                // Also store in a way the SDK might expect
+                window.puterAppInstanceId = appInstanceId;
+            }
             
             const originalFetch = window.fetch;
             window.fetch = function(...args) {
@@ -66,13 +74,20 @@
             };
         })();
     </script>
-    <script src="https://js.puter.com/v2/"></script>
+    <script src="./js/puter-sdk/puter-sdk-v2.js"></script>
     <script>
-        // Initialize Puter SDK with auth token and API origin from URL params
+        // Initialize Puter SDK and ensure appInstanceID is included in messages
         (function() {
             const urlParams = new URLSearchParams(window.location.search);
             const authToken = urlParams.get('puter.auth.token');
             const apiOrigin = urlParams.get('puter.api_origin');
+            const appInstanceId = urlParams.get('puter.app_instance_id');
+            
+            // Store app instance ID globally
+            if (appInstanceId) {
+                window.puterAppInstanceID = appInstanceId;
+                console.log('[Editor]: ✅ App instance ID from URL:', appInstanceId);
+            }
             
             function initializeSDK() {
                 if (typeof puter === 'undefined') {
@@ -97,16 +112,344 @@
                         console.error('[Editor]: Failed to set API origin:', e);
                     }
                 }
+                
+                // Patch puter.ui methods to ensure appInstanceID is included and add debugging
+                if (appInstanceId && puter && puter.ui) {
+                    console.log('[Editor]: 🔧 Patching puter.ui methods, appInstanceID:', appInstanceId);
+                    
+                    // Patch showSaveFilePicker to ensure .txt extension is added and store path
+                    if (puter.ui.showSaveFilePicker) {
+                        const originalShowSaveFilePicker = puter.ui.showSaveFilePicker.bind(puter.ui);
+                        puter.ui.showSaveFilePicker = async function(options = {}) {
+                            console.log('[Editor]: 📤 showSaveFilePicker called with options:', options);
+                            console.log('[Editor]: 🔍 puter.ui.appInstanceID:', puter.ui.appInstanceID);
+                            
+                            // Ensure suggestedName has .txt extension if no extension provided
+                            if (options.suggestedName && !options.suggestedName.includes('.')) {
+                                options.suggestedName = options.suggestedName + '.txt';
+                                console.log('[Editor]: ✅ Added .txt extension to suggestedName:', options.suggestedName);
+                            }
+                            
+                            const result = await originalShowSaveFilePicker(options);
+                            
+                            // Store path in the file object for later use
+                            if (result && result.saved_file && result.saved_file.path) {
+                                result.path = result.saved_file.path;
+                                console.log('[Editor]: ✅ Stored path in file object:', result.path);
+                            }
+                            
+                            return result;
+                        };
+                    }
+                    
+                    // Patch showOpenFilePicker
+                    if (puter.ui.showOpenFilePicker) {
+                        const originalShowOpenFilePicker = puter.ui.showOpenFilePicker.bind(puter.ui);
+                        puter.ui.showOpenFilePicker = function(...args) {
+                            console.log('[Editor]: 📤 showOpenFilePicker called');
+                            console.log('[Editor]: 🔍 puter.ui.appInstanceID:', puter.ui.appInstanceID);
+                            const result = originalShowOpenFilePicker(...args);
+                            // Try to manually send postMessage as fallback
+                            try {
+                                const message = {
+                                    msg: 'showOpenFilePicker',
+                                    appInstanceID: puter.ui.appInstanceID || window.puterAppInstanceID,
+                                    env: 'app'
+                                };
+                                console.log('[Editor]: 🚀 Attempting manual postMessage:', message);
+                                window.parent.postMessage(message, '*');
+                                console.log('[Editor]: ✅ Manual postMessage sent successfully');
+                            } catch (e) {
+                                console.error('[Editor]: ❌ Manual postMessage failed:', e);
+                            }
+                            return result;
+                        };
+                    }
+                    
+                    console.log('[Editor]: ✅ SDK patched with manual postMessage fallback');
+                }
             }
             
             initializeSDK();
+        })();
+    </script>
+    <script>
+        // CRITICAL: Initialize curfile from URL parameters when editor loads
+        // When a file is opened via URL parameters (puter.item.*), the editor doesn't call open_file()
+        // So we need to create curfile from URL parameters and ensure path is set
+        (function() {
+            function initializeCurfileFromURL() {
+                const urlParams = new URLSearchParams(window.location.search);
+                const itemPath = urlParams.get('puter.item.path');
+                const itemName = urlParams.get('puter.item.name');
+                const itemUid = urlParams.get('puter.item.uid');
+                
+                if (itemPath && typeof puter !== 'undefined' && puter.fs) {
+                    console.log('[Editor]: 🔍 Found file in URL parameters:', { path: itemPath, name: itemName, uid: itemUid });
+                    
+                    // Wait for editor.js to load and curfile to be available
+                    if (typeof curfile === 'undefined') {
+                        setTimeout(initializeCurfileFromURL, 100);
+                        return;
+                    }
+                    
+                    // CRITICAL: Always ensure curfile.path is set from URL parameters
+                    // Even if curfile already exists (from editor.js initialization),
+                    // we need to ensure it has the correct path for subsequent saves
+                    console.log('[Editor]: 📝 Ensuring curfile.path is set from URL parameters');
+                    console.log('[Editor]: 🔍 Current curfile state:', curfile ? {
+                        hasPath: !!curfile.path,
+                        path: curfile.path,
+                        name: curfile.name,
+                        hasWrite: typeof curfile.write === 'function'
+                    } : 'null');
+                    
+                    if (!curfile) {
+                        console.log('[Editor]: 📝 Creating curfile from URL parameters (curfile is null)');
+                        
+                        // Create a file-like object that matches FSItem structure
+                        const fileObj = {
+                            path: itemPath, // This is the privacy-aware path like ~/Desktop/file.txt
+                            name: itemName || 'Untitled.txt',
+                            uid: itemUid,
+                            read: async function() {
+                                // Use puter.fs.read to read the file
+                                return await puter.fs.read(this.path);
+                            },
+                            write: async function(data) {
+                                // Use puter.fs.write to write the file (this is what the official SDK does)
+                                console.log('[Editor]: 💾 fileObj.write() called with path:', this.path);
+                                return await puter.fs.write(this.path, data, { overwrite: true });
+                            }
+                        };
+                        
+                        // Set curfile to the file object
+                        curfile = fileObj;
+                        console.log('[Editor]: ✅ curfile created from URL parameters:', {
+                            path: curfile.path,
+                            name: curfile.name,
+                            uid: curfile.uid
+                        });
+                    } else {
+                        // curfile exists, but we MUST ensure path is set correctly
+                        console.log('[Editor]: 🔧 curfile exists, ensuring path is set correctly');
+                        
+                        // Always set path from URL parameters (this is the source of truth)
+                        if (itemPath) {
+                            curfile.path = itemPath;
+                            console.log('[Editor]: ✅ Set curfile.path from URL parameters:', curfile.path);
+                        }
+                        
+                        // Ensure write method exists and uses the correct path
+                        if (!curfile.write || typeof curfile.write !== 'function') {
+                            console.log('[Editor]: ⚠️ curfile.write() missing, adding write method');
+                            curfile.write = async function(data) {
+                                console.log('[Editor]: 💾 curfile.write() called with path:', this.path);
+                                if (!this.path) {
+                                    console.error('[Editor]: ❌ CRITICAL: this.path is not set in write()!');
+                                    throw new Error('File path is not set');
+                                }
+                                return await puter.fs.write(this.path, data, { overwrite: true });
+                            };
+                        } else {
+                            // Replace write method entirely to ensure it uses the correct path
+                            // The original write() might not use this.path correctly
+                            console.log('[Editor]: 🔧 Replacing curfile.write() to ensure path is used correctly');
+                            curfile.write = async function(data) {
+                                console.log('[Editor]: 💾 curfile.write() called (replaced)');
+                                console.log('[Editor]: 🔍 this.path:', this.path);
+                                console.log('[Editor]: 🔍 itemPath from URL:', itemPath);
+                                
+                                // CRITICAL: Use path from URL parameters (source of truth)
+                                const writePath = this.path || itemPath;
+                                
+                                if (!writePath) {
+                                    console.error('[Editor]: ❌ CRITICAL: No path available for write!');
+                                    console.error('[Editor]: ❌ this.path:', this.path);
+                                    console.error('[Editor]: ❌ itemPath:', itemPath);
+                                    throw new Error('File path is not set');
+                                }
+                                
+                                // Ensure this.path is set for future calls
+                                if (!this.path && itemPath) {
+                                    this.path = itemPath;
+                                    console.log('[Editor]: ✅ Set this.path for future calls:', this.path);
+                                }
+                                
+                                console.log('[Editor]: ✅ Calling puter.fs.write() with path:', writePath);
+                                return await puter.fs.write(writePath, data, { overwrite: true });
+                            };
+                            console.log('[Editor]: ✅ Replaced curfile.write() to use path correctly');
+                        }
+                        
+                        console.log('[Editor]: ✅ curfile verified and patched:', {
+                            path: curfile.path,
+                            name: curfile.name,
+                            hasWrite: typeof curfile.write === 'function'
+                        });
+                    }
+                } else if (itemPath) {
+                    // URL params exist but SDK not ready yet, retry
+                    setTimeout(initializeCurfileFromURL, 100);
+                }
+            }
+            
+            // Start initialization after a short delay to ensure SDK is loaded
+            setTimeout(initializeCurfileFromURL, 500);
         })();
     </script>
     <script src="./js/printjs.min.js"></script>
     <script src="./js/html-entities.js"></script>
     <script src="./js/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
     <script src="./js/monaco-editor/min/vs/loader.js"></script>
+    <script>
+        // Configure Monaco Editor to load from local files (self-hosted)
+        if (typeof require !== 'undefined' && require.config) {
+            require.config({ 
+                paths: { 
+                    'vs': './js/monaco-editor/min/vs'
+                }
+            });
+        }
+    </script>
     <script src="./js/editor.js"></script>
+    <script>
+        // Ensure curfile.path is always set (matching official Puter SDK behavior)
+        // The official SDK's File.write() method uses this.path, so it must be set
+        // Official implementation: curfile.write(data) -> puter.fs.write(this.path, ...)
+        
+        // Patch save_file to add debugging and verify path is set
+        (function() {
+            function patchSaveFile() {
+                if (typeof save_file === 'undefined') {
+                    setTimeout(patchSaveFile, 50);
+                    return;
+                }
+                
+                const originalSaveFile = save_file;
+                window.save_file = async function(callback) {
+                    console.log('[Editor]: 💾 save_file() called');
+                    console.log('[Editor]: 🔍 curfile:', curfile ? {
+                        path: curfile.path,
+                        name: curfile.name,
+                        uid: curfile.uid,
+                        hasWrite: typeof curfile.write === 'function',
+                        hasPath: !!curfile.path
+                    } : 'null');
+                    
+                    if (!curfile) {
+                        console.error('[Editor]: ❌ curfile is null/undefined!');
+                        return originalSaveFile.call(this, callback);
+                    }
+                    
+                    if (!curfile.path) {
+                        console.error('[Editor]: ❌ curfile.path is not set! This will cause write() to fail!');
+                        console.error('[Editor]: ❌ curfile object:', curfile);
+                        // Try to get path from saved_file
+                        if (curfile.saved_file && curfile.saved_file.path) {
+                            curfile.path = curfile.saved_file.path;
+                            console.log('[Editor]: ✅ Recovered path from saved_file:', curfile.path);
+                        } else {
+                            console.error('[Editor]: ❌ Cannot recover path, save will fail!');
+                            return originalSaveFile.call(this, callback);
+                        }
+                    }
+                    
+                    console.log('[Editor]: ✅ curfile.path is set, calling curfile.write() with path:', curfile.path);
+                    return originalSaveFile.call(this, callback);
+                };
+                console.log('[Editor]: ✅ save_file() patched with debugging');
+            }
+            setTimeout(patchSaveFile, 200);
+        })();
+        
+        // Listen for fileSaved messages to ensure path is stored in curfile
+        // This ensures curfile.path is set after first save, so subsequent saves work
+        window.addEventListener('message', function(event) {
+            if (event.data && event.data.msg === 'fileSaved' && event.data.saved_file) {
+                console.log('[Editor]: 📥 Received fileSaved message, path:', event.data.saved_file.path);
+                // Store path in curfile if it exists (matching official Puter SDK)
+                // The official SDK's File.write() uses this.path, so it must be set
+                if (typeof curfile !== 'undefined' && curfile) {
+                    curfile.path = event.data.saved_file.path;
+                    curfile.saved_file = event.data.saved_file;
+                    console.log('[Editor]: ✅ Stored path in curfile (matching official SDK):', curfile.path);
+                    console.log('[Editor]: 🔍 curfile after fileSaved:', {
+                        path: curfile.path,
+                        name: curfile.name,
+                        uid: curfile.uid,
+                        hasWrite: typeof curfile.write === 'function'
+                    });
+                }
+            }
+        });
+        
+        // Patch open_file to ensure curfile is set and path is available
+        // CRITICAL BUG FIX: open_file() doesn't set curfile = cfile, so save_file() fails
+        // The official Puter SDK's File.write() uses this.path, so curfile must be set correctly
+        (function() {
+            function patchOpenFile() {
+                if (typeof open_file === 'undefined') {
+                    setTimeout(patchOpenFile, 50);
+                    return;
+                }
+                
+                const originalOpenFile = open_file;
+                window.open_file = async function(cfile) {
+                    console.log('[Editor]: 📂 open_file() called');
+                    console.log('[Editor]: 🔍 cfile properties:', cfile ? Object.keys(cfile) : 'null');
+                    console.log('[Editor]: 🔍 cfile.path:', cfile?.path);
+                    console.log('[Editor]: 🔍 cfile.fsentry_path:', cfile?.fsentry_path);
+                    console.log('[Editor]: 🔍 cfile type:', cfile?.constructor?.name);
+                    
+                    // CRITICAL: Set curfile to the opened file (this was missing!)
+                    // Without this, save_file() uses the wrong file object
+                    curfile = cfile;
+                    console.log('[Editor]: ✅ Set curfile to opened file');
+                    
+                    // The official Puter SDK creates FSItem objects from fileOpenPicked
+                    // FSItem constructor sets: this.path = options.path ?? options.fsentry_path
+                    // So cfile should already have a path property if it's a proper FSItem
+                    // But we'll ensure it's set anyway for robustness
+                    if (cfile) {
+                        // Check if path exists (FSItem should have it from constructor)
+                        if (!cfile.path) {
+                            // Try to get path from various possible locations (matching FSItem constructor logic)
+                            const filePath = cfile.fsentry_path || 
+                                           cfile.path ||  // Try direct path again
+                                           cfile.saved_file?.path || 
+                                           (cfile.saved_file && cfile.saved_file.path);
+                            
+                            if (filePath) {
+                                cfile.path = filePath;
+                                curfile.path = filePath;
+                                console.log('[Editor]: ✅ Set path from fallback sources:', filePath);
+                            } else {
+                                console.error('[Editor]: ❌ No path found in file object!', cfile);
+                                console.error('[Editor]: ❌ Full cfile object:', JSON.stringify(cfile, null, 2));
+                            }
+                        } else {
+                            // Path already exists, ensure curfile has it too
+                            curfile.path = cfile.path;
+                            console.log('[Editor]: ✅ Path already set on file object:', cfile.path);
+                        }
+                        
+                        // Final verification: ensure curfile.path is set before proceeding
+                        if (!curfile.path) {
+                            console.error('[Editor]: ❌ CRITICAL: curfile.path is still not set after all attempts!');
+                            console.error('[Editor]: ❌ This will cause save_file() to fail!');
+                        } else {
+                            console.log('[Editor]: ✅ Verified curfile.path is set:', curfile.path);
+                        }
+                    }
+                    
+                    return originalOpenFile.call(this, cfile);
+                };
+                console.log('[Editor]: ✅ open_file() patched to set curfile and ensure path');
+            }
+            setTimeout(patchOpenFile, 200);
+        })();
+    </script>
 </body>
 
 </html>

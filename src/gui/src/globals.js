@@ -85,7 +85,7 @@ if(window.user !== undefined && window.user !== null){
     window.public_path = '/' + window.user.username + '/Public';
     window.home_path = '/' + window.user.username;
 }
-window.root_dirname = 'Puter';
+window.root_dirname = 'ElastOS';
 
 // user preferences, persisted across sessions, cached in localStorage
 try {

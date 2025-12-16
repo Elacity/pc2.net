@@ -189,7 +189,8 @@ async function UIWindow(options) {
         options.left = 0;
         options.top = window.toolbar_height + 'px';
         options.width = '100%';
-        options.height = 'calc(100% - ' + window.toolbar_height + 'px)';
+        // Don't set height for maximized windows - let update_maximized_window_for_taskbar handle it
+        // options.height = 'calc(100% - ' + window.toolbar_height + 'px)';
     }else{
         options.width += 'px'
         options.height += 'px'
@@ -581,7 +582,18 @@ async function UIWindow(options) {
         $(el_window).find('.window-scale-btn>img').attr('src', window.icons['scale-down-3.svg']);
 
         // Use taskbar position-aware window positioning
-        window.update_maximized_window_for_taskbar(el_window);
+        // Use setTimeout to ensure this runs after jQuery UI plugins are initialized
+        setTimeout(() => {
+            window.update_maximized_window_for_taskbar(el_window);
+            
+            // Disable resizable and draggable when maximized to prevent containment constraints
+            if ($(el_window).resizable('instance')) {
+                $(el_window).resizable('disable');
+            }
+            if ($(el_window).draggable('instance')) {
+                $(el_window).draggable('option', 'containment', false);
+            }
+        }, 0);
         
         // Ensure iframe and window-body take full height when maximized
         $(el_window).find('.window-body-app').css({
@@ -611,6 +623,15 @@ async function UIWindow(options) {
     // focus on this window and deactivate other windows
     if ( options.is_visible ) {
         $(el_window).focusWindow();
+    }
+    
+    // If window was created maximized, ensure it covers full viewport
+    // Run this after a short delay to ensure all plugins are initialized
+    if (options.is_maximized) {
+        setTimeout(() => {
+            console.log('[UIWindow] Window created maximized, applying full viewport fix');
+            window.update_maximized_window_for_taskbar(el_window);
+        }, 50);
     }
 
     if (window.animate_window_opening) {
@@ -1122,115 +1143,116 @@ async function UIWindow(options) {
         // --------------------------------------------------------
         // SIDEBAR sharing
         // --------------------------------------------------------
-        if(options.is_dir && !isMobile.phone){
-            puter.fs.readdir('/').then(function(shared_users){
-                let ht = '';
-                if(shared_users && shared_users.length - 1 > 0){
-                    ht += `<h2 class="window-sidebar-title disable-user-select">Shared with me</h2>`;
-                    for (let index = 0; index < shared_users.length; index++) {
-                        const shared_user = shared_users[index];
-                        // don't show current user's folder!
-                        if(shared_user.name === window.user.username)
-                            continue;
-                            ht += `<div  class="window-sidebar-item not-sortable disable-user-select ${options.path === shared_user.path ? 'window-sidebar-item-active' : ''}" 
-                                    data-path="${shared_user.path}"
-                                    data-sharing-username="${html_encode(shared_user.name)}"
-                                    title="${html_encode(shared_user.name)}"
-                                    data-is_shared="1">
-                                        <img class="window-sidebar-item-icon" src="${html_encode(window.icons['shared-outline.svg'])}">${shared_user.name}
-                                    </div>`;
-                    }
-                }
-                $(el_window).find('.window-sidebar').append(ht);
+        // PC2: Disabled - PC2 is single-user, self-hosted, no multi-user sharing
+        // if(options.is_dir && !isMobile.phone){
+        //     puter.fs.readdir('/').then(function(shared_users){
+        //         let ht = '';
+        //         if(shared_users && shared_users.length - 1 > 0){
+        //             ht += `<h2 class="window-sidebar-title disable-user-select">Shared with me</h2>`;
+        //             for (let index = 0; index < shared_users.length; index++) {
+        //                 const shared_user = shared_users[index];
+        //                 // don't show current user's folder!
+        //                 if(shared_user.name === window.user.username)
+        //                     continue;
+        //                     ht += `<div  class="window-sidebar-item not-sortable disable-user-select ${options.path === shared_user.path ? 'window-sidebar-item-active' : ''}" 
+        //                             data-path="${shared_user.path}"
+        //                             data-sharing-username="${html_encode(shared_user.name)}"
+        //                             title="${html_encode(shared_user.name)}"
+        //                             data-is_shared="1">
+        //                                 <img class="window-sidebar-item-icon" src="${html_encode(window.icons['shared-outline.svg'])}">${shared_user.name}
+        //                             </div>`;
+        //             }
+        //         }
+        //         $(el_window).find('.window-sidebar').append(ht);
 
-                $(el_window).find('.window-sidebar-item:not(.ui-droppable)').droppable({
-                    accept: '.item',
-                    tolerance: 'pointer',
-                    drop: function( event, ui ) {
-                        // check if item was actually dropped on this navbar path
-                        if($(window.mouseover_window).attr('data-id') !== $(el_window).attr('data-id')){
-                            return;
-                        }
-                        const items_to_share = []
-                        
-                        // first item
-                        items_to_share.push({
-                            uid: $(ui.draggable).attr('data-uid'),
-                            path: $(ui.draggable).attr('data-path'),
-                            icon: $(ui.draggable).find('.item-icon img').attr('src'),
-                            name: $(ui.draggable).find('.item-name').text(),
-                        }); 
-                        
-                        // all subsequent items
-                        const cloned_items = document.getElementsByClassName('item-selected-clone');
-                        for(let i =0; i<cloned_items.length; i++){
-                            const source_item = document.getElementById('item-' + $(cloned_items[i]).attr('data-id'));
-                            if(!source_item) continue;
-                            items_to_share.push({
-                                uid: $(source_item).attr('data-uid'),
-                                path: $(source_item).attr('data-path'),
-                                icon: $(source_item).find('.item-icon img').attr('src'),
-                                name: $(source_item).find('.item-name').text(),
-                            })
-                        }
-            
-                        // if alt key is down, create shortcut items
-                        if(event.altKey){
-                            items_to_share.forEach((item_to_move) => {
-                                window.create_shortcut(
-                                    path.basename($(item_to_move).attr('data-path')), 
-                                    $(item_to_move).attr('data-is_dir') === '1', 
-                                    $(this).attr('data-path'), 
-                                    null, 
-                                    $(item_to_move).attr('data-shortcut_to') === '' ? $(item_to_move).attr('data-uid') : $(item_to_move).attr('data-shortcut_to'),
-                                    $(item_to_move).attr('data-shortcut_to_path') === '' ? $(item_to_move).attr('data-path') : $(item_to_move).attr('data-shortcut_to_path'),
-                                );
-                            });
-                        }
-                        // move items
-                        else{
-                            UIWindowShare(items_to_share, $(this).attr('data-sharing-username'));
-                        }
-            
-                        $('.item-container').droppable('enable')
-                        $(this).removeClass('window-sidebar-item-drag-active');
-            
-                        return false;
-                    },
-                    over: function(event, ui){
-                        // check if item was actually hovered over this window
-                        if($(window.mouseover_window).attr('data-id') !== $(el_window).attr('data-id'))
-                            return;
-            
-                        // Don't do anything if the dragged item is NOT a UIItem
-                        if(!$(ui.draggable).hasClass('item'))
-                            return;
-                        
-                        // highlight this item
-                        $(this).addClass('window-sidebar-item-drag-active');
-                        $('.ui-draggable-dragging').css('opacity', 0.2)
-                        $('.item-selected-clone').css('opacity', 0.2)
-            
-                        // disable all window bodies 
-                        $('.item-container').droppable( 'disable' )
-                    },
-                    out: function(event, ui){
-                        // Don't do anything if the dragged element is NOT a UIItem
-                        if(!$(ui.draggable).hasClass('item'))
-                            return;
-                        
-                        // unselect item if item is dragged out
-                        $(this).removeClass('window-sidebar-item-drag-active');
-                        $('.ui-draggable-dragging').css('opacity', 'initial')
-                        $('.item-selected-clone').css('opacity', 'initial')
-            
-                        $('.item-container').droppable( 'enable' )    
-                    }
-                });
-            }).catch(function(err){
-                console.error(err);
-            })
-        }
+        //         $(el_window).find('.window-sidebar-item:not(.ui-droppable)').droppable({
+        //             accept: '.item',
+        //             tolerance: 'pointer',
+        //             drop: function( event, ui ) {
+        //                 // check if item was actually dropped on this navbar path
+        //                 if($(window.mouseover_window).attr('data-id') !== $(el_window).attr('data-id')){
+        //                     return;
+        //                 }
+        //                 const items_to_share = []
+        //                 
+        //                 // first item
+        //                 items_to_share.push({
+        //                     uid: $(ui.draggable).attr('data-uid'),
+        //                     path: $(ui.draggable).attr('data-path'),
+        //                     icon: $(ui.draggable).find('.item-icon img').attr('src'),
+        //                     name: $(ui.draggable).find('.item-name').text(),
+        //                 }); 
+        //                 
+        //                 // all subsequent items
+        //                 const cloned_items = document.getElementsByClassName('item-selected-clone');
+        //                 for(let i =0; i<cloned_items.length; i++){
+        //                     const source_item = document.getElementById('item-' + $(cloned_items[i]).attr('data-id'));
+        //                     if(!source_item) continue;
+        //                     items_to_share.push({
+        //                         uid: $(source_item).attr('data-uid'),
+        //                         path: $(source_item).attr('data-path'),
+        //                         icon: $(source_item).find('.item-icon img').attr('src'),
+        //                         name: $(source_item).find('.item-name').text(),
+        //                     })
+        //                 }
+        //     
+        //                 // if alt key is down, create shortcut items
+        //                 if(event.altKey){
+        //                     items_to_share.forEach((item_to_move) => {
+        //                         window.create_shortcut(
+        //                             path.basename($(item_to_move).attr('data-path')), 
+        //                             $(item_to_move).attr('data-is_dir') === '1', 
+        //                             $(this).attr('data-path'), 
+        //                             null, 
+        //                             $(item_to_move).attr('data-shortcut_to') === '' ? $(item_to_move).attr('data-uid') : $(item_to_move).attr('data-shortcut_to'),
+        //                             $(item_to_move).attr('data-shortcut_to_path') === '' ? $(item_to_move).attr('data-path') : $(item_to_move).attr('data-shortcut_to_path'),
+        //                         );
+        //                     });
+        //                 }
+        //                 // move items
+        //                 else{
+        //                     UIWindowShare(items_to_share, $(this).attr('data-sharing-username'));
+        //                 }
+        //     
+        //                 $('.item-container').droppable('enable')
+        //                 $(this).removeClass('window-sidebar-item-drag-active');
+        //     
+        //                 return false;
+        //             },
+        //             over: function(event, ui){
+        //                 // check if item was actually hovered over this window
+        //                 if($(window.mouseover_window).attr('data-id') !== $(el_window).attr('data-id'))
+        //                     return;
+        //     
+        //                 // Don't do anything if the dragged item is NOT a UIItem
+        //                 if(!$(ui.draggable).hasClass('item'))
+        //                     return;
+        //                 
+        //                 // highlight this item
+        //                 $(this).addClass('window-sidebar-item-drag-active');
+        //                 $('.ui-draggable-dragging').css('opacity', 0.2)
+        //                 $('.item-selected-clone').css('opacity', 0.2)
+        //     
+        //                 // disable all window bodies 
+        //                 $('.item-container').droppable( 'disable' )
+        //             },
+        //             out: function(event, ui){
+        //                 // Don't do anything if the dragged element is NOT a UIItem
+        //                 if(!$(ui.draggable).hasClass('item'))
+        //                     return;
+        //                 
+        //                 // unselect item if item is dragged out
+        //                 $(this).removeClass('window-sidebar-item-drag-active');
+        //                 $('.ui-draggable-dragging').css('opacity', 'initial')
+        //                 $('.item-selected-clone').css('opacity', 'initial')
+        //     
+        //                 $('.item-container').droppable( 'enable' )    
+        //             }
+        //         });
+        //     }).catch(function(err){
+        //         console.error(err);
+        //     })
+        // }
 
         // get directory content
         refresh_item_container(el_window_body, options);
@@ -1249,6 +1271,26 @@ async function UIWindow(options) {
     }
     if ( options.is_visible ) {
         $(el_window).css('display', 'block');
+    }
+    
+    // If window was created maximized, ensure it covers full viewport immediately
+    if (options.is_maximized) {
+        // Set data attribute first
+        $(el_window).attr('data-is_maximized', '1');
+        // Apply maximized styles immediately
+        if (window.update_maximized_window_for_taskbar) {
+            window.update_maximized_window_for_taskbar(el_window);
+        } else {
+            // Fallback if function not loaded yet
+            el_window.style.setProperty('position', 'fixed', 'important');
+            el_window.style.setProperty('top', '0', 'important');
+            el_window.style.setProperty('left', '0', 'important');
+            el_window.style.setProperty('right', '0', 'important');
+            el_window.style.setProperty('bottom', '0', 'important');
+            el_window.style.setProperty('width', '100vw', 'important');
+            el_window.style.setProperty('height', '100vh', 'important');
+            el_window.style.setProperty('z-index', '99999999', 'important');
+        }
     }
 
     // mousedown on the window body will unselect selected items if neither ctrl nor command are pressed
@@ -2140,6 +2182,11 @@ async function UIWindow(options) {
                 // maximize icon
                 $(el_window_head_scale_btn).find('img').attr('src', window.icons['scale.svg']);
                 $(el_window).attr('data-is_maximized', '0');
+                
+                // If window is maximized, ensure height stays at 100vh
+                if ($(el_window).attr('data-is_maximized') === '1') {
+                    el_window.style.setProperty('height', '100vh', 'important');
+                }
             },
             containment: 'parent',
         })
@@ -3459,7 +3506,73 @@ window.scale_window = (el_window)=>{
         $(el_window).find('.window-scale-btn>img').attr('src', window.icons['scale-down-3.svg']);
 
         // Use taskbar position-aware window positioning
+        console.log('[scale_window] Maximizing window, calling update_maximized_window_for_taskbar');
         window.update_maximized_window_for_taskbar(el_window);
+        
+        // Disable resizable and draggable when maximized to prevent containment constraints
+        // Do this immediately and also in setTimeout to catch any delayed initialization
+        if ($(el_window).resizable('instance')) {
+            $(el_window).resizable('disable');
+        }
+        if ($(el_window).draggable('instance')) {
+            $(el_window).draggable('option', 'containment', false);
+        }
+        
+        // Set up a MutationObserver to watch for style changes and override them
+        if (!el_window._maximizeObserver) {
+            el_window._maximizeObserver = new MutationObserver((mutations) => {
+                if ($(el_window).attr('data-is_maximized') === '1') {
+                    const currentHeight = el_window.style.height;
+                    if (currentHeight && currentHeight.includes('calc') && !currentHeight.includes('100vh')) {
+                        console.log('[Maximize Observer] Detected height change to:', currentHeight, '- overriding to 100vh');
+                        el_window.style.setProperty('height', '100vh', 'important');
+                    }
+                    const currentPosition = el_window.style.position;
+                    if (currentPosition && currentPosition !== 'fixed') {
+                        console.log('[Maximize Observer] Detected position change to:', currentPosition, '- overriding to fixed');
+                        el_window.style.setProperty('position', 'fixed', 'important');
+                    }
+                }
+            });
+            el_window._maximizeObserver.observe(el_window, {
+                attributes: true,
+                attributeFilter: ['style'],
+                attributeOldValue: true
+            });
+        }
+        
+        setTimeout(() => {
+            if ($(el_window).resizable('instance')) {
+                $(el_window).resizable('disable');
+            }
+            if ($(el_window).draggable('instance')) {
+                $(el_window).draggable('option', 'containment', false);
+            }
+            // Re-apply styles in case something changed them
+            window.update_maximized_window_for_taskbar(el_window);
+        }, 100);
+        
+        // Also set up a periodic check to ensure styles stay correct
+        if (el_window._maximizeInterval) {
+            clearInterval(el_window._maximizeInterval);
+        }
+        el_window._maximizeInterval = setInterval(() => {
+            if ($(el_window).attr('data-is_maximized') === '1') {
+                const currentHeight = el_window.style.height;
+                if (currentHeight && (currentHeight.includes('calc') || currentHeight !== '100vh')) {
+                    el_window.style.setProperty('height', '100vh', 'important');
+                }
+                if (el_window.style.position !== 'fixed') {
+                    el_window.style.setProperty('position', 'fixed', 'important');
+                }
+            } else {
+                // Clean up when not maximized
+                if (el_window._maximizeInterval) {
+                    clearInterval(el_window._maximizeInterval);
+                    el_window._maximizeInterval = null;
+                }
+            }
+        }, 200);
         
         // Ensure iframe and window-body take full height when maximized
         $(el_window).find('.window-body-app').css({
@@ -3477,8 +3590,28 @@ window.scale_window = (el_window)=>{
     }
     //shrink
     else {
-        // set size and position to original before maximization
+        // Clean up MutationObserver and interval when restoring
+        if (el_window._maximizeObserver) {
+            el_window._maximizeObserver.disconnect();
+            el_window._maximizeObserver = null;
+        }
+        if (el_window._maximizeInterval) {
+            clearInterval(el_window._maximizeInterval);
+            el_window._maximizeInterval = null;
+        }
+        
+        // Re-enable resizable and restore draggable containment when restoring
+        if ($(el_window).resizable('instance')) {
+            $(el_window).resizable('enable');
+        }
+        if ($(el_window).draggable('instance')) {
+            $(el_window).draggable('option', 'containment', '.window-container');
+        }
+        
+        // Reset position back to absolute (from fixed when maximized)
+        // Remove all the fixed positioning styles that were applied
         $(el_window).css({
+            'position': 'absolute',
             'top': $(el_window).attr('data-top-before-maxim'),
             'left': $(el_window).attr('data-left-before-maxim'),
             'width': $(el_window).attr('data-width-before-maxim'),
@@ -3924,40 +4057,143 @@ window.update_maximized_window_for_taskbar = (el_window) => {
     const taskbar_height = window.taskbar_height || 50;
     const toolbar_height = window.toolbar_height || 0;
     
-    if (taskbar_position === 'bottom') {
-        $(el_window).css({
-            'top': '0',
-            'left': '0',
-            'width': '100%',
-            'height': `calc(100% - ${taskbar_height + toolbar_height}px)`,
-            'transform': 'none',
-        });
-    } else if (taskbar_position === 'left') {
-        $(el_window).css({
-            'top': `${toolbar_height}px`,
-            'left': `${taskbar_height}px`,
-            'width': `calc(100% - ${taskbar_height}px)`,
-            'height': `calc(100% - ${toolbar_height}px)`,
-            'transform': 'none',
-        });
-    } else if (taskbar_position === 'right') {
-        $(el_window).css({
-            'top': `${toolbar_height}px`,
-            'left': '0',
-            'width': `calc(100% - ${taskbar_height}px)`,
-            'height': `calc(100% - ${toolbar_height}px)`,
-            'transform': 'none',
-        });
-    } else {
-        // Default to bottom if unknown position
-        $(el_window).css({
-            'top': '0',
-            'left': '0',
-            'width': '100%',
-            'height': `calc(100% - ${taskbar_height + toolbar_height}px)`,
-            'transform': 'none',
-        });
+    // Remove any existing inline styles that might conflict
+    // Get current style attribute
+    let currentStyle = el_window.getAttribute('style') || '';
+    // Remove height, width, top, left, right, bottom, max-height, max-width, min-height, min-width from inline styles
+    currentStyle = currentStyle.replace(/height\s*:[^;]+;?/gi, '');
+    currentStyle = currentStyle.replace(/width\s*:[^;]+;?/gi, '');
+    currentStyle = currentStyle.replace(/top\s*:[^;]+;?/gi, '');
+    currentStyle = currentStyle.replace(/left\s*:[^;]+;?/gi, '');
+    currentStyle = currentStyle.replace(/right\s*:[^;]+;?/gi, '');
+    currentStyle = currentStyle.replace(/bottom\s*:[^;]+;?/gi, '');
+    currentStyle = currentStyle.replace(/max-height\s*:[^;]+;?/gi, '');
+    currentStyle = currentStyle.replace(/max-width\s*:[^;]+;?/gi, '');
+    currentStyle = currentStyle.replace(/min-height\s*:[^;]+;?/gi, '');
+    currentStyle = currentStyle.replace(/min-width\s*:[^;]+;?/gi, '');
+    currentStyle = currentStyle.replace(/position\s*:[^;]+;?/gi, '');
+    currentStyle = currentStyle.replace(/transform\s*:[^;]+;?/gi, '');
+    currentStyle = currentStyle.replace(/margin\s*:[^;]+;?/gi, '');
+    currentStyle = currentStyle.replace(/padding\s*:[^;]+;?/gi, '');
+    currentStyle = currentStyle.replace(/z-index\s*:[^;]+;?/gi, '');
+    // Clean up any double semicolons or trailing semicolons
+    currentStyle = currentStyle.replace(/;;+/g, ';').replace(/^;|;$/g, '').trim();
+    
+    // For maximized windows, use fixed positioning to cover full viewport (like macOS)
+    // This allows windows to cover the taskbar
+    // Build new style string with our maximized styles
+    const maximizedStyles = [
+        'position: fixed',
+        'top: 0',
+        'left: 0',
+        'right: 0',
+        'bottom: 0',
+        'width: 100vw',
+        'height: 100vh',
+        'max-width: 100vw',
+        'max-height: 100vh',
+        'min-width: 100vw',
+        'min-height: 100vh',
+        'margin: 0',
+        'padding: 0',
+        'transform: none',
+        'z-index: 99999999'
+    ].join('; ');
+    
+    // Combine with any remaining styles
+    const newStyle = currentStyle ? `${maximizedStyles}; ${currentStyle}` : maximizedStyles;
+    el_window.setAttribute('style', newStyle);
+    
+    // Use setProperty with important flag to override any inline styles
+    const style = el_window.style;
+    style.setProperty('position', 'fixed', 'important');
+    style.setProperty('top', '0', 'important');
+    style.setProperty('left', '0', 'important');
+    style.setProperty('right', '0', 'important');
+    style.setProperty('bottom', '0', 'important');
+    style.setProperty('width', '100vw', 'important');
+    style.setProperty('height', '100vh', 'important'); // This will override calc(100% - 95px)
+    style.setProperty('max-width', '100vw', 'important');
+    style.setProperty('max-height', '100vh', 'important');
+    style.setProperty('min-width', '100vw', 'important');
+    style.setProperty('min-height', '100vh', 'important');
+    style.setProperty('margin', '0', 'important');
+    style.setProperty('padding', '0', 'important');
+    style.setProperty('transform', 'none', 'important');
+    style.setProperty('z-index', '99999999', 'important');
+    
+    // Also use jQuery css() as backup
+    $(el_window).css({
+        'position': 'fixed',
+        'top': '0',
+        'left': '0',
+        'right': '0',
+        'bottom': '0',
+        'width': '100vw',
+        'height': '100vh',
+        'max-width': '100vw',
+        'max-height': '100vh',
+        'min-width': '100vw',
+        'min-height': '100vh',
+        'margin': '0',
+        'padding': '0',
+        'transform': 'none',
+        'z-index': '99999999',
+    });
+    
+    // Force a reflow to ensure styles are applied
+    el_window.offsetHeight;
+    
+    // Debug logging
+    console.log('[Maximize] Window styles applied:', {
+        position: $(el_window).css('position'),
+        top: $(el_window).css('top'),
+        left: $(el_window).css('left'),
+        width: $(el_window).css('width'),
+        height: $(el_window).css('height'),
+        inlineStyle: el_window.getAttribute('style'),
+        computedHeight: el_window.offsetHeight,
+        viewportHeight: window.innerHeight
+    });
+};
+
+// Global function to fix all maximized windows - call this periodically
+window.fixAllMaximizedWindows = () => {
+    $('.window[data-is_maximized="1"]').each(function() {
+        const el_window = this;
+        const currentHeight = el_window.style.height;
+        if (currentHeight && (currentHeight.includes('calc') || currentHeight !== '100vh')) {
+            console.log('[fixAllMaximizedWindows] Fixing window height:', currentHeight, '-> 100vh');
+            window.update_maximized_window_for_taskbar(el_window);
+        }
+    });
+};
+
+// Set up global interval to fix maximized windows
+// Run immediately if DOM is ready, otherwise wait for it
+const setupMaximizeFix = () => {
+    if (!window._maximizeFixInterval) {
+        // Run immediately
+        window.fixAllMaximizedWindows();
+        
+        // Then set up interval
+        window._maximizeFixInterval = setInterval(() => {
+            window.fixAllMaximizedWindows();
+        }, 200);
     }
 };
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupMaximizeFix);
+} else {
+    setupMaximizeFix();
+}
+
+// Also run on window load as a backup
+window.addEventListener('load', () => {
+    setTimeout(() => {
+        window.fixAllMaximizedWindows();
+    }, 100);
+});
 
 export default UIWindow;

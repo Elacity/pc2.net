@@ -84,8 +84,37 @@ export function handleStat(req: AuthenticatedRequest, res: Response): void {
 
   try {
     const metadata = filesystem.getFileMetadata(resolvedPath, req.user.wallet_address);
+    logger.info(`[Stat] Metadata lookup result: ${metadata ? 'found' : 'not found'} for path: ${resolvedPath}`);
     
     if (!metadata) {
+      // For user paths, return directory stat even if not in database yet
+      // This allows the frontend to display directories before files are created
+      const walletPath = `/${req.user.wallet_address}`;
+      const isUserPath = resolvedPath === walletPath || 
+                         resolvedPath.startsWith(`${walletPath}/`) ||
+                         resolvedPath === '/';
+      
+      logger.info(`[Stat] Checking user path: resolvedPath=${resolvedPath}, walletPath=${walletPath}, isUserPath=${isUserPath}`);
+      
+      if (isUserPath) {
+        const pathParts = resolvedPath.split('/').filter(p => p);
+        const dirStat: FileStat = {
+          name: pathParts.length > 0 ? pathParts[pathParts.length - 1] : '/',
+          path: resolvedPath,
+          type: 'dir',
+          size: 0,
+          created: Date.now(),
+          modified: Date.now(),
+          is_dir: true,
+          uid: `uuid-${resolvedPath.replace(/\//g, '-').replace(/^-/, '')}`,
+          uuid: `uuid-${resolvedPath.replace(/\//g, '-').replace(/^-/, '')}`
+        };
+        logger.info(`[Stat] Returning directory stat for: ${resolvedPath} (not in database yet, wallet: ${walletPath})`);
+        res.json(dirStat);
+        return;
+      }
+      
+      logger.warn(`[Stat] Path not a user path, returning 404: ${resolvedPath}`);
       res.status(404).json({ error: 'File not found' });
       return;
     }
@@ -200,7 +229,12 @@ export function handleReaddir(req: AuthenticatedRequest, res: Response): void {
  */
 export async function handleRead(req: AuthenticatedRequest, res: Response): Promise<void> {
   const filesystem = (req.app.locals.filesystem as FilesystemManager | undefined);
-  const path = (req.query.path as string) || undefined;
+  // Support both GET (query param) and POST (body param)
+  const path = (req.query.path as string) || 
+               (req.query.file as string) ||
+               (req.body?.path as string) || 
+               (req.body?.file as string) ||
+               undefined;
   const encoding = (req.query.encoding as 'utf8' | 'base64') || 'utf8';
 
   if (!filesystem) {

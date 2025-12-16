@@ -1,3 +1,6 @@
+// Import polyfills FIRST (before any other imports that might use them)
+import './utils/polyfill.js';
+
 import { createServer } from './server.js';
 import { DatabaseManager, IPFSStorage, FilesystemManager } from './storage/index.js';
 import { loadConfig, type Config } from './config/loader.js';
@@ -58,18 +61,64 @@ async function main() {
 
   // Initialize IPFS (optional - server works without it)
   try {
+    logger.info('🌐 Initializing IPFS storage...');
+    logger.info(`   Repo path: ${IPFS_REPO_PATH}`);
+    
+    // Verify polyfill is loaded
+    if (typeof (Promise as any).withResolvers === 'undefined') {
+      logger.warn('⚠️  Promise.withResolvers polyfill not detected');
+      logger.warn('   This may cause IPFS initialization to fail on Node.js < 22');
+    } else {
+      logger.info('✅ Promise.withResolvers polyfill confirmed');
+    }
+    
     ipfs = new IPFSStorage({
       repoPath: IPFS_REPO_PATH
     });
+    
+    logger.info('   Starting IPFS node initialization...');
     await ipfs.initialize();
     
-    // Create filesystem manager
-    filesystem = new FilesystemManager(ipfs, db);
-    logger.info('✅ Filesystem manager initialized');
+    // Create filesystem manager (only if IPFS is available)
+    if (ipfs && ipfs.isReady()) {
+      filesystem = new FilesystemManager(ipfs, db);
+      logger.info('✅ Filesystem manager initialized with IPFS');
+      logger.info('   File uploads and storage are now available');
+    } else {
+      logger.warn('⚠️  IPFS initialization completed but isReady() returned false');
+      logger.warn('   Filesystem manager not created');
+      filesystem = null;
+    }
   } catch (error) {
-    logger.error('❌ Failed to initialize IPFS:', error instanceof Error ? error.message : 'Unknown error');
-    logger.warn('   File storage will not be available');
-    logger.warn('   Server will continue without IPFS (database-only mode)');
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    
+    logger.error('❌ Failed to initialize IPFS:', errorMessage);
+    
+    if (errorStack) {
+      logger.error('   Full error stack:');
+      logger.error(errorStack);
+    }
+    
+    if (errorMessage.includes('withResolvers') || (errorStack && errorStack.includes('withResolvers'))) {
+      logger.error('   ⚠️  This error is due to Node.js version < 22');
+      logger.error('   💡 A polyfill has been added, but IPFS may still require Node.js 22+');
+      logger.error('   💡 Consider upgrading Node.js: nvm install 22 && nvm use 22');
+      logger.error('   💡 Or continue without IPFS (database-only mode)');
+    } else if (errorMessage.includes('EADDRINUSE')) {
+      logger.error('   ⚠️  IPFS ports (4001, 5001, 8080) are already in use');
+      logger.error('   💡 Another IPFS instance may be running');
+      logger.error('   💡 Try stopping other IPFS processes or change ports in config');
+    } else if (errorMessage.includes('repo') || errorMessage.includes('repository')) {
+      logger.error('   ⚠️  IPFS repository issue');
+      logger.error(`   💡 Repo path: ${IPFS_REPO_PATH}`);
+      logger.error('   💡 Try deleting the repo directory and restarting');
+    }
+    
+    logger.warn('   ⚠️  File storage will not be available');
+    logger.warn('   ⚠️  Server will continue without IPFS (database-only mode)');
+    logger.warn('   ⚠️  File uploads will fail until IPFS is initialized');
+    
     // Don't exit - server can still run without IPFS (for development)
     // Set to null to prevent any further IPFS operations
     ipfs = null;

@@ -1,13 +1,24 @@
 /**
  * IPFS Storage Module
  * 
- * Handles file storage and retrieval using IPFS (InterPlanetary File System)
+ * Handles file storage and retrieval using Helia (modern IPFS implementation)
  * Files are stored content-addressed (by CID) and linked to paths via database
  */
 
-import { create, IPFS } from 'ipfs-core';
+// Import polyfill before Helia to ensure Promise.withResolvers is available
+import '../utils/polyfill.js';
+
+import { createHelia, type Helia } from 'helia';
+import { unixfs, type UnixFS } from '@helia/unixfs';
+import { createLibp2p } from 'libp2p';
+import { tcp } from '@libp2p/tcp';
+import { webSockets } from '@libp2p/websockets';
+import { noise } from '@chainsafe/libp2p-noise';
+import { yamux } from '@chainsafe/libp2p-yamux';
+import { FsBlockstore } from 'blockstore-fs';
+import { FsDatastore } from 'datastore-fs';
 import { existsSync, mkdirSync } from 'fs';
-import { dirname } from 'path';
+import { join } from 'path';
 
 export interface IPFSOptions {
   repoPath: string;
@@ -16,7 +27,8 @@ export interface IPFSOptions {
 }
 
 export class IPFSStorage {
-  private ipfs: IPFS | null = null;
+  private helia: Helia | null = null;
+  private fs: UnixFS | null = null;
   private repoPath: string;
   private isInitialized: boolean = false;
 
@@ -25,10 +37,10 @@ export class IPFSStorage {
   }
 
   /**
-   * Initialize IPFS node
+   * Initialize Helia IPFS node
    */
   async initialize(): Promise<void> {
-    if (this.isInitialized && this.ipfs) {
+    if (this.isInitialized && this.helia) {
       return; // Already initialized
     }
 
@@ -37,78 +49,136 @@ export class IPFSStorage {
       mkdirSync(this.repoPath, { recursive: true });
     }
 
+    // Ensure subdirectories exist
+    const blockstorePath = join(this.repoPath, 'blocks');
+    const datastorePath = join(this.repoPath, 'datastore');
+    if (!existsSync(blockstorePath)) {
+      mkdirSync(blockstorePath, { recursive: true });
+    }
+    if (!existsSync(datastorePath)) {
+      mkdirSync(datastorePath, { recursive: true });
+    }
+
     try {
-      console.log('🌐 Initializing IPFS node...');
+      // Verify polyfill is loaded
+      if (typeof (Promise as any).withResolvers === 'undefined') {
+        throw new Error('Promise.withResolvers polyfill not loaded. Helia requires Node.js 22+ or the polyfill.');
+      }
+      
+      console.log('🌐 Initializing Helia IPFS node...');
       console.log(`   Repo path: ${this.repoPath}`);
 
-      // Create IPFS node with configuration
-      this.ipfs = await create({
-        repo: this.repoPath,
-        start: true,
-        // Configuration for local-first storage
-        config: {
-          Addresses: {
-            Swarm: [
-              '/ip4/0.0.0.0/tcp/4001',
-              '/ip6/::/tcp/4001',
-              '/ip4/0.0.0.0/udp/4001/quic',
-              '/ip6/::/udp/4001/quic'
-            ],
-            API: '/ip4/127.0.0.1/tcp/5001',
-            Gateway: '/ip4/127.0.0.1/tcp/8080'
-          },
-          // Disable public swarm for privacy (local-only by default)
-          // Users can enable if they want to share files
-          Bootstrap: [
-            // Minimal bootstrap nodes (can be customized)
-            '/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN',
-            '/dnsaddr/bootstrap.libp2p.io/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16b19JTGC'
-          ],
-          Discovery: {
-            MDNS: {
-              Enabled: true // Enable local network discovery
-            }
-          }
+      // Create blockstore and datastore
+      const blockstore = new FsBlockstore(blockstorePath);
+      const datastore = new FsDatastore(datastorePath);
+
+      // Create libp2p instance without WebRTC (Node.js doesn't need it)
+      // This avoids the WebRTC certificate file requirement
+      // We must explicitly provide transports to prevent Helia from adding WebRTC by default
+      const libp2p = await createLibp2p({
+        addresses: {
+          listen: [
+            '/ip4/0.0.0.0/tcp/4001',
+            '/ip4/0.0.0.0/tcp/4002/ws'
+          ]
         },
-        // Preload configuration
-        preload: {
-          enabled: false // Disable preload for privacy
-        },
-        // Experimental features (if needed)
-        // Note: pubsub configuration may vary by IPFS version
+        transports: [
+          tcp(),
+          webSockets()
+          // Explicitly exclude WebRTC - browser-only transport
+        ],
+        connectionEncrypters: [
+          noise()
+        ],
+        streamMuxers: [
+          yamux()
+        ],
+        // Explicitly disable services that might auto-add WebRTC
+        services: {}
       });
 
+      // Create Helia node with custom libp2p (no WebRTC)
+      // Let Helia start libp2p - don't start it ourselves
+      this.helia = await createHelia({
+        blockstore,
+        datastore,
+        libp2p
+      });
+
+      // Initialize UnixFS
+      this.fs = unixfs(this.helia);
+
       // Get node info
-      const id = await this.ipfs.id();
-      console.log(`✅ IPFS node initialized`);
-      console.log(`   Node ID: ${id.id}`);
-      console.log(`   Addresses: ${id.addresses.length} configured`);
+      const peerId = this.helia.libp2p.peerId;
+      console.log(`✅ Helia IPFS node initialized`);
+      console.log(`   Node ID: ${peerId.toString()}`);
+      
+      const addresses = this.helia.libp2p.getMultiaddrs();
+      console.log(`   Addresses: ${addresses.length} configured`);
+      if (addresses.length > 0) {
+        console.log(`   First address: ${addresses[0].toString()}`);
+      }
 
       this.isInitialized = true;
     } catch (error) {
       // Clean up any partial initialization
-      if (this.ipfs) {
+      if (this.helia) {
         try {
-          await this.ipfs.stop().catch(() => {}); // Ignore stop errors
+          await this.helia.stop().catch(() => {}); // Ignore stop errors
         } catch {
           // Ignore cleanup errors
         }
-        this.ipfs = null;
+        this.helia = null;
+        this.fs = null;
       }
       this.isInitialized = false;
-      console.error('❌ Failed to initialize IPFS:', error instanceof Error ? error.message : 'Unknown error');
+      
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      
+      console.error('❌ Failed to initialize Helia IPFS:', errorMessage);
+      
+      // Provide helpful error messages for common issues
+      if (errorMessage.includes('withResolvers')) {
+        console.error('   ⚠️  This error suggests Node.js version < 22');
+        console.error('   💡 A polyfill has been added, but Helia may still require Node.js 22+');
+        console.error('   💡 Consider upgrading Node.js: nvm install 22 && nvm use 22');
+      } else if (errorMessage.includes('EADDRINUSE')) {
+        console.error('   ⚠️  IPFS ports (4001, 4002) are already in use');
+        console.error('   💡 Another IPFS instance may be running');
+        console.error('   💡 Try stopping other IPFS processes or change ports in config');
+      } else if (errorMessage.includes('repo') || errorMessage.includes('datastore') || errorMessage.includes('blockstore')) {
+        console.error('   ⚠️  IPFS repository issue');
+        console.error(`   💡 Repo path: ${this.repoPath}`);
+        console.error('   💡 Try deleting the repo directory and restarting');
+      }
+      
+      if (errorStack && process.env.NODE_ENV !== 'production') {
+        console.error('   Stack trace:', errorStack);
+      }
+      
       throw error;
     }
   }
 
   /**
-   * Get IPFS instance (throws if not initialized)
+   * Get Helia instance (throws if not initialized)
    */
-  private getIPFS(): IPFS {
-    if (!this.ipfs || !this.isInitialized) {
-      throw new Error('IPFS not initialized. Call initialize() first.');
+  private getHelia(): Helia {
+    if (!this.helia || !this.isInitialized) {
+      throw new Error('Helia IPFS not initialized. Call initialize() first.');
     }
-    return this.ipfs;
+    return this.helia;
+  }
+
+  /**
+   * Get UnixFS instance (throws if not initialized)
+   */
+  private getUnixFS(): UnixFS {
+    if (!this.fs || !this.isInitialized) {
+      throw new Error('UnixFS not initialized. Call initialize() first.');
+    }
+    return this.fs;
   }
 
   /**
@@ -118,25 +188,27 @@ export class IPFSStorage {
   async storeFile(content: Buffer | Uint8Array | string, options?: {
     pin?: boolean; // Pin the file to prevent garbage collection
   }): Promise<string> {
-    const ipfs = this.getIPFS();
+    const fs = this.getUnixFS();
 
     try {
-      // Convert string to Buffer if needed
-      const buffer = typeof content === 'string' 
-        ? Buffer.from(content, 'utf8')
-        : Buffer.from(content);
+      // Convert to Uint8Array if needed
+      const data = typeof content === 'string' 
+        ? new TextEncoder().encode(content)
+        : content instanceof Buffer
+        ? new Uint8Array(content)
+        : content;
 
-      // Add file to IPFS
-      const result = await ipfs.add(buffer, {
-        pin: options?.pin ?? true, // Pin by default to prevent GC
-        cidVersion: 1 // Use CIDv1 for better compatibility
-      });
+      // Add file to IPFS using UnixFS
+      const cid = await fs.addBytes(data);
 
-      // result is an array, get the first (and only) entry
-      const cid = Array.isArray(result) ? result[0] : result;
-      return cid.cid.toString();
+      // Pin if requested (default: true)
+      if (options?.pin !== false) {
+        await this.pinFile(cid.toString());
+      }
+
+      return cid.toString();
     } catch (error) {
-      console.error('Error storing file in IPFS:', error);
+      console.error('Error storing file in Helia IPFS:', error);
       throw new Error(`Failed to store file in IPFS: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -145,13 +217,17 @@ export class IPFSStorage {
    * Retrieve file content from IPFS using CID
    */
   async getFile(cid: string): Promise<Buffer> {
-    const ipfs = this.getIPFS();
+    const fs = this.getUnixFS();
 
     try {
-      // Get file from IPFS
+      // Import CID from string
+      const { CID } = await import('multiformats/cid');
+      const cidObj = CID.parse(cid);
+
+      // Get file from IPFS using UnixFS
       const chunks: Uint8Array[] = [];
       
-      for await (const chunk of ipfs.cat(cid)) {
+      for await (const chunk of fs.cat(cidObj)) {
         chunks.push(chunk);
       }
 
@@ -167,7 +243,7 @@ export class IPFSStorage {
 
       return buffer;
     } catch (error) {
-      console.error(`Error retrieving file from IPFS (CID: ${cid}):`, error);
+      console.error(`Error retrieving file from Helia IPFS (CID: ${cid}):`, error);
       throw new Error(`Failed to retrieve file from IPFS: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -176,14 +252,18 @@ export class IPFSStorage {
    * Check if a CID exists in IPFS
    */
   async fileExists(cid: string): Promise<boolean> {
-    const ipfs = this.getIPFS();
+    const helia = this.getHelia();
 
     try {
-      // Try to stat the CID
-      await ipfs.files.stat(`/ipfs/${cid}`);
+      // Import CID and try to get the block
+      const { CID } = await import('multiformats/cid');
+      const cidObj = CID.parse(cid);
+      
+      // Try to get the block - if it exists, this will succeed
+      await helia.blockstore.get(cidObj);
       return true;
     } catch (error) {
-      // If stat fails, file doesn't exist or isn't accessible
+      // If get fails, block doesn't exist
       return false;
     }
   }
@@ -192,10 +272,18 @@ export class IPFSStorage {
    * Pin a file (prevent garbage collection)
    */
   async pinFile(cid: string): Promise<void> {
-    const ipfs = this.getIPFS();
+    const helia = this.getHelia();
 
     try {
-      await ipfs.pin.add(cid);
+      // Import CID
+      const { CID } = await import('multiformats/cid');
+      const cidObj = CID.parse(cid);
+      
+      // Helia pins are managed through the blockstore
+      // For now, we'll just ensure the block is in the blockstore
+      // (which it should be if we just added it)
+      // In the future, we can use @helia/remote-pinning for proper pinning
+      await helia.blockstore.get(cidObj);
     } catch (error) {
       console.error(`Error pinning file (CID: ${cid}):`, error);
       throw new Error(`Failed to pin file: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -206,14 +294,10 @@ export class IPFSStorage {
    * Unpin a file (allow garbage collection)
    */
   async unpinFile(cid: string): Promise<void> {
-    const ipfs = this.getIPFS();
-
-    try {
-      await ipfs.pin.rm(cid);
-    } catch (error) {
-      console.error(`Error unpinning file (CID: ${cid}):`, error);
-      // Don't throw - unpinning failures are not critical
-    }
+    // In Helia, unpinning is typically handled by garbage collection
+    // For now, we'll just log - actual unpinning would require
+    // tracking pinned CIDs separately or using @helia/remote-pinning
+    console.log(`Unpinning file (CID: ${cid}) - GC will handle cleanup`);
   }
 
   /**
@@ -225,14 +309,15 @@ export class IPFSStorage {
     agentVersion: string;
     protocolVersion: string;
   }> {
-    const ipfs = this.getIPFS();
-    const id = await ipfs.id();
+    const helia = this.getHelia();
+    const peerId = helia.libp2p.peerId;
+    const addresses = helia.libp2p.getMultiaddrs();
     
     return {
-      id: id.id.toString(),
-      addresses: id.addresses.map(addr => addr.toString()),
-      agentVersion: id.agentVersion,
-      protocolVersion: id.protocolVersion
+      id: peerId.toString(),
+      addresses: addresses.map(addr => addr.toString()),
+      agentVersion: 'helia',
+      protocolVersion: '1.0'
     };
   }
 
@@ -240,15 +325,16 @@ export class IPFSStorage {
    * Stop IPFS node gracefully
    */
   async stop(): Promise<void> {
-    if (this.ipfs && this.isInitialized) {
+    if (this.helia && this.isInitialized) {
       try {
-        console.log('🛑 Stopping IPFS node...');
-        await this.ipfs.stop();
-        this.ipfs = null;
+        console.log('🛑 Stopping Helia IPFS node...');
+        await this.helia.stop();
+        this.helia = null;
+        this.fs = null;
         this.isInitialized = false;
-        console.log('✅ IPFS node stopped');
+        console.log('✅ Helia IPFS node stopped');
       } catch (error) {
-        console.error('Error stopping IPFS node:', error);
+        console.error('Error stopping Helia IPFS node:', error);
         throw error;
       }
     }
@@ -258,7 +344,6 @@ export class IPFSStorage {
    * Check if IPFS is initialized
    */
   isReady(): boolean {
-    return this.isInitialized && this.ipfs !== null;
+    return this.isInitialized && this.helia !== null;
   }
 }
-

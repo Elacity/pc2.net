@@ -1,5 +1,4 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
-import multer from 'multer';
 import { Server } from 'http';
 import { setupStaticServing } from './static.js';
 import { setupAPI } from './api/index.js';
@@ -56,14 +55,6 @@ export function createServer(options: ServerOptions): { app: Express; server: Se
     next();
   });
   
-  // Configure multer for multipart/form-data (file uploads)
-  const upload = multer({
-    storage: multer.memoryStorage(), // Store in memory for processing
-    limits: {
-      fileSize: 100 * 1024 * 1024 // 100MB limit
-    }
-  });
-
   app.use(express.json({ 
     verify: (req: any, res, buf) => {
       // Capture raw body for debugging (especially for /drivers/call)
@@ -73,9 +64,6 @@ export function createServer(options: ServerOptions): { app: Express; server: Se
     }
   }));
   app.use(express.urlencoded({ extended: true }));
-  
-  // Make multer instance available to routes
-  app.locals.upload = upload;
   
   // Make database, filesystem, and config available to routes via app.locals
   if (options.database) {

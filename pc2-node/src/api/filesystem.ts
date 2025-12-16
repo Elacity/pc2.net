@@ -11,7 +11,6 @@ import { broadcastFileChange, broadcastDirectoryChange } from '../websocket/even
 import { FileStat, DirectoryEntry, ReadFileRequest, WriteFileRequest, CreateDirectoryRequest, DeleteRequest, MoveRequest } from '../types/api.js';
 import { Server as SocketIOServer } from 'socket.io';
 import { logger } from '../utils/logger.js';
-import multer from 'multer';
 
 /**
  * Get file/folder stat
@@ -30,7 +29,10 @@ export function handleStat(req: AuthenticatedRequest, res: Response): void {
                (req.body?.subject as string) ||
                '/';
 
+  logger.info(`[Stat] Request received: method=${req.method}, path=${path}, query=${JSON.stringify(req.query)}, body=${JSON.stringify(req.body)}`);
+
   if (!req.user) {
+    logger.warn(`[Stat] Unauthorized request for path: ${path}`);
     res.status(401).json({ error: 'Unauthorized' });
     return;
   }
@@ -43,15 +45,22 @@ export function handleStat(req: AuthenticatedRequest, res: Response): void {
     // If path doesn't start with /, assume it's relative to user's home
     resolvedPath = `/${req.user.wallet_address}/${path}`;
   }
+  
+  logger.info(`[Stat] Resolved path: ${resolvedPath} (original: ${path}, wallet: ${req.user.wallet_address})`);
 
   if (!filesystem) {
     // Return directory stat for known directories even when filesystem not initialized
     // This allows the frontend to handle missing files gracefully
     // Always return directory stat for paths under user's wallet address
     const walletPath = `/${req.user.wallet_address}`;
-    const isUserPath = resolvedPath === walletPath || resolvedPath.startsWith(`${walletPath}/`);
     
-    if (isUserPath || resolvedPath.endsWith('/') || resolvedPath === '/') {
+    // Check if this is a user path (starts with wallet address)
+    const isUserPath = resolvedPath === walletPath || 
+                       resolvedPath.startsWith(`${walletPath}/`) ||
+                       resolvedPath === '/' ||
+                       resolvedPath.endsWith('/');
+    
+    if (isUserPath) {
       const pathParts = resolvedPath.split('/').filter(p => p);
       const dirStat: FileStat = {
         name: pathParts.length > 0 ? pathParts[pathParts.length - 1] : '/',
@@ -64,10 +73,12 @@ export function handleStat(req: AuthenticatedRequest, res: Response): void {
         uid: `uuid-${resolvedPath.replace(/\//g, '-').replace(/^-/, '')}`,
         uuid: `uuid-${resolvedPath.replace(/\//g, '-').replace(/^-/, '')}`
       };
+      logger.info(`[Stat] Returning directory stat for: ${resolvedPath} (filesystem not initialized, wallet: ${walletPath})`);
       res.json(dirStat);
       return;
     }
-    res.status(404).json({ error: 'File not found' });
+    logger.warn(`[Stat] Path not found (not a user path): ${resolvedPath}, wallet: ${walletPath}, isUserPath: ${isUserPath}`);
+    res.status(404).json({ error: 'File not found', path: resolvedPath, wallet: walletPath });
     return;
   }
 
@@ -243,15 +254,7 @@ export async function handleRead(req: AuthenticatedRequest, res: Response): Prom
 export async function handleWrite(req: AuthenticatedRequest, res: Response): Promise<void> {
   const filesystem = (req.app.locals.filesystem as FilesystemManager | undefined);
   const io = (req.app.locals.io as SocketIOServer | undefined);
-
-  logger.info(`[${req.path}] Request received`, {
-    contentType: req.headers['content-type'],
-    hasFile: !!(req as any).file,
-    bodyKeys: Object.keys(req.body || {}),
-    method: req.method,
-    path: req.path,
-    url: req.url
-  });
+  const body = req.body as WriteFileRequest;
 
   if (!filesystem) {
     res.status(500).json({ error: 'Filesystem not initialized' });
@@ -263,88 +266,33 @@ export async function handleWrite(req: AuthenticatedRequest, res: Response): Pro
     return;
   }
 
+  if (!body.path) {
+    res.status(400).json({ error: 'Missing path' });
+    return;
+  }
+
   try {
-    let filePath: string;
-    let content: Buffer | string;
-    let mimeType: string | undefined;
-
-    // Check if this is a multipart upload (file field exists)
-    if ((req as any).file) {
-      logger.info('[Write] Multipart upload detected', {
-        filename: (req as any).file.originalname,
-        size: (req as any).file.size,
-        mimetype: (req as any).file.mimetype
-      });
-      // Multipart upload
-      const file = (req as any).file;
-      filePath = (req.body.path || req.body.file_path || req.body.filePath) as string;
-      content = file.buffer;
-      mimeType = file.mimetype;
-      
-      // If path not provided, use filename
-      if (!filePath && file.originalname) {
-        filePath = file.originalname;
-      }
-    } else {
-      // JSON upload
-      const body = req.body as WriteFileRequest;
-      filePath = body.path;
-      content = body.content;
-      
-      logger.info('[Write] JSON upload detected', {
-        path: filePath,
-        hasContent: !!content,
-        encoding: body.encoding,
-        contentType: body.mime_type
-      });
-      
-      // Decode content if base64
-      if (body.encoding === 'base64') {
-        content = Buffer.from(body.content, 'base64');
-      }
-      mimeType = body.mime_type;
+    // Decode content if base64
+    let content: Buffer | string = body.content;
+    if (body.encoding === 'base64') {
+      content = Buffer.from(body.content, 'base64');
     }
-
-    if (!filePath) {
-      res.status(400).json({ error: 'Missing path' });
-      return;
-    }
-
-    // Handle ~ (home directory) - replace with user's wallet address
-    let resolvedPath = filePath;
-    if (filePath.startsWith('~')) {
-      resolvedPath = filePath.replace('~', `/${req.user.wallet_address}`);
-    } else if (!filePath.startsWith('/')) {
-      // If path doesn't start with /, assume it's relative to user's home
-      resolvedPath = `/${req.user.wallet_address}/${filePath}`;
-    }
-
-    logger.info('[Write] Writing file', {
-      resolvedPath,
-      size: Buffer.isBuffer(content) ? content.length : Buffer.byteLength(content, 'utf8'),
-      mimeType
-    });
 
     // Write file
     const metadata = await filesystem.writeFile(
-      resolvedPath,
+      body.path,
       content,
       req.user.wallet_address,
       {
-        mimeType: mimeType,
+        mimeType: body.mime_type,
         isPublic: false
       }
     );
 
-    logger.info('[Write] File written successfully', {
-      path: metadata.path,
-      size: metadata.size
-    });
-
     // Broadcast file change event
     if (io) {
       broadcastFileChange(io, {
-        path: resolvedPath,
+        path: body.path,
         wallet_address: req.user.wallet_address,
         action: 'updated',
         metadata: {
@@ -357,7 +305,7 @@ export async function handleWrite(req: AuthenticatedRequest, res: Response): Pro
 
     // Return file metadata (Puter format)
     const fileStat: FileStat = {
-      name: metadata.path.split('/').filter(p => p).pop() || '/',
+      name: metadata.path.split('/').pop() || '/',
       path: metadata.path,
       type: 'file',
       size: metadata.size,
@@ -365,116 +313,13 @@ export async function handleWrite(req: AuthenticatedRequest, res: Response): Pro
       modified: metadata.updated_at,
       mime_type: metadata.mime_type,
       is_dir: false,
-      uid: `uuid-${metadata.path.replace(/\//g, '-').replace(/^-/, '')}`,
-      uuid: `uuid-${metadata.path.replace(/\//g, '-').replace(/^-/, '')}`
+      uid: `uuid-${metadata.path.replace(/\//g, '-')}`,
+      uuid: `uuid-${metadata.path.replace(/\//g, '-')}`
     };
 
     res.json(fileStat);
   } catch (error) {
-    logger.error('Write error:', error instanceof Error ? error.message : 'Unknown error');
-    res.status(500).json({
-      error: 'Failed to write file',
-      message: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-}
-
-/**
- * Upload endpoint (alias for /write with multipart support)
- * POST /upload
- * Supports multipart/form-data uploads
- */
-export async function handleUpload(req: AuthenticatedRequest, res: Response): Promise<void> {
-  logger.info('[Upload] Request received', {
-    contentType: req.headers['content-type'],
-    hasFile: !!(req as any).file,
-    bodyKeys: Object.keys(req.body || {}),
-    method: req.method,
-    path: req.path,
-    url: req.url,
-    query: req.query
-  });
-  
-  // Redirect to handleWrite which supports both JSON and multipart
-  await handleWrite(req, res);
-}
-
-/**
- * Write file via multipart upload (signed URL)
- * POST /writeFile?uid=uuid-...&signature=...
- */
-export async function handleWriteFile(req: AuthenticatedRequest, res: Response): Promise<void> {
-  const filesystem = (req.app.locals.filesystem as FilesystemManager | undefined);
-  const io = (req.app.locals.io as SocketIOServer | undefined);
-  const uid = req.query.uid as string;
-
-  if (!filesystem) {
-    res.status(500).json({ error: 'Filesystem not initialized' });
-    return;
-  }
-
-  if (!uid) {
-    res.status(400).json({ error: 'Missing uid parameter' });
-    return;
-  }
-
-  try {
-    // Convert UUID back to path (uuid-/path/to/file -> /path/to/file)
-    const uuidPath = uid.replace(/^uuid-/, '');
-    const filePath = '/' + uuidPath.replace(/-/g, '/');
-
-    // Get file from multipart upload
-    const file = (req as any).file;
-    if (!file) {
-      res.status(400).json({ error: 'No file provided' });
-      return;
-    }
-
-    // Try to determine wallet address from path or use empty string for signed URLs
-    const walletAddress = filePath.startsWith('/0x') ? filePath.split('/')[1] : '';
-
-    // Write file
-    const metadata = await filesystem.writeFile(
-      filePath,
-      file.buffer,
-      walletAddress,
-      {
-        mimeType: file.mimetype,
-        isPublic: false
-      }
-    );
-
-    // Broadcast file change event
-    if (io && walletAddress) {
-      broadcastFileChange(io, {
-        path: filePath,
-        wallet_address: walletAddress,
-        action: 'updated',
-        metadata: {
-          size: metadata.size,
-          mime_type: metadata.mime_type || undefined,
-          is_dir: false
-        }
-      });
-    }
-
-    // Return file metadata (Puter format)
-    const fileStat: FileStat = {
-      name: metadata.path.split('/').filter(p => p).pop() || '/',
-      path: metadata.path,
-      type: 'file',
-      size: metadata.size,
-      created: metadata.created_at,
-      modified: metadata.updated_at,
-      mime_type: metadata.mime_type,
-      is_dir: false,
-      uid: `uuid-${metadata.path.replace(/\//g, '-').replace(/^-/, '')}`,
-      uuid: `uuid-${metadata.path.replace(/\//g, '-').replace(/^-/, '')}`
-    };
-
-    res.json(fileStat);
-  } catch (error) {
-    logger.error('WriteFile error:', error instanceof Error ? error.message : 'Unknown error');
+    logger.error('Write error:', error instanceof Error ? error.message : 'Unknown error', { path: body.path });
     res.status(500).json({
       error: 'Failed to write file',
       message: error instanceof Error ? error.message : 'Unknown error'

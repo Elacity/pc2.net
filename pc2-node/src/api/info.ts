@@ -6,8 +6,6 @@
 
 import { Request, Response } from 'express';
 import { AuthenticatedRequest } from './middleware.js';
-import { FilesystemManager } from '../storage/filesystem.js';
-import { logger } from '../utils/logger.js';
 
 /**
  * Get API info
@@ -128,202 +126,14 @@ export function handleDF(req: AuthenticatedRequest, res: Response): void {
 }
 
 /**
- * Batch operations endpoint (handles multipart file uploads)
+ * Batch operations
  * POST /batch
- * The Puter SDK uses this endpoint for drag-and-drop file uploads
  */
-export async function handleBatch(req: AuthenticatedRequest, res: Response): Promise<void> {
-  const filesystem = (req.app.locals.filesystem as FilesystemManager | undefined);
-  const body = req.body as any;
-
-  logger.info('[Batch] Request received', {
-    contentType: req.headers['content-type'],
-    bodyKeys: Object.keys(body || {}),
-    hasFiles: !!(req as any).files || !!(req as any).file
+export function handleBatch(req: AuthenticatedRequest, res: Response): void {
+  // Batch operations not implemented yet
+  res.json({
+    results: []
   });
-
-  if (!filesystem) {
-    res.status(500).json({ error: 'Filesystem not initialized' });
-    return;
-  }
-
-  if (!req.user) {
-    res.status(401).json({ error: 'Unauthorized' });
-    return;
-  }
-
-  try {
-    // Parse operation field (can be JSON string or array of JSON strings)
-    let operations: any[] = [];
-    if (body.operation) {
-      if (typeof body.operation === 'string') {
-        try {
-          operations = JSON.parse(body.operation);
-          if (!Array.isArray(operations)) {
-            operations = [operations];
-          }
-        } catch (e) {
-          logger.warn('[Batch] Failed to parse operation:', e);
-        }
-      } else if (Array.isArray(body.operation)) {
-        operations = body.operation.map((op: any) => {
-          if (typeof op === 'string') {
-            try {
-              return JSON.parse(op);
-            } catch (e) {
-              return null;
-            }
-          }
-          return op;
-        }).filter(Boolean);
-      }
-    }
-
-    // Parse fileinfo if it's a JSON string
-    let fileinfo: any = null;
-    if (body.fileinfo) {
-      if (typeof body.fileinfo === 'string') {
-        try {
-          fileinfo = JSON.parse(body.fileinfo);
-        } catch (e) {
-          logger.warn('[Batch] Failed to parse fileinfo:', e);
-        }
-      } else if (typeof body.fileinfo === 'object') {
-        fileinfo = body.fileinfo;
-      }
-    }
-
-    // Determine target path from operation, fileinfo, or form data
-    let targetPath = '/';
-    if (operations.length > 0 && operations[0].path) {
-      targetPath = operations[0].path;
-    } else if (fileinfo && fileinfo.path) {
-      targetPath = fileinfo.path;
-    } else if (fileinfo && fileinfo.parent) {
-      targetPath = fileinfo.parent;
-    } else {
-      targetPath = body.path || body.parent || body.dest || `/${req.user.wallet_address}/Desktop`;
-    }
-
-    // Handle ~ home directory
-    if (targetPath.startsWith('~/')) {
-      targetPath = targetPath.replace('~/', `/${req.user.wallet_address}/`);
-    }
-    if (!targetPath.startsWith('/')) {
-      targetPath = `/${req.user.wallet_address}/${targetPath}`;
-    }
-
-    logger.info('[Batch] Target path:', targetPath);
-
-    // Process file uploads from multipart form data
-    const results: any[] = [];
-    const files = (req as any).files || ((req as any).file ? [(req as any).file] : []);
-
-    if (files.length === 0) {
-      // Check if files are in body (alternative format)
-      for (const [key, value] of Object.entries(body)) {
-        if (value && typeof value === 'object' && (value as any).filename) {
-          files.push(value);
-        }
-      }
-    }
-
-    logger.info('[Batch] Found files:', files.length);
-
-    for (const file of files) {
-      try {
-        let fileName = file.originalname || file.filename || 'untitled';
-        const fileContent = file.buffer || file.content || '';
-        const mimeType = file.mimetype || file.mimeType || 'application/octet-stream';
-
-        if (!fileContent || (Buffer.isBuffer(fileContent) && fileContent.length === 0)) {
-          logger.warn(`[Batch] File content is empty for: ${fileName}`);
-          continue;
-        }
-
-        // Ensure parent directory exists
-        const parentPath = targetPath;
-        try {
-          await filesystem.createDirectory(parentPath, req.user.wallet_address);
-        } catch (e) {
-          // Directory might already exist, that's fine
-        }
-
-        // Construct full file path
-        const filePath = parentPath === '/' ? `/${fileName}` : `${parentPath}/${fileName}`;
-
-        // Check if file already exists and handle duplicates
-        let finalPath = filePath;
-        const existing = filesystem.getFileMetadata(finalPath, req.user.wallet_address);
-        if (existing && !existing.is_dir) {
-          // Add number suffix like macOS
-          const lastDot = fileName.lastIndexOf('.');
-          const hasExtension = lastDot > 0;
-          const baseName = hasExtension ? fileName.substring(0, lastDot) : fileName;
-          const extension = hasExtension ? fileName.substring(lastDot) : '';
-          
-          let counter = 1;
-          let newFileName;
-          do {
-            newFileName = `${baseName} (${counter})${extension}`;
-            finalPath = parentPath === '/' ? `/${newFileName}` : `${parentPath}/${newFileName}`;
-            const checkExisting = filesystem.getFileMetadata(finalPath, req.user.wallet_address);
-            if (!checkExisting || checkExisting.is_dir) {
-              break;
-            }
-            counter++;
-          } while (counter < 1000);
-          
-          fileName = newFileName;
-          logger.info(`[Batch] File exists, using: ${fileName}`);
-        }
-
-        // Write file
-        const contentBuffer = Buffer.isBuffer(fileContent) ? fileContent : Buffer.from(fileContent, typeof fileContent === 'string' ? 'utf8' : 'base64');
-        const metadata = await filesystem.writeFile(
-          finalPath,
-          contentBuffer,
-          req.user.wallet_address,
-          {
-            mimeType: mimeType,
-            isPublic: false
-          }
-        );
-
-        // Return file metadata in Puter format
-        const fileStat = {
-          name: metadata.path.split('/').filter(p => p).pop() || '/',
-          path: metadata.path,
-          type: 'file',
-          size: metadata.size,
-          created: metadata.created_at,
-          modified: metadata.updated_at,
-          mime_type: metadata.mime_type,
-          is_dir: false,
-          uid: `uuid-${metadata.path.replace(/\//g, '-').replace(/^-/, '')}`,
-          uuid: `uuid-${metadata.path.replace(/\//g, '-').replace(/^-/, '')}`
-        };
-
-        results.push(fileStat);
-        logger.info(`[Batch] File uploaded: ${finalPath} (${metadata.size} bytes)`);
-      } catch (error) {
-        logger.error(`[Batch] Error uploading file:`, error);
-        results.push({
-          error: error instanceof Error ? error.message : 'Unknown error'
-        });
-      }
-    }
-
-    res.json({
-      results: results
-    });
-  } catch (error) {
-    logger.error('[Batch] Error:', error);
-    res.status(500).json({
-      error: 'Failed to process batch upload',
-      message: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
 }
 
 /**

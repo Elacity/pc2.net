@@ -22,16 +22,31 @@ export function handleStat(req: AuthenticatedRequest, res: Response): void {
   const filesystem = (req.app.locals.filesystem as FilesystemManager | undefined);
   // Support both GET (query param) and POST (body param)
   // Also support various field names: path, file, subject, uid, uuid
-  let path = (req.query.path as string) || 
+  // CRITICAL: Check uid/uuid FIRST before defaulting to '/' - properties window uses uid
+  const uidFromQuery = req.query.uid as string;
+  const uidFromBody = req.body?.uid as string;
+  const uuidFromQuery = req.query.uuid as string;
+  const uuidFromBody = req.body?.uuid as string;
+  
+  logger.info(`[Stat] Parameter extraction:`, {
+    uidFromQuery,
+    uidFromBody,
+    uuidFromQuery,
+    uuidFromBody,
+    bodyKeys: Object.keys(req.body || {}),
+    hasBody: !!req.body
+  });
+  
+  let path = uidFromQuery ||
+             uuidFromQuery ||
+             uidFromBody ||
+             uuidFromBody ||
+             (req.query.path as string) || 
              (req.query.file as string) ||
              (req.query.subject as string) ||
-             (req.query.uid as string) ||
-             (req.query.uuid as string) ||
              (req.body?.path as string) || 
              (req.body?.file as string) ||
              (req.body?.subject as string) ||
-             (req.body?.uid as string) ||
-             (req.body?.uuid as string) ||
              '/';
 
   logger.info(`[Stat] Request received: method=${req.method}, path=${path}, query=${JSON.stringify(req.query)}, body=${JSON.stringify(req.body)}, hasUser=${!!req.user}`);
@@ -56,30 +71,49 @@ export function handleStat(req: AuthenticatedRequest, res: Response): void {
     const userRoot = `/${walletAddress}`;
     
     // Get ALL files recursively using database directly
+    // listFiles with userRoot and '%' pattern gets all files recursively
     const db = (req.app.locals.db as any);
     if (db && typeof db.listFiles === 'function' && filesystem) {
+      // listFiles with userRoot will get all files recursively (uses LIKE pattern)
       const allFiles = db.listFiles(userRoot, walletAddress) as FileMetadata[];
+      
+      logger.info(`[Stat] UUID lookup: searching ${allFiles.length} files for UUID: ${path}`);
       
       // Find file whose UUID matches exactly
       let foundMetadata: FileMetadata | null = null;
       for (const file of allFiles) {
         // Generate UUID the same way: uuid-${path.replace(/\//g, '-')}
+        // Paths in database start with /, so /path becomes uuid--path (double dash after uuid-)
+        // This matches the frontend UUID format: uuid--0x34daf...-Desktop-filename.png
         const fileUuid = `uuid-${file.path.replace(/\//g, '-')}`;
         if (fileUuid === path) {
           foundMetadata = file;
+          logger.info(`[Stat] ✅ UUID match found: ${fileUuid} -> ${file.path}`);
           break;
         }
       }
       
       if (foundMetadata) {
         path = foundMetadata.path;
-        logger.info(`[Stat] Found file by UUID lookup: ${path} (UUID: ${req.query.uid || req.body?.uid})`);
+        logger.info(`[Stat] ✅ Found file by UUID lookup: ${path} (UUID: ${path})`);
       } else {
-        logger.warn(`[Stat] UUID not found in database: ${path}, searched ${allFiles.length} files`);
+        logger.warn(`[Stat] ❌ UUID not found in database: ${path}, searched ${allFiles.length} files`);
+        // Log sample UUIDs for debugging
+        if (allFiles.length > 0) {
+          const sampleUuids = allFiles.slice(0, 10).map(f => {
+            const fileUuid = `uuid-${f.path.replace(/\//g, '-')}`;
+            return { path: f.path, uuid: fileUuid, matches: fileUuid === path };
+          });
+          logger.warn(`[Stat] Sample UUIDs from database:`, JSON.stringify(sampleUuids, null, 2));
+        }
         // Will fall through and return 404
       }
     } else {
-      logger.warn(`[Stat] Cannot lookup UUID - database or filesystem not available`);
+      logger.warn(`[Stat] Cannot lookup UUID - database or filesystem not available`, {
+        hasDb: !!db,
+        hasListFiles: db && typeof db.listFiles === 'function',
+        hasFilesystem: !!filesystem
+      });
     }
   }
 
@@ -1694,6 +1728,9 @@ export async function handleRename(req: AuthenticatedRequest, res: Response): Pr
       // Get socket ID from request if available (for excluding original client)
       const socketId = (req as any).socketId || undefined;
       
+      // Get thumbnail from metadata to preserve it during rename
+      const thumbnail = metadata.thumbnail || null;
+      
       broadcastItemRenamed(io, req.user.wallet_address, {
         uid: `uuid-${newPath.replace(/\//g, '-')}`,
         name: newName,
@@ -1701,6 +1738,7 @@ export async function handleRename(req: AuthenticatedRequest, res: Response): Pr
         old_path: resolvedPath,
         is_dir: metadata.is_dir,
         type: metadata.mime_type || null,
+        thumbnail: thumbnail, // Include thumbnail to preserve it during rename
         original_client_socket_id: socketId
       });
     }

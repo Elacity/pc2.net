@@ -424,15 +424,19 @@ async function UIDesktop(options) {
         $(`.window-${item.uid}`).attr('data-path', new_path);
 
         // Update all elements that have matching paths
-        $(`[data-path="${html_encode(item.old_path)}" i]`).each(function () {
-            $(this).attr('data-path', new_path)
+        $(`[data-path="${html_encode(oldPath)}" i]`).each(function () {
+            $(this).attr('data-path', newPath);
+            // Also update data-uid if this element has it
+            if ($(this).attr('data-uid')) {
+                $(this).attr('data-uid', newUid);
+            }
             if ($(this).hasClass('window-navbar-path-dirname'))
                 $(this).text(item.name);
         });
 
         // Update all elements whose paths start with old_path
-        $(`[data-path^="${html_encode(item.old_path) + '/'}"]`).each(function () {
-            const new_el_path = _.replace($(this).attr('data-path'), item.old_path + '/', new_path + '/');
+        $(`[data-path^="${html_encode(oldPath) + '/'}"]`).each(function () {
+            const new_el_path = _.replace($(this).attr('data-path'), oldPath + '/', newPath + '/');
             $(this).attr('data-path', new_el_path);
         });
 
@@ -828,55 +832,149 @@ async function UIDesktop(options) {
         if (item.original_client_socket_id === window.socket.id)
             return;
 
-        // Update matching items
+        // CRITICAL: Find elements by old_path first (since data-uid hasn't been updated yet)
+        // The backend sends the NEW uid, but DOM elements still have the OLD uid
+        // So we need to find by old_path, update data-uid, then proceed with other updates
+        const oldPath = item.old_path;
+        const newUid = item.uid;
+        const newPath = item.path;
+        
+        // Find all items with the old path
+        const itemsByOldPath = $(`.item[data-path="${html_encode(oldPath)}"]`);
+        
+        console.log('[Frontend] 🔄 item.renamed: updating items', {
+            old_path: oldPath,
+            new_path: newPath,
+            new_uid: newUid,
+            found_items: itemsByOldPath.length,
+            item_data: {
+                name: item.name,
+                thumbnail: item.thumbnail || 'NOT PROVIDED',
+                has_thumbnail: !!item.thumbnail,
+                type: item.type,
+                is_dir: item.is_dir
+            }
+        });
+        
+        // Update data-uid for all matching items (CRITICAL: must happen first!)
+        itemsByOldPath.attr('data-uid', newUid);
+        
+        // Also update any windows with the old path
+        $(`.window[data-path="${html_encode(oldPath)}"]`).attr('data-uid', newUid);
+        
+        // Now we can use the new uid for all subsequent updates
         // Set new item name
-        $(`.item[data-uid='${html_encode(item.uid)}'] .item-name`).html(html_encode(truncate_filename(item.name)));
+        $(`.item[data-uid='${html_encode(newUid)}'] .item-name`).html(html_encode(truncate_filename(item.name)));
 
-        // Set new icon
-        const new_icon = (item.is_dir ? window.icons['folder.svg'] : (await item_icon(item)).image);
-        $(`.item[data-uid='${item.uid}']`).find('.item-icon-icon').attr('src', new_icon);
+        // Set new icon - preserve thumbnail if available
+        // Create proper iconFsentry object with all required fields (matching item.moved pattern)
+        const iconFsentry = {
+            uid: newUid,
+            name: item.name,
+            path: newPath,
+            is_dir: item.is_dir,
+            type: item.type || null,
+            thumbnail: item.thumbnail || undefined, // Include thumbnail if present
+            size: 0, // Size not needed for icon, but include for completeness
+            modified: new Date().toISOString() // Modified not needed for icon, but include for completeness
+        };
+        const new_icon = (item.is_dir ? window.icons['folder.svg'] : (await item_icon(iconFsentry)).image);
+        $(`.item[data-uid='${newUid}']`).find('.item-icon-thumb').attr('src', new_icon);
+        $(`.item[data-uid='${newUid}']`).find('.item-icon-icon').attr('src', new_icon);
+        
+        console.log('[Frontend] 🔄 Updated icon after rename:', {
+            uid: newUid,
+            name: item.name,
+            path: newPath,
+            thumbnail: item.thumbnail || 'none',
+            icon_image: new_icon
+        });
 
         // Set new data-name
-        $(`.item[data-uid='${item.uid}']`).attr('data-name', html_encode(item.name));
-        $(`.window-${item.uid}`).attr('data-name', html_encode(item.name));
+        $(`.item[data-uid='${newUid}']`).attr('data-name', html_encode(item.name));
+        $(`.window-${newUid}`).attr('data-name', html_encode(item.name));
 
         // Set new title attribute
-        $(`.item[data-uid='${item.uid}']`).attr('title', html_encode(item.name));
-        $(`.window-${options.uid}`).attr('title', html_encode(item.name));
+        $(`.item[data-uid='${newUid}']`).attr('title', html_encode(item.name));
+        $(`.window-${newUid}`).attr('title', html_encode(item.name));
 
         // Set new value for item-name-editor
-        $(`.item[data-uid='${item.uid}'] .item-name-editor`).val(html_encode(item.name));
-        $(`.item[data-uid='${item.uid}'] .item-name`).attr('title', html_encode(item.name));
+        $(`.item[data-uid='${newUid}'] .item-name-editor`).val(html_encode(item.name));
+        $(`.item[data-uid='${newUid}'] .item-name`).attr('title', html_encode(item.name));
 
         // Set new data-path
-        const new_path = item.path;
-        $(`.item[data-uid='${item.uid}']`).attr('data-path', new_path);
-        $(`.window-${item.uid}`).attr('data-path', new_path);
+        $(`.item[data-uid='${newUid}']`).attr('data-path', newPath);
+        $(`.window-${newUid}`).attr('data-path', newPath);
 
         // Update all elements that have matching paths
-        $(`[data-path="${html_encode(item.old_path)}" i]`).each(function () {
-            $(this).attr('data-path', new_path)
+        $(`[data-path="${html_encode(oldPath)}" i]`).each(function () {
+            $(this).attr('data-path', newPath);
+            // Also update data-uid if this element has it
+            if ($(this).attr('data-uid')) {
+                $(this).attr('data-uid', newUid);
+            }
             if ($(this).hasClass('window-navbar-path-dirname'))
                 $(this).text(item.name);
         });
 
         // Update all elements whose paths start with old_path
-        $(`[data-path^="${html_encode(item.old_path) + '/'}"]`).each(function () {
-            const new_el_path = _.replace($(this).attr('data-path'), item.old_path + '/', new_path + '/');
+        $(`[data-path^="${html_encode(oldPath) + '/'}"]`).each(function () {
+            const new_el_path = _.replace($(this).attr('data-path'), oldPath + '/', newPath + '/');
             $(this).attr('data-path', new_el_path);
         });
 
         // Update all exact-matching windows
-        $(`.window-${item.uid}`).each(function () {
-            window.update_window_path(this, new_path);
-        })
+        $(`.window-${newUid}`).each(function () {
+            window.update_window_path(this, newPath);
+        });
         // Set new name for matching open windows
-        $(`.window-${item.uid} .window-head-title`).text(item.name);
+        $(`.window-${newUid} .window-head-title`).text(item.name);
 
         // Re-sort all matching item containers
-        $(`.item[data-uid='${item.uid}']`).parent('.item-container').each(function () {
+        $(`.item[data-uid='${newUid}']`).parent('.item-container').each(function () {
             window.sort_items(this, $(this).closest('.item-container').attr('data-sort_by'), $(this).closest('.item-container').attr('data-sort_order'));
-        })
+        });
+        
+        // CRITICAL: Update properties windows that are open for this item
+        // If a properties window is open, it needs to refresh with the new uid
+        $(`.window[data-uid="${newUid}"], .window[data-path="${html_encode(newPath)}"]`).each(function () {
+            const windowEl = $(this);
+            // Check if this is a properties window (has class window-item-properties)
+            if (windowEl.hasClass('window-item-properties')) {
+                console.log('[Frontend] 🔄 Refreshing properties window after rename', {
+                    old_path: oldPath,
+                    new_path: newPath,
+                    new_uid: newUid
+                });
+                // Re-fetch stats with the new uid
+                puter.fs.stat({
+                    uid: newUid,
+                    returnSubdomains: true,
+                    returnPermissions: true,
+                    returnVersions: true,
+                    returnSize: true,
+                    consistency: 'eventual',
+                    success: function (fsentry) {
+                        // Update all the properties fields
+                        windowEl.find('.item-prop-val-name').text(fsentry.name);
+                        windowEl.find('.item-prop-val-path').text(newPath);
+                        const fileType = fsentry.is_dir ? 'Directory' : (fsentry.mime_type || 'Unknown');
+                        windowEl.find('.item-prop-val-type').html(fileType);
+                        windowEl.find('.item-prop-val-size').html(fsentry.size === null || fsentry.size === undefined ? '-' : window.byte_format(fsentry.size));
+                        const modifiedTime = fsentry.modified ? (fsentry.modified < 10000000000 ? fsentry.modified * 1000 : fsentry.modified) : 0;
+                        windowEl.find('.item-prop-val-modified').html(modifiedTime === 0 ? '-' : timeago.format(modifiedTime));
+                        const createdTime = fsentry.created ? (fsentry.created < 10000000000 ? fsentry.created * 1000 : fsentry.created) : 0;
+                        windowEl.find('.item-prop-val-created').html(createdTime === 0 ? '-' : timeago.format(createdTime));
+                        if (fsentry.ipfs_hash) {
+                            windowEl.find('.item-prop-val-ipfs-hash').html(`<code style="font-size: 11px; word-break: break-all;">${html_encode(fsentry.ipfs_hash)}</code>`);
+                        } else {
+                            windowEl.find('.item-prop-val-ipfs-hash').html('-');
+                        }
+                        windowEl.find('.item-prop-val-uid').html(newUid);
+                    }
+                });
+            }
+        });
     });
 
     window.socket.on('item.added', async (item) => {

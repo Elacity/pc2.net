@@ -67,6 +67,7 @@ export function broadcastItemRenamed(
     old_path: string;
     is_dir: boolean;
     type: string | null;
+    thumbnail?: string | null;
     original_client_socket_id?: string;
   }
 ): void {

@@ -14,6 +14,7 @@ PC2 Node is a production-ready package that combines the ElastOS frontend with a
 - ✅ **Wallet Authentication**: Particle Auth integration
 - ✅ **Owner Verification**: Secure wallet-based ownership
 - ✅ **Single Process**: Everything runs in one Node.js process
+- ✅ **Thumbnail Generation**: Automatic thumbnails for images, videos, PDFs, and text files
 
 ## Quick Start
 
@@ -21,6 +22,12 @@ PC2 Node is a production-ready package that combines the ElastOS frontend with a
 
 - Node.js 20.18+ 
 - npm or yarn
+- **ffmpeg** (optional, for video thumbnail generation)
+  - macOS: `brew install ffmpeg`
+  - Linux: `apt-get install ffmpeg` or `yum install ffmpeg`
+  - Windows: Download from [ffmpeg.org](https://ffmpeg.org/download.html)
+
+**Note:** All npm dependencies (including `sharp`, `canvas`, `pdfjs-dist` for thumbnail generation) are automatically installed via `npm install`. Only `ffmpeg` needs to be installed separately as it's a system-level dependency.
 
 ### Installation
 

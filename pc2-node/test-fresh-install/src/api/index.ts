@@ -1,12 +1,16 @@
-import express, { Express, Request, Response } from 'express';
+import express, { Express, Request, Response, NextFunction } from 'express';
+import multer from 'multer';
 import { DatabaseManager, FilesystemManager } from '../storage/index.js';
 import { Config } from '../config/loader.js';
 import { Server as SocketIOServer } from 'socket.io';
 import { authenticate, corsMiddleware, errorHandler } from './middleware.js';
+import { logger } from '../utils/logger.js';
 import { handleWhoami } from './whoami.js';
-import { handleParticleAuth } from './auth.js';
-import { handleStat, handleReaddir, handleRead, handleWrite, handleMkdir, handleDelete, handleMove } from './filesystem.js';
-import { handleSign, handleVersion, handleOSUser, handleKV, handleRAO, handleContactUs } from './other.js';
+import { handleParticleAuth, handleGrantUserApp, handleGetUserAppToken } from './auth.js';
+import { handleStat, handleReaddir, handleRead, handleWrite, handleMkdir, handleDelete, handleMove, handleRename } from './filesystem.js';
+import { handleSign, handleVersion, handleOSUser, handleKV, handleRAO, handleContactUs, handleDriversCall, handleGetWallets, handleOpenItem, handleSuggestApps, handleItemMetadata, handleWriteFile } from './other.js';
+import { handleAPIInfo, handleGetLaunchApps, handleDF, handleBatch, handleCacheTimestamp, handleStats } from './info.js';
+import { handleFile } from './file.js';
 
 // Extend Express Request to include database, filesystem, config, and WebSocket
 declare global {
@@ -23,6 +27,14 @@ declare global {
 }
 
 export function setupAPI(app: Express): void {
+  // Debug middleware to log all requests (temporary)
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    if (req.path === '/stat' || req.path.startsWith('/stat')) {
+      logger.info(`[Route Debug] /stat request: method=${req.method}, path=${req.path}, url=${req.url}, query=${JSON.stringify(req.query)}, body=${JSON.stringify(req.body)}`);
+    }
+    next();
+  });
+  
   // CORS middleware (applied to all routes)
   app.use(corsMiddleware);
 
@@ -72,22 +84,63 @@ export function setupAPI(app: Express): void {
 
   // Version endpoint (no auth required)
   app.get('/version', handleVersion);
+  
+  // API info endpoint (no auth required)
+  app.get('/api/info', handleAPIInfo);
+  
+  // Get launch apps (no auth required)
+  app.get('/get-launch-apps', handleGetLaunchApps);
+  
+  // Cache timestamp (no auth required - SDK calls this during initialization)
+  app.get('/cache/last-change-timestamp', handleCacheTimestamp);
+  
+  // File access (signed URLs - no auth required, signature verified in query)
+  app.get('/file', handleFile);
 
   // Authentication endpoints
   app.post('/auth/particle', handleParticleAuth);
+  app.post('/auth/grant-user-app', authenticate, handleGrantUserApp);
+  app.get('/auth/get-user-app-token', authenticate, handleGetUserAppToken);
+  app.post('/auth/get-user-app-token', authenticate, handleGetUserAppToken);
 
-  // User info endpoints (require auth)
-  app.get('/whoami', authenticate, handleWhoami);
-  app.get('/os/user', authenticate, handleOSUser);
+  // User info endpoints (no auth required - return unauthenticated state if no token)
+  // Match mock server behavior: return 200 with username: null instead of 401
+  app.get('/whoami', handleWhoami);
+  app.get('/os/user', handleOSUser);
+  app.get('/api/stats', authenticate, handleStats);
+  app.get('/api/wallets', authenticate, handleGetWallets);
 
   // Filesystem endpoints (require auth)
-  app.get('/stat', authenticate, handleStat);
+  // Register /stat BEFORE other routes to ensure it's matched correctly
+  app.all('/stat', authenticate, handleStat); // Use app.all() to handle both GET and POST
   app.post('/readdir', authenticate, handleReaddir);
   app.get('/read', authenticate, handleRead);
+  app.post('/read', authenticate, handleRead); // Also support POST for /read
   app.post('/write', authenticate, handleWrite);
+  // Filesystem endpoints (standard format)
   app.post('/mkdir', authenticate, handleMkdir);
   app.post('/delete', authenticate, handleDelete);
   app.post('/move', authenticate, handleMove);
+  app.post('/rename', authenticate, handleRename);
+  
+  // Filesystem endpoints (API format - matching mock server)
+  app.post('/api/files/mkdir', authenticate, handleMkdir);
+  app.post('/api/files/delete', authenticate, handleDelete);
+  app.post('/api/files/move', authenticate, handleMove);
+  
+  // Additional filesystem endpoints
+  app.get('/df', authenticate, handleDF);
+  app.post('/df', authenticate, handleDF);
+  
+  // Batch endpoint with multer for multipart file uploads
+  const upload = multer({ 
+    storage: multer.memoryStorage(),
+    limits: {
+      fileSize: 100 * 1024 * 1024 // 100MB max file size
+    }
+  });
+  
+  app.post('/batch', authenticate, upload.any(), handleBatch);
 
   // File signing (require auth)
   app.post('/sign', authenticate, handleSign);
@@ -103,7 +156,26 @@ export function setupAPI(app: Express): void {
   // Other endpoints (require auth)
   app.post('/rao', authenticate, handleRAO);
   app.post('/contactUs', handleContactUs);
+  
+  // Driver calls (require auth)
+  // Note: Raw body capture must happen before body parser, but body parser is global
+  // So we'll check rawBody in the handler if parsed body is empty
+  app.post('/drivers/call', authenticate, handleDriversCall);
+
+  // Open item - Get app to open a file (require auth)
+  app.post('/open_item', authenticate, handleOpenItem);
+
+  // Suggest apps for a file (require auth)
+  app.post('/suggest_apps', authenticate, handleSuggestApps);
+
+  // Item metadata (require auth)
+  app.get('/itemMetadata', authenticate, handleItemMetadata);
+
+  // Write file using signed URL (require auth)
+  app.post('/writeFile', authenticate, handleWriteFile);
+  app.put('/writeFile', authenticate, handleWriteFile);
 
   // Error handling middleware (must be last)
   app.use(errorHandler);
 }
+

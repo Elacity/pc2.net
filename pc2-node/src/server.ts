@@ -52,14 +52,28 @@ export function createServer(options: ServerOptions): { app: Express; server: Se
         (req as any).body = {};
       }
     }
+    
+    // Capture raw body for /mkdir requests to debug body parsing issues
+    if (req.path === '/mkdir' && req.method === 'POST') {
+      const rawBody = (req as any).rawBody || (req as any).body;
+      console.log('[Server] /mkdir request - Content-Type:', contentType);
+      console.log('[Server] /mkdir request - Body type:', typeof rawBody);
+      console.log('[Server] /mkdir request - Body value:', rawBody);
+      console.log('[Server] /mkdir request - Query:', req.query);
+    }
+    
     next();
   });
   
   app.use(express.json({ 
     verify: (req: any, res, buf) => {
-      // Capture raw body for debugging (especially for /drivers/call)
-      if (req.path === '/drivers/call') {
+      // Capture raw body for debugging (especially for /drivers/call and /mkdir)
+      if (req.path === '/drivers/call' || req.path === '/mkdir') {
         req.rawBody = buf.toString('utf8');
+        if (req.path === '/mkdir') {
+          console.log('[Server] /mkdir raw body buffer:', req.rawBody);
+          console.log('[Server] /mkdir raw body length:', buf.length);
+        }
       }
     }
   }));

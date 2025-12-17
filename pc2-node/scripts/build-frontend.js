@@ -73,6 +73,21 @@ async function main() {
     console.log('\n📋 Copying files to frontend directory...');
     cpSync(FRONTEND_DIST, TARGET_DIR, { recursive: true });
 
+    // Copy SDK file to frontend (PC2 node must be fully isolated - NO external CDN)
+    console.log('\n📦 Copying Puter SDK to frontend...');
+    const sdkSource = join(PROJECT_ROOT, 'src/backend/apps/viewer/js/puter-sdk/puter-sdk-v2.js');
+    const sdkTargetDir = join(TARGET_DIR, 'puter.js');
+    if (existsSync(sdkSource)) {
+      if (!existsSync(sdkTargetDir)) {
+        mkdirSync(sdkTargetDir, { recursive: true });
+      }
+      cpSync(sdkSource, join(sdkTargetDir, 'v2'));
+      console.log('   ✅ SDK copied to /puter.js/v2');
+    } else {
+      console.warn('   ⚠️  SDK file not found:', sdkSource);
+      console.warn('   ⚠️  Frontend will fail to load without SDK');
+    }
+
     // Restore .gitkeep if it existed
     if (hasGitkeep) {
       writeFileSync(gitkeepPath, '');

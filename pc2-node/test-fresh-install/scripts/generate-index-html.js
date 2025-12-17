@@ -13,8 +13,8 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const PROJECT_ROOT = join(__dirname, '../..');
-const TARGET_DIR = join(PROJECT_ROOT, 'pc2-node/frontend');
+// Script is in pc2-node/test-fresh-install/scripts/, so target is ../frontend
+const TARGET_DIR = join(__dirname, '..', 'frontend');
 const INDEX_HTML = join(TARGET_DIR, 'index.html');
 
 const HTML_TEMPLATE = `<!DOCTYPE html>

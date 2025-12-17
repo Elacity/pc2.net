@@ -412,7 +412,8 @@ export async function handleBatch(req: AuthenticatedRequest, res: Response): Pro
                 is_dir: false,
                 created: new Date(metadata.created_at).toISOString(),
                 modified: new Date(metadata.updated_at).toISOString(),
-                original_client_socket_id: null
+                original_client_socket_id: null,
+                thumbnail: metadata.thumbnail || undefined // Include thumbnail if available
               });
             }
             
@@ -498,20 +499,8 @@ export async function handleBatch(req: AuthenticatedRequest, res: Response): Pro
                 is_dir: false,
                 created: new Date(metadata.created_at).toISOString(),
                 modified: new Date(metadata.updated_at).toISOString(),
-                original_client_socket_id: null
-              });
-            }
-            
-            if (io) {
-              broadcastFileChange(io, {
-                path: metadata.path,
-                wallet_address: req.user.wallet_address,
-                action: 'created',
-                metadata: {
-                  size: metadata.size,
-                  mime_type: metadata.mime_type || undefined,
-                  is_dir: false
-                }
+                original_client_socket_id: null,
+                thumbnail: metadata.thumbnail || undefined // Include thumbnail if available
               });
             }
           }

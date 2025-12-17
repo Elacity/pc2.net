@@ -10,5 +10,10 @@
   "owner": {
     "wallet_address": null,
     "tethered_wallets": []
+  },
+  "security": {
+    "session_duration_days": 30,
+    "rate_limit_window_ms": 60000,
+    "rate_limit_max_requests": 100
   }
 }

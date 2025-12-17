@@ -10,6 +10,7 @@ import { Config, saveConfig } from '../config/loader.js';
 import { verifyOwner, setOwner } from '../auth/owner.js';
 import { AuthRequest, AuthResponse, UserInfo } from '../types/api.js';
 import { AuthenticatedRequest } from './middleware.js';
+import { FilesystemManager } from '../storage/filesystem.js';
 import { logger } from '../utils/logger.js';
 import crypto from 'crypto';
 
@@ -17,7 +18,7 @@ import crypto from 'crypto';
  * Authenticate with Particle Auth
  * POST /auth/particle
  */
-export function handleParticleAuth(req: Request, res: Response): void {
+export async function handleParticleAuth(req: Request, res: Response): Promise<void> {
   const db = (req.app.locals.db as DatabaseManager | undefined);
   const config = (req.app.locals.config as Config | undefined);
 
@@ -110,6 +111,39 @@ export function handleParticleAuth(req: Request, res: Response): void {
       expires_at: expiresAt
     });
 
+    // Ensure user's home directory structure exists (matching mock server behavior)
+    const filesystem = (req.app.locals.filesystem as FilesystemManager | undefined);
+    if (filesystem) {
+      try {
+        // Create user's root directory
+        const userRoot = `/${normalizedWallet}`;
+        try {
+          await filesystem.createDirectory(userRoot, normalizedWallet);
+        } catch (error) {
+          // Directory might already exist, that's fine
+          logger.debug(`User root ${userRoot} already exists`);
+        }
+        
+        // Create standard directories (Desktop, Documents, Public, Pictures, Videos, Trash)
+        const standardDirs = ['Desktop', 'Documents', 'Public', 'Pictures', 'Videos', 'Trash'];
+        for (const dirName of standardDirs) {
+          const dirPath = `${userRoot}/${dirName}`;
+          try {
+            await filesystem.createDirectory(dirPath, normalizedWallet);
+            logger.info(`✅ Created user directory: ${dirPath}`);
+          } catch (error) {
+            // Directory might already exist, that's fine
+            logger.debug(`Directory ${dirPath} already exists or creation failed:`, error instanceof Error ? error.message : 'Unknown');
+          }
+        }
+      } catch (error) {
+        // Log but don't fail auth if directory creation fails
+        logger.warn('Failed to create user home directory structure:', error instanceof Error ? error.message : 'Unknown');
+      }
+    } else {
+      logger.warn('Filesystem not available, skipping user home directory creation');
+    }
+
     logger.info(`✅ Created session for wallet: ${normalizedWallet.slice(0, 6)}...${normalizedWallet.slice(-4)}`, {
       tokenPrefix: sessionToken.substring(0, 8) + '...',
       tokenLength: sessionToken.length,
@@ -124,6 +158,11 @@ export function handleParticleAuth(req: Request, res: Response): void {
       token: sessionToken,
       user: userInfo
     };
+
+    // Set CORS headers (matching mock server)
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
     res.json(response);
   } catch (error) {

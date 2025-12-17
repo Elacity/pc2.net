@@ -450,15 +450,42 @@ async function UIDesktop(options) {
     })
 
     window.socket.on('item.moved', async (resp) => {
-        console.log('[Frontend] ✅ Received item.moved event:', resp, 'socket.id:', window.socket.id);
-        
-        let fsentry = resp;
-        // Notify all apps that are watching this item
-        window.sendItemChangeEventToWatchingApps(fsentry.uid, {
-            event: 'moved',
-            uid: fsentry.uid,
-            name: fsentry.name,
-        })
+        try {
+            console.log('[Frontend] ✅ Received item.moved event:', resp, 'socket.id:', window.socket.id);
+            
+            let fsentry = resp;
+            
+            // Validate fsentry has required fields
+            if (!fsentry || !fsentry.uid || !fsentry.path) {
+                console.error('[Frontend] ❌ Invalid item.moved event data:', fsentry);
+                return; // Skip invalid events silently
+            }
+            
+            // Log received fields for debugging
+            console.log('[Frontend] 📦 item.moved fields:', {
+                uid: fsentry.uid,
+                path: fsentry.path,
+                old_path: fsentry.old_path,
+                name: fsentry.name,
+                is_dir: fsentry.is_dir,
+                size: fsentry.size,
+                type: fsentry.type,
+                modified: fsentry.modified,
+                has_metadata: !!fsentry.metadata
+            });
+            
+            // Notify all apps that are watching this item (with safe name access)
+            const safeName = fsentry.name || fsentry.path.split('/').pop() || 'untitled';
+            try {
+                window.sendItemChangeEventToWatchingApps(fsentry.uid, {
+                    event: 'moved',
+                    uid: fsentry.uid,
+                    name: safeName,
+                });
+            } catch (watchError) {
+                console.warn('[Frontend] ⚠️  Error notifying watching apps:', watchError);
+                // Continue - this is not critical
+            }
 
         // don't update if this is the original client that initiated the action
         if (resp.original_client_socket_id === window.socket.id) {
@@ -468,14 +495,28 @@ async function UIDesktop(options) {
 
         let dest_path = path.dirname(fsentry.path);
         let metadata = fsentry.metadata;
+        
+        console.log('[Frontend] 🎯 Move destination path:', dest_path);
+        console.log('[Frontend] 🔍 Looking for container with data-path:', dest_path);
 
         // update all shortcut_to_path
         $(`.item[data-shortcut_to_path="${html_encode(resp.old_path)}" i]`).attr(`data-shortcut_to_path`, html_encode(fsentry.path));
 
-        // remove all items with matching uids
-        $(`.item[data-uid='${fsentry.uid}']`).fadeOut(150, function () {
-            // find all parent windows that contain this item
-            let parent_windows = $(`.item[data-uid='${fsentry.uid}']`).closest('.window');
+        // CRITICAL: Remove items by OLD PATH, not by UID
+        // The UID changes when the path changes, so we need to find items by their old path
+        // Use html_encode for path selector to ensure correct matching
+        const encodedOldPath = html_encode(resp.old_path);
+        const oldPathItems = $(`.item[data-path="${encodedOldPath}" i]`);
+        console.log('[Frontend] 🗑️  Removing items from old location:', {
+            old_path: resp.old_path,
+            encoded_old_path: encodedOldPath,
+            found_items: oldPathItems.length,
+            item_uids: oldPathItems.map((i, el) => $(el).attr('data-uid')).get()
+        });
+        
+        oldPathItems.fadeOut(150, function () {
+            // find all parent windows that contain this item BEFORE removing
+            const parent_windows = $(this).closest('.window');
             // remove this item
             $(this).removeItems();
             // update parent windows' item counts
@@ -483,7 +524,27 @@ async function UIDesktop(options) {
                 window.update_explorer_footer_item_count(this);
                 window.update_explorer_footer_selected_items_count(this)
             });
-        })
+            console.log('[Frontend] ✅ Removed item from old location:', resp.old_path);
+        });
+        
+        // Also try to remove by old UID (in case UID format is consistent)
+        // Generate old UID the same way backend does: uuid-${oldPath.replace(/\//g, '-')}
+        const oldUid = `uuid-${resp.old_path.replace(/\//g, '-')}`;
+        const oldUidItems = $(`.item[data-uid='${oldUid}']`);
+        if (oldUidItems.length > 0) {
+            console.log('[Frontend] 🗑️  Also removing items by old UID:', {
+                old_uid: oldUid,
+                found_items: oldUidItems.length
+            });
+            oldUidItems.fadeOut(150, function () {
+                const parent_windows = $(this).closest('.window');
+                $(this).removeItems();
+                $(parent_windows).each(function (index) {
+                    window.update_explorer_footer_item_count(this);
+                    window.update_explorer_footer_selected_items_count(this)
+                });
+            });
+        }
 
         // if trashing, close windows of trashed items and its descendants
         if (dest_path === window.trash_path) {
@@ -522,27 +583,164 @@ async function UIDesktop(options) {
         fsentry.name = (metadata && metadata.original_name) ? metadata.original_name : fsentry.name;
 
         // create new item on matching containers
-        UIItem({
-            appendTo: $(`.item-container[data-path='${html_encode(dest_path)}' i]`),
-            immutable: fsentry.immutable || fsentry.writable === false,
-            uid: fsentry.uid,
+        const destContainer = $(`.item-container[data-path='${html_encode(dest_path)}' i]`);
+        console.log('[Frontend] 📁 Found', destContainer.length, 'container(s) for path:', dest_path);
+        
+        if (destContainer.length === 0) {
+            console.warn('[Frontend] ⚠️  No container found for destination path:', dest_path);
+            console.warn('[Frontend] 🔍 Available containers:', Array.from($('.item-container')).map(el => $(el).attr('data-path')).filter(Boolean));
+            return; // Can't add item if no container exists
+        }
+        
+        // Use metadata fields as fallback if top-level fields are missing
+        const is_dir = fsentry.is_dir !== undefined ? fsentry.is_dir : (metadata?.is_dir || false);
+        const size = fsentry.size !== undefined ? fsentry.size : (metadata?.size || 0);
+        const type = fsentry.type !== undefined ? fsentry.type : (metadata?.mime_type || null);
+        const modified = fsentry.modified || (metadata?.modified || new Date().toISOString());
+        // Get thumbnail from top level or metadata
+        const thumbnail = fsentry.thumbnail || metadata?.thumbnail || undefined;
+        
+        // Ensure name is always defined (required for item_icon and UIItem)
+        const itemName = fsentry.name || fsentry.path.split('/').pop() || 'untitled';
+        
+        // CRITICAL: Check if item already exists to prevent duplicates
+        // This can happen when both item.added and item.moved fire (e.g., during uploads)
+        // Check in ALL containers, not just destination (item might be in wrong container temporarily)
+        const existingItemByUid = $(`.item[data-uid='${fsentry.uid}']`);
+        const existingItemByPath = $(`.item[data-path="${html_encode(fsentry.path)}" i]`);
+        
+        if (existingItemByUid.length > 0 || existingItemByPath.length > 0) {
+            console.log('[Frontend] ⚠️  Item already exists in item.moved, skipping duplicate creation:', {
+                uid: fsentry.uid,
+                path: fsentry.path,
+                existing_by_uid: existingItemByUid.length,
+                existing_by_path: existingItemByPath.length,
+                existing_locations: existingItemByUid.map((i, el) => ({
+                    uid: $(el).attr('data-uid'),
+                    path: $(el).attr('data-path'),
+                    container_path: $(el).closest('.item-container').attr('data-path')
+                })).get()
+            });
+            
+            // Update existing item's icon if thumbnail is now available (especially important for desktop moves)
+            if (thumbnail) {
+                const iconFsentry = {
+                    ...fsentry,
+                    thumbnail: thumbnail,
+                    name: itemName,
+                    is_dir: is_dir,
+                    type: type,
+                    path: fsentry.path
+                };
+                try {
+                    const iconResult = await item_icon(iconFsentry);
+                    existingItemByUid.find('.item-icon-thumb').attr('src', iconResult.image);
+                    existingItemByUid.find('.item-icon-icon').attr('src', iconResult.image);
+                    console.log('[Frontend] ✅ Updated existing item icon with thumbnail:', {
+                        thumbnail: thumbnail,
+                        icon_image: iconResult.image,
+                        icon_type: iconResult.type
+                    });
+                } catch (iconError) {
+                    console.error('[Frontend] ❌ Error updating icon for existing item:', iconError);
+                }
+            }
+            
+            // Also ensure item is in the correct container (move it if needed)
+            const correctContainer = $(`.item-container[data-path='${html_encode(dest_path)}' i]`);
+            if (correctContainer.length > 0 && existingItemByUid.length > 0) {
+                const currentContainer = existingItemByUid.closest('.item-container');
+                const currentContainerPath = currentContainer.attr('data-path');
+                if (currentContainerPath !== dest_path) {
+                    console.log('[Frontend] 🔄 Moving existing item to correct container:', {
+                        from: currentContainerPath,
+                        to: dest_path
+                    });
+                    existingItemByUid.appendTo(correctContainer);
+                }
+            }
+            
+            return; // Don't create duplicate
+        }
+        if (!fsentry.name) {
+            console.warn('[Frontend] ⚠️  fsentry.name is undefined, using filename from path:', itemName);
+            fsentry.name = itemName;
+        }
+        
+        // Ensure fsentry has all required properties for item_icon, including thumbnail
+        const iconFsentry = {
+            ...fsentry,
+            name: itemName,
+            is_dir: is_dir,
+            type: type,
             path: fsentry.path,
-            icon: await item_icon(fsentry),
-            name: (dest_path === window.trash_path) ? metadata.original_name : fsentry.name,
-            is_dir: fsentry.is_dir,
-            size: fsentry.size,
-            type: fsentry.type,
-            modified: fsentry.modified,
-            is_selected: false,
-            is_shared: (dest_path === window.trash_path) ? false : fsentry.is_shared,
-            is_shortcut: fsentry.is_shortcut,
-            shortcut_to: fsentry.shortcut_to,
-            shortcut_to_path: fsentry.shortcut_to_path,
-            // has_website: $(el_item).attr('data-has_website') === '1',
-            metadata: JSON.stringify(fsentry.metadata) ?? '',
+            thumbnail: thumbnail // Include thumbnail for proper icon display
+        };
+        
+        console.log('[Frontend] 📝 Creating UIItem with:', {
+            dest_path,
+            uid: fsentry.uid,
+            name: itemName,
+            is_dir,
+            size,
+            type,
+            modified,
+            has_icon_data: !!iconFsentry.name
         });
+        
+        try {
+            const iconResult = await item_icon(iconFsentry);
+            console.log('[Frontend] 🎨 Icon result:', {
+                has_image: !!iconResult?.image,
+                icon_type: iconResult?.type
+            });
+            
+            UIItem({
+                appendTo: destContainer,
+                immutable: fsentry.immutable || fsentry.writable === false,
+                uid: fsentry.uid,
+                path: fsentry.path,
+                icon: iconResult,
+                name: (dest_path === window.trash_path) ? (metadata?.original_name || itemName) : itemName,
+                is_dir: is_dir,
+                size: size,
+                type: type,
+                modified: modified,
+                is_selected: false,
+                is_shared: (dest_path === window.trash_path) ? false : fsentry.is_shared,
+                is_shortcut: fsentry.is_shortcut,
+                shortcut_to: fsentry.shortcut_to,
+                shortcut_to_path: fsentry.shortcut_to_path,
+                // has_website: $(el_item).attr('data-has_website') === '1',
+                metadata: JSON.stringify(fsentry.metadata || {}) ?? '',
+            });
+            
+            console.log('[Frontend] ✅ UIItem created for moved file');
+        } catch (iconError) {
+            console.error('[Frontend] ❌ Error creating icon for moved file:', iconError);
+            // Fallback: create item with default icon
+            UIItem({
+                appendTo: destContainer,
+                immutable: fsentry.immutable || fsentry.writable === false,
+                uid: fsentry.uid,
+                path: fsentry.path,
+                icon: is_dir ? window.icons['folder.svg'] : window.icons['file.svg'],
+                name: (dest_path === window.trash_path) ? (metadata?.original_name || itemName) : itemName,
+                is_dir: is_dir,
+                size: size,
+                type: type,
+                modified: modified,
+                is_selected: false,
+                is_shared: (dest_path === window.trash_path) ? false : fsentry.is_shared,
+                is_shortcut: fsentry.is_shortcut,
+                shortcut_to: fsentry.shortcut_to,
+                shortcut_to_path: fsentry.shortcut_to_path,
+                metadata: JSON.stringify(fsentry.metadata || {}) ?? '',
+            });
+            console.log('[Frontend] ✅ UIItem created with fallback icon');
+        }
 
-        if (fsentry.parent_dirs_created && fsentry.parent_dirs_created.length > 0) {
+        if (fsentry && fsentry.parent_dirs_created && fsentry.parent_dirs_created.length > 0) {
             // this operation may have created some missing directories, 
             // see if any of the directories in the path of this file is new AND
             // if these new path have any open parents that need to be updated
@@ -573,6 +771,31 @@ async function UIDesktop(options) {
         $(`.item-container[data-path='${html_encode(dest_path)}' i]`).each(function () {
             window.sort_items(this, $(this).attr('data-sort_by'), $(this).attr('data-sort_order'))
         })
+        } catch (error) {
+            // CRITICAL: Catch all errors to prevent error dialogs from appearing
+            // Log error but don't show popup - real-time updates should be silent
+            console.error('[Frontend] ❌ Error in item.moved handler:', error);
+            console.error('[Frontend] ❌ Error details:', {
+                error_message: error?.message,
+                error_stack: error?.stack,
+                fsentry: typeof fsentry !== 'undefined' ? {
+                    uid: fsentry?.uid,
+                    path: fsentry?.path,
+                    old_path: fsentry?.old_path,
+                    has_name: !!fsentry?.name,
+                    has_metadata: !!fsentry?.metadata
+                } : 'fsentry is undefined',
+                resp: resp ? {
+                    uid: resp.uid,
+                    path: resp.path,
+                    old_path: resp.old_path,
+                    has_name: !!resp.name
+                } : 'resp is null/undefined'
+            });
+            // Don't show UIAlert - just log and continue
+            // The file move succeeded on the backend, we just failed to update the UI
+            // User can refresh if needed, but most moves will work fine
+        }
     });
 
     window.socket.on('user.email_confirmed', (msg) => {
@@ -702,6 +925,58 @@ async function UIDesktop(options) {
             })
         }
         else {
+            // CRITICAL: Check if item already exists to prevent duplicates
+            // This can happen when both item.added and item.moved fire (e.g., during uploads/moves)
+            // Check in ALL containers, not just destination (item might be in wrong container temporarily)
+            const existingItemByUid = $(`.item[data-uid='${item.uid}']`);
+            const existingItemByPath = $(`.item[data-path="${html_encode(item.path)}" i]`);
+            
+            if (existingItemByUid.length > 0 || existingItemByPath.length > 0) {
+                console.log('[Frontend] ⚠️  Item already exists in item.added, skipping duplicate creation:', {
+                    uid: item.uid,
+                    path: item.path,
+                    existing_by_uid: existingItemByUid.length,
+                    existing_by_path: existingItemByPath.length,
+                    existing_locations: existingItemByUid.map((i, el) => ({
+                        uid: $(el).attr('data-uid'),
+                        path: $(el).attr('data-path'),
+                        container_path: $(el).closest('.item-container').attr('data-path')
+                    })).get()
+                });
+                
+                // Update existing item's icon if thumbnail is now available (especially important for desktop uploads)
+                if (item.thumbnail) {
+                    try {
+                        const iconResult = await item_icon(item);
+                        existingItemByUid.find('.item-icon-thumb').attr('src', iconResult.image);
+                        existingItemByUid.find('.item-icon-icon').attr('src', iconResult.image);
+                        console.log('[Frontend] ✅ Updated existing item icon with thumbnail:', {
+                            thumbnail: item.thumbnail,
+                            icon_image: iconResult.image,
+                            icon_type: iconResult.type
+                        });
+                    } catch (iconError) {
+                        console.error('[Frontend] ❌ Error updating icon for existing item:', iconError);
+                    }
+                }
+                
+                // Also ensure item is in the correct container (move it if needed)
+                const correctContainer = $(`.item-container[data-path='${html_encode(item.dirpath)}' i]`);
+                if (correctContainer.length > 0 && existingItemByUid.length > 0) {
+                    const currentContainer = existingItemByUid.closest('.item-container');
+                    const currentContainerPath = currentContainer.attr('data-path');
+                    if (currentContainerPath !== item.dirpath) {
+                        console.log('[Frontend] 🔄 Moving existing item to correct container:', {
+                            from: currentContainerPath,
+                            to: item.dirpath
+                        });
+                        existingItemByUid.appendTo(correctContainer);
+                    }
+                }
+                
+                return; // Don't create duplicate
+            }
+            
             UIItem({
                 appendTo: $(`.item-container[data-path='${html_encode(item.dirpath)}' i]`),
                 uid: item.uid,

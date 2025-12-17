@@ -483,7 +483,8 @@ export async function handleRead(req: AuthenticatedRequest, res: Response): Prom
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges'
       });
-      return res.send(chunk);
+      res.send(chunk);
+      return;
     }
 
     // No range request - send full file
@@ -1233,8 +1234,21 @@ export async function handleMove(req: AuthenticatedRequest, res: Response): Prom
   
   // Handle newName parameter (if provided, use it instead of original filename)
   // BUT: If destination is Trash OR newName looks like a UUID, ignore newName and use original filename
-  const isMovingToTrash = toPath.includes('/Trash') || toPath.endsWith('/Trash') || toPath === '/Trash';
+  // IMPORTANT: Check for /Trash/ (with slash) to avoid false positives (e.g., if wallet address contains "Trash")
+  const isMovingToTrash = toPath.includes('/Trash/') || toPath.endsWith('/Trash') || toPath === '/Trash' || 
+                          toPath === `/${req.user.wallet_address}/Trash` || 
+                          toPath === `/${req.user.wallet_address}/Trash/`;
   const newNameIsUuid = newName && (newName.startsWith('uuid-') || newName.includes('uuid-'));
+  
+  logger.info('[Move] Move operation details', {
+    fromPath,
+    toPath,
+    isMovingToTrash,
+    newName,
+    newNameIsUuid,
+    originalFileName,
+    wallet: req.user.wallet_address
+  });
   
   // For Trash moves, ensure destination is treated as a directory
   if (isMovingToTrash) {
@@ -1353,11 +1367,30 @@ export async function handleMove(req: AuthenticatedRequest, res: Response): Prom
       // We already calculated the full Trash path above
       newPath = toPath;
     } else {
-      const destinationIsDir = toPath.endsWith('/') || toPath === '/';
+      // Check if destination is a directory by checking the database
+      // This is more reliable than just checking if path ends with '/'
+      const destinationMetadata = filesystem.getFileMetadata(toPath, req.user.wallet_address);
+      const destinationIsDir = destinationMetadata?.is_dir || toPath.endsWith('/') || toPath === '/';
+      
       const fileName = originalFileName || fromPath.split('/').pop() || '';
-      newPath = destinationIsDir 
-        ? `${toPath}${fileName}`
-        : toPath;
+      
+      if (destinationIsDir) {
+        // Destination is a directory - append filename
+        newPath = toPath.endsWith('/') 
+          ? `${toPath}${fileName}`
+          : `${toPath}/${fileName}`;
+      } else {
+        // Destination is a file path (rename operation)
+        newPath = toPath;
+      }
+      
+      logger.info('[Move] Calculated new path', {
+        toPath,
+        destinationIsDir,
+        destinationMetadata: destinationMetadata ? { path: destinationMetadata.path, is_dir: destinationMetadata.is_dir } : null,
+        fileName,
+        calculatedNewPath: newPath
+      });
     }
 
     logger.info('[Move] Moving file/directory', {
@@ -1430,21 +1463,32 @@ export async function handleMove(req: AuthenticatedRequest, res: Response): Prom
       } else {
         // Regular move: emit item.moved
         const fileUid = `uuid-${newPath.replace(/\//g, '-')}`;
+        const fileName = metadata.path.split('/').pop() || '';
         logger.info('[Move] Broadcasting item.moved', {
           from: fromPath,
           to: newPath,
           uid: fileUid,
           wallet: req.user.wallet_address
         });
+        // Get thumbnail if available (for image files)
+        const thumbnail = metadata.thumbnail || undefined;
+        
         broadcastItemMoved(io, req.user.wallet_address, {
           uid: fileUid,
           path: newPath,
           old_path: fromPath,
-          name: metadata.path.split('/').pop() || '',
+          name: fileName,
+          // Frontend expects these fields at top level, not just in metadata
+          is_dir: metadata.is_dir,
+          size: metadata.size || 0,
+          type: metadata.mime_type || null,
+          modified: new Date(metadata.updated_at).toISOString(),
+          thumbnail: thumbnail, // Include thumbnail for proper icon display
           metadata: {
             size: metadata.size,
             mime_type: metadata.mime_type || undefined,
-            is_dir: metadata.is_dir
+            is_dir: metadata.is_dir,
+            thumbnail: thumbnail // Also include in metadata for fallback
           },
           original_client_socket_id: null
         });
@@ -1458,11 +1502,29 @@ export async function handleMove(req: AuthenticatedRequest, res: Response): Prom
     // Return format matching mock server: { success: true, from, to }
     res.json({ success: true, from: fromPath, to: newPath });
   } catch (error) {
-    logger.error('Move error:', error instanceof Error ? error.message : 'Unknown error');
-    res.status(500).json({
-      error: 'Failed to move files',
-      message: error instanceof Error ? error.message : 'Unknown error'
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    logger.error('[Move] Move error:', {
+      error: errorMessage,
+      fromPath,
+      toPath: body.destination,
+      isMovingToTrash,
+      stack: error instanceof Error ? error.stack : undefined
     });
+    
+    // Check if it's a "destination already exists" error - return 409 Conflict
+    if (errorMessage.includes('Destination already exists')) {
+      res.status(409).json({
+        error: 'Destination already exists',
+        message: errorMessage,
+        from: fromPath,
+        to: toPath
+      });
+    } else {
+      res.status(500).json({
+        error: 'Failed to move files',
+        message: errorMessage
+      });
+    }
   }
 }
 

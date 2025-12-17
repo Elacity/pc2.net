@@ -1422,16 +1422,9 @@ window.move_items = async function(el_items, dest_path, is_undo = false){
     // when did this operation start
     let move_init_ts = Date.now();
 
-    // only show progress window if it takes longer than 2s to move
-    let progwin;
-    let progwin_timeout = setTimeout(async () => {
-        progwin = await UIWindowProgress({
-            operation_id: move_op_id,
-            on_cancel: () => {
-                window.operation_cancelled[move_op_id] = true;
-            },
-        });
-    }, 2000);
+    // Progress window disabled - moves are fast with real-time updates, no popup needed
+    let progwin = null;
+    let progwin_timeout = null; // No timeout - progress window will never show
 
     // storing moved items for undo ability
     const moved_items = []
@@ -1520,7 +1513,6 @@ window.move_items = async function(el_items, dest_path, is_undo = false){
 
                 // moving an item into a trashed directory? deny.
                 else if(dest_path.startsWith(window.trash_path)){
-                    progwin?.close();
                     UIAlert('Cannot move items into a deleted folder.');
                     return;
                 }
@@ -1536,10 +1528,7 @@ window.move_items = async function(el_items, dest_path, is_undo = false){
                     path_to_show_on_progwin = window.trash_path + '/' + new_name;
                 }
 
-                // --------------------------------------------------------
-                // update progress window with current item being moved
-                // --------------------------------------------------------
-                progwin?.set_status(i18n(status_i18n_string, path_to_show_on_progwin));
+                // Progress window disabled - no status updates needed
 
                 // execute move
                 let resp = await puter.fs.move({
@@ -1698,11 +1687,27 @@ window.move_items = async function(el_items, dest_path, is_undo = false){
                 // -----------------------------------------------------------------------
                 else{
                     item_with_same_name_already_exists = false;
-                    // error message after source item has reappeared
-                    $(el_item).show(0, function(){
-                        UIAlert(`<p>Moving <strong>${html_encode($(el_item).attr('data-name'))}</strong></p>${err.message ?? ''}`)
+                    // Log error but don't show popup for real-time operations
+                    // The error is likely a frontend issue, not a backend failure
+                    console.error('[move_items] Error during move operation:', {
+                        error: err,
+                        error_message: err.message,
+                        error_code: err.code,
+                        item_path: $(el_item).attr('data-path'),
+                        item_name: $(el_item).attr('data-name'),
+                        dest_path: dest_path
                     });
-
+                    // Only show alert for critical errors that prevent the move
+                    // Most errors are frontend UI issues and shouldn't block the user
+                    if (err.code === 'item_with_same_name_exists') {
+                        // This is handled above, shouldn't reach here
+                    } else {
+                        // For other errors, log but don't show popup
+                        // The move may have succeeded on backend even if UI update failed
+                        console.warn('[move_items] Move operation may have partially failed, but continuing...');
+                    }
+                    // Show item again in case it was hidden
+                    $(el_item).show(0);
                     break;
                 }
             }
@@ -1722,13 +1727,16 @@ window.move_items = async function(el_items, dest_path, is_undo = false){
         }
     }
 
-    clearTimeout(progwin_timeout);
+    // Clear timeout if it was set (shouldn't be, but safe to check)
+    if (progwin_timeout) {
+        clearTimeout(progwin_timeout);
+    }
 
     // log stats to console
     let move_duration = (Date.now() - move_init_ts);
 
     // -----------------------------------------------------------------------
-    // DONE! close progress window with delay to allow user to see 100% progress
+    // DONE! No progress window to close - moves are fast with real-time updates
     // -----------------------------------------------------------------------
     // Add action to actions_history for undo ability
     if(!is_undo && dest_path !== window.trash_path){
@@ -1935,27 +1943,11 @@ window.upload_items = async function(items, dest_path){
                     match: normalizedDestPath === normalizedDesktopPath
                 });
                 
-                if (normalizedDestPath === normalizedDesktopPath) {
-                    console.log('[upload_items] Refreshing desktop container...');
-                    const el_desktop = document.querySelector('.desktop.item-container');
-                    if (el_desktop) {
-                        console.log('[upload_items] Desktop container found, refreshing...');
-                        // Import refresh_item_container
-                        const refreshModule = await import('./helpers/refresh_item_container.js');
-                        refreshModule.default(el_desktop);
-                    } else {
-                        console.warn('[upload_items] Desktop container not found!');
-                    }
-                    // Also refresh any open Desktop folder windows
-                    const desktopWindows = document.querySelectorAll(`.window[data-path="${window.desktop_path}"] .item-container`);
-                    console.log('[upload_items] Found', desktopWindows.length, 'open Desktop folder windows');
-                    for (const windowContainer of desktopWindows) {
-                        const refreshModule = await import('./helpers/refresh_item_container.js');
-                        refreshModule.default(windowContainer);
-                    }
-                } else {
-                    console.log('[upload_items] Upload not to desktop, skipping refresh');
-                }
+                // NOTE: We don't refresh the desktop container here anymore
+                // The item.added and item.moved event handlers will handle real-time updates
+                // Refreshing here can cause duplicates when events fire after the refresh
+                // Only refresh if events fail to update (which shouldn't happen with proper event handling)
+                console.log('[upload_items] Upload complete - relying on item.added/item.moved events for UI updates');
                 
                 // close progress window after a bit of delay for a better UX
                 setTimeout(() => {

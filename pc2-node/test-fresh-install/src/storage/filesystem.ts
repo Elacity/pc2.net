@@ -419,10 +419,34 @@ export class FilesystemManager {
       await this.ensureDirectory(newParentPath, walletAddress);
     }
 
-    // Check if new path already exists
-    const existingNew = this.db.getFile(normalizedNewPath, walletAddress);
-    if (existingNew) {
-      throw new Error(`Destination already exists: ${newPath}`);
+    // Check if new path already exists (but allow moving to same path - that's a no-op)
+    if (normalizedOldPath !== normalizedNewPath) {
+      const existingNew = this.db.getFile(normalizedNewPath, walletAddress);
+      if (existingNew) {
+        // IMPORTANT: If the existing file is a directory, that's OK - we're moving INTO it, not replacing it
+        // Only fail if it's a file (we can't overwrite files without explicit overwrite flag)
+        if (!existingNew.is_dir) {
+          // Log details for debugging
+          console.log('[Filesystem] Destination already exists check:', {
+            oldPath: normalizedOldPath,
+            newPath: normalizedNewPath,
+            existingFile: {
+              path: existingNew.path,
+              name: existingNew.path.split('/').pop(),
+              is_dir: existingNew.is_dir,
+              size: existingNew.size
+            }
+          });
+          throw new Error(`Destination already exists: ${newPath}`);
+        } else {
+          // Destination is a directory - that's fine, we're moving the file INTO it
+          console.log('[Filesystem] Destination is a directory, allowing move into it:', {
+            oldPath: normalizedOldPath,
+            newPath: normalizedNewPath,
+            destinationDir: existingNew.path
+          });
+        }
+      }
     }
 
     // If it's a directory, we'd need to move all children too

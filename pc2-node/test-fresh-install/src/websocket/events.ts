@@ -266,10 +266,17 @@ export function broadcastItemMoved(
     path: string;
     old_path: string;
     name: string;
+    // Frontend expects these fields at top level
+    is_dir?: boolean;
+    size?: number;
+    type?: string | null;
+    modified?: string;
+    thumbnail?: string | undefined; // Include thumbnail for proper icon display
     metadata?: {
       size?: number;
       mime_type?: string;
       is_dir?: boolean;
+      thumbnail?: string | undefined;
     };
     original_client_socket_id?: string | null;
   }
@@ -281,12 +288,18 @@ export function broadcastItemMoved(
   const connectedCount = roomSockets ? roomSockets.size : 0;
   
   // Build event data (matching mock server format)
+  // Frontend expects is_dir, size, type, modified, thumbnail at top level
   // Only include original_client_socket_id if it's a non-null string (to avoid null === null comparison issues)
   const eventData: any = {
     uid: item.uid,
     path: item.path,
     old_path: item.old_path,
     name: item.name,
+    ...(item.is_dir !== undefined && { is_dir: item.is_dir }),
+    ...(item.size !== undefined && { size: item.size }),
+    ...(item.type !== undefined && { type: item.type }),
+    ...(item.modified !== undefined && { modified: item.modified }),
+    ...(item.thumbnail !== undefined && { thumbnail: item.thumbnail }), // Include thumbnail if available
     ...(item.metadata && { metadata: item.metadata })
   };
   

@@ -273,18 +273,22 @@
   - ✅ **FIXED**: Real-time file deletion updates working (items removed from DOM)
   - ✅ **FIXED**: Frontend handlers receiving and processing events correctly
   - ✅ **FIXED**: Frontend build script (PROJECT_ROOT calculation, index.html generation)
-  - ⚠️ **REMAINING**: Move files between directories (not just to trash) - needs testing/fixing
+  - ✅ **FIXED**: Real-time file move operations working (Desktop ↔ Explorer, Explorer ↔ Explorer)
+  - ✅ **FIXED**: Thumbnail display for moved image files (PNG, JPG, etc.)
+  - ✅ **FIXED**: Duplicate item prevention during moves/uploads
+  - ✅ **FIXED**: Removed "Moving" progress popup (silent real-time updates)
+  - ✅ **FIXED**: Error handling in frontend event handlers (no error popups)
   - **File:** `pc2-node/src/websocket/server.ts`
   - **Features:**
-    - Real-time file updates (delete working, move between directories needs work)
+    - Real-time file updates (delete ✅, move ✅ - all working)
     - Multi-tab sync (working - events broadcast to all connected clients)
     - Event broadcasting (queue implemented, delivery working)
     - Polling fallback support (Socket.io handles automatically)
-  - **Time:** 1 day (initial implementation) + 1 day (fixes) = 2 days total
+  - **Time:** 1 day (initial implementation) + 2 days (fixes) = 3 days total
 
-**Phase 2 Deliverable:** ✅ **NEARLY COMPLETE** - Production PC2 node with frontend built-in, WebSocket real-time updates working for deletions
+**Phase 2 Deliverable:** ✅ **COMPLETE** - Production PC2 node with frontend built-in, WebSocket real-time updates fully working
 
-**Recent Progress (2025-12-17):**
+**Recent Progress (2025-12-18):**
 - ✅ Fixed app launching - `/drivers/call` body parsing for `text/plain;actually=json`
 - ✅ Added missing endpoints (`/auth/get-user-app-token`, POST `/df`)
 - ✅ Fixed desktop UI (bin, toolbar) display
@@ -299,7 +303,7 @@
   - ✅ Added POST support for `/read` endpoint (frontend sends POST requests)
   - ✅ Enhanced `/stat` endpoint with fallback directory stats for virtual user directories
   - ✅ Updated test-fresh-install dependencies to match main project
-- ✅ **WebSocket Real-Time Updates Fixed (2025-12-17):**
+- ✅ **WebSocket Real-Time Updates Fixed (2025-12-17 to 2025-12-18):**
   - ✅ Fixed authentication token reading (`auth.auth_token` format from frontend)
   - ✅ Fixed socket authentication on handshake (sockets now stay connected)
   - ✅ Fixed room membership (sockets properly join user rooms)
@@ -307,9 +311,16 @@
   - ✅ Fixed frontend event handlers (items now removed from DOM, not just hidden)
   - ✅ Real-time file deletion working - items disappear immediately without page refresh
   - ✅ Event delivery confirmed - handlers receiving events, finding items, removing from DOM
-- ⚠️ **Remaining Issues:**
-  - ⚠️ Move files between directories (e.g., Desktop → Documents) - events emitted but UI not updating
-  - ⚠️ Move to trash works, but move between regular directories needs investigation
+  - ✅ **Real-time file move operations fully working (2025-12-18):**
+    - ✅ Move between directories (Desktop ↔ Explorer, Explorer ↔ Explorer) working smoothly
+    - ✅ Items removed from old location and added to new location in real-time
+    - ✅ Thumbnail display for image files (PNG, JPG) after moves
+    - ✅ Duplicate item prevention during moves/uploads (robust duplicate detection)
+    - ✅ Removed "Moving" progress popup - operations are silent with real-time updates
+    - ✅ Error handling in frontend - errors logged to console, no error popups
+    - ✅ Backend sends complete metadata (is_dir, size, type, modified, thumbnail) in `item.moved` events
+    - ✅ Frontend handles missing fields gracefully with fallbacks
+    - ✅ Fixed TypeScript error in `handleRead` function (line 486 - return type mismatch)
 
 ---
 
@@ -665,7 +676,7 @@ grep -r "cdn" pc2-node/frontend/ -i
 
 ---
 
-**Status:** Phase 2 ~90% complete - Core functionality working, real-time deletions working, move between directories needs fix  
+**Status:** Phase 2 ✅ **100% COMPLETE** - Core functionality working, real-time file operations (delete, move) fully working  
 **Last Updated:** 2025-12-18
 
 ---
@@ -867,15 +878,18 @@ if (token.length === 64 && /^[0-9a-f]+$/i.test(token)) {
    - ✅ File operations (upload, delete, move)
    - ✅ App launching (player, viewer, editor, etc.)
 
-### ⚠️ **IN PROGRESS** - Needs Testing/Verification
+### ✅ **COMPLETE** - Real-Time File Operations
 
-1. **WebSocket Real-Time Updates** ✅ **DELETE WORKING**, ⚠️ **MOVE NEEDS FIX**
+1. **WebSocket Real-Time Updates** ✅ **FULLY WORKING**
    - ✅ Socket.io server implemented
    - ✅ Event queue system
    - ✅ Event delivery reliability (confirmed working)
    - ✅ Multi-tab synchronization (events broadcast to all connected clients)
    - ✅ Real-time file deletion working (items removed from DOM immediately)
-   - ⚠️ **REMAINING**: Move files between directories (not just to trash) - events emitted but UI not updating correctly
+   - ✅ Real-time file move operations working (Desktop ↔ Explorer, Explorer ↔ Explorer)
+   - ✅ Thumbnail display for image files after moves
+   - ✅ Duplicate item prevention during moves/uploads
+   - ✅ Silent operations (no progress popups, errors logged to console)
 
 2. **App Functionality** ⚠️
    - ✅ Apps served at `/apps/*` paths
@@ -992,16 +1006,20 @@ if (token.length === 64 && /^[0-9a-f]+$/i.test(token)) {
 - ✅ Event queue system added
 - ✅ Authentication middleware with session persistence
 
-### In Progress
-- ⚠️ Move files between directories (Desktop → Documents, etc.) - events emitted but UI not updating correctly
-- ⚠️ Need to verify `item.moved` event handler is working properly for non-trash moves
+### ✅ Recently Completed (2025-12-18)
+- ✅ Real-time file move operations fully working
+- ✅ Thumbnail display for image files after moves
+- ✅ Duplicate item prevention during moves/uploads
+- ✅ Removed "Moving" progress popup
+- ✅ Error handling improvements (no error popups, silent failures)
+- ✅ Backend sends complete metadata in `item.moved` events
+- ✅ Frontend handles missing fields gracefully
 
 ### Next Immediate Tasks
-1. **Fix Move Files Between Directories** (Priority 1)
-   - Investigate why `item.moved` events aren't updating UI for non-trash moves
-   - Verify `item.moved` event handler is receiving events correctly
-   - Check if items are being removed from old location and added to new location
-   - Test move operations (Desktop → Documents, etc.)
+1. **App Icon Loading** (Priority 1)
+   - Update `/get-launch-apps` to return base64 SVG icons
+   - Load SVG files from `src/backend/assets/app-icons/`
+   - Match mock server's format exactly
 
 2. **Fix App Icons**
    - Update `/get-launch-apps` to return base64 SVG icons
@@ -1109,12 +1127,12 @@ cd /Users/mtk/Documents/Cursor/pc2.net/pc2-node/test-fresh-install && PORT=4202 
 ## 📈 Progress Summary
 
 - **Phase 1:** ✅ 100% Complete
-- **Phase 2:** ⚠️ ~90% Complete (core functionality working, real-time deletions working, move between directories needs fix)
+- **Phase 2:** ✅ 100% Complete (core functionality working, real-time file operations fully working)
 - **Phase 3:** ❌ 0% Complete
 - **Phase 4:** ❌ 0% Complete
 - **Phase 5:** ❌ 0% Complete
 
-**Overall Progress:** ~38% of total project complete
+**Overall Progress:** ~40% of total project complete
 
 **Estimated Time Remaining:** 4-5 weeks for full completion
 
@@ -1296,6 +1314,6 @@ Local Server (localhost:4202)
 
 ---
 
-**Status:** Phase 2 ~85% complete - Core functionality working, session persistence fixed  
-**Next Action:** WebSocket event delivery testing, comprehensive end-to-end testing
+**Status:** Phase 2 ✅ **100% COMPLETE** - Core functionality working, real-time file operations fully working  
+**Next Action:** Phase 3 - Packaging & Deployment (Docker, Debian, macOS packages)
 

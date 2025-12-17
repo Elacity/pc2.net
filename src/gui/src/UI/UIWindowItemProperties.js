@@ -142,8 +142,9 @@ async function UIWindowItemProperties (item_name, item_path, item_uid, left, top
             }
             // uid
             $(el_window).find('.item-prop-val-uid').html(fsentry.id);
-            // type - use mime_type if available, otherwise fallback to type or 'Directory'
-            const fileType = fsentry.is_dir ? 'Directory' : (fsentry.mime_type || fsentry.type || '-');
+            // type - use mime_type for files (e.g., 'image/jpeg'), 'Directory' for directories
+            // Note: fsentry.type is 'file' | 'dir', fsentry.mime_type is the actual MIME type
+            const fileType = fsentry.is_dir ? 'Directory' : (fsentry.mime_type || 'Unknown');
             $(el_window).find('.item-prop-val-type').html(fileType);
             // size
             $(el_window).find('.item-prop-val-size').html(fsentry.size === null || fsentry.size === undefined ? '-' : window.byte_format(fsentry.size));

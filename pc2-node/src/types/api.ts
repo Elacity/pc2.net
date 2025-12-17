@@ -48,6 +48,7 @@ export interface FileStat {
   created: number;
   modified: number;
   mime_type?: string | null;
+  thumbnail?: string | null;
   is_dir: boolean;
   uid?: string;
   uuid?: string;
@@ -61,6 +62,7 @@ export interface DirectoryEntry {
   created: number;
   modified: number;
   mime_type?: string | null;
+  thumbnail?: string | null;
   is_dir: boolean;
   uid?: string;
   uuid?: string;

@@ -9,6 +9,7 @@ import { IPFSStorage } from './ipfs.js';
 import { DatabaseManager, FileMetadata } from './database.js';
 import { normalize, join, dirname } from 'path';
 import { logger } from '../utils/logger.js';
+import { generateThumbnail, supportsThumbnails } from './thumbnail.js';
 
 export interface FileContent {
   content: Buffer | string;
@@ -91,13 +92,39 @@ export class FilesystemManager {
       ? content.length 
       : Buffer.byteLength(content, 'utf8');
 
+    const mimeType = options?.mimeType || this.guessMimeType(path);
+
+    // Generate thumbnail for images/videos/PDFs/text files
+    let thumbnail: string | null = null;
+    if (supportsThumbnails(mimeType)) {
+      try {
+        // Convert content to Buffer for thumbnail generation
+        const contentBuffer = Buffer.isBuffer(content) 
+          ? content 
+          : content instanceof Uint8Array
+          ? Buffer.from(content)
+          : Buffer.from(content, 'utf8');
+        
+        const fileUuid = `uuid-${normalizedPath.replace(/\//g, '-').replace(/^-/, '')}`;
+        thumbnail = await generateThumbnail(contentBuffer, mimeType, fileUuid);
+        
+        if (thumbnail) {
+          logger.info(`[Filesystem] 🖼️  Thumbnail generated for: ${normalizedPath}`);
+        }
+      } catch (error: any) {
+        logger.warn(`[Filesystem] ⚠️  Thumbnail generation failed for ${normalizedPath}: ${error.message}`);
+        // Continue without thumbnail - not critical
+      }
+    }
+
     // Create or update file metadata in database
     const metadata: FileMetadata = {
       path: normalizedPath,
       wallet_address: walletAddress,
       ipfs_hash: ipfsHash,
       size: size,
-      mime_type: options?.mimeType || this.guessMimeType(path),
+      mime_type: mimeType,
+      thumbnail: thumbnail,
       is_dir: false,
       is_public: options?.isPublic || false,
       created_at: Date.now(),

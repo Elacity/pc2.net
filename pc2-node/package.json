@@ -33,6 +33,7 @@
     "@types/multer": "^2.0.0",
     "better-sqlite3": "^9.2.2",
     "blockstore-fs": "^3.0.2",
+    "canvas": "^2.11.2",
     "cors": "^2.8.5",
     "datastore-fs": "^11.0.2",
     "dotenv": "^16.3.1",
@@ -41,6 +42,8 @@
     "libp2p": "^3.1.2",
     "multer": "^2.0.2",
     "multiformats": "^13.4.2",
+    "pdfjs-dist": "^4.0.379",
+    "sharp": "^0.33.2",
     "socket.io": "^4.7.2"
   },
   "devDependencies": {

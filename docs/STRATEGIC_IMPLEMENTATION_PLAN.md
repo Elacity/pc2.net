@@ -261,19 +261,24 @@
     - Settings
   - **Time:** 1 day
 
-#### 2.6 Real WebSocket (Socket.io) ✅
+#### 2.6 Real WebSocket (Socket.io) ⚠️ **IN PROGRESS**
 - [x] **Task:** Replace polling with WebSocket
-  - ✅ Socket.io server implemented
-  - ✅ Real-time file change broadcasting
-  - ✅ Multi-tab sync working
-  - **File:** `pc2-node/src/server.js`
+  - ✅ Socket.io server implemented (`pc2-node/src/websocket/server.ts`)
+  - ✅ Event queue system added (`pendingEvents` array)
+  - ✅ Authentication middleware with session persistence
+  - ✅ Event broadcasting to user rooms
+  - ⚠️ **ISSUE**: Clients disconnecting immediately after connection
+  - ⚠️ **ISSUE**: Events not being delivered reliably
+  - ⚠️ **ISSUE**: Real-time file deletion updates not working (requires page refresh)
+  - **File:** `pc2-node/src/websocket/server.ts`
   - **Features:**
-    - Real-time file updates
-    - Multi-tab sync
-    - Event broadcasting
-  - **Time:** 1 day
+    - Real-time file updates (partially working)
+    - Multi-tab sync (needs testing)
+    - Event broadcasting (queue implemented, delivery needs fixing)
+    - Polling fallback support (Socket.io handles automatically)
+  - **Time:** 1 day (initial implementation), additional fixes needed
 
-**Phase 2 Deliverable:** ✅ **MOSTLY COMPLETE** - Production PC2 node with frontend built-in
+**Phase 2 Deliverable:** ⚠️ **MOSTLY COMPLETE** - Production PC2 node with frontend built-in, WebSocket needs fixes
 
 **Recent Progress (2025-12-16):**
 - ✅ Fixed app launching - `/drivers/call` body parsing for `text/plain;actually=json`
@@ -285,8 +290,15 @@
 - ✅ Fixed `/readdir` endpoint - includes Trash/bin on Desktop even when filesystem not initialized
 - ✅ Desktop UI fully functional - toolbar, taskbar, bin icon all visible and working
 - ✅ Added comprehensive logging to `/stat` and `/drivers/call` for debugging
-- ⚠️ File uploads still need testing (multipart support added, awaiting verification)
-- ⚠️ App launching needs verification (endpoints fixed, awaiting user testing)
+- ✅ **IPFS Migration Complete** - Migrated from `ipfs-core` to `helia` library
+  - ✅ IPFS node initializes successfully
+  - ✅ Added POST support for `/read` endpoint (frontend sends POST requests)
+  - ✅ Enhanced `/stat` endpoint with fallback directory stats for virtual user directories
+  - ✅ Updated test-fresh-install dependencies to match main project
+- ⚠️ **Next Steps:**
+  - ⚠️ File uploads need testing (multipart support added, IPFS storage ready)
+  - ⚠️ File creation/editing needs testing
+  - ⚠️ App launching needs verification (endpoints fixed, awaiting user testing)
 
 ---
 
@@ -572,6 +584,711 @@ git push -u origin sash-anders-vision
 
 ---
 
-**Status:** Ready to begin implementation  
-**Next Action:** Save branch, create new branch, start Phase 1
+## 🚨 CRITICAL: PC2 Node Isolation Rules
+
+**PC2 node MUST be 100% isolated with ZERO external dependencies.**
+
+### ❌ NEVER DO THESE
+
+1. **NO External CDN Calls**
+   - ❌ Never load SDK from `https://js.puter.com/v2/`
+   - ❌ Never load scripts from external CDNs
+   - ❌ Never load CSS from external sources
+   - ✅ **ALWAYS** serve all assets from local server
+
+2. **NO External API Calls**
+   - ❌ Never call `api.puter.com` or any external Puter services
+   - ❌ Never depend on external authentication services (except Particle Auth for wallet)
+   - ✅ **ALWAYS** use local API endpoints
+
+3. **NO External Dependencies in Frontend**
+   - ❌ Never use `window.gui_env="prod"` with external CDN fallback
+   - ❌ Never include Cloudflare Turnstile or other external scripts
+   - ✅ **ALWAYS** use local SDK file at `/puter.js/v2`
+
+### ✅ ALWAYS DO THESE
+
+1. **Local SDK File**
+   - ✅ Copy SDK from `/src/backend/apps/viewer/js/puter-sdk/puter-sdk-v2.js`
+   - ✅ Place at `/pc2-node/frontend/puter.js/v2`
+   - ✅ Serve with correct MIME type: `application/javascript`
+   - ✅ Route handler MUST be before `express.static()` middleware
+
+2. **Build Process**
+   - ✅ Build script automatically copies SDK during frontend build
+   - ✅ Verify SDK file exists before starting server
+   - ✅ Log warning if SDK file missing
+
+3. **Static File Serving**
+   - ✅ All assets served from local `frontend/` directory
+   - ✅ No external network requests for frontend resources
+   - ✅ Proper MIME types for all file types
+
+### 📝 Implementation Checklist
+
+- [ ] SDK file copied to `frontend/puter.js/v2` during build
+- [ ] `gui.js` uses local SDK path (no external CDN)
+- [ ] Route handler for `/puter.js/v2` before static middleware
+- [ ] Correct MIME type set (`application/javascript`)
+- [ ] No external script tags in HTML
+- [ ] No external CSS links
+- [ ] All assets verified as local-only
+
+### 🔍 Verification
+
+**Test for external dependencies:**
+```bash
+# Check for external CDN references
+grep -r "js.puter.com" pc2-node/frontend/
+grep -r "https://" pc2-node/frontend/gui.js | grep -v "localhost"
+grep -r "cdn" pc2-node/frontend/ -i
+
+# Should return NO results
+```
+
+**Test server isolation:**
+1. Disconnect from internet
+2. Start PC2 node
+3. Load frontend
+4. Verify everything works offline
+
+---
+
+**Status:** Phase 2 ~85% complete - Core functionality working, session persistence fixed  
+**Last Updated:** 2025-12-17
+
+---
+
+## 🎓 Critical Lessons Learned & Implementation Wisdom (2025-12-17)
+
+### Lesson 1: IPFS File Storage & Retrieval - UnixFS DAG Structure
+
+**Problem:** Video files (2.2MB) were stored correctly but only 159 bytes were retrieved, causing playback failures.
+
+**Root Cause:** 
+- `fs.addBytes()` creates a UnixFS DAG (Directed Acyclic Graph) structure, not a single block
+- Using `blockstore.get(cid)` directly only retrieves the root block (metadata), not the full file
+- The root block is ~159 bytes, which is why only that much was retrieved
+
+**Solution:**
+- Use `ipfs-unixfs-exporter` to properly reconstruct files from UnixFS DAG structure
+- Exporter traverses the DAG and concatenates all data blocks
+- Must use the underlying `FsBlockstore` directly, not `helia.blockstore` (IdentityBlockstore wrapper)
+- The IdentityBlockstore wrapper causes `yield* is not iterable` errors
+
+**Key Code Pattern:**
+```typescript
+// ❌ WRONG - Only gets root block
+const block = await blockstore.get(cidObj);
+// Returns ~159 bytes (metadata only)
+
+// ✅ CORRECT - Reconstructs full file from DAG
+const { exporter } = await import('ipfs-unixfs-exporter');
+const entry = await exporter(cidObj, blockstore);
+const chunks: Uint8Array[] = [];
+for await (const chunk of entry.content()) {
+  chunks.push(chunk);
+}
+const buffer = Buffer.concat(chunks.map(c => Buffer.from(c)));
+// Returns full file (2.2MB)
+```
+
+**Wisdom:** When using Helia's `fs.addBytes()`, always use `ipfs-unixfs-exporter` for retrieval. Direct blockstore access only works for raw blocks, not UnixFS files.
+
+---
+
+### Lesson 2: Session Persistence After Page Refresh
+
+**Problem:** After refreshing the page, users lost their session - files and background image disappeared, requiring logout/login.
+
+**Root Causes:**
+1. Frontend wasn't loading stored session token from localStorage on page load
+2. `/whoami` endpoint wasn't checking Referer header for tokens (unlike middleware)
+3. Multiple Bearer tokens in Authorization header - code was taking first (mock token) instead of real session token
+4. Fallback to "most recent active session" was returning wrong user's session
+
+**Solution:**
+1. **Frontend:** Load token from localStorage on page initialization
+   ```javascript
+   // Load stored token FIRST
+   const storedToken = localStorage.getItem('auth_token');
+   if (storedToken) {
+     window.auth_token = storedToken;
+   }
+   ```
+
+2. **Backend `/whoami`:** Check Referer header for tokens (matching middleware behavior)
+   ```typescript
+   // Check Referer header for token (essential for session persistence)
+   if (!token && req.headers.referer) {
+     const refererUrl = new URL(req.headers.referer);
+     const refererToken = refererUrl.searchParams.get('puter.auth.token');
+     if (refererToken) token = refererToken.trim();
+   }
+   ```
+
+3. **Multiple Token Handling:** Try each token to find valid session
+   ```typescript
+   // Try each token to find one with a valid session
+   for (const candidateToken of allTokens) {
+     const candidateSession = db.getSession(candidateToken);
+     if (candidateSession && candidateSession.expires_at > Date.now()) {
+       token = candidateToken; // Use this valid session
+       break;
+     }
+   }
+   ```
+
+4. **Security Fix:** Removed fallback to "most recent active session" - would return wrong user
+   ```typescript
+   // ❌ WRONG - Returns wrong user's session
+   const mostRecent = activeSessions[0];
+   session = mostRecent; // Could be different user!
+   
+   // ✅ CORRECT - Return unauthenticated if can't determine user
+   logger.warn('Cannot determine user, returning unauthenticated state');
+   // Let it fall through to unauthenticated response
+   ```
+
+**Wisdom:** 
+- Always load stored session tokens on page initialization
+- Check all token sources (header, query, Referer) consistently across endpoints
+- Never use another user's session as fallback - security risk
+- Validate token format (64 hex chars) before storing to avoid mock tokens
+
+---
+
+### Lesson 3: Token Validation & Storage
+
+**Problem:** Frontend was capturing and storing mock tokens from `/whoami` responses, causing wrong user sessions.
+
+**Solution:**
+- Only store real session tokens (64 hex characters)
+- Ignore mock tokens (`mock-token-...` format)
+- Validate token format before storing in localStorage
+
+**Key Code Pattern:**
+```typescript
+// Only store real session tokens, not mock tokens
+if (token.length === 64 && /^[0-9a-f]+$/i.test(token)) {
+  localStorage.setItem('auth_token', token);
+} else {
+  console.warn('Ignoring non-session token (mock token or invalid format)');
+}
+```
+
+**Wisdom:** Always validate token format before storing. Mock tokens are for development only and should never be persisted.
+
+---
+
+### Lesson 4: Multiple Bearer Tokens in Authorization Header
+
+**Problem:** After using apps (player/viewer), Authorization header contained multiple tokens: `Bearer mock-token-..., Bearer 45909269...`. Code was taking first token (mock) instead of real session token.
+
+**Solution:**
+- Parse all tokens from comma-separated header
+- Try each token to find one with valid session
+- Prefer real session tokens (64 hex chars) over mock tokens
+- Only fall back to first token if no valid session found
+
+**Wisdom:** When multiple tokens are present, always try each one to find a valid session. Don't assume the first token is correct.
+
+---
+
+### Lesson 5: MIME Type Detection for Video/Audio Files
+
+**Problem:** Video files weren't being recognized properly, causing playback issues.
+
+**Solution:**
+- Extended `guessMimeType` function to include all common video/audio formats
+- Added proper MIME types for: mp4, mov, webm, avi, mkv, m4a, ogg, flac, etc.
+- Used as fallback when browser doesn't provide MIME type
+
+**Wisdom:** Always have comprehensive MIME type detection as fallback. Browsers may not always provide MIME types, especially for uploaded files.
+
+---
+
+### Lesson 6: File Upload Size Validation
+
+**Problem:** Files appeared to upload correctly but were truncated (2.2MB reported, 159 bytes stored).
+
+**Solution:**
+- Added comprehensive logging to compare `reportedSize` (from `file.size`) vs `actualSize` (from buffer length)
+- Validated that Multer is providing full file buffer
+- Discovered issue was in IPFS retrieval, not upload (see Lesson 1)
+
+**Wisdom:** Always log and validate file sizes at each stage: upload → storage → retrieval. This helps identify where truncation occurs.
+
+---
+
+## 📊 Current Implementation Status (2025-12-17)
+
+### ✅ **COMPLETE** - Core Functionality
+
+1. **IPFS Storage & Retrieval** ✅
+   - ✅ Migrated to Helia library
+   - ✅ UnixFS file storage working
+   - ✅ File retrieval using exporter (fixes video playback)
+   - ✅ Proper DAG reconstruction for multi-block files
+
+2. **Session Persistence** ✅
+   - ✅ Frontend loads token from localStorage on page load
+   - ✅ `/whoami` checks all token sources (header, query, Referer)
+   - ✅ Multiple token handling (tries each to find valid session)
+   - ✅ Security: No fallback to wrong user's session
+   - ✅ Token validation (only stores real session tokens)
+
+3. **File Operations** ✅
+   - ✅ File upload with multipart/form-data support
+   - ✅ File storage in IPFS with metadata in SQLite
+   - ✅ File retrieval with HTTP Range request support (video streaming)
+   - ✅ MIME type detection for all file types
+
+4. **Authentication** ✅
+   - ✅ Wallet-based authentication (Particle Auth)
+   - ✅ Session management (30-day sessions, auto-extension)
+   - ✅ Session persistence across page refreshes
+   - ✅ Mock token support for development
+
+5. **Desktop UI** ✅
+   - ✅ Desktop initialization with files and folders
+   - ✅ Background image loading
+   - ✅ File operations (upload, delete, move)
+   - ✅ App launching (player, viewer, editor, etc.)
+
+### ⚠️ **IN PROGRESS** - Needs Testing/Verification
+
+1. **WebSocket Real-Time Updates** ⚠️
+   - ✅ Socket.io server implemented
+   - ✅ Event queue system
+   - ⚠️ Needs testing: Event delivery reliability
+   - ⚠️ Needs testing: Multi-tab synchronization
+
+2. **App Functionality** ⚠️
+   - ✅ Apps served at `/apps/*` paths
+   - ✅ SDK URL injection working
+   - ⚠️ Needs testing: All app types (player, viewer, editor, terminal)
+   - ⚠️ Needs testing: File opening from apps
+
+---
+
+## 🎓 Lessons Learned & Architecture Decisions
+
+### WebSocket vs HTTP Polling for Remote Access
+
+**Decision Made (2025-12-17):** Use **WebSocket with polling fallback** for production remote access.
+
+**Context:**
+- PC2 nodes will be accessed from anywhere in the world (not just localhost)
+- Users run PC2 node on hardware box/VPS server
+- Browser connects remotely over the internet
+
+**Why WebSocket:**
+1. **Lower Latency**: Persistent connection, no HTTP overhead per event
+2. **More Efficient**: Bidirectional communication, no constant polling
+3. **Better for Real-Time**: Instant event delivery
+4. **Works Over Internet**: Handles network conditions better than polling
+
+**Why Polling as Fallback:**
+1. **Reliability**: Works when WebSocket fails (firewalls, proxies)
+2. **Compatibility**: Socket.io automatically falls back to polling
+3. **No Manual Implementation**: Socket.io handles this internally
+
+**Mock Server vs Production Node:**
+- **Mock Server** (`tools/mock-pc2-server.cjs`): Uses custom HTTP polling (simpler for localhost testing)
+- **PC2 Node** (`pc2-node/`): Uses Socket.io WebSocket (better for remote access)
+
+**Key Insight:** The mock server's polling approach works great for localhost, but for production remote access, WebSocket is the right choice. Socket.io provides both automatically.
+
+### Current WebSocket Implementation Status
+
+**Location:** `pc2-node/src/websocket/server.ts`
+
+**What's Working:**
+- ✅ Socket.io server setup with CORS and authentication
+- ✅ Event queue system (`pendingEvents` array)
+- ✅ Session persistence (`socketSessions` map for polling requests)
+- ✅ Authentication middleware with auto-reauthentication
+- ✅ Event broadcasting to user rooms (`io.to(room).emit()`)
+- ✅ Event queuing in `events.ts` (`broadcastItemAdded`, `broadcastItemRemoved`)
+
+**What's Not Working:**
+- ❌ Clients disconnect immediately after connection (logs show `client namespace disconnect`)
+- ❌ Events not being delivered reliably (user reports: "deleting isn't live, have to refresh")
+- ❌ Event queue delivery on connect/reconnect may not be working correctly
+- ❌ Real-time file deletion updates not appearing without page refresh
+
+**Root Cause Analysis:**
+1. **Client Disconnection**: Clients connect, authenticate, join room, then immediately disconnect
+   - May be due to WebSocket upgrade failure
+   - May be due to authentication timing issues
+   - May be due to Socket.io client configuration
+
+2. **Event Delivery Failure**: Even when clients are connected, events aren't received
+   - Events are queued correctly (`pendingEvents` array)
+   - Events are broadcast to rooms (`io.to(room).emit()`)
+   - But clients don't receive them (likely because they disconnect before events are sent)
+
+**Next Steps:**
+1. Fix client disconnection issue (investigate WebSocket upgrade, authentication timing)
+2. Ensure event queue is delivered on connect/reconnect
+3. Test with remote connections (not just localhost)
+4. Verify events are received by clients when connected
+
+### Critical Issues Identified
+
+**See:** `docs/PC2_NODE_VS_MOCK_SERVER_DEEP_AUDIT.md` for detailed audit
+
+**Priority 1 - Event System:**
+- WebSocket clients disconnecting immediately
+- Events not being delivered reliably
+- Real-time updates not working (deletions require page refresh)
+
+**Priority 2 - App Icons:**
+- `/get-launch-apps` returns `undefined` for most app icons
+- Mock server returns base64 SVG icons
+- Need to load SVG files and convert to base64
+
+**Priority 3 - File Opening:**
+- `/open_item` returns path-based URLs (`/apps/viewer/index.html`)
+- Mock server uses subdomain-based URLs (`viewer.localhost:4200`)
+- Should work if apps are served correctly, but needs verification
+
+**Priority 4 - Drag & Drop:**
+- Only works on desktop, not in explorer windows
+- Likely frontend issue, but may be related to event system
+
+### Architecture Decisions
+
+1. **WebSocket for Remote Access**: Confirmed - WebSocket is the right choice for production remote access
+2. **Socket.io with Polling Fallback**: Using Socket.io which automatically handles both WebSocket and polling
+3. **Event Queue System**: Implemented to match mock server's pattern, but needs proper delivery
+4. **Session Persistence**: Implemented for reconnection scenarios
+5. **100% Internal Isolation**: All assets served locally, no external CDN dependencies (CRITICAL)
+
+---
+
+## 📋 Current Work Status (2025-12-17)
+
+### Completed
+- ✅ PC2 node structure created
+- ✅ Frontend built and served from PC2 node
+- ✅ IPFS integration (migrated to Helia)
+- ✅ SQLite database with sessions
+- ✅ Socket.io WebSocket server implemented
+- ✅ Event queue system added
+- ✅ Authentication middleware with session persistence
+
+### In Progress
+- ⚠️ WebSocket client connection stability (clients disconnecting)
+- ⚠️ Event delivery reliability (events not received)
+- ⚠️ Real-time updates (deletions not live)
+
+### Next Immediate Tasks
+1. **Fix WebSocket Client Disconnection**
+   - Investigate why clients disconnect immediately after connection
+   - Check WebSocket upgrade process
+   - Verify authentication timing
+   - Test with different network conditions
+
+2. **Fix Event Delivery**
+   - Ensure events are delivered when clients connect
+   - Verify event queue is properly cleared after delivery
+   - Test event broadcasting to rooms
+
+3. **Fix App Icons**
+   - Update `/get-launch-apps` to return base64 SVG icons
+   - Load SVG files from `src/backend/assets/app-icons/`
+   - Match mock server's format exactly
+
+4. **Verify File Opening**
+   - Test `/open_item` endpoint
+   - Verify apps are served at `/apps/*` paths
+   - Test file opening in player/viewer
+
+### Testing Command
+```bash
+cd /Users/mtk/Documents/Cursor/pc2.net/pc2-node/test-fresh-install && PORT=4202 npm start
+```
+
+---
+
+## 🎯 What's Remaining to Do
+
+### Phase 2 Completion (Current Phase) - ~85% Complete
+
+#### Immediate Next Steps:
+1. **WebSocket Event Delivery Testing** (1-2 days)
+   - Verify events are delivered reliably
+   - Test multi-tab synchronization
+   - Ensure real-time updates work (file deletion, creation, etc.)
+
+2. **App Icon Loading** (2-3 hours)
+   - Update `/get-launch-apps` to load and return base64 SVG icons
+   - Match mock server's format exactly
+
+3. **Comprehensive End-to-End Testing** (2-3 days)
+   - Test all file operations
+   - Test all app types
+   - Test session persistence in various scenarios
+   - Test with multiple users
+
+### Phase 3: Packaging & Deployment - Not Started
+
+1. **Docker Package** (2-3 hours)
+   - Create Dockerfile
+   - Multi-stage build
+   - Health checks
+
+2. **Debian Package** (1 day)
+   - Create .deb package for Raspberry Pi
+   - Systemd service
+   - Auto-start on boot
+
+3. **macOS Package** (1 day)
+   - Create .dmg installer
+   - Launch daemon
+   - Preferences pane
+
+4. **Setup Wizard** (2-3 days)
+   - CLI setup tool
+   - Owner wallet input
+   - Domain configuration
+   - SSL certificate setup
+
+### Phase 4: Network & Security - Not Started
+
+1. **SSL/TLS Support** (2-3 days)
+   - Auto SSL certificate (Let's Encrypt)
+   - Auto-renewal
+   - HTTP → HTTPS redirect
+
+2. **Dynamic DNS** (1-2 days)
+   - Support dynamic DNS services
+   - DuckDNS, No-IP, custom domain
+
+3. **Firewall Configuration** (1-2 days)
+   - Auto-configure firewall
+   - UPnP port forwarding
+   - Security hardening
+
+4. **Security Hardening** (2-3 days)
+   - Rate limiting
+   - Input validation
+   - CSRF protection
+   - Security headers
+
+### Phase 5: Testing & Documentation - Not Started
+
+1. **Integration Testing** (1 week)
+   - End-to-end tests
+   - Installation tests
+   - Multi-node access tests
+
+2. **User Documentation** (3-4 days)
+   - Installation guide
+   - Setup guide
+   - User manual
+   - Troubleshooting
+
+3. **Developer Documentation** (2-3 days)
+   - Architecture overview
+   - API reference
+   - Development guide
+   - Deployment guide
+
+---
+
+## 📈 Progress Summary
+
+- **Phase 1:** ✅ 100% Complete
+- **Phase 2:** ⚠️ ~85% Complete (core functionality working, testing needed)
+- **Phase 3:** ❌ 0% Complete
+- **Phase 4:** ❌ 0% Complete
+- **Phase 5:** ❌ 0% Complete
+
+**Overall Progress:** ~37% of total project complete
+
+**Estimated Time Remaining:** 4-5 weeks for full completion
+
+---
+
+## 🏗️ Architecture Comparison: Puter vs PC2 Node
+
+### Puter Architecture (Cloud-Based)
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    PUTER CLOUD SERVICE                      │
+│                                                              │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  Frontend (CDN)                                       │  │
+│  │  - Served from js.puter.com                           │  │
+│  │  - External CDN dependencies                          │  │
+│  │  - Requires internet connection                       │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                          │                                  │
+│                          │ HTTPS                             │
+│                          ▼                                  │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  Backend API (api.puter.com)                         │  │
+│  │  - Centralized servers                              │  │
+│  │  - Shared infrastructure                             │  │
+│  │  - User data stored on Puter servers                │  │
+│  │  - Requires account creation                         │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                                                              │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  Storage (Cloud)                                      │  │
+│  │  - Centralized file storage                          │  │
+│  │  - User data on Puter infrastructure                 │  │
+│  │  - Requires internet for access                      │  │
+│  └──────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+         ▲
+         │ Internet Required
+         │
+┌────────┴────────┐
+│  User Browser   │
+│  (Anywhere)     │
+└─────────────────┘
+
+Key Characteristics:
+❌ Requires internet connection
+❌ Data stored on Puter servers
+❌ Centralized infrastructure
+❌ External CDN dependencies
+❌ Account-based authentication
+```
+
+### PC2 Node Architecture (Self-Hosted)
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              PC2 NODE (User's Hardware)                     │
+│  (Raspberry Pi, VPS, Mac, etc.)                            │
+│                                                              │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  Frontend (Built-in)                                   │  │
+│  │  - Served from local server                            │  │
+│  │  - No external CDN dependencies                        │  │
+│  │  - Works offline                                        │  │
+│  │  - Auto-detects same-origin API                        │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                          │                                  │
+│                          │ Local (Same Origin)              │
+│                          ▼                                  │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  Backend API (localhost:4202)                        │  │
+│  │  - Express.js server                                  │  │
+│  │  - All endpoints implemented                           │  │
+│  │  - Wallet-based authentication                         │  │
+│  │  - Session management                                  │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                          │                                  │
+│         ┌────────────────┴────────────────┐               │
+│         │                                   │               │
+│         ▼                                   ▼               │
+│  ┌──────────────┐                  ┌──────────────┐       │
+│  │  SQLite DB   │                  │  IPFS Node   │       │
+│  │  - Sessions  │                  │  - File       │       │
+│  │  - Metadata  │                  │    Storage    │       │
+│  │  - Users     │                  │  - Content    │       │
+│  └──────────────┘                  │    Addresses │       │
+│                                     └──────────────┘       │
+│                                                              │
+│  ✅ Single Process                                           │
+│  ✅ Single Port (4202)                                       │
+│  ✅ No CORS (same-origin)                                    │
+│  ✅ Self-contained                                           │
+│  ✅ Works offline                                            │
+└─────────────────────────────────────────────────────────────┘
+         ▲
+         │ HTTP/HTTPS (Local or Remote)
+         │
+┌────────┴────────┐
+│  User Browser   │
+│  (Anywhere)     │
+│  https://my-pc2 │
+│  .example.com   │
+└─────────────────┘
+
+Key Characteristics:
+✅ Works offline (after initial setup)
+✅ Data stored on user's hardware
+✅ Decentralized (each user runs their own)
+✅ No external CDN dependencies
+✅ Wallet-based authentication
+✅ User controls everything
+```
+
+### Key Architectural Differences
+
+| Aspect | Puter (Cloud) | PC2 Node (Self-Hosted) |
+|--------|---------------|------------------------|
+| **Deployment** | Centralized cloud servers | User's hardware (Raspberry Pi, VPS, Mac) |
+| **Frontend** | Served from CDN (js.puter.com) | Built-in, served locally |
+| **Backend** | api.puter.com (shared) | localhost:4202 (per-user) |
+| **Storage** | Puter cloud storage | Local IPFS + SQLite |
+| **Authentication** | Account-based (email/password) | Wallet-based (Particle Auth) |
+| **Internet Required** | Yes (always) | No (works offline) |
+| **Data Ownership** | Puter servers | User's hardware |
+| **CDN Dependencies** | Yes (external) | No (100% local) |
+| **Scalability** | Centralized scaling | Per-node scaling |
+| **Cost** | Subscription/usage-based | One-time hardware cost |
+| **Privacy** | Data on Puter servers | Data on user's hardware |
+| **Customization** | Limited | Full control |
+
+### Data Flow Comparison
+
+#### Puter (Cloud) Data Flow:
+```
+User Browser
+    │
+    │ HTTPS
+    ▼
+CDN (js.puter.com) ──┐
+    │                │
+    │                │
+    ▼                ▼
+api.puter.com ──→ Cloud Storage
+    │
+    │ (User Data)
+    ▼
+Puter Servers
+```
+
+#### PC2 Node Data Flow:
+```
+User Browser
+    │
+    │ HTTP/HTTPS (Same Origin)
+    ▼
+Local Server (localhost:4202)
+    │
+    ├─→ SQLite DB (Sessions, Metadata)
+    │
+    └─→ IPFS Node (File Content)
+    │
+    └─→ Local Filesystem (IPFS blocks)
+```
+
+### Security Model Comparison
+
+#### Puter (Cloud):
+- **Trust Model:** Trust Puter infrastructure
+- **Data Location:** Puter servers
+- **Access Control:** Account-based, managed by Puter
+- **Encryption:** At-rest and in-transit (Puter manages keys)
+
+#### PC2 Node (Self-Hosted):
+- **Trust Model:** User controls hardware and software
+- **Data Location:** User's hardware
+- **Access Control:** Wallet-based, user manages keys
+- **Encryption:** User controls encryption (IPFS content-addressed)
+
+---
+
+**Status:** Phase 2 ~85% complete - Core functionality working, session persistence fixed  
+**Next Action:** WebSocket event delivery testing, comprehensive end-to-end testing
 

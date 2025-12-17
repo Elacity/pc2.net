@@ -29,6 +29,7 @@ export interface IPFSOptions {
 export class IPFSStorage {
   private helia: Helia | null = null;
   private fs: UnixFS | null = null;
+  private blockstore: FsBlockstore | null = null; // Store reference to original blockstore
   private repoPath: string;
   private isInitialized: boolean = false;
 
@@ -69,7 +70,7 @@ export class IPFSStorage {
       console.log(`   Repo path: ${this.repoPath}`);
 
       // Create blockstore and datastore
-      const blockstore = new FsBlockstore(blockstorePath);
+      this.blockstore = new FsBlockstore(blockstorePath);
       const datastore = new FsDatastore(datastorePath);
 
       // Create libp2p instance without WebRTC (Node.js doesn't need it)
@@ -100,7 +101,7 @@ export class IPFSStorage {
       // Create Helia node with custom libp2p (no WebRTC)
       // Let Helia start libp2p - don't start it ourselves
       this.helia = await createHelia({
-        blockstore,
+        blockstore: this.blockstore,
         datastore,
         libp2p
       });
@@ -217,22 +218,48 @@ export class IPFSStorage {
    * Retrieve file content from IPFS using CID
    */
   async getFile(cid: string): Promise<Buffer> {
-    const fs = this.getUnixFS();
+    if (!this.blockstore) {
+      throw new Error('Blockstore not initialized');
+    }
 
     try {
       // Import CID from string
       const { CID } = await import('multiformats/cid');
       const cidObj = CID.parse(cid);
 
-      // Get file from IPFS using UnixFS
-      const chunks: Uint8Array[] = [];
+      // Use exporter to properly reconstruct UnixFS files (fs.addBytes creates UnixFS structure)
+      // This handles multi-block files correctly
+      // IMPORTANT: Use the underlying FsBlockstore directly, not helia.blockstore (IdentityBlockstore wrapper)
+      const { exporter } = await import('ipfs-unixfs-exporter');
       
-      for await (const chunk of fs.cat(cidObj)) {
-        chunks.push(chunk);
+      const entry = await exporter(cidObj, this.blockstore);
+      
+      if (!entry) {
+        throw new Error(`Entry not found for CID: ${cid}`);
+      }
+      
+      if (entry.type !== 'file' && entry.type !== 'raw') {
+        throw new Error(`CID ${cid} is not a file (type: ${entry.type})`);
       }
 
-      // Concatenate all chunks into a single buffer
+      // Collect all chunks from the file content
+      const chunks: Uint8Array[] = [];
+      let totalChunks = 0;
+      
+      for await (const chunk of entry.content()) {
+        chunks.push(chunk);
+        totalChunks++;
+      }
+      
+      if (chunks.length === 0) {
+        throw new Error(`File content is empty for CID: ${cid}`);
+      }
+
+      // Log chunk info for debugging
       const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+      console.log(`[IPFS] Retrieved ${chunks.length} chunks, total size: ${totalLength} bytes for CID: ${cid}`);
+      
+      // Concatenate all chunks into a single buffer
       const buffer = Buffer.allocUnsafe(totalLength);
       let offset = 0;
       

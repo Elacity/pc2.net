@@ -8,6 +8,7 @@
 import { IPFSStorage } from './ipfs.js';
 import { DatabaseManager, FileMetadata } from './database.js';
 import { normalize, join, dirname } from 'path';
+import { logger } from '../utils/logger.js';
 
 export interface FileContent {
   content: Buffer | string;
@@ -67,7 +68,23 @@ export class FilesystemManager {
       throw new Error('IPFS is not available. File storage requires IPFS to be initialized.');
     }
     
+    // Calculate actual content size
+    const contentSize = Buffer.isBuffer(content) 
+      ? content.length 
+      : content instanceof Uint8Array
+      ? content.length
+      : Buffer.byteLength(content, 'utf8');
+    
+    logger.info(`[Filesystem] Storing file in IPFS: ${normalizedPath} (size: ${contentSize} bytes)`, {
+      contentType: Buffer.isBuffer(content) ? 'Buffer' : (content instanceof Uint8Array ? 'Uint8Array' : typeof content),
+      contentLength: contentSize
+    });
+    
     const ipfsHash = await this.ipfs.storeFile(content, { pin: true });
+    
+    // Verify the stored file size matches
+    const storedSize = Buffer.isBuffer(content) ? content.length : (content instanceof Uint8Array ? content.length : Buffer.byteLength(content, 'utf8'));
+    logger.info(`[Filesystem] File stored in IPFS: ${normalizedPath} -> CID: ${ipfsHash} (stored size: ${storedSize} bytes)`);
 
     // Calculate size
     const size = Buffer.isBuffer(content) 
@@ -104,9 +121,40 @@ export class FilesystemManager {
   async readFile(path: string, walletAddress: string): Promise<Buffer> {
     const normalizedPath = this.normalizePath(path);
 
+    logger.info(`[Filesystem] readFile called`, {
+      path,
+      normalizedPath,
+      walletAddress,
+      isIPFSAvailable: this.isIPFSAvailable()
+    });
+
     // Get file metadata from database
     const metadata = this.db.getFile(normalizedPath, walletAddress);
     if (!metadata) {
+      // List all files for this wallet to help debug
+      let allFiles: any[] = [];
+      try {
+        // Try to get all files for this wallet from database
+        const dbInstance = (this.db as any).getDB();
+        if (dbInstance) {
+          allFiles = dbInstance.prepare(`
+            SELECT path FROM files 
+            WHERE wallet_address = ?
+            LIMIT 10
+          `).all(walletAddress) || [];
+        }
+      } catch (e) {
+        // Ignore if we can't query
+        logger.debug(`[Filesystem] Could not query all files for debugging: ${e instanceof Error ? e.message : String(e)}`);
+      }
+      
+      logger.error(`[Filesystem] File not found in database`, {
+        path,
+        normalizedPath,
+        walletAddress,
+        totalFilesForWallet: allFiles.length,
+        samplePaths: allFiles.slice(0, 5).map((f: any) => f.path)
+      });
       throw new Error(`File not found: ${path}`);
     }
 
@@ -115,6 +163,17 @@ export class FilesystemManager {
     }
 
     if (!metadata.ipfs_hash) {
+      logger.error(`[Filesystem] File has no IPFS hash`, {
+        path,
+        normalizedPath,
+        walletAddress,
+        metadata: {
+          path: metadata.path,
+          size: metadata.size,
+          mime_type: metadata.mime_type,
+          has_ipfs_hash: !!metadata.ipfs_hash
+        }
+      });
       throw new Error(`File has no IPFS hash: ${path}`);
     }
 
@@ -123,7 +182,20 @@ export class FilesystemManager {
       throw new Error('IPFS is not available. Cannot retrieve file content.');
     }
     
-    return await this.ipfs.getFile(metadata.ipfs_hash);
+    logger.info(`[Filesystem] Retrieving file from IPFS: ${normalizedPath} (CID: ${metadata.ipfs_hash})`);
+    try {
+      const content = await this.ipfs.getFile(metadata.ipfs_hash);
+      logger.info(`[Filesystem] File retrieved from IPFS: ${normalizedPath} (size: ${content.length} bytes)`);
+      return content;
+    } catch (error) {
+      logger.error(`[Filesystem] Failed to retrieve file from IPFS`, {
+        path: normalizedPath,
+        cid: metadata.ipfs_hash,
+        error: error instanceof Error ? error.message : String(error),
+        errorStack: error instanceof Error ? error.stack : undefined
+      });
+      throw error;
+    }
   }
 
   /**
@@ -179,6 +251,20 @@ export class FilesystemManager {
       await this.ensureDirectory(parentPath, walletAddress);
     }
 
+    // Determine if directory should be public (only folders in /Public directory)
+    // Match mock server logic: only set is_public for folders actually inside /Public directory
+    // Examples:
+    //   /Public -> is_public = true
+    //   /Public/MyFolder -> is_public = true
+    //   /MyPublicFolder -> is_public = false (folder name contains "Public" but not in /Public directory)
+    //   /wallet/Public -> is_public = true
+    //   /wallet/Public/SubFolder -> is_public = true
+    // Check if path is exactly /Public or is a direct child of /Public
+    // Use more precise matching to avoid false positives
+    const isPublic = normalizedPath === '/Public' || 
+                     normalizedPath.startsWith('/Public/') ||
+                     (normalizedPath.includes('/Public/') && !normalizedPath.match(/\/Public[^/]/));
+    
     // Create directory metadata (no IPFS hash for directories)
     const metadata: FileMetadata = {
       path: normalizedPath,
@@ -187,7 +273,7 @@ export class FilesystemManager {
       size: 0,
       mime_type: null,
       is_dir: true,
-      is_public: false,
+      is_public: isPublic,
       created_at: Date.now(),
       updated_at: Date.now()
     };
@@ -199,10 +285,25 @@ export class FilesystemManager {
         throw new Error(`Path exists as a file: ${path}`);
       }
       // Directory already exists, return existing metadata
+      logger.info('[Filesystem] Directory already exists', { path: normalizedPath });
       return existing;
     }
 
+    logger.info('[Filesystem] Creating directory in database', {
+      path: normalizedPath,
+      wallet: walletAddress,
+      is_public: isPublic
+    });
+    
     this.db.createOrUpdateFile(metadata);
+    
+    // Verify it was created
+    const created = this.db.getFile(normalizedPath, walletAddress);
+    if (!created) {
+      throw new Error(`Failed to create directory: ${normalizedPath}`);
+    }
+    
+    logger.info('[Filesystem] Directory created and verified', { path: normalizedPath });
     return metadata;
   }
 
@@ -338,9 +439,21 @@ export class FilesystemManager {
       'svg': 'image/svg+xml',
       'pdf': 'application/pdf',
       'zip': 'application/zip',
+      // Video formats
       'mp4': 'video/mp4',
+      'mov': 'video/quicktime',
+      'webm': 'video/webm',
+      'mpg': 'video/mpeg',
+      'mpeg': 'video/mpeg',
+      'mpv': 'video/mpeg',
+      'avi': 'video/x-msvideo',
+      'mkv': 'video/x-matroska',
+      // Audio formats
       'mp3': 'audio/mpeg',
-      'wav': 'audio/wav'
+      'm4a': 'audio/mp4',
+      'wav': 'audio/wav',
+      'ogg': 'audio/ogg',
+      'flac': 'audio/flac'
     };
 
     return mimeTypes[ext] || null;

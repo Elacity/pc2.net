@@ -518,3 +518,4 @@ Infrastructure:
 
 **Both architectures serve different use cases and user preferences. Puter is ideal for users who want simplicity and managed services, while PC2 Node is ideal for users who prioritize privacy, control, and self-sovereignty.**
 
+

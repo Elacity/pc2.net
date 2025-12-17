@@ -6,8 +6,8 @@ import { Server as SocketIOServer } from 'socket.io';
 import { authenticate, corsMiddleware, errorHandler } from './middleware.js';
 import { handleWhoami } from './whoami.js';
 import { handleParticleAuth, handleGrantUserApp, handleGetUserAppToken } from './auth.js';
-import { handleStat, handleReaddir, handleRead, handleWrite, handleMkdir, handleDelete, handleMove } from './filesystem.js';
-import { handleSign, handleVersion, handleOSUser, handleKV, handleRAO, handleContactUs, handleDriversCall, handleGetWallets } from './other.js';
+import { handleStat, handleReaddir, handleRead, handleWrite, handleMkdir, handleDelete, handleMove, handleRename } from './filesystem.js';
+import { handleSign, handleVersion, handleOSUser, handleKV, handleRAO, handleContactUs, handleDriversCall, handleGetWallets, handleOpenItem, handleSuggestApps, handleItemMetadata, handleWriteFile } from './other.js';
 import { handleAPIInfo, handleGetLaunchApps, handleDF, handleBatch, handleCacheTimestamp, handleStats } from './info.js';
 import { handleFile } from './file.js';
 
@@ -94,9 +94,10 @@ export function setupAPI(app: Express): void {
   app.get('/auth/get-user-app-token', authenticate, handleGetUserAppToken);
   app.post('/auth/get-user-app-token', authenticate, handleGetUserAppToken);
 
-  // User info endpoints (require auth)
-  app.get('/whoami', authenticate, handleWhoami);
-  app.get('/os/user', authenticate, handleOSUser);
+  // User info endpoints (no auth required - return unauthenticated state if no token)
+  // Match mock server behavior: return 200 with username: null instead of 401
+  app.get('/whoami', handleWhoami);
+  app.get('/os/user', handleOSUser);
   app.get('/api/stats', authenticate, handleStats);
   app.get('/api/wallets', authenticate, handleGetWallets);
 
@@ -107,9 +108,16 @@ export function setupAPI(app: Express): void {
   app.get('/read', authenticate, handleRead);
   app.post('/read', authenticate, handleRead); // Also support POST for /read
   app.post('/write', authenticate, handleWrite);
+  // Filesystem endpoints (standard format)
   app.post('/mkdir', authenticate, handleMkdir);
   app.post('/delete', authenticate, handleDelete);
   app.post('/move', authenticate, handleMove);
+  app.post('/rename', authenticate, handleRename);
+  
+  // Filesystem endpoints (API format - matching mock server)
+  app.post('/api/files/mkdir', authenticate, handleMkdir);
+  app.post('/api/files/delete', authenticate, handleDelete);
+  app.post('/api/files/move', authenticate, handleMove);
   
   // Additional filesystem endpoints
   app.get('/df', authenticate, handleDF);
@@ -144,6 +152,19 @@ export function setupAPI(app: Express): void {
   // Note: Raw body capture must happen before body parser, but body parser is global
   // So we'll check rawBody in the handler if parsed body is empty
   app.post('/drivers/call', authenticate, handleDriversCall);
+
+  // Open item - Get app to open a file (require auth)
+  app.post('/open_item', authenticate, handleOpenItem);
+
+  // Suggest apps for a file (require auth)
+  app.post('/suggest_apps', authenticate, handleSuggestApps);
+
+  // Item metadata (require auth)
+  app.get('/itemMetadata', authenticate, handleItemMetadata);
+
+  // Write file using signed URL (require auth)
+  app.post('/writeFile', authenticate, handleWriteFile);
+  app.put('/writeFile', authenticate, handleWriteFile);
 
   // Error handling middleware (must be last)
   app.use(errorHandler);

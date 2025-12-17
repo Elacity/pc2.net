@@ -35,7 +35,17 @@ export function isAPIRoute(path: string): boolean {
     '/os/user',
     '/kv/',
     '/rao',
-    '/contactUs'
+    '/contactUs',
+    '/open_item',
+    '/suggest_apps',
+    '/file',
+    '/itemMetadata',
+    '/writeFile',
+    '/drivers/call',
+    '/get-launch-apps',
+    '/cache/',
+    '/batch',
+    '/df'
   ];
 
   for (const endpoint of puterEndpoints) {

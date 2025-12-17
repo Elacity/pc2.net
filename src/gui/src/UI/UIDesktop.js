@@ -348,21 +348,47 @@ async function UIDesktop(options) {
     })
 
     window.socket.on('item.removed', async (item) => {
+        console.log('[Frontend] ✅ Received item.removed event:', item, 'socket.id:', window.socket.id);
+        
         // don't update if this is the original client that initiated the action
-        if (item.original_client_socket_id === window.socket.id)
+        if (item.original_client_socket_id === window.socket.id) {
+            console.log('[Frontend] ⏭️  Skipping item.removed - same client (socket.id:', window.socket.id, 'original_client_socket_id:', item.original_client_socket_id, ')');
             return;
+        }
 
         // don't remove items if this was a descendants_only operation
-        if (item.descendants_only)
+        if (item.descendants_only) {
+            console.log('[Frontend] ⏭️  Skipping item.removed - descendants_only operation');
             return;
+        }
 
-        // hide all UIItems with matching uids 
-        $(`.item[data-path='${item.path}']`).fadeOut(150, function () {
-            // close all windows with matching uids
-            // $('.window-' + item.uid).close();
+        console.log('[Frontend] 🔍 Looking for items with data-path:', item.path);
+        // Use html_encode for path selector (matching other handlers)
+        const encodedPath = html_encode(item.path);
+        const matchingItems = $(`.item[data-path="${encodedPath}" i]`);
+        console.log('[Frontend] 📦 Found', matchingItems.length, 'matching items');
+        
+        if (matchingItems.length === 0) {
+            console.warn('[Frontend] ⚠️ No items found with data-path:', item.path, '- trying without case sensitivity');
+            // Try without html_encode as fallback
+            const fallbackItems = $(`.item[data-path="${item.path}" i]`);
+            console.log('[Frontend] 📦 Fallback search found', fallbackItems.length, 'items');
+            if (fallbackItems.length > 0) {
+                fallbackItems.fadeOut(150, function() {
+                    $(this).remove();
+                    $(`.window[data-path^="${html_encode(item.path)}/"]`).close();
+                });
+            }
+            return;
+        }
+        
+        // hide all UIItems with matching paths, then remove from DOM
+        matchingItems.fadeOut(150, function () {
+            // Actually remove from DOM after fadeout
+            $(this).remove();
             // close all windows that belong to a descendant of this item
-            // todo this has to be case-insensitive but the `i` selector doesn't work on ^=
-            $(`.window[data-path^="${item.path}/"]`).close();
+            $(`.window[data-path^="${html_encode(item.path)}/"]`).close();
+            console.log('[Frontend] ✅ Removed', matchingItems.length, 'item(s) from DOM');
         });
     })
 
@@ -424,6 +450,8 @@ async function UIDesktop(options) {
     })
 
     window.socket.on('item.moved', async (resp) => {
+        console.log('[Frontend] ✅ Received item.moved event:', resp, 'socket.id:', window.socket.id);
+        
         let fsentry = resp;
         // Notify all apps that are watching this item
         window.sendItemChangeEventToWatchingApps(fsentry.uid, {
@@ -433,8 +461,10 @@ async function UIDesktop(options) {
         })
 
         // don't update if this is the original client that initiated the action
-        if (resp.original_client_socket_id === window.socket.id)
+        if (resp.original_client_socket_id === window.socket.id) {
+            console.log('[Frontend] ⏭️  Skipping item.moved - same client (socket.id:', window.socket.id, 'original_client_socket_id:', resp.original_client_socket_id, ')');
             return;
+        }
 
         let dest_path = path.dirname(fsentry.path);
         let metadata = fsentry.metadata;
@@ -627,9 +657,13 @@ async function UIDesktop(options) {
     });
 
     window.socket.on('item.added', async (item) => {
+        console.log('[Frontend] ✅ Received item.added event:', item, 'socket.id:', window.socket.id);
+        
         // if item is empty, don't proceed
-        if (_.isEmpty(item))
+        if (_.isEmpty(item)) {
+            console.log('[Frontend] ⏭️  Skipping item.added - empty item');
             return;
+        }
 
         // Notify all apps that are watching this item
         window.sendItemChangeEventToWatchingApps(item.uid, {
@@ -642,8 +676,10 @@ async function UIDesktop(options) {
         });
 
         // Don't update if this is the original client that initiated the action
-        if (item.original_client_socket_id === window.socket.id)
+        if (item.original_client_socket_id === window.socket.id) {
+            console.log('[Frontend] ⏭️  Skipping item.added - same client (socket.id:', window.socket.id, 'original_client_socket_id:', item.original_client_socket_id, ')');
             return;
+        }
 
         // Update replaced items with matching uids
         if (item.overwritten_uid) {

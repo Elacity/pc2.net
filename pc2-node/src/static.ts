@@ -35,6 +35,22 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
     console.warn('   Run: npm run build:frontend');
   }
 
+  // Handle /puter.js/v2 - SDK file (must be served with correct MIME type)
+  // MUST be before express.static() middleware to override default MIME type
+  app.get('/puter.js/v2', (req: Request, res: Response, next: NextFunction) => {
+    const sdkPath = path.join(frontendPath, 'puter.js', 'v2');
+    
+    if (existsSync(sdkPath) && !statSync(sdkPath).isDirectory()) {
+      res.setHeader('Content-Type', 'application/javascript');
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      res.sendFile(sdkPath);
+      return;
+    }
+    
+    console.warn(`⚠️  SDK file not found: ${sdkPath}`);
+    next();
+  });
+
   // Serve static files with appropriate cache headers
   app.use(express.static(frontendPath, {
     // Cache control: long cache for assets, no cache for HTML
@@ -69,7 +85,7 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
       if (!isProduction) {
         res.setHeader('Content-Security-Policy', 
           "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: ws: wss: https:; " +
-          "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://js.puter.com https://cdn.jsdelivr.net https://challenges.cloudflare.com; " +
+          "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; " +
           "style-src 'self' 'unsafe-inline' https:; " +
           "img-src 'self' data: blob: https:; " +
           "font-src 'self' data: https: moz-extension: chrome-extension:; " +
@@ -237,7 +253,7 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
       if (!isProduction) {
         res.setHeader('Content-Security-Policy', 
           "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: ws: wss: https:; " +
-          "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://js.puter.com https://cdn.jsdelivr.net https://challenges.cloudflare.com; " +
+          "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; " +
           "style-src 'self' 'unsafe-inline' https:; " +
           "img-src 'self' data: blob: https:; " +
           "font-src 'self' data: https: moz-extension: chrome-extension:; " +
@@ -286,11 +302,45 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
   app.get('/apps/*', (req: Request, res: Response, next: NextFunction) => {
     const appPath = req.path.replace('/apps/', '');
     const projectRoot = path.resolve(__dirname, '../..');
+    
+    // Special handling for terminal app (located in src/terminal/ instead of src/backend/apps/terminal/)
+    const isTerminal = appPath.startsWith('terminal/') || appPath === 'terminal' || appPath === 'terminal/index.html';
+    const terminalRelativePath = isTerminal ? appPath.replace(/^terminal\/?/, '') || 'index.html' : null;
+    
+    // Special handling for phoenix app (located in src/phoenix/ instead of src/backend/apps/phoenix/)
+    const isPhoenix = appPath.startsWith('phoenix/') || appPath === 'phoenix' || appPath === 'phoenix/index.html';
+    const phoenixRelativePath = isPhoenix ? appPath.replace(/^phoenix\/?/, '') || 'index.html' : null;
+    
     const possiblePaths = [
+      // Standard app paths
       path.join(projectRoot, 'src/backend/apps', appPath),
       path.join(process.cwd(), 'src/backend/apps', appPath),
       path.join(process.cwd(), '../../src/backend/apps', appPath),
-      path.join('/Users/mtk/Documents/Cursor/pc2.net/src/backend/apps', appPath) // Fallback absolute path
+      path.join('/Users/mtk/Documents/Cursor/pc2.net/src/backend/apps', appPath), // Fallback absolute path
+      // Terminal app special paths (if it's the terminal app)
+      // Try dist/ first (built version), then assets/ (source)
+      ...(isTerminal && terminalRelativePath ? [
+        path.join(projectRoot, 'src/terminal/dist', terminalRelativePath),
+        path.join(process.cwd(), 'src/terminal/dist', terminalRelativePath),
+        path.join(process.cwd(), '../../src/terminal/dist', terminalRelativePath),
+        path.join('/Users/mtk/Documents/Cursor/pc2.net/src/terminal/dist', terminalRelativePath), // Fallback absolute path
+        path.join(projectRoot, 'src/terminal/assets', terminalRelativePath),
+        path.join(process.cwd(), 'src/terminal/assets', terminalRelativePath),
+        path.join(process.cwd(), '../../src/terminal/assets', terminalRelativePath),
+        path.join('/Users/mtk/Documents/Cursor/pc2.net/src/terminal/assets', terminalRelativePath) // Fallback absolute path
+      ] : []),
+      // Phoenix app special paths (if it's the phoenix app)
+      // Try dist/ first (built version), then assets/ (source)
+      ...(isPhoenix && phoenixRelativePath ? [
+        path.join(projectRoot, 'src/phoenix/dist', phoenixRelativePath),
+        path.join(process.cwd(), 'src/phoenix/dist', phoenixRelativePath),
+        path.join(process.cwd(), '../../src/phoenix/dist', phoenixRelativePath),
+        path.join('/Users/mtk/Documents/Cursor/pc2.net/src/phoenix/dist', phoenixRelativePath), // Fallback absolute path
+        path.join(projectRoot, 'src/phoenix/assets', phoenixRelativePath),
+        path.join(process.cwd(), 'src/phoenix/assets', phoenixRelativePath),
+        path.join(process.cwd(), '../../src/phoenix/assets', phoenixRelativePath),
+        path.join('/Users/mtk/Documents/Cursor/pc2.net/src/phoenix/assets', phoenixRelativePath) // Fallback absolute path
+      ] : [])
     ];
     
     for (const possiblePath of possiblePaths) {
@@ -312,6 +362,19 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
         
         if (mimeTypes[ext]) {
           res.setHeader('Content-Type', mimeTypes[ext]);
+        }
+        
+        // Special handling for app HTML files - inject correct SDK URL
+        // This applies to all apps (terminal, phoenix, player, viewer, pdf, editor, etc.)
+        if (ext === '.html') {
+          const baseUrl = req.protocol + '://' + req.get('host');
+          const sdkUrl = `${baseUrl}/puter.js/v2`;
+          let htmlContent = readFileSync(normalizedPath, 'utf8');
+          // Replace any hardcoded SDK URL with the local server's SDK URL
+          // This ensures apps work with PC2 node's local SDK
+          htmlContent = htmlContent.replace(/https?:\/\/[^'"]*\/puter\.js\/v2/g, sdkUrl);
+          res.send(htmlContent);
+          return;
         }
         
         res.sendFile(normalizedPath);
@@ -356,7 +419,7 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
     if (!isProduction) {
       res.setHeader('Content-Security-Policy', 
         "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: ws: wss: https:; " +
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://js.puter.com https://cdn.jsdelivr.net https://challenges.cloudflare.com; " +
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; " +
         "style-src 'self' 'unsafe-inline' https:; " +
         "img-src 'self' data: blob: https:; " +
         "font-src 'self' data: https: moz-extension: chrome-extension:; " +

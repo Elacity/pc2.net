@@ -1,4 +1,4 @@
-import express, { Express } from 'express';
+import express, { Express, Request, Response, NextFunction } from 'express';
 import { Server } from 'http';
 import { setupStaticServing } from './static.js';
 import { setupAPI } from './api/index.js';
@@ -19,7 +19,64 @@ export function createServer(options: ServerOptions): { app: Express; server: Se
   const app = express();
   
   // Middleware
-  app.use(express.json());
+  // Handle text/plain;actually=json content type (used by Puter SDK)
+  // Parse it as JSON by using express.text() first, then manually parsing in a follow-up middleware
+  app.use(express.text({ 
+    type: (req: any) => {
+      const contentType = req.headers['content-type'] || '';
+      return contentType.includes('text/plain') && contentType.includes('actually=json');
+    }
+  }));
+  
+  // Convert text body to JSON for text/plain;actually=json requests
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    const contentType = (req as any).get('Content-Type') || '';
+    if (contentType.includes('text/plain') && contentType.includes('actually=json') && typeof (req as any).body === 'string') {
+      try {
+        // Only parse if body is not empty
+        if ((req as any).body && (req as any).body.trim().length > 0) {
+          const parsed = JSON.parse((req as any).body);
+          (req as any).rawBody = (req as any).body; // Store raw for debugging
+          (req as any).body = parsed; // Replace string with parsed object
+        } else {
+          // Empty body, set to empty object
+          (req as any).rawBody = (req as any).body;
+          (req as any).body = {};
+        }
+      } catch (e) {
+        // Only log if body is not empty (to avoid noise from empty requests)
+        if ((req as any).body && (req as any).body.trim().length > 0) {
+          console.error('[Middleware] Failed to parse text/plain;actually=json:', e);
+        }
+        (req as any).rawBody = (req as any).body;
+        (req as any).body = {};
+      }
+    }
+    
+    // Capture raw body for /mkdir requests to debug body parsing issues
+    if (req.path === '/mkdir' && req.method === 'POST') {
+      const rawBody = (req as any).rawBody || (req as any).body;
+      console.log('[Server] /mkdir request - Content-Type:', contentType);
+      console.log('[Server] /mkdir request - Body type:', typeof rawBody);
+      console.log('[Server] /mkdir request - Body value:', rawBody);
+      console.log('[Server] /mkdir request - Query:', req.query);
+    }
+    
+    next();
+  });
+  
+  app.use(express.json({ 
+    verify: (req: any, res, buf) => {
+      // Capture raw body for debugging (especially for /drivers/call and /mkdir)
+      if (req.path === '/drivers/call' || req.path === '/mkdir') {
+        req.rawBody = buf.toString('utf8');
+        if (req.path === '/mkdir') {
+          console.log('[Server] /mkdir raw body buffer:', req.rawBody);
+          console.log('[Server] /mkdir raw body length:', buf.length);
+        }
+      }
+    }
+  }));
   app.use(express.urlencoded({ extended: true }));
   
   // Make database, filesystem, and config available to routes via app.locals
@@ -50,6 +107,10 @@ export function createServer(options: ServerOptions): { app: Express; server: Se
     database: options.database
   });
   
+  // Store pendingEvents reference for polling middleware
+  // This will be set by setupWebSocket
+  (app as any).__pendingEvents = null;
+  
   // Make WebSocket server available globally for event broadcasting
   setGlobalIO(io);
   
@@ -58,3 +119,4 @@ export function createServer(options: ServerOptions): { app: Express; server: Se
   
   return { app, server };
 }
+

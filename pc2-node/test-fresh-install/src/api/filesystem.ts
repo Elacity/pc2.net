@@ -133,18 +133,19 @@ export function handleStat(req: AuthenticatedRequest, res: Response): void {
       return;
     }
 
-    const stat: FileStat & { is_public?: boolean } = {
+    const stat: FileStat & { is_public?: boolean; ipfs_hash?: string | null } = {
       name: metadata.path.split('/').pop() || '/',
       path: resolvedPath, // Return the resolved path (with ~ expanded)
-      type: metadata.is_dir ? 'dir' : 'file',
+      type: metadata.mime_type || (metadata.is_dir ? 'dir' : 'file'), // Use mime_type for files, 'dir' for directories
       size: metadata.size,
-      created: metadata.created_at,
-      modified: metadata.updated_at,
+      created: Math.floor(metadata.created_at / 1000), // Convert to seconds (Unix timestamp)
+      modified: Math.floor(metadata.updated_at / 1000), // Convert to seconds (Unix timestamp)
       mime_type: metadata.mime_type,
       thumbnail: metadata.thumbnail || undefined,
       is_dir: metadata.is_dir,
       uid: `uuid-${metadata.path.replace(/\//g, '-')}`,
-      uuid: `uuid-${metadata.path.replace(/\//g, '-')}`
+      uuid: `uuid-${metadata.path.replace(/\//g, '-')}`,
+      ipfs_hash: metadata.ipfs_hash || null // Include IPFS Content ID (CID)
     };
     
     // Add is_public if it exists (for frontend to determine shared status)

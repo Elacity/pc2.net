@@ -41,6 +41,7 @@ async function UIWindowItemProperties (item_name, item_path, item_uid, left, top
     h += `<tr><td class="item-prop-label">${i18n('size')}</td><td class="item-prop-val item-prop-val-size"></td></tr>`;
     h += `<tr><td class="item-prop-label">${i18n('modified')}</td><td class="item-prop-val item-prop-val-modified"></td></tr>`;
     h += `<tr><td class="item-prop-label">${i18n('created')}</td><td class="item-prop-val item-prop-val-created"></td></tr>`;
+    h += '<tr class="item-prop-ipfs-hash"><td class="item-prop-label">IPFS Content ID</td><td class="item-prop-val item-prop-val-ipfs-hash"></td></tr>';
     h += `<tr><td class="item-prop-label">${i18n('versions')}</td><td class="item-prop-val item-prop-val-versions"></td></tr>`;
     h += `<tr><td class="item-prop-label">${i18n('associated_websites')}</td><td class="item-prop-val item-prop-val-websites">`;
     h += '</td></tr>';
@@ -141,14 +142,25 @@ async function UIWindowItemProperties (item_name, item_path, item_uid, left, top
             }
             // uid
             $(el_window).find('.item-prop-val-uid').html(fsentry.id);
-            // type
-            $(el_window).find('.item-prop-val-type').html(fsentry.is_dir ? 'Directory' : (fsentry.type === null ? '-' : fsentry.type));
+            // type - use mime_type if available, otherwise fallback to type or 'Directory'
+            const fileType = fsentry.is_dir ? 'Directory' : (fsentry.mime_type || fsentry.type || '-');
+            $(el_window).find('.item-prop-val-type').html(fileType);
             // size
             $(el_window).find('.item-prop-val-size').html(fsentry.size === null || fsentry.size === undefined ? '-' : window.byte_format(fsentry.size));
-            // modified
-            $(el_window).find('.item-prop-val-modified').html(fsentry.modified === 0 ? '-' : timeago.format(fsentry.modified * 1000));
-            // created
-            $(el_window).find('.item-prop-val-created').html(fsentry.created === 0 ? '-' : timeago.format(fsentry.created * 1000));
+            // modified - handle both seconds (Unix timestamp) and milliseconds
+            const modifiedTime = fsentry.modified ? (fsentry.modified < 10000000000 ? fsentry.modified * 1000 : fsentry.modified) : 0;
+            $(el_window).find('.item-prop-val-modified').html(modifiedTime === 0 ? '-' : timeago.format(modifiedTime));
+            // created - handle both seconds (Unix timestamp) and milliseconds
+            const createdTime = fsentry.created ? (fsentry.created < 10000000000 ? fsentry.created * 1000 : fsentry.created) : 0;
+            $(el_window).find('.item-prop-val-created').html(createdTime === 0 ? '-' : timeago.format(createdTime));
+            // IPFS Content ID (CID)
+            if (fsentry.ipfs_hash) {
+                $(el_window).find('.item-prop-val-ipfs-hash').html(`<code style="font-size: 11px; word-break: break-all;">${html_encode(fsentry.ipfs_hash)}</code>`);
+                $(el_window).find('.item-prop-ipfs-hash').show();
+            } else {
+                $(el_window).find('.item-prop-val-ipfs-hash').html('-');
+                $(el_window).find('.item-prop-ipfs-hash').show(); // Show row even if no hash (for directories)
+            }
             // subdomains
             if ( fsentry.subdomains && fsentry.subdomains.length > 0 ) {
                 fsentry.subdomains.forEach(subdomain => {

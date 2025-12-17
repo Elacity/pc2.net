@@ -1314,6 +1314,217 @@ Local Server (localhost:4202)
 
 ---
 
+## 🔧 Development Workflow & Multi-Level Change Process
+
+### Critical Lesson: Multi-Level Architecture Requires Multi-Level Updates
+
+**Problem:** PC2 Node uses a **three-layer architecture** that requires changes at multiple levels:
+1. **TypeScript Source** (`src/`) - Human-readable source code
+2. **Compiled JavaScript** (`dist/`) - Runtime code executed by Node.js
+3. **Frontend Bundle** (`frontend/`) - Built frontend served to browsers
+
+**Common Pitfall:** Making changes to TypeScript source but forgetting to:
+- Compile TypeScript → JavaScript (`npx tsc`)
+- Rebuild frontend bundle (`node scripts/build-frontend.js`)
+- Restart the server to load new code
+
+**Result:** Changes appear to "not work" even though source code is correct, because the running server is executing old compiled code.
+
+### Development Workflow Checklist
+
+When making changes, **ALWAYS** follow this sequence:
+
+#### Backend Changes (TypeScript → JavaScript)
+
+1. **Edit TypeScript source** (`pc2-node/test-fresh-install/src/**/*.ts`)
+2. **Compile TypeScript:**
+   ```bash
+   cd pc2-node/test-fresh-install
+   npx tsc --skipLibCheck  # Skip lib check if other files have errors
+   ```
+3. **Verify compilation:**
+   - Check `dist/` folder has updated `.js` files
+   - Check for TypeScript errors (fix if critical)
+   - **Note:** Some TypeScript errors in unrelated files can be ignored if they don't affect your changes
+4. **Restart server:**
+   ```bash
+   # Kill old process
+   lsof -ti:4202 | xargs kill -9
+   # Start new process
+   cd pc2-node/test-fresh-install && PORT=4202 npm start
+   ```
+
+#### Frontend Changes (Source → Bundle)
+
+1. **Edit frontend source** (`src/gui/src/**/*.js`)
+2. **Rebuild frontend bundle:**
+   ```bash
+   cd /Users/mtk/Documents/Cursor/pc2.net
+   node pc2-node/test-fresh-install/scripts/build-frontend.js
+   ```
+3. **Verify build:**
+   - Check `pc2-node/test-fresh-install/frontend/` has updated files
+   - Check `bundle.min.js` timestamp is recent
+4. **Hard refresh browser** (Cmd+Shift+R / Ctrl+Shift+R) to clear cache
+
+#### Full Stack Changes (Both Backend + Frontend)
+
+1. **Edit both TypeScript and frontend source**
+2. **Compile backend:**
+   ```bash
+   cd pc2-node/test-fresh-install && npx tsc --skipLibCheck
+   ```
+3. **Rebuild frontend:**
+   ```bash
+   node pc2-node/test-fresh-install/scripts/build-frontend.js
+   ```
+4. **Restart server:**
+   ```bash
+   lsof -ti:4202 | xargs kill -9
+   cd pc2-node/test-fresh-install && PORT=4202 npm start
+   ```
+5. **Hard refresh browser**
+
+### Quick Reference: File Locations
+
+| Layer | Source Location | Compiled/Built Location | How to Update |
+|-------|----------------|------------------------|---------------|
+| **Backend API** | `pc2-node/test-fresh-install/src/api/*.ts` | `pc2-node/test-fresh-install/dist/api/*.js` | `npx tsc` |
+| **WebSocket Events** | `pc2-node/test-fresh-install/src/websocket/*.ts` | `pc2-node/test-fresh-install/dist/websocket/*.js` | `npx tsc` |
+| **Frontend UI** | `src/gui/src/UI/*.js` | `pc2-node/test-fresh-install/frontend/bundle.min.js` | `node scripts/build-frontend.js` |
+| **Frontend Helpers** | `src/gui/src/helpers.js` | `pc2-node/test-fresh-install/frontend/bundle.min.js` | `node scripts/build-frontend.js` |
+
+### Common Scenarios & Solutions
+
+#### Scenario 1: "My TypeScript changes aren't working"
+**Check:**
+- ✅ Did you compile? (`npx tsc`)
+- ✅ Did you restart the server?
+- ✅ Are you looking at the right `dist/` file?
+- ✅ Check server logs for errors
+
+**Solution:** Compile and restart:
+```bash
+cd pc2-node/test-fresh-install
+npx tsc --skipLibCheck
+lsof -ti:4202 | xargs kill -9
+PORT=4202 npm start
+```
+
+#### Scenario 2: "My frontend changes aren't showing"
+**Check:**
+- ✅ Did you rebuild the frontend? (`node scripts/build-frontend.js`)
+- ✅ Did you hard refresh the browser? (Cmd+Shift+R)
+- ✅ Is the browser caching the old bundle?
+
+**Solution:** Rebuild and hard refresh:
+```bash
+node pc2-node/test-fresh-install/scripts/build-frontend.js
+# Then in browser: Cmd+Shift+R (Mac) or Ctrl+Shift+R (Windows/Linux)
+```
+
+#### Scenario 3: "WebSocket events aren't working after backend changes"
+**Check:**
+- ✅ Backend compiled? (`npx tsc`)
+- ✅ Server restarted?
+- ✅ Frontend still connected? (Check browser console for WebSocket connection)
+
+**Solution:** Full restart:
+```bash
+# Compile backend
+cd pc2-node/test-fresh-install && npx tsc --skipLibCheck
+
+# Kill and restart server
+lsof -ti:4202 | xargs kill -9
+PORT=4202 npm start
+
+# Rebuild frontend if you changed event handlers
+node pc2-node/test-fresh-install/scripts/build-frontend.js
+```
+
+#### Scenario 4: "TypeScript compilation fails but I only changed one file"
+**Common causes:**
+- Other files have pre-existing TypeScript errors
+- Type definitions changed
+- Import paths broken
+
+**Solution:** Use `--skipLibCheck` to compile despite errors in unrelated files:
+```bash
+npx tsc --skipLibCheck
+```
+
+**Note:** Only skip lib check if errors are in files you didn't modify. Fix errors in files you actually changed.
+
+### Debugging Multi-Level Issues
+
+#### Step 1: Verify Source Code
+- Check the source file has your changes
+- Check syntax is correct
+- Check imports are correct
+
+#### Step 2: Verify Compiled Code
+- Check `dist/` file has your changes
+- Compare source and compiled side-by-side
+- Check for compilation errors
+
+#### Step 3: Verify Running Code
+- Check server logs for your changes executing
+- Add `console.log()` statements to verify code path
+- Check browser console for frontend changes
+
+#### Step 4: Verify Browser Cache
+- Hard refresh (Cmd+Shift+R)
+- Check Network tab - is bundle.min.js recent?
+- Clear browser cache if needed
+
+### Best Practices
+
+1. **Always compile after TypeScript changes** - Don't assume auto-compilation
+2. **Always rebuild frontend after JS changes** - Bundle doesn't auto-update
+3. **Always restart server after backend changes** - Node.js doesn't hot-reload
+4. **Always hard refresh browser after frontend changes** - Browsers cache aggressively
+5. **Check logs first** - Server logs and browser console tell you what's actually running
+6. **Verify file timestamps** - `ls -la dist/` and `ls -la frontend/` show when files were last updated
+
+### Emergency: Direct Compiled JS Edits
+
+**When to use:** TypeScript compilation is broken but you need to test a fix immediately.
+
+**How to do it safely:**
+1. Edit `dist/**/*.js` directly
+2. Test the change
+3. **IMMEDIATELY** apply the same change to `src/**/*.ts`
+4. Fix TypeScript compilation
+5. Recompile to verify
+
+**Warning:** Direct JS edits are temporary. Always sync back to TypeScript source or you'll lose changes on next compile.
+
+### Example: Real-Time File Operations Fix
+
+**Problem:** File rename loses thumbnail until page refresh.
+
+**Multi-level fix required:**
+
+1. **Backend (TypeScript):**
+   - Edit `src/api/filesystem.ts` - Add `thumbnail` to `broadcastItemRenamed` call
+   - Edit `src/websocket/events.ts` - Add `thumbnail` parameter to function signature
+   - Compile: `npx tsc --skipLibCheck`
+   - Restart server
+
+2. **Frontend (JavaScript):**
+   - Edit `src/gui/src/UI/UIDesktop.js` - Update `item.renamed` handler to use thumbnail
+   - Rebuild: `node scripts/build-frontend.js`
+   - Hard refresh browser
+
+3. **Verification:**
+   - Check server logs show thumbnail in event
+   - Check browser console shows thumbnail received
+   - Test rename operation - thumbnail should appear immediately
+
+**Key insight:** All three layers (backend source → compiled backend → frontend bundle) must be updated for the fix to work.
+
+---
+
 **Status:** Phase 2 ✅ **100% COMPLETE** - Core functionality working, real-time file operations fully working  
 **Next Action:** Phase 3 - Packaging & Deployment (Docker, Debian, macOS packages)
 

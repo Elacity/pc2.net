@@ -29,7 +29,7 @@ function findSchemaFile(): string {
   }
   throw new Error(`Schema file not found. Tried: ${SCHEMA_FILE} and ${sourceSchema}`);
 }
-const CURRENT_VERSION = 1;
+const CURRENT_VERSION = 2;
 
 interface Migration {
   version: number;
@@ -86,9 +86,21 @@ export function runMigrations(db: Database.Database): void {
   }
 
   if (currentVersion < CURRENT_VERSION) {
-    // Future migrations would go here
     console.log(`📦 Running migrations from version ${currentVersion} to ${CURRENT_VERSION}...`);
-    // Add migration logic here as needed
+    
+    // Migration 2: Add thumbnail column to files table
+    if (currentVersion < 2) {
+      try {
+        db.exec('ALTER TABLE files ADD COLUMN thumbnail TEXT');
+        console.log('✅ Added thumbnail column to files table');
+      } catch (error: any) {
+        // Column might already exist (e.g., from fresh install with new schema)
+        if (!error.message.includes('duplicate column')) {
+          console.warn(`⚠️  Migration 2 warning: ${error.message}`);
+        }
+      }
+    }
+    
     recordMigration(db, CURRENT_VERSION);
     console.log('✅ Migrations completed');
   } else if (currentVersion === CURRENT_VERSION) {

@@ -30,6 +30,7 @@ export interface FileMetadata {
   ipfs_hash: string | null;
   size: number;
   mime_type: string | null;
+  thumbnail: string | null;
   is_dir: boolean;
   is_public: boolean;
   created_at: number;
@@ -180,6 +181,19 @@ export class DatabaseManager {
   }
 
   /**
+   * Get all active sessions (not expired)
+   */
+  getAllActiveSessions(): Session[] {
+    const db = this.getDB();
+    const rows = db.prepare(`
+      SELECT * FROM sessions 
+      WHERE expires_at > ?
+      ORDER BY created_at DESC
+    `).all(Date.now()) as Session[];
+    return rows;
+  }
+
+  /**
    * Delete session
    */
   deleteSession(token: string): void {
@@ -204,6 +218,14 @@ export class DatabaseManager {
     db.prepare('DELETE FROM sessions WHERE wallet_address = ?').run(walletAddress);
   }
 
+  /**
+   * Update session expiration time
+   */
+  updateSessionExpiration(token: string, newExpiresAt: number): void {
+    const db = this.getDB();
+    db.prepare('UPDATE sessions SET expires_at = ? WHERE token = ?').run(newExpiresAt, token);
+  }
+
   // ============================================================================
   // File Operations
   // ============================================================================
@@ -214,12 +236,13 @@ export class DatabaseManager {
   createOrUpdateFile(metadata: FileMetadata): void {
     const db = this.getDB();
     db.prepare(`
-      INSERT INTO files (path, wallet_address, ipfs_hash, size, mime_type, is_dir, is_public, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO files (path, wallet_address, ipfs_hash, size, mime_type, thumbnail, is_dir, is_public, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(path, wallet_address) DO UPDATE SET
         ipfs_hash = excluded.ipfs_hash,
         size = excluded.size,
         mime_type = excluded.mime_type,
+        thumbnail = excluded.thumbnail,
         is_dir = excluded.is_dir,
         is_public = excluded.is_public,
         updated_at = excluded.updated_at
@@ -229,6 +252,7 @@ export class DatabaseManager {
       metadata.ipfs_hash,
       metadata.size,
       metadata.mime_type,
+      metadata.thumbnail || null,
       metadata.is_dir ? 1 : 0,
       metadata.is_public ? 1 : 0,
       metadata.created_at,

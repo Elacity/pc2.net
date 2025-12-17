@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS files (
   ipfs_hash TEXT,
   size INTEGER DEFAULT 0,
   mime_type TEXT,
+  thumbnail TEXT,
   is_dir INTEGER DEFAULT 0,
   is_public INTEGER DEFAULT 0,
   created_at INTEGER NOT NULL,

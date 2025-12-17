@@ -516,6 +516,13 @@ export async function handleBatch(req: AuthenticatedRequest, res: Response): Pro
             }
           }
         } catch (error) {
+          logger.error('[Batch] Error uploading file:', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            errorCode: (error as any)?.code,
+            errorStack: error instanceof Error ? error.stack : undefined,
+            filename: file.originalname || file.name,
+            filePath: filePath
+          });
           results.push({
             success: false,
             error: error instanceof Error ? error.message : 'Unknown error',
@@ -639,7 +646,7 @@ export function handleStats(req: AuthenticatedRequest, res: Response): void {
     const walletAddress = req.user.wallet_address;
     
     // Default storage limit: 10GB
-    const storageLimit = 10 * 1024 * 1024 * 1024; // 10 GB
+      const storageLimit = 10 * 1024 * 1024 * 1024; // 10 GB
     
     // If database doesn't exist, return empty stats
     if (!db) {

@@ -21,14 +21,18 @@ import { logger } from '../utils/logger.js';
 export function handleStat(req: AuthenticatedRequest, res: Response): void {
   const filesystem = (req.app.locals.filesystem as FilesystemManager | undefined);
   // Support both GET (query param) and POST (body param)
-  // Also support various field names: path, file, subject
-  const path = (req.query.path as string) || 
-               (req.query.file as string) ||
-               (req.query.subject as string) ||
-               (req.body?.path as string) || 
-               (req.body?.file as string) ||
-               (req.body?.subject as string) ||
-               '/';
+  // Also support various field names: path, file, subject, uid, uuid
+  let path = (req.query.path as string) || 
+             (req.query.file as string) ||
+             (req.query.subject as string) ||
+             (req.query.uid as string) ||
+             (req.query.uuid as string) ||
+             (req.body?.path as string) || 
+             (req.body?.file as string) ||
+             (req.body?.subject as string) ||
+             (req.body?.uid as string) ||
+             (req.body?.uuid as string) ||
+             '/';
 
   logger.info(`[Stat] Request received: method=${req.method}, path=${path}, query=${JSON.stringify(req.query)}, body=${JSON.stringify(req.body)}, hasUser=${!!req.user}`);
 
@@ -43,6 +47,40 @@ export function handleStat(req: AuthenticatedRequest, res: Response): void {
     logger.error(`[Stat] User object exists but wallet_address is null/undefined`);
     res.status(401).json({ error: 'Invalid user session - wallet address missing' });
     return;
+  }
+
+  // Handle UUID/UID parameter (convert uuid-/path/to/file to /path/to/file)
+  // This is used by the properties window which calls puter.fs.stat({ uid: item_uid })
+  if (path.startsWith('uuid-')) {
+    const walletAddress = req.user.wallet_address;
+    const userRoot = `/${walletAddress}`;
+    
+    // Get ALL files recursively using database directly
+    const db = (req.app.locals.db as any);
+    if (db && typeof db.listFiles === 'function' && filesystem) {
+      const allFiles = db.listFiles(userRoot, walletAddress) as FileMetadata[];
+      
+      // Find file whose UUID matches exactly
+      let foundMetadata: FileMetadata | null = null;
+      for (const file of allFiles) {
+        // Generate UUID the same way: uuid-${path.replace(/\//g, '-')}
+        const fileUuid = `uuid-${file.path.replace(/\//g, '-')}`;
+        if (fileUuid === path) {
+          foundMetadata = file;
+          break;
+        }
+      }
+      
+      if (foundMetadata) {
+        path = foundMetadata.path;
+        logger.info(`[Stat] Found file by UUID lookup: ${path} (UUID: ${req.query.uid || req.body?.uid})`);
+      } else {
+        logger.warn(`[Stat] UUID not found in database: ${path}, searched ${allFiles.length} files`);
+        // Will fall through and return 404
+      }
+    } else {
+      logger.warn(`[Stat] Cannot lookup UUID - database or filesystem not available`);
+    }
   }
 
   // Handle ~ (home directory) - replace with user's wallet address
@@ -136,11 +174,11 @@ export function handleStat(req: AuthenticatedRequest, res: Response): void {
     const stat: FileStat & { is_public?: boolean; ipfs_hash?: string | null } = {
       name: metadata.path.split('/').pop() || '/',
       path: resolvedPath, // Return the resolved path (with ~ expanded)
-      type: metadata.mime_type || (metadata.is_dir ? 'dir' : 'file'), // Use mime_type for files, 'dir' for directories
+      type: metadata.is_dir ? 'dir' : 'file', // FileStat requires 'file' | 'dir'
       size: metadata.size,
       created: Math.floor(metadata.created_at / 1000), // Convert to seconds (Unix timestamp)
       modified: Math.floor(metadata.updated_at / 1000), // Convert to seconds (Unix timestamp)
-      mime_type: metadata.mime_type,
+      mime_type: metadata.mime_type, // MIME type is separate field (e.g., 'image/jpeg')
       thumbnail: metadata.thumbnail || undefined,
       is_dir: metadata.is_dir,
       uid: `uuid-${metadata.path.replace(/\//g, '-')}`,

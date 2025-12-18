@@ -1530,10 +1530,12 @@ npx tsc --skipLibCheck
 
 ---
 
-## 🚀 Feature Roadmap: Beyond Phase 2
+## 🚀 Potential Future Features (Post-Phase 2)
+
+> **Status:** These features are proposed for future consideration. They are not part of the current implementation plan but represent opportunities to enhance PC2's value proposition.
 
 ### Overview
-Based on the current PC2 architecture and self-hosted vision, here are strategic feature proposals that would enhance the platform's value and differentiate it from traditional cloud storage solutions.
+Based on the current PC2 architecture and self-hosted vision, here are strategic feature proposals that would enhance the platform's value and differentiate it from traditional cloud storage solutions. These are **potential enhancements** to be evaluated and prioritized after Phase 2 completion.
 
 ### Feature Categories
 
@@ -2005,21 +2007,23 @@ Based on the current PC2 architecture and self-hosted vision, here are strategic
 
 ---
 
-### Recommended Implementation Priority
+### Potential Implementation Priority (For Future Consideration)
 
-#### **Phase 2.5: Essential Enhancements** (Before Phase 3)
-1. ✅ **Permanent Delete from Trash** - DONE
+> **Note:** These priorities are suggestions for future evaluation. Actual implementation will depend on user feedback, technical feasibility assessment, and business priorities.
+
+#### **Potential Phase 2.5: Essential Enhancements** (Before Phase 3)
+1. ✅ **Permanent Delete from Trash** - ✅ COMPLETE
 2. 🔄 **Advanced Search & Indexing** - High value, builds on existing
 3. 🔄 **File Versioning** - Leverages IPFS perfectly
 4. 🔄 **End-to-End Encryption** - Critical for privacy-focused users
 
-#### **Phase 3.5: User Experience** (After Packaging)
+#### **Potential Phase 3.5: User Experience** (After Packaging)
 5. **Decentralized File Sharing** - Core differentiator
 6. **Storage Analytics Dashboard** - Helps users manage storage
 7. **Advanced File Preview** - Improves daily UX
 8. **Multi-User Support** - Enables team/family use
 
-#### **Phase 4+: Advanced Features**
+#### **Potential Phase 4+: Advanced Features**
 9. **Backup & Sync** - Redundancy and multi-device
 10. **API & Webhooks** - Developer features
 11. **PC2 Node Federation** - Revolutionary decentralized network

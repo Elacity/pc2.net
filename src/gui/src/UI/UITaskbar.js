@@ -53,6 +53,13 @@ async function UITaskbar (options) {
     // Set global taskbar position
     window.taskbar_position = taskbar_position;
 
+    // Ensure taskbar_height is set before creating taskbar HTML
+    // If taskbar_height is 0 or undefined, use default (50px)
+    if (!window.taskbar_height || window.taskbar_height === 0) {
+        window.taskbar_height = window.default_taskbar_height || 50;
+        console.log('[UITaskbar]: taskbar_height was 0/undefined, setting to default:', window.taskbar_height);
+    }
+
     // get launch apps
     $.ajax({
         url: `${window.api_origin }/get-launch-apps?icon_size=64`,
@@ -79,11 +86,22 @@ async function UITaskbar (options) {
     console.log('[UITaskbar]: Appending taskbar to .desktop, desktop element exists:', $('.desktop').length > 0, 'taskbar_height:', window.taskbar_height, 'taskbar_position:', taskbar_position);
     $('.desktop').append(h);
     
+    // Ensure taskbar has correct height after appending (in case it was set to 0)
+    const $taskbar = $('.taskbar').last();
+    if ($taskbar.length > 0) {
+        const currentHeight = parseInt($taskbar.css('height')) || 0;
+        if (currentHeight === 0 || !currentHeight) {
+            const correctHeight = window.taskbar_height || window.default_taskbar_height || 50;
+            $taskbar.css('height', `${correctHeight}px`);
+            console.log('[UITaskbar]: Fixed taskbar height from', currentHeight, 'to', correctHeight);
+        }
+    }
+    
     // Explicitly show the taskbar and desktop to ensure visibility
     $('.taskbar').show();
     $('.desktop').css('display', 'grid');
     
-    console.log('[UITaskbar]: Taskbar appended, taskbar element exists:', $('.taskbar').length > 0, 'taskbar visible:', $('.taskbar').is(':visible'));
+    console.log('[UITaskbar]: Taskbar appended, taskbar element exists:', $('.taskbar').length > 0, 'taskbar visible:', $('.taskbar').is(':visible'), 'taskbar height:', $('.taskbar').last().css('height'));
 
     //---------------------------------------------
     // add `Start` to taskbar

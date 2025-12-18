@@ -1528,3 +1528,544 @@ npx tsc --skipLibCheck
 **Status:** Phase 2 ✅ **100% COMPLETE** - Core functionality working, real-time file operations fully working  
 **Next Action:** Phase 3 - Packaging & Deployment (Docker, Debian, macOS packages)
 
+---
+
+## 🚀 Feature Roadmap: Beyond Phase 2
+
+### Overview
+Based on the current PC2 architecture and self-hosted vision, here are strategic feature proposals that would enhance the platform's value and differentiate it from traditional cloud storage solutions.
+
+### Feature Categories
+
+#### 📁 **File Management & Organization**
+
+##### 1. **Advanced Search & Indexing**
+**Priority:** High | **Complexity:** Medium | **Value:** High
+
+**Features:**
+- Full-text search across file contents (PDFs, documents, code files)
+- Metadata search (tags, custom properties, IPFS CIDs)
+- Advanced filters (date range, file type, size, owner)
+- Search history and saved searches
+- Indexing service that runs in background
+
+**Technical Approach:**
+- Use `pdfjs-dist` (already in dependencies) for PDF text extraction
+- Integrate with IPFS content for searchable metadata
+- SQLite FTS5 extension for full-text search
+- Background worker process for indexing
+
+**Why It Matters:**
+- Self-hosted users need powerful search without relying on external services
+- Leverages IPFS content-addressing for unique search capabilities
+- Differentiates from basic file managers
+
+---
+
+##### 2. **File Versioning & History**
+**Priority:** Medium | **Complexity:** Medium | **Value:** High
+
+**Features:**
+- Automatic version snapshots on file changes
+- Version browser UI (similar to Google Docs)
+- Rollback to previous versions
+- Version diff viewer for text files
+- IPFS-based version storage (each version = new CID)
+
+**Technical Approach:**
+- Store version metadata in SQLite with IPFS CIDs
+- Use IPFS content-addressing for immutable version history
+- Frontend version browser component
+- API endpoint: `/versions?path=...`
+
+**Why It Matters:**
+- Self-hosted users need version control without Git
+- IPFS's content-addressing is perfect for versioning
+- Provides safety net for accidental edits
+
+---
+
+##### 3. **Smart Folders & Collections**
+**Priority:** Medium | **Complexity:** Low | **Value:** Medium
+
+**Features:**
+- Virtual folders based on search criteria
+- Tag-based organization
+- Smart collections (e.g., "Recent Images", "Large Files", "Unused Files")
+- Auto-organize rules (move files based on type/date)
+
+**Technical Approach:**
+- Store smart folder definitions in database
+- Dynamic folder contents based on queries
+- Frontend UI for creating/managing smart folders
+
+**Why It Matters:**
+- Reduces manual organization overhead
+- Leverages existing search/indexing infrastructure
+- Modern file management expectation
+
+---
+
+#### 🔗 **Sharing & Collaboration**
+
+##### 4. **Decentralized File Sharing**
+**Priority:** High | **Complexity:** High | **Value:** Very High
+
+**Features:**
+- Share files via IPFS CID (public or private)
+- Time-limited share links with expiration
+- Password-protected shares
+- Share analytics (views, downloads)
+- Direct IPFS peer-to-peer sharing
+
+**Technical Approach:**
+- Generate shareable IPFS links
+- Store share metadata in database (expiration, password hash)
+- IPFS gateway integration for public shares
+- WebRTC or libp2p for direct P2P sharing
+
+**Why It Matters:**
+- Core differentiator: decentralized sharing without central server
+- Leverages IPFS's native sharing capabilities
+- Privacy-first approach (user controls sharing)
+
+---
+
+##### 5. **Multi-User Support & Permissions**
+**Priority:** Medium | **Complexity:** Medium | **Value:** High
+
+**Features:**
+- Multiple wallet addresses per node
+- Folder-level permissions (read, write, admin)
+- User groups/roles
+- Activity logs (who did what, when)
+- Invite system (share wallet address for access)
+
+**Technical Approach:**
+- Extend database schema for permissions
+- Permission middleware for API endpoints
+- Frontend permission UI
+- Activity logging system
+
+**Why It Matters:**
+- Enables family/team use cases
+- Foundation for collaboration features
+- Differentiates from single-user solutions
+
+---
+
+#### 🔒 **Security & Privacy**
+
+##### 6. **End-to-End Encryption**
+**Priority:** High | **Complexity:** High | **Value:** Very High
+
+**Features:**
+- Client-side encryption before IPFS upload
+- Encrypted file metadata
+- Zero-knowledge architecture (server can't read files)
+- Key management (user's wallet as key derivation)
+- Encrypted sharing (recipient's wallet for key exchange)
+
+**Technical Approach:**
+- Use Web Crypto API for encryption
+- Encrypt files before IPFS storage
+- Store encryption keys encrypted with user's wallet
+- Implement key derivation from wallet signature
+
+**Why It Matters:**
+- Critical for self-hosted privacy-focused users
+- True "your data, your control" architecture
+- Competitive advantage over traditional cloud storage
+
+---
+
+##### 7. **Backup & Sync**
+**Priority:** High | **Complexity:** Medium | **Value:** High
+
+**Features:**
+- Automated backups to external IPFS nodes
+- Sync between multiple PC2 nodes
+- Backup scheduling (daily, weekly, custom)
+- Restore from backup UI
+- Backup verification and integrity checks
+
+**Technical Approach:**
+- Background backup service
+- IPFS pinning to external nodes
+- Sync protocol for multi-node setups
+- Backup manifest with file CIDs
+
+**Why It Matters:**
+- Redundancy for self-hosted users
+- Disaster recovery capability
+- Multi-device sync use case
+
+---
+
+#### ⚡ **Performance & Optimization**
+
+##### 8. **Intelligent Caching & Prefetching**
+**Priority:** Medium | **Complexity:** Medium | **Value:** Medium
+
+**Features:**
+- Predictive file prefetching (based on usage patterns)
+- Smart thumbnail caching
+- Offline mode with service worker
+- Progressive file loading (stream large files)
+- CDN-like edge caching for frequently accessed files
+
+**Technical Approach:**
+- Service worker for offline support
+- Usage analytics for prefetching decisions
+- Browser IndexedDB for local cache
+- Streaming API for large file downloads
+
+**Why It Matters:**
+- Improves UX for remote access scenarios
+- Reduces bandwidth usage
+- Makes PC2 feel faster and more responsive
+
+---
+
+##### 9. **Storage Optimization**
+**Priority:** Medium | **Complexity:** Medium | **Value:** Medium
+
+**Features:**
+- Deduplication (same file = same IPFS CID = stored once)
+- Compression for text files
+- Storage quota management
+- Storage analytics (what's using space)
+- Cleanup tools (find and remove duplicates)
+
+**Technical Approach:**
+- Leverage IPFS deduplication (already happens!)
+- Add compression layer for text files
+- Storage usage dashboard
+- Duplicate detection algorithm
+
+**Why It Matters:**
+- Maximizes storage efficiency
+- Important for resource-constrained devices (Raspberry Pi)
+- IPFS already provides deduplication - just need to surface it
+
+---
+
+#### 🎨 **User Experience**
+
+##### 10. **Advanced File Preview**
+**Priority:** Medium | **Complexity:** Low | **Value:** Medium
+
+**Features:**
+- In-browser preview for more file types (videos, audio, code)
+- Markdown rendering
+- Code syntax highlighting
+- Image gallery view
+- PDF viewer (already have pdfjs-dist!)
+
+**Technical Approach:**
+- Extend existing viewer app
+- Add code editor component for syntax highlighting
+- Video/audio player integration
+- Markdown renderer
+
+**Why It Matters:**
+- Reduces need to download files
+- Better user experience
+- Leverages existing app infrastructure
+
+---
+
+##### 11. **Customizable UI & Themes**
+**Priority:** Low | **Complexity:** Low | **Value:** Low-Medium
+
+**Features:**
+- Dark/light theme toggle
+- Custom color schemes
+- Desktop wallpaper customization
+- Icon pack support
+- Layout preferences (grid size, view modes)
+
+**Technical Approach:**
+- CSS variables for theming
+- User preferences stored in database
+- Theme selector UI
+
+**Why It Matters:**
+- Personalization increases user satisfaction
+- Low effort, decent impact
+
+---
+
+#### 🔌 **Integration & Interoperability**
+
+##### 12. **API & Webhooks**
+**Priority:** Medium | **Complexity:** Medium | **Value:** High
+
+**Features:**
+- RESTful API for external integrations
+- Webhook system (file created, deleted, shared)
+- API key management
+- Rate limiting
+- API documentation
+
+**Technical Approach:**
+- Extend existing API endpoints
+- Webhook queue system
+- API key authentication middleware
+- OpenAPI/Swagger documentation
+
+**Why It Matters:**
+- Enables automation and integrations
+- Makes PC2 programmable
+- Attracts developer users
+
+---
+
+##### 13. **Import/Export Tools**
+**Priority:** Medium | **Complexity:** Medium | **Value:** Medium
+
+**Features:**
+- Import from Google Drive, Dropbox, OneDrive
+- Export to standard formats
+- Bulk import/export
+- Migration wizard
+- Backup format compatibility
+
+**Technical Approach:**
+- OAuth integration for cloud services
+- Batch processing for imports
+- Standard export formats (ZIP, tar)
+
+**Why It Matters:**
+- Lowers barrier to entry
+- Migration path from existing services
+- User onboarding tool
+
+---
+
+#### 📊 **Analytics & Insights**
+
+##### 14. **Storage Analytics Dashboard**
+**Priority:** Low | **Complexity:** Low | **Value:** Medium
+
+**Features:**
+- Storage usage by file type
+- Storage trends over time
+- Largest files identification
+- Unused files detection
+- IPFS node health monitoring
+
+**Technical Approach:**
+- Aggregate data from database
+- Visualization components
+- Background analytics calculation
+
+**Why It Matters:**
+- Helps users manage storage
+- Provides insights into usage patterns
+- Useful for optimization
+
+---
+
+##### 15. **Activity Feed & Audit Log**
+**Priority:** Medium | **Complexity:** Low | **Value:** Medium
+
+**Features:**
+- Timeline of file operations
+- User activity history
+- Search activity log
+- Export activity logs
+- Privacy controls (disable logging)
+
+**Technical Approach:**
+- Activity logging in database
+- Activity feed UI component
+- Filtering and search for logs
+
+**Why It Matters:**
+- Transparency for users
+- Useful for troubleshooting
+- Security audit capability
+
+---
+
+#### 🛠️ **Developer & Power User Features**
+
+##### 16. **Terminal Integration**
+**Priority:** Medium | **Complexity:** Medium | **Value:** High
+
+**Features:**
+- Full terminal access to node filesystem
+- Terminal in browser (already have terminal app!)
+- SSH access support
+- Command history
+- Custom shell scripts
+
+**Technical Approach:**
+- Enhance existing terminal app
+- File system integration
+- Command execution API
+
+**Why It Matters:**
+- Power users expect terminal access
+- Enables automation and scripting
+- Differentiates from consumer cloud storage
+
+---
+
+##### 17. **Plugin/Extension System**
+**Priority:** Low | **Complexity:** High | **Value:** High (Long-term)
+
+**Features:**
+- Plugin API for custom functionality
+- Plugin marketplace
+- Custom file handlers
+- UI extensions
+- Background workers
+
+**Technical Approach:**
+- Plugin architecture design
+- Sandboxed plugin execution
+- Plugin registry
+
+**Why It Matters:**
+- Extensibility without core changes
+- Community-driven features
+- Long-term platform growth
+
+---
+
+#### 🌐 **Network & Distribution**
+
+##### 18. **PC2 Node Discovery & Federation**
+**Priority:** Low | **Complexity:** High | **Value:** Very High (Long-term)
+
+**Features:**
+- Discover other PC2 nodes on network
+- Federated file sharing between nodes
+- Node directory/registry
+- Cross-node search
+- Mesh network of PC2 nodes
+
+**Technical Approach:**
+- mDNS for local discovery
+- libp2p for node-to-node communication
+- Distributed hash table (DHT) for node registry
+
+**Why It Matters:**
+- True decentralized network
+- No central authority needed
+- Revolutionary feature for self-hosted ecosystem
+
+---
+
+##### 19. **IPFS Gateway Integration**
+**Priority:** Medium | **Complexity:** Low | **Value:** Medium
+
+**Features:**
+- Public IPFS gateway for sharing
+- Custom gateway configuration
+- Gateway health monitoring
+- Fallback gateway support
+
+**Technical Approach:**
+- Gateway selection logic
+- Health check system
+- Configuration UI
+
+**Why It Matters:**
+- Enables public file sharing
+- Redundancy for IPFS access
+- Better reliability
+
+---
+
+#### 📱 **Mobile & Cross-Platform**
+
+##### 20. **Mobile Web App**
+**Priority:** Medium | **Complexity:** Medium | **Value:** High
+
+**Features:**
+- Responsive mobile UI
+- Touch-optimized file operations
+- Mobile file upload (camera, gallery)
+- Offline mobile access
+- Push notifications
+
+**Technical Approach:**
+- Mobile-first CSS
+- Touch gesture support
+- PWA (Progressive Web App) features
+- Service worker for offline
+
+**Why It Matters:**
+- Modern expectation (mobile access)
+- Increases usability
+- Broader user base
+
+---
+
+### Recommended Implementation Priority
+
+#### **Phase 2.5: Essential Enhancements** (Before Phase 3)
+1. ✅ **Permanent Delete from Trash** - DONE
+2. 🔄 **Advanced Search & Indexing** - High value, builds on existing
+3. 🔄 **File Versioning** - Leverages IPFS perfectly
+4. 🔄 **End-to-End Encryption** - Critical for privacy-focused users
+
+#### **Phase 3.5: User Experience** (After Packaging)
+5. **Decentralized File Sharing** - Core differentiator
+6. **Storage Analytics Dashboard** - Helps users manage storage
+7. **Advanced File Preview** - Improves daily UX
+8. **Multi-User Support** - Enables team/family use
+
+#### **Phase 4+: Advanced Features**
+9. **Backup & Sync** - Redundancy and multi-device
+10. **API & Webhooks** - Developer features
+11. **PC2 Node Federation** - Revolutionary decentralized network
+
+---
+
+### Quick Wins (Low Effort, High Impact)
+
+1. **Storage Usage Dashboard** - Simple aggregation, high value
+2. **File Type Icons** - Better visual organization
+3. **Keyboard Shortcuts** - Power user feature
+4. **Bulk Operations** - Select multiple files, delete/move
+5. **Recent Files** - Quick access to recently used files
+6. **Favorites/Bookmarks** - Pin frequently accessed folders
+7. **File Comments/Notes** - Add metadata to files
+8. **Custom File Properties** - User-defined metadata fields
+
+---
+
+### Technical Debt & Foundation Work
+
+Before adding many features, consider:
+
+1. **Testing Infrastructure** - Unit tests, integration tests
+2. **Error Monitoring** - Sentry or similar for production
+3. **Performance Monitoring** - Metrics and profiling
+4. **Documentation** - API docs, user guides
+5. **Migration Tools** - Database migrations, data upgrades
+6. **Configuration Management** - Centralized config system
+
+---
+
+### Innovation Opportunities
+
+**Unique to PC2 (Leveraging IPFS + Self-Hosted):**
+
+1. **Content-Addressed Sharing** - Share files by CID, not URL
+2. **Immutable File History** - IPFS provides natural versioning
+3. **Decentralized Backup** - Backup to IPFS network, not single server
+4. **Zero-Knowledge Sync** - Encrypted sync between nodes
+5. **Proof of Storage** - Cryptographic proofs of file integrity
+6. **Distributed Search** - Search across federated PC2 nodes
+7. **Blockchain Integration** - File ownership on-chain, storage off-chain
+
+---
+
+**Status:** Phase 2 ✅ **100% COMPLETE** - Core functionality working, real-time file operations fully working  
+**Next Action:** Phase 3 - Packaging & Deployment (Docker, Debian, macOS packages)
+

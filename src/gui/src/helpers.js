@@ -1229,33 +1229,74 @@ window.delete_item = async function(el_item, descendants_only = false){
     });
 
     try{
-        // Use move to trash (same as drag-to-trash) for consistency
-        // This ensures deletion works the same way as dragging to trash
         const trash_path = window.trash_path || '/' + window.user.username + '/Trash';
+        const item_path = $(el_item).attr('data-path');
         const item_uid = $(el_item).attr('data-uid');
         const item_name = $(el_item).attr('data-name');
         
-        // Move to trash with metadata (same as drag-to-trash logic)
-        const metadata = {
-            original_name: item_name,
-            original_path: $(el_item).attr('data-path'),
-            trashed_ts: Math.round(Date.now() / 1000),
-        };
+        // CRITICAL: Check if item is already in Trash - if so, permanently delete
+        // Handle both /Trash and /.Trash paths
+        const normalizedPath = item_path.replace(/\/+/g, '/');
+        const isInTrash = normalizedPath.includes('/Trash/') || 
+                         normalizedPath.includes('/.Trash/') ||
+                         normalizedPath.endsWith('/Trash') ||
+                         normalizedPath.endsWith('/.Trash') ||
+                         normalizedPath.includes('/Trash') ||
+                         normalizedPath.includes('/.Trash');
         
-        await puter.fs.move({
-            source: item_uid, // Use UUID like drag-to-trash does
-            destination: trash_path,
-            newName: item_uid, // Use UUID as filename in trash (same as drag-to-trash)
-            newMetadata: metadata,
-            excludeSocketID: window.socket?.id,
-        });
-        
-        // Update trash icon to full
-        if(window.socket)
-            window.socket.emit('trash.is_empty', {is_empty: false});
-        $(`[data-app="trash"]`).find('.taskbar-icon > img').attr('src', window.icons['trash-full.svg']);
-        $(`.item[data-path="${html_encode(trash_path)}" i], .item[data-shortcut_to_path="${html_encode(trash_path)}" i]`).find('.item-icon > img').attr('src', window.icons['trash-full.svg']);
-        $(`.window[data-path="${html_encode(trash_path)}" i]`).find('.window-head-icon').attr('src', window.icons['trash-full.svg']);
+        if (isInTrash) {
+            // Item is already in Trash - permanently delete it
+            console.log('[Frontend] Item is in Trash, permanently deleting:', {
+                path: item_path,
+                uid: item_uid,
+                normalizedPath: normalizedPath
+            });
+            
+            await puter.fs.delete({
+                paths: item_path, // Use path for permanent deletion
+                excludeSocketID: window.socket?.id,
+                success: async function(resp) {
+                    console.log('[Frontend] ✅ Permanently deleted from Trash:', item_path);
+                    
+                    // Check if trash is now empty
+                    try {
+                        const trash = await puter.fs.stat(trash_path);
+                        if (window.socket) {
+                            window.socket.emit('trash.is_empty', { is_empty: trash.is_empty || false });
+                        }
+                        if (trash.is_empty) {
+                            $(`[data-app="trash"]`).find('.taskbar-icon > img').attr('src', window.icons['trash.svg']);
+                            $(`.item[data-path="${html_encode(trash_path)}" i], .item[data-shortcut_to_path="${html_encode(trash_path)}" i]`).find('.item-icon > img').attr('src', window.icons['trash.svg']);
+                            $(`.window[data-path="${html_encode(trash_path)}" i]`).find('.window-head-icon').attr('src', window.icons['trash.svg']);
+                        }
+                    } catch (statError) {
+                        console.warn('[Frontend] Could not check trash status:', statError);
+                    }
+                }
+            });
+        } else {
+            // Item is NOT in Trash - move it to Trash (not permanently delete)
+            const metadata = {
+                original_name: item_name,
+                original_path: item_path,
+                trashed_ts: Math.round(Date.now() / 1000),
+            };
+            
+            await puter.fs.move({
+                source: item_uid, // Use UUID like drag-to-trash does
+                destination: trash_path,
+                newName: item_uid, // Use UUID as filename in trash (same as drag-to-trash)
+                newMetadata: metadata,
+                excludeSocketID: window.socket?.id,
+            });
+            
+            // Update trash icon to full
+            if(window.socket)
+                window.socket.emit('trash.is_empty', {is_empty: false});
+            $(`[data-app="trash"]`).find('.taskbar-icon > img').attr('src', window.icons['trash-full.svg']);
+            $(`.item[data-path="${html_encode(trash_path)}" i], .item[data-shortcut_to_path="${html_encode(trash_path)}" i]`).find('.item-icon > img').attr('src', window.icons['trash-full.svg']);
+            $(`.window[data-path="${html_encode(trash_path)}" i]`).find('.window-head-icon').attr('src', window.icons['trash-full.svg']);
+        }
         
         // fade out item 
         $(`.item[data-uid='${item_uid}']`).fadeOut(150, function(){

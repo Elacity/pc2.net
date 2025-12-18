@@ -1043,9 +1043,24 @@ export async function handleDelete(req: AuthenticatedRequest, res: Response): Pr
         const path = actualPath.startsWith('/') ? actualPath : '/' + actualPath;
         
         // Check if file is already in Trash - if so, permanently delete
-        if (path.includes('/Trash/') || path.includes('/Trash')) {
-          // Permanently delete from Trash
-          await filesystem.deleteFile(path, walletAddress);
+        // Handle both /Trash and /.Trash paths (check normalized path)
+        const normalizedPath = path.replace(/\/+/g, '/');
+        const isInTrash = normalizedPath.includes('/Trash/') || 
+                         normalizedPath.includes('/.Trash/') ||
+                         normalizedPath.endsWith('/Trash') ||
+                         normalizedPath.endsWith('/.Trash') ||
+                         normalizedPath.includes('/Trash') ||
+                         normalizedPath.includes('/.Trash');
+        
+        if (isInTrash) {
+          logger.info('[Delete] File is in Trash, permanently deleting', { 
+            path, 
+            normalizedPath,
+            isInTrash 
+          });
+          
+          // Permanently delete from Trash (recursively for directories)
+          await filesystem.deleteFile(path, walletAddress, true); // true = recursive
           deleted.push({ path, success: true });
 
           // Broadcast item.removed event

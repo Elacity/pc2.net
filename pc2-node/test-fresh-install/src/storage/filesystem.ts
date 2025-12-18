@@ -366,7 +366,7 @@ export class FilesystemManager {
   /**
    * Delete file or directory
    */
-  async deleteFile(path: string, walletAddress: string): Promise<void> {
+  async deleteFile(path: string, walletAddress: string, recursive: boolean = false): Promise<void> {
     const normalizedPath = this.normalizePath(path);
     const metadata = this.db.getFile(normalizedPath, walletAddress);
 
@@ -375,16 +375,35 @@ export class FilesystemManager {
     }
 
     if (metadata.is_dir) {
-      // For directories, check if it's empty
+      // For directories, handle children
       const children = this.listDirectory(normalizedPath, walletAddress);
+      
       if (children.length > 0) {
-        throw new Error(`Directory not empty: ${path}`);
+        if (recursive) {
+          // Recursively delete all children first
+          for (const child of children) {
+            await this.deleteFile(child.path, walletAddress, true);
+          }
+        } else {
+          throw new Error(`Directory not empty: ${path}`);
+        }
       }
-    } else {
-      // For files, unpin from IPFS (optional - allows garbage collection)
+      
+      // For directories, also unpin from IPFS if it has an IPFS hash
       if (metadata.ipfs_hash && this.isIPFSAvailable() && this.ipfs) {
         try {
           await this.ipfs.unpinFile(metadata.ipfs_hash);
+        } catch (error) {
+          // Non-critical - continue with deletion
+          console.warn(`Failed to unpin directory ${metadata.ipfs_hash}:`, error);
+        }
+      }
+    } else {
+      // For files, unpin from IPFS (allows garbage collection)
+      if (metadata.ipfs_hash && this.isIPFSAvailable() && this.ipfs) {
+        try {
+          await this.ipfs.unpinFile(metadata.ipfs_hash);
+          console.log(`[Delete] Unpinned file from IPFS: ${metadata.ipfs_hash}`);
         } catch (error) {
           // Non-critical - continue with deletion
           console.warn(`Failed to unpin file ${metadata.ipfs_hash}:`, error);
@@ -392,8 +411,9 @@ export class FilesystemManager {
       }
     }
 
-    // Remove from database
+    // Remove from database (this is the critical step - removes file metadata)
     this.db.deleteFile(normalizedPath, walletAddress);
+    console.log(`[Delete] Removed file from database: ${normalizedPath}`);
   }
 
   /**

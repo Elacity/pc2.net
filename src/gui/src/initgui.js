@@ -175,6 +175,31 @@ if(jQuery){
 }
 
 window.initgui = async function(options){
+    // Guard: Prevent multiple simultaneous initializations
+    // BUT: Allow re-initialization on page reload (after Particle Auth redirect)
+    // Check if this is a fresh page load by checking if desktop exists
+    const isFreshPageLoad = !document.querySelector('.desktop');
+    const hasAuthTokenInUrl = window.url_query_params?.has('auth_token');
+    
+    if (window.initgui_in_progress && !isFreshPageLoad) {
+        console.log('[initgui]: ⚠️ initgui() already in progress, skipping duplicate call');
+        return;
+    }
+    // Only skip if completed AND not a fresh page load (page reload after auth)
+    if (window.initgui_completed && !isFreshPageLoad && !hasAuthTokenInUrl) {
+        console.log('[initgui]: ⚠️ initgui() already completed, skipping duplicate call');
+        return;
+    }
+    
+    // Reset flags on fresh page load (after redirect)
+    if (isFreshPageLoad || hasAuthTokenInUrl) {
+        console.log('[initgui]: Fresh page load detected, resetting initialization flags');
+        window.initgui_in_progress = false;
+        window.initgui_completed = false;
+        window.desktop_loaded = false; // Reset desktop loaded flag on fresh page load
+    }
+    
+    window.initgui_in_progress = true;
     console.log('[initgui]: 🚀 Starting initgui()...');
     // 🚀 Initialize PC2ConnectionService EARLY to redirect API calls before SDK initializes
     // This prevents SDK from calling api.puter.com or constructing api.puter.localhost URLs
@@ -442,6 +467,15 @@ window.initgui = async function(options){
     // -------------------------------------------------------------------------------------
     else if(window.url_query_params.has('auth_token')){
         console.log('[initgui]: Processing auth_token from URL');
+        
+        // Guard: If user is already authenticated and desktop is loaded, skip processing
+        // This prevents double initialization when Particle Auth redirects after login event
+        if (window.is_auth() && window.desktop_loaded) {
+            console.log('[initgui]: User already authenticated and desktop loaded, removing auth_token from URL');
+            window.history.pushState(null, document.title, '/');
+            return;
+        }
+        
         let query_param_auth_token = window.url_query_params.get('auth_token');
 
         puter.setAuthToken(query_param_auth_token);
@@ -473,6 +507,12 @@ window.initgui = async function(options){
             // UIWindowLoginInProgress({user_info: whoami});
             // update auth data - MUST await to ensure desktop_path is set before UIDesktop loads
             await window.update_auth_data(query_param_auth_token, whoami);
+            
+            // Reset flags before reload so initgui() can run again after redirect
+            // This ensures desktop items are loaded properly
+            window.initgui_in_progress = false;
+            window.initgui_completed = false;
+            window.desktop_loaded = false; // Reset desktop loaded flag
             
             // For Particle auth redirects, do a clean reload to ensure full desktop initialization
             // This matches how other login methods work (see UIWindowLogin.js)
@@ -543,10 +583,22 @@ window.initgui = async function(options){
             // Load desktop, only if we're not embedded in a popup
             // -------------------------------------------------------------------------------------
             if(!window.embedded_in_popup){
+                // Guard: Prevent duplicate desktop loading
+                if (window.desktop_loaded) {
+                    console.log('[initgui]: Desktop already loaded, skipping UIDesktop call');
+                    window.initgui_in_progress = false;
+                    window.initgui_completed = true;
+                    return;
+                }
+                
+                window.desktop_loaded = true; // Mark as loaded
                 console.log('[initgui]: Loading desktop for path:', window.desktop_path);
                 await window.get_auto_arrange_data()
                 puter.fs.stat(window.desktop_path, async function(desktop_fsentry){
                     console.log('[initgui]: puter.fs.stat callback, calling UIDesktop');
+                    // Mark initialization as complete when desktop loads
+                    window.initgui_in_progress = false;
+                    window.initgui_completed = true;
                     UIDesktop({desktop_fsentry: desktop_fsentry});
                 })
             }
@@ -871,6 +923,9 @@ window.initgui = async function(options){
         console.log('[initgui]: ✅ UIWindowParticleLogin() completed');
     } else {
         console.log('[initgui]: ✅ User IS authenticated');
+        // Mark initialization as complete when user is already authenticated
+        window.initgui_in_progress = false;
+        window.initgui_completed = true;
         // -------------------------------------------------------------------------------------
         // Desktop Background
         // Only load after authentication to avoid black background showing during login
@@ -963,6 +1018,12 @@ window.initgui = async function(options){
     // `login` event handler
     // --------------------------------------------------------------------------------------
     $(document).on("login", async (e) => {
+        // Guard: Prevent duplicate desktop loading
+        if (window.desktop_loaded) {
+            console.log('[initgui]: Desktop already loaded, skipping login event handler');
+            return;
+        }
+        
         // close all windows
         $('.window').close();
 
@@ -970,6 +1031,7 @@ window.initgui = async function(options){
         // Load desktop, if not embedded in a popup
         // -------------------------------------------------------------------------------------
         if(!window.embedded_in_popup){
+            window.desktop_loaded = true; // Mark as loaded to prevent duplicates
             await window.get_auto_arrange_data();
             puter.fs.stat(window.desktop_path, function (desktop_fsentry) {
                 UIDesktop({ desktop_fsentry: desktop_fsentry });
@@ -1438,9 +1500,21 @@ window.initgui = async function(options){
         localStorage.removeItem('user');
         window.auth_token = null;
         localStorage.removeItem('auth_token');
+        
+        // Clear PC2 session data
+        localStorage.removeItem('pc2_session');
+        localStorage.removeItem('pc2_config');
+        
+        // Clear sessionStorage to remove any cached auth
+        sessionStorage.clear();
 
         // disconnect particle under iframe 
-        localStorage.setItem('disconnect_particle', true);
+        localStorage.setItem('disconnect_particle', 'true');
+
+        // Reset initialization flags to allow fresh login
+        window.initgui_in_progress = false;
+        window.initgui_completed = false;
+        window.desktop_loaded = false;
 
         // close all windows
         $('.window').close();
@@ -1452,8 +1526,21 @@ window.initgui = async function(options){
         $('.taskbar').remove();
         // disable native browser exit confirmation
         window.onbeforeunload = null;
-        // go to home page
-        window.location.replace("/");
+        // Reset initialization flags on logout
+        window.initgui_in_progress = false;
+        window.initgui_completed = false;
+        window.desktop_loaded = false; // Reset desktop loaded flag
+        
+        // Clear PC2 session data
+        localStorage.removeItem('pc2_session');
+        localStorage.removeItem('pc2_config');
+        
+        // Clear sessionStorage to remove any cached auth
+        sessionStorage.clear();
+        
+        console.log('[initgui]: Logout complete, redirecting to home...');
+        // Use location.href instead of location.replace to ensure full page reload
+        window.location.href = '/';
     });
 }
 

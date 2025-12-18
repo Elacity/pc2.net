@@ -1168,15 +1168,130 @@ async function UIDesktop(options) {
     // Append to <body>
     $('body').append(h);
 
+    // Ensure taskbar_height is set before calculating desktop height
+    // This prevents taskbar from being created with height: 0
+    if (!window.taskbar_height || window.taskbar_height === 0) {
+        window.taskbar_height = window.default_taskbar_height || 50;
+        console.log('[UIDesktop]: taskbar_height was 0/undefined, setting to default before UITaskbar:', window.taskbar_height);
+    }
+
     // Set desktop height based on taskbar height
     $('.desktop').css('height', `calc(100vh - ${window.taskbar_height + window.toolbar_height}px)`)
 
-    console.log('[UIDesktop]: About to call UITaskbar, desktop exists:', $('.desktop').length > 0);
+    console.log('[UIDesktop]: About to call UITaskbar, desktop exists:', $('.desktop').length > 0, 'taskbar_height:', window.taskbar_height);
     // ---------------------------------------------------------------
     // Taskbar - MUST await since UITaskbar is async
     // ---------------------------------------------------------------
     await UITaskbar();
     console.log('[UIDesktop]: UITaskbar completed');
+    
+    // Ensure taskbar is visible after initialization
+    // Sometimes taskbar items don't render immediately, so force a refresh
+    setTimeout(() => {
+        const $taskbar = $('.taskbar').last();
+        if ($taskbar.length > 0) {
+            const currentHeight = parseInt($taskbar.css('height')) || 0;
+            if (currentHeight === 0) {
+                const correctHeight = window.taskbar_height || window.default_taskbar_height || 50;
+                $taskbar.css('height', `${correctHeight}px`);
+                console.log('[UIDesktop]: Post-init taskbar height fix: set to', correctHeight);
+            }
+            // Force show taskbar items
+            $taskbar.find('.taskbar-item').show();
+            $taskbar.show();
+        }
+    }, 100);
+    
+    // IMMEDIATE desktop items refresh - ensure it runs right after taskbar
+    // This is a fallback in case the later refresh code doesn't execute
+    const isEmbeddedCheck = window.is_embedded || false;
+    const isFullpageCheck = window.is_fullpage_mode || false;
+    console.log('[UIDesktop]: Immediate desktop refresh check after taskbar...', {
+        is_embedded: isEmbeddedCheck,
+        is_fullpage_mode: isFullpageCheck,
+        shouldRefresh: !isEmbeddedCheck && !isFullpageCheck,
+        desktop_path: window.desktop_path,
+        window_location: window.location.href,
+        parent_location: window.parent?.location?.href,
+        in_iframe: window.location !== window.parent?.location
+    });
+    
+    // FORCE desktop refresh - the condition check seems unreliable
+    // Desktop items should always load on initial login
+    console.log('[UIDesktop]: FORCING desktop refresh regardless of embedded/fullpage flags...');
+    setTimeout(() => {
+        console.log('[UIDesktop]: Executing FORCED immediate desktop refresh...');
+        const desktopContainer = document.querySelector('.desktop.item-container') || 
+                               (document.querySelector('.desktop')?.classList.contains('item-container') ? document.querySelector('.desktop') : null);
+        console.log('[UIDesktop]: Desktop container search result:', {
+            found: !!desktopContainer,
+            selector1: !!document.querySelector('.desktop.item-container'),
+            selector2: !!document.querySelector('.desktop'),
+            hasItemContainer: document.querySelector('.desktop')?.classList.contains('item-container'),
+            desktop_path: window.desktop_path
+        });
+        
+        if (desktopContainer && window.desktop_path) {
+            console.log('[UIDesktop]: FORCED refresh - found desktop container, refreshing...', {
+                container: desktopContainer,
+                data_path: $(desktopContainer).attr('data-path'),
+                desktop_path: window.desktop_path
+            });
+            if (!$(desktopContainer).attr('data-path') || $(desktopContainer).attr('data-path') !== window.desktop_path) {
+                $(desktopContainer).attr('data-path', window.desktop_path);
+                console.log('[UIDesktop]: Updated desktop container data-path to:', window.desktop_path);
+            }
+            refresh_item_container(desktopContainer, { fadeInItems: true });
+        } else {
+            console.error('[UIDesktop]: FORCED refresh - desktop container not found or desktop_path not set', {
+                container: !!desktopContainer,
+                desktop_path: window.desktop_path,
+                allDesktopElements: document.querySelectorAll('.desktop').length,
+                allItemContainers: document.querySelectorAll('.item-container').length
+            });
+        }
+    }, 200);
+    
+    // Original conditional refresh (keeping for compatibility)
+    if (!isEmbeddedCheck && !isFullpageCheck) {
+        setTimeout(() => {
+            console.log('[UIDesktop]: Executing immediate desktop refresh...');
+            const desktopContainer = document.querySelector('.desktop.item-container') || 
+                                   (document.querySelector('.desktop')?.classList.contains('item-container') ? document.querySelector('.desktop') : null);
+            console.log('[UIDesktop]: Desktop container search result:', {
+                found: !!desktopContainer,
+                selector1: !!document.querySelector('.desktop.item-container'),
+                selector2: !!document.querySelector('.desktop'),
+                hasItemContainer: document.querySelector('.desktop')?.classList.contains('item-container'),
+                desktop_path: window.desktop_path
+            });
+            
+            if (desktopContainer && window.desktop_path) {
+                console.log('[UIDesktop]: Immediate refresh - found desktop container, refreshing...', {
+                    container: desktopContainer,
+                    data_path: $(desktopContainer).attr('data-path'),
+                    desktop_path: window.desktop_path
+                });
+                if (!$(desktopContainer).attr('data-path') || $(desktopContainer).attr('data-path') !== window.desktop_path) {
+                    $(desktopContainer).attr('data-path', window.desktop_path);
+                    console.log('[UIDesktop]: Updated desktop container data-path to:', window.desktop_path);
+                }
+                refresh_item_container(desktopContainer, { fadeInItems: true });
+            } else {
+                console.warn('[UIDesktop]: Immediate refresh - desktop container not found or desktop_path not set', {
+                    container: !!desktopContainer,
+                    desktop_path: window.desktop_path,
+                    allDesktopElements: document.querySelectorAll('.desktop').length,
+                    allItemContainers: document.querySelectorAll('.item-container').length
+                });
+            }
+        }, 200);
+    } else {
+        console.warn('[UIDesktop]: Immediate refresh SKIPPED - embedded or fullpage mode', {
+            is_embedded: isEmbeddedCheck,
+            is_fullpage_mode: isFullpageCheck
+        });
+    }
 
     // ---------------------------------------------------------------
     // PC2 Status Bar - Shows connection status in taskbar
@@ -1477,33 +1592,82 @@ async function UIDesktop(options) {
     // we don't need to get the desktop items if we're in embedded or fullpage mode
     // because the items aren't visible anyway and we don't need to waste bandwidth/server resources
     //-------------------------------------------
-    if (!window.is_embedded && !window.is_fullpage_mode) {
-        // Ensure el_desktop is the correct element (with .item-container class)
-        // Try both selectors in case the element structure is different
-        let desktopContainer = document.querySelector('.desktop.item-container');
-        if (!desktopContainer) {
-            // Fallback: try just .desktop and check if it has item-container class
-            const el_desktop = document.querySelector('.desktop');
-            if (el_desktop && $(el_desktop).hasClass('item-container')) {
-                desktopContainer = el_desktop;
+    const isEmbedded = window.is_embedded || false;
+    const isFullpage = window.is_fullpage_mode || false;
+    const shouldRefresh = !isEmbedded && !isFullpage;
+    
+    console.log('[UIDesktop] Checking desktop refresh conditions:', {
+        is_embedded: isEmbedded,
+        is_fullpage_mode: isFullpage,
+        shouldRefresh: shouldRefresh,
+        desktop_path: window.desktop_path
+    });
+    
+    if (shouldRefresh) {
+        console.log('[UIDesktop] ✅ Desktop refresh conditions met, setting up refresh...');
+        // Use a function to refresh desktop items, with retry logic
+        const refreshDesktopItems = () => {
+            console.log('[UIDesktop] refreshDesktopItems called, desktop_path:', window.desktop_path);
+            
+            // Ensure el_desktop is the correct element (with .item-container class)
+            // Try both selectors in case the element structure is different
+            let desktopContainer = document.querySelector('.desktop.item-container');
+            if (!desktopContainer) {
+                // Fallback: try just .desktop and check if it has item-container class
+                const el_desktop = document.querySelector('.desktop');
+                if (el_desktop && $(el_desktop).hasClass('item-container')) {
+                    desktopContainer = el_desktop;
+                }
             }
-        }
+            
+            if (desktopContainer) {
+                const currentDataPath = $(desktopContainer).attr('data-path');
+                console.log('[UIDesktop] Desktop container found:', {
+                    el_desktop: desktopContainer,
+                    desktop_path: window.desktop_path,
+                    data_path: currentDataPath,
+                    matches: currentDataPath === window.desktop_path,
+                    hasItemContainer: $(desktopContainer).hasClass('item-container'),
+                    hasDesktop: $(desktopContainer).hasClass('desktop'),
+                    isConnected: desktopContainer.isConnected
+                });
+                
+                // Ensure desktop container has correct path attribute before refreshing
+                if (!currentDataPath || currentDataPath !== window.desktop_path) {
+                    $(desktopContainer).attr('data-path', window.desktop_path);
+                    console.log('[UIDesktop] Updated desktop container data-path from', currentDataPath, 'to:', window.desktop_path);
+                }
+                
+                // Verify container is in DOM before refreshing
+                if (!desktopContainer.isConnected) {
+                    console.warn('[UIDesktop] Desktop container not connected to DOM, waiting...');
+                    setTimeout(refreshDesktopItems, 100);
+                    return;
+                }
+                
+                console.log('[UIDesktop] Calling refresh_item_container for desktop...');
+                refresh_item_container(desktopContainer, { fadeInItems: true });
+            } else {
+                console.error('[UIDesktop] Desktop container not found! Tried .desktop.item-container and .desktop');
+                console.error('[UIDesktop] Available .desktop elements:', document.querySelectorAll('.desktop').length);
+                console.error('[UIDesktop] Available .item-container elements:', document.querySelectorAll('.item-container').length);
+                console.error('[UIDesktop] Full DOM check - all .desktop:', Array.from(document.querySelectorAll('.desktop')).map(el => ({
+                    classes: el.className,
+                    dataPath: el.getAttribute('data-path'),
+                    isConnected: el.isConnected
+                })));
+            }
+        };
         
-        if (desktopContainer) {
-            console.log('[UIDesktop] About to refresh desktop container:', {
-                el_desktop: desktopContainer,
-                desktop_path: window.desktop_path,
-                data_path: $(desktopContainer).attr('data-path'),
-                matches: $(desktopContainer).attr('data-path') === window.desktop_path,
-                hasItemContainer: $(desktopContainer).hasClass('item-container'),
-                hasDesktop: $(desktopContainer).hasClass('desktop')
-            });
-            refresh_item_container(desktopContainer, { fadeInItems: true });
-        } else {
-            console.error('[UIDesktop] Desktop container not found! Tried .desktop.item-container and .desktop');
-            console.error('[UIDesktop] Available .desktop elements:', document.querySelectorAll('.desktop').length);
-            console.error('[UIDesktop] Available .item-container elements:', document.querySelectorAll('.item-container').length);
-        }
+        // Wait for DOM to be ready, then refresh
+        // Use requestAnimationFrame to ensure DOM is fully rendered
+        console.log('[UIDesktop] Scheduling desktop items refresh...');
+        requestAnimationFrame(() => {
+            setTimeout(() => {
+                console.log('[UIDesktop] Executing scheduled desktop items refresh...');
+                refreshDesktopItems();
+            }, 50);
+        });
 
         // Show welcome window if user hasn't already seen it and hasn't directly navigated to an app 
         if (!window.url_paths[0]?.toLocaleLowerCase() === 'app' || !window.url_paths[1]) {

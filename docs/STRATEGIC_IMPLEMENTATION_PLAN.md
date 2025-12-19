@@ -74,7 +74,27 @@ PORT=4202 npm start
 - ✅ Error handling
 - ✅ Connection status UI
 
-#### 5. **Documentation**
+#### 5. **User Personalization Features** ✅ **COMPLETE (2025-01-20)**
+- ✅ Desktop background customization with persistence
+  - Custom image selection from PC2 filesystem
+  - Default wallpaper option
+  - Background fit options (cover, contain, center, repeat)
+  - Color background option
+  - Settings persist across page refreshes
+  - Signed URL generation for secure file access
+- ✅ Profile picture management
+  - Custom profile picture selection from PC2 filesystem
+  - Display in Settings → Account tab
+  - Display in taskbar/profile icon
+  - Settings persist across page refreshes
+  - Signed URL generation for secure file access
+- ✅ Backend persistence via KV store
+  - User preferences stored per wallet address
+  - Desktop background URL, color, and fit settings
+  - Profile picture URL settings
+  - Retrieved via `/whoami` endpoint on page load
+
+#### 6. **Documentation**
 - ✅ Architecture analysis
 - ✅ CTO feedback documentation
 - ✅ Software package vision
@@ -1583,6 +1603,76 @@ When making changes, **ALWAYS** follow this sequence:
 | **WebSocket Events** | `pc2-node/test-fresh-install/src/websocket/*.ts` | `pc2-node/test-fresh-install/dist/websocket/*.js` | `npx tsc` |
 | **Frontend UI** | `src/gui/src/UI/*.js` | `pc2-node/test-fresh-install/frontend/bundle.min.js` | `node scripts/build-frontend.js` |
 | **Frontend Helpers** | `src/gui/src/helpers.js` | `pc2-node/test-fresh-install/frontend/bundle.min.js` | `node scripts/build-frontend.js` |
+
+### Recent Implementation: Desktop Background & Profile Picture (2025-01-20)
+
+**Task:** Implement persistent desktop background and profile picture customization with settings saved to backend.
+
+**Key Challenges & Solutions:**
+
+1. **CSS `background-image` Authentication Issue**
+   - **Problem:** Direct file paths in CSS don't send `Authorization` headers, causing 401 errors
+   - **Solution:** Save file *paths* to backend, generate *signed URLs* dynamically using `puter.fs.sign()` for display
+   - **Pattern:** Store path in KV store → Generate signed URL on page load → Use signed URL in CSS
+
+2. **UUID-to-Path Conversion for Files with Special Characters**
+   - **Problem:** Filenames with spaces/hyphens (e.g., `Screenshot 2025-12-03 at 13.28.09.png`) broke naive UUID conversion
+   - **Solution:** Implemented intelligent file lookup:
+     - Extract wallet address from UUID
+     - List directory contents
+     - Match filenames with case-insensitive comparison
+     - Handle URL encoding differences
+   - **Location:** `pc2-node/test-fresh-install/src/api/file.ts`
+
+3. **Default Settings Persistence**
+   - **Problem:** Default wallpaper/background settings not persisting after refresh
+   - **Solution:** 
+     - Explicitly save default values (`/images/wallpaper-elastos.jpg`, `'cover'` fit) to backend
+     - Always use `'cover'` fit for default wallpapers, regardless of previous custom image settings
+     - Update `window.user` and `window.desktop_bg_*` immediately after save
+
+4. **Profile Picture Display in Settings Window**
+   - **Problem:** Profile picture not showing in Settings → Account tab after page refresh
+   - **Solution:** Call `refresh_profile_picture()` when Account tab initializes, ensuring signed URL is generated after DOM element exists
+
+**Files Modified:**
+- `src/gui/src/UI/UIWindowDesktopBGSettings.js` - Desktop background settings UI
+- `src/gui/src/UI/Settings/UITabAccount.js` - Profile picture settings UI
+- `src/gui/src/helpers.js` - `refresh_desktop_background()` and `refresh_profile_picture()` functions
+- `pc2-node/test-fresh-install/src/api/other.ts` - `/set-desktop-bg` and `/set-profile-picture` endpoints
+- `pc2-node/test-fresh-install/src/api/whoami.ts` - Retrieve desktop background and profile picture from KV store
+- `pc2-node/test-fresh-install/src/api/file.ts` - Improved UUID-to-path conversion for files with special characters
+- `pc2-node/test-fresh-install/src/types/api.ts` - Added `profile_picture_url` to `UserInfo` interface
+
+**Best Practices Learned:**
+
+1. **Always Use Proper Build Process**
+   - Frontend bundle must be rebuilt using `npm run build:frontend` (not just `cd src/gui && node ./build.js`)
+   - Bundle is built in `src/gui/dist/` but served from `pc2-node/test-fresh-install/frontend/`
+   - The build script automatically copies the bundle to the correct location
+   - **Rule:** ALWAYS use `npm run build:frontend` from `pc2-node/test-fresh-install/`
+
+2. **Signed URLs for CSS Resources**
+   - CSS `background-image` and `<img src>` don't send `Authorization` headers
+   - Must use signed URLs (with embedded authentication) for local files
+   - Pattern: Save path → Generate signed URL on load → Use signed URL in CSS
+
+3. **Default Values Must Be Explicitly Saved**
+   - Don't rely on "null means default" - explicitly save default values to backend
+   - Ensures consistency and prevents fallback to old values
+
+4. **Refresh Functions Should Be Called When UI Elements Exist**
+   - Don't call refresh functions during page load if UI elements don't exist yet
+   - Call refresh functions when UI components initialize (e.g., Settings tab opens)
+
+5. **UUID-to-Path Conversion Requires Robust Matching**
+   - Don't use naive string replacement (e.g., `replace(/-/g, '/')`)
+   - Use directory listing and filename matching for files with special characters
+   - Handle case-insensitive matching and URL encoding differences
+
+6. **Always Update In-Memory State After Backend Save**
+   - Update `window.user.*` and global variables immediately after successful save
+   - Ensures UI reflects changes before next `whoami` call
 
 ### Common Scenarios & Solutions
 

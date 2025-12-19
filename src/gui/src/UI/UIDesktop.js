@@ -393,18 +393,129 @@ async function UIDesktop(options) {
     })
 
     window.socket.on('item.updated', async (item) => {
-        // Don't update if this is the original client that initiated the action
-        if (item.original_client_socket_id === window.socket.id)
+        console.log('[UIDesktop] item.updated event received', {
+            uid: item.uid,
+            path: item.path,
+            hasThumbnail: !!item.thumbnail,
+            thumbnail: item.thumbnail?.substring(0, 50) + '...',
+            original_client_socket_id: item.original_client_socket_id,
+            current_socket_id: window.socket.id
+        });
+        
+        // For thumbnail updates (image saves), always update regardless of socket ID
+        // This ensures thumbnails refresh immediately after save
+        const isThumbnailUpdate = item.thumbnail && !item.is_dir;
+        
+        // Don't update if this is the original client that initiated the action (unless it's a thumbnail update)
+        if (!isThumbnailUpdate && item.original_client_socket_id === window.socket.id) {
+            console.log('[UIDesktop] Skipping item.updated - same client that initiated action');
             return;
+        }
 
         // Update matching items
         // set new item name
         $(`.item[data-uid='${html_encode(item.uid)}'] .item-name`).html(html_encode(truncate_filename(item.name)));
 
-        // Set new icon
-        const new_icon = (item.is_dir ? window.icons['folder.svg'] : (await item_icon(item)).image);
-        $(`.item[data-uid='${item.uid}']`).find('.item-icon-thumb').attr('src', new_icon);
-        $(`.item[data-uid='${item.uid}']`).find('.item-icon-icon').attr('src', new_icon);
+        // Set new icon - use thumbnail directly if provided (for live updates), otherwise generate via item_icon
+        let new_icon;
+        if (item.thumbnail && !item.is_dir) {
+            // Use provided thumbnail URL directly (includes cache-busting for live updates)
+            new_icon = item.thumbnail;
+            console.log('[UIDesktop] Using provided thumbnail for live update:', new_icon.substring(0, 80) + '...');
+        } else {
+            // Generate icon via item_icon (for non-image files or when thumbnail not provided)
+            new_icon = (item.is_dir ? window.icons['folder.svg'] : (await item_icon(item)).image);
+            console.log('[UIDesktop] Generated icon via item_icon:', new_icon.substring(0, 80) + '...');
+        }
+        
+        // Find elements and force reload
+        let itemElements = $(`.item[data-uid='${item.uid}']`);
+        if (itemElements.length === 0) {
+            console.warn('[UIDesktop] No item elements found for uid:', item.uid, '- attempting to create item or refresh container');
+            
+            // If this is a thumbnail update and item doesn't exist, try to find/create it
+            if (isThumbnailUpdate && item.path) {
+                // Try to find the container for this path
+                const containerPath = path.dirname(item.path);
+                const containers = $(`.item-container[data-path="${html_encode(containerPath)}" i]`);
+                
+                if (containers.length > 0) {
+                    // Refresh the container to ensure the item is created
+                    console.log('[UIDesktop] Refreshing container to create missing item:', containerPath);
+                    await refresh_item_container(containers[0], { consistency: 'strong' });
+                    
+                    // Try to find the item again after refresh
+                    itemElements = $(`.item[data-uid='${item.uid}']`);
+                    if (itemElements.length === 0) {
+                        console.warn('[UIDesktop] Item still not found after container refresh');
+                        return;
+                    }
+                } else {
+                    console.warn('[UIDesktop] Container not found for path:', containerPath);
+                    return;
+                }
+            } else {
+                return;
+            }
+        }
+        
+        const thumbElement = itemElements.find('.item-icon-thumb');
+        const iconElement = itemElements.find('.item-icon-icon');
+        
+        console.log('[UIDesktop] Updating thumbnail', {
+            foundElements: itemElements.length,
+            foundThumb: thumbElement.length,
+            foundIcon: iconElement.length,
+            newIcon: new_icon.substring(0, 60) + '...'
+        });
+        
+        // Force reload by creating a new Image object to bypass browser cache
+        const updateThumbnail = (element, iconUrl) => {
+            if (element.length === 0) return;
+            
+            const oldSrc = element.attr('src');
+            // Add timestamp cache-buster if not already present
+            const cacheBuster = iconUrl.includes('_cid=') || iconUrl.includes('_t=') 
+                ? iconUrl 
+                : iconUrl + (iconUrl.includes('?') ? '&' : '?') + '_t=' + Date.now();
+            
+            // Create new Image object to force browser to fetch fresh image
+            const img = new Image();
+            img.onload = function() {
+                // Image loaded successfully, update the element
+                element.attr('src', cacheBuster);
+                console.log('[UIDesktop] ✅ Thumbnail image loaded and updated', {
+                    old: oldSrc?.substring(0, 50),
+                    new: cacheBuster.substring(0, 50)
+                });
+            };
+            img.onerror = function() {
+                // Fallback: update src directly even if preload failed
+                element.attr('src', cacheBuster);
+                console.warn('[UIDesktop] ⚠️ Thumbnail preload failed, updated src directly');
+            };
+            // Trigger load by setting src
+            img.src = cacheBuster;
+        };
+        
+        // Update both thumbnail and icon elements
+        updateThumbnail(thumbElement, new_icon);
+        updateThumbnail(iconElement, new_icon);
+        
+        // For thumbnail updates, also refresh the parent container to ensure the item is fully updated
+        // This matches the behavior of item.moved which refreshes the container
+        if (isThumbnailUpdate && itemElements.length > 0) {
+            const parentContainer = itemElements.closest('.item-container');
+            if (parentContainer.length > 0) {
+                const containerPath = parentContainer.attr('data-path');
+                if (containerPath) {
+                    console.log('[UIDesktop] Refreshing parent container for thumbnail update:', containerPath);
+                    // Trigger a lightweight refresh of just this item's container
+                    // This ensures the thumbnail is fully updated
+                    refresh_item_container(parentContainer[0], { consistency: 'strong' });
+                }
+            }
+        }
 
         // Set new data-name
         $(`.item[data-uid='${item.uid}']`).attr('data-name', html_encode(item.name));

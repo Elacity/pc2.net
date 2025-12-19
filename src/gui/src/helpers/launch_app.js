@@ -272,7 +272,14 @@ const launch_app = async (options) => {
 
         if ( file_signature ) {
             iframe_url.searchParams.append('puter.item.uid', file_signature.uid);
-            iframe_url.searchParams.append('puter.item.path', options.file_path ? privacy_aware_path(options.file_path) : file_signature.path);
+            const displayPath = options.file_path ? privacy_aware_path(options.file_path) : file_signature.path;
+            iframe_url.searchParams.append('puter.item.path', displayPath);
+            // Include full path for reading operations (backend requires full path, not ~ format)
+            if (options.file_path && !options.file_path.startsWith('~')) {
+                iframe_url.searchParams.append('puter.item.fullPath', options.file_path);
+            } else if (file_signature.path && !file_signature.path.startsWith('~')) {
+                iframe_url.searchParams.append('puter.item.fullPath', file_signature.path);
+            }
             iframe_url.searchParams.append('puter.item.name', file_signature.fsentry_name);
             iframe_url.searchParams.append('puter.item.read_url', file_signature.read_url);
             iframe_url.searchParams.append('puter.item.write_url', file_signature.write_url);
@@ -285,6 +292,10 @@ const launch_app = async (options) => {
         else if ( options.readURL ) {
             iframe_url.searchParams.append('puter.item.name', options.filename);
             iframe_url.searchParams.append('puter.item.path', privacy_aware_path(options.file_path));
+            // Include full path for reading operations
+            if (options.file_path && !options.file_path.startsWith('~')) {
+                iframe_url.searchParams.append('puter.item.fullPath', options.file_path);
+            }
             iframe_url.searchParams.append('puter.item.read_url', options.readURL);
         }
 

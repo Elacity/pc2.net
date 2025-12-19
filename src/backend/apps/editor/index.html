@@ -113,6 +113,138 @@
                     }
                 }
                 
+                // CRITICAL: Patch puter.fs.read() to convert ~ paths to full paths
+                // The backend API doesn't understand ~ paths, so we need to convert them
+                if (puter && puter.fs && puter.fs.read) {
+                    const originalRead = puter.fs.read.bind(puter.fs);
+                    puter.fs.read = async function(options) {
+                        // Handle both object and string path formats
+                        let pathToRead = null;
+                        if (typeof options === 'string') {
+                            pathToRead = options;
+                        } else if (options && typeof options === 'object' && options.path) {
+                            pathToRead = options.path;
+                        } else if (options && typeof options === 'object' && options.uid) {
+                            // If uid is provided, use it directly (no path conversion needed)
+                            return await originalRead(options);
+                        }
+                        
+                        // Convert ~ path to full path if needed
+                        if (pathToRead && pathToRead.startsWith('~/')) {
+                            console.log('[Editor]: 🔧 Converting ~ path to full path:', pathToRead);
+                            
+                            const urlParams = new URLSearchParams(window.location.search);
+                            
+                            // Priority 1: ALWAYS try to get fresh readURL using uid (for latest content after save)
+                            // This ensures reopened files show the latest saved content
+                            const itemUid = urlParams.get('puter.item.uid');
+                            let usedFreshReadURL = false;
+                            
+                            if (itemUid && puter && puter.fs && puter.fs.stat) {
+                                try {
+                                    console.log('[Editor]: 🔄 ALWAYS fetching fresh metadata using uid:', itemUid);
+                                    const statResult = await puter.fs.stat({ uid: itemUid, consistency: 'strong' });
+                                    console.log('[Editor]: 📊 stat() result:', statResult);
+                                    
+                                    // Extract readURL from stat result (might be nested)
+                                    let freshReadURL = null;
+                                    if (statResult && statResult.readURL) {
+                                        freshReadURL = statResult.readURL;
+                                    } else if (statResult && statResult.read_url) {
+                                        freshReadURL = statResult.read_url;
+                                    } else if (statResult && statResult.result && statResult.result.readURL) {
+                                        freshReadURL = statResult.result.readURL;
+                                    } else if (statResult && statResult.result && statResult.result.read_url) {
+                                        freshReadURL = statResult.result.read_url;
+                                    }
+                                    
+                                    if (freshReadURL) {
+                                        console.log('[Editor]: ✅ Using fresh readURL from stat():', freshReadURL);
+                                        // Add cache-busting parameter to ensure we get the latest content
+                                        const url = new URL(freshReadURL);
+                                        url.searchParams.set('_t', Date.now());
+                                        const cacheBustedURL = url.toString();
+                                        console.log('[Editor]: 🔄 Fetching with cache-busting:', cacheBustedURL);
+                                        const response = await fetch(cacheBustedURL);
+                                        if (!response.ok) {
+                                            throw new Error(`Failed to read file: ${response.statusText}`);
+                                        }
+                                        usedFreshReadURL = true;
+                                        return await response.blob();
+                                    } else {
+                                        console.warn('[Editor]: ⚠️ stat() did not return readURL, will try path or fallback');
+                                        // If stat() returns path, use it for SDK read
+                                        if (statResult && (statResult.path || (statResult.result && statResult.result.path))) {
+                                            const statPath = statResult.path || statResult.result.path;
+                                            if (statPath) {
+                                                console.log('[Editor]: ✅ Using path from stat():', statPath);
+                                                pathToRead = statPath;
+                                            }
+                                        }
+                                    }
+                                } catch (err) {
+                                    console.error('[Editor]: ❌ Failed to get fresh metadata from stat(), will fallback:', err);
+                                }
+                            }
+                            
+                            // Priority 2: Use readURL from URL params (fallback for initial open - this was working before)
+                            // Only use this if we didn't successfully use fresh readURL from stat()
+                            if (!usedFreshReadURL) {
+                                const readURL = urlParams.get('puter.item.read_url');
+                                if (readURL) {
+                                    console.log('[Editor]: ✅ Using readURL from URL params (fallback):', readURL);
+                                    try {
+                                        // Add cache-busting even to fallback readURL to avoid stale content
+                                        const url = new URL(readURL);
+                                        url.searchParams.set('_t', Date.now());
+                                        const cacheBustedURL = url.toString();
+                                        console.log('[Editor]: 🔄 Fetching fallback readURL with cache-busting:', cacheBustedURL);
+                                        const response = await fetch(cacheBustedURL);
+                                        if (!response.ok) {
+                                            throw new Error(`Failed to read file: ${response.statusText}`);
+                                        }
+                                        return await response.blob();
+                                    } catch (err) {
+                                        console.error('[Editor]: ❌ Failed to fetch from readURL, falling back to path:', err);
+                                    }
+                                }
+                            }
+                            
+                            // Priority 3: Use fullPath from URL parameters (convert to full path for SDK)
+                            const fullPath = urlParams.get('puter.item.fullPath');
+                            if (fullPath) {
+                                console.log('[Editor]: ✅ Using fullPath from URL:', fullPath);
+                                pathToRead = fullPath;
+                            } else {
+                                // Fallback: try to get it from the current user's home directory
+                                if (pathToRead && pathToRead.startsWith('~/')) {
+                                    // ~/Desktop/file.txt -> /{username}/Desktop/file.txt
+                                    const username = urlParams.get('puter.auth.username') || 
+                                                    (window.user && window.user.username);
+                                    
+                                    if (username) {
+                                        const relativePath = pathToRead.replace(/^~\//, '');
+                                        pathToRead = `/${username}/${relativePath}`;
+                                        console.log('[Editor]: ✅ Converted ~ path using username:', pathToRead);
+                                    } else {
+                                        console.warn('[Editor]: ⚠️ Could not convert ~ path, using as-is (may fail)');
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Call original read with converted path
+                        if (typeof options === 'string') {
+                            return await originalRead(pathToRead);
+                        } else if (options && typeof options === 'object') {
+                            return await originalRead({ ...options, path: pathToRead });
+                        } else {
+                            return await originalRead(options);
+                        }
+                    };
+                    console.log('[Editor]: ✅ Patched puter.fs.read() to handle ~ paths');
+                }
+                
                 // Patch puter.ui methods to ensure appInstanceID is included and add debugging
                 if (appInstanceId && puter && puter.ui) {
                     console.log('[Editor]: 🔧 Patching puter.ui methods, appInstanceID:', appInstanceId);
@@ -276,8 +408,178 @@
                                     console.log('[Editor]: ✅ Set this.path for future calls:', this.path);
                                 }
                                 
-                                console.log('[Editor]: ✅ Calling puter.fs.write() with path:', writePath);
-                                return await puter.fs.write(writePath, data, { overwrite: true });
+                                // Log data being written
+                                const dataType = data instanceof Blob ? 'Blob' : typeof data;
+                                const dataSize = data instanceof Blob ? data.size : (typeof data === 'string' ? data.length : 'unknown');
+                                console.log('[Editor]: 📝 Data to write - type:', dataType, 'size:', dataSize);
+                                if (typeof data === 'string' && data.length < 200) {
+                                    console.log('[Editor]: 📝 Data preview:', data.substring(0, 100));
+                                }
+                                
+                                // Try using writeURL from URL params first (this goes through proper overwrite handler)
+                                const urlParams = new URLSearchParams(window.location.search);
+                                const writeURL = urlParams.get('puter.item.write_url');
+                                
+                                if (writeURL) {
+                                    console.log('[Editor]: ✅ Using writeURL from URL params for overwrite:', writeURL);
+                                    try {
+                                        // Convert data to Blob if it's a string
+                                        const blobData = typeof data === 'string' ? new Blob([data], { type: 'text/plain' }) : data;
+                                        
+                                        const response = await fetch(writeURL, {
+                                            method: 'PUT',
+                                            body: blobData,
+                                            headers: {
+                                                'Content-Type': blobData.type || 'text/plain'
+                                            }
+                                        });
+                                        
+                                        if (!response.ok) {
+                                            const errorText = await response.text();
+                                            throw new Error(`Write failed: ${response.status} ${response.statusText} - ${errorText}`);
+                                        }
+                                        
+                                        const writeResult = await response.json().catch(() => ({ success: true }));
+                                        console.log('[Editor]: ✅ Write via writeURL completed successfully');
+                                        console.log('[Editor]: 📊 Write result:', writeResult);
+                                        
+                                        // Verify immediately after write
+                                        console.log('[Editor]: 🔍 Verifying write by reading file back with fresh readURL...');
+                                        try {
+                                            // Get fresh readURL using stat() with path
+                                            const verifyStatResult = await puter.fs.stat({ path: writePath, consistency: 'strong' });
+                                            console.log('[Editor]: 📊 Verification stat() result:', verifyStatResult);
+                                            
+                                            // Extract readURL from stat result
+                                            let freshReadURL = null;
+                                            if (verifyStatResult && verifyStatResult.readURL) {
+                                                freshReadURL = verifyStatResult.readURL;
+                                            } else if (verifyStatResult && verifyStatResult.read_url) {
+                                                freshReadURL = verifyStatResult.read_url;
+                                            } else if (verifyStatResult && verifyStatResult.result && verifyStatResult.result.readURL) {
+                                                freshReadURL = verifyStatResult.result.readURL;
+                                            } else if (verifyStatResult && verifyStatResult.result && verifyStatResult.result.read_url) {
+                                                freshReadURL = verifyStatResult.result.read_url;
+                                            }
+                                            
+                                            if (freshReadURL) {
+                                                console.log('[Editor]: ✅ Got fresh readURL for verification:', freshReadURL);
+                                                // Add cache-busting
+                                                const url = new URL(freshReadURL);
+                                                url.searchParams.set('_t', Date.now());
+                                                const verifyResponse = await fetch(url.toString());
+                                                if (!verifyResponse.ok) {
+                                                    throw new Error(`Failed to verify: ${verifyResponse.statusText}`);
+                                                }
+                                                const verifyContent = await verifyResponse.text();
+                                                console.log('[Editor]: ✅ Verification read successful (fresh), content length:', verifyContent ? verifyContent.length : 0);
+                                                
+                                                // Compare with what we wrote
+                                                const writtenContent = typeof data === 'string' ? data : (data instanceof Blob ? await data.text() : String(data));
+                                                if (verifyContent === writtenContent) {
+                                                    console.log('[Editor]: ✅ VERIFICATION PASSED: Written content matches read content!');
+                                                } else {
+                                                    console.warn('[Editor]: ⚠️ VERIFICATION MISMATCH: Written length:', writtenContent.length, 'Read length:', verifyContent.length);
+                                                    console.warn('[Editor]: ⚠️ Written preview:', writtenContent.substring(0, 50));
+                                                    console.warn('[Editor]: ⚠️ Read preview:', verifyContent.substring(0, 50));
+                                                }
+                                            }
+                                        } catch (verifyErr) {
+                                            console.error('[Editor]: ❌ Verification read failed:', verifyErr);
+                                        }
+                                        
+                                        return { success: true, path: writePath, ...writeResult };
+                                    } catch (writeURLErr) {
+                                        console.error('[Editor]: ❌ Write via writeURL failed, falling back to puter.fs.write():', writeURLErr);
+                                        // Fall through to puter.fs.write() below
+                                    }
+                                }
+                                
+                                console.log('[Editor]: ✅ Calling puter.fs.write() with path:', writePath, 'overwrite: true');
+                                try {
+                                    const writeResult = await puter.fs.write(writePath, data, { overwrite: true });
+                                    console.log('[Editor]: ✅ puter.fs.write() completed successfully');
+                                    console.log('[Editor]: 📊 Write result:', writeResult);
+                                    console.log('[Editor]: 📊 Write result keys:', writeResult ? Object.keys(writeResult) : 'null');
+                                    
+                                    // Verify the write by reading back immediately with FRESH readURL
+                                    console.log('[Editor]: 🔍 Verifying write by reading file back with fresh readURL...');
+                                    try {
+                                        // Get fresh readURL using stat() with path (not uid, since we just wrote to this path)
+                                        let freshReadURL = null;
+                                        try {
+                                            const verifyStatResult = await puter.fs.stat({ path: writePath, consistency: 'strong' });
+                                            console.log('[Editor]: 📊 Verification stat() result:', verifyStatResult);
+                                            
+                                            // Extract readURL from stat result
+                                            if (verifyStatResult && verifyStatResult.readURL) {
+                                                freshReadURL = verifyStatResult.readURL;
+                                            } else if (verifyStatResult && verifyStatResult.read_url) {
+                                                freshReadURL = verifyStatResult.read_url;
+                                            } else if (verifyStatResult && verifyStatResult.result && verifyStatResult.result.readURL) {
+                                                freshReadURL = verifyStatResult.result.readURL;
+                                            } else if (verifyStatResult && verifyStatResult.result && verifyStatResult.result.read_url) {
+                                                freshReadURL = verifyStatResult.result.read_url;
+                                            }
+                                            
+                                            if (freshReadURL) {
+                                                console.log('[Editor]: ✅ Got fresh readURL for verification:', freshReadURL);
+                                                // Add cache-busting
+                                                const url = new URL(freshReadURL);
+                                                url.searchParams.set('_t', Date.now());
+                                                const response = await fetch(url.toString());
+                                                if (!response.ok) {
+                                                    throw new Error(`Failed to verify: ${response.statusText}`);
+                                                }
+                                                const verifyContent = await response.text();
+                                                console.log('[Editor]: ✅ Verification read successful (fresh), content length:', verifyContent ? verifyContent.length : 0);
+                                                if (typeof verifyContent === 'string' && verifyContent.length < 200) {
+                                                    console.log('[Editor]: 📝 Verified content preview:', verifyContent.substring(0, 100));
+                                                }
+                                                
+                                                // Compare with what we wrote
+                                                const writtenContent = typeof data === 'string' ? data : (data instanceof Blob ? await data.text() : String(data));
+                                                if (verifyContent === writtenContent) {
+                                                    console.log('[Editor]: ✅ VERIFICATION PASSED: Written content matches read content!');
+                                                } else {
+                                                    console.warn('[Editor]: ⚠️ VERIFICATION MISMATCH: Written length:', writtenContent.length, 'Read length:', verifyContent.length);
+                                                    console.warn('[Editor]: ⚠️ Written preview:', writtenContent.substring(0, 50));
+                                                    console.warn('[Editor]: ⚠️ Read preview:', verifyContent.substring(0, 50));
+                                                }
+                                            } else {
+                                                console.warn('[Editor]: ⚠️ stat() did not return readURL for verification, using puter.fs.read()');
+                                                const verifyRead = await puter.fs.read(writePath);
+                                                const verifyContent = verifyRead instanceof Blob ? await verifyRead.text() : verifyRead;
+                                                console.log('[Editor]: ✅ Verification read successful, content length:', verifyContent ? verifyContent.length : 0);
+                                                if (typeof verifyContent === 'string' && verifyContent.length < 200) {
+                                                    console.log('[Editor]: 📝 Verified content preview:', verifyContent.substring(0, 100));
+                                                }
+                                            }
+                                        } catch (statErr) {
+                                            console.error('[Editor]: ❌ Failed to get fresh readURL for verification, using puter.fs.read():', statErr);
+                                            const verifyRead = await puter.fs.read(writePath);
+                                            const verifyContent = verifyRead instanceof Blob ? await verifyRead.text() : verifyRead;
+                                            console.log('[Editor]: ✅ Verification read successful, content length:', verifyContent ? verifyContent.length : 0);
+                                            if (typeof verifyContent === 'string' && verifyContent.length < 200) {
+                                                console.log('[Editor]: 📝 Verified content preview:', verifyContent.substring(0, 100));
+                                            }
+                                        }
+                                    } catch (verifyErr) {
+                                        console.error('[Editor]: ❌ Verification read failed:', verifyErr);
+                                    }
+                                    
+                                    return writeResult;
+                                } catch (writeErr) {
+                                    console.error('[Editor]: ❌ puter.fs.write() failed:', writeErr);
+                                    console.error('[Editor]: ❌ Error details:', {
+                                        message: writeErr.message,
+                                        stack: writeErr.stack,
+                                        path: writePath,
+                                        dataType: dataType,
+                                        dataSize: dataSize
+                                    });
+                                    throw writeErr;
+                                }
                             };
                             console.log('[Editor]: ✅ Replaced curfile.write() to use path correctly');
                         }

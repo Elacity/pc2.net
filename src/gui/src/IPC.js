@@ -1440,8 +1440,74 @@ const ipc_listener = async (event, handled) => {
             el_filedialog_window,
             res,
         }) => {
+            // Validate response has required properties
+            if (!res || typeof res !== 'object') {
+                console.error('[IPC.js] Invalid response in tell_caller_and_update_views:', res);
+                throw new Error('Invalid response from puter.fs.write()');
+            }
+            
+            // Ensure res has all required properties (SDK might access these)
+            if (!res.uid || typeof res.uid !== 'string') {
+                console.error('[IPC.js] Response missing uid:', res);
+                throw new Error('Response missing uid');
+            }
+            
+            if (!res.name || typeof res.name !== 'string') {
+                console.warn('[IPC.js] Response missing name, using basename of target_path');
+                res.name = path.basename(target_path);
+            }
+            
+            if (!res.type || typeof res.type !== 'string') {
+                console.warn('[IPC.js] Response missing type, inferring from filename');
+                const ext = res.name.split('.').pop()?.toLowerCase() || 'txt';
+                const typeMap = {
+                    'txt': 'text/plain',
+                    'html': 'text/html',
+                    'js': 'text/javascript',
+                    'json': 'application/json',
+                    'png': 'image/png',
+                    'jpg': 'image/jpeg',
+                    'jpeg': 'image/jpeg',
+                };
+                res.type = typeMap[ext] || 'text/plain';
+            }
+            
+            if (!res.path || typeof res.path !== 'string') {
+                console.warn('[IPC.js] Response missing path, using target_path');
+                res.path = target_path;
+            }
+            
+            console.log('[IPC.js] tell_caller_and_update_views - validated res:', {
+                uid: res.uid,
+                name: res.name,
+                type: res.type,
+                path: res.path,
+                size: res.size
+            });
+            
             let file_signature = await puter.fs.sign(app_uuid, { uid: res.uid, action: 'write' });
+            
+            // Validate file_signature structure
+            if (!file_signature || typeof file_signature !== 'object') {
+                console.error('[IPC.js] Invalid file_signature from puter.fs.sign():', file_signature);
+                throw new Error('Invalid file signature response');
+            }
+            
+            // Ensure file_signature.items exists (might be nested)
+            if (file_signature.items && typeof file_signature.items === 'object') {
             file_signature = file_signature.items;
+            }
+            
+            // Validate file_signature has required properties
+            if (!file_signature.fsentry_name || typeof file_signature.fsentry_name !== 'string') {
+                console.warn('[IPC.js] file_signature missing fsentry_name, using res.name');
+                file_signature.fsentry_name = res.name;
+            }
+            
+            if (!file_signature.type || typeof file_signature.type !== 'string') {
+                console.warn('[IPC.js] file_signature missing type, using res.type');
+                file_signature.type = res.type;
+            }
 
             target_iframe.contentWindow.postMessage({
                 msg: 'fileSaved',
@@ -1455,6 +1521,8 @@ const ipc_listener = async (event, handled) => {
                     type: file_signature.type,
                     uid: file_signature.uid,
                     path: privacy_aware_path(res.path),
+                    // Include full path for reading operations (backend requires full path, not ~ format)
+                    fullPath: res.path,
                 },
             }, '*');
 
@@ -1498,14 +1566,218 @@ const ipc_listener = async (event, handled) => {
             target_path, el_filedialog_window,
             file_to_upload, overwrite,
         }) => {
-            const res = await puter.fs.write(target_path,
+            // Ensure target_path is a valid string and properly formatted
+            if (!target_path || typeof target_path !== 'string') {
+                throw new Error('Invalid target_path: must be a non-empty string');
+            }
+            
+            // Ensure file_to_upload is a valid File or Blob object
+            if (!file_to_upload || (!(file_to_upload instanceof File) && !(file_to_upload instanceof Blob))) {
+                throw new Error('Invalid file_to_upload: must be a File or Blob object');
+            }
+            
+            // Ensure the File object has a valid name property
+            if (file_to_upload instanceof File && (!file_to_upload.name || typeof file_to_upload.name !== 'string')) {
+                throw new Error('Invalid File object: name property must be a non-empty string');
+            }
+            
+            // Normalize the target_path to ensure it's properly formatted
+            const normalized_path = path.normalize(target_path);
+            
+            // Final validation before passing to SDK
+            // The SDK might call toLowerCase() on file extension or MIME type subtype
+            // Ensure everything is safe for the SDK to process
+            
+            // Double-check filename has valid extension
+            const filenameForSDK = file_to_upload.name;
+            const extMatch = filenameForSDK.match(/\.([a-z0-9]+)$/i);
+            if (!extMatch || !extMatch[1]) {
+                console.error('[IPC.js] Filename missing valid extension for SDK:', filenameForSDK);
+                throw new Error('Filename must have a valid extension');
+            }
+            
+            // Double-check type has valid format for SDK
+            const typeForSDK = file_to_upload.type;
+            const typeMatch = typeForSDK && typeof typeForSDK === 'string' ? typeForSDK.match(/^([^/]+)\/([^/;]+)/) : null;
+            if (!typeMatch || !typeMatch[1] || !typeMatch[2]) {
+                console.error('[IPC.js] File type invalid format for SDK:', typeForSDK);
+                // Extract content from existing File and recreate with valid type
+                const validType = 'text/plain';
+                // Read the File content as text (for text files) or keep as blob
+                const fileContent = file_to_upload instanceof File ? await file_to_upload.text() : file_to_upload;
+                file_to_upload = new File([fileContent], file_to_upload.name, { type: validType });
+                console.warn('[IPC.js] Recreated File object with valid type:', validType);
+            }
+            
+            const writeInfo = {
+                path: normalized_path,
+                fileName: file_to_upload.name,
+                fileType: file_to_upload.type,
+                fileSize: file_to_upload.size,
+                extension: extMatch[1],
+                typeSubtype: typeMatch ? typeMatch[2] : 'unknown',
+                fileNameParts: filenameForSDK.split('.'),
+                typeParts: typeForSDK.split('/')
+            };
+            console.log('[IPC.js] Calling puter.fs.write with validated File:', JSON.stringify(writeInfo, null, 2));
+            console.log('[IPC.js] File object being passed:', {
+                name: file_to_upload.name,
+                type: file_to_upload.type,
+                size: file_to_upload.size,
+                constructor: file_to_upload.constructor.name
+            });
+            
+            try {
+                const res = await puter.fs.write(normalized_path,
                             file_to_upload,
                             {
                                 dedupeName: false,
                                 overwrite: overwrite,
                             });
 
-            await tell_caller_and_update_views({ res, el_filedialog_window, target_path });
+                // Log the response to see what puter.fs.write() returns
+                console.log('[IPC.js] puter.fs.write() raw response:', JSON.stringify({
+                    hasResult: !!res.result,
+                    hasSuccess: 'success' in res,
+                    hasPath: !!res.path,
+                    allKeys: Object.keys(res || {}),
+                    resultKeys: res.result ? Object.keys(res.result) : null
+                }, null, 2));
+                console.log('[IPC.js] Full response object:', res);
+                
+                // Ensure response has required properties before processing
+                if (!res || typeof res !== 'object') {
+                    throw new Error('puter.fs.write() returned invalid response');
+                }
+                
+                // Extract actual item data - SDK might return { success, path, result: { uid, name, type, ... } }
+                let itemData = res;
+                if (res.result && typeof res.result === 'object') {
+                    console.log('[IPC.js] Response has nested result, extracting item data from res.result');
+                    itemData = res.result;
+                    // Preserve path from outer response if not in result
+                    if (!itemData.path && res.path) {
+                        itemData.path = res.path;
+                    }
+                }
+                
+                // Log extracted item data
+                console.log('[IPC.js] Extracted item data:', JSON.stringify({
+                    hasUid: !!itemData.uid,
+                    hasName: !!itemData.name,
+                    hasType: !!itemData.type,
+                    hasMimeType: !!itemData.mime_type,
+                    hasPath: !!itemData.path,
+                    hasSize: !!itemData.size,
+                    uid: itemData.uid,
+                    name: itemData.name,
+                    type: itemData.type,
+                    mime_type: itemData.mime_type,
+                    path: itemData.path,
+                    size: itemData.size,
+                    allKeys: Object.keys(itemData || {})
+                }, null, 2));
+                
+                // Handle mime_type -> type mapping (backend uses mime_type, SDK expects type)
+                if (itemData.mime_type && !itemData.type) {
+                    console.log('[IPC.js] Converting mime_type to type:', itemData.mime_type);
+                    itemData.type = itemData.mime_type;
+                }
+                
+                // Ensure itemData.type exists and is a string (SDK might call toLowerCase on it)
+                if (itemData.type === undefined || itemData.type === null) {
+                    console.warn('[IPC.js] Item data missing type, setting to text/plain');
+                    itemData.type = 'text/plain';
+                } else if (typeof itemData.type !== 'string') {
+                    console.warn('[IPC.js] Item data type is not a string, converting:', itemData.type);
+                    itemData.type = String(itemData.type);
+                }
+                
+                // Ensure itemData.name exists (SDK might extract extension from it)
+                if (!itemData.name || typeof itemData.name !== 'string') {
+                    console.warn('[IPC.js] Item data missing name, using filename from File object');
+                    itemData.name = file_to_upload.name;
+                }
+                
+                // Ensure itemData.path exists
+                if (!itemData.path || typeof itemData.path !== 'string') {
+                    console.warn('[IPC.js] Item data missing path, using normalized_path');
+                    itemData.path = normalized_path;
+                }
+                
+                // Get uid from stat if missing (backend might not return it in write response)
+                if (!itemData.uid || typeof itemData.uid !== 'string') {
+                    console.warn('[IPC.js] Item data missing uid, fetching from stat()');
+                    try {
+                        const statResult = await puter.fs.stat({ path: itemData.path, consistency: 'eventual' });
+                        console.log('[IPC.js] stat() result:', JSON.stringify({
+                            hasUid: !!statResult.uid,
+                            uid: statResult.uid,
+                            allKeys: Object.keys(statResult || {})
+                        }, null, 2));
+                        
+                        // Extract uid from stat result (might also be nested)
+                        let statUid = statResult.uid;
+                        if (!statUid && statResult.result && statResult.result.uid) {
+                            statUid = statResult.result.uid;
+                        }
+                        
+                        if (statUid && typeof statUid === 'string') {
+                            itemData.uid = statUid;
+                            console.log('[IPC.js] ✅ Retrieved uid from stat():', itemData.uid);
+                        } else {
+                            throw new Error('stat() did not return uid');
+                        }
+                    } catch (statErr) {
+                        console.error('[IPC.js] Failed to get uid from stat():', statErr);
+                        // Generate a temporary uid based on path (fallback)
+                        const pathParts = itemData.path.split('/');
+                        const filename = pathParts[pathParts.length - 1];
+                        itemData.uid = `uuid--${itemData.path.replace(/\//g, '-').replace(/^\-/, '')}`;
+                        console.warn('[IPC.js] Generated fallback uid:', itemData.uid);
+                    }
+                }
+                
+                // Create a new response object with all required properties
+                // Don't reassign res (might be const), create a new object instead
+                const processedRes = {
+                    uid: itemData.uid,
+                    name: itemData.name,
+                    type: itemData.type,
+                    path: itemData.path,
+                    size: itemData.size,
+                    modified: itemData.modified || Date.now(),
+                    created: itemData.created || Date.now(),
+                    // Copy any other properties from itemData
+                    ...itemData
+                };
+                
+                // Use processedRes for downstream processing instead of res
+                // Update res properties instead of reassigning (if res is const)
+                Object.assign(res, processedRes);
+
+                await tell_caller_and_update_views({ res, el_filedialog_window, target_path: normalized_path });
+            } catch (err) {
+                console.error('[IPC.js] Error in write_file_tell_caller_and_update_views:', err);
+                // If error is about toLowerCase, provide more context
+                if (err.message && err.message.includes('toLowerCase')) {
+                    const errorInfo = {
+                        name: file_to_upload.name,
+                        type: file_to_upload.type,
+                        nameType: typeof file_to_upload.name,
+                        typeType: typeof file_to_upload.type,
+                        nameParts: file_to_upload.name ? file_to_upload.name.split('.') : null,
+                        typeParts: file_to_upload.type ? file_to_upload.type.split('/') : null,
+                        extension: file_to_upload.name ? file_to_upload.name.split('.').pop() : null,
+                        typeSubtype: file_to_upload.type ? file_to_upload.type.split('/')[1] : null,
+                        errorMessage: err.message,
+                        errorStack: err.stack
+                    };
+                    console.error('[IPC.js] toLowerCase error - File object state:', JSON.stringify(errorInfo, null, 2));
+                    console.error('[IPC.js] Full error object:', err);
+                }
+                throw err;
+            }
         };
 
         const handle_url_save = async ({ target_path }) => {
@@ -1542,7 +1814,202 @@ const ipc_listener = async (event, handled) => {
         };
 
         const handle_data_save = async ({ target_path, el_filedialog_window }) => {
-            let file_to_upload = new File([event.data.content], path.basename(target_path));
+            // Ensure content is defined and is a valid type (string, Blob, ArrayBuffer, etc.)
+            // Note: Empty string is valid for text files, but undefined/null is not
+            if (event.data.content === undefined || event.data.content === null) {
+                console.error('[IPC.js] File content is undefined or null');
+                console.error('[IPC.js] event.data keys:', Object.keys(event.data || {}));
+                console.error('[IPC.js] Full event.data:', event.data);
+                await UIAlert({
+                    message: 'Cannot save file: content is missing. The editor may not be passing content correctly.',
+                    parent_uuid: $(el_filedialog_window).attr('data-element_uuid'),
+                });
+                $(el_filedialog_window).find('.window-disable-mask, .busy-indicator').hide();
+                return;
+            }
+            
+            // Log content info for debugging
+            const contentInfo = {
+                type: typeof event.data.content,
+                isString: typeof event.data.content === 'string',
+                isBlob: event.data.content instanceof Blob,
+                length: typeof event.data.content === 'string' ? event.data.content.length : 
+                        event.data.content instanceof Blob ? event.data.content.size : 'N/A',
+                preview: typeof event.data.content === 'string' ? event.data.content.substring(0, 50) : 'N/A',
+                value: typeof event.data.content === 'string' ? event.data.content : 
+                       event.data.content instanceof Blob ? '[Blob]' : String(event.data.content)
+            };
+            console.log('[IPC.js] Content received:', JSON.stringify(contentInfo, null, 2));
+            console.log('[IPC.js] Content raw:', event.data.content);
+            
+            // Ensure target_path is a valid string
+            if (!target_path || typeof target_path !== 'string') {
+                console.error('[IPC.js] Invalid target_path:', target_path);
+                await UIAlert({
+                    message: 'Cannot save file: invalid file path.',
+                    parent_uuid: $(el_filedialog_window).attr('data-element_uuid'),
+                });
+                $(el_filedialog_window).find('.window-disable-mask, .busy-indicator').hide();
+                return;
+            }
+            
+            // Get filename safely - ensure path.basename returns a valid string
+            let filename;
+            try {
+                filename = path.basename(target_path);
+                if (!filename || typeof filename !== 'string') {
+                    throw new Error('Invalid filename');
+                }
+            } catch (err) {
+                console.error('[IPC.js] Error getting filename from target_path:', target_path, err);
+                await UIAlert({
+                    message: 'Cannot save file: invalid filename.',
+                    parent_uuid: $(el_filedialog_window).attr('data-element_uuid'),
+                });
+                $(el_filedialog_window).find('.window-disable-mask, .busy-indicator').hide();
+                return;
+            }
+            
+            // Ensure filename has a valid extension for proper type detection
+            // Extract extension safely to prevent toLowerCase() errors
+            let final_filename = filename;
+            let file_extension = '';
+            
+            // Safely extract extension from filename
+            const last_dot_index = final_filename.lastIndexOf('.');
+            if (last_dot_index > 0 && last_dot_index < final_filename.length - 1) {
+                // Valid extension exists
+                file_extension = final_filename.substring(last_dot_index + 1).toLowerCase();
+                // Ensure extension is valid (alphanumeric only, no special chars)
+                if (!/^[a-z0-9]+$/.test(file_extension)) {
+                    // Invalid extension, replace with .txt
+                    final_filename = final_filename.substring(0, last_dot_index) + '.txt';
+                    file_extension = 'txt';
+                }
+            } else {
+                // No extension or invalid format, add .txt
+                if (event.data.contentType) {
+                    const contentType = event.data.contentType.split('/')[1]?.split(';')[0]?.toLowerCase();
+                    if (contentType && /^[a-z0-9]+$/.test(contentType)) {
+                        file_extension = contentType;
+                        final_filename = filename + '.' + file_extension;
+                    } else {
+                        final_filename = filename + '.txt';
+                        file_extension = 'txt';
+                    }
+                } else {
+                    final_filename = filename + '.txt';
+                    file_extension = 'txt';
+                }
+            }
+            
+            // Ensure final_filename is valid and has a proper extension
+            if (!final_filename || !file_extension) {
+                final_filename = filename + '.txt';
+                file_extension = 'txt';
+            }
+            
+            // Create File object with explicit type - ALWAYS set a valid type
+            const fileOptions = {};
+            
+            // Determine MIME type based on extension or provided contentType
+            let mimeType = 'text/plain'; // Default for text files
+            if (event.data.contentType && typeof event.data.contentType === 'string') {
+                // Validate contentType format (should be "type/subtype")
+                const contentTypeParts = event.data.contentType.split('/');
+                if (contentTypeParts.length === 2 && contentTypeParts[0] && contentTypeParts[1]) {
+                    mimeType = event.data.contentType;
+                }
+            } else {
+                // Infer from extension
+                const ext = file_extension.toLowerCase();
+                const mimeTypes = {
+                    'txt': 'text/plain',
+                    'html': 'text/html',
+                    'css': 'text/css',
+                    'js': 'text/javascript',
+                    'json': 'application/json',
+                    'xml': 'application/xml',
+                    'pdf': 'application/pdf',
+                    'png': 'image/png',
+                    'jpg': 'image/jpeg',
+                    'jpeg': 'image/jpeg',
+                    'gif': 'image/gif',
+                    'svg': 'image/svg+xml',
+                };
+                mimeType = mimeTypes[ext] || 'text/plain';
+            }
+            
+            // Ensure mimeType is valid (has both type and subtype)
+            if (!mimeType.includes('/') || mimeType.split('/').length !== 2) {
+                mimeType = 'text/plain';
+            }
+            
+            fileOptions.type = mimeType;
+            
+            // Ensure content is not empty string (convert to proper format)
+            let fileContent = event.data.content;
+            if (fileContent === '') {
+                fileContent = ''; // Empty string is valid for text files
+            } else if (typeof fileContent !== 'string' && !(fileContent instanceof Blob) && !(fileContent instanceof ArrayBuffer)) {
+                // Convert to string if it's not already a valid type
+                fileContent = String(fileContent);
+            }
+            
+            let file_to_upload = new File([fileContent], final_filename, fileOptions);
+            
+            // Validate File object properties
+            if (!file_to_upload.name || typeof file_to_upload.name !== 'string') {
+                console.error('[IPC.js] File object created with invalid name:', file_to_upload.name);
+                await UIAlert({
+                    message: 'Cannot save file: file object creation failed.',
+                    parent_uuid: $(el_filedialog_window).attr('data-element_uuid'),
+                });
+                $(el_filedialog_window).find('.window-disable-mask, .busy-indicator').hide();
+                return;
+            }
+            
+            // Ensure File object has a valid type property (backend might need this)
+            if (!file_to_upload.type || typeof file_to_upload.type !== 'string') {
+                console.warn('[IPC.js] File object missing type, setting to text/plain');
+                // Recreate with explicit type
+                file_to_upload = new File([fileContent], final_filename, { type: 'text/plain' });
+            }
+            
+            // Validate File object completely before passing to backend
+            const fileValidation = {
+                name: file_to_upload.name,
+                type: file_to_upload.type,
+                size: file_to_upload.size,
+                hasExtension: file_to_upload.name.includes('.'),
+                nameType: typeof file_to_upload.name,
+                typeType: typeof file_to_upload.type,
+            };
+            
+            // Ensure name has extension that can be safely extracted
+            const nameParts = file_to_upload.name.split('.');
+            if (nameParts.length < 2 || !nameParts[nameParts.length - 1]) {
+                console.error('[IPC.js] File name does not have valid extension:', file_to_upload.name);
+                throw new Error('File name must have a valid extension');
+            }
+            
+            // Ensure type has both parts (type/subtype)
+            const typeParts = file_to_upload.type.split('/');
+            if (typeParts.length !== 2 || !typeParts[0] || !typeParts[1]) {
+                console.error('[IPC.js] File type is invalid:', file_to_upload.type);
+                // Fix it
+                file_to_upload = new File([fileContent], final_filename, { type: 'text/plain' });
+            }
+            
+            console.log('[IPC.js] File object validated:', JSON.stringify(fileValidation, null, 2));
+            console.log('[IPC.js] File object details:', {
+                name: file_to_upload.name,
+                type: file_to_upload.type,
+                size: file_to_upload.size,
+                nameType: typeof file_to_upload.name,
+                typeType: typeof file_to_upload.type
+            });
+            
             const written = await window.handle_same_name_exists({
                 action: async ({ overwrite }) => {
                     await write_file_tell_caller_and_update_views({

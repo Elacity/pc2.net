@@ -69,9 +69,10 @@ export async function handleFile(req: Request, res: Response): Promise<void> {
           
           try {
             const parentFiles = filesystem.listDirectory(parentPath, walletAddress || '');
-            const matchingFile = parentFiles.find(f => 
-              f.name.toLowerCase() === fileName.toLowerCase()
-            );
+            const matchingFile = parentFiles.find(f => {
+              const fName = f.path.split('/').pop() || '';
+              return fName.toLowerCase() === fileName.toLowerCase();
+            });
             if (matchingFile) {
               metadata = matchingFile;
               filePath = matchingFile.path;

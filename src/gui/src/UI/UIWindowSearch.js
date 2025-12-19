@@ -24,13 +24,57 @@ import launch_app from '../helpers/launch_app.js';
 import item_icon from '../helpers/item_icon.js';
 import UIContextMenu from './UIContextMenu.js';
 
+// HTML encoding helper (if not available globally)
+const html_encode = window.html_encode || function(str) {
+    if (str == null) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+};
+
 async function UIWindowSearch (options) {
     let h = '';
 
     h += '<div class="search-input-wrapper">';
     h += `<input type="text" class="search-input" placeholder="Search" style="background-image:url('${window.icons['magnifier-outline.svg']}');">`;
     h += '</div>';
-    h += '<div class="search-results" style="overflow-y: auto; max-height: 300px;">';
+    
+    // Search filters UI (collapsible)
+    h += '<div class="search-filters-wrapper" style="display: none; padding: 8px 12px; border-top: 1px solid rgba(0,0,0,0.1); background: rgba(255,255,255,0.5);">';
+    h += '<div class="search-filters-row" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">';
+    
+    // Search mode toggle
+    h += '<div class="search-filter-group" style="display: flex; align-items: center; gap: 4px;">';
+    h += '<label style="font-size: 12px; color: #666;">Mode:</label>';
+    h += '<select class="search-mode-select" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px; background: white;">';
+    h += '<option value="both">Filename & Content</option>';
+    h += '<option value="filename">Filename Only</option>';
+    h += '<option value="content">Content Only</option>';
+    h += '</select>';
+    h += '</div>';
+    
+    // File type filter
+    h += '<div class="search-filter-group" style="display: flex; align-items: center; gap: 4px;">';
+    h += '<label style="font-size: 12px; color: #666;">Type:</label>';
+    h += '<select class="search-filetype-select" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px; background: white;">';
+    h += '<option value="">All Files</option>';
+    h += '<option value="image">Images</option>';
+    h += '<option value="video">Videos</option>';
+    h += '<option value="audio">Audio</option>';
+    h += '<option value="document">Documents</option>';
+    h += '<option value="text">Text Files</option>';
+    h += '<option value="code">Code Files</option>';
+    h += '</select>';
+    h += '</div>';
+    
+    h += '</div>'; // search-filters-row
+    h += '</div>'; // search-filters-wrapper
+    
+    h += '<div class="search-results" style="overflow-y: auto; flex: 1; min-height: 100px; max-height: none;"></div>';
+    // Note: Toggle button is added programmatically after window creation to ensure visibility
 
     const el_window = await UIWindow({
         icon: null,
@@ -51,7 +95,7 @@ async function UIWindowSearch (options) {
         allow_user_select: true,
         window_class: 'window-search',
         backdrop: true,
-        center: isMobile.phone,
+        center: window.isMobile?.phone || false,
         width: 500,
         dominant: true,
 
@@ -65,10 +109,14 @@ async function UIWindowSearch (options) {
             'background-color': 'rgb(241 246 251)',
             'backdrop-filter': 'blur(3px)',
             'padding': '0',
-            'height': 'initial',
-            'overflow': 'hidden',
+            'height': 'auto',
+            'overflow-y': 'auto',
+            'overflow-x': 'hidden',
             'min-height': '65px',
-            'padding-bottom': '10px',
+            'padding-bottom': '0',
+            'display': 'flex',
+            'flex-direction': 'column',
+            'position': 'relative',
         },
     });
 
@@ -104,6 +152,24 @@ async function UIWindowSearch (options) {
         }
 
         try {
+            // Detect if input looks like an IPFS CID
+            // IPFS CIDs typically start with 'bafkrei', 'Qm', 'bafy', 'bafz', etc.
+            const searchValue = searchInput.val().trim();
+            const isCID = /^(bafkrei|bafy|bafz|Qm|z[a-z0-9]+)/i.test(searchValue);
+            
+            // Get filter values
+            const searchMode = $(el_window).find('.search-mode-select').val() || 'both';
+            const fileType = $(el_window).find('.search-filetype-select').val() || '';
+            
+            // Build search request
+            const searchRequest = isCID && searchValue.length >= 10
+                ? { ipfsHash: searchValue }  // CID search
+                : { 
+                    text: searchValue,
+                    searchMode: searchMode,
+                    fileType: fileType || undefined
+                  };
+            
             // Perform the search
             let results = await fetch(`${window.api_origin }/search`, {
                 method: 'POST',
@@ -111,7 +177,7 @@ async function UIWindowSearch (options) {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${puter.authToken}`,
                 },
-                body: JSON.stringify({ text: searchInput.val() }),
+                body: JSON.stringify(searchRequest),
             });
 
             results = await results.json();
@@ -131,17 +197,34 @@ async function UIWindowSearch (options) {
 
             for ( let i = 0; i < results.length; i++ ) {
                 const result = results[i];
+                // Prepare fsentry object for item_icon (includes thumbnail for proper display)
+                const fsentry = {
+                    path: result.path,
+                    name: result.name,
+                    type: result.type,
+                    is_dir: result.is_dir,
+                    thumbnail: result.thumbnail || null
+                };
+                
+                const iconResult = await item_icon(fsentry);
+                const isThumbnail = iconResult.type === 'thumb';
+                
                 h += `<div 
                         class="search-result"
                         data-path="${html_encode(result.path)}" 
                         data-uid="${html_encode(result.uid)}"
                         data-is_dir="${html_encode(result.is_dir)}"
                     >`;
-                // icon
-                h += `<img src="${(await item_icon(result)).image}" style="width: 20px; height: 20px; margin-right: 6px;">`;
+                // Use thumbnail styling if it's a thumbnail, otherwise use icon styling
+                if (isThumbnail) {
+                    h += `<img src="${html_encode(iconResult.image)}" class="search-result-thumb" style="width: 40px; height: 40px; margin-right: 8px; object-fit: cover; border-radius: 4px;">`;
+                } else {
+                    h += `<img src="${html_encode(iconResult.image)}" class="search-result-icon" style="width: 20px; height: 20px; margin-right: 8px;">`;
+                }
                 h += html_encode(result.name);
                 h += '</div>';
             }
+            // Only update the inner content, don't replace the entire container
             resultsContainer.html(h);
         } catch ( error ) {
             resultsContainer.html('<div class="search-error">Search failed. Please try again.</div>');
@@ -157,6 +240,15 @@ async function UIWindowSearch (options) {
         const resultsContainer = $(el_window).find('.search-results');
         performSearch(searchInput, resultsContainer);
     });
+    
+    
+    // Set up filter change listeners
+    $(el_window).find('.search-mode-select, .search-filetype-select').on('change', function () {
+        const searchInput = $(el_window).find('.search-input');
+        const resultsContainer = $(el_window).find('.search-results');
+        performSearch(searchInput, resultsContainer);
+    });
+    
 }
 
 $(document).on('click', '.search-result', async function (e) {
@@ -304,5 +396,10 @@ $(document).on('contextmenu', '.search-result', async function (e) {
         items: menuItems,
     });
 });
+
+// Make UIWindowSearch available globally for keyboard shortcuts and toolbar
+if (typeof window !== 'undefined') {
+    window.UIWindowSearch = UIWindowSearch;
+}
 
 export default UIWindowSearch;

@@ -21,6 +21,7 @@ import UIWindow from './UIWindow.js';
 
 // todo do this using uid rather than item_path, since item_path is way mroe expensive on the DB
 async function UIWindowItemProperties (item_name, item_path, item_uid, left, top, width, height) {
+    console.log('[Properties] UIWindowItemProperties called:', { item_name, item_path, item_uid });
     let h = '';
     h += '<div class="item-props-tabview" style="display: flex; flex-direction: column; height: 100%;">';
     // tabs
@@ -50,7 +51,8 @@ async function UIWindowItemProperties (item_name, item_path, item_uid, left, top
     h += '</div>';
 
     h += '<div class="item-props-tab-content" data-tab="versions" style="padding: 20px;">';
-    h += '<div class="item-props-version-list">';
+    h += '<div class="item-props-version-list" style="min-height: 100px;">';
+    h += '<p style="color: #666;">Initializing...</p>';
     h += '</div>';
     h += '</div>';
     h += '</div>';
@@ -100,9 +102,162 @@ async function UIWindowItemProperties (item_name, item_path, item_uid, left, top
         $(el_window).find('.item-props-tab-content').removeClass('item-props-tab-content-selected');
         // select this tab content
         $(el_window).find(`.item-props-tab-content[data-tab="${$(this).attr('data-tab')}"]`).addClass('item-props-tab-content-selected');
+        
+        // If versions tab is clicked, reload versions (in case file was edited)
+        if ($(this).attr('data-tab') === 'versions') {
+            console.log('[Properties] Versions tab clicked');
+            const versionListEl = $(el_window).find('.item-props-version-list');
+            console.log('[Properties] Version list element:', versionListEl.length, 'has entries:', versionListEl.find('.item-prop-version-entry').length);
+            
+            // Always try to load if we have a file path
+            const filePath = $(el_window).find('.item-prop-val-path').text();
+            console.log('[Properties] File path from UI:', filePath);
+            
+            if (filePath && typeof loadFileVersions === 'function') {
+                console.log('[Properties] Calling loadFileVersions from tab click');
+                loadFileVersions(el_window, filePath);
+            } else if (!filePath) {
+                console.error('[Properties] No file path found in UI');
+            } else {
+                console.error('[Properties] loadFileVersions function not available');
+            }
+        }
     });
 
+    // Function to load and display file versions
+    // Defined here so it's available when called from the stat callback
+    const loadFileVersions = async function(windowEl, filePath) {
+        console.log('[Versions] loadFileVersions called for:', filePath);
+        const versionListEl = $(windowEl).find('.item-props-version-list');
+        console.log('[Versions] Version list element found:', versionListEl.length);
+        versionListEl.html('<p style="color: #666;">Loading versions...</p>');
+
+        try {
+            // Determine API origin with fallback
+            const apiOrigin = window.api_origin || window.location.origin;
+            const authToken = puter.authToken || (window.getAuthToken && window.getAuthToken());
+            
+            if (!authToken) {
+                throw new Error('Authentication token not available');
+            }
+
+            console.log('[Versions] Loading versions for:', filePath);
+            console.log('[Versions] API Origin:', apiOrigin);
+            
+            const response = await fetch(`${apiOrigin}/versions?path=${encodeURIComponent(filePath)}`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${authToken}`,
+                },
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('[Versions] API Error:', response.status, errorText);
+                throw new Error(`Failed to load versions: ${response.status} - ${errorText}`);
+            }
+
+            const versions = await response.json();
+            console.log('[Versions] Loaded versions:', versions.length);
+            
+            versionListEl.html(''); // Clear loading message
+
+            // Update version count in General tab
+            const versionCount = versions.length;
+            $(windowEl).find('.item-prop-val-versions').html(versionCount > 0 ? `${versionCount} version${versionCount !== 1 ? 's' : ''}` : '0 versions');
+
+            if (versions.length === 0) {
+                versionListEl.append('<p style="color: #666;">No versions available. Versions are created automatically when you edit files.</p>');
+                return;
+            }
+
+            // Display versions (newest first - already sorted by API)
+            versions.forEach((version, index) => {
+                const isCurrent = index === 0; // First version is the most recent (before current)
+                const date = new Date(version.created_at);
+                const dateStr = date.toLocaleString();
+                const sizeStr = window.byte_format ? window.byte_format(version.size) : `${version.size} bytes`;
+                
+                const versionHtml = `
+                    <div class="item-prop-version-entry" style="padding: 12px; margin-bottom: 8px; border: 1px solid #ddd; border-radius: 4px; background: ${isCurrent ? '#f0f8ff' : '#fff'};">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <strong>Version ${version.version_number}</strong>
+                                ${isCurrent ? '<span style="color: #0066cc; font-size: 11px; margin-left: 8px;">(Previous)</span>' : ''}
+                                <p style="font-size: 11px; color: #666; margin: 4px 0;">${dateStr} &bull; ${sizeStr}</p>
+                                ${version.comment ? `<p style="font-size: 11px; color: #888; margin: 4px 0; font-style: italic;">${html_encode(version.comment)}</p>` : ''}
+                                <p style="font-size: 10px; color: #999; margin: 4px 0; font-family: monospace; word-break: break-all;">CID: ${html_encode(version.ipfs_hash)}</p>
+                            </div>
+                            <button class="version-restore-btn" 
+                                    data-version="${version.version_number}" 
+                                    data-path="${html_encode(filePath)}"
+                                    style="padding: 6px 12px; background: #0066cc; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">
+                                Restore
+                            </button>
+                        </div>
+                    </div>
+                `;
+                versionListEl.append(versionHtml);
+            });
+
+            // Add restore button handlers
+            $(windowEl).find('.version-restore-btn').on('click', async function(e) {
+                const btn = $(this);
+                const versionNumber = btn.attr('data-version');
+                const path = btn.attr('data-path');
+                
+                btn.prop('disabled', true).text('Restoring...');
+                
+                try {
+                    const apiOrigin = window.api_origin || window.location.origin;
+                    const authToken = puter.authToken || (window.getAuthToken && window.getAuthToken());
+                    
+                    const restoreResponse = await fetch(`${apiOrigin}/versions/${versionNumber}/restore`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${authToken}`,
+                        },
+                        body: JSON.stringify({ path: path }),
+                    });
+
+                    if (!restoreResponse.ok) {
+                        const error = await restoreResponse.json();
+                        throw new Error(error.error || 'Restore failed');
+                    }
+
+                    const result = await restoreResponse.json();
+                    
+                    // Show success message
+                    btn.text('✅ Restored').css('background', '#28a745');
+                    
+                    // Reload versions after a short delay
+                    setTimeout(() => {
+                        loadFileVersions(windowEl, path);
+                        // Refresh the file in the explorer
+                        if (window.refresh_item_container) {
+                            const parentPath = path.substring(0, path.lastIndexOf('/')) || '/';
+                            window.refresh_item_container(parentPath);
+                        }
+                    }, 1000);
+                } catch (error) {
+                    console.error('[Versions] Restore error:', error);
+                    btn.text('Error').css('background', '#dc3545');
+                    alert(`Failed to restore version: ${error.message}`);
+                    setTimeout(() => {
+                        btn.prop('disabled', false).text('Restore').css('background', '#0066cc');
+                    }, 2000);
+                }
+            });
+
+        } catch (error) {
+            console.error('[Versions] Error loading versions:', error);
+            versionListEl.html(`<p style="color: #dc3545;">Failed to load versions: ${error.message}</p><p style="font-size: 11px; color: #999; margin-top: 8px;">Check browser console for details.</p>`);
+        }
+    };
+
     // /stat
+    console.log('[Properties] Calling puter.fs.stat for uid:', item_uid);
     puter.fs.stat({
         uid: item_uid,
         returnSubdomains: true,
@@ -111,8 +266,10 @@ async function UIWindowItemProperties (item_name, item_path, item_uid, left, top
         returnSize: true,
         consistency: 'eventual',
         success: function (fsentry) {
+            console.log('[Properties] puter.fs.stat success callback called, fsentry:', fsentry);
             // hide versions tab if item is a directory
             if ( fsentry.is_dir ) {
+                console.log('[Properties] Item is directory, hiding versions tab');
                 $(el_window).find('[data-tab="versions"]').hide();
             }
             // name
@@ -145,22 +302,17 @@ async function UIWindowItemProperties (item_name, item_path, item_uid, left, top
             // type - use mime_type for files (e.g., 'image/jpeg'), 'Directory' for directories
             // Note: fsentry.type is 'file' | 'dir', fsentry.mime_type is the actual MIME type
             const fileType = fsentry.is_dir ? 'Directory' : (fsentry.mime_type || 'Unknown');
-            $(el_window).find('.item-prop-val-type').html(fileType);
             // size
             $(el_window).find('.item-prop-val-size').html(fsentry.size === null || fsentry.size === undefined ? '-' : window.byte_format(fsentry.size));
-            // modified - handle both seconds (Unix timestamp) and milliseconds
-            const modifiedTime = fsentry.modified ? (fsentry.modified < 10000000000 ? fsentry.modified * 1000 : fsentry.modified) : 0;
-            $(el_window).find('.item-prop-val-modified').html(modifiedTime === 0 ? '-' : timeago.format(modifiedTime));
-            // created - handle both seconds (Unix timestamp) and milliseconds
-            const createdTime = fsentry.created ? (fsentry.created < 10000000000 ? fsentry.created * 1000 : fsentry.created) : 0;
-            $(el_window).find('.item-prop-val-created').html(createdTime === 0 ? '-' : timeago.format(createdTime));
+            // modified
+            $(el_window).find('.item-prop-val-modified').html(fsentry.modified === 0 ? '-' : timeago.format(fsentry.modified * 1000));
+            // created
+            $(el_window).find('.item-prop-val-created').html(fsentry.created === 0 ? '-' : timeago.format(fsentry.created * 1000));
             // IPFS Content ID (CID)
             if (fsentry.ipfs_hash) {
                 $(el_window).find('.item-prop-val-ipfs-hash').html(`<code style="font-size: 11px; word-break: break-all;">${html_encode(fsentry.ipfs_hash)}</code>`);
-                $(el_window).find('.item-prop-ipfs-hash').show();
             } else {
                 $(el_window).find('.item-prop-val-ipfs-hash').html('-');
-                $(el_window).find('.item-prop-ipfs-hash').show(); // Show row even if no hash (for directories)
             }
             // subdomains
             if ( fsentry.subdomains && fsentry.subdomains.length > 0 ) {
@@ -171,15 +323,21 @@ async function UIWindowItemProperties (item_name, item_path, item_uid, left, top
             else {
                 $(el_window).find('.item-prop-val-websites').append('-');
             }
-            // versions
-            if ( fsentry.versions && fsentry.versions.length > 0 ) {
-                fsentry.versions.reverse().forEach(version => {
-                    $(el_window).find('.item-props-version-list')
-                        .append(`<div class="item-prop-version-entry">${version.user ? version.user.username : ''} &bull; ${timeago.format(version.timestamp * 1000)}<p style="font-size:10px;">${version.id}</p></div>`);
-                });
-            }
-            else {
-                $(el_window).find('.item-props-version-list').append('-');
+            // Load versions from our new /versions API endpoint and update version count
+            console.log('[Properties] File is_dir:', fsentry.is_dir, 'path:', item_path);
+            if (!fsentry.is_dir) {
+                console.log('[Properties] Calling loadFileVersions for file:', item_path);
+                // Call loadFileVersions - it's defined below
+                if (typeof loadFileVersions === 'function') {
+                    loadFileVersions(el_window, item_path);
+                } else {
+                    console.error('[Properties] loadFileVersions function not found!');
+                    $(el_window).find('.item-props-version-list').html('<p style="color: #dc3545;">Error: Version loading function not available.</p>');
+                }
+            } else {
+                console.log('[Properties] Item is a directory, skipping versions');
+                $(el_window).find('.item-props-version-list').append('<p style="color: #666;">Versions are only available for files.</p>');
+                $(el_window).find('.item-prop-val-versions').html('-');
             }
 
             $(el_window).find('.disassociate-website-link').on('click', function (e) {

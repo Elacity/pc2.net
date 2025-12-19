@@ -23,6 +23,7 @@ import AccountTab from '../UI/Settings/UITabAccount.js';
 import PersonalizationTab from '../UI/Settings/UITabPersonalization.js';
 import LanguageTag from '../UI/Settings/UITabLanguage.js';
 import PC2Tab from '../UI/Settings/UITabPC2.js';
+import StorageTab from '../UI/Settings/UITabStorage.js';
 import UIElement from '../UI/UIElement.js';
 const TSettingsTab = use('ui.traits.TSettingsTab');
 
@@ -34,6 +35,7 @@ export class SettingsService extends Service {
         ;[
             AccountTab,
             PC2Tab,
+            StorageTab,
             PersonalizationTab,
             LanguageTag,
             AboutTab,

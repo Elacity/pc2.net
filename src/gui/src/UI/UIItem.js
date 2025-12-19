@@ -1604,22 +1604,30 @@ function UIItem (options) {
             menu_items.push({
                 html: i18n('properties'),
                 onClick: function () {
-                    let window_height = 500;
-                    let window_width = 450;
+                    try {
+                        console.log('[UIItem] Properties menu item clicked!');
+                        let window_height = 500;
+                        let window_width = 450;
 
-                    let left = $(el_item).position().left + $(el_item).width();
-                    left = left > (window.innerWidth - window_width) ? (window.innerWidth - window_width) : left;
+                        let left = $(el_item).position().left + $(el_item).width();
+                        left = left > (window.innerWidth - window_width) ? (window.innerWidth - window_width) : left;
 
-                    let top = $(el_item).position().top + $(el_item).height();
-                    top = top > (window.innerHeight - (window_height + window.taskbar_height + window.toolbar_height)) ? (window.innerHeight - (window_height + window.taskbar_height + window.toolbar_height)) : top;
+                        let top = $(el_item).position().top + $(el_item).height();
+                        top = top > (window.innerHeight - (window_height + window.taskbar_height + window.toolbar_height)) ? (window.innerHeight - (window_height + window.taskbar_height + window.toolbar_height)) : top;
 
-                    UIWindowItemProperties($(el_item).attr('data-name'),
-                                    $(el_item).attr('data-path'),
-                                    $(el_item).attr('data-uid'),
-                                    left,
-                                    top,
-                                    window_width,
-                                    window_height);
+                        const itemName = $(el_item).attr('data-name');
+                        const itemPath = $(el_item).attr('data-path');
+                        const itemUid = $(el_item).attr('data-uid');
+                        console.log('[UIItem] Opening Properties window:', { itemName, itemPath, itemUid, left, top });
+                        console.log('[UIItem] UIWindowItemProperties function exists:', typeof UIWindowItemProperties);
+                        UIWindowItemProperties(itemName, itemPath, itemUid, left,
+                                        top,
+                                        window_width,
+                                        window_height);
+                    } catch (error) {
+                        console.error('[UIItem] ERROR opening Properties:', error);
+                        alert('Error opening Properties: ' + error.message);
+                    }
                 },
             });
         }

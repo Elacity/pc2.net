@@ -509,8 +509,7 @@ export async function handleBatch(req: AuthenticatedRequest, res: Response): Pro
             error: error instanceof Error ? error.message : 'Unknown error',
             errorCode: (error as any)?.code,
             errorStack: error instanceof Error ? error.stack : undefined,
-            filename: file.originalname || file.name,
-            filePath: filePath
+            filename: file.originalname || file.name
           });
           results.push({
             success: false,

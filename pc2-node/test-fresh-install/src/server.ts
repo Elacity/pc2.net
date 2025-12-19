@@ -5,6 +5,7 @@ import { setupAPI } from './api/index.js';
 import { setupWebSocket, setGlobalIO } from './websocket/server.js';
 import { DatabaseManager, FilesystemManager } from './storage/index.js';
 import { Config } from './config/loader.js';
+import { IndexingWorker } from './storage/indexer.js';
 
 export interface ServerOptions {
   port: number;
@@ -65,6 +66,14 @@ export function createServer(options: ServerOptions): { app: Express; server: Se
     next();
   });
   
+  // Handle binary data for /writeFile endpoint (PDFs, images, etc.)
+  // CRITICAL: Accept ALL content types for /writeFile to handle Blobs from viewer app
+  // The viewer app sends Blobs which may have various content types
+  app.use('/writeFile', express.raw({ 
+    type: '*/*', // Accept all content types for /writeFile
+    limit: '100mb' // Allow large files
+  }));
+  
   app.use(express.json({ 
     verify: (req: any, res, buf) => {
       // Capture raw body for debugging (especially for /drivers/call and /mkdir)
@@ -116,6 +125,16 @@ export function createServer(options: ServerOptions): { app: Express; server: Se
   
   // Make WebSocket server available to routes via app.locals
   app.locals.io = io;
+  
+  // Initialize background indexing worker (if database and filesystem are available)
+  if (options.database && options.filesystem) {
+    const indexer = new IndexingWorker(options.database, options.filesystem);
+    indexer.start().catch((error) => {
+      console.error('[Server] Failed to start indexing worker:', error);
+    });
+    // Store indexer in app.locals for potential API access
+    app.locals.indexer = indexer;
+  }
   
   return { app, server };
 }

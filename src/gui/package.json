@@ -30,7 +30,8 @@
   "scripts": {
     "test": "mocha ./test/**/*.test.js",
     "start=gui": "nodemon --exec \"node dev-server.js\" ",
-    "build": "node ./build.js",
+    "build": "node ./build.js && node ../../pc2-node/test-fresh-install/scripts/build-frontend.js",
+    "build:only": "node ./build.js",
     "check-translations": "node tools/check-translations.js",
     "start-webpack": "webpack --watch --devtool source-map --stats=errors-only"
   },

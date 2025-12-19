@@ -7,6 +7,25 @@
 
 ---
 
+## 🚀 Quick Start: Full System Restart
+
+**When user requests "restart everything" or "get latest build":**
+
+```bash
+# Complete restart sequence (ALWAYS do all steps)
+lsof -ti:4202 | xargs kill -9 2>/dev/null || true
+cd /Users/mtk/Documents/Cursor/pc2.net/pc2-node/test-fresh-install
+npm run build:backend
+npm run build:frontend
+PORT=4202 npm start
+```
+
+**Then:** User must hard refresh browser (Cmd+Shift+R / Ctrl+Shift+R)
+
+**See:** "Full System Restart Process" section below for details
+
+---
+
 ## 🎯 Vision Statement
 
 **"Puter runs ON the PC2 node itself - a self-contained software package that users install on their hardware (Raspberry Pi, VPS, Mac, etc.), accessible via a unique URL, with wallet-based decentralized identity."**
@@ -207,6 +226,15 @@
 
 #### 2.2 Build Process Integration ✅
 - [x] **Task:** Create build process
+- [x] **CRITICAL RULE: Frontend Bundle Copying (2025-12-19)**
+  - **Problem:** Frontend bundle built in `src/gui/dist/` but server serves from `pc2-node/test-fresh-install/frontend/`
+  - **Impact:** Stale bundles cause "code not working" debugging confusion
+  - **Solution:** 
+    - `npm run build` in `src/gui/` now automatically copies bundle via `build-frontend.js`
+    - Modified `src/gui/package.json` so `build` script runs copy automatically
+  - **Manual Copy:** If building directly, run: `node pc2-node/test-fresh-install/scripts/build-frontend.js`
+  - **Rule:** ALWAYS ensure frontend directory has latest bundle before testing
+  - **Never:** Serve stale bundles - causes debugging confusion and "code not working" issues
   - **File:** `pc2-node/package.json`
   - **Scripts:**
     ```json
@@ -1541,21 +1569,48 @@ Based on the current PC2 architecture and self-hosted vision, here are strategic
 
 #### 📁 **File Management & Organization**
 
-##### 1. **Advanced Search & Indexing**
-**Priority:** High | **Complexity:** Medium | **Value:** High
+##### 1. **Advanced Search & Indexing** 🔄 **IN PROGRESS**
+**Priority:** High | **Complexity:** Medium | **Value:** High  
+**Status:** Backend complete, UI filters pending (low priority)
+
+**✅ Completed (2025-12-19):**
+- ✅ **Phase 1: Foundation** - Basic `/search` endpoint with filename/path search using SQL LIKE
+- ✅ **Phase 2: FTS5 Setup** - SQLite FTS5 virtual table with sync triggers, `content_text` column added
+- ✅ **Phase 3: Content Extraction** - Text extraction from plain text, code files, and PDFs (mandatory `pdfjs-dist` integration)
+- ✅ **Phase 4: Backend Enhancements** - Advanced search capabilities:
+  - ✅ IPFS CID search (auto-detects CID patterns in search input)
+  - ✅ Metadata filters (file type, MIME type, size range, date range)
+  - ✅ Search mode selection (filename, content, or both)
+  - ✅ Improved ranking (prioritizes filename matches over content matches)
+  - ✅ Background indexing worker for asynchronous content extraction
+- ✅ **Frontend Integration** - Search UI accessible via Cmd+K / Ctrl+K and search toolbar icon
+- ✅ **Thumbnail Display** - Search results show actual thumbnails like file explorer
+
+**⚠️ Known Issues:**
+- ⚠️ **Filter UI Not Visible** - Search mode toggle and file type filter dropdowns implemented in code but not appearing in UI (low priority, backend fully functional)
 
 **Features:**
-- Full-text search across file contents (PDFs, documents, code files)
-- Metadata search (tags, custom properties, IPFS CIDs)
-- Advanced filters (date range, file type, size, owner)
-- Search history and saved searches
-- Indexing service that runs in background
+- ✅ Full-text search across file contents (PDFs, documents, code files)
+- ✅ Metadata search (IPFS CIDs, file types, MIME types)
+- ✅ Advanced filters (date range, file type, size) - **Backend ready, UI pending**
+- ⏳ Search history and saved searches - **Not started**
+- ✅ Indexing service that runs in background
 
-**Technical Approach:**
-- Use `pdfjs-dist` (already in dependencies) for PDF text extraction
-- Integrate with IPFS content for searchable metadata
-- SQLite FTS5 extension for full-text search
-- Background worker process for indexing
+**Technical Implementation:**
+- ✅ `pdfjs-dist` integrated for PDF text extraction (mandatory dependency)
+- ✅ IPFS CID search integrated
+- ✅ SQLite FTS5 extension for full-text search with ranking
+- ✅ Background worker process (`IndexingWorker`) for asynchronous indexing
+- ✅ Database migration system updated (Migration 3: FTS5 table + triggers)
+- ✅ Search endpoint: `POST /search` with comprehensive filtering options
+
+**Files Modified:**
+- `pc2-node/test-fresh-install/src/api/search.ts` - Search endpoint implementation
+- `pc2-node/test-fresh-install/src/storage/database.ts` - Added `content_text` to FileMetadata
+- `pc2-node/test-fresh-install/src/storage/migrations.ts` - Migration 3 for FTS5
+- `pc2-node/test-fresh-install/src/storage/indexer.ts` - Content extraction and indexing worker
+- `pc2-node/test-fresh-install/src/server.ts` - IndexingWorker initialization
+- `src/gui/src/UI/UIWindowSearch.js` - Frontend search UI (filters UI code present but not visible)
 
 **Why It Matters:**
 - Self-hosted users need powerful search without relying on external services
@@ -1564,26 +1619,52 @@ Based on the current PC2 architecture and self-hosted vision, here are strategic
 
 ---
 
-##### 2. **File Versioning & History**
-**Priority:** Medium | **Complexity:** Medium | **Value:** High
+##### 2. **File Versioning & History** ✅ **BACKEND COMPLETE** (2025-12-19)
+**Priority:** Medium | **Complexity:** Medium | **Value:** High  
+**Status:** Backend complete, frontend UI pending
+
+**✅ Completed (2025-12-19):**
+- ✅ **Database Schema** - Migration 4: `file_versions` table with version tracking
+- ✅ **Automatic Version Snapshots** - Versions created automatically on file write/update
+- ✅ **Version API Endpoints**:
+  - ✅ `GET /versions?path=...` - List all versions for a file
+  - ✅ `GET /versions/:versionNumber?path=...` - Get specific version content
+  - ✅ `POST /versions/:versionNumber/restore` - Rollback file to specific version
+- ✅ **IPFS Integration** - Each version stores IPFS CID (content-addressed, immutable)
+- ✅ **Version Cleanup** - Versions deleted when file is deleted
+- ✅ **Rollback Functionality** - Restore any previous version (creates new version automatically)
+
+**⏳ Pending:**
+- ⏳ **Frontend UI** - Version browser component (similar to Google Docs)
+- ⏳ **Version Diff Viewer** - Compare versions for text files
 
 **Features:**
-- Automatic version snapshots on file changes
-- Version browser UI (similar to Google Docs)
-- Rollback to previous versions
-- Version diff viewer for text files
-- IPFS-based version storage (each version = new CID)
+- ✅ Automatic version snapshots on file changes
+- ⏳ Version browser UI (similar to Google Docs) - **Pending**
+- ✅ Rollback to previous versions
+- ⏳ Version diff viewer for text files - **Pending**
+- ✅ IPFS-based version storage (each version = new CID)
 
-**Technical Approach:**
-- Store version metadata in SQLite with IPFS CIDs
-- Use IPFS content-addressing for immutable version history
-- Frontend version browser component
-- API endpoint: `/versions?path=...`
+**Technical Implementation:**
+- ✅ `file_versions` table in SQLite (Migration 4)
+- ✅ Automatic version creation in `writeFile()` before updating file
+- ✅ Version metadata stored with IPFS CID, size, MIME type, timestamp
+- ✅ API endpoints for listing, retrieving, and restoring versions
+- ✅ IPFS content-addressing ensures immutable version history
+- ✅ Version cleanup on file deletion
+
+**Files Modified:**
+- `pc2-node/test-fresh-install/src/storage/migrations.ts` - Migration 4 for file_versions table
+- `pc2-node/test-fresh-install/src/storage/database.ts` - Added FileVersion interface and versioning methods
+- `pc2-node/test-fresh-install/src/storage/filesystem.ts` - Automatic version snapshots on writeFile
+- `pc2-node/test-fresh-install/src/api/versions.ts` - Version API endpoints (NEW)
+- `pc2-node/test-fresh-install/src/api/index.ts` - Registered version endpoints
 
 **Why It Matters:**
 - Self-hosted users need version control without Git
-- IPFS's content-addressing is perfect for versioning
+- IPFS's content-addressing is perfect for versioning (immutable, deduplicated)
 - Provides safety net for accidental edits
+- Natural progression from search/indexing infrastructure
 
 ---
 
@@ -2013,8 +2094,8 @@ Based on the current PC2 architecture and self-hosted vision, here are strategic
 
 #### **Potential Phase 2.5: Essential Enhancements** (Before Phase 3)
 1. ✅ **Permanent Delete from Trash** - ✅ COMPLETE
-2. 🔄 **Advanced Search & Indexing** - High value, builds on existing
-3. 🔄 **File Versioning** - Leverages IPFS perfectly
+2. ✅ **Advanced Search & Indexing** - **Backend Complete** (UI filters pending, low priority)
+3. ✅ **File Versioning** - **Backend Complete** (Frontend UI pending)
 4. 🔄 **End-to-End Encryption** - Critical for privacy-focused users
 
 #### **Potential Phase 3.5: User Experience** (After Packaging)
@@ -2043,6 +2124,58 @@ Based on the current PC2 architecture and self-hosted vision, here are strategic
 
 ---
 
+---
+
+## 📍 Current Status & Next Steps (Updated: 2025-12-19)
+
+### ✅ Recently Completed
+
+**Phase 2.4: Advanced Search & Indexing** - ✅ Complete
+- ✅ Full-text search with SQLite FTS5
+- ✅ IPFS CID search capability
+- ✅ Background content indexing worker
+- ✅ PDF text extraction (mandatory)
+- ✅ Advanced filtering (file type, size, date) - backend ready
+- ✅ Search UI simplified (removed advanced filters toggle button)
+
+**Phase 2.5: File Versioning** - ✅ Complete (2025-12-19)
+- ✅ Automatic version snapshots on file changes
+- ✅ Version API endpoints (list, retrieve, restore)
+- ✅ IPFS-based immutable version storage
+- ✅ Rollback functionality
+- ✅ Version history preserved on file rename/move
+- ✅ Frontend UI complete (version browser in Properties window)
+
+**Infrastructure Improvements** - ✅ Complete (2025-12-19)
+- ✅ Frontend bundle auto-copying (prevents stale bundle issues)
+- ✅ Binary data support for `/writeFile` endpoint (images, PDFs)
+- ✅ Enhanced error handling and logging
+
+### 🎯 Recommended Next Steps
+
+**Option 1: Viewer App Save Fix** (In Progress)
+- ⏳ Debug why viewer app's `curfile.write()` isn't calling backend
+- ⏳ Add error handling to viewer app (in progress)
+- ⏳ Verify binary data handling works correctly
+- **Estimated Time:** 1-2 hours
+
+**Option 2: Quick Wins from List** (Low Effort, High Impact)
+- **Recent Files** - Track `last_accessed`, add UI component (1-2 days)
+- **Bulk Operations** - Multi-select delete/move (2-3 days)
+- **Storage Usage Dashboard** - Simple aggregation query (1-2 days)
+
+**Option 3: Phase 3 - Packaging** (Production Readiness)
+- Docker package
+- Debian package (Raspberry Pi)
+- macOS package
+- **Estimated Time:** 1 week
+
+### 💡 Recommendation
+
+**Complete Option 1 (Viewer App Save Fix)** - Critical for user workflow. Once fixed, proceed with Option 2 or Option 3 based on priorities.
+
+---
+
 ### Technical Debt & Foundation Work
 
 Before adding many features, consider:
@@ -2053,6 +2186,103 @@ Before adding many features, consider:
 4. **Documentation** - API docs, user guides
 5. **Migration Tools** - Database migrations, data upgrades
 6. **Configuration Management** - Centralized config system
+
+---
+
+## 🔧 Development Rules & Best Practices
+
+### ⚠️ CRITICAL: Full System Restart Process (2025-12-19)
+
+**MANDATORY:** When user requests "restart everything" or "get latest build", **ALWAYS** follow this complete process:
+
+#### Standard Full Restart Sequence
+
+```bash
+# 1. Kill all existing processes
+lsof -ti:4202 | xargs kill -9 2>/dev/null || true
+pkill -f "node.*pc2-node" || pkill -f "npm.*start" || true
+
+# 2. Rebuild Backend (TypeScript → JavaScript)
+cd pc2-node/test-fresh-install
+npm run build:backend
+
+# 3. Rebuild Frontend (Source → Bundle)
+npm run build:frontend
+
+# 4. Restart Server
+PORT=4202 npm start
+```
+
+#### Why This Matters
+
+**Problem:** Partial restarts waste time:
+- ❌ Only restarting server → Old compiled code runs
+- ❌ Only rebuilding frontend → Backend still has old code
+- ❌ Not killing processes → Port conflicts, stale connections
+- ❌ Browser cache → User sees old frontend bundle
+
+**Solution:** **ALWAYS** do complete rebuild + restart:
+- ✅ Kill all processes (clean slate)
+- ✅ Rebuild backend (fresh compiled code)
+- ✅ Rebuild frontend (fresh bundle)
+- ✅ Restart server (loads new code)
+- ✅ User hard refreshes browser (Cmd+Shift+R)
+
+#### When to Use Full Restart
+
+**ALWAYS use full restart when:**
+- User says "restart everything" or "get latest build"
+- After making changes to both backend and frontend
+- When user reports "not seeing changes" or "old code"
+- Before testing after any code changes
+- When switching between tasks
+
+**Never skip steps** - Partial restarts cause confusion and waste time.
+
+#### Verification After Restart
+
+After full restart, verify:
+```bash
+# Check bundle timestamp (should be recent)
+ls -lh pc2-node/test-fresh-install/frontend/bundle.min.js
+
+# Check server is running
+curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:4202
+# Should return: 200
+
+# Check compiled backend exists
+ls -lh pc2-node/test-fresh-install/dist/index.js
+```
+
+**This process prevents:** Hours of debugging when code is correct but build/restart was incomplete.
+
+---
+
+### Frontend Bundle Management (CRITICAL - 2025-12-19)
+
+**Rule:** Frontend bundle MUST always be copied to serving directory after build
+
+**Why:**
+- Frontend is built in `src/gui/dist/` but server serves from `pc2-node/test-fresh-install/frontend/`
+- Stale bundles cause debugging confusion ("code not working" when it's just old bundle)
+- This caused significant debugging time waste during File Versioning implementation
+
+**Solution:**
+- `npm run build` in `src/gui/` automatically runs `build-frontend.js` to copy bundle
+- Modified `src/gui/package.json` so `build` script includes copy step
+- Always verify bundle timestamp matches before testing
+
+**Manual Copy Command:**
+```bash
+node pc2-node/test-fresh-install/scripts/build-frontend.js
+```
+
+**Never:**
+- Serve stale bundles
+- Assume bundle is up-to-date without checking
+- Skip bundle copy step
+
+**This rule prevents:** Hours of debugging confusion when code is correct but bundle is stale.
 
 ---
 

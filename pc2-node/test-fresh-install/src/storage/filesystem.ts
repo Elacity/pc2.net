@@ -72,19 +72,17 @@ export class FilesystemManager {
     // Calculate actual content size
     const contentSize = Buffer.isBuffer(content) 
       ? content.length 
-      : content instanceof Uint8Array
-      ? content.length
       : Buffer.byteLength(content, 'utf8');
     
     logger.info(`[Filesystem] Storing file in IPFS: ${normalizedPath} (size: ${contentSize} bytes)`, {
-      contentType: Buffer.isBuffer(content) ? 'Buffer' : (content instanceof Uint8Array ? 'Uint8Array' : typeof content),
+      contentType: Buffer.isBuffer(content) ? 'Buffer' : typeof content,
       contentLength: contentSize
     });
     
     const ipfsHash = await this.ipfs.storeFile(content, { pin: true });
     
     // Verify the stored file size matches
-    const storedSize = Buffer.isBuffer(content) ? content.length : (content instanceof Uint8Array ? content.length : Buffer.byteLength(content, 'utf8'));
+    const storedSize = Buffer.isBuffer(content) ? content.length : Buffer.byteLength(content, 'utf8');
     logger.info(`[Filesystem] File stored in IPFS: ${normalizedPath} -> CID: ${ipfsHash} (stored size: ${storedSize} bytes)`);
 
     // Calculate size
@@ -101,12 +99,10 @@ export class FilesystemManager {
         // Convert content to Buffer for thumbnail generation
         const contentBuffer = Buffer.isBuffer(content) 
           ? content 
-          : content instanceof Uint8Array
-          ? Buffer.from(content)
           : Buffer.from(content, 'utf8');
         
         const fileUuid = `uuid-${normalizedPath.replace(/\//g, '-').replace(/^-/, '')}`;
-        thumbnail = await generateThumbnail(contentBuffer, mimeType, fileUuid);
+        thumbnail = await generateThumbnail(contentBuffer, mimeType || 'application/octet-stream', fileUuid);
         
         if (thumbnail) {
           logger.info(`[Filesystem] 🖼️  Thumbnail generated for: ${normalizedPath}`);
@@ -117,6 +113,26 @@ export class FilesystemManager {
       }
     }
 
+    // Check if file already exists (for versioning and preserving created_at)
+    const existing = this.db.getFile(normalizedPath, walletAddress);
+    
+    // Create version snapshot if file already exists (before updating)
+    if (existing && existing.ipfs_hash) {
+      const nextVersion = this.db.getNextVersionNumber(normalizedPath, walletAddress);
+      this.db.createFileVersion({
+        file_path: normalizedPath,
+        wallet_address: walletAddress,
+        version_number: nextVersion,
+        ipfs_hash: existing.ipfs_hash,
+        size: existing.size,
+        mime_type: existing.mime_type,
+        created_at: existing.updated_at, // Use previous updated_at as version timestamp
+        created_by: null,
+        comment: null
+      });
+      logger.info(`[Filesystem] 📸 Created version ${nextVersion} snapshot for: ${normalizedPath} (CID: ${existing.ipfs_hash})`);
+    }
+
     // Create or update file metadata in database
     const metadata: FileMetadata = {
       path: normalizedPath,
@@ -125,17 +141,12 @@ export class FilesystemManager {
       size: size,
       mime_type: mimeType,
       thumbnail: thumbnail,
+      content_text: null, // Will be populated by indexer
       is_dir: false,
       is_public: options?.isPublic || false,
-      created_at: Date.now(),
+      created_at: existing?.created_at || Date.now(), // Preserve original creation time
       updated_at: Date.now()
     };
-
-    // Check if file already exists to preserve created_at
-    const existing = this.db.getFile(normalizedPath, walletAddress);
-    if (existing) {
-      metadata.created_at = existing.created_at;
-    }
 
     this.db.createOrUpdateFile(metadata);
 
@@ -299,6 +310,8 @@ export class FilesystemManager {
       ipfs_hash: null,
       size: 0,
       mime_type: null,
+      thumbnail: null,
+      content_text: null, // Directories don't have content
       is_dir: true,
       is_public: isPublic,
       created_at: Date.now(),
@@ -412,8 +425,10 @@ export class FilesystemManager {
     }
 
     // Remove from database (this is the critical step - removes file metadata)
+    // Also delete all version history for this file
+    this.db.deleteFileVersions(normalizedPath, walletAddress);
     this.db.deleteFile(normalizedPath, walletAddress);
-    console.log(`[Delete] Removed file from database: ${normalizedPath}`);
+    console.log(`[Delete] Removed file and version history from database: ${normalizedPath}`);
   }
 
   /**
@@ -473,13 +488,27 @@ export class FilesystemManager {
     // For now, we'll just update the metadata
     // TODO: Implement recursive directory move if needed
 
+    // Update version history to new path BEFORE deleting old entry
+    // This preserves version history when files are renamed/moved
+    this.db.updateFileVersionPaths(normalizedOldPath, normalizedNewPath, walletAddress);
+
     // Delete old entry
     this.db.deleteFile(normalizedOldPath, walletAddress);
 
     // Create new entry with same data but new path
+    // Explicitly construct FileMetadata to ensure all required fields are present
+    // and no extra database fields (like rowid) are included
     const newMetadata: FileMetadata = {
-      ...existing,
       path: normalizedNewPath,
+      wallet_address: existing.wallet_address,
+      ipfs_hash: existing.ipfs_hash,
+      size: existing.size,
+      mime_type: existing.mime_type,
+      thumbnail: existing.thumbnail ?? null,
+      content_text: existing.content_text ?? null, // Explicitly preserve content_text
+      is_dir: existing.is_dir,
+      is_public: existing.is_public,
+      created_at: existing.created_at,
       updated_at: Date.now()
     };
 

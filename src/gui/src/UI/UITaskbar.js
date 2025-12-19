@@ -83,8 +83,15 @@ async function UITaskbar (options) {
         $('.desktop').addClass(`desktop-taskbar-position-${taskbar_position}`);
     }
 
-    console.log('[UITaskbar]: Appending taskbar to .desktop, desktop element exists:', $('.desktop').length > 0, 'taskbar_height:', window.taskbar_height, 'taskbar_position:', taskbar_position);
-    $('.desktop').append(h);
+    // CRITICAL: For bottom position, append to body (not desktop) since we use position: fixed
+    // For left/right positions, append to desktop as before
+    if (taskbar_position === 'bottom') {
+        console.log('[UITaskbar]: Appending taskbar to body (bottom position), taskbar_height:', window.taskbar_height);
+        $('body').append(h);
+    } else {
+        console.log('[UITaskbar]: Appending taskbar to .desktop, desktop element exists:', $('.desktop').length > 0, 'taskbar_height:', window.taskbar_height, 'taskbar_position:', taskbar_position);
+        $('.desktop').append(h);
+    }
     
     // Ensure taskbar has correct height after appending (in case it was set to 0)
     const $taskbar = $('.taskbar').last();
@@ -95,13 +102,67 @@ async function UITaskbar (options) {
             $taskbar.css('height', `${correctHeight}px`);
             console.log('[UITaskbar]: Fixed taskbar height from', currentHeight, 'to', correctHeight);
         }
+    } else {
+        console.error('[UITaskbar]: ❌ Taskbar element not found after append!');
     }
     
     // Explicitly show the taskbar and desktop to ensure visibility
     $('.taskbar').show();
     $('.desktop').css('display', 'grid');
     
-    console.log('[UITaskbar]: Taskbar appended, taskbar element exists:', $('.taskbar').length > 0, 'taskbar visible:', $('.taskbar').is(':visible'), 'taskbar height:', $('.taskbar').last().css('height'));
+    // CRITICAL: Ensure taskbar is positioned correctly and visible
+    // For bottom position, taskbar should be at the bottom of viewport, full width
+    if (taskbar_position === 'bottom') {
+        const $taskbar = $('.taskbar').last();
+        if ($taskbar.length === 0) {
+            console.error('[UITaskbar]: ❌ Cannot find taskbar element to position!');
+            return;
+        }
+        
+        // Position relative to viewport, not desktop container
+        // CRITICAL: Keep centered positioning (left: 50%, transform: translateX(-50%)) but ensure visibility
+        $taskbar.css({
+            'position': 'fixed !important', // Use fixed instead of absolute to position relative to viewport
+            'bottom': '5px !important', // Match CSS default bottom position
+            'left': '50% !important', // Center horizontally
+            'right': 'auto !important',
+            'width': 'auto !important', // Let CSS handle width based on content
+            'transform': 'translateX(-50%) !important', // Center the taskbar
+            'z-index': '10000 !important', // High z-index to ensure it's on top
+            'display': 'flex !important', // Force display
+            'flex-direction': 'row !important',
+            'align-items': 'center !important',
+            'justify-content': 'center !important',
+            'visibility': 'visible !important', // Force visibility
+            'opacity': '1 !important', // Force opacity
+            'background-color': 'rgba(0, 0, 0, 0.9) !important', // Ensure taskbar has visible background
+            'min-height': `${window.taskbar_height || 50}px !important`, // Ensure minimum height
+            'height': `${window.taskbar_height || 50}px !important` // Force height
+        });
+        
+        // Ensure taskbar-sortable takes available space
+        $taskbar.find('.taskbar-sortable').css({
+            'flex': '1',
+            'display': 'flex',
+            'justify-content': 'center',
+            'align-items': 'center',
+            'min-width': '0' // Allow flex shrinking
+        });
+        
+        // Force show with !important to override any CSS
+        $taskbar.show();
+        
+        console.log('[UITaskbar]: Taskbar positioned at bottom with fixed positioning, full width', {
+            exists: $taskbar.length > 0,
+            visible: $taskbar.is(':visible'),
+            height: $taskbar.css('height'),
+            position: $taskbar.css('position'),
+            bottom: $taskbar.css('bottom'),
+            zIndex: $taskbar.css('z-index')
+        });
+    }
+    
+    console.log('[UITaskbar]: Taskbar appended, taskbar element exists:', $('.taskbar').length > 0, 'taskbar visible:', $('.taskbar').is(':visible'), 'taskbar height:', $('.taskbar').last().css('height'), 'taskbar position:', $('.taskbar').last().css('position'), 'taskbar bottom:', $('.taskbar').last().css('bottom'));
 
     //---------------------------------------------
     // add `Start` to taskbar

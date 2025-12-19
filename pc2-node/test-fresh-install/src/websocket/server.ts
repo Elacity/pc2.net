@@ -137,7 +137,7 @@ export function setupWebSocket(
       hasToken: !!token,
       hasAuthenticatedSession: !!authenticatedSession,
       tokenSource: authenticatedSession ? 'allowRequest' :
-                   socket.handshake.auth?.token ? 'auth.token' :
+                   socket.handshake.auth?.token ? 'auth.token' : 
                    socket.handshake.auth?.auth_token ? 'auth.auth_token' :
                    socket.handshake.headers?.authorization ? 'headers.authorization' :
                    socket.handshake.query?.token ? 'query.token' :
@@ -459,7 +459,7 @@ export function setupWebSocket(
         console.log(`💚 [puter_is_actually_open] Socket ${socket.id} confirmed open (not authenticated yet)`);
       }
     });
-    
+
     // Handle client events (if needed)
     socket.on('file:subscribe', (data: { path?: string }) => {
       // Client can subscribe to specific file changes

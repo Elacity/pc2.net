@@ -29,7 +29,7 @@ function findSchemaFile(): string {
   }
   throw new Error(`Schema file not found. Tried: ${SCHEMA_FILE} and ${sourceSchema}`);
 }
-const CURRENT_VERSION = 2;
+const CURRENT_VERSION = 4;
 
 interface Migration {
   version: number;
@@ -101,9 +101,201 @@ export function runMigrations(db: Database.Database): void {
       }
     }
     
-    recordMigration(db, CURRENT_VERSION);
+    // Migration 3: Add FTS5 full-text search and content_text column
+    if (currentVersion < 3) {
+      try {
+        // Add content_text column for storing extracted file content
+        db.exec('ALTER TABLE files ADD COLUMN content_text TEXT');
+        console.log('✅ Added content_text column to files table');
+        
+        // Drop existing FTS5 table and triggers if they exist (for clean migration)
+        db.exec('DROP TABLE IF EXISTS files_fts');
+        db.exec('DROP TRIGGER IF EXISTS files_fts_insert');
+        db.exec('DROP TRIGGER IF EXISTS files_fts_update');
+        db.exec('DROP TRIGGER IF EXISTS files_fts_delete');
+        
+        // Create FTS5 virtual table for full-text search
+        // Note: We don't use content='files' because the files table doesn't have a 'name' column
+        // We'll use triggers to keep FTS5 in sync instead
+        db.exec(`
+          CREATE VIRTUAL TABLE files_fts USING fts5(
+            path,
+            name,
+            content,
+            mime_type
+          )
+        `);
+        console.log('✅ Created FTS5 virtual table files_fts');
+        
+        // Helper function to extract filename from path
+        // SQLite doesn't have a built-in basename function, so we use a workaround
+        // For path like /user/path/to/file.txt, we want file.txt
+        // We'll extract it by finding the last '/' and taking everything after it
+        
+        // Create triggers to keep FTS5 in sync with files table
+        // For name field, we'll store the full path (still searchable)
+        // Filename extraction can be done in application code when needed
+        db.exec(`
+          CREATE TRIGGER IF NOT EXISTS files_fts_insert AFTER INSERT ON files BEGIN
+            INSERT INTO files_fts(rowid, path, name, content, mime_type)
+            VALUES (
+              new.rowid, 
+              new.path,
+              new.path,  -- Store full path in name field (searchable)
+              COALESCE(new.content_text, ''),
+              COALESCE(new.mime_type, '')
+            );
+          END
+        `);
+        
+        db.exec(`
+          CREATE TRIGGER IF NOT EXISTS files_fts_delete AFTER DELETE ON files BEGIN
+            DELETE FROM files_fts WHERE rowid = old.rowid;
+          END
+        `);
+        
+        db.exec(`
+          CREATE TRIGGER IF NOT EXISTS files_fts_update AFTER UPDATE ON files BEGIN
+            UPDATE files_fts SET
+              path = new.path,
+              name = new.path,  -- Store full path in name field
+              content = COALESCE(new.content_text, ''),
+              mime_type = COALESCE(new.mime_type, '')
+            WHERE rowid = new.rowid;
+          END
+        `);
+        console.log('✅ Created FTS5 sync triggers');
+        
+        // Populate FTS5 with existing files (if any)
+        db.exec(`
+          INSERT INTO files_fts(rowid, path, name, content, mime_type)
+          SELECT 
+            rowid,
+            path,
+            path as name,  -- Store full path in name field
+            COALESCE(content_text, '') as content,
+            COALESCE(mime_type, '') as mime_type
+          FROM files
+          WHERE is_dir = 0
+        `);
+        console.log('✅ Populated FTS5 with existing files');
+        
+      } catch (error: any) {
+        console.error(`❌ Migration 3 error: ${error.message}`);
+        // Don't fail migration if FTS5 already exists
+        if (!error.message.includes('already exists') && !error.message.includes('duplicate column')) {
+          throw error;
+        }
+      }
+    }
+    
+    // Migration 4: Add file_versions table for version history
+    if (currentVersion < 4) {
+      try {
+        console.log('📦 Running Migration 4: File versioning...');
+        
+        // Create file_versions table
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS file_versions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            file_path TEXT NOT NULL,
+            wallet_address TEXT NOT NULL,
+            version_number INTEGER NOT NULL,
+            ipfs_hash TEXT NOT NULL,
+            size INTEGER NOT NULL,
+            mime_type TEXT,
+            created_at INTEGER NOT NULL,
+            created_by TEXT,
+            comment TEXT,
+            FOREIGN KEY (wallet_address) REFERENCES users(wallet_address),
+            UNIQUE(file_path, wallet_address, version_number)
+          )
+        `);
+        
+        // Create index for fast lookups
+        db.exec(`
+          CREATE INDEX IF NOT EXISTS idx_file_versions_path 
+          ON file_versions(file_path, wallet_address)
+        `);
+        
+        db.exec(`
+          CREATE INDEX IF NOT EXISTS idx_file_versions_created 
+          ON file_versions(created_at DESC)
+        `);
+        
+        console.log('✅ Migration 4 complete: File versioning table created');
+        recordMigration(db, 4);
+      } catch (error: any) {
+        console.error(`❌ Migration 4 error: ${error.message}`);
+        throw error;
+      }
+    }
+    
+    if (currentVersion < CURRENT_VERSION) {
+      recordMigration(db, CURRENT_VERSION);
+    }
     console.log('✅ Migrations completed');
   } else if (currentVersion === CURRENT_VERSION) {
+    // Even if migration version is current, check if FTS5 table exists
+    // (it might have been dropped manually or due to an error)
+    try {
+      const fts5Exists = db.prepare(`
+        SELECT name FROM sqlite_master 
+        WHERE type='table' AND name='files_fts'
+      `).get();
+      
+      if (!fts5Exists) {
+        console.log('⚠️  FTS5 table missing, recreating...');
+        // Recreate FTS5 table and triggers
+        db.exec('DROP TRIGGER IF EXISTS files_fts_insert');
+        db.exec('DROP TRIGGER IF EXISTS files_fts_update');
+        db.exec('DROP TRIGGER IF EXISTS files_fts_delete');
+        db.exec(`
+          CREATE VIRTUAL TABLE files_fts USING fts5(
+            path,
+            name,
+            content,
+            mime_type
+          )
+        `);
+        db.exec(`
+          CREATE TRIGGER files_fts_insert AFTER INSERT ON files BEGIN
+            INSERT INTO files_fts(rowid, path, name, content, mime_type)
+            VALUES (new.rowid, new.path, new.path, COALESCE(new.content_text, ''), COALESCE(new.mime_type, ''));
+          END
+        `);
+        db.exec(`
+          CREATE TRIGGER files_fts_delete AFTER DELETE ON files BEGIN
+            DELETE FROM files_fts WHERE rowid = old.rowid;
+          END
+        `);
+        db.exec(`
+          CREATE TRIGGER files_fts_update AFTER UPDATE ON files BEGIN
+            UPDATE files_fts SET
+              path = new.path,
+              name = new.path,
+              content = COALESCE(new.content_text, ''),
+              mime_type = COALESCE(new.mime_type, '')
+            WHERE rowid = new.rowid;
+          END
+        `);
+        // Repopulate FTS5 with existing files
+        db.exec(`
+          INSERT INTO files_fts(rowid, path, name, content, mime_type)
+          SELECT 
+            rowid,
+            path,
+            path as name,
+            COALESCE(content_text, '') as content,
+            COALESCE(mime_type, '') as mime_type
+          FROM files
+          WHERE is_dir = 0
+        `);
+        console.log('✅ FTS5 table and triggers recreated');
+      }
+    } catch (error: any) {
+      console.warn('⚠️  Could not check/recreate FTS5 table:', error.message);
+    }
     console.log('✅ Database schema is up to date');
   } else {
     console.warn(`⚠️  Database version (${currentVersion}) is newer than expected (${CURRENT_VERSION})`);

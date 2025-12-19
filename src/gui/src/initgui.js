@@ -48,6 +48,7 @@ import { IPCService } from './services/IPCService.js';
 import { ExecService } from './services/ExecService.js';
 import { DebugService } from './services/DebugService.js';
 import { privacy_aware_path } from './util/desktop.js';
+import initKeyboardShortcuts from './helpers/keyboard_shortcuts.js';
 
 // DEBUG: Add global message listener to see ALL messages before xd-incoming filtering
 // Also try to directly call ipc_listener if xd-incoming is filtering it out
@@ -600,6 +601,8 @@ window.initgui = async function(options){
                     window.initgui_in_progress = false;
                     window.initgui_completed = true;
                     UIDesktop({desktop_fsentry: desktop_fsentry});
+                    // Initialize keyboard shortcuts
+                    initKeyboardShortcuts();
                 })
             }
             // -------------------------------------------------------------------------------------

@@ -1063,7 +1063,17 @@ export async function handleWriteFile(req: AuthenticatedRequest, res: Response):
     return;
   }
 
-  logger.info('[WriteFile] Request received', { uid: fileUid, signature: signature ? signature.substring(0, 20) + '...' : 'none' });
+  logger.info('[WriteFile] Request received', { 
+    uid: fileUid, 
+    signature: signature ? signature.substring(0, 20) + '...' : 'none',
+    method: req.method,
+    contentType: req.get('Content-Type'),
+    contentLength: req.get('Content-Length'),
+    hasBody: !!req.body,
+    bodyType: typeof req.body,
+    isBuffer: Buffer.isBuffer(req.body),
+    bodyLength: Buffer.isBuffer(req.body) ? req.body.length : (typeof req.body === 'string' ? req.body.length : 'N/A')
+  });
 
   // Convert UUID to path: uuid-/path/to/file -> /path/to/file
   const uuidPath = fileUid.replace(/^uuid-+/, '');
@@ -1084,12 +1094,26 @@ export async function handleWriteFile(req: AuthenticatedRequest, res: Response):
   }
 
   // Get file content from request body
-  // Support multiple formats: raw text, JSON with content field, multipart
+  // Support multiple formats: binary (Buffer), raw text, JSON with content field, multipart
   let fileContent: string | Buffer = '';
   const contentType = req.get('Content-Type') || '';
   
+  logger.info('[WriteFile] Request received', { 
+    contentType, 
+    bodyType: typeof req.body, 
+    isBuffer: Buffer.isBuffer(req.body),
+    bodyLength: Buffer.isBuffer(req.body) ? req.body.length : (typeof req.body === 'string' ? req.body.length : 'N/A'),
+    method: req.method,
+    query: req.query
+  });
+  
+  // Check if body is a Buffer (binary data - PDFs, images, etc.)
+  if (Buffer.isBuffer(req.body) && req.body.length > 0) {
+    fileContent = req.body;
+    logger.info('[WriteFile] Using body as binary Buffer', { length: fileContent.length, contentType });
+  }
   // Check if body is a string (raw text)
-  if (typeof req.body === 'string' && req.body.length > 0) {
+  else if (typeof req.body === 'string' && req.body.length > 0) {
     fileContent = req.body;
     logger.info('[WriteFile] Using body as raw text', { length: fileContent.length });
   }
@@ -1111,21 +1135,36 @@ export async function handleWriteFile(req: AuthenticatedRequest, res: Response):
 
   // If no content found, try raw body buffer (for PUT requests with plain text)
   if (!fileContent && (req as any).rawBody) {
-    fileContent = (req as any).rawBody.toString('utf8');
-    logger.info('[WriteFile] Using raw body buffer', { length: fileContent.length });
+    // Check if rawBody is already a Buffer
+    if (Buffer.isBuffer((req as any).rawBody)) {
+      fileContent = (req as any).rawBody;
+      logger.info('[WriteFile] Using rawBody as Buffer', { length: fileContent.length });
+    } else {
+      fileContent = (req as any).rawBody.toString('utf8');
+      logger.info('[WriteFile] Using rawBody as text', { length: fileContent.length });
+    }
   }
 
-  if (!fileContent || (typeof fileContent === 'string' && fileContent.length === 0)) {
-    logger.warn('[WriteFile] No file content found in request');
+  if (!fileContent || (typeof fileContent === 'string' && fileContent.length === 0) || (Buffer.isBuffer(fileContent) && fileContent.length === 0)) {
+    logger.warn('[WriteFile] No file content found in request', {
+      hasFileContent: !!fileContent,
+      fileContentType: typeof fileContent,
+      fileContentLength: Buffer.isBuffer(fileContent) ? fileContent.length : (typeof fileContent === 'string' ? fileContent.length : 'N/A'),
+      contentType,
+      bodyKeys: req.body && typeof req.body === 'object' ? Object.keys(req.body) : 'N/A'
+    });
     res.status(400).json({ error: 'No file content provided' });
     return;
   }
 
   try {
     // Write file content
-    const contentBuffer = typeof fileContent === 'string' 
-      ? Buffer.from(fileContent, 'utf8')
-      : fileContent;
+    // If already a Buffer (binary data), use it directly; otherwise convert string to Buffer
+    const contentBuffer = Buffer.isBuffer(fileContent)
+      ? fileContent
+      : typeof fileContent === 'string'
+        ? Buffer.from(fileContent, 'utf8')
+        : Buffer.from(fileContent);
 
     const updatedMetadata = await filesystem.writeFile(
       potentialPath,
@@ -1136,9 +1175,14 @@ export async function handleWriteFile(req: AuthenticatedRequest, res: Response):
       }
     );
 
-    logger.info('[WriteFile] File updated successfully', { path: updatedMetadata.path, size: updatedMetadata.size });
+    logger.info('[WriteFile] File updated successfully', { 
+      path: updatedMetadata.path, 
+      size: updatedMetadata.size,
+      newIPFSHash: updatedMetadata.ipfs_hash?.substring(0, 20) + '...',
+      oldIPFSHash: existingMetadata?.ipfs_hash?.substring(0, 20) + '...'
+    });
 
-    // Return file metadata
+    // Return file metadata (include IPFS hash for cache-busting)
     res.json({
       uid: fileUid,
       name: updatedMetadata.path.split('/').pop() || '',
@@ -1148,6 +1192,7 @@ export async function handleWriteFile(req: AuthenticatedRequest, res: Response):
       type: updatedMetadata.mime_type || 'application/octet-stream',
       created: new Date(updatedMetadata.created_at).toISOString(),
       modified: new Date(updatedMetadata.updated_at).toISOString(),
+      ipfs_hash: updatedMetadata.ipfs_hash, // Include IPFS hash so frontend can verify update
     });
   } catch (error) {
     logger.error('[WriteFile] Error writing file:', error);

@@ -560,6 +560,20 @@ export async function handleRead(req: AuthenticatedRequest, res: Response): Prom
       return;
     }
 
+    // Set cache headers to prevent stale file content
+    // Use ETag based on IPFS hash (CID) - when file is updated, CID changes, so ETag changes
+    // This ensures browsers re-fetch when file is actually updated
+    if (metadata?.ipfs_hash) {
+      res.setHeader('ETag', `"${metadata.ipfs_hash}"`);
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate'); // Force revalidation
+      res.setHeader('Last-Modified', new Date(metadata.updated_at).toUTCString());
+    } else {
+      // No IPFS hash - use no-cache to prevent any caching
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    }
+
     // No range request - send full file
     if (encoding === 'base64') {
       res.setHeader('Content-Type', 'application/octet-stream');
@@ -1591,13 +1605,24 @@ export async function handleMove(req: AuthenticatedRequest, res: Response): Prom
     res.json({ success: true, from: fromPath, to: newPath });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    const errorDetails = error instanceof Error ? {
+      name: error.name,
+      message: error.message,
+      stack: error.stack
+    } : { error };
+    
     logger.error('[Move] Move error:', {
       error: errorMessage,
       fromPath,
       toPath: body.destination,
       isMovingToTrash,
-      stack: error instanceof Error ? error.stack : undefined
+      errorDetails,
+      stack: errorStack
     });
+    
+    // Also log to console for immediate visibility
+    console.error('[Move] Detailed error:', errorDetails);
     
     // Check if it's a "destination already exists" error - return 409 Conflict
     if (errorMessage.includes('Destination already exists')) {

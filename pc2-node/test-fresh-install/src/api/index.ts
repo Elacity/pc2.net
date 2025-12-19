@@ -11,6 +11,9 @@ import { handleStat, handleReaddir, handleRead, handleWrite, handleMkdir, handle
 import { handleSign, handleVersion, handleOSUser, handleKV, handleRAO, handleContactUs, handleDriversCall, handleGetWallets, handleOpenItem, handleSuggestApps, handleItemMetadata, handleWriteFile } from './other.js';
 import { handleAPIInfo, handleGetLaunchApps, handleDF, handleBatch, handleCacheTimestamp, handleStats } from './info.js';
 import { handleFile } from './file.js';
+import storageRouter from './storage.js';
+import { handleSearch } from './search.js';
+import { handleGetVersions, handleGetVersion, handleRestoreVersion } from './versions.js';
 
 // Extend Express Request to include database, filesystem, config, and WebSocket
 declare global {
@@ -109,6 +112,17 @@ export function setupAPI(app: Express): void {
   app.get('/os/user', handleOSUser);
   app.get('/api/stats', authenticate, handleStats);
   app.get('/api/wallets', authenticate, handleGetWallets);
+  
+  // Storage usage endpoint
+  app.use('/api/storage', storageRouter);
+
+  // Search endpoint (require auth)
+  app.post('/search', authenticate, handleSearch);
+
+  // File versions endpoints (require auth)
+  app.get('/versions', authenticate, handleGetVersions);
+  app.get('/versions/:versionNumber', authenticate, handleGetVersion);
+  app.post('/versions/:versionNumber/restore', authenticate, handleRestoreVersion);
 
   // Filesystem endpoints (require auth)
   // Register /stat BEFORE other routes to ensure it's matched correctly

@@ -193,6 +193,17 @@ const refresh_item_container = function (el_item_container, options) {
                 const item_path = fsentry.path ?? path.join(parentPath, fsentry.name);
                 // render any item but Trash/AppData
                 if ( item_path !== window.trash_path && item_path !== window.appdata_path ) {
+                    // CRITICAL: Check if item already exists to prevent duplicates (can happen if socket events fire during refresh)
+                    // Use filter() instead of selector to avoid jQuery selector syntax errors with special characters
+                    const existingItemByUid = $(el_item_container).find(`.item[data-uid="${fsentry.uid}"]`);
+                    const existingItemByPath = $(el_item_container).find('.item').filter(function() {
+                        return $(this).attr('data-path') === item_path;
+                    });
+                    if (existingItemByUid.length > 0 || existingItemByPath.length > 0) {
+                        console.log(`[refresh_item_container]: Item already exists, skipping duplicate: ${fsentry.name} (uid: ${fsentry.uid}, path: ${item_path})`);
+                        continue; // Skip this item, move to next
+                    }
+                    
                     // if this is trash, get original name from item metadata
                     fsentry.name = (metadata && metadata.original_name !== undefined) ? metadata.original_name : fsentry.name;
                     const position = window.desktop_item_positions[fsentry.uid] ?? undefined;
@@ -227,20 +238,30 @@ const refresh_item_container = function (el_item_container, options) {
             if ( $(el_item_container).hasClass('desktop') ) {
                 try {
                     const trash = await puter.fs.stat({ path: window.trash_path, consistency: options.consistency ?? 'eventual' });
-                    UIItem({
-                        appendTo: el_item_container,
-                        uid: trash.id,
-                        immutable: trash.immutable,
-                        path: window.trash_path,
-                        icon: { image: (trash.is_empty ? window.icons['trash.svg'] : window.icons['trash-full.svg']), type: 'icon' },
-                        name: trash.name,
-                        is_dir: trash.is_dir,
-                        sort_by: trash.sort_by,
-                        type: trash.type,
-                        is_trash: true,
-                        sortable: false,
+                    // CRITICAL: Check if Trash icon already exists to prevent duplicates
+                    // Use filter() to avoid jQuery selector syntax errors
+                    const existingTrashByUid = $(el_item_container).find(`.item[data-uid="${trash.id}"]`);
+                    const existingTrashByPath = $(el_item_container).find('.item').filter(function() {
+                        return $(this).attr('data-path') === window.trash_path;
                     });
-                    window.sort_items(el_item_container, $(el_item_container).attr('data-sort_by'), $(el_item_container).attr('data-sort_order'));
+                    if (existingTrashByUid.length === 0 && existingTrashByPath.length === 0) {
+                        UIItem({
+                            appendTo: el_item_container,
+                            uid: trash.id,
+                            immutable: trash.immutable,
+                            path: window.trash_path,
+                            icon: { image: (trash.is_empty ? window.icons['trash.svg'] : window.icons['trash-full.svg']), type: 'icon' },
+                            name: trash.name,
+                            is_dir: trash.is_dir,
+                            sort_by: trash.sort_by,
+                            type: trash.type,
+                            is_trash: true,
+                            sortable: false,
+                        });
+                        window.sort_items(el_item_container, $(el_item_container).attr('data-sort_by'), $(el_item_container).attr('data-sort_order'));
+                    } else {
+                        console.log('[refresh_item_container]: Trash icon already exists, skipping duplicate');
+                    }
                 } catch (e) {
                     // Log error for debugging (but don't break the UI)
                     console.warn('[refresh_item_container]: Failed to add Trash icon to desktop:', e);

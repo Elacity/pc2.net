@@ -40,12 +40,15 @@ async function main() {
   }
 
   try {
-    // Build frontend
+    // Build frontend (use build:only to avoid infinite loop - build:only just runs build.js)
     console.log('\n📦 Running frontend build...');
-    execSync('npm run build', {
+    execSync('npm run build:only', {
       cwd: GUI_DIR,
       stdio: 'inherit'
     });
+    
+    // CRITICAL: Always copy bundle after build to ensure frontend directory has latest
+    // This prevents serving stale bundles that cause debugging confusion
 
     // Check if dist directory was created
     if (!existsSync(FRONTEND_DIST)) {

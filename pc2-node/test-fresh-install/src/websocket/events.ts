@@ -224,7 +224,7 @@ export function broadcastItemRemoved(
     console.log(`⚠️  Room membership changed! Was ${connectedCount}, now ${currentConnectedCount}`);
   }
   
-  io.to(room).emit('item.removed', eventData);
+    io.to(room).emit('item.removed', eventData);
   console.log(`📡 Event emitted - Socket.io should deliver to ${currentConnectedCount} WebSocket clients or via polling`);
   
   if (currentConnectedCount > 0) {

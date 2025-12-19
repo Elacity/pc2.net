@@ -1175,8 +1175,25 @@ async function UIDesktop(options) {
         console.log('[UIDesktop]: taskbar_height was 0/undefined, setting to default before UITaskbar:', window.taskbar_height);
     }
 
-    // Set desktop height based on taskbar height
-    $('.desktop').css('height', `calc(100vh - ${window.taskbar_height + window.toolbar_height}px)`)
+    // Set desktop height - desktop should be full viewport height
+    // Taskbar will be positioned absolutely at the bottom
+    // Ensure toolbar_height is defined (default to 0 if not set)
+    const toolbarHeight = window.toolbar_height || 0;
+    const taskbarHeight = window.taskbar_height || 50;
+    $('.desktop').css({
+        'height': '100vh', // Full viewport height - taskbar overlays at bottom
+        'position': 'relative', // Ensure taskbar can be positioned relative to desktop
+        'overflow': 'visible', // Ensure taskbar isn't clipped
+        'padding-bottom': `${taskbarHeight}px` // Add padding so desktop items don't overlap taskbar
+    });
+    
+    // Ensure body/html allow taskbar to be visible at bottom
+    $('body').css({
+        'overflow': 'hidden', // Prevent body scroll
+        'margin': '0',
+        'padding': '0',
+        'height': '100vh' // Full viewport height
+    });
 
     console.log('[UIDesktop]: About to call UITaskbar, desktop exists:', $('.desktop').length > 0, 'taskbar_height:', window.taskbar_height);
     // ---------------------------------------------------------------
@@ -1203,7 +1220,7 @@ async function UIDesktop(options) {
     }, 100);
     
     // IMMEDIATE desktop items refresh - ensure it runs right after taskbar
-    // This is a fallback in case the later refresh code doesn't execute
+    // FIXED: Only refresh once to prevent duplicate icons
     const isEmbeddedCheck = window.is_embedded || false;
     const isFullpageCheck = window.is_fullpage_mode || false;
     console.log('[UIDesktop]: Immediate desktop refresh check after taskbar...', {
@@ -1216,46 +1233,10 @@ async function UIDesktop(options) {
         in_iframe: window.location !== window.parent?.location
     });
     
-    // FORCE desktop refresh - the condition check seems unreliable
-    // Desktop items should always load on initial login
-    console.log('[UIDesktop]: FORCING desktop refresh regardless of embedded/fullpage flags...');
-    setTimeout(() => {
-        console.log('[UIDesktop]: Executing FORCED immediate desktop refresh...');
-        const desktopContainer = document.querySelector('.desktop.item-container') || 
-                               (document.querySelector('.desktop')?.classList.contains('item-container') ? document.querySelector('.desktop') : null);
-        console.log('[UIDesktop]: Desktop container search result:', {
-            found: !!desktopContainer,
-            selector1: !!document.querySelector('.desktop.item-container'),
-            selector2: !!document.querySelector('.desktop'),
-            hasItemContainer: document.querySelector('.desktop')?.classList.contains('item-container'),
-            desktop_path: window.desktop_path
-        });
-        
-        if (desktopContainer && window.desktop_path) {
-            console.log('[UIDesktop]: FORCED refresh - found desktop container, refreshing...', {
-                container: desktopContainer,
-                data_path: $(desktopContainer).attr('data-path'),
-                desktop_path: window.desktop_path
-            });
-            if (!$(desktopContainer).attr('data-path') || $(desktopContainer).attr('data-path') !== window.desktop_path) {
-                $(desktopContainer).attr('data-path', window.desktop_path);
-                console.log('[UIDesktop]: Updated desktop container data-path to:', window.desktop_path);
-            }
-            refresh_item_container(desktopContainer, { fadeInItems: true });
-        } else {
-            console.error('[UIDesktop]: FORCED refresh - desktop container not found or desktop_path not set', {
-                container: !!desktopContainer,
-                desktop_path: window.desktop_path,
-                allDesktopElements: document.querySelectorAll('.desktop').length,
-                allItemContainers: document.querySelectorAll('.item-container').length
-            });
-        }
-    }, 200);
-    
-    // Original conditional refresh (keeping for compatibility)
+    // Single desktop refresh (removed duplicate refresh call to prevent duplicate icons)
     if (!isEmbeddedCheck && !isFullpageCheck) {
         setTimeout(() => {
-            console.log('[UIDesktop]: Executing immediate desktop refresh...');
+            console.log('[UIDesktop]: Executing desktop refresh...');
             const desktopContainer = document.querySelector('.desktop.item-container') || 
                                    (document.querySelector('.desktop')?.classList.contains('item-container') ? document.querySelector('.desktop') : null);
             console.log('[UIDesktop]: Desktop container search result:', {
@@ -1267,7 +1248,7 @@ async function UIDesktop(options) {
             });
             
             if (desktopContainer && window.desktop_path) {
-                console.log('[UIDesktop]: Immediate refresh - found desktop container, refreshing...', {
+                console.log('[UIDesktop]: Refresh - found desktop container, refreshing...', {
                     container: desktopContainer,
                     data_path: $(desktopContainer).attr('data-path'),
                     desktop_path: window.desktop_path
@@ -1278,7 +1259,7 @@ async function UIDesktop(options) {
                 }
                 refresh_item_container(desktopContainer, { fadeInItems: true });
             } else {
-                console.warn('[UIDesktop]: Immediate refresh - desktop container not found or desktop_path not set', {
+                console.warn('[UIDesktop]: Refresh - desktop container not found or desktop_path not set', {
                     container: !!desktopContainer,
                     desktop_path: window.desktop_path,
                     allDesktopElements: document.querySelectorAll('.desktop').length,
@@ -1287,7 +1268,7 @@ async function UIDesktop(options) {
             }
         }, 200);
     } else {
-        console.warn('[UIDesktop]: Immediate refresh SKIPPED - embedded or fullpage mode', {
+        console.warn('[UIDesktop]: Desktop refresh SKIPPED - embedded or fullpage mode', {
             is_embedded: isEmbeddedCheck,
             is_fullpage_mode: isFullpageCheck
         });
@@ -2777,7 +2758,12 @@ $(document).on('click', '.close-launch-popover', function () {
 });
 
 $(document).on('click', '.search-btn', function () {
-    UIWindowSearch();
+    // Use window.UIWindowSearch if available, otherwise use imported function
+    if (window.UIWindowSearch) {
+        window.UIWindowSearch();
+    } else {
+        UIWindowSearch();
+    }
 })
 
 // Wallet button - opens Account Sidebar

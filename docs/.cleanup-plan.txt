@@ -1,0 +1,17 @@
+KEEP (Essential):
+- STRATEGIC_IMPLEMENTATION_PLAN.md (main strategic doc)
+- PHASE3_BACKUP_RESTORE_REQUIREMENTS.md (referenced in strategic plan)
+- PC2_NODE_BACKUP_STRATEGY.md (referenced in strategic plan)
+- PC2_NODE_UPGRADE_AND_MAINTENANCE_STRATEGY.md (referenced in strategic plan)
+- PC2_NODE_RESTORE_TO_NEW_NODE.md (backup/restore related)
+
+ARCHIVE (Old audits, handoffs, fix summaries):
+- All *_AUDIT.md files
+- All HANDOFF*.md files
+- All HANDOVER*.md files
+- All PC2_NODE_*_FIX*.md files
+- All MOCK_SERVER*.md files
+- All *_TESTING*.md files
+- PHASE_2_STRATEGY.md (content in strategic plan)
+- PHASE_2.4*.md files (old phase docs)
+- Other outdated docs

@@ -3112,5 +3112,732 @@ if (isThumbnailUpdate) {
 
 ---
 
+## 🌐 Phase 6: Elacity dDRM Integration (Future Vision)
+
+**Status:** ⏸️ **PLANNED** - Architecture design phase  
+**Priority:** **STRATEGIC** - Enables global marketplace and digital rights economy  
+**Estimated Time:** 10-14 weeks (post-Phase 5)  
+**Note:** Extended timeline due to custom WASMER runtime development (6-8 weeks)
+
+### Vision: The Internet of Wealth
+
+PC2 nodes will evolve from personal cloud storage into **sovereign economic nodes** in the Elacity network, enabling:
+
+1. **Digital Capsule Factory**: Users package assets (media, code, AI models, knowledge) into encrypted, tokenized WASMER binaries
+2. **Global Marketplace**: Discover, purchase, and trade executable knowledge packages via blockchain registry
+3. **P2P Distribution**: Download binaries from other PC2 nodes via IPFS
+4. **Tokenized Rights**: Access, Distribution, and Royalty tokens managed on blockchain
+5. **WASMER Runtime**: Custom runtime executes self-contained binaries (Player + Asset + RTOS)
+6. **AI Agent Economy**: Agents purchase and execute binaries to unlock knowledge/functionality
+
+#### Critical Architecture Distinction
+
+**Elacity (Existing - Browser-Based):**
+- Uses **WASM for browser execution** (web runtime)
+- Runs in browser environment
+- Media playback, web-based DRM
+
+**PC2 WASMER System (New - Custom Runtime):**
+- **Self-contained executable binaries** (not browser-dependent)
+- Packages **Player (execution engine) + Asset (content) + RTOS (real-time OS)** into single binary
+- Runs on **any system** with WASMER runtime
+- **Goal**: Convert as many asset types as possible into executable knowledge packages
+- **AI Agent Ready**: Agents can purchase Access Tokens and execute binaries to gain capabilities
+
+### 6.1 IPFS Architecture for dDRM
+
+#### Current State (Phase 2)
+- ✅ IPFS node using Helia library
+- ✅ Private storage for user files
+- ✅ Files stored with CIDs in SQLite metadata
+- ✅ Local pinning (not publicly advertised)
+
+#### Future State (Phase 6)
+- **Dual-Mode IPFS Node:**
+  - **Private Mode**: User's personal files (current behavior)
+  - **Public Gateway Mode**: Published Digital Capsules (CDN for marketplace)
+  - **Hybrid Operation**: Same node, different pinning strategies per asset
+
+#### IPFS Configuration Strategy
+
+```typescript
+// Future: src/storage/ipfs-config.ts
+interface IPFSConfig {
+  // Private storage (current)
+  privateMode: {
+    enabled: boolean;
+    pinLocally: boolean;
+    advertiseToNetwork: false; // Never advertise private files
+  };
+  
+  // Public gateway (future)
+  publicGateway: {
+    enabled: boolean;
+    port: number;
+    allowCORS: boolean;
+    whitelistCIDs: string[]; // Only serve published capsules
+  };
+  
+  // Hybrid operation
+  hybridMode: {
+    autoDetect: boolean; // Detect capsule vs personal file
+    pinStrategy: 'local' | 'network' | 'both';
+  };
+}
+```
+
+**Key Design Decisions:**
+1. **Privacy by Default**: All user files remain private unless explicitly published
+2. **Opt-In Publishing**: Users must explicitly mark assets for global distribution
+3. **CID-Based Routing**: Published capsules get public CIDs, private files stay local
+4. **Gateway Configuration**: Public gateway only serves whitelisted CIDs (published capsules)
+
+### 6.2 Digital Capsule Architecture: WASMER Binary System
+
+#### Critical Distinction: WASMER vs Browser WASM
+
+**Elacity (Existing):**
+- Uses **WASM for browser-based execution** (web runtime)
+- Runs in browser environment
+- Limited to web platform capabilities
+
+**New WASMER System (PC2 Custom Runtime):**
+- **Self-contained executable binary** (not browser-dependent)
+- Packages **Player + Asset + RTOS** into single binary
+- Runs on **any system** with WASMER runtime installed
+- **Goal**: Convert as many asset types as possible into executable knowledge packages
+
+#### WASMER Binary Structure
+
+```
+WASMER Binary (Self-Contained Executable)
+├── Binary Header
+│   ├── Magic Number (WASMER format identifier)
+│   ├── Version
+│   └── Metadata Offset
+├── Encrypted Payload (128-bit AES, CENC)
+│   ├── Player (Execution Engine)
+│   │   ├── WASMER Runtime (custom, not browser WASM)
+│   │   ├── Decryption Module
+│   │   ├── License Validator
+│   │   └── Execution Controller
+│   ├── Asset (Content/Knowledge)
+│   │   ├── Media (video, audio, images)
+│   │   ├── Code (functions, libraries, APIs)
+│   │   ├── Data (datasets, knowledge bases)
+│   │   ├── AI Models (ML models, embeddings)
+│   │   └── Documentation
+│   └── RTOS (Real-Time Operating System)
+│       ├── Task Scheduler
+│       ├── Resource Manager
+│       ├── I/O Handlers
+│       └── System Calls Interface
+├── Metadata (Unencrypted, for discovery)
+│   ├── CID (IPFS Content ID)
+│   ├── Smart Contract Address (DCL token)
+│   ├── Asset Type (media, code, knowledge, AI model, etc.)
+│   ├── Licensing Terms (embedded)
+│   └── Execution Requirements
+└── License Key Slot (ECIES encrypted, populated on purchase)
+```
+
+#### Key Architectural Differences
+
+| Aspect | Browser WASM (Elacity) | WASMER Binary (PC2) |
+|--------|------------------------|---------------------|
+| **Execution Environment** | Browser only | Any system with WASMER runtime |
+| **Packaging** | Separate files | Single self-contained binary |
+| **Runtime** | Browser WASM engine | Custom WASMER runtime |
+| **Portability** | Web platform | Cross-platform (OS-agnostic) |
+| **Use Case** | Web media playback | Executable knowledge packages |
+| **AI Agent Support** | Limited | Full support (AgentKit compatible) |
+
+#### Integration Points
+
+1. **Capsule Creation (Factory)**
+   - User selects asset in PC2
+   - Packages into WASMER binary with Elacity SDK
+   - Encrypts with AES-128 (CENC)
+   - Uploads to IPFS (public pinning)
+   - Mints ERC-721 DCL token with CID
+   - Creates Operative Contract (ERC-1155) for rights
+
+2. **Capsule Discovery (Marketplace)**
+   - Query blockchain registry for assets
+   - Filter by category, price, creator
+   - Display capsule metadata (CID, pricing, royalties)
+   - Purchase Access Token via smart contract
+
+3. **Capsule Distribution (P2P)**
+   - Buyer receives Access Token
+   - PC2 queries IPFS network for capsule CID
+   - Downloads from nearest PC2 node (or IPFS gateway)
+   - Stores locally in user's PC2
+   - License key delivered via CapsuleConnect protocol
+
+4. **Capsule Execution (Runtime)**
+   - **User Execution**: WASMER runtime validates Access Token on blockchain
+   - **AI Agent Execution**: Agent holds Access Token, queries blockchain, executes binary
+   - Decrypts capsule using license key (delivered via CapsuleConnect)
+   - Executes embedded Player + Asset + RTOS as unified binary
+   - Enforces licensing terms (view count, duration, execution limits, etc.)
+   - **AI Agent Use Case**: Agent unlocks knowledge/functionality by executing binary
+
+### 6.3 Blockchain Integration
+
+#### Smart Contract Architecture
+
+1. **Digital Capsule Ledger (DCL) - ERC-721**
+   - One token per Digital Capsule
+   - Links asset ownership to wallet address
+   - Contains CID, metadata, creator info
+
+2. **Operative Contracts - ERC-1155**
+   - Access Tokens: License to decrypt and use
+   - Distribution Rights: Resale/redistribution terms
+   - Royalty Tokens: Revenue share claims
+
+3. **Authority Gateway Smart Contract**
+   - Handles token trades
+   - Enforces licensing terms
+   - Distributes royalties automatically
+   - Issues license keys via CapsuleConnect
+
+#### PC2 Integration
+
+```typescript
+// Future: src/integration/elacity-sdk.ts
+interface ElacitySDK {
+  // Factory operations
+  createCapsule(asset: File, licensing: LicensingTerms): Promise<CapsuleMetadata>;
+  publishCapsule(capsuleId: string, pricing: PricingModel): Promise<Transaction>;
+  
+  // Marketplace operations
+  searchMarketplace(query: SearchQuery): Promise<CapsuleListing[]>;
+  purchaseAccess(capsuleId: string): Promise<AccessToken>;
+  
+  // Distribution operations
+  downloadCapsule(cid: string): Promise<WASMERBinary>;
+  validateAccess(capsuleId: string, wallet: string): Promise<boolean>;
+  
+  // Runtime operations
+  executeCapsule(binary: WASMERBinary, licenseKey: string): Promise<Runtime>;
+}
+```
+
+### 6.4 Implementation Phases
+
+#### Phase 6.1: IPFS Gateway Configuration (2-3 weeks)
+- [ ] Add public gateway mode to IPFS node
+- [ ] Implement CID whitelisting
+- [ ] Add pinning strategy configuration
+- [ ] Test hybrid private/public operation
+- [ ] Document gateway setup
+
+#### Phase 6.2: Elacity SDK Integration (3-4 weeks)
+- [ ] Integrate Elacity dDRM SDK
+- [ ] Implement capsule creation workflow
+- [ ] Add blockchain connection (EVM)
+- [ ] Test smart contract interactions
+- [ ] Create factory UI in PC2
+
+#### Phase 6.3: Marketplace Integration (2-3 weeks)
+- [ ] Implement blockchain registry queries
+- [ ] Create marketplace UI
+- [ ] Add purchase flow
+- [ ] Integrate payment processing
+- [ ] Test end-to-end purchase
+
+#### Phase 6.4: P2P Distribution (2-3 weeks)
+- [ ] Implement IPFS content discovery
+- [ ] Add download from other PC2 nodes
+- [ ] Optimize for CDN performance
+- [ ] Add caching strategy
+- [ ] Test multi-node distribution
+
+#### Phase 6.5: WASMER Runtime Development (6-8 weeks) ⚠️ **CUSTOM BUILD REQUIRED**
+
+**Critical Understanding:** This is NOT integrating existing WASMER - this is **building a custom runtime system**.
+
+- [ ] **Design WASMER Binary Format** (1 week)
+  - Define binary structure (Player + Asset + RTOS)
+  - Design encryption/decryption flow
+  - Define metadata format
+  - Create binary packing/unpacking utilities
+
+- [ ] **Build WASMER Runtime Engine** (2-3 weeks)
+  - Custom runtime (not browser WASM)
+  - Player execution engine
+  - RTOS integration
+  - License validation module
+  - Blockchain integration for Access Token checking
+  - Cross-platform support (Linux, macOS, Windows)
+
+- [ ] **Asset Packaging System** (2 weeks)
+  - Convert various asset types to WASMER binaries
+  - Player embedding for each asset type
+  - RTOS integration
+  - Encryption pipeline
+  - IPFS upload integration
+
+- [ ] **AI Agent Integration** (1-2 weeks)
+  - Coinbase AgentKit compatibility
+  - Agent token validation
+  - Agent execution interface
+  - Knowledge extraction APIs
+  - Tool/function exposure for agents
+
+- [ ] **Testing & Validation** (1 week)
+  - Test binary execution
+  - Test license enforcement
+  - Test AI agent execution
+  - Test cross-platform compatibility
+  - Performance benchmarking
+
+### 6.5 Technical Considerations
+
+#### IPFS Node Configuration
+
+**Private Files (Current):**
+- Pinned locally only
+- Not advertised to IPFS network
+- Accessible only via authenticated API
+- No public gateway access
+
+**Public Capsules (Future):**
+- Pinned and advertised to IPFS network
+- Public gateway serves whitelisted CIDs
+- CDN functionality for marketplace
+- Configurable per capsule
+
+**Implementation:**
+```typescript
+// Future enhancement to src/storage/ipfs.ts
+class IPFSStorage {
+  async pinPrivate(filePath: string, cid: string) {
+    // Pin locally, don't advertise
+    await this.helia.pins.add(cid);
+    // Store in database with private flag
+    this.db.setFileMetadata(filePath, { cid, isPublic: false });
+  }
+  
+  async pinPublic(capsuleId: string, cid: string) {
+    // Pin and advertise to network
+    await this.helia.pins.add(cid);
+    await this.helia.libp2p.contentRouting.provide(cid);
+    // Store in database with public flag
+    this.db.setCapsuleMetadata(capsuleId, { cid, isPublic: true });
+  }
+  
+  async setupPublicGateway() {
+    // Configure HTTP gateway for public CIDs only
+    const gateway = new IPFSGateway({
+      whitelist: await this.db.getPublicCIDs(),
+      cors: true
+    });
+    return gateway;
+  }
+}
+```
+
+#### Security Considerations
+
+1. **Privacy Protection**
+   - Private files never exposed to public network
+   - Explicit opt-in required for publishing
+   - Gateway whitelist prevents accidental exposure
+
+2. **License Enforcement**
+   - License keys encrypted with ECIES
+   - Runtime validates Access Token on blockchain
+   - No central server can revoke access
+
+3. **Revenue Protection**
+   - Smart contracts handle all payments
+   - Automatic royalty distribution
+   - Transparent, verifiable transactions
+
+### 6.6 User Experience Flow
+
+#### Publishing an Asset (Factory)
+1. User selects file in PC2
+2. Opens "Publish to Marketplace" dialog
+3. Configures licensing (Access, Distribution, Royalty splits)
+4. Sets pricing model (Buy Now, Subscription, PPV, etc.)
+5. PC2 packages into Digital Capsule (WASMER)
+6. Encrypts and uploads to IPFS (public)
+7. Mints DCL token and Operative Contract
+8. Asset appears in global marketplace
+
+#### Purchasing an Asset (Marketplace)
+1. User browses marketplace in PC2
+2. Finds asset via blockchain registry
+3. Views pricing, royalties, creator info
+4. Purchases Access Token via smart contract
+5. PC2 queries IPFS for capsule CID
+6. Downloads from nearest node (P2P or gateway)
+7. License key delivered via CapsuleConnect
+8. Asset available in user's PC2 library
+
+#### Executing an Asset (Runtime - Human User)
+1. User opens capsule in PC2
+2. WASMER runtime checks Access Token on blockchain
+3. If valid, decrypts capsule using license key
+4. Executes embedded Player + Asset + RTOS as unified binary
+5. Enforces licensing terms (view count, duration, execution limits)
+6. Tracks usage for royalty distribution
+
+#### Executing an Asset (Runtime - AI Agent)
+1. AI Agent (e.g., Coinbase AgentKit) queries blockchain registry
+2. Agent identifies needed knowledge/functionality
+3. Agent checks if it holds Access Token for required binary
+4. If not, agent purchases Access Token via smart contract (autonomous)
+5. Agent downloads WASMER binary from IPFS (via PC2 node or gateway)
+6. Agent executes binary using WASMER runtime
+7. Binary decrypts and exposes knowledge/functions to agent
+8. Agent uses unlocked knowledge for its tasks
+9. Usage tracked for royalty distribution to creators
+
+### 6.7 Economic Model Integration
+
+#### Royalty Distribution
+- **Automatic**: Smart contracts split revenue instantly
+- **Transparent**: All transactions on blockchain
+- **Liquid**: Royalty Tokens tradeable on DEXs
+- **Fractional**: Creators can sell % of future royalties
+
+#### Marketplace Revenue
+- **Protocol Fee**: Small % to Elacity protocol
+- **Node Operators**: Incentive for running public gateways
+- **Distributors**: % for reselling/redistributing
+- **Creators**: Majority share to asset creators
+
+### 6.8 CTO Technical Assessment & Architecture Recommendations
+
+#### Architecture Feasibility: ✅ **HIGHLY VIABLE**
+
+**Strengths:**
+1. **Self-Contained Binaries**: Packaging Player + Asset + RTOS eliminates dependency hell
+2. **Cross-Platform**: WASMER runtime can run on any OS (Linux, macOS, Windows, embedded)
+3. **AI Agent Ready**: Binary format perfect for agent execution (no browser dependency)
+4. **Knowledge Economy**: Creates executable knowledge packages - very innovative
+5. **Blockchain Integration**: Access tokens provide clear ownership/rights model
+
+**Technical Challenges:**
+1. **Custom Runtime Development**: Building WASMER runtime from scratch is significant work (6-8 weeks)
+2. **Binary Format Design**: Need robust format that handles all asset types
+3. **RTOS Integration**: Real-time OS adds complexity but enables deterministic execution
+4. **Performance**: Binary size and execution speed need optimization
+5. **Security**: Encrypted binaries with license validation must be bulletproof
+
+#### Recommended Architecture Approach
+
+**Option A: Build Custom WASMER Runtime (Recommended)**
+- **Pros**: Full control, optimized for PC2, AI agent support built-in
+- **Cons**: Significant development time (6-8 weeks)
+- **Best For**: Long-term vision, unique capabilities
+
+**Option B: Extend Existing WASMER (Wasmer.io)**
+- **Pros**: Faster to market, proven runtime
+- **Cons**: Less control, may need modifications for RTOS
+- **Best For**: Faster MVP, leverage existing work
+
+**Recommendation**: **Start with Option B (extend Wasmer.io), migrate to Option A if needed**
+
+#### Implementation Strategy
+
+**Phase 1: Foundation (Weeks 1-2)**
+1. Evaluate Wasmer.io runtime capabilities
+2. Design binary format (Player + Asset + RTOS structure)
+3. Create proof-of-concept binary packer
+4. Test basic execution
+
+**Phase 2: Core Runtime (Weeks 3-4)**
+1. Integrate/extend Wasmer.io for PC2 needs
+2. Add RTOS layer (lightweight, deterministic)
+3. Implement license validation (blockchain integration)
+4. Add decryption module
+
+**Phase 3: Asset Packaging (Weeks 5-6)**
+1. Build asset-to-binary converter
+2. Support multiple asset types (media, code, data, AI models)
+3. Player embedding for each type
+4. Encryption pipeline
+
+**Phase 4: AI Agent Integration (Weeks 7-8)**
+1. Coinbase AgentKit compatibility layer
+2. Agent execution interface
+3. Knowledge extraction APIs
+4. Tool/function exposure
+
+#### Binary Format Specification (Draft)
+
+```typescript
+// Future: src/wasmer/binary-format.ts
+interface WASMERBinary {
+  // Header (unencrypted, for discovery)
+  header: {
+    magic: 'WASMER'; // Format identifier
+    version: number;
+    assetType: 'media' | 'code' | 'knowledge' | 'ai-model' | 'tool';
+    cid: string; // IPFS Content ID
+    contractAddress: string; // DCL token address
+    metadataSize: number;
+    payloadSize: number;
+  };
+  
+  // Encrypted Payload
+  payload: {
+    // Player (Execution Engine)
+    player: {
+      runtime: WebAssembly.Module; // WASMER runtime
+      decryptor: WebAssembly.Module;
+      validator: WebAssembly.Module; // License validator
+      controller: WebAssembly.Module; // Execution controller
+    };
+    
+    // Asset (Content)
+    asset: {
+      type: string;
+      data: Uint8Array; // Encrypted content
+      metadata: AssetMetadata;
+    };
+    
+    // RTOS (Real-Time OS)
+    rtos: {
+      scheduler: WebAssembly.Module;
+      resourceManager: WebAssembly.Module;
+      ioHandlers: WebAssembly.Module[];
+      syscalls: SystemCallInterface;
+    };
+  };
+  
+  // License Key Slot (populated on purchase)
+  licenseKey?: EncryptedLicenseKey;
+}
+```
+
+#### AI Agent Execution Flow
+
+```typescript
+// Future: src/wasmer/agent-execution.ts
+interface AgentExecution {
+  // Agent discovers need for knowledge
+  discoverNeed(task: string): Promise<CapsuleListing[]>;
+  
+  // Agent checks token ownership
+  checkAccess(agentWallet: string, capsuleId: string): Promise<boolean>;
+  
+  // Agent purchases if needed
+  purchaseAccess(capsuleId: string): Promise<AccessToken>;
+  
+  // Agent downloads binary
+  downloadBinary(cid: string): Promise<WASMERBinary>;
+  
+  // Agent executes binary
+  executeBinary(
+    binary: WASMERBinary,
+    licenseKey: string,
+    agentContext: AgentContext
+  ): Promise<ExecutionResult>;
+  
+  // Agent extracts knowledge/functions
+  extractKnowledge(result: ExecutionResult): Promise<AgentKnowledge>;
+}
+```
+
+#### Technical Considerations
+
+**1. Binary Size Optimization**
+- **Challenge**: Player + Asset + RTOS can be large
+- **Solution**: 
+  - Shared Player library (reference, not embedded)
+  - Asset compression
+  - Lazy RTOS loading
+  - Streaming for large assets
+
+**2. Execution Performance**
+- **Challenge**: Runtime overhead
+- **Solution**:
+  - Native code paths where possible
+  - JIT compilation for hot paths
+  - Caching of decrypted content
+  - Parallel execution support
+
+**3. Security Model**
+- **Challenge**: Prevent unauthorized execution
+- **Solution**:
+  - License key tied to wallet address
+  - Blockchain validation on every execution
+  - Encrypted binary until license verified
+  - Sandboxed execution environment
+
+**4. AI Agent Compatibility**
+- **Challenge**: AgentKit integration
+- **Solution**:
+  - Standard tool interface (function signatures)
+  - Knowledge extraction APIs
+  - Event-driven execution model
+  - Async/await support
+
+#### Recommended Tech Stack
+
+**Runtime:**
+- Base: Wasmer.io (or custom Rust-based runtime)
+- Language: Rust (performance, safety)
+- WASM: WebAssembly System Interface (WASI)
+
+**Packaging:**
+- Language: TypeScript/Node.js (PC2 integration)
+- Encryption: AES-128 (CENC), ECIES for keys
+- Compression: zstd or brotli
+
+**AI Agent Integration:**
+- Framework: Coinbase AgentKit compatibility layer
+- Interface: Standard tool/function API
+- Communication: JSON-RPC or gRPC
+
+### 6.9 Dependencies & Prerequisites
+
+**External Dependencies:**
+- Elacity dDRM SDK (third-party project)
+- Wasmer.io runtime (base, may extend or replace)
+- EVM-compatible blockchain connection
+- Smart contract deployment
+- Coinbase AgentKit (for AI agent support)
+
+**PC2 Prerequisites:**
+- ✅ IPFS integration (Phase 2) - **COMPLETE**
+- ✅ SQLite database (Phase 2) - **COMPLETE**
+- ✅ Wallet authentication (Phase 1) - **COMPLETE**
+- ⏸️ Public gateway configuration (Phase 6.1)
+- ⏸️ Blockchain integration (Phase 6.2)
+- ⏸️ WASMER runtime development (Phase 6.5) - **CUSTOM BUILD**
+
+### 6.9 Success Criteria
+
+**Phase 6 Success:**
+- ✅ Users can publish assets to global marketplace
+- ✅ Users can discover and purchase assets
+- ✅ P2P distribution works across PC2 nodes
+- ✅ WASMER runtime executes binaries correctly (Player + Asset + RTOS)
+- ✅ Rights management enforced on blockchain
+- ✅ Royalties distributed automatically
+- ✅ Public IPFS gateway serves as CDN
+- ✅ **AI Agents can purchase and execute binaries** (Coinbase AgentKit compatible)
+- ✅ **Knowledge extraction works** (agents can use unlocked functionality)
+- ✅ **Multiple asset types supported** (media, code, knowledge, AI models, tools)
+
+### 6.10 AI Agent Economy Integration
+
+#### Vision: Bot-to-Bot (B2B) Knowledge Market
+
+**The Future Economy:**
+- AI Agents are the primary consumers (not just humans)
+- Agents need knowledge/functionality to complete tasks
+- Agents purchase Access Tokens autonomously
+- Agents execute WASMER binaries to unlock capabilities
+- Creators earn royalties from agent usage
+
+#### Agent Execution Model
+
+```typescript
+// Example: AI Agent using Coinbase AgentKit
+const agent = new Agent({
+  wallet: agentWallet,
+  tools: [/* standard tools */]
+});
+
+// Agent needs knowledge for task
+const task = "Analyze market trends using proprietary dataset";
+const capsules = await agent.discoverCapsules(task);
+
+// Agent checks if it has access
+for (const capsule of capsules) {
+  const hasAccess = await agent.checkAccessToken(capsule.id);
+  if (!hasAccess) {
+    // Agent autonomously purchases access
+    await agent.purchaseAccess(capsule.id);
+  }
+  
+  // Agent downloads and executes binary
+  const binary = await agent.downloadCapsule(capsule.cid);
+  const knowledge = await agent.executeBinary(binary);
+  
+  // Agent uses unlocked knowledge
+  await agent.useKnowledge(knowledge, task);
+}
+```
+
+#### Market Opportunities
+
+1. **Data Capsules**: Verified datasets for AI training
+2. **Function Libraries**: Reusable code/tools for agents
+3. **Knowledge Bases**: Domain expertise packaged as executables
+4. **AI Models**: Pre-trained models with execution rights
+5. **Tool Sets**: Specialized tools agents can purchase and use
+
+#### Revenue Model for Creators
+
+- **Per-Execution**: Agent pays each time it runs binary
+- **Subscription**: Agent pays for time-based access
+- **Royalty Tokens**: Creators earn from all agent usage
+- **Fractional Ownership**: Investors buy % of future royalties
+
+### 6.10 Strategic Importance
+
+**Why This Matters:**
+1. **Economic Sovereignty**: Users own and monetize their digital assets
+2. **Global Network**: PC2 nodes become part of distributed marketplace
+3. **Future-Proof**: Ready for AI/robotics economy (B2B bot-to-bot market)
+4. **Competitive Advantage**: First self-hosted node with dDRM marketplace
+5. **Revenue Model**: Protocol fees and node operator incentives
+
+**Market Opportunities:**
+- Media (music, video, art)
+- Software & Applications
+- AI Models & Datasets
+- Robotics-as-a-Service
+- 3D Assets & VR/AR
+- Royalty Trading
+
+### 6.11 CTO Architecture Assessment Summary
+
+#### ✅ **Architecture Makes Sense - Recommended Approach**
+
+**Why This Works:**
+1. **Executable Knowledge Packages**: Packaging Player + Asset + RTOS creates truly portable, self-contained knowledge units
+2. **AI Agent Economy**: Agents can autonomously purchase and execute knowledge - this is the future
+3. **Blockchain Rights**: Access tokens provide clear, verifiable ownership model
+4. **P2P Distribution**: IPFS enables decentralized distribution without central servers
+5. **Cross-Platform**: WASMER runtime works everywhere (not browser-locked)
+
+**Key Technical Insights:**
+1. **Start with Wasmer.io Base**: Don't reinvent the wheel - extend existing proven runtime
+2. **Binary Format is Critical**: Design format carefully to support all asset types
+3. **RTOS Adds Value**: Real-time OS enables deterministic execution for agents
+4. **AgentKit Compatibility**: Standard tool interface makes agent integration straightforward
+5. **Performance Matters**: Optimize binary size and execution speed early
+
+**Recommended Implementation Order:**
+1. **Phase 6.1-6.2**: IPFS gateway + Elacity SDK (foundation)
+2. **Phase 6.5**: WASMER runtime development (core capability)
+3. **Phase 6.3-6.4**: Marketplace + P2P (distribution)
+4. **Phase 6.6**: AI Agent integration (future economy)
+
+**Risk Mitigation:**
+- **Binary Format**: Design extensible format from day one
+- **Performance**: Benchmark early, optimize iteratively
+- **Security**: License validation must be bulletproof
+- **Compatibility**: Test across platforms early
+
+**Strategic Value:**
+- **First-Mover**: Self-hosted nodes with executable knowledge marketplace
+- **AI Ready**: Built for agent economy from ground up
+- **Creator Economy**: Enables new revenue models
+- **Future-Proof**: Architecture supports B2B bot-to-bot market
+
+---
+
 *This document is a living guide and will be updated as the project evolves.*
 

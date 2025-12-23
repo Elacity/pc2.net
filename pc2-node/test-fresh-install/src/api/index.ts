@@ -12,6 +12,7 @@ import { handleSign, handleVersion, handleOSUser, handleKV, handleRAO, handleCon
 import { handleAPIInfo, handleGetLaunchApps, handleDF, handleBatch, handleCacheTimestamp, handleStats } from './info.js';
 import { handleFile } from './file.js';
 import storageRouter from './storage.js';
+import aiRouter from './ai.js';
 import { handleSearch } from './search.js';
 import { handleGetVersions, handleGetVersion, handleRestoreVersion } from './versions.js';
 import { createBackup, listBackups, downloadBackup, deleteBackup, restoreBackup } from './backup.js';
@@ -116,6 +117,7 @@ export function setupAPI(app: Express): void {
   
   // Storage usage endpoint
   app.use('/api/storage', storageRouter);
+  app.use('/api/ai', aiRouter);
 
   // Search endpoint (require auth)
   app.post('/search', authenticate, handleSearch);

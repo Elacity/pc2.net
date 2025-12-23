@@ -45,6 +45,7 @@ import UIWindowSearch from "./UIWindowSearch.js"
 import UIAccountSidebar from "./UIAccountSidebar.js"
 import walletService from "../services/WalletService.js"
 import initPC2StatusBar from "./UIPC2StatusBar.js"
+import UIAIChat from "./AI/UIAIChat.js"
 
 async function UIDesktop(options) {
     let h = '';
@@ -1400,6 +1401,12 @@ async function UIDesktop(options) {
 
     window.active_element = el_desktop;
     window.active_item_container = el_desktop;
+
+    // ---------------------------------------------------------------
+    // AI Side Panel
+    // ---------------------------------------------------------------
+    UIAIChat();
+
     // --------------------------------------------------------
     // Dragster
     // Allow dragging of local files onto desktop.

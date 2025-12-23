@@ -43,7 +43,7 @@ export const normalizeJsonSchema = (schema: JSONSchema | undefined): JSONSchema 
 
   if (schema.type === 'array') {
     if (!schema.items) {
-      schema.items = {};
+      schema.items = { type: 'string' } as JSONSchema;
     } else {
       schema.items = normalizeJsonSchema(schema.items) as JSONSchema;
     }
@@ -73,7 +73,7 @@ export const normalizeToolsObject = (tools: any[]): NormalizedTool[] => {
       const normalFn: any = {};
       let parameters = fn.parameters || fn.input_schema;
 
-      normalFn.parameters = parameters ?? { type: 'object' };
+      normalFn.parameters = (parameters ?? { type: 'object', properties: {} }) as JSONSchema;
 
       if (parameters?.properties) {
         parameters = normalizeJsonSchema(parameters);

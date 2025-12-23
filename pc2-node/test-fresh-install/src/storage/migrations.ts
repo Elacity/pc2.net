@@ -29,7 +29,7 @@ function findSchemaFile(): string {
   }
   throw new Error(`Schema file not found. Tried: ${SCHEMA_FILE} and ${sourceSchema}`);
 }
-const CURRENT_VERSION = 4;
+const CURRENT_VERSION = 5;
 
 interface Migration {
   version: number;
@@ -227,6 +227,38 @@ export function runMigrations(db: Database.Database): void {
         recordMigration(db, 4);
       } catch (error: any) {
         console.error(`❌ Migration 4 error: ${error.message}`);
+        throw error;
+      }
+    }
+    
+    // Migration 5: Add ai_config table for wallet-scoped AI configuration
+    if (currentVersion < 5) {
+      try {
+        console.log('📦 Running Migration 5: AI configuration...');
+        
+        // Create ai_config table (wallet-scoped)
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS ai_config (
+            wallet_address TEXT PRIMARY KEY,
+            default_provider TEXT DEFAULT 'ollama',
+            default_model TEXT,
+            api_keys TEXT,
+            ollama_base_url TEXT DEFAULT 'http://localhost:11434',
+            updated_at INTEGER DEFAULT (strftime('%s', 'now')),
+            FOREIGN KEY (wallet_address) REFERENCES users(wallet_address)
+          )
+        `);
+        
+        // Create index for fast lookups
+        db.exec(`
+          CREATE INDEX IF NOT EXISTS idx_ai_config_wallet 
+          ON ai_config(wallet_address)
+        `);
+        
+        console.log('✅ Migration 5 complete: AI config table created');
+        recordMigration(db, 5);
+      } catch (error: any) {
+        console.error(`❌ Migration 5 error: ${error.message}`);
         throw error;
       }
     }

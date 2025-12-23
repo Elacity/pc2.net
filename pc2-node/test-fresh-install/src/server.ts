@@ -7,6 +7,7 @@ import { DatabaseManager, FilesystemManager } from './storage/index.js';
 import { Config } from './config/loader.js';
 import { IndexingWorker } from './storage/indexer.js';
 import { AIChatService } from './services/ai/AIChatService.js';
+import { logger } from './utils/logger.js';
 
 export interface ServerOptions {
   port: number;
@@ -77,6 +78,7 @@ export function createServer(options: ServerOptions): { app: Express; server: Se
   }));
   
   app.use(express.json({ 
+    limit: '50mb', // Allow large JSON payloads (for AI chat with large PDF text content)
     verify: (req: any, res, buf) => {
       // Capture raw body for debugging (especially for /drivers/call and /mkdir)
       if (req.path === '/drivers/call' || req.path === '/mkdir') {
@@ -96,6 +98,11 @@ export function createServer(options: ServerOptions): { app: Express; server: Se
   }
   if (options.filesystem) {
     app.locals.filesystem = options.filesystem;
+    // Also store in global as fallback
+    (global as any).__filesystem = options.filesystem;
+    logger.info('[Server] ✅ Filesystem stored in app.locals and global');
+  } else {
+    logger.warn('[Server] ⚠️ No filesystem provided - tool execution will be disabled');
   }
   if (options.config) {
     app.locals.config = options.config;

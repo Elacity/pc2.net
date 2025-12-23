@@ -13,6 +13,9 @@ import { broadcastItemUpdated } from '../websocket/events.js';
 import { Server as SocketIOServer } from 'socket.io';
 import crypto from 'crypto';
 import { AIChatService } from '../services/ai/AIChatService.js';
+import * as pdfjsLib from 'pdfjs-dist';
+import fs from 'fs/promises';
+import path from 'path';
 
 /**
  * Sign files for app access
@@ -478,6 +481,156 @@ export function handleDriversCall(req: AuthenticatedRequest, res: Response): voi
       return;
     }
 
+    // Handle puter-ocr interface (OCR for images)
+    if (body.interface === 'puter-ocr') {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+
+      const method = body.method || 'recognize';
+      const args = body.args || {};
+
+      if (method === 'recognize') {
+        const source = args.source;
+        if (!source) {
+          res.status(400).json({ 
+            success: false, 
+            error: 'Missing required argument: source' 
+          });
+          return;
+        }
+
+        // Note: OCR is best handled by vision-capable AI models
+        // For now, return a message suggesting to use vision models
+        // Future: Could integrate Tesseract.js or cloud OCR services
+        
+        logger.info('[Drivers] OCR requested for:', source);
+        res.json({ 
+          success: true, 
+          result: { 
+            text: '',
+            note: 'OCR is handled by vision-capable AI models. The image will be analyzed directly by the AI model.'
+          } 
+        });
+        return;
+      }
+
+      res.status(400).json({ 
+        success: false, 
+        error: `Unknown method: ${method}` 
+      });
+      return;
+    }
+
+    // Handle puter-pdf interface (PDF text extraction)
+    if (body.interface === 'puter-pdf') {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+
+      const method = body.method || 'extract_text';
+      const args = body.args || {};
+
+      if (method === 'extract_text') {
+        const source = args.source;
+        if (!source) {
+          res.status(400).json({ 
+            success: false, 
+            error: 'Missing required argument: source' 
+          });
+          return;
+        }
+
+        // Extract text from PDF using pdfjs-dist
+        (async () => {
+          try {
+            if (!req.user) {
+              res.status(401).json({ success: false, error: 'Unauthorized' });
+              return;
+            }
+
+            const filesystem = (req.app.locals.filesystem as FilesystemManager | undefined);
+            if (!filesystem) {
+              res.status(500).json({ 
+                success: false, 
+                error: 'Filesystem not initialized' 
+              });
+              return;
+            }
+
+            // Get file path - source could be a path or UID
+            let filePath: string;
+            if (source.startsWith('/')) {
+              filePath = source;
+            } else {
+              // Assume it's a UID, need to resolve to path
+              // For now, treat as path
+              filePath = source;
+            }
+
+            // Ensure path is within user's directory
+            const walletAddress = req.user.wallet_address;
+            const userPath = `/${walletAddress}`;
+            if (!filePath.startsWith(userPath)) {
+              res.status(403).json({ 
+                success: false, 
+                error: 'Access denied' 
+              });
+              return;
+            }
+
+            // Read PDF file
+            const fileContent = await filesystem.readFile(filePath, walletAddress);
+            if (!fileContent) {
+              res.status(404).json({ 
+                success: false, 
+                error: 'File not found' 
+              });
+              return;
+            }
+
+            // Convert Buffer to Uint8Array for pdfjs-dist
+            const uint8Array = new Uint8Array(fileContent);
+
+            // Load PDF with pdfjs-dist
+            const pdf = await pdfjsLib.getDocument({ data: uint8Array }).promise;
+            let fullText = '';
+
+            // Extract text from all pages
+            for (let i = 1; i <= pdf.numPages; i++) {
+              const page = await pdf.getPage(i);
+              const textContent = await page.getTextContent();
+              const pageText = textContent.items.map((item: any) => item.str).join(' ');
+              fullText += pageText + '\n\n';
+            }
+
+            res.json({ 
+              success: true, 
+              result: { 
+                text: fullText.trim(),
+                pages: pdf.numPages
+              } 
+            });
+          } catch (error: any) {
+            logger.error('[Drivers] PDF extraction error:', error);
+            res.status(500).json({ 
+              success: false, 
+              error: error.message || 'PDF text extraction failed' 
+            });
+          }
+        })();
+        return;
+      }
+
+      res.status(400).json({ 
+        success: false, 
+        error: `Unknown method: ${method}` 
+      });
+      return;
+    }
+
     // Handle puter-chat-completion interface (AI chat)
     if (body.interface === 'puter-chat-completion') {
       if (!req.user) {
@@ -496,96 +649,215 @@ export function handleDriversCall(req: AuthenticatedRequest, res: Response): voi
 
       const method = body.method || 'complete';
 
-      try {
-        if (method === 'complete') {
-          const args = body.args || {};
-          const messages = args.messages || [];
-          const model = args.model;
-          const stream = args.stream || false;
-          const tools = args.tools;
-          const max_tokens = args.max_tokens;
-          const temperature = args.temperature;
+      // Make handler async to support streaming
+      (async () => {
+        try {
+          if (method === 'complete') {
+            const args = body.args || {};
+            const messages = args.messages || [];
+            const model = args.model;
+            const stream = args.stream || false;
+            const tools = args.tools;
+            const max_tokens = args.max_tokens;
+            const temperature = args.temperature;
 
-          if (!messages || !Array.isArray(messages) || messages.length === 0) {
-            res.status(400).json({ 
-              success: false, 
-              error: 'Missing or invalid messages array' 
-            });
-            return;
-          }
-
-          if (stream) {
-            // Streaming response
-            res.setHeader('Content-Type', 'text/event-stream');
-            res.setHeader('Cache-Control', 'no-cache');
-            res.setHeader('Connection', 'keep-alive');
-
-            try {
-              for await (const chunk of aiService.streamComplete({
-                messages,
-                model,
-                stream: true,
-                tools,
-                max_tokens,
-                temperature,
-              })) {
-                res.write(`data: ${JSON.stringify({ 
-                  success: true, 
-                  result: chunk 
-                })}\n\n`);
-              }
-              res.end();
-            } catch (error: any) {
-              logger.error('[Drivers] AI stream error:', error);
-              res.write(`data: ${JSON.stringify({ 
+            if (!messages || !Array.isArray(messages) || messages.length === 0) {
+              res.status(400).json({ 
                 success: false, 
-                error: error.message || 'Stream error' 
-              })}\n\n`);
-              res.end();
+                error: 'Missing or invalid messages array' 
+              });
+              return;
             }
-          } else {
-            // Non-streaming response
-            const result = await aiService.complete({
-              messages,
-              model,
-              stream: false,
-              tools,
-              max_tokens,
-              temperature,
-            });
 
+            // Log message sizes for debugging
+            const totalMessageLength = JSON.stringify(messages).length;
+            logger.info('[Drivers] AI chat request:', {
+              messageCount: messages.length,
+              totalMessageLength,
+              model,
+              stream,
+              hasTools: !!tools,
+            });
+            
+            // Warn if message is very large
+            if (totalMessageLength > 100000) {
+              logger.warn('[Drivers] Large AI chat request detected:', {
+                totalMessageLength,
+                messageCount: messages.length,
+              });
+            }
+
+            if (stream) {
+              // Streaming response
+              res.setHeader('Content-Type', 'text/event-stream');
+              res.setHeader('Cache-Control', 'no-cache');
+              res.setHeader('Connection', 'keep-alive');
+
+              try {
+                // Get filesystem and wallet address for tool execution
+                // CRITICAL: filesystem must be available for tool execution
+                let filesystem = (req.app.locals.filesystem as FilesystemManager | undefined);
+                const walletAddress = req.user?.wallet_address;
+
+                // Get WebSocket server for live updates
+                const io = (req.app.locals.io as any | undefined);
+                logger.info('[Drivers] AI streamComplete - io available:', !!io, 'filesystem:', !!filesystem, 'walletAddress:', walletAddress);
+                
+                if (!filesystem) {
+                  logger.error('[Drivers] ⚠️ CRITICAL: filesystem not available in app.locals - tool execution will be disabled!');
+                  logger.error('[Drivers] app.locals keys:', Object.keys(req.app.locals || {}));
+                  logger.error('[Drivers] app.locals.filesystem type:', typeof req.app.locals.filesystem);
+                  logger.error('[Drivers] app.locals.filesystem value:', req.app.locals.filesystem);
+                  
+                  // Try to get filesystem from global if available
+                  const globalFilesystem = (global as any).__filesystem;
+                  if (globalFilesystem) {
+                    logger.warn('[Drivers] Found filesystem in global, using it as fallback');
+                    filesystem = globalFilesystem;
+                  }
+                }
+
+                for await (const chunk of aiService.streamComplete({
+                  messages,
+                  model,
+                  stream: true,
+                  tools,
+                  max_tokens,
+                  temperature,
+                  walletAddress,
+                  filesystem,
+                  io,
+                })) {
+                  res.write(`data: ${JSON.stringify({ 
+                    success: true, 
+                    result: chunk 
+                  })}\n\n`);
+                }
+                res.end();
+              } catch (error: any) {
+                const errorMessage = error?.message || 'AI stream error';
+                const errorStack = error?.stack;
+                
+                logger.error('[Drivers] AI stream error:', error);
+                logger.error('[Drivers] AI stream error message:', errorMessage);
+                logger.error('[Drivers] AI stream error stack:', errorStack);
+                logger.error('[Drivers] AI stream error details:', {
+                  message: errorMessage,
+                  name: error?.name,
+                  cause: error?.cause,
+                  toString: String(error),
+                });
+                
+                // Check if headers are already sent (stream might have started)
+                if (!res.headersSent) {
+                  // Headers not sent yet - send error as regular JSON response
+                  res.status(500).json({ 
+                    success: false, 
+                    error: errorMessage,
+                    errorName: error?.name,
+                    details: errorStack?.substring(0, 1000)
+                  });
+                } else {
+                  // Headers already sent - send error in SSE format
+                  try {
+                    res.write(`data: ${JSON.stringify({ 
+                      success: false, 
+                      error: errorMessage,
+                      errorName: error?.name,
+                      details: errorStack?.substring(0, 1000)
+                    })}\n\n`);
+                    res.end();
+                  } catch (writeError) {
+                    logger.error('[Drivers] Failed to write stream error:', writeError);
+                    // Can't write to stream, just end it
+                    res.end();
+                  }
+                }
+              }
+            } else {
+              // Non-streaming response
+              try {
+                // Get filesystem and wallet address for tool execution
+                const filesystem = (req.app.locals.filesystem as FilesystemManager | undefined);
+                const walletAddress = req.user?.wallet_address;
+
+                // Get WebSocket server for live updates
+                const io = (req.app.locals.io as any | undefined);
+
+                const result = await aiService.complete({
+                  messages,
+                  model,
+                  stream: false,
+                  tools,
+                  max_tokens,
+                  temperature,
+                  walletAddress,
+                  filesystem,
+                  io,
+                });
+
+                res.json({ 
+                  success: true, 
+                  result: result 
+                });
+              } catch (completeError: any) {
+                const errorMessage = completeError?.message || 'AI chat completion failed';
+                const errorStack = completeError?.stack;
+                
+                logger.error('[Drivers] AI complete error:', completeError);
+                logger.error('[Drivers] AI complete error message:', errorMessage);
+                logger.error('[Drivers] AI complete error stack:', errorStack);
+                logger.error('[Drivers] AI complete error details:', {
+                  message: errorMessage,
+                  name: completeError?.name,
+                  cause: completeError?.cause,
+                  toString: String(completeError),
+                });
+                
+                // Always return error message to client for debugging
+                res.status(500).json({ 
+                  success: false, 
+                  error: errorMessage,
+                  errorName: completeError?.name,
+                  details: errorStack?.substring(0, 1000) // First 1000 chars of stack
+                });
+              }
+            }
+          } else if (method === 'models' || method === 'list') {
+            // List available models
+            const models = await aiService.listModels();
             res.json({ 
               success: true, 
-              result: result 
+              result: models 
+            });
+          } else if (method === 'providers') {
+            // List available providers
+            const providers = aiService.listProviders();
+            res.json({ 
+              success: true, 
+              result: providers 
+            });
+          } else {
+            res.status(400).json({ 
+              success: false, 
+              error: `Unknown method: ${method}` 
             });
           }
-        } else if (method === 'models' || method === 'list') {
-          // List available models
-          const models = await aiService.listModels();
-          res.json({ 
-            success: true, 
-            result: models 
+        } catch (error: any) {
+          logger.error('[Drivers] AI chat error:', error);
+          logger.error('[Drivers] AI chat error stack:', error.stack);
+          logger.error('[Drivers] AI chat error details:', {
+            message: error.message,
+            name: error.name,
+            cause: error.cause,
           });
-        } else if (method === 'providers') {
-          // List available providers
-          const providers = aiService.listProviders();
-          res.json({ 
-            success: true, 
-            result: providers 
-          });
-        } else {
-          res.status(400).json({ 
+          res.status(500).json({ 
             success: false, 
-            error: `Unknown method: ${method}` 
+            error: error.message || 'AI chat completion failed',
+            details: process.env.NODE_ENV === 'development' ? error.stack : undefined
           });
         }
-      } catch (error: any) {
-        logger.error('[Drivers] AI chat error:', error);
-        res.status(500).json({ 
-          success: false, 
-          error: error.message || 'AI chat completion failed' 
-        });
-      }
+      })();
       return;
     }
 

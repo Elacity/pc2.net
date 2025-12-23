@@ -57,6 +57,15 @@ export interface FileVersion {
   comment: string | null;
 }
 
+export interface AIConfig {
+  wallet_address: string;
+  default_provider: string;
+  default_model: string | null;
+  api_keys: string; // JSON string: { "openai": "sk-...", "claude": "sk-ant-..." }
+  ollama_base_url: string;
+  updated_at: number;
+}
+
 export class DatabaseManager {
   private db: Database.Database | null = null;
   private dbPath: string;
@@ -494,5 +503,109 @@ export class DatabaseManager {
   queryOne(sql: string, ...params: any[]): any {
     const db = this.getDB();
     return db.prepare(sql).get(...params);
+  }
+
+  // ============================================================================
+  // AI Configuration Operations (Wallet-Scoped)
+  // ============================================================================
+
+  /**
+   * Get AI configuration for a wallet
+   */
+  getAIConfig(walletAddress: string): AIConfig | null {
+    const db = this.getDB();
+    const row = db.prepare('SELECT * FROM ai_config WHERE wallet_address = ?')
+      .get(walletAddress) as AIConfig | undefined;
+    return row ?? null;
+  }
+
+  /**
+   * Create or update AI configuration
+   */
+  setAIConfig(
+    walletAddress: string,
+    defaultProvider: string = 'ollama',
+    defaultModel: string | null = null,
+    apiKeys: Record<string, string> | null = null,
+    ollamaBaseUrl: string = 'http://localhost:11434'
+  ): void {
+    const db = this.getDB();
+    const now = Math.floor(Date.now() / 1000);
+    const apiKeysJson = apiKeys ? JSON.stringify(apiKeys) : null;
+
+    db.prepare(`
+      INSERT INTO ai_config (wallet_address, default_provider, default_model, api_keys, ollama_base_url, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(wallet_address) DO UPDATE SET
+        default_provider = excluded.default_provider,
+        default_model = excluded.default_model,
+        api_keys = excluded.api_keys,
+        ollama_base_url = excluded.ollama_base_url,
+        updated_at = excluded.updated_at
+    `).run(walletAddress, defaultProvider, defaultModel, apiKeysJson, ollamaBaseUrl, now);
+  }
+
+  /**
+   * Update API keys for a wallet (merge with existing)
+   */
+  updateAIAPIKeys(walletAddress: string, apiKeys: Record<string, string>): void {
+    const db = this.getDB();
+    const existing = this.getAIConfig(walletAddress);
+    
+    // Merge with existing keys
+    let mergedKeys: Record<string, string> = {};
+    if (existing?.api_keys) {
+      try {
+        mergedKeys = JSON.parse(existing.api_keys);
+      } catch (e) {
+        // If parsing fails, start fresh
+      }
+    }
+    
+    // Merge new keys
+    Object.assign(mergedKeys, apiKeys);
+    
+    // Update config
+    const now = Math.floor(Date.now() / 1000);
+    db.prepare(`
+      INSERT INTO ai_config (wallet_address, default_provider, default_model, api_keys, ollama_base_url, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(wallet_address) DO UPDATE SET
+        api_keys = excluded.api_keys,
+        updated_at = excluded.updated_at
+    `).run(
+      walletAddress,
+      existing?.default_provider || 'ollama',
+      existing?.default_model || null,
+      JSON.stringify(mergedKeys),
+      existing?.ollama_base_url || 'http://localhost:11434',
+      now
+    );
+  }
+
+  /**
+   * Delete API key for a specific provider
+   */
+  deleteAIAPIKey(walletAddress: string, provider: string): void {
+    const db = this.getDB();
+    const existing = this.getAIConfig(walletAddress);
+    
+    if (!existing?.api_keys) {
+      return; // No keys to delete
+    }
+    
+    try {
+      const keys = JSON.parse(existing.api_keys);
+      delete keys[provider];
+      
+      const now = Math.floor(Date.now() / 1000);
+      db.prepare(`
+        UPDATE ai_config 
+        SET api_keys = ?, updated_at = ?
+        WHERE wallet_address = ?
+      `).run(JSON.stringify(keys), now, walletAddress);
+    } catch (e) {
+      // If parsing fails, ignore
+    }
   }
 }

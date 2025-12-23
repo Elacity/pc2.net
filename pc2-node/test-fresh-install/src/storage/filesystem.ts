@@ -518,6 +518,50 @@ export class FilesystemManager {
   }
 
   /**
+   * Copy file or directory
+   */
+  async copyFile(
+    sourcePath: string,
+    destPath: string,
+    walletAddress: string
+  ): Promise<FileMetadata> {
+    const normalizedSourcePath = this.normalizePath(sourcePath);
+    const normalizedDestPath = this.normalizePath(destPath);
+
+    // Get source file
+    const source = this.db.getFile(normalizedSourcePath, walletAddress);
+    if (!source) {
+      throw new Error(`File not found: ${sourcePath}`);
+    }
+
+    // Ensure destination parent directory exists
+    const destParentPath = dirname(normalizedDestPath);
+    if (destParentPath !== '/' && destParentPath !== '.') {
+      await this.ensureDirectory(destParentPath, walletAddress);
+    }
+
+    // Check if destination already exists
+    const existingDest = this.db.getFile(normalizedDestPath, walletAddress);
+    if (existingDest) {
+      throw new Error(`Destination already exists: ${destPath}`);
+    }
+
+    // If it's a directory, create a new directory
+    if (source.is_dir) {
+      return await this.createDirectory(normalizedDestPath, walletAddress);
+    }
+
+    // If it's a file, read the content and write it to the new location
+    const content = await this.readFile(normalizedSourcePath, walletAddress);
+    const mimeType = source.mime_type || this.guessMimeType(normalizedDestPath) || undefined;
+
+    return await this.writeFile(normalizedDestPath, content, walletAddress, {
+      mimeType,
+      isPublic: source.is_public || false
+    });
+  }
+
+  /**
    * Guess MIME type from file extension
    */
   private guessMimeType(path: string): string | null {

@@ -841,6 +841,12 @@ async function UIWindow(options) {
 
                 $(el_window).close();
             }
+            else {
+                // No parent window - dispatch event on the file dialog window itself
+                const file_opened_event = new CustomEvent('file_opened', {detail: Array.isArray(selected_files) ? [...selected_files] : [selected_files]});
+                $(el_window).get(0)?.dispatchEvent(file_opened_event);
+                $(el_window).close();
+            }
         })
     }
     else if(options.is_directoryPicker){

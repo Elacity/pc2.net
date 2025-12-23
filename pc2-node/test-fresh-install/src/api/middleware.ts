@@ -319,10 +319,18 @@ export function errorHandler(
     return next(err);
   }
 
-  res.status(500).json({
-    error: 'Internal server error',
-    message: process.env.NODE_ENV === 'development' ? err.message : undefined
-  });
+  const errorResponse: any = {
+    success: false,
+    error: err.message || 'Internal server error',
+    errorName: err.name,
+  };
+  
+  // Include stack trace in development
+  if (process.env.NODE_ENV === 'development') {
+    errorResponse.details = err.stack?.substring(0, 1000);
+  }
+  
+  res.status(500).json(errorResponse);
 }
 
 /**

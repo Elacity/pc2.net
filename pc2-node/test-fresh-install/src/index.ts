@@ -2,6 +2,7 @@ import { createServer } from './server.js';
 import { DatabaseManager, IPFSStorage, FilesystemManager } from './storage/index.js';
 import { loadConfig, type Config } from './config/loader.js';
 import { logger } from './utils/logger.js';
+import { AIChatService } from './services/ai/AIChatService.js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -28,10 +29,11 @@ const DB_PATH = process.env.DB_PATH || config.storage.database_path;
 // IPFS repo path (from config or env)
 const IPFS_REPO_PATH = process.env.IPFS_REPO_PATH || config.storage.ipfs_repo_path;
 
-// Global storage instances
-let db: DatabaseManager | null = null;
-let ipfs: IPFSStorage | null = null;
-let filesystem: FilesystemManager | null = null;
+  // Global storage instances
+  let db: DatabaseManager | null = null;
+  let ipfs: IPFSStorage | null = null;
+  let filesystem: FilesystemManager | null = null;
+  let aiService: AIChatService | null = null;
 
 async function main() {
   logger.info('Starting PC2 Node...');
@@ -72,6 +74,28 @@ async function main() {
     // Don't exit - server can still run without IPFS (for development)
   }
 
+  // Initialize AI service
+  if (config.ai?.enabled !== false) {
+    try {
+      aiService = new AIChatService(config.ai);
+      await aiService.initialize();
+      
+      if (aiService.isAvailable()) {
+        const providers = aiService.listProviders();
+        logger.info(`🤖 AI service initialized (providers: ${providers.join(', ')})`);
+      } else {
+        logger.warn('⚠️  AI service initialized but no providers available');
+        logger.info('   💡 Install Ollama: curl -fsSL https://ollama.com/install.sh | sh');
+        logger.info('   💡 Or add API keys for cloud providers in config');
+      }
+    } catch (error) {
+      logger.error('❌ Failed to initialize AI service:', error);
+      logger.warn('   AI features will not be available');
+    }
+  } else {
+    logger.info('ℹ️  AI service disabled in config');
+  }
+
   // Check owner status
   if (!config.owner.wallet_address) {
     logger.warn('⚠️  No owner wallet set');
@@ -91,7 +115,8 @@ async function main() {
     isProduction: IS_PRODUCTION,
     database: db,
     filesystem: filesystem || undefined,
-    config: config
+    config: config,
+    aiService: aiService || undefined
   });
 
   server.listen(PORT, () => {

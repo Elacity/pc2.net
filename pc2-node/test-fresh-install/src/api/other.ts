@@ -12,6 +12,7 @@ import { logger } from '../utils/logger.js';
 import { broadcastItemUpdated } from '../websocket/events.js';
 import { Server as SocketIOServer } from 'socket.io';
 import crypto from 'crypto';
+import { AIChatService } from '../services/ai/AIChatService.js';
 
 /**
  * Sign files for app access
@@ -474,6 +475,117 @@ export function handleDriversCall(req: AuthenticatedRequest, res: Response): voi
       // PC2 node doesn't use subdomains - apps are served from /apps/* paths
       // Return empty list to indicate no subdomains are configured
       res.json({ success: true, result: [] });
+      return;
+    }
+
+    // Handle puter-chat-completion interface (AI chat)
+    if (body.interface === 'puter-chat-completion') {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+
+      const aiService = (req.app.locals.aiService as AIChatService | undefined);
+      if (!aiService) {
+        res.status(503).json({ 
+          success: false, 
+          error: 'AI service not available. Please ensure Ollama is installed and running.' 
+        });
+        return;
+      }
+
+      const method = body.method || 'complete';
+
+      try {
+        if (method === 'complete') {
+          const args = body.args || {};
+          const messages = args.messages || [];
+          const model = args.model;
+          const stream = args.stream || false;
+          const tools = args.tools;
+          const max_tokens = args.max_tokens;
+          const temperature = args.temperature;
+
+          if (!messages || !Array.isArray(messages) || messages.length === 0) {
+            res.status(400).json({ 
+              success: false, 
+              error: 'Missing or invalid messages array' 
+            });
+            return;
+          }
+
+          if (stream) {
+            // Streaming response
+            res.setHeader('Content-Type', 'text/event-stream');
+            res.setHeader('Cache-Control', 'no-cache');
+            res.setHeader('Connection', 'keep-alive');
+
+            try {
+              for await (const chunk of aiService.streamComplete({
+                messages,
+                model,
+                stream: true,
+                tools,
+                max_tokens,
+                temperature,
+              })) {
+                res.write(`data: ${JSON.stringify({ 
+                  success: true, 
+                  result: chunk 
+                })}\n\n`);
+              }
+              res.end();
+            } catch (error: any) {
+              logger.error('[Drivers] AI stream error:', error);
+              res.write(`data: ${JSON.stringify({ 
+                success: false, 
+                error: error.message || 'Stream error' 
+              })}\n\n`);
+              res.end();
+            }
+          } else {
+            // Non-streaming response
+            const result = await aiService.complete({
+              messages,
+              model,
+              stream: false,
+              tools,
+              max_tokens,
+              temperature,
+            });
+
+            res.json({ 
+              success: true, 
+              result: result 
+            });
+          }
+        } else if (method === 'models' || method === 'list') {
+          // List available models
+          const models = await aiService.listModels();
+          res.json({ 
+            success: true, 
+            result: models 
+          });
+        } else if (method === 'providers') {
+          // List available providers
+          const providers = aiService.listProviders();
+          res.json({ 
+            success: true, 
+            result: providers 
+          });
+        } else {
+          res.status(400).json({ 
+            success: false, 
+            error: `Unknown method: ${method}` 
+          });
+        }
+      } catch (error: any) {
+        logger.error('[Drivers] AI chat error:', error);
+        res.status(500).json({ 
+          success: false, 
+          error: error.message || 'AI chat completion failed' 
+        });
+      }
       return;
     }
 

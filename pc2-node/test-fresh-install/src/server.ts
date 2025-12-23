@@ -6,6 +6,7 @@ import { setupWebSocket, setGlobalIO } from './websocket/server.js';
 import { DatabaseManager, FilesystemManager } from './storage/index.js';
 import { Config } from './config/loader.js';
 import { IndexingWorker } from './storage/indexer.js';
+import { AIChatService } from './services/ai/AIChatService.js';
 
 export interface ServerOptions {
   port: number;
@@ -14,6 +15,7 @@ export interface ServerOptions {
   database?: DatabaseManager;
   filesystem?: FilesystemManager;
   config?: Config;
+  aiService?: AIChatService;
 }
 
 export function createServer(options: ServerOptions): { app: Express; server: Server } {
@@ -88,7 +90,7 @@ export function createServer(options: ServerOptions): { app: Express; server: Se
   }));
   app.use(express.urlencoded({ extended: true }));
   
-  // Make database, filesystem, and config available to routes via app.locals
+  // Make database, filesystem, config, and AI service available to routes via app.locals
   if (options.database) {
     app.locals.db = options.database;
   }
@@ -97,6 +99,9 @@ export function createServer(options: ServerOptions): { app: Express; server: Se
   }
   if (options.config) {
     app.locals.config = options.config;
+  }
+  if (options.aiService) {
+    app.locals.aiService = options.aiService;
   }
   
   // API routes (must come before static serving to avoid SPA fallback)

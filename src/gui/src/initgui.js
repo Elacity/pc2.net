@@ -936,6 +936,14 @@ window.initgui = async function(options){
         if(!window.is_fullpage_mode && !window.embedded_in_popup){
             window.refresh_desktop_background();
         }
+        
+        // -------------------------------------------------------------------------------------
+        // Profile Picture
+        // Load profile picture after authentication
+        // -------------------------------------------------------------------------------------
+        if(window.user && window.user.profile_picture_url){
+            window.refresh_profile_picture();
+        }
     }
 
     // -------------------------------------------------------------------------------------

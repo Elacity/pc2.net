@@ -484,6 +484,15 @@ window.update_auth_data = async (auth_token, user)=>{
     window.user = user;
     localStorage.setItem('user', JSON.stringify(to_storable_user(user)));
 
+    // Refresh profile picture if profile_picture_url is set in whoami response
+    // Also refresh if it was previously set (to update signed URL)
+    if (user.profile_picture_url || window.user?.profile_picture_url) {
+        // Small delay to ensure window.user is set
+        setTimeout(() => {
+            window.refresh_profile_picture();
+        }, 200);
+    }
+
     // re-initialize the Puter.js objects with the new auth token
     puter.setAuthToken(auth_token, window.api_origin)
     
@@ -1830,10 +1839,68 @@ window.move_items = async function(el_items, dest_path, is_undo = false){
     }
 } */
 
-window.refresh_desktop_background = function() {
+window.refresh_desktop_background = async function() {
     if (window.user && (window.user.desktop_bg_url !== null || window.user.desktop_bg_color !== null)) {
+        let bg_url = window.user.desktop_bg_url;
+        
+        console.log('[refresh_desktop_background] Loading background:', bg_url);
+        
+        // If bg_url is null or the default wallpaper, use it directly (no signing needed)
+        // Always use 'cover' fit for default wallpapers, regardless of saved fit
+        if (!bg_url || bg_url === '/images/wallpaper-elastos.jpg' || bg_url === '/images/flint-2.jpg') {
+            console.log('[refresh_desktop_background] Using default wallpaper:', bg_url || '/images/wallpaper-elastos.jpg');
+            window.set_desktop_background({
+                url: bg_url || '/images/wallpaper-elastos.jpg',
+                fit: 'cover', // Always use 'cover' for default wallpapers
+                color: window.user.desktop_bg_color,
+            });
+            return;
+        }
+        
+        // If the saved URL is a path (starts with / or ~) but not a signed URL, generate a signed URL
+        // Signed URLs contain 'signature=' or 'file?uid=' parameters
+        if (bg_url && (bg_url.startsWith('/') || bg_url.startsWith('~')) && !bg_url.includes('signature=') && !bg_url.includes('file?uid=') && !bg_url.startsWith('/images/') && !bg_url.startsWith('http')) {
+            // It's a file path, need to sign it for CSS background-image to work
+            try {
+                // Expand ~ to full path
+                let filePath = bg_url;
+                if (filePath.startsWith('~')) {
+                    const walletAddress = window.user?.wallet_address || window.user?.username || '';
+                    filePath = filePath.replace('~', `/${walletAddress}`);
+                }
+                
+                console.log('[refresh_desktop_background] Signing path:', filePath);
+                const signed = await puter.fs.sign(undefined, { path: filePath, action: 'read' });
+                console.log('[refresh_desktop_background] Sign response:', signed);
+                
+                // Handle different response structures
+                let items = null;
+                if (signed && signed.items) {
+                    items = Array.isArray(signed.items) ? signed.items : [signed.items];
+                } else if (signed && signed.signatures) {
+                    items = Array.isArray(signed.signatures) ? signed.signatures : [signed.signatures];
+                } else if (signed && Array.isArray(signed)) {
+                    items = signed;
+                }
+                
+                if (items && items.length > 0 && items[0].read_url) {
+                    bg_url = items[0].read_url;
+                    console.log('[refresh_desktop_background] Got signed URL:', bg_url);
+                } else {
+                    console.warn('[refresh_desktop_background] Sign response missing read_url:', signed);
+                    // Fall back to default if signing fails
+                    bg_url = '/images/wallpaper-elastos.jpg';
+                }
+            } catch (err) {
+                console.warn('[refresh_desktop_background] Failed to sign background URL:', err);
+                // Fall back to default if signing fails
+                bg_url = '/images/wallpaper-elastos.jpg';
+            }
+        }
+        
+        console.log('[refresh_desktop_background] Setting background with URL:', bg_url);
         window.set_desktop_background({
-            url: window.user.desktop_bg_url,
+            url: bg_url,
             fit: window.user.desktop_bg_fit,
             color: window.user.desktop_bg_color,
         });
@@ -2893,6 +2960,77 @@ window.get_profile_picture = async function(username){
     }
 
     return icon;
+}
+
+/**
+ * Refresh profile picture from saved path
+ * Similar to refresh_desktop_background - loads profile picture path from user data
+ * and generates a fresh signed URL for display
+ */
+window.refresh_profile_picture = async function() {
+    if (!window.user || !window.user.profile_picture_url) {
+        console.log('[refresh_profile_picture] No profile picture URL set');
+        return;
+    }
+    
+    const pic_url = window.user.profile_picture_url;
+    console.log('[refresh_profile_picture] Loading profile picture:', pic_url);
+    
+    // Check if it's a local file path (starts with / or ~, not already a signed URL or HTTP URL)
+    const isLocalFile = pic_url && 
+        (pic_url.startsWith('/') || pic_url.startsWith('~')) &&
+        !pic_url.startsWith('http://') && 
+        !pic_url.startsWith('https://') &&
+        !pic_url.includes('/file?uid=');
+    
+    if (isLocalFile) {
+        try {
+            // Expand ~ to full path if needed
+            let filePath = pic_url;
+            if (filePath.startsWith('~')) {
+                filePath = filePath.replace('~', `/${window.user?.username || window.user?.wallet_address || ''}`);
+            }
+            
+            console.log('[refresh_profile_picture] Signing path:', filePath);
+            const signed = await puter.fs.sign(undefined, { path: filePath, action: 'read' });
+            console.log('[refresh_profile_picture] Sign response:', signed);
+            
+            // Handle different response structures
+            let signed_url = null;
+            if (signed && signed.items) {
+                const items = Array.isArray(signed.items) ? signed.items : [signed.items];
+                if (items.length > 0 && items[0].read_url) {
+                    signed_url = items[0].read_url;
+                }
+            } else if (signed && signed.signatures) {
+                const items = Array.isArray(signed.signatures) ? signed.signatures : [signed.signatures];
+                if (items.length > 0 && items[0].read_url) {
+                    signed_url = items[0].read_url;
+                }
+            } else if (signed && signed.read_url) {
+                signed_url = signed.read_url;
+            }
+            
+            if (signed_url) {
+                console.log('[refresh_profile_picture] Got signed URL:', signed_url);
+                // Update profile picture display
+                $('.profile-picture').css('background-image', `url("${signed_url}")`);
+                $('.profile-image').css('background-image', `url("${signed_url}")`);
+                $('.profile-image').addClass('profile-image-has-picture');
+                console.log('[refresh_profile_picture] Profile picture set with signed URL');
+            } else {
+                console.warn('[refresh_profile_picture] Sign response missing read_url:', signed);
+            }
+        } catch (err) {
+            console.warn('[refresh_profile_picture] Failed to sign profile picture URL:', err);
+        }
+    } else if (pic_url) {
+        // Already a URL (signed URL or HTTP), use it directly
+        console.log('[refresh_profile_picture] Using existing URL:', pic_url);
+        $('.profile-picture').css('background-image', `url("${pic_url}")`);
+        $('.profile-image').css('background-image', `url("${pic_url}")`);
+        $('.profile-image').addClass('profile-image-has-picture');
+    }
 }
 
 window.format_with_units = (num, { mulUnits, divUnits, precision = 3 }) => {

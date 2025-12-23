@@ -92,12 +92,21 @@ export class ExecService extends Service {
         }
 
         // Handle file paths if provided and caller is in godmode
+        const parent_instance_id = app?.appInstanceID;
+        console.log(`[ExecService] launchApp for "${app_name}":`, {
+            hasApp: !!app,
+            appInstanceID: app?.appInstanceID,
+            processUuid: process?.uuid,
+            parent_instance_id,
+            willSetParentInstanceId: !!parent_instance_id
+        });
+        
         let launch_options = {
             launched_by_exec_service: true,
             name: app_name,
             pseudonym,
             args: args ?? {},
-            parent_instance_id: app?.appInstanceID,
+            parent_instance_id: parent_instance_id,
             uuid: child_instance_id,
             params,
             ...source_app_metadata,

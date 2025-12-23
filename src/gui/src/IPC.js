@@ -50,16 +50,61 @@ window.ipc_handlers = {};
  * Precautions are taken to ensure proper usage of appInstanceIDs and other sensitive information.
  */
 const ipc_listener = async (event, handled) => {
+    // Debug: Log ALL puter-ipc messages when IPC listener is called
+    if (event.data && event.data.$ === 'puter-ipc') {
+        console.log('[IPC.js]: 🎯 IPC listener CALLED for puter-ipc message:', {
+            $: event.data.$,
+            v: event.data.v,
+            msg: event.data.msg,
+            appInstanceID: event.data.appInstanceID,
+            env: event.data.env,
+            origin: event.origin,
+            hasData: !!event.data,
+            hasMsg: !!event.data.msg
+        });
+    }
+    
+    // Debug: Log puter-ipc messages when they reach the IPC listener
+    if (event.data && event.data.$ === 'puter-ipc' && event.data.env === 'app') {
+        console.log('[IPC.js]: 🎯 IPC listener called for puter-ipc message:', {
+            msg: event.data.msg,
+            appInstanceID: event.data.appInstanceID,
+            origin: event.origin
+        });
+    }
+    
     // Debug: Log ALL messages to see what's coming through
     if (event.data && (event.data.msg === 'showSaveFilePicker' || event.data.msg === 'showOpenFilePicker')) {
         console.log('[IPC.js]: 🔍 Message received (before filtering):', event.data.msg, 'appInstanceID:', event.data.appInstanceID, 'env:', event.data.env, 'origin:', event.origin, 'full data:', event.data);
     }
     
     const app_env = event.data?.env ?? 'app';
+    
+    // Debug: Log early returns
+    if (event.data && event.data.$ === 'puter-ipc') {
+        console.log('[IPC.js]: 🔍 Checking app_env:', app_env, 'app_env !== "app":', app_env !== 'app');
+    }
 
     // Debug: Log all messages from apps
     if (app_env === 'app' && event.data?.msg) {
         console.log('[IPC.js]: 📥 Received message:', event.data.msg, 'appInstanceID:', event.data.appInstanceID, 'full data:', event.data);
+    }
+    
+    // Debug: Log puter-ipc messages specifically
+    if (event.data && event.data.$ === 'puter-ipc') {
+        console.log('[IPC.js]: 🔵 puter-ipc message received:', {
+            $: event.data.$,
+            v: event.data.v,
+            msg: event.data.msg,
+            appInstanceID: event.data.appInstanceID,
+            env: event.data.env,
+            parameters: event.data.parameters,
+            uuid: event.data.uuid
+        });
+        console.log('[IPC.js]: 🔍 Checking appInstanceID registration...');
+        console.log('[IPC.js]:   window.app_instance_ids:', window.app_instance_ids);
+        console.log('[IPC.js]:   Has appInstanceID?', window.app_instance_ids?.has(event.data.appInstanceID));
+        console.log('[IPC.js]:   Available IDs:', Array.from(window.app_instance_ids || []));
     }
 
     // Only process messages from apps
@@ -92,12 +137,13 @@ const ipc_listener = async (event, handled) => {
 
     // `appInstanceID` is required
     if ( ! event.data.appInstanceID ) {
-        console.error('appInstanceID is needed', event.data);
-        console.error('Available app_instance_ids:', Array.from(window.app_instance_ids || []));
+        console.error('[IPC.js]: ❌ appInstanceID is needed', event.data);
+        console.error('[IPC.js]: Available app_instance_ids:', Array.from(window.app_instance_ids || []));
         return handled.resolve(false);
     } else if ( ! window.app_instance_ids.has(event.data.appInstanceID) ) {
-        console.error('appInstanceID is invalid:', event.data.appInstanceID);
-        console.error('Available app_instance_ids:', Array.from(window.app_instance_ids || []));
+        console.error('[IPC.js]: ❌ appInstanceID is invalid:', event.data.appInstanceID);
+        console.error('[IPC.js]: Available app_instance_ids:', Array.from(window.app_instance_ids || []));
+        console.error('[IPC.js]: This usually means the app sent a message before its READY message was processed');
         return handled.resolve(false);
     }
 
@@ -2405,7 +2451,40 @@ window.when_puter_happens.push(async () => {
     // Expose ipc_listener globally for debugging/direct access
     window.ipc_listener_direct = ipc_listener;
     
-    await puter.services.wait_for_init(['xd-incoming']);
-    const svc_xdIncoming = puter.services.get('xd-incoming');
-    svc_xdIncoming.register_filter_listener(ipc_listener);
+    // Add a global message listener to catch ALL messages before xd-incoming filtering
+    window.addEventListener('message', (event) => {
+        if (event.data && event.data.$ === 'puter-ipc' && event.data.env === 'app') {
+            console.log('[IPC.js]: 🌐 GLOBAL listener caught puter-ipc message BEFORE xd-incoming filter:', {
+                msg: event.data.msg,
+                appInstanceID: event.data.appInstanceID,
+                origin: event.origin,
+                source: event.source
+            });
+        }
+    }, true); // Use capture phase to catch messages early
+    
+    // In the GUI, we register the IPC listener directly as a window message listener
+    // since the GUI doesn't use puter.services/xd-incoming
+    console.log('[IPC.js]: 📝 Registering IPC listener directly as window message listener (GUI mode)...');
+    
+    // Create a wrapper that provides the handled TeePromise that ipc_listener expects
+    // Simple TeePromise-like object for GUI (we don't need the full filtering behavior)
+    class SimpleTeePromise {
+        constructor() {
+            this.promise = new Promise((resolve) => {
+                this.resolve = resolve;
+            });
+        }
+    }
+    
+    const ipc_listener_wrapper = async (event) => {
+        // Create a handled TeePromise for the IPC listener
+        const handled = new SimpleTeePromise();
+        // Call the actual IPC listener
+        await ipc_listener(event, handled);
+    };
+    
+    // Register directly as a window message listener
+    window.addEventListener('message', ipc_listener_wrapper, false);
+    console.log('[IPC.js]: ✅ IPC listener registered directly as window message listener');
 });

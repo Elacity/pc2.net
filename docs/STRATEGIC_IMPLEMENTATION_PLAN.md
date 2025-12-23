@@ -43,6 +43,38 @@ PORT=4202 npm start
 
 ## 📊 Current State Assessment
 
+### 🎯 Recent Progress (2025-12-21)
+
+**Phase 2.5: Backup & Restore Enhancements - ✅ COMPLETE**
+
+**Major Features Delivered:**
+1. ✅ **One-Click Web UI Restore** - Users can upload backup files and restore through browser (no SSH required)
+2. ✅ **Backup Status Indicators** - Visual health status showing last backup date with color-coded indicators
+3. ✅ **Comprehensive Help System** - In-app help dialog with step-by-step instructions, multi-account clarification, server restart guide
+4. ✅ **UI Polish** - Off-server storage warnings, improved feedback messages, progress indicators
+5. ✅ **Technical Fixes** - Fixed `isPC2Mode` scope issue, added SDK proxying for terminal apps
+
+**Files Modified:**
+- `pc2-node/test-fresh-install/src/api/backup.ts` - Restore endpoint with file upload
+- `pc2-node/test-fresh-install/src/api/index.ts` - Registered restore endpoint
+- `src/gui/src/UI/Settings/UITabPC2.js` - Restore UI, help dialog, status indicators
+- `pc2-node/test-fresh-install/src/static.ts` - SDK proxying for terminal
+- `docs/BACKUP_RESTORE_AUDIT.md` - Comprehensive audit document
+
+**Status:** Phase 2.5 complete, Phase 3 at 40% (automated scheduling and verification tools remaining)
+
+**⚠️ Known Issue (2025-01-20): Terminal/Phoenix App Not Working**
+- Terminal app launches but shows black/blank screen
+- Phoenix app launches as separate windows (should run inside terminal) but windows are blank/white
+- Terminal's `main_term()` promise resolves, but terminal doesn't accept input
+- Phoenix's `puter.ui.parentApp()` may be returning `null`, causing phoenix to exit immediately
+- IPC communication between terminal and phoenix appears to be working (messages are being sent)
+- Server logs show phoenix HTML is being processed correctly with SDK injection
+- Visual debugging indicators added to phoenix HTML to track initialization status
+- **Next Steps:** Need to verify phoenix is receiving correct `parent_instance_id` in URL params and that `puter.parentInstanceID` is being set correctly by SDK
+
+---
+
 ### ✅ What We've Achieved (Current Branch: `sash-work`)
 
 #### 1. **Desktop UI Working**
@@ -1175,36 +1207,39 @@ cd /Users/mtk/Documents/Cursor/pc2.net/pc2-node/test-fresh-install && PORT=4202 
 
 #### 🛡️ CRITICAL: Backup & Restore System (User Safety & Data Protection)
 
-**Status:** ✅ **Core Functionality Complete** (2025-12-19)  
+**Status:** ✅ **Phase 2.5 Complete** (2025-12-21), Phase 3 at 40%  
 **Priority:** **HIGH** - Essential for user trust and data safety  
-**Phase:** **Phase 3 (Documentation & Polish Required)**
+**Phase:** **Phase 2.5 Complete, Phase 3 In Progress**
 
 **Current Implementation:**
 - ✅ Backup creation (UI + terminal): `npm run backup` or Settings UI button
 - ✅ Backup download (UI): Download to local device via browser
 - ✅ Backup restore (terminal): `npm run restore <backup-file>`
-- ✅ Backup management API: List, create, download, delete endpoints
+- ✅ **One-Click Web UI Restore** (NEW - Phase 2.5): Upload backup file via browser, restore without SSH
+- ✅ Backup management API: List, create, download, delete, restore endpoints
 - ✅ UI integration: Personal Cloud settings tab with full backup management
 - ✅ Off-server backup strategy: Download to separate device (survives server failure)
 - ✅ Restore to new node: Works across different hardware/servers
 - ✅ Database migrations: Automatic schema upgrades on restore
+- ✅ **Backup Status Indicators** (NEW - Phase 2.5): Visual health status with last backup date
+- ✅ **Comprehensive Help System** (NEW - Phase 2.5): In-app help with step-by-step instructions
 
 **Phase 3 Requirements (MUST COMPLETE):**
 
 1. **User Documentation** (2-3 days) - **CRITICAL**
    - ✅ Complete backup strategy guide (`/docs/PC2_NODE_BACKUP_STRATEGY.md`)
    - ✅ Restore to new node guide (`/docs/PC2_NODE_UPGRADE_AND_MAINTENANCE_STRATEGY.md`)
-   - ⚠️ **User-facing documentation** (in-app help, setup wizard integration)
-   - ⚠️ **Quick start guide** for new users
-   - ⚠️ **Disaster recovery guide** (what to do if server fails)
+   - ✅ **User-facing documentation** (Phase 2.5 - Comprehensive in-app help dialog)
+   - ✅ **Quick start guide** (Phase 2.5 - Included in help dialog)
+   - ✅ **Disaster recovery guide** (Phase 2.5 - "New Server Scenario" section with step-by-step instructions)
    - ⚠️ **Best practices** (3-2-1 backup rule, scheduling, etc.)
 
 2. **UI Polish & Reassurance** (1-2 days) - **HIGH PRIORITY**
-   - ⚠️ **Backup status indicators** (last backup date, backup health)
-   - ⚠️ **Backup verification** (verify backup integrity before restore)
-   - ⚠️ **Restore progress UI** (if we add UI restore feature)
-   - ⚠️ **Clear warnings** (backup location, off-server storage importance)
-   - ⚠️ **Success confirmations** (backup created, restore completed)
+   - ✅ **Backup status indicators** (Phase 2.5 - Visual health status with icons, last backup date)
+   - [ ] **Backup verification** (verify backup integrity before restore) - Not implemented yet
+   - ✅ **Restore progress UI** (Phase 2.5 - Upload and processing progress indicators)
+   - ✅ **Clear warnings** (Phase 2.5 - Prominent off-server storage warning box)
+   - ✅ **Success confirmations** (Phase 2.5 - Improved feedback messages)
 
 3. **Automated Backup Scheduling** (2-3 days) - **MEDIUM PRIORITY**
    - ⚠️ **Cron job integration** (schedule automatic backups)
@@ -1213,9 +1248,9 @@ cd /Users/mtk/Documents/Cursor/pc2.net/pc2-node/test-fresh-install && PORT=4202 
    - ⚠️ **Backup health monitoring** (warn if no backup in X days)
 
 4. **Enhanced Restore Experience** (2-3 days) - **MEDIUM PRIORITY**
-   - ⚠️ **UI Restore Feature** (upload backup file, restore via browser)
-   - ⚠️ **Restore verification** (pre-restore checks, compatibility validation)
-   - ⚠️ **Restore preview** (show what will be restored before proceeding)
+   - ✅ **UI Restore Feature** (Phase 2.5 - **COMPLETE** - One-click restore with file upload)
+   - [ ] **Restore verification** (pre-restore checks, compatibility validation) - Not implemented yet
+   - [ ] **Restore preview** (show what will be restored before proceeding) - Not implemented yet
 
 5. **Testing & Validation** (1-2 days) - **HIGH PRIORITY**
    - ⚠️ **End-to-end restore testing** (backup → restore → verify)
@@ -1226,16 +1261,16 @@ cd /Users/mtk/Documents/Cursor/pc2.net/pc2-node/test-fresh-install && PORT=4202 
 **User Safety & Reassurance Requirements:**
 
 **MUST HAVE (Phase 3):**
-- ✅ Clear documentation on backup importance
-- ✅ Easy-to-find backup management UI
-- ✅ Clear instructions for restore process
-- ✅ Warnings about off-server backup storage
-- ✅ Verification that backups work correctly
+- ✅ Clear documentation on backup importance (Phase 2.5 - Help dialog)
+- ✅ Easy-to-find backup management UI (Phase 2.5 - Settings → PC2 tab)
+- ✅ Clear instructions for restore process (Phase 2.5 - Step-by-step in help dialog)
+- ✅ Warnings about off-server backup storage (Phase 2.5 - Prominent warning box)
+- [ ] Verification that backups work correctly - Manual testing done, automated tests needed
 
 **SHOULD HAVE (Phase 3 or 3.5):**
-- Automated backup scheduling
-- Backup health monitoring
-- UI restore feature (convenience)
+- [ ] Automated backup scheduling - Not implemented yet
+- [ ] Backup health monitoring - Status indicator shows health, but needs automated alerts
+- ✅ UI restore feature (Phase 2.5 - **COMPLETE** - One-click restore implemented)
 - Backup verification tools
 
 **NICE TO HAVE (Phase 4+):**
@@ -1333,7 +1368,8 @@ cd /Users/mtk/Documents/Cursor/pc2.net/pc2-node/test-fresh-install && PORT=4202 
 - **Phase 2.5:** ✅ 95% Complete
   - ✅ Backup/Restore Core: 100% (functionality complete)
   - ⚠️ Backup/Restore Polish: 30% (UI polish, documentation, testing needed)
-- **Phase 3:** ⚠️ 10% Complete
+- **Phase 2.5:** ✅ 100% Complete (One-click restore, UI polish, help documentation)
+- **Phase 3:** ⚠️ 40% Complete (Major UI/documentation done, automated scheduling and verification tools remaining)
   - ⚠️ Backup/Restore Documentation & Polish: 30% (user-facing docs, UI polish, testing)
   - ❌ Packaging: 0% (Docker, Debian, macOS)
   - ❌ Setup Wizard: 0%
@@ -2388,11 +2424,11 @@ Based on the current PC2 architecture and self-hosted vision, here are strategic
    - Backup health monitoring
    - **Status:** Manual only, automation needed
 
-5. ⚠️ **UI Restore Feature** (2-3 days)
-   - Upload backup file via browser
-   - Restore via UI (no SSH required)
-   - Progress indicators
-   - **Status:** Terminal only, UI needed for convenience
+5. ✅ **UI Restore Feature** (Phase 2.5 - **COMPLETE**)
+   - ✅ Upload backup file via browser (drag & drop or file picker)
+   - ✅ Restore via UI (no SSH required)
+   - ✅ Progress indicators (upload and processing)
+   - **Status:** ✅ **COMPLETE** - One-click restore fully functional (Phase 2.5)
 
 **LOW PRIORITY (Phase 3.5 or Later):**
 6. ⚠️ **Network Restore** (2-3 days)
@@ -2647,14 +2683,17 @@ node pc2-node/test-fresh-install/scripts/build-frontend.js
 ---
 
 **Status:** Phase 2 ✅ **100% COMPLETE** - Core functionality working, real-time file operations fully working  
-**Next Action:** Phase 3 - Packaging & Deployment (Docker, Debian, macOS packages) + **Backup/Restore Polish (MANDATORY)**
+**Current Status (2025-12-21):**
+- ✅ **Phase 2.5 Complete:** One-click restore, UI polish, comprehensive help documentation
+- 🚧 **Phase 3 In Progress:** Automated scheduling, backup verification, process manager integration
+- 📋 **Next Action:** Complete Phase 3 remaining items (automated scheduling, verification tools) OR proceed to Packaging & Deployment
 
 ---
 
 ## 🛡️ CRITICAL: Backup/Restore System - User Trust & Safety Requirements
 
-**Last Updated:** 2025-12-19  
-**Status:** Core Complete (Phase 2.5), Phase 3 Polish Required  
+**Last Updated:** 2025-12-21  
+**Status:** Phase 2.5 Complete ✅, Phase 3 Polish In Progress  
 **Priority:** **CRITICAL** - Essential for user trust and data safety
 
 ### Current Implementation (Phase 2.5 - ✅ Complete)
@@ -2663,11 +2702,22 @@ node pc2-node/test-fresh-install/scripts/build-frontend.js
 - ✅ Backup creation (UI button + terminal: `npm run backup`)
 - ✅ Backup download (UI: Settings → Personal Cloud → Backup & Restore)
 - ✅ Backup restore (terminal: `npm run restore <backup-file>`)
-- ✅ Backup management API (list, create, download, delete)
+- ✅ **One-Click Web UI Restore** (NEW - Phase 2.5) - Upload backup file via browser, restore without SSH
+- ✅ Backup management API (list, create, download, delete, restore)
 - ✅ UI integration (full backup management in Settings)
 - ✅ Off-server backup strategy (download to separate device)
 - ✅ Cross-node restore (works across different hardware/servers)
 - ✅ Database migration compatibility (automatic schema upgrades)
+
+**Phase 2.5 Enhancements (Completed 2025-12-21):**
+- ✅ **One-Click Restore Feature** - Users can upload backup files through web UI and restore without SSH/terminal
+- ✅ **Backup Status Indicators** - Visual health status (green/yellow/red) showing last backup date
+- ✅ **Help Documentation** - Comprehensive in-app help dialog with step-by-step instructions
+- ✅ **Multi-Account Restore Clarification** - Documentation explains all accounts are restored, privacy maintained
+- ✅ **Server Restart Instructions** - Clear step-by-step guide for non-technical users
+- ✅ **Off-Server Storage Warnings** - Prominent warnings about downloading backups to external devices
+- ✅ **Improved User Feedback** - Better success/error messages, progress indicators for restore
+- ✅ **Technical Fixes** - Fixed `isPC2Mode` scope issue, added SDK proxying for terminal apps
 
 ### Phase 3 Requirements (MANDATORY for User Trust)
 
@@ -2676,18 +2726,18 @@ node pc2-node/test-fresh-install/scripts/build-frontend.js
 #### HIGH PRIORITY (Must Complete in Phase 3):
 
 1. **User-Facing Documentation** (2-3 days) - **CRITICAL**
-   - [ ] In-app help and tooltips
-   - [ ] Quick start guide (first backup, where to store)
-   - [ ] Disaster recovery guide (what to do if server fails)
-   - [ ] Best practices (3-2-1 backup rule, scheduling)
-   - **Status:** Technical docs exist, user-facing docs needed
+   - [x] In-app help and tooltips ✅ (Phase 2.5 - Help dialog with comprehensive instructions)
+   - [x] Quick start guide (first backup, where to store) ✅ (Phase 2.5 - Included in help dialog)
+   - [x] Disaster recovery guide (what to do if server fails) ✅ (Phase 2.5 - "New Server Scenario" section)
+   - [ ] Best practices (3-2-1 backup rule, scheduling) - Partially done, needs expansion
+   - **Status:** ✅ Major progress - comprehensive help system implemented
 
 2. **UI Polish & Reassurance** (1-2 days) - **HIGH PRIORITY**
-   - [ ] Backup status indicators (last backup date, health status)
-   - [ ] Clear warnings ("Backups on server will be lost if server fails")
-   - [ ] Success confirmations ("Backup created successfully")
-   - [ ] Backup health monitoring (warn if no backup in X days)
-   - **Status:** Basic UI complete, polish needed
+   - [x] Backup status indicators (last backup date, health status) ✅ (Phase 2.5 - Visual indicators with icons)
+   - [x] Clear warnings ("Backups on server will be lost if server fails") ✅ (Phase 2.5 - Prominent warning box)
+   - [x] Success confirmations ("Backup created successfully") ✅ (Phase 2.5 - Improved feedback)
+   - [ ] Backup health monitoring (warn if no backup in X days) - Status indicator shows this, but needs automated alerts
+   - **Status:** ✅ Major progress - UI polish largely complete
 
 3. **Comprehensive Testing** (1-2 days) - **HIGH PRIORITY**
    - [ ] End-to-end restore testing (backup → restore → verify)
@@ -2706,29 +2756,29 @@ node pc2-node/test-fresh-install/scripts/build-frontend.js
    - **Status:** Manual only, automation needed
 
 5. **UI Restore Feature** (2-3 days)
-   - [ ] Upload backup file via browser
-   - [ ] Restore via UI (no SSH required)
-   - [ ] Progress indicators
-   - [ ] Restore preview (show what will be restored)
-   - **Status:** Terminal only, UI needed for convenience
+   - [x] Upload backup file via browser ✅ (Phase 2.5 - Drag & drop or file picker)
+   - [x] Restore via UI (no SSH required) ✅ (Phase 2.5 - One-click restore implemented)
+   - [x] Progress indicators ✅ (Phase 2.5 - Upload and processing progress)
+   - [ ] Restore preview (show what will be restored) - Not implemented yet
+   - **Status:** ✅ **COMPLETE** - One-click restore fully functional (Phase 2.5)
 
 ### User Safety & Reassurance Checklist
 
 **Must Have (Phase 3):**
-- [ ] Clear explanation of backup importance
-- [ ] Easy-to-find backup management UI
-- [ ] Step-by-step restore instructions
-- [ ] Warnings about off-server backup storage
-- [ ] Backup status indicators
-- [ ] Success confirmations
-- [ ] Comprehensive testing completed
-- [ ] User-facing documentation
+- [x] Clear explanation of backup importance ✅ (Phase 2.5 - Help dialog)
+- [x] Easy-to-find backup management UI ✅ (Phase 2.5 - Settings → PC2 tab)
+- [x] Step-by-step restore instructions ✅ (Phase 2.5 - Detailed in help dialog)
+- [x] Warnings about off-server backup storage ✅ (Phase 2.5 - Prominent warning box)
+- [x] Backup status indicators ✅ (Phase 2.5 - Visual health status)
+- [x] Success confirmations ✅ (Phase 2.5 - Improved feedback)
+- [ ] Comprehensive testing completed - Manual testing done, automated tests needed
+- [x] User-facing documentation ✅ (Phase 2.5 - Comprehensive help system)
 
 **Should Have (Phase 3):**
-- [ ] Automated backup scheduling
-- [ ] Backup health monitoring
-- [ ] UI restore feature
-- [ ] Backup verification tools
+- [ ] Automated backup scheduling - Not implemented yet
+- [ ] Backup health monitoring - Status indicator shows health, but needs automated alerts
+- [x] UI restore feature ✅ (Phase 2.5 - **COMPLETE** - One-click restore implemented)
+- [ ] Backup verification tools - Not implemented yet
 
 ### Success Criteria
 
@@ -2783,13 +2833,63 @@ node pc2-node/test-fresh-install/scripts/build-frontend.js
 3. **Users feel confident** about data safety (testing + reassurance)
 4. **Users know how** to restore if needed (clear instructions)
 
-**Estimated Effort:** 1 week for critical items, 2 weeks for all items
+**Estimated Effort:** 
+- Phase 2.5: ✅ **COMPLETE** (1 week) - One-click restore, UI polish, help documentation
+- Phase 3 Remaining: ~1 week (automated scheduling, verification tools, process manager integration)
+
+**Phase 2.5 Completion Summary (2025-12-21):**
+- ✅ One-click web UI restore feature
+- ✅ Backup status indicators with health monitoring
+- ✅ Comprehensive in-app help system
+- ✅ Multi-account restore clarification
+- ✅ Server restart instructions for non-technical users
+- ✅ UI polish (warnings, feedback, progress indicators)
+- ✅ Technical fixes (isPC2Mode scope, SDK proxying)
 
 **Related Section:** See "Phase 3: Packaging & Deployment" above for detailed requirements.
 
 ---
 
 ## 📚 Technical Knowledge Base: Critical Implementation Patterns
+
+### Phase 2.5: One-Click Restore Feature - Complete Solution
+
+**Date:** 2025-12-21  
+**Status:** ✅ Implemented and Working  
+**Feature:** Web UI Restore for Backup & Restore System
+
+**Implementation Summary:**
+- **Backend:** Added `/api/backups/restore` endpoint with file upload (multipart/form-data, 10GB max)
+- **Frontend:** Added "Restore from Backup" section with drag & drop file upload, progress indicators, and status messages
+- **User Experience:** Users can now restore backups through web UI without SSH/terminal access
+- **Documentation:** Comprehensive help dialog with step-by-step instructions, multi-account clarification, server restart guide
+
+**Key Files Modified:**
+- `pc2-node/test-fresh-install/src/api/backup.ts` - Added `restoreBackup()` function
+- `pc2-node/test-fresh-install/src/api/index.ts` - Registered restore endpoint with multer upload
+- `src/gui/src/UI/Settings/UITabPC2.js` - Added restore UI, help dialog, status indicators
+- `pc2-node/test-fresh-install/src/static.ts` - Added SDK proxying for terminal apps
+- `docs/BACKUP_RESTORE_AUDIT.md` - Comprehensive audit and recommendations
+
+**Technical Challenges Solved:**
+1. **File Upload Handling:** Used multer with 10GB limit for large backup files
+2. **Server Process Management:** Restore script stops server automatically, user restarts manually
+3. **Progress Tracking:** Frontend shows upload and processing progress
+4. **Error Handling:** Comprehensive validation and user-friendly error messages
+5. **Multi-Account Support:** Clarified that all accounts are restored, privacy maintained
+6. **Scope Issues:** Fixed `isPC2Mode` function scope for access in `on_show` handler
+
+**Known Issues:**
+- Terminal app showing white screen - SDK initialization issue (separate from restore feature)
+- Server restart still requires manual SSH access (Phase 3 could automate this with process manager)
+
+**Next Steps (Phase 3):**
+- Automated backup scheduling
+- Backup verification tools
+- Process manager integration for automatic server restart
+- Full node backup option (include entire installation)
+
+---
 
 ### Image Editor Save Functionality - Complete Solution
 
@@ -3109,6 +3209,36 @@ if (isThumbnailUpdate) {
 - **Text Editor**: ✅ **COMPLETE** - Save and read functionality fully working with proper overwrite and fresh content retrieval
 - **Media Player**: No save functionality - not applicable
 - **PDF Viewer**: No save functionality - not applicable
+
+---
+
+## 🤖 AI Agent Integration Research (2025-01-20)
+
+**Status:** ✅ **RESEARCH COMPLETE** - Integration strategy documented
+
+**Research Summary:**
+- ✅ Analyzed Puter repository AI implementation (https://github.com/HeyPuter/puter.git)
+- ✅ Identified AI SDK architecture (`puter.ai.chat()` with function calling)
+- ✅ Documented backend service structure (AIChatService, providers, tools)
+- ✅ Created comprehensive integration strategy document
+
+**Key Findings:**
+1. **AI SDK**: Puter has `puter.ai.chat()` with tools/function calling support
+2. **Function Calling**: AI can call filesystem functions (create_folder, list_files, etc.)
+3. **Multiple Providers**: OpenAI, Claude, Gemini, Ollama (local), etc.
+4. **Tool Execution**: Backend executes tools and feeds results back to AI
+5. **Architecture**: Service-based with provider abstraction
+
+**Integration Strategy:**
+- 📄 **See:** `/docs/AI_AGENT_INTEGRATION_STRATEGY.md` for complete strategy
+- **Recommended Approach**: 4-phase implementation (Backend → Tools → UI → Polish)
+- **Priority**: Start with Ollama (local AI) for privacy-focused self-hosted nodes
+- **Timeline**: 4-5 weeks for full implementation
+
+**Next Steps:**
+- Review integration strategy document
+- Decide on implementation timeline (before/after Phase 3)
+- Begin Phase 1: Backend AI service infrastructure
 
 ---
 

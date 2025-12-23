@@ -132,13 +132,83 @@ async function UIWindowDesktopBGSettings (options) {
         $(el_window).find('.desktop-bg-color-block-palette input').on('change', async function (e) {
             window.set_desktop_background({ color: $(this).val() });
         });
-        $(el_window).on('file_opened', function (e) {
+        $(el_window).on('file_opened', async function (e) {
             let selected_file = Array.isArray(e.detail) ? e.detail[0] : e.detail;
             const fit = $(el_window).find('.desktop-bg-fit').val();
-            bg_url = selected_file.read_url;
-            bg_fit = fit;
-            bg_color = undefined;
-            window.set_desktop_background({ url: bg_url, fit: bg_fit });
+            console.log('[UIWindowDesktopBGSettings] File opened:', selected_file);
+            console.log('[UIWindowDesktopBGSettings] File properties:', Object.keys(selected_file));
+            
+            // Get signed read_url for immediate display (works for CSS background-image)
+            let signed_url = null;
+            
+            // Check various possible property names for the read URL
+            if (selected_file.read_url) {
+                signed_url = selected_file.read_url;
+                console.log('[UIWindowDesktopBGSettings] Using read_url:', signed_url);
+            } else if (selected_file.readURL) {
+                signed_url = selected_file.readURL;
+                console.log('[UIWindowDesktopBGSettings] Using readURL:', signed_url);
+            } else if (selected_file.url) {
+                signed_url = selected_file.url;
+                console.log('[UIWindowDesktopBGSettings] Using url:', signed_url);
+            } else if (selected_file.path) {
+                // If we only have a path, sign it to get a read_url
+                try {
+                    console.log('[UIWindowDesktopBGSettings] Signing file path:', selected_file.path);
+                    // Expand ~ to full path if needed
+                    let filePath = selected_file.path;
+                    if (filePath.startsWith('~')) {
+                        filePath = filePath.replace('~', `/${window.user?.username || window.user?.wallet_address || ''}`);
+                    }
+                    
+                    const signed = await puter.fs.sign(undefined, { path: filePath, action: 'read' });
+                    console.log('[UIWindowDesktopBGSettings] Sign response:', signed);
+                    
+                    // Handle different response structures - SDK transforms {signatures: [...]} to {items: [...]}
+                    let items = null;
+                    if (signed && signed.items) {
+                        items = Array.isArray(signed.items) ? signed.items : [signed.items];
+                    } else if (signed && signed.signatures) {
+                        items = Array.isArray(signed.signatures) ? signed.signatures : [signed.signatures];
+                    } else if (signed && Array.isArray(signed)) {
+                        items = signed;
+                    } else if (signed && signed.read_url) {
+                        // Single item response
+                        signed_url = signed.read_url;
+                        console.log('[UIWindowDesktopBGSettings] Got signed URL from single item:', signed_url);
+                    }
+                    
+                    if (items && items.length > 0) {
+                        const firstItem = items[0];
+                        if (firstItem.read_url) {
+                            signed_url = firstItem.read_url;
+                            console.log('[UIWindowDesktopBGSettings] Got signed URL from items array:', signed_url);
+                        } else if (firstItem.url) {
+                            signed_url = firstItem.url;
+                            console.log('[UIWindowDesktopBGSettings] Got URL from items array:', signed_url);
+                        } else {
+                            console.warn('[UIWindowDesktopBGSettings] Sign response item missing read_url/url:', firstItem);
+                        }
+                    } else if (!signed_url) {
+                        console.warn('[UIWindowDesktopBGSettings] Sign response has no items/signatures:', signed);
+                    }
+                } catch (err) {
+                    console.warn('[UIWindowDesktopBGSettings] Failed to sign file:', err);
+                }
+            }
+            
+            if (signed_url) {
+                // Store the file path for saving (not the signed URL)
+                // We'll regenerate signed URLs on page load in refresh_desktop_background
+                bg_url = selected_file.path || null; // Save path, not URL
+                bg_fit = fit;
+                bg_color = undefined;
+                console.log('[UIWindowDesktopBGSettings] Setting background - path:', bg_url, 'signed_url:', signed_url, 'fit:', bg_fit);
+                // Use signed URL for immediate display
+                window.set_desktop_background({ url: signed_url, fit: bg_fit });
+            } else {
+                console.warn('[UIWindowDesktopBGSettings] No signed URL available for file. File object:', selected_file);
+            }
         });
 
         $(el_window).find('.desktop-bg-fit').on('change', function (e) {
@@ -155,27 +225,77 @@ async function UIWindowDesktopBGSettings (options) {
             } else if ( type === 'color' ) {
                 $(el_window).find('.desktop-bg-settings-color').show();
             } else if ( type === 'default' ) {
+                bg_url = default_wallpaper; // Explicitly set to default wallpaper path
                 bg_color = undefined;
-                bg_fit = 'cover';
-                window.set_desktop_background({ url: default_wallpaper, fit: bg_fit });
+                bg_fit = 'cover'; // Always reset to 'cover' for default
+                // Also update the dropdown to show 'cover'
+                $(el_window).find('.desktop-bg-fit').val('cover');
+                window.set_desktop_background({ url: default_wallpaper, fit: 'cover' });
             }
         });
 
         $(el_window).find('.apply').on('click', async function (e) {
             // /set-desktop-bg
             try {
+                // Determine what to save based on current selection
+                const selectedType = $(el_window).find('.desktop-bg-type').val();
+                let urlToSave = bg_url;
+                let colorToSave = window.desktop_bg_color;
+                let fitToSave = window.desktop_bg_fit;
+                
+                // If default is selected, save the default wallpaper path and reset bg_url
+                if (selectedType === 'default') {
+                    urlToSave = default_wallpaper;
+                    colorToSave = null;
+                    fitToSave = 'cover'; // Always use 'cover' for default
+                    bg_url = default_wallpaper; // Explicitly reset bg_url to default
+                    bg_fit = 'cover'; // Explicitly reset bg_fit to 'cover'
+                } else if (selectedType === 'color') {
+                    // For color, save null for URL and the selected color
+                    urlToSave = null;
+                    colorToSave = window.desktop_bg_color;
+                } else if (selectedType === 'picture') {
+                    // For picture, save the file path (bg_url was set to selected_file.path in file_opened handler)
+                    urlToSave = bg_url || window.desktop_bg_url;
+                }
+                
+                console.log('[UIWindowDesktopBGSettings] Apply clicked - saving:', {
+                    selectedType: selectedType,
+                    bg_url: bg_url,
+                    window_desktop_bg_url: window.desktop_bg_url,
+                    urlToSave: urlToSave,
+                    color: colorToSave,
+                    fit: fitToSave
+                });
+                
                 $.ajax({
                     url: `${window.api_origin }/set-desktop-bg`,
                     type: 'POST',
                     data: JSON.stringify({
-                        url: window.desktop_bg_url,
-                        color: window.desktop_bg_color,
-                        fit: window.desktop_bg_fit,
+                        url: urlToSave,
+                        color: colorToSave,
+                        fit: fitToSave,
                     }),
                     async: true,
                     contentType: 'application/json',
                     headers: {
                         'Authorization': `Bearer ${window.auth_token}`,
+                    },
+                    success: function(response) {
+                        console.log('[UIWindowDesktopBGSettings] Background saved successfully:', response);
+                        // Update window.desktop_bg_url immediately so it persists
+                        window.desktop_bg_url = urlToSave;
+                        window.desktop_bg_color = colorToSave;
+                        window.desktop_bg_fit = fitToSave;
+                        // Also update window.user if it exists
+                        if (window.user) {
+                            window.user.desktop_bg_url = urlToSave;
+                            window.user.desktop_bg_color = colorToSave;
+                            window.user.desktop_bg_fit = fitToSave;
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('[UIWindowDesktopBGSettings] Failed to save background:', error, xhr);
                     },
                     statusCode: {
                         401: function () {
@@ -186,7 +306,7 @@ async function UIWindowDesktopBGSettings (options) {
                 $(el_window).close();
                 resolve(true);
             } catch ( err ) {
-                // Ignore
+                console.error('[UIWindowDesktopBGSettings] Error in apply handler:', err);
             }
         });
 

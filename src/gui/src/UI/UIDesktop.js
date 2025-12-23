@@ -1911,13 +1911,13 @@ async function UIDesktop(options) {
     const walletSvg = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>')}`;
     ht += `<div class="toolbar-btn wallet-btn" title="${i18n('wallet') || 'Wallet'}" style="background-image:url('${walletSvg}')"></div>`;
 
-    //clock 
-    ht += `<div id="clock" class="toolbar-clock" style="">12:00 AM Sun, Jan 01</div>`;
-
-    // user options menu
+    // user options menu (profile icon - before clock so clock is on far right)
     ht += `<div class="toolbar-btn user-options-menu-btn profile-pic" style="display:block;">`;
     ht += `<div class="profile-image ${window.user?.profile?.picture && 'profile-image-has-picture'}" style="border-radius: 50%; background-image:url(${window.user?.profile?.picture || window.icons['profile.svg']}); box-sizing: border-box; width: 17px !important; height: 17px !important; background-size: contain; background-repeat: no-repeat; background-position: center; background-position: center; background-size: cover;"></div>`;
     ht += `</div>`;
+
+    //clock (on far right)
+    ht += `<div id="clock" class="toolbar-clock" style="">12:00 AM Sun, Jan 01</div>`;
     ht += `</div>`;
 
     // prepend toolbar to desktop
@@ -3025,9 +3025,26 @@ window.set_desktop_background = function (options) {
     }
 
     if (options.url) {
-        $('body').css('background-image', `url(${options.url})`);
+        console.log('[set_desktop_background] Setting background-image to:', options.url);
+        $('body').css('background-image', `url("${options.url}")`);
+        // Also set background-size and position for proper display
+        if (options.fit) {
+            if (options.fit === 'cover' || options.fit === 'contain') {
+                $('body').css('background-size', options.fit);
+                $('body').css('background-repeat', 'no-repeat');
+                $('body').css('background-position', 'center center');
+            } else if (options.fit === 'center') {
+                $('body').css('background-size', 'auto');
+                $('body').css('background-repeat', 'no-repeat');
+                $('body').css('background-position', 'center center');
+            } else if (options.fit === 'repeat') {
+                $('body').css('background-size', 'auto');
+                $('body').css('background-repeat', 'repeat');
+            }
+        }
         window.desktop_bg_url = options.url;
         window.desktop_bg_color = undefined;
+        console.log('[set_desktop_background] Background set, checking computed style:', $('body').css('background-image'));
     }
     else if (options.color) {
         $('body').css({

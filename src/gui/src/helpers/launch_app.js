@@ -58,7 +58,19 @@ const launch_app = async (options) => {
     else
     {
         try {
-            app_info = await puter.apps.get(options.name, { icon_size: 64 });
+            // Try puter.apps.get first (for cloud Puter)
+            if (typeof puter !== 'undefined' && puter.apps && puter.apps.get) {
+                try {
+                    app_info = await puter.apps.get(options.name, { icon_size: 64 });
+                } catch (sdkError) {
+                    // If SDK fails, fall back to window.get_apps (for PC2/local backend)
+                    console.warn(`[launch_app] puter.apps.get failed for "${options.name}", falling back to window.get_apps:`, sdkError);
+                    app_info = await window.get_apps(options.name);
+                }
+            } else {
+                // Use window.get_apps if SDK is not available
+                app_info = await window.get_apps(options.name);
+            }
             if (!app_info) {
                 console.error(`[launch_app] App "${options.name}" not found`);
                 throw new Error(`App "${options.name}" not found`);
@@ -253,7 +265,9 @@ const launch_app = async (options) => {
 
         // add parent_app_instance_id to URL
         if ( options.parent_instance_id ) {
-            iframe_url.searchParams.append('puter.parent_instance_id', options.parent_pseudo_id);
+            // Use parent_instance_id (the actual app instance ID) instead of parent_pseudo_id (connection UUID)
+            // Phoenix and other apps need the actual parent app instance ID to call puter.ui.parentApp()
+            iframe_url.searchParams.append('puter.parent_instance_id', options.parent_instance_id);
         }
 
         // add source app metadata to URL

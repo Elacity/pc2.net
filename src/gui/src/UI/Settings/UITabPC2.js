@@ -12,8 +12,20 @@
 
 import { getPC2Service } from '../../services/PC2ConnectionService.js';
 import { createLogger } from '../../helpers/logger.js';
+import UIWindow from '../UIWindow.js';
 
 const logger = createLogger('PC2Settings');
+
+// Check if we're in PC2 mode (self-hosted) - must be at module level for access in on_show
+function isPC2Mode() {
+    return window.api_origin && (
+        window.api_origin.includes('127.0.0.1:4200') || 
+        window.api_origin.includes('localhost:4200') ||
+        window.api_origin.includes('127.0.0.1:4202') ||
+        window.api_origin.includes('localhost:4202') ||
+        window.location.origin === window.api_origin
+    );
+}
 
 export default {
     id: 'pc2',
@@ -91,6 +103,107 @@ export default {
                     <strong>Encrypted Files</strong>
                     <div style="flex-grow:1; text-align: right;">
                         <span id="pc2-encrypted-count" style="font-size: 13px;">-</span>
+                    </div>
+                </div>
+                
+                <!-- Backup & Restore Section -->
+                <div style="display: flex; align-items: center; gap: 8px; margin: 20px 0 10px;">
+                    <h2 style="font-size: 15px; margin: 0; color: #333;">Backup & Restore</h2>
+                    <span id="pc2-backup-help" style="cursor: pointer; font-size: 12px; color: #6b7280; text-decoration: underline; text-decoration-style: dotted; display: inline-flex; align-items: center; gap: 4px;" title="Click for backup help">
+                        ${window.icons && window.icons['question.svg'] ? `<img src="${window.icons['question.svg']}" style="width: 14px; height: 14px; vertical-align: middle;">` : ''}
+                        Help
+                    </span>
+                </div>
+                
+                <div class="pc2-backup-card">
+                    <div class="pc2-backup-header">
+                        <strong>Backups</strong>
+                        <button class="button pc2-btn-primary" id="pc2-create-backup-btn" title="Create a new backup of your PC2 node data">
+                            <span style="margin-right: 4px;">+</span> Create Backup
+                        </button>
+                    </div>
+                    
+                    <!-- Backup Status Indicator -->
+                    <div id="pc2-backup-status-indicator" style="display: none; margin: 10px 0; padding: 10px; background: #f9fafb; border-radius: 4px; font-size: 12px; border-left: 3px solid #9ca3af;">
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                            <span id="pc2-backup-status-icon" style="display: inline-flex; align-items: center;">
+                                ${window.icons && window.icons['warning-sign.svg'] ? `<img src="${window.icons['warning-sign.svg']}" style="width: 16px; height: 16px;">` : ''}
+                            </span>
+                            <strong id="pc2-backup-status-text">No backups yet</strong>
+                        </div>
+                        <div id="pc2-backup-status-details" style="color: #6b7280; font-size: 11px; margin-left: 24px;"></div>
+                    </div>
+                    
+                    <!-- Off-Server Storage Warning -->
+                    <div class="pc2-backup-warning" style="margin: 10px 0; padding: 10px; background: #fef3c7; border: 1px solid #fbbf24; border-radius: 4px; font-size: 12px; color: #92400e;">
+                        <div style="display: flex; align-items: start; gap: 8px;">
+                            <span style="flex-shrink: 0; display: inline-flex; align-items: center;">
+                                ${window.icons && window.icons['warning-sign.svg'] ? `<img src="${window.icons['warning-sign.svg']}" style="width: 18px; height: 18px;">` : ''}
+                            </span>
+                            <div>
+                                <strong style="display: block; margin-bottom: 4px;">Important: Download Backups to External Device</strong>
+                                <div style="font-size: 11px; line-height: 1.4;">
+                                    Backups stored on the same server will be lost if the server fails. Always download backups to your laptop, external drive, or another server to keep them safe.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div id="pc2-backup-status" style="display: none; margin: 10px 0; padding: 8px; background: #f0f9ff; border-radius: 4px; font-size: 12px; color: #0369a1;"></div>
+                    
+                    <div id="pc2-backups-list" style="margin-top: 12px;">
+                        <span style="color: #888; font-size: 13px;">Loading...</span>
+                    </div>
+                </div>
+                
+                <!-- Restore from Backup Section -->
+                <div class="pc2-backup-card" style="margin-top: 30px;">
+                    <div class="pc2-backup-header">
+                        <strong>Restore from Backup</strong>
+                    </div>
+                    
+                    <div style="margin: 15px 0;">
+                        <p style="margin: 0 0 12px; font-size: 13px; color: #4b5563; line-height: 1.5;">
+                            Upload a backup file to restore your PC2 node data. This will replace all current data with the backup.
+                        </p>
+                        
+                        <div id="pc2-restore-upload-area" style="border: 2px dashed #d1d5db; border-radius: 8px; padding: 30px; text-align: center; background: #f9fafb; cursor: pointer; transition: all 0.2s;" 
+                             onmouseover="this.style.borderColor='#3b82f6'; this.style.background='#eff6ff';" 
+                             onmouseout="this.style.borderColor='#d1d5db'; this.style.background='#f9fafb';">
+                            <input type="file" id="pc2-restore-file-input" accept=".tar.gz" style="display: none;">
+                            <div style="margin-bottom: 8px;">
+                                ${window.icons && window.icons['cloud.svg'] ? `<img src="${window.icons['cloud.svg']}" style="width: 32px; height: 32px; opacity: 0.6; margin-bottom: 8px;">` : '📁'}
+                            </div>
+                            <div style="font-size: 14px; color: #374151; margin-bottom: 4px;">
+                                <strong>Click to select backup file</strong> or drag and drop
+                            </div>
+                            <div style="font-size: 12px; color: #6b7280;">
+                                Backup files must be .tar.gz format
+                            </div>
+                        </div>
+                        
+                        <div id="pc2-restore-file-info" style="display: none; margin-top: 12px; padding: 12px; background: #f0f9ff; border-radius: 6px; border-left: 3px solid #3b82f6;">
+                            <div style="display: flex; align-items: center; justify-content: space-between;">
+                                <div>
+                                    <div style="font-size: 13px; font-weight: 500; color: #1e40af; margin-bottom: 4px;" id="pc2-restore-filename"></div>
+                                    <div style="font-size: 11px; color: #6b7280;" id="pc2-restore-filesize"></div>
+                                </div>
+                                <button id="pc2-restore-clear-btn" style="background: none; border: none; color: #6b7280; cursor: pointer; font-size: 18px; padding: 0 8px;" title="Clear selection">×</button>
+                            </div>
+                        </div>
+                        
+                        <button id="pc2-restore-btn" class="button pc2-btn-primary" style="width: 100%; margin-top: 12px; display: none;" disabled>
+                            <span id="pc2-restore-btn-text">Start Restore</span>
+                        </button>
+                        
+                        <div id="pc2-restore-progress" style="display: none; margin-top: 12px;">
+                            <div style="background: #e5e7eb; border-radius: 4px; height: 8px; overflow: hidden;">
+                                <div id="pc2-restore-progress-bar" style="background: #3b82f6; height: 100%; width: 0%; transition: width 0.3s;"></div>
+                            </div>
+                            <div id="pc2-restore-progress-text" style="font-size: 12px; color: #6b7280; margin-top: 6px; text-align: center;">Uploading...</div>
+                        </div>
+                        
+                        <div id="pc2-restore-status" style="display: none; margin-top: 12px; padding: 12px; border-radius: 6px; font-size: 13px;"></div>
                     </div>
                 </div>
                 
@@ -259,6 +372,85 @@ export default {
                     background: #fee2e2;
                     border-radius: 4px;
                 }
+                
+                /* Backup Card */
+                .pc2-backup-card {
+                    border: 1px solid #e5e7eb;
+                    border-radius: 6px;
+                    background: #fff;
+                    padding: 15px;
+                    margin: 0 15px;
+                }
+                .pc2-backup-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin-bottom: 12px;
+                }
+                .pc2-backup-header .button {
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 6px 14px;
+                    font-size: 13px;
+                }
+                .pc2-backup-item {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    padding: 10px 0;
+                    border-bottom: 1px solid #e5e7eb;
+                }
+                .pc2-backup-item:last-child {
+                    border-bottom: none;
+                }
+                .pc2-backup-info {
+                    flex: 1;
+                    min-width: 0;
+                }
+                .pc2-backup-name {
+                    font-size: 13px;
+                    font-weight: 500;
+                    margin-bottom: 4px;
+                    word-break: break-all;
+                }
+                .pc2-backup-meta {
+                    font-size: 11px;
+                    color: #6b7280;
+                    display: flex;
+                    gap: 12px;
+                }
+                .pc2-backup-actions {
+                    display: flex;
+                    gap: 8px;
+                    margin-left: 12px;
+                }
+                .pc2-backup-btn {
+                    padding: 6px 12px;
+                    font-size: 12px;
+                    border: 1px solid #d1d5db;
+                    background: #fff;
+                    border-radius: 4px;
+                    cursor: pointer;
+                }
+                .pc2-backup-btn:hover {
+                    background: #f9fafb;
+                }
+                .pc2-backup-btn.download {
+                    color: #3b82f6;
+                    border-color: #3b82f6;
+                }
+                .pc2-backup-btn.delete {
+                    color: #dc2626;
+                    border-color: #dc2626;
+                }
+                .pc2-backup-btn.delete:hover {
+                    background: #fee2e2;
+                }
+                @keyframes spin {
+                    from { transform: rotate(0deg); }
+                    to { transform: rotate(360deg); }
+                }
             </style>
         `;
     },
@@ -279,14 +471,7 @@ export default {
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
         }
         
-        // Check if we're in PC2 mode (self-hosted)
-        function isPC2Mode() {
-            return window.api_origin && (
-                window.api_origin.includes('127.0.0.1:4200') || 
-                window.api_origin.includes('localhost:4200') ||
-                window.location.origin === window.api_origin
-            );
-        }
+        // isPC2Mode is now defined at module level (above) for access in on_show
         
         // Get auth token for PC2 mode API calls
         function getAuthToken() {
@@ -347,7 +532,8 @@ export default {
                 // Load all data
                 await Promise.all([
                     loadStorageStats(),
-                    loadWallets()
+                    loadWallets(),
+                    loadBackups()
                 ]);
             } else {
                 $statusDot.removeClass('connected connecting').addClass('disconnected');
@@ -432,6 +618,314 @@ export default {
                 $el_window.find('#pc2-storage-limit').text('-');
                 $el_window.find('#pc2-files-count').text('-');
                 $el_window.find('#pc2-encrypted-count').text('-');
+            }
+        }
+        
+        // Update backup status indicator
+        function updateBackupStatusIndicator(backups) {
+            const $indicator = $el_window.find('#pc2-backup-status-indicator');
+            const $icon = $el_window.find('#pc2-backup-status-icon');
+            const $text = $el_window.find('#pc2-backup-status-text');
+            const $details = $el_window.find('#pc2-backup-status-details');
+            
+            if (backups.length === 0) {
+                $indicator.css('border-left-color', '#f59e0b').show();
+                $icon.text('⚠️');
+                $text.text('No backups yet');
+                $details.text('Create your first backup to protect your data. Remember to download it to an external device.');
+                return;
+            }
+            
+            // Sort backups by date (newest first)
+            const sortedBackups = [...backups].sort((a, b) => new Date(b.created) - new Date(a.created));
+            const latestBackup = sortedBackups[0];
+            const latestDate = new Date(latestBackup.created);
+            const now = new Date();
+            const daysSinceBackup = Math.floor((now - latestDate) / (1000 * 60 * 60 * 24));
+            
+            // Determine health status
+            let statusColor = '#22c55e'; // Green
+            let statusIconHtml = '';
+            let statusText = 'Backup up to date';
+            let statusDetails = '';
+            
+            // Get icon HTML helper
+            const getIconHtml = (iconName, size = 16) => {
+                return window.icons && window.icons[iconName] 
+                    ? `<img src="${window.icons[iconName]}" style="width: ${size}px; height: ${size}px; vertical-align: middle;">`
+                    : '';
+            };
+            
+            if (daysSinceBackup === 0) {
+                statusText = 'Backed up today';
+                statusIconHtml = getIconHtml('checkmark.svg', 16);
+                statusDetails = `Latest backup: ${latestDate.toLocaleDateString()} at ${latestDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+            } else if (daysSinceBackup === 1) {
+                statusText = 'Backed up yesterday';
+                statusIconHtml = getIconHtml('checkmark.svg', 16);
+                statusDetails = `Latest backup: ${latestDate.toLocaleDateString()} at ${latestDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+            } else if (daysSinceBackup <= 7) {
+                statusText = `Backed up ${daysSinceBackup} days ago`;
+                statusIconHtml = getIconHtml('checkmark.svg', 16);
+                statusDetails = `Latest backup: ${latestDate.toLocaleDateString()} at ${latestDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+            } else if (daysSinceBackup <= 30) {
+                statusColor = '#f59e0b'; // Yellow
+                statusIconHtml = getIconHtml('warning-sign.svg', 16);
+                statusText = `Last backup ${daysSinceBackup} days ago`;
+                statusDetails = `Latest backup: ${latestDate.toLocaleDateString()}. Consider creating a new backup soon.`;
+            } else {
+                statusColor = '#dc2626'; // Red
+                statusIconHtml = getIconHtml('danger.svg', 16);
+                statusText = `Last backup ${daysSinceBackup} days ago`;
+                statusDetails = `Latest backup: ${latestDate.toLocaleDateString()}. Your data may be at risk - create a backup now!`;
+            }
+            
+            $indicator.css('border-left-color', statusColor).show();
+            $icon.html(statusIconHtml);
+            $text.text(statusText);
+            $details.html(statusDetails);
+        }
+        
+        // Load backups
+        async function loadBackups() {
+            const $list = $el_window.find('#pc2-backups-list');
+            const $status = $el_window.find('#pc2-backup-status');
+            $status.hide();
+            
+            try {
+                if (!isPC2Mode() || !window.api_origin) {
+                    $list.html('<span style="color: #888; font-size: 13px;">Backup management only available on PC2 nodes</span>');
+                    $el_window.find('#pc2-backup-status-indicator').hide();
+                    return;
+                }
+                
+                const url = new URL('/api/backups', window.api_origin);
+                const authToken = getAuthToken();
+                const headers = {
+                    'Content-Type': 'application/json'
+                };
+                if (authToken) {
+                    headers['Authorization'] = `Bearer ${authToken}`;
+                }
+                
+                const response = await fetch(url.toString(), {
+                    method: 'GET',
+                    headers
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Failed to load backups: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                const backups = data.backups || [];
+                
+                // Update status indicator
+                updateBackupStatusIndicator(backups);
+                
+                if (backups.length === 0) {
+                    $list.html('<span style="color: #888; font-size: 13px;">No backups yet. Create your first backup to get started.</span>');
+                    return;
+                }
+                
+                $list.empty();
+                // Sort backups by date (newest first)
+                const sortedBackups = [...backups].sort((a, b) => new Date(b.created) - new Date(a.created));
+                
+                sortedBackups.forEach(backup => {
+                    const size = formatBytes(backup.size);
+                    const date = new Date(backup.created);
+                    const dateStr = date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    
+                    const $item = $(`
+                        <div class="pc2-backup-item">
+                            <div class="pc2-backup-info">
+                                <div class="pc2-backup-name">${backup.filename}</div>
+                                <div class="pc2-backup-meta">
+                                    <span>${size}</span>
+                                    <span>${dateStr}</span>
+                                </div>
+                            </div>
+                            <div class="pc2-backup-actions">
+                                <button class="pc2-backup-btn download" data-filename="${backup.filename}" title="Download backup to your local device for safe storage">Download</button>
+                                <button class="pc2-backup-btn delete" data-filename="${backup.filename}" title="Delete this backup from the server">Delete</button>
+                            </div>
+                        </div>
+                    `);
+                    $list.append($item);
+                });
+                
+                // Download handler
+                $list.find('.pc2-backup-btn.download').on('click', async function() {
+                    const filename = $(this).data('filename');
+                    const $btn = $(this);
+                    const originalText = $btn.text();
+                    
+                    $btn.prop('disabled', true).text('Downloading...');
+                    
+                    try {
+                        const authToken = getAuthToken();
+                        const downloadUrl = new URL(`/api/backups/download/${filename}`, window.api_origin);
+                        
+                        if (authToken) {
+                            downloadUrl.searchParams.set('token', authToken);
+                        }
+                        
+                        // Open download in new window/tab
+                        window.open(downloadUrl.toString(), '_blank');
+                        
+                        // Show success message
+                        const $status = $el_window.find('#pc2-backup-status');
+                        $status.html(
+                            '✅ <strong>Download Started</strong><br>' +
+                            '<div style="margin-top: 6px; font-size: 11px; line-height: 1.4;">' +
+                            'The backup file is downloading. Save it to an external device (laptop, external drive, or another server) to keep it safe from server failures.' +
+                            '</div>'
+                        ).css('background', '#f0fdf4').css('color', '#166534').css('border', '1px solid #86efac').show();
+                        
+                        // Hide message after 10 seconds
+                        setTimeout(() => {
+                            $status.fadeOut();
+                        }, 10000);
+                    } catch (error) {
+                        alert('Failed to download backup: ' + error.message);
+                    } finally {
+                        $btn.prop('disabled', false).text(originalText);
+                    }
+                });
+                
+                // Delete handler
+                $list.find('.pc2-backup-btn.delete').on('click', async function() {
+                    const filename = $(this).data('filename');
+                    if (!confirm(`Delete backup "${filename}"? This cannot be undone.`)) {
+                        return;
+                    }
+                    
+                    const $btn = $(this);
+                    $btn.prop('disabled', true).text('Deleting...');
+                    
+                    try {
+                        const url = new URL(`/api/backups/${filename}`, window.api_origin);
+                        const authToken = getAuthToken();
+                        const headers = {
+                            'Content-Type': 'application/json'
+                        };
+                        if (authToken) {
+                            headers['Authorization'] = `Bearer ${authToken}`;
+                        }
+                        
+                        const response = await fetch(url.toString(), {
+                            method: 'DELETE',
+                            headers
+                        });
+                        
+                        if (!response.ok) {
+                            throw new Error(`Failed to delete: ${response.status}`);
+                        }
+                        
+                        // Show success message
+                        const $status = $el_window.find('#pc2-backup-status');
+                        $status.html(
+                            '✅ <strong>Backup Deleted</strong><br>' +
+                            '<div style="margin-top: 6px; font-size: 11px;">' +
+                            `Backup "${filename}" has been deleted from the server.` +
+                            '</div>'
+                        ).css('background', '#f0fdf4').css('color', '#166534').css('border', '1px solid #86efac').show();
+                        
+                        // Hide message after 5 seconds
+                        setTimeout(() => {
+                            $status.fadeOut();
+                        }, 5000);
+                        
+                        // Reload backups list
+                        loadBackups();
+                    } catch (error) {
+                        alert('Failed to delete backup: ' + error.message);
+                    } finally {
+                        $btn.prop('disabled', false).text('Delete');
+                    }
+                });
+            } catch (error) {
+                logger.error('[PC2Tab] Failed to load backups:', error);
+                $list.html('<span style="color: #dc2626; font-size: 13px;">Failed to load backups: ' + error.message + '</span>');
+            }
+        }
+        
+        // Create backup
+        async function createBackup() {
+            const $status = $el_window.find('#pc2-backup-status');
+            const $btn = $el_window.find('#pc2-create-backup-btn');
+            
+            if (!isPC2Mode() || !window.api_origin) {
+                alert('Backup creation only available on PC2 nodes. Use the terminal command: npm run backup');
+                return;
+            }
+            
+            const loadingIcon = window.icons && window.icons['clock.svg']
+                ? `<img src="${window.icons['clock.svg']}" style="width: 14px; height: 14px; vertical-align: middle; margin-right: 4px; display: inline-block; animation: spin 1s linear infinite;">`
+                : '';
+            $btn.prop('disabled', true).html(loadingIcon + 'Creating...');
+            $status.hide();
+            
+            try {
+                const url = new URL('/api/backups/create', window.api_origin);
+                const authToken = getAuthToken();
+                const headers = {
+                    'Content-Type': 'application/json'
+                };
+                if (authToken) {
+                    headers['Authorization'] = `Bearer ${authToken}`;
+                }
+                
+                const response = await fetch(url.toString(), {
+                    method: 'POST',
+                    headers
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ error: `Failed: ${response.status}` }));
+                    throw new Error(errorData.error || `Failed: ${response.status}`);
+                }
+                
+                const result = await response.json();
+                
+                // Show success message with clear instructions
+                const successIcon = window.icons && window.icons['checkmark.svg'] 
+                    ? `<img src="${window.icons['checkmark.svg']}" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 6px; display: inline-block;">`
+                    : '✅ ';
+                const successMessage = result.message || 'Backup creation started successfully.';
+                $status.html(
+                    successIcon + '<strong>Backup Started</strong><br>' +
+                    '<div style="margin-top: 6px; font-size: 11px; line-height: 1.4;">' +
+                    successMessage + ' The backup list will update automatically when the backup is ready. ' +
+                    '<strong>Remember to download the backup to an external device for safe storage.</strong>' +
+                    '</div>'
+                ).css('background', '#f0fdf4').css('color', '#166534').css('border', '1px solid #86efac').show();
+                
+                // Poll for new backup (check every 3 seconds for up to 2 minutes)
+                let attempts = 0;
+                const maxAttempts = 40; // 40 * 3 seconds = 2 minutes
+                const pollInterval = setInterval(() => {
+                    attempts++;
+                    loadBackups();
+                    
+                    if (attempts >= maxAttempts) {
+                        clearInterval(pollInterval);
+                        const clockIcon = window.icons && window.icons['clock.svg']
+                            ? `<img src="${window.icons['clock.svg']}" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 6px; display: inline-block;">`
+                            : '';
+                        $status.html(clockIcon + 'Backup may still be creating. Check the backup list in a few minutes.').css('background', '#fef3c7').css('color', '#92400e').show();
+                    }
+                }, 3000);
+                
+            } catch (error) {
+                logger.error('[PC2Tab] Failed to create backup:', error);
+                const errorIcon = window.icons && window.icons['danger.svg']
+                    ? `<img src="${window.icons['danger.svg']}" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 6px; display: inline-block;">`
+                    : '';
+                $status.html(errorIcon + 'Failed: ' + error.message).css('background', '#fee2e2').css('color', '#dc2626').show();
+            } finally {
+                $btn.prop('disabled', false).html('<span style="margin-right: 4px;">+</span> Create Backup');
             }
         }
         
@@ -549,6 +1043,317 @@ export default {
             }
         }
         
+        // Create backup button
+        $el_window.find('#pc2-create-backup-btn').on('click', createBackup);
+        
+        // Backup help dialog
+        $el_window.find('#pc2-backup-help').on('click', function() {
+            const helpContent = `
+                <div style="padding: 20px; max-width: 500px;">
+                    <h3 style="margin-top: 0; margin-bottom: 15px;">Backup & Restore Help</h3>
+                    
+                    <div style="margin-bottom: 20px;">
+                        <strong style="display: block; margin-bottom: 8px; color: #1f2937;">Why Backup?</strong>
+                        <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #4b5563;">
+                            Backups protect your data from server failures, hardware issues, or accidental deletion. 
+                            Regular backups ensure you can recover your files, settings, and user accounts.
+                        </p>
+                    </div>
+                    
+                    <div style="margin-bottom: 20px;">
+                        <strong style="display: block; margin-bottom: 8px; color: #1f2937;">How to Backup:</strong>
+                        <ol style="margin: 0; padding-left: 20px; font-size: 13px; line-height: 1.8; color: #4b5563;">
+                            <li>Click "Create Backup" to start a backup</li>
+                            <li>Wait for the backup to complete (may take a few minutes)</li>
+                            <li><strong>Download the backup</strong> to your laptop or external drive</li>
+                            <li>Store the backup file in a safe location</li>
+                        </ol>
+                    </div>
+                    
+                    <div style="margin-bottom: 20px; padding: 12px; background: #fef3c7; border-left: 3px solid #f59e0b; border-radius: 4px;">
+                        <strong style="display: block; margin-bottom: 6px; color: #92400e;">${window.icons && window.icons['warning-sign.svg'] ? `<img src="${window.icons['warning-sign.svg']}" style="width: 14px; height: 14px; vertical-align: middle; margin-right: 4px;">` : ''} Critical: Off-Server Storage</strong>
+                        <p style="margin: 0; font-size: 12px; line-height: 1.5; color: #78350f;">
+                            Backups stored on the same server will be lost if the server fails. 
+                            Always download backups to a separate device (laptop, external drive, or cloud storage).
+                        </p>
+                    </div>
+                    
+                    <div style="margin-bottom: 20px;">
+                        <strong style="display: block; margin-bottom: 8px; color: #1f2937;">How to Restore (New Server Scenario):</strong>
+                        <p style="margin: 0 0 12px; font-size: 13px; line-height: 1.6; color: #4b5563;">
+                            <strong>Scenario:</strong> Your server was lost/died, you have a backup file on your computer, and you're setting up a <strong>brand new PC2 node</strong> on a new VPS/Raspberry Pi.
+                        </p>
+                        <p style="margin: 0 0 12px; font-size: 13px; line-height: 1.6; color: #4b5563;">
+                            <strong>Important:</strong> You must use the <strong>same admin wallet address</strong> that created the backup. This is required for security - the restore process verifies you own the wallet that created the backup.
+                        </p>
+                        <div style="padding: 10px; background: #eff6ff; border-left: 3px solid #3b82f6; border-radius: 4px; margin-bottom: 12px;">
+                            <strong style="display: block; margin-bottom: 4px; color: #1e40af; font-size: 12px;">👥 Multiple Accounts on PC2 Node</strong>
+                            <p style="margin: 0; font-size: 12px; line-height: 1.5; color: #1e3a8a;">
+                                <strong>Yes, all accounts are restored!</strong> The backup contains the entire PC2 node database, which includes all user accounts (all wallet addresses that have connected). Each wallet can only access their own files - the admin wallet cannot access other users' files unless explicitly shared. After restore, all users can log in with their original wallet addresses and access their data.
+                            </p>
+                        </div>
+                        <div style="padding: 10px; background: #f0fdf4; border-left: 3px solid #22c55e; border-radius: 4px; margin-bottom: 12px;">
+                            <strong style="display: block; margin-bottom: 4px; color: #166534; font-size: 12px;">✅ One-Click Restore Available!</strong>
+                            <p style="margin: 0; font-size: 12px; line-height: 1.5; color: #15803d;">
+                                You can now restore directly through the web interface! Scroll down to the "Restore from Backup" section, upload your backup file, and click "Start Restore". The server will stop automatically during restore.
+                            </p>
+                        </div>
+                        <p style="margin: 0 0 12px; font-size: 13px; line-height: 1.6; color: #4b5563;">
+                            <strong>After Restore - How to Restart Server:</strong>
+                        </p>
+                        <ol style="margin: 0 0 12px; padding-left: 20px; font-size: 13px; line-height: 1.8; color: #4b5563;">
+                            <li><strong>Connect to your server via SSH</strong> (use the same method you used to install PC2 - Terminal on Mac/Linux, PuTTY on Windows, or your VPS provider's console)</li>
+                            <li><strong>Navigate to PC2 directory:</strong> <code style="background: #f3f4f6; padding: 2px 6px; border-radius: 3px; font-size: 11px; font-family: monospace;">cd pc2-node/test-fresh-install</code></li>
+                            <li><strong>Start the server:</strong> <code style="background: #f3f4f6; padding: 2px 6px; border-radius: 3px; font-size: 11px; font-family: monospace;">npm start</code></li>
+                            <li><strong>Wait for startup</strong> - you'll see "Server listening on port 4200" (or similar) when ready</li>
+                            <li><strong>Refresh this page</strong> in your browser and log in with your admin wallet</li>
+                            <li><strong>All accounts restored!</strong> Other users can also log in with their wallet addresses</li>
+                        </ol>
+                    </div>
+                    
+                    <div style="margin-bottom: 0;">
+                        <strong style="display: block; margin-bottom: 8px; color: #1f2937;">Best Practices:</strong>
+                        <ul style="margin: 0; padding-left: 20px; font-size: 13px; line-height: 1.8; color: #4b5563;">
+                            <li>Create backups regularly (weekly recommended)</li>
+                            <li>Keep at least 3 backups (3-2-1 rule: 3 copies, 2 different media, 1 off-site)</li>
+                            <li>Test restore process periodically</li>
+                            <li>Store backups in multiple locations</li>
+                        </ul>
+                    </div>
+                </div>
+            `;
+            
+            UIWindow({
+                title: 'Backup & Restore Help',
+                body_content: helpContent,
+                width: 550,
+                height: 600,
+                is_resizable: true,
+                window_options: {
+                    parent_uuid: $el_window.attr('data-element_uuid'),
+                    disable_parent_window: true,
+                    parent_center: true,
+                }
+            });
+        });
+        
+        // Restore functionality
+        let selectedRestoreFile = null;
+        
+        // File input handler
+        const $fileInput = $el_window.find('#pc2-restore-file-input');
+        const $uploadArea = $el_window.find('#pc2-restore-upload-area');
+        const $fileInfo = $el_window.find('#pc2-restore-file-info');
+        const $restoreBtn = $el_window.find('#pc2-restore-btn');
+        const $restoreProgress = $el_window.find('#pc2-restore-progress');
+        const $restoreStatus = $el_window.find('#pc2-restore-status');
+        
+        // Click upload area to trigger file input
+        $uploadArea.on('click', function() {
+            $fileInput.click();
+        });
+        
+        // Drag and drop handlers
+        $uploadArea.on('dragover', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            $(this).css({ borderColor: '#3b82f6', background: '#eff6ff' });
+        });
+        
+        $uploadArea.on('dragleave', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            $(this).css({ borderColor: '#d1d5db', background: '#f9fafb' });
+        });
+        
+        $uploadArea.on('drop', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            $(this).css({ borderColor: '#d1d5db', background: '#f9fafb' });
+            
+            const files = e.originalEvent.dataTransfer.files;
+            if (files.length > 0) {
+                handleFileSelect(files[0]);
+            }
+        });
+        
+        // File input change handler
+        $fileInput.on('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                handleFileSelect(file);
+            }
+        });
+        
+        // Clear file selection
+        $el_window.find('#pc2-restore-clear-btn').on('click', function(e) {
+            e.stopPropagation();
+            selectedRestoreFile = null;
+            $fileInput.val('');
+            $fileInfo.hide();
+            $restoreBtn.hide();
+            $restoreProgress.hide();
+            $restoreStatus.hide();
+        });
+        
+        // Format file size
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
+        }
+        
+        // Handle file selection
+        function handleFileSelect(file) {
+            // Validate file type
+            if (!file.name.endsWith('.tar.gz')) {
+                showRestoreStatus('error', 'Invalid file type. Please select a .tar.gz backup file.');
+                return;
+            }
+            
+            // Validate file size (10GB max)
+            const maxSize = 10 * 1024 * 1024 * 1024; // 10GB
+            if (file.size > maxSize) {
+                showRestoreStatus('error', 'File too large. Maximum backup size is 10GB.');
+                return;
+            }
+            
+            selectedRestoreFile = file;
+            
+            // Show file info
+            $el_window.find('#pc2-restore-filename').text(file.name);
+            $el_window.find('#pc2-restore-filesize').text(formatBytes(file.size));
+            $fileInfo.show();
+            $restoreBtn.show().prop('disabled', false);
+            $restoreStatus.hide();
+        }
+        
+        // Show restore status message
+        function showRestoreStatus(type, message) {
+            $restoreStatus.removeClass().show();
+            if (type === 'error') {
+                $restoreStatus.css({
+                    background: '#fef2f2',
+                    border: '1px solid #fca5a5',
+                    color: '#991b1b'
+                }).text(message);
+            } else if (type === 'success') {
+                $restoreStatus.css({
+                    background: '#f0fdf4',
+                    border: '1px solid #86efac',
+                    color: '#166534'
+                }).text(message);
+            } else {
+                $restoreStatus.css({
+                    background: '#f0f9ff',
+                    border: '1px solid #93c5fd',
+                    color: '#1e40af'
+                }).text(message);
+            }
+        }
+        
+        // Restore button handler
+        $restoreBtn.on('click', async function() {
+            if (!selectedRestoreFile) {
+                showRestoreStatus('error', 'Please select a backup file first.');
+                return;
+            }
+            
+            if (!isPC2Mode() || !window.api_origin) {
+                showRestoreStatus('error', 'Restore only available on PC2 nodes.');
+                return;
+            }
+            
+            // Confirm restore (destructive operation)
+            const confirmed = confirm(
+                '⚠️ WARNING: This will replace all current PC2 node data with the backup.\n\n' +
+                'The server will stop during restore. You will need to restart it manually.\n\n' +
+                'Are you sure you want to continue?'
+            );
+            
+            if (!confirmed) {
+                return;
+            }
+            
+            const $btn = $(this);
+            const $btnText = $el_window.find('#pc2-restore-btn-text');
+            const $progressBar = $el_window.find('#pc2-restore-progress-bar');
+            const $progressText = $el_window.find('#pc2-restore-progress-text');
+            
+            // Disable button and show progress
+            $btn.prop('disabled', true);
+            $btnText.text('Uploading...');
+            $restoreProgress.show();
+            $restoreStatus.hide();
+            
+            // Create FormData
+            const formData = new FormData();
+            formData.append('file', selectedRestoreFile);
+            
+            // Update progress (upload phase)
+            $progressBar.css('width', '30%');
+            $progressText.text('Uploading backup file...');
+            
+            try {
+                const authToken = getAuthToken();
+                const url = new URL('/api/backups/restore', window.api_origin);
+                
+                const headers = {};
+                if (authToken) {
+                    headers['Authorization'] = `Bearer ${authToken}`;
+                }
+                
+                const response = await fetch(url.toString(), {
+                    method: 'POST',
+                    headers,
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || `Server error: ${response.status}`);
+                }
+                
+                // Upload complete
+                $progressBar.css('width', '60%');
+                $progressText.text('Processing restore...');
+                
+                // Show success message with important note about server restart
+                $progressBar.css('width', '100%');
+                $progressText.text('Restore started!');
+                
+                showRestoreStatus('success', 
+                    '✅ Restore process started successfully!\n\n' +
+                    '⚠️ IMPORTANT: The server will stop automatically during restore.\n\n' +
+                    '📋 To restart the server:\n' +
+                    '1. Connect to your server via SSH (same way you installed PC2)\n' +
+                    '2. Navigate to PC2 directory: cd pc2-node/test-fresh-install\n' +
+                    '3. Start server: npm start\n' +
+                    '4. Wait for server to start (you\'ll see "Server listening on port...")\n' +
+                    '5. Refresh this page and log in with your admin wallet\n\n' +
+                    '💡 All accounts on the PC2 node will be restored, but each wallet can only access their own files.'
+                );
+                
+                // Reset UI
+                $btnText.text('Start Restore');
+                $restoreProgress.hide();
+                selectedRestoreFile = null;
+                $fileInput.val('');
+                $fileInfo.hide();
+                $restoreBtn.hide();
+                
+            } catch (error) {
+                console.error('[Restore] Error:', error);
+                showRestoreStatus('error', 'Failed to start restore: ' + error.message);
+                $btn.prop('disabled', false);
+                $btnText.text('Start Restore');
+                $restoreProgress.hide();
+            }
+        });
+        
         // Connect button
         $el_window.find('#pc2-connect-btn').on('click', async function() {
             const { default: UIPC2SetupWizard } = await import('../UIPC2SetupWizard.js');
@@ -654,13 +1459,47 @@ export default {
         
         // Initial update
         await updateUI();
+        
+        // Refresh backups when tab is shown
+        if ($el_window.find('#pc2-connected').is(':visible')) {
+            loadBackups();
+        }
     },
     on_show: async function($content) {
         // Refresh data when tab is shown
         const pc2Service = getPC2Service();
-        if (pc2Service.isConnected?.()) {
+        const $window = $content.closest('.window-settings');
+        
+        if (pc2Service.isConnected?.() || (isPC2Mode() && window.is_auth && window.is_auth())) {
+            // Refresh backups if connected
+            if ($window.find('#pc2-connected').is(':visible')) {
+                // Load backups without full re-init
+                const authToken = window.auth_token || localStorage.getItem('auth_token');
+                if (authToken && window.api_origin) {
+                    try {
+                        const url = new URL('/api/backups', window.api_origin);
+                        const response = await fetch(url.toString(), {
+                            headers: { 'Authorization': `Bearer ${authToken}` }
+                        });
+                        if (response.ok) {
+                            const data = await response.json();
+                            const backups = data.backups || [];
+                            const $list = $window.find('#pc2-backups-list');
+                            if (backups.length === 0) {
+                                $list.html('<span style="color: #888; font-size: 13px;">No backups yet.</span>');
+                            } else {
+                                // Trigger re-render by calling loadBackups through the init context
+                                // For now, just show count
+                                $list.html(`<span style="color: #888; font-size: 13px;">${backups.length} backup(s) available</span>`);
+                            }
+                        }
+                    } catch (e) {
+                        // Ignore errors on quick refresh
+                    }
+                }
+            }
             // Re-init to refresh all data
-            this.init($content.closest('.window-settings'));
+            this.init($window);
         }
     }
 };

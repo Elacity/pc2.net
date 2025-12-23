@@ -13,10 +13,28 @@ export class XDIncomingService extends putility.concepts.Service {
 
     _init () {
         globalThis.addEventListener('message', async event => {
+            // Debug: Log puter-ipc messages
+            if (event.data && event.data.$ === 'puter-ipc') {
+                console.log('[XDIncoming]: 📨 Message received, filter_listeners_ count:', this.filter_listeners_.length);
+            }
+            
             for ( const fn of this.filter_listeners_ ) {
+                // Debug: Log when calling filter listener
+                if (event.data && event.data.$ === 'puter-ipc') {
+                    console.log('[XDIncoming]: 🔄 Calling filter listener:', fn);
+                }
                 const tp = new TeePromise();
                 fn(event, tp);
-                if ( await tp ) return;
+                const result = await tp;
+                if (event.data && event.data.$ === 'puter-ipc') {
+                    console.log('[XDIncoming]: ✅ Filter listener returned:', result);
+                }
+                if ( result ) {
+                    if (event.data && event.data.$ === 'puter-ipc') {
+                        console.log('[XDIncoming]: 🛑 Filter listener resolved true, stopping message processing');
+                    }
+                    return;
+                }
             }
 
             const data = event.data;

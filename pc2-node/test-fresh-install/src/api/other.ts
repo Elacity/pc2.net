@@ -9,6 +9,8 @@ import { AuthenticatedRequest } from './middleware.js';
 import { SignRequest, SignResponse } from '../types/api.js';
 import { FilesystemManager } from '../storage/filesystem.js';
 import { logger } from '../utils/logger.js';
+import { broadcastItemUpdated } from '../websocket/events.js';
+import { Server as SocketIOServer } from 'socket.io';
 import crypto from 'crypto';
 
 /**
@@ -1044,26 +1046,37 @@ export function handleItemMetadata(req: AuthenticatedRequest, res: Response): vo
  * POST /writeFile?uid=...&signature=...&expires=...
  */
 export async function handleWriteFile(req: AuthenticatedRequest, res: Response): Promise<void> {
+  logger.info('[WriteFile] 🔵 HANDLER CALLED', {
+    path: req.path,
+    method: req.method,
+    query: req.query,
+    hasUser: !!req.user,
+    userWallet: req.user?.wallet_address
+  });
+
   const filesystem = (req.app.locals.filesystem as FilesystemManager | undefined);
   const fileUid = req.query.uid as string;
   const signature = req.query.signature as string;
 
   if (!filesystem) {
+    logger.error('[WriteFile] Filesystem not initialized');
     res.status(500).json({ error: 'Filesystem not initialized' });
     return;
   }
 
   if (!req.user) {
+    logger.warn('[WriteFile] Unauthorized - no user in request');
     res.status(401).json({ error: 'Unauthorized' });
     return;
   }
 
   if (!fileUid) {
+    logger.warn('[WriteFile] Missing uid parameter', { query: req.query });
     res.status(400).json({ error: 'Missing uid parameter' });
     return;
   }
 
-  logger.info('[WriteFile] Request received', { 
+  logger.info('[WriteFile] 🔵 Request received', { 
     uid: fileUid, 
     signature: signature ? signature.substring(0, 20) + '...' : 'none',
     method: req.method,
@@ -1072,23 +1085,74 @@ export async function handleWriteFile(req: AuthenticatedRequest, res: Response):
     hasBody: !!req.body,
     bodyType: typeof req.body,
     isBuffer: Buffer.isBuffer(req.body),
-    bodyLength: Buffer.isBuffer(req.body) ? req.body.length : (typeof req.body === 'string' ? req.body.length : 'N/A')
+    bodyLength: Buffer.isBuffer(req.body) ? req.body.length : (typeof req.body === 'string' ? req.body.length : 'N/A'),
+    walletAddress: req.user?.wallet_address
   });
 
   // Convert UUID to path: uuid-/path/to/file -> /path/to/file
+  // UID format: uuid--0x34daf...-Desktop-filename.jpg (double dash because path starts with /)
+  // First, try direct conversion
   const uuidPath = fileUid.replace(/^uuid-+/, '');
   let potentialPath = '/' + uuidPath.replace(/-/g, '/');
   
-  // Remove leading wallet address if present
+  // Remove leading wallet address if present (it's already in the path)
   const pathParts = potentialPath.split('/').filter(p => p);
   if (pathParts.length > 0 && pathParts[0].startsWith('0x')) {
     potentialPath = '/' + pathParts.join('/');
   }
 
-  const existingMetadata = filesystem.getFileMetadata(potentialPath, req.user.wallet_address);
+  // Try to find file by converted path
+  let existingMetadata = filesystem.getFileMetadata(potentialPath, req.user.wallet_address);
+
+  // If not found, try database lookup by UUID (handles case sensitivity issues)
+  if (!existingMetadata) {
+    logger.info('[WriteFile] File not found by path conversion, trying UUID lookup', { 
+      uid: fileUid, 
+      convertedPath: potentialPath 
+    });
+    
+    const db = (req.app.locals.db as any);
+    if (db && typeof db.listFiles === 'function') {
+      // listFiles takes (directoryPath, walletAddress) - use '/' to get all files
+      const allFiles = db.listFiles('/', req.user.wallet_address);
+      logger.info('[WriteFile] UUID lookup - searching files', { 
+        totalFiles: allFiles.length,
+        searchingFor: fileUid
+      });
+      for (const file of allFiles) {
+        // Generate UUID the same way as frontend: uuid-${path.replace(/\//g, '-')}
+        // CRITICAL: Make comparison case-insensitive to handle Desktop vs desktop mismatch
+        const fileUuid = `uuid-${file.path.replace(/\//g, '-')}`;
+        const fileUuidLower = fileUuid.toLowerCase();
+        const fileUidLower = fileUid.toLowerCase();
+        if (fileUuidLower === fileUidLower) {
+          existingMetadata = file;
+          potentialPath = file.path; // Update potentialPath with the correct casing
+          logger.info('[WriteFile] ✅ Found file by UUID lookup (case-insensitive)', { 
+            uid: fileUid, 
+            path: potentialPath,
+            filePath: file.path,
+            generatedUuid: fileUuid,
+            matched: true
+          });
+          break;
+        }
+      }
+      if (!existingMetadata) {
+        logger.warn('[WriteFile] UUID not found in database', {
+          searchedFiles: allFiles.length,
+          sampleUuids: allFiles.slice(0, 3).map((f: any) => `uuid-${f.path.replace(/\//g, '-')}`)
+        });
+      }
+    }
+  }
 
   if (!existingMetadata) {
-    logger.warn('[WriteFile] File not found for UID', { uid: fileUid, convertedPath: potentialPath });
+    logger.warn('[WriteFile] File not found for UID', { 
+      uid: fileUid, 
+      convertedPath: potentialPath,
+      walletAddress: req.user.wallet_address
+    });
     res.status(404).json({ error: 'File not found' });
     return;
   }
@@ -1110,7 +1174,12 @@ export async function handleWriteFile(req: AuthenticatedRequest, res: Response):
   // Check if body is a Buffer (binary data - PDFs, images, etc.)
   if (Buffer.isBuffer(req.body) && req.body.length > 0) {
     fileContent = req.body;
-    logger.info('[WriteFile] Using body as binary Buffer', { length: fileContent.length, contentType });
+    logger.info('[WriteFile] ✅ Using body as binary Buffer', { 
+      length: fileContent.length, 
+      contentType,
+      firstBytes: fileContent.slice(0, 16).toString('hex'),
+      lastBytes: fileContent.slice(-16).toString('hex')
+    });
   }
   // Check if body is a string (raw text)
   else if (typeof req.body === 'string' && req.body.length > 0) {
@@ -1175,12 +1244,55 @@ export async function handleWriteFile(req: AuthenticatedRequest, res: Response):
       }
     );
 
-    logger.info('[WriteFile] File updated successfully', { 
+    logger.info('[WriteFile] ✅ File updated successfully', { 
       path: updatedMetadata.path, 
       size: updatedMetadata.size,
       newIPFSHash: updatedMetadata.ipfs_hash?.substring(0, 20) + '...',
-      oldIPFSHash: existingMetadata?.ipfs_hash?.substring(0, 20) + '...'
+      oldIPFSHash: existingMetadata?.ipfs_hash?.substring(0, 20) + '...',
+      hashChanged: updatedMetadata.ipfs_hash !== existingMetadata?.ipfs_hash,
+      contentSize: contentBuffer.length,
+      walletAddress: req.user.wallet_address
     });
+
+    // Broadcast item.updated event to refresh desktop thumbnail
+    const io = (req.app.locals.io as SocketIOServer | undefined);
+    if (io) {
+      // Build read URL for thumbnail (images use read URL as thumbnail)
+      // Include cache-busting parameter using IPFS hash to ensure fresh thumbnail
+      const isHttps = req.protocol === 'https';
+      const baseUrl = isHttps 
+        ? `https://${req.get('host')}`
+        : `http://${req.get('host')}`;
+      
+      // For image files, include thumbnail URL with cache-busting
+      let thumbnail: string | undefined = undefined;
+      if (updatedMetadata.mime_type?.startsWith('image/')) {
+        const cacheBuster = updatedMetadata.ipfs_hash 
+          ? `_cid=${updatedMetadata.ipfs_hash.substring(0, 16)}`
+          : `_t=${Date.now()}`;
+        thumbnail = `${baseUrl}/read?file=${encodeURIComponent(updatedMetadata.path)}&${cacheBuster}`;
+      }
+      
+      broadcastItemUpdated(io, req.user.wallet_address, {
+        uid: fileUid,
+        name: updatedMetadata.path.split('/').pop() || '',
+        path: updatedMetadata.path,
+        size: updatedMetadata.size,
+        modified: new Date(updatedMetadata.updated_at).toISOString(),
+        original_client_socket_id: null,
+        thumbnail: thumbnail, // Include thumbnail URL with cache-busting for image files
+        type: updatedMetadata.mime_type || undefined,
+        is_dir: false
+      });
+      
+      logger.info('[WriteFile] 📡 Broadcasted item.updated event for thumbnail refresh', {
+        path: updatedMetadata.path,
+        hasThumbnail: !!thumbnail,
+        mimeType: updatedMetadata.mime_type
+      });
+    } else {
+      logger.warn('[WriteFile] ⚠️ WebSocket server not available, cannot broadcast thumbnail update');
+    }
 
     // Return file metadata (include IPFS hash for cache-busting)
     res.json({
@@ -1198,6 +1310,102 @@ export async function handleWriteFile(req: AuthenticatedRequest, res: Response):
     logger.error('[WriteFile] Error writing file:', error);
     res.status(500).json({
       error: 'Failed to write file',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+}
+
+/**
+ * Set desktop background
+ * POST /set-desktop-bg
+ */
+export function handleSetDesktopBg(req: AuthenticatedRequest, res: Response): void {
+  const db = (req.app.locals.db as any);
+  const body = req.body as { url?: string; color?: string; fit?: string };
+
+  if (!db) {
+    res.status(500).json({ error: 'Database not initialized' });
+    return;
+  }
+
+  if (!req.user) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
+  try {
+    const walletAddress = req.user.wallet_address;
+
+    // Save desktop background settings to KV store
+    if (body.url !== undefined) {
+      const kvKey = `${walletAddress}:user_preferences.desktop_bg_url`;
+      db.setSetting(kvKey, body.url);
+    }
+
+    if (body.color !== undefined) {
+      const kvKey = `${walletAddress}:user_preferences.desktop_bg_color`;
+      db.setSetting(kvKey, body.color || null);
+    }
+
+    if (body.fit !== undefined) {
+      const kvKey = `${walletAddress}:user_preferences.desktop_bg_fit`;
+      db.setSetting(kvKey, body.fit || 'cover');
+    }
+
+    logger.info('[SetDesktopBg] Desktop background saved', {
+      walletAddress,
+      url: body.url,
+      color: body.color,
+      fit: body.fit
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    logger.error('[SetDesktopBg] Error:', error instanceof Error ? error.message : 'Unknown error');
+    res.status(500).json({
+      error: 'Failed to save desktop background',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+}
+
+/**
+ * Set profile picture
+ * POST /set-profile-picture
+ */
+export function handleSetProfilePicture(req: AuthenticatedRequest, res: Response): void {
+  const db = (req.app.locals.db as any);
+  const body = req.body as { url?: string };
+
+  if (!db) {
+    res.status(500).json({ error: 'Database not initialized' });
+    return;
+  }
+
+  if (!req.user) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
+  try {
+    const walletAddress = req.user.wallet_address;
+
+    // Save profile picture path to KV store
+    if (body.url !== undefined) {
+      const kvKey = `${walletAddress}:user_preferences.profile_picture_url`;
+      db.setSetting(kvKey, body.url);
+    }
+
+    logger.info('[SetProfilePicture] Profile picture saved', {
+      walletAddress,
+      url: body.url
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    logger.error('[SetProfilePicture] Error:', error instanceof Error ? error.message : 'Unknown error');
+    res.status(500).json({
+      error: 'Failed to save profile picture',
       message: error instanceof Error ? error.message : 'Unknown error'
     });
   }

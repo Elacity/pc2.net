@@ -34,8 +34,10 @@ export default {
         // h += `<h1>${i18n('account')}</h1>`;
 
         // profile picture
+        // Use profile_picture_url from whoami response if available, otherwise fall back to profile.picture or default icon
+        const profilePicUrl = window.user?.profile_picture_url || window.user?.profile?.picture || window.icons['profile.svg'];
         h += `<div style="overflow: hidden; display: flex; margin-bottom: 20px; flex-direction: column; align-items: center;">`;
-            h += `<div class="profile-picture change-profile-picture" style="background-image: url('${html_encode(window.user?.profile?.picture ?? window.icons['profile.svg'])}');">`;
+            h += `<div class="profile-picture change-profile-picture" style="background-image: url('${html_encode(profilePicUrl)}'); cursor: pointer;" title="Click to change profile picture">`;
             h += `</div>`;
         h += `</div>`;
 
@@ -203,48 +205,155 @@ export default {
             });
         });
 
-        $el_window.find('.change-profile-picture').on('click', async function (e) {
+        // Profile picture click handler
+        const $profilePic = $el_window.find('.change-profile-picture');
+        console.log('[UITabAccount] Setting up profile picture click handler, found elements:', $profilePic.length);
+        
+        // Refresh profile picture with signed URL when Account tab is opened
+        // This ensures the profile picture displays correctly even if Settings window opens after page load
+        if (window.user?.profile_picture_url && $profilePic.length > 0) {
+            console.log('[UITabAccount] Refreshing profile picture for Settings window');
+            // Small delay to ensure DOM is ready
+            setTimeout(() => {
+                if (typeof window.refresh_profile_picture === 'function') {
+                    window.refresh_profile_picture();
+                }
+            }, 100);
+        }
+        
+        $profilePic.on('click', async function (e) {
+            console.log('[UITabAccount] Profile picture clicked');
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const parentUuid = $el_window.attr('data-element_uuid');
+            console.log('[UITabAccount] Parent UUID:', parentUuid);
+            console.log('[UITabAccount] Opening file dialog for profile picture');
+            
             // open dialog
             UIWindow({
-                path: '/' + window.user.username + '/Desktop',
+                path: '/' + (window.user?.username || window.user?.wallet_address || '') + '/Desktop',
                 // this is the uuid of the window to which this dialog will return
-                parent_uuid: $el_window.attr('data-element_uuid'),
-                allowed_file_types: ['.png', '.jpg', '.jpeg'],
+                parent_uuid: parentUuid,
+                allowed_file_types: ['.png', '.jpg', '.jpeg', 'image/*'],
                 show_maximize_button: false,
                 show_minimize_button: false,
-                title: 'Open',
+                title: 'Select Profile Picture',
                 is_dir: true,
                 is_openFileDialog: true,
                 selectable_body: false,
             });    
-        })
+        });
 
-        $el_window.on('file_opened', async function(e){
+        // File opened event listener - must be on the window element (not jQuery wrapper)
+        console.log('[UITabAccount] Setting up file_opened event listener on window element');
+        const windowElement = $el_window.get(0);
+        if (windowElement) {
+            windowElement.addEventListener('file_opened', async function(e) {
+                console.log('[UITabAccount] file_opened event received:', e);
+                console.log('[UITabAccount] Event detail:', e.detail);
             let selected_file = Array.isArray(e.detail) ? e.detail[0] : e.detail;
-            // set profile picture
-            const profile_pic = await puter.fs.read(selected_file.path)
-            // blob to base64
-            const reader = new FileReader();
-            reader.readAsDataURL(profile_pic);
-            reader.onloadend = function() {
-                // resizes the image to 150x150
-                const img = new Image();
-                img.src = reader.result;
-                img.onload = function() {
-                    const canvas = document.createElement('canvas');
-                    const ctx = canvas.getContext('2d');
-                    canvas.width = 150;
-                    canvas.height = 150;
-                    ctx.drawImage(img, 0, 0, 150, 150);
-                    const base64data = canvas.toDataURL('image/png');
-                    // update profile picture
-                    $el_window.find('.profile-picture').css('background-image', 'url(' + html_encode(base64data) + ')');
-                    $('.profile-image').css('background-image', 'url(' + html_encode(base64data) + ')');
-                    $('.profile-image').addClass('profile-image-has-picture');
-                    // update profile picture
-                    update_profile(window.user.username, {picture: base64data})
+            console.log('[UITabAccount] File opened:', selected_file);
+            console.log('[UITabAccount] File properties:', Object.keys(selected_file));
+            
+            // Get signed read_url for immediate display (works for CSS background-image)
+            let signed_url = null;
+            
+            // Check various possible property names for the read URL
+            if (selected_file.read_url) {
+                signed_url = selected_file.read_url;
+                console.log('[UITabAccount] Using read_url:', signed_url);
+            } else if (selected_file.readURL) {
+                signed_url = selected_file.readURL;
+                console.log('[UITabAccount] Using readURL:', signed_url);
+            } else if (selected_file.url) {
+                signed_url = selected_file.url;
+                console.log('[UITabAccount] Using url:', signed_url);
+            } else if (selected_file.path) {
+                // If we only have a path, sign it to get a read_url
+                try {
+                    console.log('[UITabAccount] Signing file path:', selected_file.path);
+                    // Expand ~ to full path if needed
+                    let filePath = selected_file.path;
+                    if (filePath.startsWith('~')) {
+                        filePath = filePath.replace('~', `/${window.user?.username || window.user?.wallet_address || ''}`);
+                    }
+                    
+                    const signed = await puter.fs.sign(undefined, { path: filePath, action: 'read' });
+                    console.log('[UITabAccount] Sign response:', signed);
+                    
+                    // Handle different response structures
+                    let items = null;
+                    if (signed && signed.items) {
+                        items = Array.isArray(signed.items) ? signed.items : [signed.items];
+                    } else if (signed && signed.signatures) {
+                        items = Array.isArray(signed.signatures) ? signed.signatures : [signed.signatures];
+                    } else if (signed && Array.isArray(signed)) {
+                        items = signed;
+                    } else if (signed && signed.read_url) {
+                        signed_url = signed.read_url;
+                        console.log('[UITabAccount] Got signed URL from single item:', signed_url);
+                    }
+                    
+                    if (items && items.length > 0) {
+                        const firstItem = items[0];
+                        if (firstItem.read_url) {
+                            signed_url = firstItem.read_url;
+                            console.log('[UITabAccount] Got signed URL from items array:', signed_url);
+                        } else if (firstItem.url) {
+                            signed_url = firstItem.url;
+                            console.log('[UITabAccount] Got URL from items array:', signed_url);
+                        }
+                    }
+                } catch (err) {
+                    console.warn('[UITabAccount] Failed to sign file:', err);
                 }
             }
-        })
+            
+            if (signed_url) {
+                // Store the file path for saving (not the signed URL)
+                const profile_pic_path = selected_file.path || null;
+                console.log('[UITabAccount] Setting profile picture - path:', profile_pic_path, 'signed_url:', signed_url);
+                
+                // Use signed URL for immediate display
+                $el_window.find('.profile-picture').css('background-image', `url("${signed_url}")`);
+                $('.profile-image').css('background-image', `url("${signed_url}")`);
+                $('.profile-image').addClass('profile-image-has-picture');
+                
+                // Save the file path to backend (not base64)
+                $.ajax({
+                    url: `${window.api_origin}/set-profile-picture`,
+                    type: 'POST',
+                    data: JSON.stringify({
+                        url: profile_pic_path,
+                    }),
+                    async: true,
+                    contentType: 'application/json',
+                    headers: {
+                        'Authorization': `Bearer ${window.auth_token}`,
+                    },
+                    success: function(response) {
+                        console.log('[UITabAccount] Profile picture saved successfully:', response);
+                        // Also update window.user for immediate access
+                        if (window.user) {
+                            window.user.profile_picture_url = profile_pic_path;
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('[UITabAccount] Failed to save profile picture:', error, xhr);
+                    },
+                    statusCode: {
+                        401: function () {
+                            window.logout();
+                        },
+                    },
+                });
+            } else {
+                console.warn('[UITabAccount] No signed URL available for file. File object:', selected_file);
+            }
+            });
+        } else {
+            console.warn('[UITabAccount] Window element not found, cannot attach file_opened listener');
+        }
     },
 };

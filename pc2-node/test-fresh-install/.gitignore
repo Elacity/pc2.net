@@ -25,3 +25,6 @@ data/
 *.db
 *.db-shm
 *.db-wal
+backups/*.tar.gz
+.old-backup/
+nohup.out

@@ -12,7 +12,9 @@
     "dev": "tsx watch --exclude 'data/**' --exclude 'frontend/**' src/index.ts",
     "dev:legacy": "tsc --watch & nodemon dist/index.js",
     "clean": "node scripts/clean.js",
-    "test": "npm run build:backend && node scripts/test-system.js"
+    "test": "npm run build:backend && node scripts/test-system.js",
+    "backup": "node scripts/backup.js",
+    "restore": "node scripts/restore.js"
   },
   "keywords": [
     "pc2",
@@ -44,7 +46,8 @@
     "multiformats": "^13.4.2",
     "pdfjs-dist": "^4.0.0",
     "sharp": "^0.33.0",
-    "socket.io": "^4.7.2"
+    "socket.io": "^4.7.2",
+    "tar": "^7.5.2"
   },
   "optionalDependencies": {
     "canvas": "^2.11.2"

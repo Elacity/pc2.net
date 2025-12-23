@@ -78,6 +78,23 @@ async function main() {
     console.log('\n📋 Copying files to frontend directory...');
     cpSync(FRONTEND_DIST, TARGET_DIR, { recursive: true });
 
+    // Copy SDK file to frontend/puter.js/v2
+    const SDK_SOURCE = join(PROJECT_ROOT, 'src/puter-js/dist/puter.js');
+    const SDK_TARGET_DIR = join(TARGET_DIR, 'puter.js');
+    const SDK_TARGET = join(SDK_TARGET_DIR, 'v2');
+    
+    if (existsSync(SDK_SOURCE)) {
+      console.log('\n📦 Copying SDK file...');
+      if (!existsSync(SDK_TARGET_DIR)) {
+        mkdirSync(SDK_TARGET_DIR, { recursive: true });
+      }
+      cpSync(SDK_SOURCE, SDK_TARGET);
+      console.log(`   ✅ SDK copied: ${SDK_TARGET}`);
+    } else {
+      console.warn(`   ⚠️  SDK file not found: ${SDK_SOURCE}`);
+      console.warn(`   ⚠️  Terminal app will proxy SDK from api.puter.com`);
+    }
+
     // Restore .gitkeep if it existed
     if (hasGitkeep) {
       writeFileSync(gitkeepPath, '');

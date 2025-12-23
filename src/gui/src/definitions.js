@@ -112,7 +112,7 @@ export class InitProcess extends Process {
     }
 
     _construct () {
-        this.name = 'Puter';
+        this.name = 'ElastOS';
 
         this.type_ = 'init'; // thanks minify
 

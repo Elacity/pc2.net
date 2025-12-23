@@ -372,11 +372,33 @@ export function broadcastItemUpdated(
     size: number;
     modified: string; // ISO timestamp
     original_client_socket_id?: string | null;
+    thumbnail?: string; // Thumbnail URL for images
+    type?: string; // MIME type
+    is_dir?: boolean; // Whether it's a directory
   }
 ): void {
-  const room = `user:${walletAddress}`;
+  // Normalize wallet address to lowercase for room matching
+  const normalizedWallet = walletAddress.toLowerCase();
+  const room = `user:${normalizedWallet}`;
+  
+  // Queue event for polling-based delivery (matching mock server pattern)
+  if (globalPendingEvents) {
+    globalPendingEvents.push({
+      event: 'item.updated',
+      data: item,
+      wallet: normalizedWallet,
+      timestamp: Date.now()
+    });
+    // Keep only last 100 events
+    if (globalPendingEvents.length > 100) {
+      globalPendingEvents.shift();
+    }
+    console.log(`🔔 Queued item.updated event for wallet: ${normalizedWallet}, queue size: ${globalPendingEvents.length}`);
+  }
+  
+  // Always emit to room (Socket.io will queue for polling if no WebSocket connection)
   io.to(room).emit('item.updated', item);
-  console.log(`📡 Broadcasted item.updated to ${room}: ${item.path}`);
+  console.log(`📡 Broadcasted item.updated to ${room}: ${item.path}${item.thumbnail ? ' (with thumbnail)' : ''}`);
 }
 
 /**

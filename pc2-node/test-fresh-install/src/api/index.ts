@@ -8,12 +8,13 @@ import { logger } from '../utils/logger.js';
 import { handleWhoami } from './whoami.js';
 import { handleParticleAuth, handleGrantUserApp, handleGetUserAppToken } from './auth.js';
 import { handleStat, handleReaddir, handleRead, handleWrite, handleMkdir, handleDelete, handleMove, handleRename } from './filesystem.js';
-import { handleSign, handleVersion, handleOSUser, handleKV, handleRAO, handleContactUs, handleDriversCall, handleGetWallets, handleOpenItem, handleSuggestApps, handleItemMetadata, handleWriteFile } from './other.js';
+import { handleSign, handleVersion, handleOSUser, handleKV, handleRAO, handleContactUs, handleDriversCall, handleGetWallets, handleOpenItem, handleSuggestApps, handleItemMetadata, handleWriteFile, handleSetDesktopBg, handleSetProfilePicture } from './other.js';
 import { handleAPIInfo, handleGetLaunchApps, handleDF, handleBatch, handleCacheTimestamp, handleStats } from './info.js';
 import { handleFile } from './file.js';
 import storageRouter from './storage.js';
 import { handleSearch } from './search.js';
 import { handleGetVersions, handleGetVersion, handleRestoreVersion } from './versions.js';
+import { createBackup, listBackups, downloadBackup, deleteBackup, restoreBackup } from './backup.js';
 
 // Extend Express Request to include database, filesystem, config, and WebSocket
 declare global {
@@ -154,6 +155,14 @@ export function setupAPI(app: Express): void {
     }
   });
   
+  // Restore endpoint with larger file size limit (backups can be GB)
+  const restoreUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+      fileSize: 10 * 1024 * 1024 * 1024 // 10GB max file size for backups
+    }
+  });
+  
   app.post('/batch', authenticate, upload.any(), handleBatch);
 
   // File signing (require auth)
@@ -188,6 +197,17 @@ export function setupAPI(app: Express): void {
   // Write file using signed URL (require auth)
   app.post('/writeFile', authenticate, handleWriteFile);
   app.put('/writeFile', authenticate, handleWriteFile);
+
+  // Desktop background (require auth)
+  app.post('/set-desktop-bg', authenticate, handleSetDesktopBg);
+  app.post('/set-profile-picture', authenticate, handleSetProfilePicture);
+
+  // Backup management endpoints (require auth)
+  app.post('/api/backups/create', authenticate, createBackup);
+  app.get('/api/backups', authenticate, listBackups);
+  app.get('/api/backups/download/:filename', authenticate, downloadBackup);
+  app.delete('/api/backups/:filename', authenticate, deleteBackup);
+  app.post('/api/backups/restore', authenticate, restoreUpload.single('file'), restoreBackup);
 
   // Error handling middleware (must be last)
   app.use(errorHandler);

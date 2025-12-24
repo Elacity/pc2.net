@@ -417,6 +417,95 @@ export default function UIAIChat() {
     
     // Set dark mode as default (no theme toggle in AI chat)
     document.documentElement.setAttribute('data-theme', 'dark');
+    
+    // Load user's AI config and update model selector
+    loadAIConfigForChat();
+    
+    // Listen for AI config updates from Settings
+    $(document).on('ai-config-updated', function() {
+        console.log('[UIAIChat] AI config updated, reloading...');
+        loadAIConfigForChat();
+    });
+}
+
+// Load user's AI configuration and update model selector
+async function loadAIConfigForChat() {
+    try {
+        const apiOrigin = window.api_origin || window.location.origin;
+        const url = new URL('/api/ai/config', apiOrigin);
+        const authToken = window.auth_token || localStorage.getItem('puter_auth_token') || localStorage.getItem('auth_token') || '';
+        
+        const headers = {
+            'Content-Type': 'application/json'
+        };
+        if (authToken) {
+            headers['Authorization'] = `Bearer ${authToken}`;
+        }
+        
+        const response = await fetch(url.toString(), {
+            method: 'GET',
+            headers
+        });
+        
+        if (!response.ok) {
+            console.warn('[UIAIChat] Failed to load AI config, using defaults');
+            return;
+        }
+        
+        const data = await response.json();
+        if (!data.success || !data.result) {
+            console.warn('[UIAIChat] No AI config found, using defaults');
+            return;
+        }
+        
+        const config = data.result;
+        const provider = config.default_provider || 'ollama';
+        let model = config.default_model || (provider === 'ollama' ? 'deepseek-r1:1.5b' : null);
+        
+        // If model already has a provider prefix (e.g., "ollama:llava:7b"), extract just the model name
+        if (model && model.includes(':')) {
+            const parts = model.split(':');
+            // If it starts with a provider name, remove it
+            if (parts[0] === 'ollama' || parts[0] === 'claude' || parts[0] === 'openai' || parts[0] === 'gemini') {
+                model = parts.slice(1).join(':'); // Keep rest as model (handles models with colons like "deepseek-r1:1.5b")
+            }
+        }
+        
+        // Update model selector dropdown
+        const $modelSelect = $('.ai-model-select');
+        if ($modelSelect.length && model) {
+            // Format: provider:model (e.g., "ollama:deepseek-r1:1.5b" or "claude:claude-3-5-sonnet-20240620")
+            // IMPORTANT: Only use the configured provider, don't mix providers
+            
+            // Fix deprecated Claude model names
+            let cleanModel = model;
+            if (provider === 'claude') {
+                const deprecatedModels = ['claude-3-5-sonnet-20241022', 'claude-3-5-sonnet-20240620'];
+                if (deprecatedModels.includes(model)) {
+                    cleanModel = 'claude-sonnet-4-5-20250929';
+                    console.log('[UIAIChat] Fixed deprecated Claude model name:', model, '->', cleanModel);
+                }
+            }
+            
+            const modelValue = `${provider}:${cleanModel}`;
+            
+            // Clear existing options and add the configured one
+            $modelSelect.empty();
+            $modelSelect.append(`<option value="ollama:deepseek-r1:1.5b">Fast (Ollama)</option>`);
+            
+            // Add the configured model option
+            const providerName = provider === 'ollama' ? 'Ollama' : 
+                                provider === 'claude' ? 'Claude' :
+                                provider === 'openai' ? 'OpenAI' :
+                                provider === 'gemini' ? 'Gemini' : provider;
+            $modelSelect.append(`<option value="${modelValue}">${providerName}: ${cleanModel}</option>`);
+            $modelSelect.val(modelValue);
+            
+            console.log('[UIAIChat] Updated model selector to:', modelValue, '(provider:', provider, ', model:', cleanModel, ')');
+        }
+    } catch (error) {
+        console.error('[UIAIChat] Error loading AI config:', error);
+    }
 }
 
 
@@ -541,6 +630,8 @@ $(document).on('click', '.ai-toolbar-btn, .btn-show-ai', function () {
         // Open panel
         $panel.addClass('ai-panel-open');
         $btn.addClass('active');
+        // Reload AI config when panel opens to sync with settings
+        loadAIConfigForChat();
         $('.ai-chat-input').focus();
         scrollChatToBottom();
     }
@@ -693,30 +784,39 @@ $(document).on('click', '.ai-attach-btn', async function () {
         
         // Also set up a MutationObserver to watch for when the window closes
         // This will help us catch files even if the event doesn't fire
-        const observer = new MutationObserver((mutations) => {
-            mutations.forEach((mutation) => {
-                if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
-                    const display = $(windowElement).css('display');
-                    if (display === 'none') {
-                        console.log('[UIAIChat] Window closed, checking for selected files...');
-                        // Window closed - check if files were selected
-                        const selectedEls = $(windowElement).find('.item-selected[data-is_dir="0"]');
-                        if (selectedEls.length > 0) {
-                            console.log('[UIAIChat] Found', selectedEls.length, 'selected files after window closed');
-                            // Process files
-                            processSelectedFiles(selectedEls, windowElement);
+        // Only set up observer if windowElement is a valid DOM node
+        if (windowElement && windowElement.nodeType === Node.ELEMENT_NODE) {
+            const observer = new MutationObserver((mutations) => {
+                mutations.forEach((mutation) => {
+                    if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+                        const display = $(windowElement).css('display');
+                        if (display === 'none') {
+                            console.log('[UIAIChat] Window closed, checking for selected files...');
+                            // Window closed - check if files were selected
+                            const selectedEls = $(windowElement).find('.item-selected[data-is_dir="0"]');
+                            if (selectedEls.length > 0) {
+                                console.log('[UIAIChat] Found', selectedEls.length, 'selected files after window closed');
+                                // Process files
+                                processSelectedFiles(selectedEls, windowElement);
+                            }
+                            observer.disconnect();
                         }
-                        observer.disconnect();
                     }
-                }
+                });
             });
-        });
-        
-        observer.observe(windowElement, {
-            attributes: true,
-            attributeFilter: ['style', 'class']
-        });
-        console.log('[UIAIChat] Set up MutationObserver to watch window');
+            
+            try {
+                observer.observe(windowElement, {
+                    attributes: true,
+                    attributeFilter: ['style', 'class']
+                });
+                console.log('[UIAIChat] Set up MutationObserver to watch window');
+            } catch (error) {
+                console.warn('[UIAIChat] Failed to set up MutationObserver:', error);
+            }
+        } else {
+            console.warn('[UIAIChat] windowElement is not a valid DOM node, skipping MutationObserver');
+        }
         
         // Helper function to process selected files
         async function processSelectedFiles(selectedEls, windowEl) {
@@ -1430,11 +1530,12 @@ async function sendAIMessage() {
             throw error;
         }
         
-        // Handle streaming response (Server-Sent Events)
+        // Handle streaming response - Puter's format: application/x-ndjson
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
         let fullContent = '';
+        let lastChunkText = ''; // Track last chunk to detect exact duplicates
         
         const $aiMessage = $(`#${aiMessageId} .ai-chat-message-ai`);
         
@@ -1447,26 +1548,44 @@ async function sendAIMessage() {
             buffer = lines.pop() || '';
             
             for (const line of lines) {
-                if (line.startsWith('data: ')) {
-                    try {
-                        const data = JSON.parse(line.substring(6));
-                        if (data.success && data.result) {
-                            const chunk = data.result;
-                            if (chunk.message && chunk.message.content) {
-                                const content = typeof chunk.message.content === 'string' 
-                                    ? chunk.message.content 
-                                    : (chunk.message.content.text || '');
-                                
-                                if (content) {
-                                    fullContent += content;
-                                    $aiMessage.removeClass('ai-streaming');
-                                    $aiMessage.html(renderMarkdown(fullContent));
-                                    scrollChatToBottom();
-                                }
-                            }
+                if (!line.trim()) continue;
+                
+                try {
+                    const chunk = JSON.parse(line);
+                    
+                    // Puter's format: {"type": "text", "text": "chunk content"}
+                    if (chunk.type === 'text' && chunk.text) {
+                        const newText = chunk.text;
+                        // Skip if this is the exact same chunk as the last one (duplicate detection)
+                        if (newText === lastChunkText && newText.length > 0) {
+                            console.warn('[UIAIChat] Skipping duplicate chunk:', newText.substring(0, 50));
+                            continue;
                         }
-                    } catch (e) {
-                        console.error('[UIAIChat] Failed to parse SSE chunk:', e);
+                        lastChunkText = newText;
+                        fullContent += newText;
+                        $aiMessage.removeClass('ai-streaming');
+                        $aiMessage.html(renderMarkdown(fullContent));
+                        scrollChatToBottom();
+                    }
+                    // Handle tool_use chunks if needed (for display)
+                    else if (chunk.type === 'tool_use') {
+                        // Tool calls are handled by backend
+                    }
+                    // Handle errors
+                    else if (chunk.type === 'error') {
+                        console.error('[UIAIChat] Stream error:', chunk.message || chunk.error || chunk);
+                        const errorMsg = chunk.message || chunk.error || JSON.stringify(chunk);
+                        $aiMessage.html(`<span style="color: #fca5a5;">Error: ${errorMsg}</span>`);
+                        fullContent = errorMsg; // Set content so it doesn't show generic error
+                    }
+                    // Log any other chunk types for debugging
+                    else {
+                        console.log('[UIAIChat] Received chunk with type:', chunk.type, chunk);
+                    }
+                } catch (e) {
+                    // Skip invalid JSON lines (might be partial chunks)
+                    if (line.trim() && !line.startsWith('data: ')) {
+                        console.warn('[UIAIChat] Failed to parse chunk:', line.substring(0, 100), e);
                     }
                 }
             }
@@ -1478,8 +1597,14 @@ async function sendAIMessage() {
             $aiMessage.html(renderMarkdown(fullContent));
             addToHistory('assistant', fullContent);
             updateHistoryMenu();
+        } else if ($aiMessage.text().trim()) {
+            // If we have content in the message but fullContent is empty (edge case)
+            const existingContent = $aiMessage.text();
+            addToHistory('assistant', existingContent);
+            updateHistoryMenu();
         } else {
-            $aiMessage.html('I received your message, but I\'m having trouble responding right now.');
+            console.error('[UIAIChat] Stream completed but no content received. Full buffer:', buffer);
+            $aiMessage.html('I received your message, but I\'m having trouble responding right now. Please check the console for details.');
         }
         
         scrollChatToBottom();
@@ -1715,7 +1840,7 @@ $(document).on('click', '.ai-history-item', function (e) {
 $(document).on('click', '.ai-history-item-delete', function (e) {
     e.stopPropagation();
     const convId = $(this).attr('data-conv-id');
-    if (convId && confirm('Are you sure you want to delete this conversation?')) {
+    if (convId) {
         deleteConversation(convId);
     }
 });

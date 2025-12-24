@@ -410,9 +410,13 @@ export default {
                         throw new Error(saveData.error || 'Failed to save API key');
                     }
                     
-                    // Reload config
+                    // Close modal immediately on success
                     dialog.remove();
-                    await loadAIConfig();
+                    
+                    // Reload config to show updated status (don't block on this)
+                    loadAIConfig().catch(err => {
+                        console.error('[AI Settings] Error reloading config after save:', err);
+                    });
                     
                 } catch (error) {
                     console.error('[AI Settings] Error saving API key:', error);
@@ -457,6 +461,9 @@ export default {
                     }
                     
                     await loadAIConfig();
+                    
+                    // Notify AI chat to reload config
+                    $(document).trigger('ai-config-updated');
                 } catch (error) {
                     console.error('[AI Settings] Error updating provider:', error);
                     alert('Failed to update provider: ' + error.message);

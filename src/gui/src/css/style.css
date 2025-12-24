@@ -102,7 +102,7 @@
     height: 100dvh;
     background-color: var(--ai-bg-color);
     flex-direction: column;
-    z-index: 999999;
+    z-index: 9997; /* Behind wallet sidebar (9998) and windows (10000+) */
     -webkit-font-smoothing: antialiased;
     box-shadow: -2px 0 10px var(--ai-shadow);
     color: var(--ai-text-color);
@@ -2751,7 +2751,7 @@ label {
     background-color: #00000040;
     height: 30px;
     position: relative;
-    z-index: 999999;
+    z-index: 9997; /* Behind wallet sidebar (9998) and windows (10000+) */
     box-sizing: border-box;
     display: flex;
     flex-direction: row;

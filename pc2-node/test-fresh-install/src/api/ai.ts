@@ -63,9 +63,25 @@ router.get('/config', authenticate, async (req: AuthenticatedRequest, res: Respo
     let currentModel = config?.default_model || null;
     const defaultProvider = config?.default_provider || 'ollama';
     
-    // Default model for Ollama
-    if (!currentModel && defaultProvider === 'ollama') {
-      currentModel = 'deepseek-r1:1.5b';
+    // Clean model name - remove provider prefix if present (e.g., "ollama:llava:7b" -> "llava:7b")
+    if (currentModel && currentModel.includes(':')) {
+      const parts = currentModel.split(':');
+      // If first part is a provider name, remove it
+      if (parts[0] === 'ollama' || parts[0] === 'claude' || parts[0] === 'openai' || parts[0] === 'gemini') {
+        currentModel = parts.slice(1).join(':'); // Keep rest as model name
+        logger.info('[AI API] Cleaned model name from config:', config.default_model, '->', currentModel);
+      }
+    }
+    
+    // Default model for each provider
+    if (!currentModel) {
+      const defaultModels: Record<string, string> = {
+        'ollama': 'deepseek-r1:1.5b',
+        'claude': 'claude-sonnet-4-5-20250929',
+        'openai': 'gpt-4o',
+        'gemini': 'gemini-pro'
+      };
+      currentModel = defaultModels[defaultProvider] || null;
     }
     
     if (aiService) {
@@ -231,12 +247,38 @@ router.post('/config', authenticate, async (req: AuthenticatedRequest, res: Resp
 
     // Get existing config
     const existing = db.getAIConfig(walletAddress);
+    const newProvider = provider || existing?.default_provider || 'ollama';
+    
+    // If provider is changing, set appropriate default model for that provider
+    let cleanModel = model || existing?.default_model || null;
+    
+    // If provider changed and no explicit model provided, set default for new provider
+    if (provider && provider !== existing?.default_provider && !model) {
+      const defaultModels: Record<string, string> = {
+        'ollama': 'deepseek-r1:1.5b',
+        'claude': 'claude-sonnet-4-5-20250929', // Current Claude Sonnet 4.5 model
+        'openai': 'gpt-4o',
+        'gemini': 'gemini-pro'
+      };
+      cleanModel = defaultModels[provider] || null;
+      logger.info(`[AI API] Provider changed to ${provider}, setting default model: ${cleanModel}`);
+    }
+    
+    // Clean model name - remove provider prefix if present (e.g., "ollama:llava:7b" -> "llava:7b")
+    if (cleanModel && cleanModel.includes(':')) {
+      const parts = cleanModel.split(':');
+      // If first part is a provider name, remove it
+      if (parts[0] === 'ollama' || parts[0] === 'claude' || parts[0] === 'openai' || parts[0] === 'gemini') {
+        cleanModel = parts.slice(1).join(':'); // Keep rest as model name
+        logger.info('[AI API] Cleaned model name:', model, '->', cleanModel);
+      }
+    }
     
     // Update config
     db.setAIConfig(
       walletAddress,
-      provider || existing?.default_provider || 'ollama',
-      model || existing?.default_model || null,
+      newProvider,
+      cleanModel,
       existing?.api_keys ? JSON.parse(existing.api_keys) : null,
       ollama_base_url || existing?.ollama_base_url || 'http://localhost:11434'
     );
@@ -344,6 +386,45 @@ router.post('/api-keys', authenticate, async (req: AuthenticatedRequest, res: Re
         success: false, 
         error: `Invalid provider. Must be one of: ${validProviders.join(', ')}` 
       });
+    }
+
+    // Ensure ai_config table exists (fallback if migration didn't run)
+    try {
+      const dbInstance = db.getDB();
+      // Try a simple query to check if table exists
+      dbInstance.prepare('SELECT 1 FROM ai_config LIMIT 1').get();
+    } catch (error: any) {
+      // Table doesn't exist, create it
+      if (error.message && error.message.includes('no such table')) {
+        logger.warn('[AI API] ai_config table not found, creating it now...');
+        try {
+          const dbInstance = db.getDB();
+          dbInstance.exec(`
+            CREATE TABLE IF NOT EXISTS ai_config (
+              wallet_address TEXT PRIMARY KEY,
+              default_provider TEXT NOT NULL DEFAULT 'ollama',
+              default_model TEXT,
+              api_keys TEXT,
+              ollama_base_url TEXT DEFAULT 'http://localhost:11434',
+              updated_at INTEGER NOT NULL,
+              FOREIGN KEY (wallet_address) REFERENCES users(wallet_address) ON DELETE CASCADE
+            )
+          `);
+          dbInstance.exec(`
+            CREATE INDEX IF NOT EXISTS idx_ai_config_wallet 
+            ON ai_config(wallet_address)
+          `);
+          logger.info('[AI API] ✅ ai_config table created successfully');
+        } catch (createError: any) {
+          logger.error('[AI API] ❌ Failed to create ai_config table:', createError);
+          return res.status(500).json({ 
+            success: false, 
+            error: 'Database migration required. Please restart the server to run migrations.' 
+          });
+        }
+      } else {
+        throw error;
+      }
     }
 
     // Update API keys

@@ -29,7 +29,7 @@ function findSchemaFile(): string {
   }
   throw new Error(`Schema file not found. Tried: ${SCHEMA_FILE} and ${sourceSchema}`);
 }
-const CURRENT_VERSION = 5;
+const CURRENT_VERSION = 7;
 
 interface Migration {
   version: number;
@@ -259,6 +259,60 @@ export function runMigrations(db: Database.Database): void {
         recordMigration(db, 5);
       } catch (error: any) {
         console.error(`❌ Migration 5 error: ${error.message}`);
+        throw error;
+      }
+    }
+    
+    // Migration 6: Clean model names in ai_config (remove provider prefixes)
+    if (currentVersion < 6) {
+      try {
+        console.log('📦 Running Migration 6: Clean AI model names...');
+        const rows = db.prepare('SELECT wallet_address, default_model FROM ai_config WHERE default_model IS NOT NULL').all() as Array<{wallet_address: string, default_model: string}>;
+        
+        let cleaned = 0;
+        for (const row of rows) {
+          let model = row.default_model;
+          if (model && model.includes(':')) {
+            const parts = model.split(':');
+            // If first part is a provider name, remove it
+            if (parts[0] === 'ollama' || parts[0] === 'claude' || parts[0] === 'openai' || parts[0] === 'gemini') {
+              const cleanModel = parts.slice(1).join(':');
+              db.prepare('UPDATE ai_config SET default_model = ? WHERE wallet_address = ?').run(cleanModel, row.wallet_address);
+              console.log(`  Cleaned model for ${row.wallet_address.substring(0, 10)}...: "${model}" -> "${cleanModel}"`);
+              cleaned++;
+            }
+          }
+        }
+        
+        console.log(`✅ Migration 6 complete: Cleaned ${cleaned} model name(s)`);
+        recordMigration(db, 6);
+      } catch (error: any) {
+        console.error(`❌ Migration 6 error: ${error.message}`);
+        throw error;
+      }
+    }
+
+    // Migration 7: Update deprecated Claude model names to current model
+    if (currentVersion < 7) {
+      try {
+        console.log('📦 Running Migration 7: Update deprecated Claude models...');
+        const deprecatedModels = ['claude-3-5-sonnet-20241022', 'claude-3-5-sonnet-20240620'];
+        const newModel = 'claude-sonnet-4-5-20250929';
+        
+        let updated = 0;
+        for (const oldModel of deprecatedModels) {
+          const rows = db.prepare('SELECT wallet_address, default_model FROM ai_config WHERE default_model = ?').all(oldModel) as Array<{wallet_address: string, default_model: string}>;
+          for (const row of rows) {
+            db.prepare('UPDATE ai_config SET default_model = ? WHERE wallet_address = ?').run(newModel, row.wallet_address);
+            console.log(`  Updated Claude model for ${row.wallet_address.substring(0, 10)}...: "${row.default_model}" -> "${newModel}"`);
+            updated++;
+          }
+        }
+        
+        console.log(`✅ Migration 7 complete: Updated ${updated} Claude model name(s)`);
+        recordMigration(db, 7);
+      } catch (error: any) {
+        console.error(`❌ Migration 7 error: ${error.message}`);
         throw error;
       }
     }

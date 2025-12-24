@@ -655,11 +655,37 @@ export function handleDriversCall(req: AuthenticatedRequest, res: Response): voi
           if (method === 'complete') {
             const args = body.args || {};
             const messages = args.messages || [];
-            const model = args.model;
+            let model = args.model;
             const stream = args.stream || false;
             const tools = args.tools;
             const max_tokens = args.max_tokens;
             const temperature = args.temperature;
+            
+            // Get user's AI config to use default model/provider if not specified
+            const db = (req.app.locals.db as any);
+            const walletAddress = req.user?.wallet_address;
+            if (db && walletAddress && !model) {
+              try {
+                const userConfig = db.getAIConfig(walletAddress);
+                if (userConfig) {
+                  const provider = userConfig.default_provider || 'ollama';
+                  const defaultModel = userConfig.default_model || (provider === 'ollama' ? 'deepseek-r1:1.5b' : null);
+                  if (defaultModel) {
+                    // Format: provider:model (e.g., "ollama:deepseek-r1:1.5b" or "claude:claude-3-5-sonnet-20240620")
+                    model = `${provider}:${defaultModel}`;
+                    logger.info('[Drivers] Using user default model from config:', model);
+                  }
+                }
+              } catch (e) {
+                // Config not found or error - use default
+                logger.debug('[Drivers] Could not load user AI config, using defaults');
+              }
+            }
+            
+            // If model still not set, use default
+            if (!model) {
+              model = 'ollama:deepseek-r1:1.5b';
+            }
 
             if (!messages || !Array.isArray(messages) || messages.length === 0) {
               res.status(400).json({ 
@@ -688,10 +714,23 @@ export function handleDriversCall(req: AuthenticatedRequest, res: Response): voi
             }
 
             if (stream) {
-              // Streaming response
-              res.setHeader('Content-Type', 'text/event-stream');
+              // Streaming response - Use Puter's exact format: application/x-ndjson
+              res.status(200); // Set status before headers
+              res.setHeader('Content-Type', 'application/x-ndjson');
               res.setHeader('Cache-Control', 'no-cache');
               res.setHeader('Connection', 'keep-alive');
+              res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
+              
+              // Disable Express response buffering
+              res.setTimeout(0); // No timeout
+              
+              // Send headers immediately (don't wait for first write)
+              res.writeHead(200, {
+                'Content-Type': 'application/x-ndjson',
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
+                'X-Accel-Buffering': 'no',
+              });
 
               try {
                 // Get filesystem and wallet address for tool execution
@@ -717,6 +756,11 @@ export function handleDriversCall(req: AuthenticatedRequest, res: Response): voi
                   }
                 }
 
+                // Register user providers before streaming (loads API keys from database)
+                if (walletAddress) {
+                  await (aiService as any).registerUserProviders(walletAddress);
+                }
+
                 for await (const chunk of aiService.streamComplete({
                   messages,
                   model,
@@ -728,10 +772,42 @@ export function handleDriversCall(req: AuthenticatedRequest, res: Response): voi
                   filesystem,
                   io,
                 })) {
-                  res.write(`data: ${JSON.stringify({ 
-                    success: true, 
-                    result: chunk 
-                  })}\n\n`);
+                  // Puter's format: {"type": "text", "text": "chunk content"}\n
+                  const content = chunk.message?.content || '';
+                  if (content) {
+                    const textChunk = JSON.stringify({
+                      type: 'text',
+                      text: content,
+                    });
+                    res.write(`${textChunk}\n`);
+                    // Force flush after each write to ensure immediate delivery
+                    if (typeof (res as any).flush === 'function') {
+                      (res as any).flush();
+                    }
+                  }
+                  
+                  // Handle tool calls if present
+                  if (chunk.message?.tool_calls && Array.isArray(chunk.message.tool_calls)) {
+                    for (const toolCall of chunk.message.tool_calls) {
+                      try {
+                        const args = typeof toolCall.function?.arguments === 'string'
+                          ? JSON.parse(toolCall.function.arguments)
+                          : toolCall.function?.arguments || {};
+                        
+                        const toolChunk = JSON.stringify({
+                          type: 'tool_use',
+                          name: toolCall.function?.name,
+                          input: args,
+                        });
+                        res.write(`${toolChunk}\n`);
+                        if (typeof (res as any).flush === 'function') {
+                          (res as any).flush();
+                        }
+                      } catch (e) {
+                        logger.error('[Drivers] Failed to format tool call chunk:', e);
+                      }
+                    }
+                  }
                 }
                 res.end();
               } catch (error: any) {
@@ -758,14 +834,15 @@ export function handleDriversCall(req: AuthenticatedRequest, res: Response): voi
                     details: errorStack?.substring(0, 1000)
                   });
                 } else {
-                  // Headers already sent - send error in SSE format
+                  // Headers already sent - send error in ndjson format
                   try {
-                    res.write(`data: ${JSON.stringify({ 
-                      success: false, 
-                      error: errorMessage,
+                    const errorChunk = JSON.stringify({
+                      type: 'error',
+                      message: errorMessage,
                       errorName: error?.name,
                       details: errorStack?.substring(0, 1000)
-                    })}\n\n`);
+                    });
+                    res.write(`${errorChunk}\n`);
                     res.end();
                   } catch (writeError) {
                     logger.error('[Drivers] Failed to write stream error:', writeError);

@@ -152,18 +152,27 @@ async function build (options) {
         },
     };
     console.log('webpack opts', webpack_opts);
-    await webpack(webpack_opts, (err, stats) => {
-        if ( err ) {
-            throw err;
-            // console.error(err);
-            // return;
-        }
-        //if(options?.verbose)
-        console.log(stats.toString());
-        // write to ./dist/bundle.min.js
-        // fs.writeFileSync(path.join(__dirname, 'dist', 'bundle.min.js'), fs.readFileSync(path.join(__dirname, 'dist', 'main.js')));
-        // remove ./dist/main.js
-        // fs.unlinkSync(path.join(__dirname, 'dist', 'main.js'));
+    await new Promise((resolve, reject) => {
+        webpack(webpack_opts, (err, stats) => {
+            if ( err ) {
+                reject(err);
+                return;
+            }
+            //if(options?.verbose)
+            console.log(stats.toString());
+            
+            // Webpack outputs to main.js, rename it to bundle.min.js
+            const mainJsPath = path.join(__dirname, 'dist', 'main.js');
+            const bundleJsPath = path.join(__dirname, 'dist', 'bundle.min.js');
+            if (fs.existsSync(mainJsPath)) {
+                fs.copyFileSync(mainJsPath, bundleJsPath);
+                fs.unlinkSync(mainJsPath);
+                console.log('✅ Created bundle.min.js from webpack output');
+            } else {
+                console.warn('⚠️  webpack did not output main.js, bundle.min.js may be missing');
+            }
+            resolve();
+        });
     });
 
     // Copy index.js to dist/gui.js

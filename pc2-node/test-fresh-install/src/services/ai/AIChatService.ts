@@ -6,11 +6,15 @@
 
 import { logger } from '../../utils/logger.js';
 import { OllamaProvider, ChatModel, ChatMessage, CompleteArguments, ChatCompletion } from './providers/OllamaProvider.js';
+import { ClaudeProvider } from './providers/ClaudeProvider.js';
+import { OpenAIProvider } from './providers/OpenAIProvider.js';
+import { GeminiProvider } from './providers/GeminiProvider.js';
 import { normalizeMessages, extractText } from './utils/Messages.js';
 import { normalizeToolsObject } from './utils/FunctionCalling.js';
 import { filesystemTools } from './tools/FilesystemTools.js';
 import { ToolExecutor } from './tools/ToolExecutor.js';
 import { FilesystemManager } from '../../storage/filesystem.js';
+import { DatabaseManager } from '../../storage/database.js';
 
 export interface AIConfig {
   enabled?: boolean;
@@ -45,15 +49,19 @@ export interface CompleteRequest {
   io?: any; // Socket.IO server instance for WebSocket events
 }
 
+type AIProvider = OllamaProvider | ClaudeProvider | OpenAIProvider | GeminiProvider;
+
 export class AIChatService {
-  private providers: Map<string, OllamaProvider> = new Map();
+  private providers: Map<string, AIProvider> = new Map();
   private config: AIConfig;
   private defaultProvider: string = 'ollama';
   private initialized: boolean = false;
+  private db?: DatabaseManager; // For loading user API keys
 
-  constructor(config: AIConfig = {}) {
+  constructor(config: AIConfig = {}, db?: DatabaseManager) {
     this.config = config;
     this.defaultProvider = config.defaultProvider || 'ollama';
+    this.db = db;
   }
 
   /**
@@ -72,10 +80,142 @@ export class AIChatService {
     }
 
     // Register cloud providers if API keys are provided
-    // (For now, we only support Ollama. Cloud providers can be added later)
+    // These will be registered per-user when they have API keys configured
+    // For now, we register them globally if config has API keys (for backward compatibility)
+    if (this.config.providers?.claude?.apiKey) {
+      await this.registerClaudeProvider(this.config.providers.claude.apiKey);
+    }
+    if (this.config.providers?.openai?.apiKey) {
+      await this.registerOpenAIProvider(this.config.providers.openai.apiKey);
+    }
+    // Gemini not in config yet, but will be registered per-user
 
     this.initialized = true;
-    logger.info(`[AIChatService] Initialized with ${this.providers.size} provider(s)`);
+    logger.info(`[AIChatService] Initialized with ${this.providers.size} provider(s): ${Array.from(this.providers.keys()).join(', ')}`);
+  }
+
+  /**
+   * Register providers for a specific user (loads API keys from database)
+   * This is called per-request to ensure user-specific API keys are used
+   */
+  async registerUserProviders(walletAddress: string): Promise<void> {
+    if (!this.db) {
+      logger.warn('[AIChatService] registerUserProviders: No database available');
+      return; // No database, can't load user config
+    }
+
+    try {
+      const userConfig = this.db.getAIConfig(walletAddress);
+      logger.info(`[AIChatService] registerUserProviders: Loaded config for ${walletAddress.substring(0, 10)}...`, {
+        hasConfig: !!userConfig,
+        hasApiKeys: !!userConfig?.api_keys
+      });
+      
+      if (!userConfig?.api_keys) {
+        logger.info('[AIChatService] registerUserProviders: No API keys configured for user');
+        return; // No API keys configured
+      }
+
+      const apiKeys = JSON.parse(userConfig.api_keys);
+      logger.info('[AIChatService] registerUserProviders: Parsed API keys', {
+        hasClaude: !!apiKeys.claude,
+        hasOpenAI: !!apiKeys.openai,
+        hasGemini: !!apiKeys.gemini,
+        currentProviders: Array.from(this.providers.keys())
+      });
+      
+      // Register Claude if API key exists (always re-register to ensure latest API key is used)
+      if (apiKeys.claude) {
+        logger.info('[AIChatService] registerUserProviders: Registering Claude provider...');
+        await this.registerClaudeProvider(apiKeys.claude);
+      }
+      
+      // Register OpenAI if API key exists
+      if (apiKeys.openai) {
+        logger.info('[AIChatService] registerUserProviders: Registering OpenAI provider...');
+        await this.registerOpenAIProvider(apiKeys.openai);
+      }
+      
+      // Register Gemini if API key exists
+      if (apiKeys.gemini) {
+        logger.info('[AIChatService] registerUserProviders: Registering Gemini provider...');
+        await this.registerGeminiProvider(apiKeys.gemini);
+      }
+      
+      logger.info(`[AIChatService] registerUserProviders: Complete. Registered providers: ${Array.from(this.providers.keys()).join(', ')}`);
+    } catch (error: any) {
+      logger.error('[AIChatService] Failed to register user providers:', error);
+      logger.error('[AIChatService] Error details:', {
+        message: error?.message,
+        stack: error?.stack?.substring(0, 500)
+      });
+    }
+  }
+
+  /**
+   * Register Claude provider
+   */
+  private async registerClaudeProvider(apiKey: string): Promise<void> {
+    try {
+      logger.info('[AIChatService] registerClaudeProvider: Creating provider with API key (length:', apiKey?.length || 0, ')');
+      const provider = new ClaudeProvider({ apiKey });
+      logger.info('[AIChatService] registerClaudeProvider: Checking availability...');
+      const isAvailable = await provider.isAvailable();
+      logger.info('[AIChatService] registerClaudeProvider: Availability check result:', isAvailable);
+      if (isAvailable) {
+        this.providers.set('claude', provider);
+        logger.info('[AIChatService] ✅ Claude provider registered successfully');
+      } else {
+        logger.warn('[AIChatService] ⚠️  Claude API not available (invalid API key or network error)');
+        // Still register it - let the API call fail if key is invalid
+        // This allows users to see the error rather than silently failing
+        this.providers.set('claude', provider);
+        logger.info('[AIChatService] ⚠️  Claude provider registered anyway (will fail on API call if key invalid)');
+      }
+    } catch (error: any) {
+      logger.error('[AIChatService] ❌ Failed to register Claude provider:', error);
+      logger.error('[AIChatService] Error details:', {
+        message: error?.message,
+        stack: error?.stack?.substring(0, 500)
+      });
+      // Don't throw - allow other providers to be registered
+    }
+  }
+
+  /**
+   * Register OpenAI provider
+   */
+  private async registerOpenAIProvider(apiKey: string): Promise<void> {
+    try {
+      const provider = new OpenAIProvider({ apiKey });
+      const isAvailable = await provider.isAvailable();
+      if (isAvailable) {
+        this.providers.set('openai', provider);
+        logger.info('[AIChatService] ✅ OpenAI provider registered');
+      } else {
+        logger.warn('[AIChatService] ⚠️  OpenAI API not available (invalid API key or network error)');
+      }
+    } catch (error: any) {
+      logger.warn('[AIChatService] ⚠️  Failed to register OpenAI provider:', error.message);
+    }
+  }
+
+  /**
+   * Register Gemini provider
+   */
+  private async registerGeminiProvider(apiKey: string): Promise<void> {
+    try {
+      const provider = new GeminiProvider({ apiKey });
+      const isAvailable = await provider.isAvailable();
+      if (isAvailable) {
+        this.providers.set('gemini', provider);
+        logger.info('[AIChatService] ✅ Gemini provider registered');
+      } else {
+        logger.warn('[AIChatService] ⚠️  Gemini API not available (invalid API key or network error)');
+      }
+    } catch (error: any) {
+      logger.warn('[AIChatService] ⚠️  Failed to register Gemini provider:', error.message);
+    }
   }
 
   /**
@@ -137,29 +277,37 @@ export class AIChatService {
   /**
    * Get provider for a given model
    */
-  private getProviderForModel(model?: string): OllamaProvider | null {
+  private getProviderForModel(model?: string): AIProvider | null {
     if (!model) {
       // Use default provider
       const provider = this.providers.get(this.defaultProvider);
+      logger.info(`[AIChatService] No model specified, using default provider: ${this.defaultProvider}`);
       return provider || null;
     }
 
     // Check if model specifies provider (e.g., "ollama:deepseek-r1:1.5b")
     if (model.includes(':')) {
       const [providerName] = model.split(':');
+      logger.info(`[AIChatService] Model specifies provider: "${providerName}" (from model: "${model}")`);
+      logger.info(`[AIChatService] Available providers: ${Array.from(this.providers.keys()).join(', ')}`);
+      
       const provider = this.providers.get(providerName);
-      if (provider) return provider;
+      if (provider) {
+        logger.info(`[AIChatService] ✅ Found provider "${providerName}", using it`);
+        return provider;
+      } else {
+        logger.error(`[AIChatService] ❌ Provider "${providerName}" not found in registered providers!`);
+        logger.error(`[AIChatService] ❌ Available providers: ${Array.from(this.providers.keys()).join(', ')}`);
+        logger.error(`[AIChatService] ❌ Model: ${model}`);
+        // Don't fallback to Ollama for cloud provider models - return null to throw error
+        return null;
+      }
     }
 
-    // Try to find provider that has this model
-    for (const provider of this.providers.values()) {
-      // For now, assume Ollama can handle any model
-      // In the future, we can check provider.models() to match
-      if (provider) return provider;
-    }
-
-    // Fallback to default provider
-    return this.providers.get(this.defaultProvider) || null;
+    // If model doesn't specify provider, fallback to default provider (Ollama)
+    const defaultProvider = this.providers.get(this.defaultProvider);
+    logger.info(`[AIChatService] No provider specified in model, using default: ${this.defaultProvider}`);
+    return defaultProvider || null;
   }
 
   /**
@@ -204,8 +352,13 @@ export class AIChatService {
   async complete(args: CompleteRequest): Promise<ChatCompletion> {
     await this.ensureInitialized();
 
+    // Register user-specific providers if wallet address is provided
+    if (args.walletAddress) {
+      await this.registerUserProviders(args.walletAddress);
+    }
+
     if (this.providers.size === 0) {
-      throw new Error('No AI providers available. Please ensure Ollama is installed and running.');
+      throw new Error('No AI providers available. Please ensure Ollama is installed and running, or add API keys for cloud providers.');
     }
 
     // Check if messages contain images
@@ -277,10 +430,21 @@ export class AIChatService {
       throw new Error(`No provider available for model: ${args.model || 'default'}`);
     }
 
+    // Extract model name (remove provider prefix if present, e.g., "ollama:deepseek-r1:1.5b" -> "deepseek-r1:1.5b")
+    let modelName = args.model || '';
+    if (modelName.includes(':')) {
+      // Split by first colon only - model name might contain colons (e.g., "deepseek-r1:1.5b")
+      const parts = modelName.split(':');
+      if (parts.length > 1) {
+        // Remove provider prefix, keep rest as model name
+        modelName = parts.slice(1).join(':');
+      }
+    }
+    
     // Prepare completion arguments
     const completeArgs: CompleteArguments = {
       messages: normalizedMessages as ChatMessage[],
-      model: args.model,
+      model: modelName, // Pass just the model name to provider
       stream: args.stream,
       tools: tools as any,
       max_tokens: args.max_tokens,
@@ -334,7 +498,7 @@ export class AIChatService {
   private async executeWithTools(
     messages: any[],
     completeArgs: CompleteArguments,
-    provider: OllamaProvider,
+    provider: AIProvider,
     tools: any[],
     filesystem: FilesystemManager,
     walletAddress: string,
@@ -363,9 +527,19 @@ For MOST user questions, you should respond directly with helpful text answers. 
 - "What's the weather like?" → Answer naturally (you don't have weather tools, so just explain that)
 - Any general knowledge question → Answer directly with text
 
-**SECONDARY MODE: Use tools ONLY for explicit filesystem operations**
+**SECONDARY MODE: Use tools for filesystem operations and queries**
 
-ONLY when the user explicitly asks you to perform a filesystem operation (create folder, list files, read file, write file, move file, delete file, rename file, etc.), you MUST respond with ONLY a valid JSON object in this exact format:
+Use tools when the user asks about or requests filesystem operations, including:
+- **Creating files/folders** (e.g., "create a folder", "make a file", "put this into a file", "save to desktop")
+- **Writing files** (e.g., "write this to a file", "put this into a txt file", "save this as", "create a file with this content")
+- **Generating content for files** (e.g., "add a text file with a story about X", "create a file that tells about Y", "write a file containing Z"). When asked to create content, GENERATE it yourself - write stories, descriptions, or any requested content.
+- **Listing files** (e.g., "list files", "what files do I have", "show me files in Desktop")
+- **Reading files** (e.g., "read this file", "show me the content of", "what's in this file")
+- **Querying files** (e.g., "What PDFs do I have?", "What files are in Desktop?", "Show me all images")
+- **Searching files** (e.g., "Search for text in a file", "Find files containing X")
+- **Moving/deleting/renaming** files and folders
+
+When you need to use tools, you MUST respond with ONLY a valid JSON object in this exact format:
 {
   "tool_calls": [
     {
@@ -379,21 +553,52 @@ Available filesystem tools (ONLY use these when user explicitly requests filesys
 ${toolDescriptions}
 
 CRITICAL RULES FOR TOOL CALLS:
-1. ONLY use tools when user explicitly requests filesystem operations (create, list, read, write, move, delete, rename files/folders)
-2. For general questions, conversations, or information requests, respond with normal text - DO NOT use tools
+1. Use tools when user requests filesystem operations. Key phrases that indicate tool usage:
+   - "put into file", "save to file", "write to file", "create a file", "make a file", "add a file", "add a text file" → USE write_file
+   - "create folder", "make folder", "new folder" → USE create_folder
+   - "list files", "what files", "show files", "files in" → USE list_files
+   - "read file", "show content", "what's in file" → USE read_file
+   - "delete", "remove file" → USE delete_file
+   - "move", "rename" → USE move_file or rename
+2. For general questions, conversations, or information requests (NOT about files), respond with normal text - DO NOT use tools
 3. The JSON must be valid. All tool calls must be in a SINGLE array. Do NOT create multiple arrays like [item1], [item2]. Use [item1, item2] instead.
 4. Do NOT create duplicate tool calls. Each tool should be called only once.
 5. For paths, use "~" for home directory (NOT "/~"). Examples: "~/Desktop/Projects" (correct), NOT "/~Desktop/Projects" (wrong).
 6. When creating a folder, ALWAYS use the path format "~/Desktop/FolderName" where FolderName is the EXACT folder name from the user's request.
+7. When searching for files by type (e.g., "What PDFs do I have?"), search multiple common directories: Desktop, Documents, Downloads, Pictures, Videos. Use multiple tool calls to search each directory.
+8. CONTEXT AWARENESS: When user says "inside it", "in it", "inside that folder", etc., refer to the MOST RECENTLY CREATED FOLDER from the conversation history. Use the exact folder name and path from the previous tool execution result.
+9. CONTENT GENERATION: When asked to create content (e.g., "tell a story about X", "write about Y", "inside tell a story"), GENERATE the content yourself. Write creative, engaging stories, descriptions, or any requested content. Do NOT use placeholder text like "[story content]" - actually write the story!
 
 DO NOT provide instructions or explanations when making tool calls. Just output the JSON tool call.
 
 Examples:
 - User: "What is the capital of France?" → You: "The capital of France is Paris." (NO TOOLS - just text answer)
 - User: "create a folder called Projects" → You: {"tool_calls": [{"name": "create_folder", "arguments": {"path": "~/Desktop/Projects"}}]} (USE TOOL)
+- User: "put this into a txt file on my desktop" → You: {"tool_calls": [{"name": "write_file", "arguments": {"path": "~/Desktop/file.txt", "content": "[use the content from the previous conversation - the text the user wants to save]"}}]} (USE TOOL - write_file. "this" refers to content from previous messages)
+- User: "save this to a file called notes.txt" → You: {"tool_calls": [{"name": "write_file", "arguments": {"path": "~/Desktop/notes.txt", "content": "[use the actual content from previous messages]"}}]} (USE TOOL - write_file)
+- User: "write the story to desktop/story.txt" → You: {"tool_calls": [{"name": "write_file", "arguments": {"path": "~/Desktop/story.txt", "content": "[use the actual story content from previous messages]"}}]} (USE TOOL - write_file)
+- User: "save that to a file" → You: {"tool_calls": [{"name": "write_file", "arguments": {"path": "~/Desktop/file.txt", "content": "[use the content from the previous assistant message]"}}]} (USE TOOL - "that" refers to previous content)
+- User: "add a text file inside it called wow and inside tell a story about a dinosaur" → You: {"tool_calls": [{"name": "write_file", "arguments": {"path": "~/Desktop/[FOLDER_NAME]/wow.txt", "content": "Once upon a time, in a land far away, there lived a magnificent dinosaur named Rex. Rex was a friendly Tyrannosaurus who loved to explore the ancient forests..."}}]} (USE TOOL - "inside it" refers to the most recently created folder, GENERATE the story content yourself)
+- User: "create a file in that folder with a story about space" → You: {"tool_calls": [{"name": "write_file", "arguments": {"path": "~/Desktop/[FOLDER_NAME]/story.txt", "content": "In the vast expanse of the cosmos, stars twinkled like diamonds scattered across a velvet sky. A brave astronaut named Alex embarked on a journey..."}}]} (USE TOOL - "that folder" refers to previous folder, GENERATE the story)
 - User: "list files in Desktop" → You: {"tool_calls": [{"name": "list_files", "arguments": {"path": "~/Desktop"}}]} (USE TOOL)
+- User: "What PDFs do I have?" → You: {"tool_calls": [{"name": "list_files", "arguments": {"path": "~/Desktop", "file_type": "pdf", "detailed": true}}, {"name": "list_files", "arguments": {"path": "~/Documents", "file_type": "pdf", "detailed": true}}, {"name": "list_files", "arguments": {"path": "~/Downloads", "file_type": "pdf", "detailed": true}}]} (USE TOOL - search Desktop, Documents, and Downloads with file_type: "pdf")
+- User: "What files are in my Desktop?" → You: {"tool_calls": [{"name": "list_files", "arguments": {"path": "~/Desktop"}}]} (USE TOOL)
 
 After I execute a tool, I will provide you with the result. Then you can respond to the user with the final answer.
+
+**IMPORTANT: When responding after tool execution, ALWAYS mention the exact path where files/folders were created. This helps with follow-up requests.**
+Examples:
+- After creating a folder at ~/Desktop/Projects, say: "I've created the folder 'Projects' at ~/Desktop/Projects."
+- After creating a file at ~/Documents/notes.txt, say: "I've created the file 'notes.txt' at ~/Documents/notes.txt."
+- When user says "inside it" or "in that folder" in a follow-up, use the exact path from your previous response.
+
+**CRITICAL RULES FOR USING TOOL RESULTS:**
+1. ALWAYS use the ACTUAL tool results provided - DO NOT make up, invent, or hallucinate data
+2. If a tool returns empty results (no files found), say "No files found" - DO NOT create fake file lists
+3. If a tool returns specific files, list the ACTUAL file names and paths from the results
+4. DO NOT generate fake timestamps, file names, or descriptions
+5. If tool results show "success: false" or an error, report the actual error to the user
+6. Only use information that is explicitly provided in the tool execution results
 
 **CRITICAL: Default to answering with text. Only use tools when the user explicitly requests filesystem operations.**`
     };
@@ -436,7 +641,17 @@ After I execute a tool, I will provide you with the result. Then you can respond
         toolCalls = result.message.tool_calls
           .map((tc: any) => {
             try {
-              const args = JSON.parse(tc.function.arguments || '{}');
+              let args = JSON.parse(tc.function.arguments || '{}');
+              
+              // Fix: If properties are at top level of tool call, move them to arguments
+              // (This handles cases where AI puts file_type, detailed, etc. at wrong level)
+              const argumentProperties = ['file_type', 'detailed', 'show_hidden', 'human_readable'];
+              for (const prop of argumentProperties) {
+                if (tc[prop] !== undefined && args[prop] === undefined) {
+                  args[prop] = tc[prop];
+                  logger.info(`[AIChatService] Moved ${prop} from tool call top level to arguments`);
+                }
+              }
               
               // Normalize path arguments to fix malformed paths
               if (args.path && typeof args.path === 'string') {
@@ -531,12 +746,12 @@ After I execute a tool, I will provide you with the result. Then you can respond
 
       // Add tool results as user message for next iteration
       const toolResultsText = toolResults.map(tr => 
-        `Tool ${tr.name} result: ${JSON.stringify(tr.result)}`
+        `Tool ${tr.name} result: ${JSON.stringify(tr.result, null, 2)}`
       ).join('\n\n');
 
       currentMessages.push({
         role: 'user',
-        content: `Tool execution results:\n\n${toolResultsText}\n\nPlease respond to the user based on these results.`
+        content: `Tool execution results:\n\n${toolResultsText}\n\nCRITICAL: Use ONLY the actual data from these tool results. DO NOT make up, invent, or hallucinate any file names, timestamps, or descriptions. If the results show no files found, say "No files found". If the results show specific files, list ONLY those exact files with their actual names and paths.`
       });
     }
 
@@ -563,6 +778,13 @@ After I execute a tool, I will provide you with the result. Then you can respond
         'writefile': 'write_file',
         'deletefile': 'delete_file',
         'movefile': 'move_file',
+        'copyfile': 'copy_file',
+        'grepfile': 'grep_file',
+        'readfilelines': 'read_file_lines',
+        'countfile': 'count_file',
+        'getfilename': 'get_filename',
+        'getdirectory': 'get_directory',
+        'touchfile': 'touch_file',
       };
       return mappings[name.toLowerCase()] || name;
     };
@@ -630,14 +852,23 @@ After I execute a tool, I will provide you with the result. Then you can respond
                 logger.info('[AIChatService] parseToolCalls - call.name:', call.name, 'call.arguments:', call.arguments, 'typeof arguments:', typeof call.arguments);
                 
                 // Handle arguments as string (JSON) or object
-                let args = call.arguments;
+                let args = call.arguments || {};
                 if (typeof args === 'string') {
                   try {
                     args = JSON.parse(args);
                     logger.info('[AIChatService] parseToolCalls - Parsed arguments string:', args);
                   } catch (e) {
                     logger.warn('[AIChatService] parseToolCalls - Failed to parse arguments string:', e);
-                    continue;
+                    args = {};
+                  }
+                }
+                
+                // Fix: If file_type, detailed, show_hidden, etc. are at top level, move them to arguments
+                const argumentProperties = ['file_type', 'detailed', 'show_hidden', 'human_readable', 'create_parents', 'recursive', 'case_sensitive', 'first', 'last', 'range', 'pattern', 'content', 'mime_type', 'from_path', 'to_path', 'new_name'];
+                for (const prop of argumentProperties) {
+                  if (call[prop] !== undefined && args[prop] === undefined) {
+                    args[prop] = call[prop];
+                    logger.info(`[AIChatService] parseToolCalls - Moved ${prop} from top level to arguments`);
                   }
                 }
                 
@@ -796,10 +1027,29 @@ After I execute a tool, I will provide you with the result. Then you can respond
   async *streamComplete(args: CompleteRequest): AsyncGenerator<ChatCompletion, void, unknown> {
     await this.ensureInitialized();
 
-    if (this.providers.size === 0) {
-      throw new Error('No AI providers available. Please ensure Ollama is installed and running.');
+    // Register user-specific providers if wallet address is provided
+    if (args.walletAddress) {
+      await this.registerUserProviders(args.walletAddress);
     }
 
+    if (this.providers.size === 0) {
+      throw new Error('No AI providers available. Please ensure Ollama is installed and running, or add API keys for cloud providers.');
+    }
+
+    // Get provider for model BEFORE checking images (need provider to determine vision support)
+    // But first, extract provider name from model to ensure it's registered
+    let requestedProvider = this.defaultProvider;
+    if (args.model && args.model.includes(':')) {
+      const [providerName] = args.model.split(':');
+      requestedProvider = providerName;
+      logger.info(`[AIChatService] streamComplete - Model specifies provider: "${providerName}"`);
+    }
+    
+    // Ensure the requested provider is registered (especially for user-specific API keys)
+    if (requestedProvider !== 'ollama' && args.walletAddress) {
+      await this.registerUserProviders(args.walletAddress);
+    }
+    
     // Check if messages contain images
     const hasImages = this.hasImages(args.messages);
     if (hasImages && (!args.model || !args.model.toLowerCase().includes('llava') && !args.model.toLowerCase().includes('vision'))) {
@@ -840,9 +1090,20 @@ After I execute a tool, I will provide you with the result. Then you can respond
     
     logger.info('[AIChatService] streamComplete - Final tools count:', tools?.length || 0);
     
+    // Extract model name (remove provider prefix if present, e.g., "ollama:deepseek-r1:1.5b" -> "deepseek-r1:1.5b")
+    let modelName = args.model || '';
+    if (modelName.includes(':')) {
+      // Split by first colon only - model name might contain colons (e.g., "deepseek-r1:1.5b")
+      const parts = modelName.split(':');
+      if (parts.length > 1) {
+        // Remove provider prefix, keep rest as model name
+        modelName = parts.slice(1).join(':');
+      }
+    }
+    
     const completeArgs: CompleteArguments = {
       messages: normalizedMessages as ChatMessage[],
-      model: args.model,
+      model: modelName, // Pass just the model name to provider
       stream: true,
       tools: tools as any,
       max_tokens: args.max_tokens,
@@ -853,10 +1114,11 @@ After I execute a tool, I will provide you with the result. Then you can respond
       // If tools are available, we need to collect the full response to check for tool calls
       logger.info('[AIChatService] streamComplete - Tool execution check - tools:', tools?.length || 0, 'filesystem:', !!args.filesystem, 'walletAddress:', !!args.walletAddress, 'io:', !!args.io);
       if (tools && tools.length > 0 && args.filesystem && args.walletAddress) {
-        // Collect the complete streamed response
+        // Collect the complete streamed response while also streaming chunks
         let fullContent = '';
-        let toolCalls: any[] | undefined = undefined;
+        let toolCalls: any[] = []; // Accumulate all tool calls across chunks
         let streamedChunks: ChatCompletion[] = [];
+        let hasToolCalls = false;
         
         for await (const chunk of provider.streamComplete(completeArgs)) {
           streamedChunks.push(chunk);
@@ -866,21 +1128,34 @@ After I execute a tool, I will provide you with the result. Then you can respond
             fullContent += chunk.message.content;
           }
           
-          // Check for tool_calls in the chunk (if Ollama returns them in stream)
-          if (chunk.message?.tool_calls) {
-            toolCalls = chunk.message.tool_calls;
+          // Accumulate tool_calls from chunks (Claude yields them incrementally)
+          if (chunk.message?.tool_calls && Array.isArray(chunk.message.tool_calls)) {
+            // Merge new tool calls with existing ones (avoid duplicates by ID)
+            for (const newToolCall of chunk.message.tool_calls) {
+              const existingIndex = toolCalls.findIndex(tc => tc.id === newToolCall.id);
+              if (existingIndex >= 0) {
+                // Update existing tool call (arguments might have been updated)
+                toolCalls[existingIndex] = newToolCall;
+                logger.debug('[AIChatService] streamComplete - Updated existing tool call:', newToolCall.function?.name);
+              } else {
+                // Add new tool call
+                toolCalls.push(newToolCall);
+                logger.debug('[AIChatService] streamComplete - Added new tool call:', newToolCall.function?.name);
+              }
+            }
+            hasToolCalls = true;
+            logger.info('[AIChatService] streamComplete - Accumulated tool calls so far:', toolCalls.length, toolCalls.map(tc => tc.function?.name));
           }
           
-          // DON'T yield tool call chunks - we'll yield final response after execution
-          // Only yield if there are no tools (normal chat response)
-          if (!tools || tools.length === 0) {
-            yield chunk;
-          }
+          // ALWAYS yield chunks for streaming, even when tools are available
+          // This allows the user to see the response in real-time
+          // If tool calls are detected later, we'll execute them and stream the final response
+          yield chunk;
         }
         
         // After stream completes, check if we have tool calls to execute
         // First check native tool_calls, then parse from content
-        if (!toolCalls && fullContent && tools && tools.length > 0) {
+        if (toolCalls.length === 0 && fullContent && tools && tools.length > 0) {
           // Try to parse tool calls from the accumulated content
           logger.info('[AIChatService] streamComplete - No native tool_calls, parsing from content:', fullContent.substring(0, 200));
           const parsedToolCalls = this.parseToolCalls(fullContent);
@@ -917,6 +1192,29 @@ After I execute a tool, I will provide you with the result. Then you can respond
           
           const updatedMessages = [...normalizedMessages, assistantMessage];
           
+          // Check if user mentioned a specific directory in their request
+          const userMessage = args.messages.find((m: any) => m.role === 'user');
+          let userText = '';
+          if (userMessage?.content) {
+            if (typeof userMessage.content === 'string') {
+              userText = userMessage.content;
+            } else if (Array.isArray(userMessage.content)) {
+              // Extract text from multimodal content
+              userText = userMessage.content
+                .filter((c: any) => c.type === 'text' && c.text)
+                .map((c: any) => c.text)
+                .join(' ');
+            }
+          }
+          
+          // Detect which directory the user mentioned (desktop, documents, pictures, videos, music, downloads, public, home)
+          const directoryMatch = userText.match(/(?:on|in|at)\s+(?:my\s+)?(desktop|documents|pictures|videos|music|downloads|public|home|~)/i);
+          const mentionedDirectory = directoryMatch ? directoryMatch[1].toLowerCase() : null;
+          // Normalize directory name (capitalize first letter)
+          const targetDirectory = mentionedDirectory 
+            ? mentionedDirectory.charAt(0).toUpperCase() + mentionedDirectory.slice(1)
+            : null;
+          
           // Execute each tool call
           const toolResults: any[] = [];
           for (const toolCall of toolCalls) {
@@ -928,7 +1226,21 @@ After I execute a tool, I will provide you with the result. Then you can respond
               // Normalize path if present
               if (args.path && typeof args.path === 'string') {
                 let path = args.path;
-                logger.info('[AIChatService] streamComplete - Original path:', path);
+                logger.info('[AIChatService] streamComplete - Original path:', path, 'User mentioned directory:', targetDirectory);
+                
+                // If user mentioned a specific directory but path is just ~/FolderName (missing directory), fix it
+                if (targetDirectory && path.match(/^~\/[^\/]+$/)) {
+                  // Path is like ~/555 (home-level folder, missing target directory)
+                  const folderName = path.substring(2); // Remove ~/
+                  // Handle "home" or "~" as special case - keep it at home level
+                  if (targetDirectory.toLowerCase() === 'home' || targetDirectory === '~') {
+                    // Keep at home level, don't change
+                    logger.info('[AIChatService] streamComplete - User mentioned home, keeping path at home level:', path);
+                  } else {
+                    path = `~/${targetDirectory}/${folderName}`;
+                    logger.info('[AIChatService] streamComplete - Fixed path from home to', targetDirectory, '(user mentioned directory):', args.path, '->', path);
+                  }
+                }
                 
                 // Fix "~:Desktop/" -> "~/Desktop/" (colon instead of slash)
                 path = path.replace(/~:/g, '~/');
@@ -943,11 +1255,36 @@ After I execute a tool, I will provide you with the result. Then you can respond
                   path = path.substring(1);
                 }
                 path = path.replace(/\/~/g, '/');
+                // If user mentioned a specific directory but path is just ~/FolderName (missing directory), fix it
+                if (targetDirectory && path.match(/^~\/[^\/]+$/)) {
+                  // Path is like ~/555 (home-level folder, missing target directory)
+                  const folderName = path.substring(2); // Remove ~/
+                  // Handle "home" or "~" as special case - keep it at home level
+                  if (targetDirectory.toLowerCase() === 'home' || targetDirectory === '~') {
+                    // Keep at home level, don't change
+                    logger.info('[AIChatService] streamComplete - User mentioned home, keeping path at home level:', path);
+                  } else {
+                    path = `~/${targetDirectory}/${folderName}`;
+                    logger.info('[AIChatService] streamComplete - Fixed path from home to', targetDirectory, '(user mentioned directory):', args.path, '->', path);
+                  }
+                }
+                
                 if (path.startsWith('~') && !path.includes('/') && path.length > 1) {
                   const folderName = path.substring(1);
                   path = `~/Desktop/${folderName}`;
                   logger.info('[AIChatService] streamComplete - Fixed path from ~FolderName to:', path);
                 }
+                // Fix paths like "desktop/YO", "Desktop/YO", "documents/Projects", etc. (case-insensitive)
+                // Normalize to "~/Desktop/YO", "~/Documents/Projects", etc.
+                const standardDirPattern = /^(desktop|documents|pictures|videos|music|downloads|public|trash)\/(.+)$/i;
+                const dirMatch = path.match(standardDirPattern);
+                if (dirMatch && !path.startsWith('~') && !path.startsWith('/')) {
+                  const dirName = dirMatch[1].charAt(0).toUpperCase() + dirMatch[1].slice(1).toLowerCase(); // Capitalize first letter
+                  const rest = dirMatch[2];
+                  path = `~/${dirName}/${rest}`;
+                  logger.info('[AIChatService] streamComplete - Fixed path (standard directory) from:', args.path, 'to:', path);
+                }
+                
                 if (!path.startsWith('~') && !path.startsWith('/') && !path.includes('/')) {
                   path = `~/Desktop/${path}`;
                   logger.info('[AIChatService] streamComplete - Fixed path (no prefix) to:', path);
@@ -979,7 +1316,34 @@ After I execute a tool, I will provide you with the result. Then you can respond
           // Add tool results to conversation and get final response
           const finalMessages = [...updatedMessages, ...toolResults];
           
-          // Get final response from AI
+          // Build tool summary for context (this will be included in the AI's response)
+          const toolSummary = toolResults.map(tr => {
+            try {
+              const result = JSON.parse(tr.content);
+              if (tr.name === 'create_folder' && result.success && result.result?.path) {
+                return `Created folder: ${result.result.path}`;
+              } else if (tr.name === 'write_file' && result.success && result.result?.path) {
+                return `Created file: ${result.result.path}`;
+              } else if (tr.name === 'list_files' && result.success) {
+                return `Listed files in: ${result.result?.path || 'directory'}`;
+              } else if (tr.name === 'read_file' && result.success) {
+                return `Read file: ${result.result?.path || 'file'}`;
+              }
+            } catch (e) {
+              // Ignore parse errors
+            }
+            return null;
+          }).filter(Boolean).join(', ');
+          
+          // Add context message that will be included in the AI's response
+          if (toolSummary) {
+            const contextMessage = {
+              role: 'user' as const,
+              content: `Tool execution completed. Results: ${toolSummary}. Please confirm what was created and ALWAYS mention the exact paths in your response. When the user says "inside it", "in that folder", or similar in follow-up requests, they are referring to the most recently created folder/file. Your response will be saved to conversation history, so make sure to include the paths clearly.`
+            };
+            finalMessages.push(contextMessage);
+          }
+          
           const finalArgs: CompleteArguments = {
             messages: finalMessages as ChatMessage[],
             model: args.model,
@@ -989,7 +1353,7 @@ After I execute a tool, I will provide you with the result. Then you can respond
             temperature: args.temperature,
           };
           
-          // Stream the final response
+          // Stream the final response (AI will see tool results and context message)
           yield* provider.streamComplete(finalArgs);
         }
       } else {

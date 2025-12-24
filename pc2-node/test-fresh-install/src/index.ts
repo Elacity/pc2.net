@@ -77,7 +77,7 @@ async function main() {
   // Initialize AI service
   if (config.ai?.enabled !== false) {
     try {
-      aiService = new AIChatService(config.ai);
+      aiService = new AIChatService(config.ai, db);
       await aiService.initialize();
       
       if (aiService.isAvailable()) {

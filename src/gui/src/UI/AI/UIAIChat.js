@@ -20,14 +20,68 @@
 import UIWindow from '../UIWindow.js';
 import UIContextMenu from '../UIContextMenu.js';
 
-// Chat history storage keys
-const CHAT_HISTORY_KEY = 'pc2_ai_chat_history';
-const CONVERSATIONS_KEY = 'pc2_ai_conversations';
-const CURRENT_CONVERSATION_KEY = 'pc2_ai_current_conversation';
+// Chat history storage keys (wallet-scoped for user isolation)
+const CHAT_HISTORY_KEY_PREFIX = 'pc2_ai_chat_history';
+const CONVERSATIONS_KEY_PREFIX = 'pc2_ai_conversations';
+const CURRENT_CONVERSATION_KEY_PREFIX = 'pc2_ai_current_conversation';
 const MAX_HISTORY_MESSAGES = 100;
 
 // Current conversation ID
 let currentConversationId = null;
+let currentWalletAddress = null;
+
+// Refresh wallet address from window.user (called on initialization and when panel opens)
+function refreshWalletAddress() {
+    const oldWallet = currentWalletAddress;
+    
+    // Try to get from window.user (set by whoami endpoint)
+    if (window.user?.wallet_address) {
+        currentWalletAddress = window.user.wallet_address;
+        
+        // If wallet changed, clear old conversation ID (user switched accounts)
+        if (oldWallet && oldWallet !== currentWalletAddress) {
+            console.log('[UIAIChat] Wallet address changed, clearing old conversation ID');
+            currentConversationId = null;
+        }
+        
+        return currentWalletAddress;
+    }
+    
+    // Fallback: try to get from auth token or other sources
+    // This should not happen in normal operation, but provides a fallback
+    console.warn('[UIAIChat] Wallet address not found in window.user');
+    currentWalletAddress = null;
+    return null;
+}
+
+// Get current wallet address (cached or refreshed)
+function getCurrentWalletAddress() {
+    if (currentWalletAddress) {
+        return currentWalletAddress;
+    }
+    
+    // Try to refresh from window.user
+    refreshWalletAddress();
+    
+    if (currentWalletAddress) {
+        return currentWalletAddress;
+    }
+    
+    // Last resort fallback (should not happen in normal operation)
+    console.warn('[UIAIChat] Wallet address not available, using fallback');
+    return 'unknown_wallet';
+}
+
+// Get wallet-scoped storage keys
+function getConversationsKey() {
+    const wallet = getCurrentWalletAddress();
+    return `${CONVERSATIONS_KEY_PREFIX}_${wallet}`;
+}
+
+function getCurrentConversationKey() {
+    const wallet = getCurrentWalletAddress();
+    return `${CURRENT_CONVERSATION_KEY_PREFIX}_${wallet}`;
+}
 
 // Simple markdown renderer
 function renderMarkdown(text) {
@@ -99,10 +153,11 @@ function renderMarkdown(text) {
     return html;
 }
 
-// Load all conversations from localStorage
+// Load all conversations from localStorage (wallet-scoped)
 function loadConversations() {
     try {
-        const conversations = localStorage.getItem(CONVERSATIONS_KEY);
+        const key = getConversationsKey();
+        const conversations = localStorage.getItem(key);
         if (conversations) {
             return JSON.parse(conversations);
         }
@@ -112,19 +167,21 @@ function loadConversations() {
     return {};
 }
 
-// Save all conversations to localStorage
+// Save all conversations to localStorage (wallet-scoped)
 function saveConversations(conversations) {
     try {
-        localStorage.setItem(CONVERSATIONS_KEY, JSON.stringify(conversations));
+        const key = getConversationsKey();
+        localStorage.setItem(key, JSON.stringify(conversations));
     } catch (e) {
         console.error('[UIAIChat] Failed to save conversations:', e);
     }
 }
 
-// Get current conversation ID
+// Get current conversation ID (wallet-scoped)
 function getCurrentConversationId() {
     if (!currentConversationId) {
-        const saved = localStorage.getItem(CURRENT_CONVERSATION_KEY);
+        const key = getCurrentConversationKey();
+        const saved = localStorage.getItem(key);
         if (saved) {
             currentConversationId = saved;
         }
@@ -132,13 +189,31 @@ function getCurrentConversationId() {
     return currentConversationId;
 }
 
-// Set current conversation ID
+// Set current conversation ID (wallet-scoped)
 function setCurrentConversationId(id) {
     currentConversationId = id;
+    const key = getCurrentConversationKey();
     if (id) {
-        localStorage.setItem(CURRENT_CONVERSATION_KEY, id);
+        localStorage.setItem(key, id);
     } else {
-        localStorage.removeItem(CURRENT_CONVERSATION_KEY);
+        localStorage.removeItem(key);
+    }
+}
+
+// Clear chat history for current wallet (called on logout)
+function clearChatHistoryForCurrentWallet() {
+    const wallet = getCurrentWalletAddress();
+    if (wallet && wallet !== 'unknown_wallet') {
+        const conversationsKey = getConversationsKey();
+        const currentConvKey = getCurrentConversationKey();
+        
+        localStorage.removeItem(conversationsKey);
+        localStorage.removeItem(currentConvKey);
+        
+        currentConversationId = null;
+        currentWalletAddress = null;
+        
+        console.log('[UIAIChat] Cleared chat history for wallet:', wallet.substring(0, 10) + '...');
     }
 }
 
@@ -403,6 +478,9 @@ export default function UIAIChat() {
     // Append to body
     $('body').append(h);
 
+    // Initialize wallet address on startup
+    refreshWalletAddress();
+    
     // Initialize history menu (will load current conversation if exists)
     initializeHistoryMenu();
 
@@ -420,6 +498,11 @@ export default function UIAIChat() {
     
     // Load user's AI config and update model selector
     loadAIConfigForChat();
+    
+    // Refresh wallet address when AI panel is opened (in case user changed)
+    $(document).on('click', '.ai-toolbar-btn', function() {
+        refreshWalletAddress();
+    });
     
     // Listen for AI config updates from Settings
     $(document).on('ai-config-updated', function() {

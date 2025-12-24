@@ -494,7 +494,8 @@ export class AIChatService {
         tools,
         args.filesystem!,
         args.walletAddress!,
-        args.io
+        args.io,
+        (args as any).toolSourceMap // Pass tool source map
       );
     } else {
       logger.info('[AIChatService] Tool execution disabled - filesystem:', !!args.filesystem, 'walletAddress:', !!args.walletAddress, 'tools:', tools?.length || 0);
@@ -535,7 +536,8 @@ export class AIChatService {
     tools: any[],
     filesystem: FilesystemManager,
     walletAddress: string,
-    io?: any
+    io?: any,
+    toolSourceMap?: Map<string, { type: 'filesystem' | 'app'; appInstanceID?: string }>
   ): Promise<ChatCompletion> {
     const toolExecutor = new ToolExecutor(filesystem, walletAddress, io);
     const MAX_TOOL_ITERATIONS = 5; // Prevent infinite loops

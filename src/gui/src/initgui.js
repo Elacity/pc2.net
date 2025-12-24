@@ -47,6 +47,7 @@ import { AntiCSRFService } from './services/AntiCSRFService.js';
 import { IPCService } from './services/IPCService.js';
 import { ExecService } from './services/ExecService.js';
 import { DebugService } from './services/DebugService.js';
+import { AIToolService } from './services/AIToolService.js';
 import { privacy_aware_path } from './util/desktop.js';
 import initKeyboardShortcuts from './helpers/keyboard_shortcuts.js';
 
@@ -115,6 +116,7 @@ const launch_services = async function (options) {
     register('locale', new LocaleService());
     register('settings', new SettingsService());
     register('anti-csrf', new AntiCSRFService());
+    register('ai-tool', new AIToolService());
     register('__launch-on-init', new LaunchOnInitService());
 
     // === Service-Script Services ===

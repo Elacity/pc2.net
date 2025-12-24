@@ -408,21 +408,54 @@ export class AIChatService {
     // If tools are requested and filesystem is available, automatically include filesystem tools
     logger.info('[AIChatService] Checking tools - args.tools:', args.tools, 'args.filesystem:', !!args.filesystem, 'args.walletAddress:', !!args.walletAddress);
     
+    // Track tool sources: Map<toolName, { type: 'filesystem' | 'app', appInstanceID?: string }>
+    const toolSourceMap = new Map<string, { type: 'filesystem' | 'app'; appInstanceID?: string }>();
+    
     let tools = args.tools;
     if (tools && tools.length > 0) {
-      tools = normalizeToolsObject([...tools]);
-      logger.info('[AIChatService] Tools provided by user:', tools.length);
+      // Tools from frontend may include source metadata
+      // Extract source info and normalize tools
+      const toolsWithSource: any[] = [];
+      for (const tool of tools) {
+        const toolName = tool.function?.name || tool.name;
+        const source = (tool as any).__source || { type: 'filesystem' as const };
+        
+        // Store source mapping
+        if (toolName) {
+          toolSourceMap.set(toolName, source);
+        }
+        
+        // Remove source metadata before normalizing (it's not part of tool definition)
+        const cleanTool = { ...tool };
+        delete (cleanTool as any).__source;
+        toolsWithSource.push(cleanTool);
+      }
+      
+      tools = normalizeToolsObject([...toolsWithSource]);
+      logger.info('[AIChatService] Tools provided by frontend:', tools.length, 'with sources:', Array.from(toolSourceMap.entries()).map(([name, source]) => `${name}:${source.type}`).join(', '));
     } else if (args.filesystem && args.walletAddress) {
       // Automatically include filesystem tools if filesystem is available
       // This allows AI to perform filesystem operations without explicit tool request
       logger.info('[AIChatService] Auto-including filesystem tools - filesystemTools length:', filesystemTools.length);
       tools = normalizeToolsObject([...filesystemTools]);
+      
+      // Mark all filesystem tools
+      for (const tool of tools) {
+        const toolName = tool.function?.name || tool.name;
+        if (toolName) {
+          toolSourceMap.set(toolName, { type: 'filesystem' });
+        }
+      }
+      
       logger.info('[AIChatService] Automatically including filesystem tools:', tools.length);
     } else {
       logger.warn('[AIChatService] No tools available - filesystem:', !!args.filesystem, 'walletAddress:', !!args.walletAddress, 'args.tools:', args.tools);
     }
     
     logger.info('[AIChatService] Final tools count:', tools?.length || 0);
+    
+    // Store toolSourceMap for use in executeWithTools
+    (args as any).toolSourceMap = toolSourceMap;
 
     // Get provider for the requested model
     const provider = this.getProviderForModel(args.model);
@@ -1075,20 +1108,52 @@ Examples:
     // If tools are requested and filesystem is available, automatically include filesystem tools
     logger.info('[AIChatService] streamComplete - Checking tools - args.tools:', args.tools, 'args.filesystem:', !!args.filesystem, 'args.walletAddress:', !!args.walletAddress);
     
+    // Track tool sources: Map<toolName, { type: 'filesystem' | 'app', appInstanceID?: string }>
+    const toolSourceMap = new Map<string, { type: 'filesystem' | 'app'; appInstanceID?: string }>();
+    
     let tools = args.tools;
     if (tools && tools.length > 0) {
-      tools = normalizeToolsObject([...tools]);
-      logger.info('[AIChatService] streamComplete - Tools provided by user:', tools.length);
+      // Tools from frontend may include source metadata
+      const toolsWithSource: any[] = [];
+      for (const tool of tools) {
+        const toolName = tool.function?.name || tool.name;
+        const source = (tool as any).__source || { type: 'filesystem' as const };
+        
+        // Store source mapping
+        if (toolName) {
+          toolSourceMap.set(toolName, source);
+        }
+        
+        // Remove source metadata before normalizing
+        const cleanTool = { ...tool };
+        delete (cleanTool as any).__source;
+        toolsWithSource.push(cleanTool);
+      }
+      
+      tools = normalizeToolsObject([...toolsWithSource]);
+      logger.info('[AIChatService] streamComplete - Tools provided by frontend:', tools.length, 'with sources:', Array.from(toolSourceMap.entries()).map(([name, source]) => `${name}:${source.type}`).join(', '));
     } else if (args.filesystem && args.walletAddress) {
       // Automatically include filesystem tools if filesystem is available
       logger.info('[AIChatService] streamComplete - Auto-including filesystem tools - filesystemTools length:', filesystemTools.length);
       tools = normalizeToolsObject([...filesystemTools]);
+      
+      // Mark all filesystem tools
+      for (const tool of tools) {
+        const toolName = tool.function?.name || tool.name;
+        if (toolName) {
+          toolSourceMap.set(toolName, { type: 'filesystem' });
+        }
+      }
+      
       logger.info('[AIChatService] streamComplete - Automatically including filesystem tools:', tools.length);
     } else {
       logger.warn('[AIChatService] streamComplete - No tools available - filesystem:', !!args.filesystem, 'walletAddress:', !!args.walletAddress, 'args.tools:', args.tools);
     }
     
     logger.info('[AIChatService] streamComplete - Final tools count:', tools?.length || 0);
+    
+    // Store toolSourceMap for use in tool execution
+    (args as any).toolSourceMap = toolSourceMap;
     
     // Extract model name (remove provider prefix if present, e.g., "ollama:deepseek-r1:1.5b" -> "deepseek-r1:1.5b")
     let modelName = args.model || '';
@@ -1110,9 +1175,9 @@ Examples:
       temperature: args.temperature,
     };
 
+    // If tools are available, we need to collect the full response to check for tool calls
+    logger.info('[AIChatService] streamComplete - Tool execution check - tools:', tools?.length || 0, 'filesystem:', !!args.filesystem, 'walletAddress:', !!args.walletAddress, 'io:', !!args.io);
     try {
-      // If tools are available, we need to collect the full response to check for tool calls
-      logger.info('[AIChatService] streamComplete - Tool execution check - tools:', tools?.length || 0, 'filesystem:', !!args.filesystem, 'walletAddress:', !!args.walletAddress, 'io:', !!args.io);
       if (tools && tools.length > 0 && args.filesystem && args.walletAddress) {
         // Collect the complete streamed response while also streaming chunks
         let fullContent = '';
@@ -1178,19 +1243,67 @@ Examples:
         if (toolCalls && toolCalls.length > 0) {
           logger.info('[AIChatService] streamComplete - Found tool calls, executing:', toolCalls.length, toolCalls);
           
-          // Execute tools using the same logic as executeWithTools
-          logger.info('[AIChatService] streamComplete - Creating ToolExecutor with io:', !!args.io, 'walletAddress:', args.walletAddress);
-          const toolExecutor = new ToolExecutor(args.filesystem, args.walletAddress, args.io);
-          const normalizedMessages = normalizeMessages(args.messages);
+          // Get tool source map
+          const toolSourceMap = (args as any).toolSourceMap || new Map();
           
-          // Add the assistant's message with tool calls to the conversation
-          const assistantMessage: any = {
-            role: 'assistant',
-            content: fullContent,
-            tool_calls: toolCalls
-          };
+          // Separate filesystem tools from app tools
+          const filesystemToolCalls: any[] = [];
+          const appToolCalls: any[] = [];
           
-          const updatedMessages = [...normalizedMessages, assistantMessage];
+          for (const toolCall of toolCalls) {
+            const toolName = toolCall.function?.name;
+            const source = toolSourceMap.get(toolName);
+            
+            if (source?.type === 'app' && source.appInstanceID) {
+              appToolCalls.push({ ...toolCall, __source: source });
+            } else {
+              filesystemToolCalls.push(toolCall);
+            }
+          }
+          
+          logger.info('[AIChatService] streamComplete - Tool separation:', {
+            filesystem: filesystemToolCalls.length,
+            app: appToolCalls.length,
+            total: toolCalls.length
+          });
+          
+          // For app tools, yield them with source info so frontend can handle them
+          // For filesystem tools, execute them here
+          if (appToolCalls.length > 0) {
+            // Yield app tool calls with source info
+            for (const toolCall of appToolCalls) {
+              const args = typeof toolCall.function.arguments === 'string' 
+                ? JSON.parse(toolCall.function.arguments) 
+                : toolCall.function.arguments;
+              
+              yield {
+                message: {
+                  role: 'assistant',
+                  content: '',
+                  tool_calls: [{
+                    ...toolCall,
+                    __source: toolCall.__source
+                  }]
+                },
+                done: false
+              } as ChatCompletion;
+            }
+          }
+          
+          // Execute filesystem tools using ToolExecutor
+          if (filesystemToolCalls.length > 0) {
+            logger.info('[AIChatService] streamComplete - Creating ToolExecutor with io:', !!args.io, 'walletAddress:', args.walletAddress);
+            const toolExecutor = new ToolExecutor(args.filesystem, args.walletAddress, args.io);
+            const normalizedMessages = normalizeMessages(args.messages);
+            
+            // Add the assistant's message with filesystem tool calls to the conversation
+            const assistantMessage: any = {
+              role: 'assistant',
+              content: fullContent,
+              tool_calls: filesystemToolCalls
+            };
+            
+            const updatedMessages = [...normalizedMessages, assistantMessage];
           
           // Check if user mentioned a specific directory in their request
           const userMessage = args.messages.find((m: any) => m.role === 'user');
@@ -1215,9 +1328,9 @@ Examples:
             ? mentionedDirectory.charAt(0).toUpperCase() + mentionedDirectory.slice(1)
             : null;
           
-          // Execute each tool call
+          // Execute each filesystem tool call
           const toolResults: any[] = [];
-          for (const toolCall of toolCalls) {
+          for (const toolCall of filesystemToolCalls) {
             try {
               const args = typeof toolCall.function.arguments === 'string' 
                 ? JSON.parse(toolCall.function.arguments) 
@@ -1355,6 +1468,7 @@ Examples:
           
           // Stream the final response (AI will see tool results and context message)
           yield* provider.streamComplete(finalArgs);
+          }
         }
       } else {
         // No tools, just stream normally

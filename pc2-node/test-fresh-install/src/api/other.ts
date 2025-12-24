@@ -794,12 +794,22 @@ export function handleDriversCall(req: AuthenticatedRequest, res: Response): voi
                           ? JSON.parse(toolCall.function.arguments)
                           : toolCall.function?.arguments || {};
                         
-                        const toolChunk = JSON.stringify({
+                        // Get tool source from tool call metadata (set by AIChatService)
+                        const toolName = toolCall.function?.name;
+                        const toolSource = (toolCall as any).__source;
+                        
+                        const toolChunk: any = {
                           type: 'tool_use',
-                          name: toolCall.function?.name,
+                          name: toolName,
                           input: args,
-                        });
-                        res.write(`${toolChunk}\n`);
+                        };
+                        
+                        // Include source metadata if available
+                        if (toolSource) {
+                          toolChunk.source = toolSource;
+                        }
+                        
+                        res.write(`${JSON.stringify(toolChunk)}\n`);
                         if (typeof (res as any).flush === 'function') {
                           (res as any).flush();
                         }

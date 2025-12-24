@@ -1467,6 +1467,29 @@ async function sendAIMessage() {
     // Add current user message (with file attachments if any)
     messages.push({ role: 'user', content: userMessageContent });
     
+    // Collect tools from apps and backend before sending request
+    let allTools = [];
+    try {
+        const aiToolService = window.services?.get('ai-tool');
+        if (aiToolService) {
+            // Get filesystem tools callback (backend will auto-inject, but we merge with app tools)
+            const getFilesystemTools = async () => {
+                // Backend will auto-inject filesystem tools, but we need to merge with app tools
+                // For now, return empty array - backend handles filesystem tools
+                // App tools will be merged on frontend
+                return [];
+            };
+            
+            allTools = await aiToolService.collectAllTools(getFilesystemTools);
+            console.log('[UIAIChat] Collected', allTools.length, 'tools for AI request');
+        } else {
+            console.warn('[UIAIChat] AIToolService not available, proceeding without app tools');
+        }
+    } catch (error) {
+        console.warn('[UIAIChat] Error collecting tools:', error);
+        // Continue without app tools - backend will still provide filesystem tools
+    }
+    
     const authToken = window.auth_token || localStorage.getItem('puter_auth_token') || localStorage.getItem('auth_token') || '';
     const requestBody = {
         interface: 'puter-chat-completion',
@@ -1474,7 +1497,8 @@ async function sendAIMessage() {
         args: {
             messages: messages,
             model: selectedModel,
-            stream: true  // Enable streaming
+            stream: true,  // Enable streaming
+            tools: allTools.length > 0 ? allTools : undefined  // Pass tools if available
         }
     };
     
@@ -1569,7 +1593,34 @@ async function sendAIMessage() {
                     }
                     // Handle tool_use chunks if needed (for display)
                     else if (chunk.type === 'tool_use') {
-                        // Tool calls are handled by backend
+                        // Check if tool is from an app (has source metadata)
+                        const toolSource = chunk.source; // { appInstanceID: '...' } or null
+                        
+                        if (toolSource?.appInstanceID) {
+                            // App tool - execute via IPC
+                            console.log('[UIAIChat] Executing app tool:', chunk.name, 'from app:', toolSource.appInstanceID);
+                            try {
+                                const aiToolService = window.services?.get('ai-tool');
+                                if (aiToolService) {
+                                    const result = await aiToolService.executeTool(
+                                        chunk.name,
+                                        chunk.input || {},
+                                        toolSource
+                                    );
+                                    console.log('[UIAIChat] App tool execution result:', result);
+                                    // TODO: Add tool result to conversation and continue AI response
+                                    // For now, backend handles filesystem tools, app tools need result handling
+                                } else {
+                                    console.error('[UIAIChat] AIToolService not available for app tool execution');
+                                }
+                            } catch (error) {
+                                console.error('[UIAIChat] App tool execution error:', error);
+                                $aiMessage.html($aiMessage.html() + `<br><span style="color: #fca5a5;">Tool execution error: ${error.message}</span>`);
+                            }
+                        } else {
+                            // Filesystem tool - backend handles it
+                            console.log('[UIAIChat] Filesystem tool call detected:', chunk.name);
+                        }
                     }
                     // Handle errors
                     else if (chunk.type === 'error') {

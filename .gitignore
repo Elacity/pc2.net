@@ -31,4 +31,11 @@ dist/
 .netlify
 src/emulator/release/
 src/particle-auth
-.vscodepc2-node/test-fresh-install/data/*.db
+
+# PC2 Node User Data (should never be in git - each user's node has its own data)
+pc2-node/test-fresh-install/data/*.db
+pc2-node/test-fresh-install/data/*.sqlite
+pc2-node/test-fresh-install/data/*.sqlite3
+**/data/*.db
+**/data/*.sqlite
+**/data/*.sqlite3

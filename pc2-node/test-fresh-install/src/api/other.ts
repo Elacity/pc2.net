@@ -705,6 +705,17 @@ export function handleDriversCall(req: AuthenticatedRequest, res: Response): voi
               hasTools: !!tools,
             });
             
+            // Log the last user message to help debug content generation issues
+            const lastUserMessage = messages.find((m: any) => m.role === 'user');
+            if (lastUserMessage) {
+              const userText = typeof lastUserMessage.content === 'string' 
+                ? lastUserMessage.content 
+                : (Array.isArray(lastUserMessage.content) 
+                  ? lastUserMessage.content.filter((c: any) => c.type === 'text').map((c: any) => c.text).join(' ')
+                  : JSON.stringify(lastUserMessage.content));
+              logger.info('[Drivers] Last user message:', userText.substring(0, 200));
+            }
+            
             // Warn if message is very large
             if (totalMessageLength > 100000) {
               logger.warn('[Drivers] Large AI chat request detected:', {

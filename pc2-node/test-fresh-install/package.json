@@ -26,6 +26,7 @@
   "author": "Elacity",
   "license": "AGPL-3.0",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.71.2",
     "@chainsafe/libp2p-yamux": "^8.0.1",
     "@helia/strings": "^5.0.3",
     "@helia/unixfs": "^6.0.4",

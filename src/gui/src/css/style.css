@@ -600,6 +600,70 @@
     -ms-user-select: text;
 }
 
+/* Loading Indicator */
+.ai-loading-indicator {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    color: var(--ai-text-color);
+    opacity: 0.7;
+}
+
+.ai-loading-dots {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+.ai-loading-dots span {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: var(--ai-text-color);
+    opacity: 0.6;
+    animation: ai-loading-pulse 1.4s ease-in-out infinite;
+}
+
+.ai-loading-dots span:nth-child(1) {
+    animation-delay: 0s;
+}
+
+.ai-loading-dots span:nth-child(2) {
+    animation-delay: 0.2s;
+}
+
+.ai-loading-dots span:nth-child(3) {
+    animation-delay: 0.4s;
+}
+
+@keyframes ai-loading-pulse {
+    0%, 60%, 100% {
+        opacity: 0.3;
+        transform: scale(0.8);
+    }
+    30% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.ai-loading-text {
+    font-size: 14px;
+    color: var(--ai-text-color);
+    opacity: 0.7;
+}
+
+/* Loading indicator - show when streaming */
+.ai-chat-message-ai.ai-streaming .ai-loading-indicator {
+    display: flex !important;
+}
+
+/* Hide loading indicator when not streaming */
+.ai-chat-message-ai:not(.ai-streaming) .ai-loading-indicator {
+    display: none !important;
+}
+
 /* Markdown styling in AI messages */
 .ai-chat-message-ai h1,
 .ai-chat-message-ai h2,

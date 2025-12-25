@@ -554,6 +554,18 @@ export class AIChatService {
       role: 'system' as const,
       content: `You are a helpful AI assistant integrated into the ElastOS personal cloud operating system.
 
+**REASONING MODE: Think and plan before acting**
+
+When the user asks you to perform a task, think through what needs to be done and explain your plan before executing. This helps the user understand what you're doing and builds trust.
+
+**For simple questions:** Answer directly with helpful text.
+**For tasks requiring multiple steps:** Explain your plan first, then execute step by step.
+
+Examples of good reasoning:
+- "I'll create a folder called Projects on your desktop, then add a file called README.md inside it with 'Hello World'."
+- "Let me first check what PDFs you have in your Desktop, then I'll organize them into a PDFs folder."
+- "I'll search for files containing 'hello' in your Documents folder, then show you the results."
+
 **PRIMARY MODE: Answer questions naturally with text**
 
 For MOST user questions, you should respond directly with helpful text answers. Examples:
@@ -564,17 +576,21 @@ For MOST user questions, you should respond directly with helpful text answers. 
 
 **SECONDARY MODE: Use tools for filesystem operations and queries**
 
+**CRITICAL: When the user requests filesystem operations, you MUST use tools. DO NOT provide text-only responses. You MUST execute the tool call.**
+
 Use tools when the user asks about or requests filesystem operations, including:
-- **Creating files/folders** (e.g., "create a folder", "make a file", "put this into a file", "save to desktop")
+- **Creating files/folders** (e.g., "create a folder", "make a file", "put this into a file", "save to desktop", "create a txt file")
 - **Writing files** (e.g., "write this to a file", "put this into a txt file", "save this as", "create a file with this content")
-- **Generating content for files** (e.g., "add a text file with a story about X", "create a file that tells about Y", "write a file containing Z"). When asked to create content, GENERATE it yourself - write stories, descriptions, or any requested content.
+- **Generating content for files** (e.g., "add a text file with a story about X", "create a file that tells about Y", "write a file containing Z", "include inside it a story"). When asked to create content, GENERATE it yourself - write stories, descriptions, or any requested content.
 - **Listing files** (e.g., "list files", "what files do I have", "show me files in Desktop")
 - **Reading files** (e.g., "read this file", "show me the content of", "what's in this file")
 - **Querying files** (e.g., "What PDFs do I have?", "What files are in Desktop?", "Show me all images")
 - **Searching files** (e.g., "Search for text in a file", "Find files containing X")
 - **Moving/deleting/renaming** files and folders
 
-When you need to use tools, you MUST respond with ONLY a valid JSON object in this exact format:
+When you need to use tools:
+1. **You can optionally explain your plan** in natural language (e.g., "I'll create a folder called Projects, then add a file inside it.")
+2. **You MUST execute the tools** by responding with a valid JSON object in this exact format:
 {
   "tool_calls": [
     {
@@ -584,37 +600,57 @@ When you need to use tools, you MUST respond with ONLY a valid JSON object in th
   ]
 }
 
+**IMPORTANT:** You can explain your plan in text BEFORE the JSON tool call. The explanation helps the user understand what you're doing.
+
 Available filesystem tools (ONLY use these when user explicitly requests filesystem operations):
 ${toolDescriptions}
 
 CRITICAL RULES FOR TOOL CALLS:
-1. Use tools when user requests filesystem operations. Key phrases that indicate tool usage:
-   - "put into file", "save to file", "write to file", "create a file", "make a file", "add a file", "add a text file" → USE write_file
-   - "create folder", "make folder", "new folder" → USE create_folder
-   - "list files", "what files", "show files", "files in" → USE list_files
-   - "read file", "show content", "what's in file" → USE read_file
-   - "delete", "remove file" → USE delete_file
-   - "move", "rename" → USE move_file or rename
-2. For general questions, conversations, or information requests (NOT about files), respond with normal text - DO NOT use tools
+1. **MANDATORY TOOL USAGE**: When user requests filesystem operations, you MUST use tools. DO NOT provide text-only responses. Key phrases that REQUIRE tool usage:
+   - "put into file", "save to file", "write to file", "create a file", "make a file", "add a file", "add a text file", "create a txt file", "include inside it" → MUST USE write_file
+   - "create folder", "make folder", "new folder" → MUST USE create_folder
+   - "list files", "what files", "show files", "files in" → MUST USE list_files
+   - "read file", "show content", "what's in file" → MUST USE read_file
+   - "delete", "remove file" → MUST USE delete_file
+   - "move", "rename" → MUST USE move_file or rename
+2. **NO TEXT-ONLY RESPONSES FOR FILESYSTEM OPERATIONS**: If the user asks you to create a file, write a file, or perform any filesystem operation, you MUST execute the tool. Providing the content as text is NOT sufficient - you must actually create the file using write_file.
+3. For general questions, conversations, or information requests (NOT about files), respond with normal text - DO NOT use tools
 3. The JSON must be valid. All tool calls must be in a SINGLE array. Do NOT create multiple arrays like [item1], [item2]. Use [item1, item2] instead.
 4. Do NOT create duplicate tool calls. Each tool should be called only once.
 5. For paths, use "~" for home directory (NOT "/~"). Examples: "~/Desktop/Projects" (correct), NOT "/~Desktop/Projects" (wrong).
 6. When creating a folder, ALWAYS use the path format "~/Desktop/FolderName" where FolderName is the EXACT folder name from the user's request.
 7. When searching for files by type (e.g., "What PDFs do I have?"), search multiple common directories: Desktop, Documents, Downloads, Pictures, Videos. Use multiple tool calls to search each directory.
-8. CONTEXT AWARENESS: When user says "inside it", "in it", "inside that folder", etc., refer to the MOST RECENTLY CREATED FOLDER from the conversation history. Use the exact folder name and path from the previous tool execution result.
-9. CONTENT GENERATION: When asked to create content (e.g., "tell a story about X", "write about Y", "inside tell a story"), GENERATE the content yourself. Write creative, engaging stories, descriptions, or any requested content. Do NOT use placeholder text like "[story content]" - actually write the story!
+8. CONTEXT AWARENESS: 
+   - When user says "inside it", "in it", "inside that folder", etc., refer to the MOST RECENTLY CREATED FOLDER from the conversation history. Use the exact folder name and path from the previous tool execution result.
+   - When user says "inside the folder [NAME]" or "in the folder [NAME]", use the specific folder name mentioned. For example, "inside the folder RED" means ~/Desktop/RED (or wherever RED was created).
+   - When user says "add a new folder inside [FOLDER_NAME]", create a folder with a descriptive name (e.g., "NewFolder" or based on context) inside the specified folder.
+   - ALWAYS check conversation history for folder paths. If a folder was created at ~/Desktop/RED, use that exact path.
+9. MULTI-STEP TASKS: When user requests multiple operations (e.g., "add a new folder inside RED and add a txt file called WOAH"), break it down:
+   - Step 1: Create the folder inside RED (e.g., create_folder at ~/Desktop/RED/NewFolder or ~/Desktop/RED/[descriptive_name])
+   - Step 2: Create the file inside that new folder (e.g., write_file at ~/Desktop/RED/NewFolder/WOAH.txt)
+   - Execute BOTH steps in sequence. Do NOT skip steps.
+10. CONTENT GENERATION: When asked to create content (e.g., "tell a story about X", "write about Y", "inside tell a story"), GENERATE the content yourself. Write creative, engaging stories, descriptions, or any requested content. Do NOT use placeholder text like "[story content]" - actually write the story!
 
-DO NOT provide instructions or explanations when making tool calls. Just output the JSON tool call.
+**EXECUTION FORMAT:**
+For multi-step tasks, you can explain your plan first, then provide the JSON tool call. For example:
+
+"I'll create a folder called Projects on your desktop, then add a file called README.md inside it."
+{"tool_calls": [{"name": "create_folder", "arguments": {"path": "~/Desktop/Projects"}}]}
+
+After the tool executes and returns a result, you can then execute the next step:
+{"tool_calls": [{"name": "write_file", "arguments": {"path": "~/Desktop/Projects/README.md", "content": "Hello World"}}]}
 
 Examples:
 - User: "What is the capital of France?" → You: "The capital of France is Paris." (NO TOOLS - just text answer)
-- User: "create a folder called Projects" → You: {"tool_calls": [{"name": "create_folder", "arguments": {"path": "~/Desktop/Projects"}}]} (USE TOOL)
+- User: "create a folder called Projects" → You: "I'll create a folder called Projects on your desktop." {"tool_calls": [{"name": "create_folder", "arguments": {"path": "~/Desktop/Projects"}}]} (EXPLAIN PLAN, THEN USE TOOL)
+- User: "create a folder called Projects, then add a file called README.md inside it" → You: "I'll create the Projects folder first, then add README.md inside it with some content." {"tool_calls": [{"name": "create_folder", "arguments": {"path": "~/Desktop/Projects"}}]} (After tool executes, continue with next step)
 - User: "put this into a txt file on my desktop" → You: {"tool_calls": [{"name": "write_file", "arguments": {"path": "~/Desktop/file.txt", "content": "[use the content from the previous conversation - the text the user wants to save]"}}]} (USE TOOL - write_file. "this" refers to content from previous messages)
 - User: "save this to a file called notes.txt" → You: {"tool_calls": [{"name": "write_file", "arguments": {"path": "~/Desktop/notes.txt", "content": "[use the actual content from previous messages]"}}]} (USE TOOL - write_file)
 - User: "write the story to desktop/story.txt" → You: {"tool_calls": [{"name": "write_file", "arguments": {"path": "~/Desktop/story.txt", "content": "[use the actual story content from previous messages]"}}]} (USE TOOL - write_file)
 - User: "save that to a file" → You: {"tool_calls": [{"name": "write_file", "arguments": {"path": "~/Desktop/file.txt", "content": "[use the content from the previous assistant message]"}}]} (USE TOOL - "that" refers to previous content)
 - User: "add a text file inside it called wow and inside tell a story about a dinosaur" → You: {"tool_calls": [{"name": "write_file", "arguments": {"path": "~/Desktop/[FOLDER_NAME]/wow.txt", "content": "Once upon a time, in a land far away, there lived a magnificent dinosaur named Rex. Rex was a friendly Tyrannosaurus who loved to explore the ancient forests..."}}]} (USE TOOL - "inside it" refers to the most recently created folder, GENERATE the story content yourself)
 - User: "create a file in that folder with a story about space" → You: {"tool_calls": [{"name": "write_file", "arguments": {"path": "~/Desktop/[FOLDER_NAME]/story.txt", "content": "In the vast expanse of the cosmos, stars twinkled like diamonds scattered across a velvet sky. A brave astronaut named Alex embarked on a journey..."}}]} (USE TOOL - "that folder" refers to previous folder, GENERATE the story)
+- User: "add a new folder inside the folder RED and add a txt file called WOAH, but a story about the world inside of it" → You: I'll create a new folder inside RED, then add WOAH.txt with a story about the world. {"tool_calls": [{"name": "create_folder", "arguments": {"path": "~/Desktop/RED/NewFolder"}}, {"name": "write_file", "arguments": {"path": "~/Desktop/RED/NewFolder/WOAH.txt", "content": "Once upon a time, in a world filled with wonder and beauty, there existed a planet called Earth. Earth was home to countless species, diverse ecosystems, and billions of people living in harmony with nature. The world was a place of endless possibilities, where every sunrise brought new opportunities and every sunset marked the end of another day filled with experiences. Mountains reached toward the sky, oceans stretched to the horizon, and forests teemed with life. It was a world of infinite beauty and boundless potential..."}}]} (MULTI-STEP: Create folder FIRST at ~/Desktop/RED/NewFolder, then create file INSIDE that new folder at ~/Desktop/RED/NewFolder/WOAH.txt with generated story content. DO NOT create WOAH as a folder - WOAH is the FILE name)
 - User: "list files in Desktop" → You: {"tool_calls": [{"name": "list_files", "arguments": {"path": "~/Desktop"}}]} (USE TOOL)
 - User: "What PDFs do I have?" → You: {"tool_calls": [{"name": "list_files", "arguments": {"path": "~/Desktop", "file_type": "pdf", "detailed": true}}, {"name": "list_files", "arguments": {"path": "~/Documents", "file_type": "pdf", "detailed": true}}, {"name": "list_files", "arguments": {"path": "~/Downloads", "file_type": "pdf", "detailed": true}}]} (USE TOOL - search Desktop, Documents, and Downloads with file_type: "pdf")
 - User: "What files are in my Desktop?" → You: {"tool_calls": [{"name": "list_files", "arguments": {"path": "~/Desktop"}}]} (USE TOOL)
@@ -840,15 +876,39 @@ Examples:
         }
         
         // Now find the matching closing brace
+        // IMPORTANT: Account for string literals - don't count braces inside strings
         let braceCount = 0;
         let endIndex = startIndex;
+        let inString = false;
+        let escapeNext = false;
+        
         for (let i = startIndex; i < content.length; i++) {
-          if (content[i] === '{') braceCount++;
-          if (content[i] === '}') {
-            braceCount--;
-            if (braceCount === 0) {
-              endIndex = i;
-              break;
+          const char = content[i];
+          
+          if (escapeNext) {
+            escapeNext = false;
+            continue;
+          }
+          
+          if (char === '\\') {
+            escapeNext = true;
+            continue;
+          }
+          
+          if (char === '"') {
+            inString = !inString;
+            continue;
+          }
+          
+          // Only count braces when NOT inside a string
+          if (!inString) {
+            if (char === '{') braceCount++;
+            if (char === '}') {
+              braceCount--;
+              if (braceCount === 0) {
+                endIndex = i;
+                break;
+              }
             }
           }
         }
@@ -960,28 +1020,94 @@ Examples:
             } else {
               logger.warn('[AIChatService] parseToolCalls - Calls is not an array:', typeof calls, calls);
             }
-        } catch (parseError) {
-          logger.warn('[AIChatService] JSON match found but parsing failed, trying to extract tool calls manually:', parseError);
+        } catch (parseError: any) {
+          logger.warn('[AIChatService] JSON match found but parsing failed, trying to extract tool calls manually:', parseError?.message || parseError);
+          logger.warn('[AIChatService] JSON string length:', jsonStr.length, 'First 500 chars:', jsonStr.substring(0, 500));
           
-          // Fallback: Try to extract tool calls manually from malformed JSON
-          const toolCallMatches = jsonStr.matchAll(/\{"name":\s*"([^"]+)",\s*"arguments":\s*(\{[^}]+\})\}/g);
-          for (const match of toolCallMatches) {
-            try {
-              const name = match[1];
-              const argsStr = match[2];
-              const arguments_ = JSON.parse(argsStr);
-              toolCalls.push({
-                name: normalizeToolName(name),
-                arguments: arguments_
-              });
-            } catch (e) {
-              logger.debug('[AIChatService] Failed to parse individual tool call:', e);
+          // Try to fix common JSON issues
+          let fixedJson = jsonStr;
+          
+          // Fix unescaped quotes in content strings (common issue with AI-generated JSON)
+          // Replace unescaped quotes inside content values, but preserve escaped quotes
+          fixedJson = fixedJson.replace(/"content":\s*"([^"]*(?:\\.[^"]*)*)"/g, (match, content) => {
+            // If content has unescaped quotes, escape them
+            const escaped = content.replace(/(?<!\\)"/g, '\\"');
+            return `"content": "${escaped}"`;
+          });
+          
+          // Try parsing the fixed JSON
+          try {
+            const parsed = JSON.parse(fixedJson);
+            const calls = parsed.tool_calls || parsed.toolcalls;
+            if (calls && Array.isArray(calls)) {
+              for (const call of calls) {
+                let args = call.arguments || {};
+                if (typeof args === 'string') {
+                  try {
+                    args = JSON.parse(args);
+                  } catch (e) {
+                    logger.warn('[AIChatService] Failed to parse arguments string:', e);
+                    args = {};
+                  }
+                }
+                
+                if (call.name && args) {
+                  toolCalls.push({
+                    name: normalizeToolName(call.name),
+                    arguments: args
+                  });
+                }
+              }
+              if (toolCalls.length > 0) {
+                logger.info('[AIChatService] Successfully parsed tool calls from fixed JSON:', toolCalls.length);
+                return toolCalls;
+              }
             }
+          } catch (fixError: any) {
+            logger.warn('[AIChatService] Fixed JSON also failed to parse:', fixError?.message || fixError);
           }
           
-          if (toolCalls.length > 0) {
-            logger.info('[AIChatService] Successfully extracted tool calls from malformed JSON');
-            return toolCalls;
+          // Last resort: Try to extract using balanced brace matching for arguments
+          const nameMatch = jsonStr.match(/"name":\s*"([^"]+)"/);
+          if (nameMatch) {
+            const toolName = nameMatch[1];
+            const argsStart = jsonStr.indexOf('"arguments":');
+            if (argsStart !== -1) {
+              // Find the opening brace after "arguments":
+              let braceStart = argsStart;
+              while (braceStart < jsonStr.length && jsonStr[braceStart] !== '{') {
+                braceStart++;
+              }
+              
+              // Find matching closing brace
+              let braceCount = 0;
+              let braceEnd = braceStart;
+              for (let i = braceStart; i < jsonStr.length; i++) {
+                if (jsonStr[i] === '{') braceCount++;
+                if (jsonStr[i] === '}') {
+                  braceCount--;
+                  if (braceCount === 0) {
+                    braceEnd = i;
+                    break;
+                  }
+                }
+              }
+              
+              if (braceEnd > braceStart) {
+                const argsStr = jsonStr.substring(braceStart, braceEnd + 1);
+                try {
+                  const args = JSON.parse(argsStr);
+                  toolCalls.push({
+                    name: normalizeToolName(toolName),
+                    arguments: args
+                  });
+                  logger.info('[AIChatService] Successfully extracted tool call using balanced brace matching');
+                  return toolCalls;
+                } catch (e: any) {
+                  logger.warn('[AIChatService] Failed to parse arguments using balanced braces:', e?.message || e);
+                }
+              }
+            }
           }
         }
       }
@@ -1114,7 +1240,8 @@ Examples:
     const toolSourceMap = new Map<string, { type: 'filesystem' | 'app'; appInstanceID?: string }>();
     
     let tools = args.tools;
-    if (tools && tools.length > 0) {
+    // Check if tools is provided and not empty
+    if (tools && Array.isArray(tools) && tools.length > 0) {
       // Tools from frontend may include source metadata
       const toolsWithSource: any[] = [];
       for (const tool of tools) {
@@ -1135,8 +1262,10 @@ Examples:
       tools = normalizeToolsObject([...toolsWithSource]);
       logger.info('[AIChatService] streamComplete - Tools provided by frontend:', tools.length, 'with sources:', Array.from(toolSourceMap.entries()).map(([name, source]) => `${name}:${source.type}`).join(', '));
     } else if (args.filesystem && args.walletAddress) {
-      // Automatically include filesystem tools if filesystem is available
-      logger.info('[AIChatService] streamComplete - Auto-including filesystem tools - filesystemTools length:', filesystemTools.length);
+      // CRITICAL: Auto-inject filesystem tools when no tools provided
+      // This ensures AI always has filesystem tools available
+      logger.info('[AIChatService] streamComplete - ✅ Auto-including filesystem tools - filesystemTools length:', filesystemTools.length);
+      logger.info('[AIChatService] streamComplete - filesystem available:', !!args.filesystem, 'walletAddress:', args.walletAddress?.substring(0, 10) + '...');
       tools = normalizeToolsObject([...filesystemTools]);
       
       // Mark all filesystem tools
@@ -1147,9 +1276,12 @@ Examples:
         }
       }
       
-      logger.info('[AIChatService] streamComplete - Automatically including filesystem tools:', tools.length);
+      logger.info('[AIChatService] streamComplete - ✅ Automatically included', tools.length, 'filesystem tools');
     } else {
-      logger.warn('[AIChatService] streamComplete - No tools available - filesystem:', !!args.filesystem, 'walletAddress:', !!args.walletAddress, 'args.tools:', args.tools);
+      logger.error('[AIChatService] streamComplete - ⚠️ CRITICAL: No tools available!');
+      logger.error('[AIChatService] streamComplete - filesystem:', !!args.filesystem, 'walletAddress:', !!args.walletAddress, 'args.tools:', args.tools);
+      logger.error('[AIChatService] streamComplete - AI will NOT be able to execute filesystem operations');
+      tools = undefined; // Explicitly set to undefined
     }
     
     logger.info('[AIChatService] streamComplete - Final tools count:', tools?.length || 0);
@@ -1224,10 +1356,20 @@ Examples:
         // First check native tool_calls, then parse from content
         if (toolCalls.length === 0 && fullContent && tools && tools.length > 0) {
           // Try to parse tool calls from the accumulated content
-          logger.info('[AIChatService] streamComplete - No native tool_calls, parsing from content:', fullContent.substring(0, 200));
+          logger.info('[AIChatService] streamComplete - No native tool_calls, parsing from content. Full content length:', fullContent.length);
+          logger.info('[AIChatService] streamComplete - Full content preview (first 1000 chars):', fullContent.substring(0, 1000));
           const parsedToolCalls = this.parseToolCalls(fullContent);
           if (parsedToolCalls && parsedToolCalls.length > 0) {
-            logger.info('[AIChatService] streamComplete - Parsed tool calls from content:', parsedToolCalls.length);
+            logger.info('[AIChatService] streamComplete - ✅ Parsed', parsedToolCalls.length, 'tool calls from content');
+            for (const tc of parsedToolCalls) {
+              logger.info('[AIChatService] streamComplete - Tool call:', {
+                name: tc.name,
+                hasContent: !!tc.arguments?.content,
+                contentLength: tc.arguments?.content?.length || 0,
+                contentPreview: tc.arguments?.content ? tc.arguments.content.substring(0, 200) : 'NO CONTENT',
+                allArgs: Object.keys(tc.arguments || {})
+              });
+            }
             // Convert parsed tool calls to the format expected by tool executor
             toolCalls = parsedToolCalls.map((tc, idx) => ({
               id: `call_${Date.now()}_${idx}`,
@@ -1238,7 +1380,8 @@ Examples:
               }
             }));
           } else {
-            logger.warn('[AIChatService] streamComplete - No tool calls parsed from content');
+            logger.warn('[AIChatService] streamComplete - ⚠️ No tool calls parsed from content');
+            logger.warn('[AIChatService] streamComplete - Content that failed to parse:', fullContent.substring(0, 1000));
           }
         }
         
@@ -1408,9 +1551,12 @@ Examples:
                 logger.info('[AIChatService] streamComplete - Normalized path:', path);
               }
               
-              logger.info('[AIChatService] streamComplete - Executing tool:', toolCall.function.name, 'with args:', args);
+              logger.info('[AIChatService] streamComplete - Executing tool:', toolCall.function.name, 'with args:', JSON.stringify(args, null, 2));
+              if (toolCall.function.name === 'write_file' && args.content) {
+                logger.info('[AIChatService] streamComplete - write_file content length:', args.content.length, 'preview:', args.content.substring(0, 100));
+              }
               const result = await toolExecutor.executeTool(toolCall.function.name, args);
-              logger.info('[AIChatService] streamComplete - Tool execution result:', result);
+              logger.info('[AIChatService] streamComplete - Tool execution result:', JSON.stringify(result, null, 2));
               toolResults.push({
                 tool_call_id: toolCall.id,
                 role: 'tool' as const,

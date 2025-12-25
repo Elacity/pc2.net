@@ -1467,7 +1467,16 @@ async function sendAIMessage() {
     const aiMessageId = 'msg-ai-' + Date.now();
     $('.ai-chat-messages').append(
         `<div class="ai-chat-message" id="${aiMessageId}">
-            <div class="ai-chat-message-ai ai-streaming">...</div>
+            <div class="ai-chat-message-ai ai-streaming">
+                <div class="ai-loading-indicator">
+                    <div class="ai-loading-dots">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </div>
+                    <span class="ai-loading-text">Thinking...</span>
+                </div>
+            </div>
         </div>`
     );
     scrollChatToBottom();
@@ -1550,21 +1559,21 @@ async function sendAIMessage() {
     // Add current user message (with file attachments if any)
     messages.push({ role: 'user', content: userMessageContent });
     
-    // Collect tools from apps and backend before sending request
+    // Collect tools from apps (backend will auto-inject filesystem tools)
     let allTools = [];
     try {
         const aiToolService = window.services?.get('ai-tool');
         if (aiToolService) {
-            // Get filesystem tools callback (backend will auto-inject, but we merge with app tools)
+            // Only collect app tools - backend will auto-inject filesystem tools
+            // Pass empty callback since backend handles filesystem tools automatically
             const getFilesystemTools = async () => {
-                // Backend will auto-inject filesystem tools, but we need to merge with app tools
-                // For now, return empty array - backend handles filesystem tools
-                // App tools will be merged on frontend
+                // Backend auto-injects filesystem tools when tools is undefined/empty
+                // We only need to collect app tools here
                 return [];
             };
             
             allTools = await aiToolService.collectAllTools(getFilesystemTools);
-            console.log('[UIAIChat] Collected', allTools.length, 'tools for AI request');
+            console.log('[UIAIChat] Collected', allTools.length, 'tools for AI request (app tools only - backend will add filesystem tools)');
         } else {
             console.warn('[UIAIChat] AIToolService not available, proceeding without app tools');
         }
@@ -1581,7 +1590,8 @@ async function sendAIMessage() {
             messages: messages,
             model: selectedModel,
             stream: true,  // Enable streaming
-            tools: allTools.length > 0 ? allTools : undefined  // Pass tools if available
+            // Pass app tools if available, otherwise undefined (backend will auto-inject filesystem tools)
+            tools: allTools.length > 0 ? allTools : undefined
         }
     };
     
@@ -1670,6 +1680,7 @@ async function sendAIMessage() {
                         }
                         lastChunkText = newText;
                         fullContent += newText;
+                        // Remove loading indicator when first content arrives
                         $aiMessage.removeClass('ai-streaming');
                         $aiMessage.html(renderMarkdown(fullContent));
                         scrollChatToBottom();

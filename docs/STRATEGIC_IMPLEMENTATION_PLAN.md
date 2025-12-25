@@ -43,7 +43,7 @@ PORT=4202 npm start
 
 ## 📊 Current State Assessment
 
-### 🎯 Recent Progress (2025-12-21)
+### 🎯 Recent Progress (2025-01-20)
 
 **Phase 2.5: Backup & Restore Enhancements - ✅ COMPLETE**
 
@@ -62,6 +62,17 @@ PORT=4202 npm start
 - `docs/BACKUP_RESTORE_AUDIT.md` - Comprehensive audit document
 
 **Status:** Phase 2.5 complete, Phase 3 at 40% (automated scheduling and verification tools remaining)
+
+**🎯 AI Integration Complete (2025-01-20):**
+- ✅ Full AI chat functionality with streaming responses (`application/x-ndjson`)
+- ✅ IPC tool system for app extensibility (ready for WASMER apps)
+- ✅ User isolation verified and fixed (wallet-scoped localStorage)
+- ✅ AI Settings tab for provider and API key management
+- ✅ Complete sovereignty verification (local-first, cloud-optional)
+- ✅ Enhanced tools: `grep_file`, `read_file_lines`, `count_file`, `get_filename`, `get_directory`, `touch_file`
+- ✅ Advanced path normalization (handles malformed AI-generated paths)
+- ✅ Standard directory support (Desktop, Documents, Pictures, Videos, Music, Downloads, Public)
+- See "AI Agent Integration Status" section below for full details
 
 **⚠️ Known Issue (2025-01-20): Terminal/Phoenix App Not Working**
 - Terminal app launches but shows black/blank screen
@@ -3969,43 +3980,79 @@ for (const capsule of capsules) {
 
 ---
 
-## AI Agent Integration Status (2025-12-23)
+## AI Agent Integration Status (2025-12-25)
 
 ### ✅ **AI Integration Complete - Production Ready**
 
-**Implementation Status:** All phases complete and fully functional
+**Implementation Status:** All phases complete, IPC tool system implemented, user isolation verified, Claude provider tool calls fixed
 
 **Completed Features:**
+
 1. **Backend AI Service** ✅
-   - Ollama provider integration with auto-detection
-   - Multiple AI providers support (OpenAI, Claude, etc. - optional with API keys)
+   - Ollama provider integration with auto-detection (default: `deepseek-r1:1.5b`)
+   - Multiple AI providers support (OpenAI, Claude, Gemini - optional with user API keys)
    - Tool normalization and execution
-   - Streaming responses via Server-Sent Events
+   - Streaming responses via `application/x-ndjson` (Puter-compatible format)
+   - Provider abstraction layer (`AIProvider` interface)
+   - User-specific provider registration (per-wallet API keys)
+   - **Claude Provider Fix (2025-12-25):** Fixed tool call finalization using official `@anthropic-ai/sdk` streaming API
+     - Properly handles `content_block_start`, `content_block_delta` (with `input_json_delta`), and `content_block_stop` events
+     - Accumulates tool call JSON incrementally and finalizes on `content_block_stop`
+     - Yields tool calls immediately when finalized for real-time execution
 
 2. **Function Calling** ✅
    - All filesystem tools implemented (create, list, read, write, delete, move, copy, stat, rename)
-   - Wallet-scoped path resolution and security
-   - Path normalization (handles malformed paths)
+   - Enhanced tools: `grep_file`, `read_file_lines`, `count_file`, `get_filename`, `get_directory`, `touch_file`
+   - Wallet-scoped path resolution and security (`/${walletAddress}/...`)
+   - Advanced path normalization (handles malformed paths like `~Desktop/`, `~:Desktop/`, `/walletDocuments`)
+   - Standard directory support (Desktop, Documents, Pictures, Videos, Music, Downloads, Public)
    - Tool execution with proper error handling
-   - WebSocket live updates for AI-initiated operations
+   - WebSocket live updates for AI-initiated operations (`original_client_socket_id: null`)
 
 3. **Frontend UI** ✅
-   - Slide-out chat panel (right side of screen)
-   - Multi-conversation system with persistent history
+   - Slide-out chat panel (right side of screen, z-index: 9997)
+   - Multi-conversation system with persistent history (wallet-scoped localStorage)
    - History slide-out menu (slides from left inside AI panel)
    - Streaming text responses with markdown rendering
-   - File attachments (images, PDFs, text files)
-   - OCR and PDF text extraction
-   - Vision-capable model support (llava)
-   - Dark mode as default
+   - File attachments (images, PDFs, text files) from PC2 filesystem
+   - OCR and PDF text extraction (client-side)
+   - Vision-capable model support (llava:7b)
+   - Dark mode as default (matches PC2 brand kit: `#2f2f30`)
    - AI toolbar button toggle functionality
    - Hover-to-delete conversation history
+   - Model selector synced with Settings
+   - Copy and edit functionality for user messages
 
-4. **AI Capabilities** ✅
-   - General question answering (default behavior)
-   - Filesystem operations via function calling
-   - Multi-modal input (text + images)
-   - Context-aware responses
+4. **AI Settings Tab** ✅
+   - Dedicated AI Assistant tab in Settings
+   - Provider selection (Ollama, Claude, OpenAI, Gemini)
+   - API key management (per-wallet, encrypted in database)
+   - Model selection and status display
+   - Ollama base URL configuration
+   - Real-time status indicators
+
+5. **IPC Tool System** ✅
+   - `AIToolService` for collecting tools from apps via IPC
+   - Tool discovery from open app windows (`requestTools` / `providedTools`)
+   - Tool execution routing (backend filesystem tools vs. app tools)
+   - Tool source tracking (`__source` metadata)
+   - Hybrid architecture: centralized backend tools + distributed app tools
+   - Ready for WASMER app extensibility
+
+6. **User Isolation** ✅ **CRITICAL FIX (2025-01-20)**
+   - **Backend:** Perfect wallet-scoped isolation (database, API endpoints, tool execution)
+   - **Frontend:** Fixed wallet-scoped localStorage keys (prevents cross-user data leakage)
+   - Each user has isolated: AI config, API keys, chat history, filesystem operations
+   - Works exactly like a normal computer (each account completely isolated)
+
+**AI Capabilities:**
+- ✅ General question answering (default behavior - no tool calls)
+- ✅ Filesystem operations via function calling (explicit requests only)
+- ✅ Multi-modal input (text + images)
+- ✅ Context-aware responses
+- ✅ Content generation (stories, descriptions)
+- ✅ File type queries ("What PDFs do I have?")
+- ✅ Search and analysis operations
 
 **Integration Points:**
 - ✅ Uses existing `/drivers/call` endpoint pattern
@@ -4013,9 +4060,542 @@ for (const capsule of capsules) {
 - ✅ Leverages existing `FilesystemManager` for tool execution
 - ✅ Uses existing WebSocket system for live updates
 - ✅ Follows PC2's Express + TypeScript architecture
+- ✅ Maintains complete sovereignty (local by default, cloud providers optional)
+
+**Critical Lessons Learned:**
+
+1. **User Isolation is Non-Negotiable**
+   - **Issue:** Chat history stored in global localStorage (User A's chats visible to User B)
+   - **Fix:** Wallet-scoped localStorage keys (`pc2_ai_conversations_${walletAddress}`)
+   - **Lesson:** Always scope browser storage by user identity, even in single-user scenarios
+
+2. **Path Normalization is Critical**
+   - **Issue:** AI generates malformed paths (`~Desktop/`, `~:Desktop/`, `/walletDocuments`)
+   - **Fix:** Multi-layer path normalization in `ToolExecutor.resolvePath()`
+   - **Lesson:** AI models need robust input validation and correction
+
+3. **WebSocket Events Must Include Source Metadata**
+   - **Issue:** AI-initiated file operations didn't show live in UI
+   - **Fix:** Set `original_client_socket_id: null` for AI operations
+   - **Lesson:** Frontend filters events by socket ID - AI operations need special handling
+
+4. **Streaming Format Matters**
+   - **Issue:** Initial SSE format didn't match Puter's implementation
+   - **Fix:** Switched to `application/x-ndjson` (newline-delimited JSON)
+   - **Lesson:** Compatibility with existing systems requires format alignment
+
+5. **Tool Source Tracking Enables Extensibility**
+   - **Implementation:** `toolSourceMap` tracks whether tools come from backend or apps
+   - **Benefit:** Enables future WASMER apps to register their own AI tools
+   - **Lesson:** Design for extensibility from the start
+
+6. **Default to Local, Cloud is Optional**
+   - **Architecture:** Ollama is default (local, no external calls)
+   - **User Choice:** Cloud providers require explicit API key configuration
+   - **Lesson:** Sovereignty means local-first, cloud-enhanced
+
+**Security & Sovereignty Verification:**
+- ✅ **Complete Isolation:** Each user's data is wallet-scoped (backend + frontend)
+- ✅ **No External Dependencies:** Default Ollama runs locally (`localhost:11434`)
+- ✅ **User-Controlled Cloud:** Cloud providers only used if user adds API keys
+- ✅ **Data Sovereignty:** All data stays on user's PC2 node
+- ✅ **API Keys:** Encrypted in user's database, never exposed
+- ✅ **Verification:** See `docs/AI_SOVEREIGNTY_VERIFICATION.md` and `docs/AI_USER_ISOLATION_VERIFICATION.md`
 
 **Documentation:**
-- See `docs/AI_AGENT_INTEGRATION_STRATEGY.md` for detailed implementation guide
+- `docs/AI_AGENT_INTEGRATION_STRATEGY.md` - Detailed implementation guide
+- `docs/AI_SOVEREIGNTY_VERIFICATION.md` - Sovereignty and isolation verification
+- `docs/AI_USER_ISOLATION_VERIFICATION.md` - User isolation audit and fixes
+- `docs/IPC_TOOL_SYSTEM_STRATEGY.md` - IPC tool system architecture
+- `docs/IPC_TOOL_SYSTEM_TESTING.md` - Testing guide for IPC tools
+- `docs/AI_CAPABILITIES_AND_BENEFITS.md` - User-facing capabilities documentation
+
+---
+
+## AI Integration Testing & Handover Guide (2025-12-25)
+
+### 🧪 **Comprehensive Testing Procedures**
+
+This section provides a complete testing guide for new agents or developers taking over the AI integration.
+
+#### **Prerequisites**
+1. **Server Running:** PC2 node must be running on `http://localhost:4202`
+2. **Ollama Installed:** Local Ollama server should be running on `http://localhost:11434`
+3. **Default Model:** `deepseek-r1:1.5b` should be available in Ollama
+4. **Vision Model (Optional):** `llava:7b` for image/PDF analysis
+5. **API Keys (Optional):** Claude, OpenAI, or Gemini API keys for cloud provider testing
+
+#### **1. Basic AI Chat Functionality**
+
+**Test 1.1: General Question Answering**
+```
+User Input: "What is the capital of France?"
+Expected: AI responds with text answer (no tool calls)
+Verification: Response appears in chat, no files created
+```
+
+**Test 1.2: Streaming Text**
+```
+User Input: "Tell me a short story about space"
+Expected: Text streams incrementally (not all at once)
+Verification: Watch chat - text should appear word-by-word
+```
+
+**Test 1.3: Markdown Rendering**
+```
+User Input: "Explain markdown formatting with examples"
+Expected: Response includes formatted markdown (headers, lists, code blocks)
+Verification: Check rendered output in chat UI
+```
+
+#### **2. Filesystem Operations**
+
+**Test 2.1: Create Folder**
+```
+User Input: "Create a folder called TEST on my desktop"
+Expected: 
+  - Folder appears on desktop immediately (live update)
+  - AI confirms creation with path
+Verification: Check desktop UI, verify path: ~/Desktop/TEST
+```
+
+**Test 2.2: Create File with Content**
+```
+User Input: "Create a text file called DRAGON.txt on my desktop with a story about a dragon"
+Expected:
+  - File created at ~/Desktop/DRAGON.txt
+  - File contains generated story content
+  - File appears on desktop immediately
+Verification: 
+  - Check desktop for DRAGON.txt
+  - Open file and verify content is a story (not placeholder text)
+```
+
+**Test 2.3: Multi-Step Operations**
+```
+User Input: "Create a folder called PROJECTS on my desktop, then add a file called README.md inside it with 'Hello World'"
+Expected:
+  - Folder PROJECTS created
+  - File README.md created inside PROJECTS
+  - Both appear on desktop immediately
+Verification: Check ~/Desktop/PROJECTS/README.md exists with content
+```
+
+**Test 2.4: Context Awareness ("inside it")**
+```
+Step 1: "Create a folder called RED on my desktop"
+Step 2: "Add a text file inside it called NOTES.txt with 'My notes'"
+Expected:
+  - Step 2 creates file at ~/Desktop/RED/NOTES.txt (not ~/Desktop/NOTES.txt)
+Verification: File location is correct
+```
+
+**Test 2.5: Standard Directory Support**
+```
+Test Cases:
+- "Create a folder called PHOTOS in Pictures"
+- "Create a file called DOC.txt in Documents"
+- "List files in Downloads"
+Expected: Paths resolve to ~/Pictures/, ~/Documents/, ~/Downloads/
+Verification: Files appear in correct directories
+```
+
+#### **3. File Queries**
+
+**Test 3.1: List Files**
+```
+User Input: "What files are in my Desktop?"
+Expected: AI lists actual files (not hallucinated)
+Verification: Compare AI response with actual desktop contents
+```
+
+**Test 3.2: File Type Filtering**
+```
+User Input: "What PDFs do I have?"
+Expected: AI searches Desktop, Documents, Downloads and lists actual PDFs
+Verification: Response matches actual PDF files in filesystem
+```
+
+**Test 3.3: File Reading**
+```
+User Input: "Read the file DRAGON.txt on my desktop"
+Expected: AI displays actual file content
+Verification: Content matches file contents
+```
+
+#### **4. Multi-Modal Input**
+
+**Test 4.1: Image Upload**
+```
+Steps:
+1. Click attachment icon in AI chat
+2. Select an image file from PC2 filesystem
+3. Ask: "What's in this image?"
+Expected: 
+  - Image appears in chat
+  - AI analyzes image content (if using vision model)
+Verification: AI response describes image content
+```
+
+**Test 4.2: PDF Upload**
+```
+Steps:
+1. Upload a PDF file
+2. Ask: "What is this PDF about?"
+Expected:
+  - PDF icon appears in chat
+  - AI extracts and analyzes PDF text
+Verification: AI response references PDF content
+```
+
+#### **5. Provider Switching**
+
+**Test 5.1: Ollama (Default)**
+```
+Steps:
+1. Open AI Settings tab
+2. Verify "Ollama" is selected
+3. Send message: "Hello"
+Expected: Response from Ollama (deepseek-r1:1.5b)
+Verification: Check server logs for Ollama requests
+```
+
+**Test 5.2: Claude Provider**
+```
+Steps:
+1. Open AI Settings tab
+2. Select "Claude" provider
+3. Add Claude API key (if not already added)
+4. Select model: "claude-sonnet-4-5-20250929"
+5. Send message: "Create a file called TEST.txt on desktop"
+Expected:
+  - Tool calls are properly finalized and executed
+  - File is created
+Verification: Check server logs for "Tool call finalized" messages
+```
+
+**Test 5.3: OpenAI Provider**
+```
+Steps:
+1. Select "OpenAI" provider
+2. Add OpenAI API key
+3. Test basic chat and tool execution
+Expected: Works same as Claude
+```
+
+#### **6. User Isolation**
+
+**Test 6.1: Multi-User Isolation**
+```
+Steps:
+1. Login as User A (wallet address 0xAAA...)
+2. Create AI conversation, add API keys
+3. Logout
+4. Login as User B (wallet address 0xBBB...)
+5. Open AI chat
+Expected:
+  - User B sees empty chat history (not User A's)
+  - User B's API keys are separate
+  - User B's filesystem operations are isolated
+Verification: Check localStorage keys include wallet address
+```
+
+**Test 6.2: Wallet-Scoped Storage**
+```
+Steps:
+1. Open browser DevTools > Application > Local Storage
+2. Check keys: `pc2_ai_conversations_${walletAddress}`
+Expected: Keys are wallet-scoped
+Verification: Keys include wallet address
+```
+
+#### **7. Error Handling**
+
+**Test 7.1: Invalid Path**
+```
+User Input: "Create a file at /invalid/path/file.txt"
+Expected: Error message, no file created
+Verification: Check server logs for path validation errors
+```
+
+**Test 7.2: Missing API Key**
+```
+Steps:
+1. Remove API key for a provider
+2. Try to use that provider
+Expected: Clear error message about missing API key
+```
+
+**Test 7.3: Network Errors**
+```
+Steps:
+1. Stop Ollama server
+2. Try to use AI chat
+Expected: Graceful error message
+```
+
+#### **8. UI/UX Testing**
+
+**Test 8.1: Chat History**
+```
+Steps:
+1. Create multiple conversations
+2. Click hamburger menu (top left)
+3. Verify conversations appear in history
+4. Hover over conversation, verify delete icon appears
+5. Click delete, verify conversation removed
+Expected: History works correctly
+```
+
+**Test 8.2: New Chat**
+```
+Steps:
+1. Click "+" button (top right)
+2. Verify new empty conversation starts
+Expected: Previous conversation saved, new one starts
+```
+
+**Test 8.3: Toggle Panel**
+```
+Steps:
+1. Click AI icon in taskbar
+2. Panel opens
+3. Click AI icon again
+4. Panel closes
+Expected: Toggle works smoothly
+```
+
+**Test 8.4: Z-Index Ordering**
+```
+Steps:
+1. Open AI chat panel
+2. Open wallet sidebar
+3. Open a window
+Expected: 
+  - Wallet sidebar appears above AI panel
+  - Windows appear above both
+Verification: Visual layering is correct
+```
+
+#### **9. Performance Testing**
+
+**Test 9.1: Streaming Performance**
+```
+User Input: "Write a long story about space exploration"
+Expected: Text streams smoothly without lag
+Verification: No UI freezing, smooth streaming
+```
+
+**Test 9.2: Large File Handling**
+```
+Steps:
+1. Upload large PDF (>10MB)
+2. Ask AI to analyze it
+Expected: Handles gracefully (may truncate or error appropriately)
+```
+
+#### **10. Integration Testing**
+
+**Test 10.1: WebSocket Live Updates**
+```
+Steps:
+1. Open desktop in one tab
+2. Use AI chat in another tab (or same tab)
+3. Ask AI to create a file
+Expected: File appears on desktop immediately (no refresh needed)
+Verification: Live update works
+```
+
+**Test 10.2: Tool Execution Routing**
+```
+Steps:
+1. Open an app that registers AI tools (future WASMER app)
+2. Use AI chat to call app tool
+Expected: Tool executes in app, not backend
+Verification: Check logs for tool source routing
+```
+
+### 🔍 **Debugging & Troubleshooting**
+
+#### **Server Logs Location**
+```bash
+tail -f /private/tmp/pc2-server.log
+```
+
+#### **Key Log Patterns to Watch**
+
+**Tool Call Finalization (Claude):**
+```
+[ClaudeProvider] Tool use started: write_file id: toolu_...
+[ClaudeProvider] content_block_stop received - currentToolCallInfo: write_file (...) buffer length: ...
+[ClaudeProvider] ✅ Tool call finalized: write_file args: {...}
+```
+
+**Tool Execution:**
+```
+[ToolExecutor] Executing tool: write_file with args: {...}
+[ToolExecutor] Resolved path: /0x.../Desktop/DRAGON.txt
+[ToolExecutor] ✅ Tool execution successful
+```
+
+**WebSocket Broadcasting:**
+```
+[ToolExecutor] Broadcasting item.added event for: DRAGON.txt
+[WebSocket] Event broadcasted to all clients (original_client_socket_id: null)
+```
+
+#### **Common Issues & Fixes**
+
+**Issue: Tool calls not executing**
+- Check: Server logs for "Tool call finalized" message
+- Fix: Verify `content_block_stop` handler is working (Claude provider)
+- Fix: Check `currentToolCallInfo` is not null when `content_block_stop` received
+
+**Issue: Files not appearing live on desktop**
+- Check: `original_client_socket_id: null` in WebSocket events
+- Fix: Verify `ToolExecutor` broadcasts events with `null` socket ID
+
+**Issue: Wrong paths (e.g., `~Desktop/` instead of `~/Desktop/`)**
+- Check: Path normalization in `ToolExecutor.resolvePath()`
+- Fix: Add new normalization rule for malformed path pattern
+
+**Issue: User A sees User B's chat history**
+- Check: localStorage keys are wallet-scoped
+- Fix: Ensure all localStorage keys include wallet address
+
+**Issue: Claude tool calls not finalizing**
+- Check: `@anthropic-ai/sdk` streaming events are handled correctly
+- Fix: Verify `content_block_stop` finalizes tool call even if buffer is empty
+
+### 📋 **Handover Checklist for New Agents**
+
+When taking over AI integration work, verify:
+
+- [ ] **Server Setup**
+  - [ ] PC2 node running on port 4202
+  - [ ] Ollama installed and running
+  - [ ] Default model (`deepseek-r1:1.5b`) available
+  - [ ] Database migrations run (check `ai_config` table exists)
+
+- [ ] **Code Structure**
+  - [ ] `pc2-node/test-fresh-install/src/services/ai/AIChatService.ts` - Main AI service
+  - [ ] `pc2-node/test-fresh-install/src/services/ai/providers/ClaudeProvider.ts` - Claude implementation
+  - [ ] `pc2-node/test-fresh-install/src/services/ai/tools/ToolExecutor.ts` - Tool execution
+  - [ ] `src/gui/src/UI/AI/UIAIChat.js` - Frontend chat UI
+  - [ ] `src/gui/src/UI/Settings/UITabAI.js` - AI settings tab
+
+- [ ] **Key Files Modified**
+  - [ ] `pc2-node/test-fresh-install/src/api/other.ts` - `/drivers/call` endpoint
+  - [ ] `pc2-node/test-fresh-install/src/api/ai.ts` - AI configuration API
+  - [ ] `pc2-node/test-fresh-install/src/storage/migrations.ts` - Database migrations
+  - [ ] `pc2-node/test-fresh-install/src/storage/database.ts` - AI config methods
+
+- [ ] **Testing**
+  - [ ] Run all tests from "Comprehensive Testing Procedures" above
+  - [ ] Verify tool calls execute correctly
+  - [ ] Verify user isolation works
+  - [ ] Verify streaming works smoothly
+
+- [ ] **Documentation**
+  - [ ] Read `docs/AI_AGENT_INTEGRATION_STRATEGY.md`
+  - [ ] Read `docs/IPC_TOOL_SYSTEM_STRATEGY.md`
+  - [ ] Review this testing guide
+
+### 🚀 **Quick Start for New Developers**
+
+1. **Start Server:**
+   ```bash
+   cd pc2-node/test-fresh-install
+   PORT=4202 npm start
+   ```
+
+2. **Verify Ollama:**
+   ```bash
+   curl http://localhost:11434/api/tags
+   ```
+
+3. **Test Basic Chat:**
+   - Open `http://localhost:4202`
+   - Click AI icon in taskbar
+   - Send: "Hello, what is 2+2?"
+   - Verify response
+
+4. **Test Tool Execution:**
+   - Send: "Create a folder called TEST on my desktop"
+   - Verify folder appears on desktop
+   - Check server logs for tool execution
+
+5. **Check Logs:**
+   ```bash
+   tail -f /private/tmp/pc2-server.log | grep -E "ClaudeProvider|ToolExecutor|AIChatService"
+   ```
+
+### 📝 **Recent Fixes (2025-12-25)**
+
+1. **Claude Provider Tool Call Finalization**
+   - **Issue:** Tool calls from Claude were not being finalized correctly
+   - **Root Cause:** `content_block_stop` handler wasn't properly checking `currentToolCallInfo`
+   - **Fix:** Updated condition to check only `currentToolCallInfo` (not buffer), added comprehensive logging
+   - **Files Modified:** `pc2-node/test-fresh-install/src/services/ai/providers/ClaudeProvider.ts`
+   - **Verification:** Check logs for "Tool call finalized" messages
+
+2. **Path Normalization Enhancements**
+   - **Issue:** AI generated malformed paths like `~Desktop/`, `~:Desktop/`
+   - **Fix:** Enhanced `ToolExecutor.resolvePath()` with multiple normalization rules
+   - **Files Modified:** `pc2-node/test-fresh-install/src/services/ai/tools/ToolExecutor.ts`
+
+3. **User Isolation Fix**
+   - **Issue:** Chat history visible across users
+   - **Fix:** Wallet-scoped localStorage keys
+   - **Files Modified:** `src/gui/src/UI/AI/UIAIChat.js`
+
+---
+
+## Key Architectural Insights (2025-01-20)
+
+### 1. **Sovereignty Through Isolation**
+Every user operation must be wallet-scoped from day one. This includes:
+- Database queries (always include `wallet_address` in WHERE clauses)
+- Filesystem paths (always resolve to `/${walletAddress}/...`)
+- Browser storage (always include wallet in localStorage keys)
+- API endpoints (always extract wallet from authenticated user)
+
+**Lesson:** Isolation is not optional - it's the foundation of user sovereignty.
+
+### 2. **Local-First, Cloud-Enhanced**
+PC2's architecture defaults to local operations (Ollama on `localhost:11434`), with cloud providers as optional enhancements that require explicit user configuration (API keys). This maintains sovereignty while providing flexibility.
+
+**Lesson:** Default to sovereignty, enhance with user choice.
+
+### 3. **Extensibility Through IPC**
+The IPC tool system enables future WASMER apps to register their own AI tools, creating an extensible ecosystem while maintaining centralized control over core filesystem operations.
+
+**Lesson:** Design for extensibility, but maintain control over core operations.
+
+### 4. **Format Compatibility Matters**
+Using Puter's `application/x-ndjson` streaming format ensures compatibility with existing frontend code and enables easier migration of features from Puter's codebase.
+
+**Lesson:** When forking, maintain format compatibility for easier code reuse.
+
+### 5. **Path Normalization is Critical**
+AI models generate unpredictable path formats. Robust normalization (handling `~Desktop/`, `~:Desktop/`, `/walletDocuments`, etc.) is essential for reliable filesystem operations.
+
+**Lesson:** Always validate and normalize user (and AI) input, especially paths.
+
+### 6. **WebSocket Event Source Matters**
+Frontend filters WebSocket events by `original_client_socket_id` to prevent duplicate updates. AI-initiated operations must set this to `null` to ensure live UI updates.
+
+**Lesson:** Understand event filtering mechanisms before implementing new event sources.
+
+### 7. **User Isolation Requires Both Backend and Frontend**
+Backend isolation (database, API) is not enough. Frontend browser storage (localStorage) must also be wallet-scoped to prevent cross-user data leakage.
+
+**Lesson:** Security and isolation must be enforced at every layer (backend, frontend, storage).
+
+### 8. **AI Tool Execution Needs Context**
+AI models need clear system messages that differentiate between general questions (text responses) and explicit filesystem operations (tool calls). Context about user intent (e.g., "on desktop") must be extracted and used for path resolution.
+
+**Lesson:** AI system prompts must be carefully crafted to guide behavior, and context extraction is essential for accurate tool execution.
 
 ---
 

@@ -31,4 +31,4 @@ dist/
 .netlify
 src/emulator/release/
 src/particle-auth
-.vscode
+.vscodepc2-node/test-fresh-install/data/*.db

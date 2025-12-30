@@ -411,7 +411,11 @@ function updateHistoryMenu() {
 
 export default function UIAIChat() {
     // AI button in toolbar (next to cloud icon)
-    const aiButtonSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/></svg>`;
+    // Chat bubble icon for AI assistant
+    const aiButtonSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        <path d="M8 10h.01M12 10h.01M16 10h.01"/>
+    </svg>`;
     
     // Insert AI button into toolbar (after cloud icon)
     const insertAIButton = () => {
@@ -451,9 +455,9 @@ export default function UIAIChat() {
     let h = '';
     h += `<div class="ai-panel">`;
         h += `<div class="ai-panel-header">`;
-            h += `<button class="ai-menu-btn" title="Menu" style="background: none; border: none; padding: 4px; cursor: pointer; color: #666; margin-right: auto;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>`;
-            h += `<button class="ai-new-chat-btn" title="New Chat" style="background: none; border: none; padding: 4px; cursor: pointer; color: #666; margin-right: 8px;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></button>`;
-            h += `<button class="btn-hide-ai" title="Close" style="background: none; border: none; padding: 4px; cursor: pointer; color: #666; margin-right: 12px;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>`;
+            h += `<button class="ai-menu-btn" title="Menu" style="background: none; border: none; padding: 2px; cursor: pointer; color: #666; margin-right: auto;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>`;
+            h += `<button class="ai-new-chat-btn" title="New Chat" style="background: none; border: none; padding: 2px; cursor: pointer; color: #666; margin-right: 6px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></button>`;
+            h += `<button class="btn-hide-ai" title="Close" style="background: none; border: none; padding: 2px; cursor: pointer; color: #666; margin-right: 8px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>`;
         h += `</div>`;
         h += `<div class="ai-history-menu">`;
             h += `<div class="ai-history-header">Chats</div>`;
@@ -468,7 +472,7 @@ export default function UIAIChat() {
             h += `<div class="ai-chat-input-actions">`;
                 h += `<button class="ai-attach-btn" title="Attach file"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></button>`;
                 h += `<select class="ai-model-select">`;
-                    h += `<option value="ollama:deepseek-r1:1.5b">Fast</option>`;
+                    h += `<option value="ollama:deepseek-r1:1.5b">Local DeepSeek</option>`;
                 h += `</select>`;
                 h += `<button class="btn-send-ai" title="Send"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg></button>`;
             h += `</div>`;
@@ -572,19 +576,63 @@ async function loadAIConfigForChat() {
             
             const modelValue = `${provider}:${cleanModel}`;
             
+            // Format model name for display (shorten long names)
+            function formatModelName(provider, model) {
+                if (provider === 'ollama') {
+                    if (model.includes('deepseek')) {
+                        return 'Local DeepSeek';
+                    }
+                    // Extract model name without version
+                    const name = model.split(':')[0];
+                    return `Local ${name.charAt(0).toUpperCase() + name.slice(1)}`;
+                }
+                if (provider === 'claude') {
+                    // "claude-sonnet-4-5-20250929" -> "Claude Sonnet 4.5"
+                    if (model.includes('sonnet-4-5')) {
+                        return 'Claude Sonnet 4.5';
+                    }
+                    if (model.includes('sonnet')) {
+                        return 'Claude Sonnet';
+                    }
+                    if (model.includes('opus')) {
+                        return 'Claude Opus';
+                    }
+                    if (model.includes('haiku')) {
+                        return 'Claude Haiku';
+                    }
+                    // Fallback: capitalize and clean
+                    return 'Claude ' + model.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                }
+                if (provider === 'openai') {
+                    // "gpt-4" -> "GPT-4", "gpt-3.5-turbo" -> "GPT-3.5 Turbo"
+                    if (model.startsWith('gpt-')) {
+                        const parts = model.split('-');
+                        if (parts.length >= 2) {
+                            const version = parts.slice(1).join(' ');
+                            return `GPT-${version.charAt(0).toUpperCase() + version.slice(1)}`;
+                        }
+                    }
+                    return model.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                }
+                if (provider === 'gemini') {
+                    // "gemini-pro" -> "Gemini Pro"
+                    return model.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                }
+                // Fallback
+                return `${provider.charAt(0).toUpperCase() + provider.slice(1)}: ${model}`;
+            }
+            
             // Clear existing options and add the configured one
             $modelSelect.empty();
-            $modelSelect.append(`<option value="ollama:deepseek-r1:1.5b">Fast (Ollama)</option>`);
+            $modelSelect.append(`<option value="ollama:deepseek-r1:1.5b">Local DeepSeek</option>`);
             
-            // Add the configured model option
-            const providerName = provider === 'ollama' ? 'Ollama' : 
-                                provider === 'claude' ? 'Claude' :
-                                provider === 'openai' ? 'OpenAI' :
-                                provider === 'gemini' ? 'Gemini' : provider;
-            $modelSelect.append(`<option value="${modelValue}">${providerName}: ${cleanModel}</option>`);
+            // Add the configured model option with formatted name
+            const displayName = formatModelName(provider, cleanModel);
+            console.log('[UIAIChat] [NEW CODE v2] formatModelName result:', displayName, 'for provider:', provider, 'model:', cleanModel);
+            $modelSelect.append(`<option value="${modelValue}">${displayName}</option>`);
             $modelSelect.val(modelValue);
             
-            console.log('[UIAIChat] Updated model selector to:', modelValue, '(provider:', provider, ', model:', cleanModel, ')');
+            console.log('[UIAIChat] [NEW CODE v2] Updated model selector to:', modelValue, 'display name:', displayName, '(provider:', provider, ', model:', cleanModel, ')');
         }
     } catch (error) {
         console.error('[UIAIChat] Error loading AI config:', error);
@@ -706,25 +754,34 @@ $(document).on('click', '.ai-toolbar-btn, .btn-show-ai', function () {
     const $panel = $('.ai-panel');
     const $btn = $('.ai-toolbar-btn');
     if ($panel.hasClass('ai-panel-open')) {
-        // Close panel
+        // Close panel with smooth animation
         $panel.removeClass('ai-panel-open');
         $btn.removeClass('active');
     } else {
-        // Open panel
-        $panel.addClass('ai-panel-open');
-        $btn.addClass('active');
-        // Reload AI config when panel opens to sync with settings
-        loadAIConfigForChat();
-        $('.ai-chat-input').focus();
-        scrollChatToBottom();
+        // Open panel with smooth animation
+        // Use requestAnimationFrame to ensure smooth transition
+        requestAnimationFrame(() => {
+            $panel.addClass('ai-panel-open');
+            $btn.addClass('active');
+            // Reload AI config when panel opens to sync with settings
+            loadAIConfigForChat();
+            // Focus input after animation starts
+            setTimeout(() => {
+                $('.ai-chat-input').focus();
+                scrollChatToBottom();
+            }, 100);
+        });
     }
 });
 
 // Hide AI panel (close button in header)
 $(document).on('click', '.btn-hide-ai', function (e) {
     e.stopPropagation(); // Prevent triggering toolbar button click
-    $('.ai-panel').removeClass('ai-panel-open');
-    $('.ai-toolbar-btn').removeClass('active');
+    const $panel = $('.ai-panel');
+    const $btn = $('.ai-toolbar-btn');
+    // Smooth close animation
+    $panel.removeClass('ai-panel-open');
+    $btn.removeClass('active');
 });
 
 // Send message

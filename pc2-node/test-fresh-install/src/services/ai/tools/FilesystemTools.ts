@@ -82,7 +82,7 @@ export const filesystemTools: NormalizedTool[] = [
     type: 'function',
     function: {
       name: 'write_file',
-      description: 'Creates or overwrites a file with the specified content. Creates parent directories if needed. When asked to create content (e.g., "tell a story", "write about X"), GENERATE the content yourself - write creative, engaging stories, descriptions, or any requested content. Do NOT use placeholder text. REQUIRED: Both "path" and "content" parameters must be provided.',
+      description: 'Creates or overwrites a file with the specified content. Creates parent directories if needed. **CRITICAL FOR EDITING:** If the file already exists and you are editing it (e.g., "edit the file", "add to the file", "modify the file"), you MUST first use read_file to get the existing content, then modify it, then use write_file to save. Do NOT overwrite existing files without reading them first - you will lose the original content! When asked to create NEW content (e.g., "tell a story", "write about X"), GENERATE the content yourself - write creative, engaging stories, descriptions, or any requested content. Do NOT use placeholder text. REQUIRED: Both "path" and "content" parameters must be provided.',
       parameters: {
         type: 'object',
         properties: {

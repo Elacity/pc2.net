@@ -581,6 +581,7 @@ For MOST user questions, you should respond directly with helpful text answers. 
 Use tools when the user asks about or requests filesystem operations, including:
 - **Creating files/folders** (e.g., "create a folder", "make a file", "put this into a file", "save to desktop", "create a txt file")
 - **Writing files** (e.g., "write this to a file", "put this into a txt file", "save this as", "create a file with this content")
+- **Editing existing files** (e.g., "edit the robert txt", "modify the story", "add bert to the file", "update the file to include X"). **CRITICAL:** When editing an existing file, you MUST: (1) First use read_file to read the current file content, (2) Then modify the content based on the user's request, (3) Finally use write_file to save the modified content back to the same path. **DO NOT** write new content without reading the existing file first - you will overwrite the file and lose the original content!
 - **Generating content for files** (e.g., "add a text file with a story about X", "create a file that tells about Y", "write a file containing Z", "include inside it a story"). When asked to create content, GENERATE it yourself - write stories, descriptions, or any requested content.
 - **Listing files** (e.g., "list files", "what files do I have", "show me files in Desktop")
 - **Reading files** (e.g., "read this file", "show me the content of", "what's in this file")
@@ -608,6 +609,7 @@ ${toolDescriptions}
 CRITICAL RULES FOR TOOL CALLS:
 1. **MANDATORY TOOL USAGE**: When user requests filesystem operations, you MUST use tools. DO NOT provide text-only responses. Key phrases that REQUIRE tool usage:
    - "put into file", "save to file", "write to file", "create a file", "make a file", "add a file", "add a text file", "create a txt file", "include inside it" → MUST USE write_file
+   - **"edit file", "modify file", "update file", "add to file", "change file", "edit the [filename]", "modify the [filename]" → MUST FIRST USE read_file, THEN modify content, THEN use write_file**
    - "create folder", "make folder", "new folder" → MUST USE create_folder
    - "list files", "what files", "show files", "files in" → MUST USE list_files
    - "read file", "show content", "what's in file" → MUST USE read_file
@@ -629,7 +631,19 @@ CRITICAL RULES FOR TOOL CALLS:
    - Step 1: Create the folder inside RED (e.g., create_folder at ~/Desktop/RED/NewFolder or ~/Desktop/RED/[descriptive_name])
    - Step 2: Create the file inside that new folder (e.g., write_file at ~/Desktop/RED/NewFolder/WOAH.txt)
    - Execute BOTH steps in sequence. Do NOT skip steps.
-10. CONTENT GENERATION: When asked to create content (e.g., "tell a story about X", "write about Y", "inside tell a story"), GENERATE the content yourself. Write creative, engaging stories, descriptions, or any requested content. Do NOT use placeholder text like "[story content]" - actually write the story!
+10. **EDITING EXISTING FILES - CRITICAL WORKFLOW**: When user asks to edit, modify, update, or add to an existing file (e.g., "edit the robert txt", "add bert to the file", "modify the story to include X", "add more about greg"):
+   - **Step 1: ALWAYS read the file first** using read_file to get the current content
+   - **Step 2: After reading, you MUST continue to the next iteration** - do NOT stop after reading!
+   - **Step 3: Modify the content** - take the FULL original content from the read_file result, then add/modify based on the user's request (e.g., if user says "add greg", include ALL the original text PLUS the new content about greg)
+   - **Step 4: Write the COMPLETE modified content back** using write_file with the SAME path - include BOTH the original content AND your modifications
+   - **CRITICAL:** The write_file content must include the ENTIRE file - original content + modifications. Do NOT write only the new parts!
+   - **Example workflow:**
+     - User: "edit the robert txt to include bert" → You: "I'll read the current story, add Bert, then save it back." {"tool_calls": [{"name": "read_file", "arguments": {"path": "~/Desktop/Robert.txt"}}]}
+     - After read_file returns: "The Legend of Robert the Dragon\nIn the misty peaks..."
+     - Then you MUST continue: {"tool_calls": [{"name": "write_file", "arguments": {"path": "~/Desktop/Robert.txt", "content": "The Legend of Robert the Dragon\nIn the misty peaks... [ALL ORIGINAL TEXT] ... and Bert the bee was Robert's friend. [NEW CONTENT ADDED]"}}]}
+   - **DO NOT** write new content without reading first - you will lose the original file content!
+   - **DO NOT** stop after reading - you MUST continue and write the modified file!
+11. CONTENT GENERATION: When asked to create content (e.g., "tell a story about X", "write about Y", "inside tell a story"), GENERATE the content yourself. Write creative, engaging stories, descriptions, or any requested content. Do NOT use placeholder text like "[story content]" - actually write the story!
 
 **EXECUTION FORMAT:**
 For multi-step tasks, you can explain your plan first, then provide the JSON tool call. For example:
@@ -654,6 +668,8 @@ Examples:
 - User: "list files in Desktop" → You: {"tool_calls": [{"name": "list_files", "arguments": {"path": "~/Desktop"}}]} (USE TOOL)
 - User: "What PDFs do I have?" → You: {"tool_calls": [{"name": "list_files", "arguments": {"path": "~/Desktop", "file_type": "pdf", "detailed": true}}, {"name": "list_files", "arguments": {"path": "~/Documents", "file_type": "pdf", "detailed": true}}, {"name": "list_files", "arguments": {"path": "~/Downloads", "file_type": "pdf", "detailed": true}}]} (USE TOOL - search Desktop, Documents, and Downloads with file_type: "pdf")
 - User: "What files are in my Desktop?" → You: {"tool_calls": [{"name": "list_files", "arguments": {"path": "~/Desktop"}}]} (USE TOOL)
+- User: "edit the robert txt to include bert" → You: "I'll read the current story first, then add Bert to it." {"tool_calls": [{"name": "read_file", "arguments": {"path": "~/Desktop/Robert.txt"}}]} (After read_file returns content, modify it to include Bert, then use write_file to save)
+- User: "add bert the bee to the story file" → You: "I'll read the story file, add Bert the bee, then save it." {"tool_calls": [{"name": "read_file", "arguments": {"path": "~/Desktop/[story_file_name].txt"}}]} (After reading, modify content, then write back)
 
 After I execute a tool, I will provide you with the result. Then you can respond to the user with the final answer.
 
@@ -779,7 +795,30 @@ Examples:
       
       logger.info('[AIChatService] Final tool calls (after deduplication):', toolCalls.length, toolCalls);
       
+      // CRITICAL: Check if we executed read_file in THIS iteration (editing workflow)
+      // We need to check the toolResults from the PREVIOUS iteration, not current messages
+      const previousIterationHadReadFile = iteration > 1;
+      let wasEditingFile = false;
+      if (previousIterationHadReadFile) {
+        // Look for read_file in the last user message (which contains tool results)
+        const lastUserMessage = currentMessages.filter(m => m.role === 'user').pop();
+        if (lastUserMessage && typeof lastUserMessage.content === 'string') {
+          wasEditingFile = lastUserMessage.content.includes('read_file') && 
+                          lastUserMessage.content.includes('FILE EDITING WORKFLOW');
+        }
+      }
+      
       if (toolCalls.length === 0) {
+        // If we were editing a file and no tool calls, force continuation
+        if (wasEditingFile && iteration < MAX_TOOL_ITERATIONS) {
+          logger.warn('[AIChatService] No tool calls after read_file - forcing continuation for file editing');
+          // Add a stronger instruction to continue
+          currentMessages.push({
+            role: 'user',
+            content: `**CRITICAL: You MUST continue the file editing workflow! You read the file but did not write it back. The user asked you to EDIT the file. You MUST execute write_file now with the modified content. Do NOT respond with text only - you MUST use tools!`
+          });
+          continue; // Continue loop instead of returning
+        }
         // No tool calls, return final response
         logger.info('[AIChatService] No tool calls detected, returning final response');
         return result;
@@ -820,10 +859,43 @@ Examples:
         `Tool ${tr.name} result: ${JSON.stringify(tr.result, null, 2)}`
       ).join('\n\n');
 
+      // Check if we just read a file - if so, instruct AI to continue with modification and write
+      const hasReadFile = toolResults.some(tr => tr.name === 'read_file' && tr.result?.success);
+      const readFileResult = hasReadFile ? toolResults.find(tr => tr.name === 'read_file' && tr.result?.success) : null;
+      
+      let continuationInstruction = '';
+      if (hasReadFile && readFileResult) {
+        // Extract the file path and content from the read_file result
+        // Structure: { name: 'read_file', result: { success: true, result: { path, content } } }
+        const fileData = readFileResult.result?.result || {};
+        const filePath = fileData.path || '';
+        const fileContent = fileData.content || '';
+        const contentPreview = fileContent.substring(0, 200) + (fileContent.length > 200 ? '...' : '');
+        
+        continuationInstruction = `\n\n**CRITICAL - FILE EDITING WORKFLOW - YOU MUST CONTINUE:** 
+You just read the file: ${filePath}
+File content (first 200 chars): "${contentPreview}"
+
+The user asked you to EDIT this file. You MUST now:
+1. Take the FULL file content shown above (from the tool result)
+2. Modify it based on the user's original request (e.g., "add greg", "include bert", etc.)
+3. Use write_file to save the COMPLETE modified content back to the SAME path: ${filePath}
+
+DO NOT stop here! DO NOT just report the file content! You MUST execute write_file with the modified content!
+
+Example: {"tool_calls": [{"name": "write_file", "arguments": {"path": "${filePath}", "content": "[FULL ORIGINAL CONTENT] + [YOUR MODIFICATIONS]"}}]}`;
+      }
+
       currentMessages.push({
         role: 'user',
-        content: `Tool execution results:\n\n${toolResultsText}\n\nCRITICAL: Use ONLY the actual data from these tool results. DO NOT make up, invent, or hallucinate any file names, timestamps, or descriptions. If the results show no files found, say "No files found". If the results show specific files, list ONLY those exact files with their actual names and paths.`
+        content: `Tool execution results:\n\n${toolResultsText}${continuationInstruction}\n\nCRITICAL: Use ONLY the actual data from these tool results. DO NOT make up, invent, or hallucinate any file names, timestamps, or descriptions. If the results show no files found, say "No files found". If the results show specific files, list ONLY those exact files with their actual names and paths.`
       });
+      
+      // If we read a file, we MUST continue - don't let the loop exit
+      if (hasReadFile) {
+        logger.info('[AIChatService] File was read - continuing loop to wait for write_file');
+        continue; // Continue to next iteration to wait for write_file
+      }
     }
 
     // Max iterations reached, return last response

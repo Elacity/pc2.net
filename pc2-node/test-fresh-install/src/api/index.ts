@@ -13,7 +13,9 @@ import { handleAPIInfo, handleGetLaunchApps, handleDF, handleBatch, handleCacheT
 import { handleFile } from './file.js';
 import storageRouter from './storage.js';
 import aiRouter from './ai.js';
+import wasmRouter from './wasm.js';
 import { handleSearch } from './search.js';
+import { handleGetApp } from './apps.js';
 import { handleGetVersions, handleGetVersion, handleRestoreVersion } from './versions.js';
 import { createBackup, listBackups, downloadBackup, deleteBackup, restoreBackup } from './backup.js';
 
@@ -96,6 +98,10 @@ export function setupAPI(app: Express): void {
   // Get launch apps (no auth required)
   app.get('/get-launch-apps', handleGetLaunchApps);
   
+  // Get app info by name (no auth required - used by window.get_apps)
+  // IMPORTANT: This must be registered BEFORE static file middleware to catch /apps/:name requests
+  app.get('/apps/:name', handleGetApp);
+  
   // Cache timestamp (no auth required - SDK calls this during initialization)
   app.get('/cache/last-change-timestamp', handleCacheTimestamp);
   
@@ -118,6 +124,7 @@ export function setupAPI(app: Express): void {
   // Storage usage endpoint
   app.use('/api/storage', storageRouter);
   app.use('/api/ai', aiRouter);
+  app.use('/api/wasm', wasmRouter);
 
   // Search endpoint (require auth)
   app.post('/search', authenticate, handleSearch);

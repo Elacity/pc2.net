@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WASM Calculator</title>
+    <script src="/puter.js/v2"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            margin: 0;
+        }
+
+        .calculator-container {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 400px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #2d3748;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 24px;
+        }
+
+        .wasm-badge {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .subtitle {
+            color: #718096;
+            font-size: 12px;
+            margin-bottom: 20px;
+        }
+
+        .display {
+            background: #1a202c;
+            color: #f7fafc;
+            padding: 20px;
+            border-radius: 12px;
+            font-size: 36px;
+            font-weight: 300;
+            text-align: right;
+            margin-bottom: 20px;
+            min-height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            word-break: break-all;
+            font-family: 'Courier New', monospace;
+        }
+
+        .keypad {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+        }
+
+        button {
+            padding: 20px;
+            border: none;
+            border-radius: 12px;
+            font-size: 20px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: white;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        button:active:not(:disabled) {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-number {
+            background: linear-gradient(135deg, #4a5568 0%, #2d3748 100%);
+        }
+
+        .btn-operator {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .btn-clear {
+            background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);
+        }
+
+        .btn-equals {
+            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+            grid-column: span 2;
+        }
+
+        .btn-zero {
+            grid-column: span 2;
+        }
+
+        .status {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+            font-size: 12px;
+            font-weight: 600;
+            display: none;
+        }
+
+        .status.info {
+            background: #bee3f8;
+            color: #2c5282;
+        }
+
+        .status.success {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .status.error {
+            background: #fed7d7;
+            color: #742a2a;
+        }
+
+        .info-panel {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f7fafc;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+            font-size: 11px;
+            color: #4a5568;
+            line-height: 1.6;
+        }
+
+        .info-panel strong {
+            color: #2d3748;
+        }
+    </style>
+</head>
+<body>
+    <div class="calculator-container">
+        <h1>
+            Calculator
+            <span class="wasm-badge">WASM</span>
+        </h1>
+        <div class="subtitle">Powered by WebAssembly on PC2 Node</div>
+        
+        <div class="display" id="display">0</div>
+        
+        <div class="keypad">
+            <button class="btn-clear" onclick="clearAll()">C</button>
+            <button class="btn-clear" onclick="clearEntry()">CE</button>
+            <button class="btn-operator" onclick="inputOperator('/')">÷</button>
+            <button class="btn-operator" onclick="inputOperator('*')">×</button>
+            
+            <button class="btn-number" onclick="inputNumber('7')">7</button>
+            <button class="btn-number" onclick="inputNumber('8')">8</button>
+            <button class="btn-number" onclick="inputNumber('9')">9</button>
+            <button class="btn-operator" onclick="inputOperator('-')">−</button>
+            
+            <button class="btn-number" onclick="inputNumber('4')">4</button>
+            <button class="btn-number" onclick="inputNumber('5')">5</button>
+            <button class="btn-number" onclick="inputNumber('6')">6</button>
+            <button class="btn-operator" onclick="inputOperator('+')">+</button>
+            
+            <button class="btn-number" onclick="inputNumber('1')">1</button>
+            <button class="btn-number" onclick="inputNumber('2')">2</button>
+            <button class="btn-number" onclick="inputNumber('3')">3</button>
+            <button class="btn-equals" onclick="calculate()" rowspan="2">=</button>
+            
+            <button class="btn-number btn-zero" onclick="inputNumber('0')">0</button>
+            <button class="btn-number" onclick="inputDecimal()">.</button>
+        </div>
+        
+        <div class="status" id="status"></div>
+        
+        <div class="info-panel">
+            <strong>How it works:</strong><br>
+            This calculator runs <strong>WebAssembly (WASM)</strong> on your PC2 node. When you press a button, the frontend sends the calculation to your PC2 backend, which executes the WASM binary locally and returns the result. All computation happens on your own hardware - completely self-hosted and private.
+        </div>
+    </div>
+
+    <script>
+        let authToken = null;
+        let currentValue = '0';
+        let previousValue = null;
+        let operator = null;
+        let waitingForNewValue = false;
+
+        function updateDisplay(value) {
+            const display = document.getElementById('display');
+            if (display) {
+                display.textContent = value;
+            }
+        }
+
+        function showStatus(message, type = 'info') {
+            const statusEl = document.getElementById('status');
+            if (statusEl) {
+                statusEl.textContent = message;
+                statusEl.className = `status ${type}`;
+                statusEl.style.display = 'block';
+                setTimeout(() => {
+                    statusEl.style.display = 'none';
+                }, 3000);
+            }
+        }
+
+        function inputNumber(num) {
+            if (waitingForNewValue) {
+                currentValue = num;
+                waitingForNewValue = false;
+            } else {
+                currentValue = currentValue === '0' ? num : currentValue + num;
+            }
+            updateDisplay(currentValue);
+        }
+
+        function inputDecimal() {
+            if (waitingForNewValue) {
+                currentValue = '0.';
+                waitingForNewValue = false;
+            } else if (currentValue.indexOf('.') === -1) {
+                currentValue += '.';
+            }
+            updateDisplay(currentValue);
+        }
+
+        function inputOperator(op) {
+            const inputValue = parseFloat(currentValue);
+
+            if (previousValue === null) {
+                previousValue = inputValue;
+            } else if (operator) {
+                const result = performCalculation();
+                currentValue = String(result);
+                previousValue = result;
+                updateDisplay(currentValue);
+            }
+
+            waitingForNewValue = true;
+            operator = op;
+        }
+
+        function performCalculation() {
+            const prev = parseFloat(previousValue);
+            const current = parseFloat(currentValue);
+
+            if (isNaN(prev) || isNaN(current)) return current;
+
+            switch (operator) {
+                case '+':
+                    return prev + current;
+                case '-':
+                    return prev - current;
+                case '*':
+                    return prev * current;
+                case '/':
+                    return current !== 0 ? prev / current : 0;
+                default:
+                    return current;
+            }
+        }
+
+        async function calculate() {
+            if (!operator || previousValue === null) {
+                return;
+            }
+
+            const num1 = parseFloat(previousValue);
+            const num2 = parseFloat(currentValue);
+
+            if (isNaN(num1) || isNaN(num2)) {
+                showStatus('Invalid numbers', 'error');
+                return;
+            }
+
+            if (!authToken) {
+                showStatus('Error: Authentication token not found', 'error');
+                return;
+            }
+
+            // Determine which WASM function to call based on operator
+            let functionName;
+            switch (operator) {
+                case '+':
+                    functionName = 'add';
+                    break;
+                case '-':
+                    functionName = 'subtract';
+                    break;
+                case '*':
+                    functionName = 'multiply';
+                    break;
+                case '/':
+                    functionName = 'divide';
+                    break;
+                default:
+                    showStatus('Unknown operator', 'error');
+                    return;
+            }
+
+            const buttons = document.querySelectorAll('button');
+            buttons.forEach(btn => btn.disabled = true);
+            showStatus('Executing on PC2 node via WASM...', 'info');
+            updateDisplay('...');
+
+            try {
+                const response = await fetch('/api/wasm/execute-file', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({
+                        filePath: 'data/wasm-apps/calculator.wasm',
+                        functionName: functionName,
+                        args: [Math.floor(num1), Math.floor(num2)]
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    const wasmResult = result.result;
+                    currentValue = String(wasmResult);
+                    previousValue = null;
+                    operator = null;
+                    waitingForNewValue = true;
+                    updateDisplay(currentValue);
+                    showStatus(`✅ Calculated on PC2 node using WASM`, 'success');
+                } else {
+                    updateDisplay('Error');
+                    showStatus(`Error: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                updateDisplay('Error');
+                showStatus(`Network error: ${error.message}`, 'error');
+                console.error('WASM execution error:', error);
+            } finally {
+                buttons.forEach(btn => btn.disabled = false);
+            }
+        }
+
+        function clearAll() {
+            currentValue = '0';
+            previousValue = null;
+            operator = null;
+            waitingForNewValue = false;
+            updateDisplay(currentValue);
+        }
+
+        function clearEntry() {
+            currentValue = '0';
+            updateDisplay(currentValue);
+        }
+
+        async function initializeApp() {
+            console.log('[Calculator] Initializing app...');
+            
+            let attempts = 0;
+            const maxAttempts = 100;
+            while (typeof puter === 'undefined' && attempts < maxAttempts) {
+                await new Promise(resolve => setTimeout(resolve, 50));
+                attempts++;
+            }
+            
+            if (typeof puter === 'undefined') {
+                console.error('[Calculator] Puter SDK failed to load');
+                showStatus('Error: SDK failed to load', 'error');
+                return;
+            }
+            
+            console.log('[Calculator] SDK loaded, getting auth token...');
+            
+            try {
+                if (puter.auth && puter.auth.getToken) {
+                    authToken = await puter.auth.getToken();
+                    console.log('[Calculator] Got token from SDK');
+                } else {
+                    authToken = localStorage.getItem('puter_auth_token') || localStorage.getItem('auth_token');
+                    console.log('[Calculator] Got token from localStorage');
+                }
+            } catch (error) {
+                console.warn('[Calculator] Failed to get token from SDK, trying localStorage:', error);
+                authToken = localStorage.getItem('puter_auth_token') || localStorage.getItem('auth_token');
+            }
+            
+            if (!authToken) {
+                console.warn('[Calculator] No auth token found');
+                showStatus('Warning: No auth token', 'error');
+            } else {
+                console.log('[Calculator] Auth token obtained, length:', authToken.length);
+            }
+            
+            showStatus('Ready - Calculations run on your PC2 node', 'success');
+            console.log('[Calculator] App initialized successfully');
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializeApp);
+        } else {
+            initializeApp();
+        }
+    </script>
+</body>
+</html>

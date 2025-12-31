@@ -279,7 +279,9 @@ export function handleDriversCall(req: AuthenticatedRequest, res: Response): voi
         'terminal': { name: 'terminal', title: 'Terminal', uuid: 'app-terminal', uid: 'app-terminal', icon: undefined, index_url: `${baseUrl}/apps/terminal/index.html` },
         'phoenix': { name: 'phoenix', title: 'Phoenix Shell', uuid: 'app-phoenix', uid: 'app-phoenix', icon: undefined, index_url: `${baseUrl}/apps/phoenix/index.html` },
         'recorder': { name: 'recorder', title: 'Recorder', uuid: 'app-recorder', uid: 'app-recorder', icon: undefined, index_url: `${baseUrl}/apps/recorder/index.html` },
-        'solitaire-frvr': { name: 'solitaire-frvr', title: 'Solitaire FRVR', uuid: 'app-solitaire-frvr', uid: 'app-solitaire-frvr', icon: undefined, index_url: `${baseUrl}/apps/solitaire-frvr/index.html` }
+        'solitaire-frvr': { name: 'solitaire-frvr', title: 'Solitaire FRVR', uuid: 'app-solitaire-frvr', uid: 'app-solitaire-frvr', icon: undefined, index_url: `${baseUrl}/apps/solitaire-frvr/index.html` },
+        'calculator': { name: 'calculator', title: 'WASM Calculator', uuid: 'app-calculator', uid: 'app-calculator', icon: undefined, index_url: `${baseUrl}/apps/calculator/index.html` },
+        'file-processor': { name: 'file-processor', title: 'File Processor', uuid: 'app-file-processor', uid: 'app-file-processor', icon: undefined, index_url: `${baseUrl}/apps/file-processor/index.html` }
       };
       const appInfo = appMap[String(appNameFromQuery)];
       if (appInfo) {

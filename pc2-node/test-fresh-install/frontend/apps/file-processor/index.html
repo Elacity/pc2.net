@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Processor - WASI</title>
+    <script src="/puter.js/v2"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            margin: 0;
+        }
+
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 600px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #2d3748;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .wasi-badge {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .subtitle {
+            color: #718096;
+            font-size: 14px;
+            margin-bottom: 30px;
+        }
+
+        .file-input-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            color: #2d3748;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .button-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        button {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: white;
+        }
+
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-process {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .btn-count-words {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+
+        .btn-count-lines {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        }
+
+        .btn-count-chars {
+            background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+        }
+
+        .results {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f7fafc;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .result-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .result-item:last-child {
+            border-bottom: none;
+        }
+
+        .result-label {
+            color: #718096;
+            font-weight: 600;
+        }
+
+        .result-value {
+            color: #2d3748;
+            font-weight: 700;
+            font-size: 18px;
+        }
+
+        .status {
+            margin-top: 15px;
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+            font-weight: 600;
+            display: none;
+        }
+
+        .status.info {
+            background: #bee3f8;
+            color: #2c5282;
+        }
+
+        .status.success {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .status.error {
+            background: #fed7d7;
+            color: #742a2a;
+        }
+
+        .note {
+            margin-top: 20px;
+            padding: 15px;
+            background: #fff5e6;
+            border-left: 4px solid #f6ad55;
+            border-radius: 4px;
+            font-size: 13px;
+            color: #744210;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>
+            File Processor
+            <span class="wasi-badge">WASI</span>
+        </h1>
+        <div class="subtitle">Powered by WASMER/WASI Runtime - Demonstrates File I/O</div>
+        
+        <div class="file-input-group">
+            <label for="filePath">File Path (relative to PC2 data directory):</label>
+            <input type="text" id="filePath" value="data/wasm-apps/TEST.md" placeholder="Enter file path">
+        </div>
+        
+        <div class="button-group">
+            <button class="btn-process" onclick="processFile()">Process File</button>
+            <button class="btn-count-words" onclick="countWords()">Count Words</button>
+            <button class="btn-count-lines" onclick="countLines()">Count Lines</button>
+            <button class="btn-count-chars" onclick="countChars()">Count Chars</button>
+        </div>
+        
+        <div class="results" id="results" style="display: none;">
+            <div class="result-item">
+                <span class="result-label">Words:</span>
+                <span class="result-value" id="wordCount">-</span>
+            </div>
+            <div class="result-item">
+                <span class="result-label">Lines:</span>
+                <span class="result-value" id="lineCount">-</span>
+            </div>
+            <div class="result-item">
+                <span class="result-label">Characters:</span>
+                <span class="result-value" id="charCount">-</span>
+            </div>
+        </div>
+        
+        <div class="status" id="status"></div>
+        
+        <div class="note">
+            <strong>Note:</strong> This app uses WASMER/WASI to read files. The file path should be relative to the PC2 node's data directory. This demonstrates WASI file I/O capabilities.
+        </div>
+    </div>
+
+    <script>
+        let authToken = null;
+
+        function showStatus(message, type = 'info') {
+            const statusEl = document.getElementById('status');
+            if (statusEl) {
+                statusEl.textContent = message;
+                statusEl.className = `status ${type}`;
+                statusEl.style.display = 'block';
+            }
+        }
+
+        function updateResults(words, lines, chars) {
+            document.getElementById('wordCount').textContent = words !== null ? words : '-';
+            document.getElementById('lineCount').textContent = lines !== null ? lines : '-';
+            document.getElementById('charCount').textContent = chars !== null ? chars : '-';
+            document.getElementById('results').style.display = 'block';
+        }
+
+        async function callWASM(functionName, filePath) {
+            if (!authToken) {
+                showStatus('Error: Authentication token not found. Please refresh the page.', 'error');
+                return null;
+            }
+
+            const buttons = document.querySelectorAll('button');
+            buttons.forEach(btn => btn.disabled = true);
+            showStatus('Executing WASM function via WASI...', 'info');
+
+            try {
+                const response = await fetch('/api/wasm/execute-file', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({
+                        filePath: 'data/wasm-apps/file-processor.wasm',
+                        functionName: functionName,
+                        args: [filePath, filePath.length]
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showStatus(`Successfully executed ${functionName} via WASI!`, 'success');
+                    return result.result;
+                } else {
+                    showStatus(`Error: ${result.error}`, 'error');
+                    return null;
+                }
+            } catch (error) {
+                showStatus(`Network error: ${error.message}`, 'error');
+                console.error('WASM execution error:', error);
+                return null;
+            } finally {
+                buttons.forEach(btn => btn.disabled = false);
+            }
+        }
+
+        async function processFile() {
+            const filePath = document.getElementById('filePath').value;
+            if (!filePath) {
+                showStatus('Please enter a file path', 'error');
+                return;
+            }
+
+            const result = await callWASM('process_file', filePath);
+            if (result !== null) {
+                // Process file returns a combined stat, but for now just show it
+                showStatus(`File processed! Result: ${result}`, 'success');
+            }
+        }
+
+        async function countWords() {
+            const filePath = document.getElementById('filePath').value;
+            if (!filePath) {
+                showStatus('Please enter a file path', 'error');
+                return;
+            }
+
+            const result = await callWASM('count_words', filePath);
+            if (result !== null && result >= 0) {
+                updateResults(result, null, null);
+            }
+        }
+
+        async function countLines() {
+            const filePath = document.getElementById('filePath').value;
+            if (!filePath) {
+                showStatus('Please enter a file path', 'error');
+                return;
+            }
+
+            const result = await callWASM('count_lines', filePath);
+            if (result !== null && result >= 0) {
+                updateResults(null, result, null);
+            }
+        }
+
+        async function countChars() {
+            const filePath = document.getElementById('filePath').value;
+            if (!filePath) {
+                showStatus('Please enter a file path', 'error');
+                return;
+            }
+
+            const result = await callWASM('count_chars', filePath);
+            if (result !== null && result >= 0) {
+                updateResults(null, null, result);
+            }
+        }
+
+        async function initializeApp() {
+            console.log('[File Processor] Initializing app...');
+            
+            let attempts = 0;
+            const maxAttempts = 100;
+            while (typeof puter === 'undefined' && attempts < maxAttempts) {
+                await new Promise(resolve => setTimeout(resolve, 50));
+                attempts++;
+            }
+            
+            if (typeof puter === 'undefined') {
+                console.error('[File Processor] Puter SDK failed to load');
+                showStatus('Error: SDK failed to load', 'error');
+                return;
+            }
+            
+            console.log('[File Processor] SDK loaded, getting auth token...');
+            
+            try {
+                if (puter.auth && puter.auth.getToken) {
+                    authToken = await puter.auth.getToken();
+                    console.log('[File Processor] Got token from SDK');
+                } else {
+                    authToken = localStorage.getItem('puter_auth_token') || localStorage.getItem('auth_token');
+                    console.log('[File Processor] Got token from localStorage');
+                }
+            } catch (error) {
+                console.warn('[File Processor] Failed to get token from SDK, trying localStorage:', error);
+                authToken = localStorage.getItem('puter_auth_token') || localStorage.getItem('auth_token');
+            }
+            
+            if (!authToken) {
+                console.warn('[File Processor] No auth token found');
+            } else {
+                console.log('[File Processor] Auth token obtained, length:', authToken.length);
+            }
+            
+            showStatus('Ready to process files via WASI', 'info');
+            console.log('[File Processor] App initialized successfully');
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializeApp);
+        } else {
+            initializeApp();
+        }
+    </script>
+</body>
+</html>
+

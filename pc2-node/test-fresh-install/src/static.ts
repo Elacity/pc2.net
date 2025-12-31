@@ -387,11 +387,22 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
     const isPhoenix = appPath.startsWith('phoenix/') || appPath === 'phoenix' || appPath === 'phoenix/index.html';
     const phoenixRelativePath = isPhoenix ? appPath.replace(/^phoenix\/?/, '') || 'index.html' : null;
     
+    // Special handling for calculator app (located in frontend/apps/calculator/)
+    const isCalculator = appPath.startsWith('calculator/') || appPath === 'calculator' || appPath === 'calculator/index.html';
+    const calculatorRelativePath = isCalculator ? appPath.replace(/^calculator\/?/, '') || 'index.html' : null;
+    
     if (isPhoenix) {
       console.log(`[static.ts] 🐦 Phoenix detected! appPath: ${appPath}, phoenixRelativePath: ${phoenixRelativePath}`);
     }
     
+    if (isCalculator) {
+      console.log(`[static.ts] 🧮 Calculator detected! appPath: ${appPath}, calculatorRelativePath: ${calculatorRelativePath}`);
+    }
+    
     const possiblePaths = [
+      // Frontend apps path (for calculator and other new apps)
+      path.join(projectRoot, 'frontend/apps', appPath),
+      path.join(process.cwd(), 'frontend/apps', appPath),
       // Standard app paths
       path.join(projectRoot, 'src/backend/apps', appPath),
       path.join(process.cwd(), 'src/backend/apps', appPath),
@@ -447,7 +458,7 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
         // Special handling for app HTML files - inject correct SDK URL
         // This applies to all apps (terminal, phoenix, player, viewer, pdf, editor, etc.)
         if (ext === '.html') {
-          console.log(`[static.ts] 📄 Processing HTML file: ${normalizedPath}, isPhoenix: ${isPhoenix}, isTerminal: ${isTerminal}`);
+          console.log(`[static.ts] 📄 Processing HTML file: ${normalizedPath}, isPhoenix: ${isPhoenix}, isTerminal: ${isTerminal}, isCalculator: ${isCalculator}`);
           const baseUrl = req.protocol + '://' + req.get('host');
           const sdkUrl = `${baseUrl}/puter.js/v2`;
           let htmlContent = readFileSync(normalizedPath, 'utf8');
@@ -455,6 +466,21 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
           // This ensures apps work with PC2 node's local SDK
           htmlContent = htmlContent.replace(/https?:\/\/[^'"]*\/puter\.js\/v2/g, sdkUrl);
           console.log(`[static.ts] ✅ SDK URL replaced in HTML`);
+          
+          // For calculator app, add SDK initialization script to set API origin
+          if (isCalculator) {
+            const sdkInitScript = `
+    <script>
+        // Set API origin before SDK loads (for calculator app)
+        window.api_origin = '${baseUrl}';
+        window.puter_api_origin = '${baseUrl}';
+        console.log('[Calculator] Setting API origin to:', window.api_origin);
+    </script>
+`;
+            // Insert before the SDK script tag
+            htmlContent = htmlContent.replace(/(<script[^>]*src=["']\/puter\.js\/v2["'][^>]*>)/i, sdkInitScript + '$1');
+            console.log(`[static.ts] ✅ Calculator SDK initialization added`);
+          }
           
           // For terminal app, add SDK initialization script to set API origin
           if (isTerminal) {

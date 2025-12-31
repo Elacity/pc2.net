@@ -1,0 +1,709 @@
+# PC2 Architecture Overview: Self-Hosted Sovereign Cloud
+
+**Version:** 1.0  
+**Date:** 2025-01-20  
+**Status:** Production-Ready Core, WASM Integration Active
+
+---
+
+## 🎯 Executive Summary
+
+**PC2** is a **self-hosted, self-contained personal cloud** that runs entirely on user-controlled hardware. Unlike traditional cloud services (Puter, Dropbox, Google Drive), PC2 gives users complete sovereignty over their data, computation, and software - all while providing a modern, Puter-compatible interface accessible from anywhere.
+
+### Key Differentiators
+
+| Feature | Puter (Cloud Service) | PC2 (Self-Hosted) |
+|---------|----------------------|-------------------|
+| **Data Location** | Provider's servers | User's hardware |
+| **Control** | Provider controls access | User has full control |
+| **Computation** | Provider's servers | User's hardware (WASM) |
+| **Identity** | Email/password | Wallet-based (decentralized) |
+| **Cost** | Subscription fees | One-time hardware cost |
+| **Privacy** | Provider can access data | User-only access |
+| **Customization** | Limited | Full control |
+| **WASM Execution** | Browser-only | Node-side execution |
+
+---
+
+## 📐 System Architecture
+
+### Image 1: High-Level Architecture Diagram
+
+**Visual Description:**
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    USER'S DEVICE (Browser)                   │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │         PC2 Desktop UI (Puter-Compatible)            │   │
+│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐          │   │
+│  │  │ Desktop  │  │ Taskbar  │  │  Apps    │          │   │
+│  │  │  Files   │  │  Menu    │  │ Launcher │          │   │
+│  │  └──────────┘  └──────────┘  └──────────┘          │   │
+│  │  ┌──────────────────────────────────────────────┐   │   │
+│  │  │     AI Chat Sidebar (Multi-Provider)         │   │   │
+│  │  │  - Ollama (Local)  - OpenAI  - Claude        │   │   │
+│  │  └──────────────────────────────────────────────┘   │   │
+│  └──────────────────────────────────────────────────────┘   │
+│                        ↕ HTTP/WebSocket                       │
+└─────────────────────────────────────────────────────────────┘
+                              ↕
+┌─────────────────────────────────────────────────────────────┐
+│              PC2 NODE (User's Hardware)                       │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │              Express.js HTTP Server                   │   │
+│  │  ┌──────────────┐  ┌──────────────┐                 │   │
+│  │  │   API Layer  │  │ Static Files │                 │   │
+│  │  │  (REST/WS)   │  │  (Frontend)  │                 │   │
+│  │  └──────────────┘  └──────────────┘                 │   │
+│  └──────────────────────────────────────────────────────┘   │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │              Core Services Layer                      │   │
+│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐         │   │
+│  │  │  Auth    │  │ Storage  │  │  WASM    │         │   │
+│  │  │ (Wallet) │  │ (IPFS)   │  │ Runtime  │         │   │
+│  │  └──────────┘  └──────────┘  └──────────┘         │   │
+│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐         │   │
+│  │  │   AI     │  │ Backup/  │  │  IPC     │         │   │
+│  │  │ Service  │  │ Restore │  │  Tools   │         │   │
+│  │  └──────────┘  └──────────┘  └──────────┘         │   │
+│  └──────────────────────────────────────────────────────┘   │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │              Data Layer                                 │   │
+│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐         │   │
+│  │  │ SQLite   │  │  IPFS    │  │  File    │         │   │
+│  │  │ Database │  │  Node    │  │ System  │         │   │
+│  │  └──────────┘  └──────────┘  └──────────┘         │   │
+│  └──────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Key Components:**
+1. **Frontend (Browser)**: Puter-compatible desktop UI, communicates via HTTP/WebSocket
+2. **Backend (PC2 Node)**: Express.js server with API layer and static file serving
+3. **Services Layer**: Authentication, storage, WASM runtime, AI, backup/restore, IPC tools
+4. **Data Layer**: SQLite for metadata, IPFS for distributed storage, local filesystem
+
+---
+
+### Image 2: Data Flow - WASM Calculator Example
+
+**Visual Description:**
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    USER INTERACTION                          │
+│  User clicks "5 + 3 = " in Calculator App                    │
+└─────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────┐
+│              FRONTEND (Browser - Calculator App)              │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  JavaScript: calculate() function                     │   │
+│  │  - Parses: num1=5, num2=3, operator='+'              │   │
+│  │  - Prepares: POST /api/wasm/execute-file             │   │
+│  │  - Payload: {                                         │   │
+│  │      filePath: 'data/wasm-apps/calculator.wasm',     │   │
+│  │      functionName: 'add',                             │   │
+│  │      args: [5, 3]                                     │   │
+│  │    }                                                   │   │
+│  └──────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+                              ↓ HTTP POST
+┌─────────────────────────────────────────────────────────────┐
+│              BACKEND (PC2 Node - API Layer)                   │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  /api/wasm/execute-file endpoint                       │   │
+│  │  - Validates auth token                                │   │
+│  │  - Resolves user-scoped path                           │   │
+│  │  - Calls WASMRuntime.execute()                        │   │
+│  └──────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────┐
+│              WASM RUNTIME SERVICE                             │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  WASMRuntime.execute()                                  │   │
+│  │  1. Loads calculator.wasm from disk                     │   │
+│  │  2. Compiles WASM binary                                │   │
+│  │  3. Detects: non-WASI module (no system calls)         │   │
+│  │  4. Instantiates with minimal env imports               │   │
+│  │  5. Calls: instance.exports.add(5, 3)                   │   │
+│  │  6. Returns: 8                                           │   │
+│  └──────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────┐
+│              WASM BINARY (calculator.wasm)                   │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  Compiled Rust Code (WebAssembly)                      │   │
+│  │  - add(a: i32, b: i32) -> i32                          │   │
+│  │  - subtract(a: i32, b: i32) -> i32                     │   │
+│  │  - multiply(a: i32, b: i32) -> i32                     │   │
+│  │  - divide(a: i32, b: i32) -> i32                       │   │
+│  │                                                          │   │
+│  │  Execution: add(5, 3) = 8                             │   │
+│  └──────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────┐
+│              RESPONSE FLOW                                    │
+│  WASMRuntime → API → Frontend → UI Update                    │
+│  Result: 8 displayed in calculator display                   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Key Points:**
+- **Computation happens on PC2 node**, not in browser
+- **WASM binary is stored on user's hardware** (self-hosted)
+- **No external services** required for calculation
+- **Privacy**: Calculation data never leaves user's node
+
+---
+
+### Image 3: PC2 vs Puter Comparison
+
+**Visual Description:**
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    PUTER (Cloud Service)                          │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │                    User's Browser                          │   │
+│  │  ┌────────────────────────────────────────────────────┐   │   │
+│  │  │         Puter Desktop UI                            │   │   │
+│  │  └────────────────────────────────────────────────────┘   │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                            ↕ HTTPS                                │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │              Puter Cloud Servers                          │   │
+│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐              │   │
+│  │  │  Data    │  │ Compute  │  │  Auth    │              │   │
+│  │  │ Storage  │  │ (Cloud)  │  │ (Email)  │              │   │
+│  │  └──────────┘  └──────────┘  └──────────┘              │   │
+│  │                                                           │   │
+│  │  ⚠️ User has NO control over:                            │   │
+│  │  - Where data is stored                                   │   │
+│  │  - Who can access it                                      │   │
+│  │  - What computation happens                              │   │
+│  │  - Service availability                                   │   │
+│  └──────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│                    PC2 (Self-Hosted)                              │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │                    User's Browser                          │   │
+│  │  ┌────────────────────────────────────────────────────┐   │   │
+│  │  │         PC2 Desktop UI (Puter-Compatible)           │   │   │
+│  │  └────────────────────────────────────────────────────┘   │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                            ↕ HTTP                                 │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │              USER'S HARDWARE (PC2 Node)                   │   │
+│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐              │   │
+│  │  │  Data    │  │ Compute  │  │  Auth    │              │   │
+│  │  │ Storage  │  │ (WASM)   │  │ (Wallet) │              │   │
+│  │  └──────────┘  └──────────┘  └──────────┘              │   │
+│  │                                                           │   │
+│  │  ✅ User has FULL control over:                           │   │
+│  │  - Where data is stored (their hardware)                 │   │
+│  │  - Who can access it (wallet-based)                     │   │
+│  │  - What computation happens (WASM on node)              │   │
+│  │  - Service availability (their server)                  │   │
+│  │  - Custom apps and binaries                             │   │
+│  └──────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│                    KEY DIFFERENCES                                │
+│  ┌──────────────────────┐  ┌──────────────────────┐            │
+│  │      PUTER           │  │        PC2             │            │
+│  ├──────────────────────┤  ├──────────────────────┤            │
+│  │ Cloud-hosted         │  │ Self-hosted           │            │
+│  │ Email auth           │  │ Wallet auth           │            │
+│  │ Provider's servers   │  │ User's hardware       │            │
+│  │ Browser WASM only    │  │ Node-side WASM        │            │
+│  │ Subscription cost    │  │ One-time hardware     │            │
+│  │ Limited control      │  │ Full sovereignty      │            │
+│  │ Provider can access  │  │ User-only access      │            │
+│  └──────────────────────┘  └──────────────────────┘            │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Key Differentiators:**
+1. **Data Sovereignty**: PC2 data stays on user's hardware
+2. **Computation Control**: WASM runs on user's node, not cloud
+3. **Identity**: Wallet-based vs email-based
+4. **Cost Model**: Hardware ownership vs subscription
+5. **Customization**: Full control vs limited options
+
+---
+
+### Image 4: WASM Execution Architecture
+
+**Visual Description:**
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    WASM EXECUTION FLOW                           │
+│                                                                  │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │              WASM BINARY TYPES                             │  │
+│  │  ┌──────────────────┐  ┌──────────────────┐             │  │
+│  │  │  Non-WASI WASM    │  │   WASI WASM      │             │  │
+│  │  │  (Calculator)      │  │  (File Processor)│             │  │
+│  │  │                   │  │                  │             │  │
+│  │  │  - Pure compute   │  │  - File I/O      │             │  │
+│  │  │  - No system calls│  │  - Env variables │             │  │
+│  │  │  - Fast execution │  │  - System access  │             │  │
+│  │  └──────────────────┘  └──────────────────┘             │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                            ↓                                     │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │              WASMRUNTIME SERVICE                            │  │
+│  │  ┌────────────────────────────────────────────────────┐  │  │
+│  │  │  1. Load WASM binary from disk                        │  │  │
+│  │  │  2. Compile: WebAssembly.compile()                    │  │  │
+│  │  │  3. Inspect imports: Module.imports()                 │  │  │
+│  │  │  4. Detect WASI requirement                           │  │  │
+│  │  └────────────────────────────────────────────────────┘  │  │
+│  │                            ↓                               │  │
+│  │  ┌──────────────────┐  ┌──────────────────┐             │  │
+│  │  │  Non-WASI Path   │  │   WASI Path      │             │  │
+│  │  │                  │  │                  │             │  │
+│  │  │  WebAssembly.    │  │  WASI.getImports│             │  │
+│  │  │  instantiate(    │  │  (wasmModule)    │             │  │
+│  │  │    module,       │  │                  │             │  │
+│  │  │    {env: {}}     │  │  WebAssembly.    │             │  │
+│  │  │  )               │  │  instantiate(    │             │  │
+│  │  │                  │  │    module,       │             │  │
+│  │  │  → instance      │  │    wasiImports   │             │  │
+│  │  │                  │  │  )              │             │  │
+│  │  │                  │  │                  │             │  │
+│  │  │  → instance      │  │  → instance      │             │  │
+│  │  └──────────────────┘  └──────────────────┘             │  │
+│  │                            ↓                               │  │
+│  │  ┌────────────────────────────────────────────────────┐  │  │
+│  │  │  5. Execute: instance.exports.functionName(args)  │  │  │
+│  │  │  6. Return result to API layer                      │  │  │
+│  │  └────────────────────────────────────────────────────┘  │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                            ↓                                     │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │              WASI COMPONENTS (for WASI modules)            │  │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐   │  │
+│  │  │   MemFS      │  │   WASI       │  │   Preopens   │   │  │
+│  │  │ (In-memory   │  │  (System     │  │  (Directory  │   │  │
+│  │  │ filesystem)  │  │  Interface)  │  │  access)     │   │  │
+│  │  └──────────────┘  └──────────────┘  └──────────────┘   │  │
+│  │                                                             │  │
+│  │  ⚠️ Current Limitation:                                    │  │
+│  │  MemFS is in-memory only - real filesystem mapping         │  │
+│  │  requires additional work (future enhancement)              │  │
+│  └──────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Key Technical Details:**
+1. **Automatic Detection**: Runtime detects WASI requirement by inspecting module imports
+2. **Dual Path**: Non-WASI uses standard WebAssembly, WASI uses @wasmer/wasi
+3. **Isolation**: Each execution is isolated, no shared state between calls
+4. **User-Scoped**: WASM binaries are stored per-wallet, ensuring privacy
+
+---
+
+## 🏗️ Core Components
+
+### 1. Frontend (Browser)
+
+**Technology Stack:**
+- **Framework**: Custom JavaScript/jQuery (Puter-compatible)
+- **UI**: Desktop environment with taskbar, app launcher, file manager
+- **Communication**: HTTP REST API + WebSocket (Socket.io)
+- **SDK**: Puter SDK (intercepted to use PC2 API)
+
+**Key Features:**
+- Desktop UI with file operations
+- App launcher (Terminal, Editor, Calculator, etc.)
+- AI chat sidebar (multi-provider support)
+- Wallet-based authentication UI
+- Real-time updates via WebSocket
+
+**Location:** `src/gui/src/` (source), `pc2-node/test-fresh-install/frontend/` (built)
+
+---
+
+### 2. Backend (PC2 Node)
+
+**Technology Stack:**
+- **Runtime**: Node.js with TypeScript
+- **Server**: Express.js
+- **Database**: SQLite (Better-SQLite3)
+- **Storage**: IPFS (Helia) + Local filesystem
+- **WASM**: @wasmer/wasi runtime
+
+**Key Services:**
+
+#### 2.1 API Layer (`src/api/`)
+- **Authentication**: `/whoami`, `/auth/*` - Wallet-based auth
+- **File Operations**: `/read`, `/write`, `/readdir`, `/stat` - Puter-compatible
+- **WASM**: `/api/wasm/execute-file`, `/api/wasm/execute` - WASM execution
+- **Apps**: `/apps/:name`, `/get-launch-apps` - App metadata
+- **Backup/Restore**: `/api/backup/*` - Data backup system
+- **AI**: `/api/ai/*` - AI chat with multiple providers
+
+#### 2.2 Services Layer (`src/services/`)
+- **WASMRuntime**: Executes WASM binaries on node
+- **AIService**: Multi-provider AI chat (Ollama, OpenAI, Claude, Gemini)
+- **StorageService**: IPFS integration for distributed storage
+- **AuthService**: Wallet authentication via Particle Auth
+- **BackupService**: Automated backup/restore system
+
+#### 2.3 Static File Serving (`src/static.ts`)
+- Serves frontend bundle
+- SDK injection for apps
+- App HTML serving with dynamic SDK URL
+
+**Location:** `pc2-node/test-fresh-install/src/`
+
+---
+
+### 3. WASM Runtime
+
+**Implementation:** `src/services/wasm/WASMRuntime.ts`
+
+**Capabilities:**
+- Loads WASM binaries from disk
+- Compiles and instantiates WASM modules
+- Automatic WASI detection
+- Supports both WASI and non-WASI modules
+- User-scoped binary storage (per-wallet)
+
+**Current Status:**
+- ✅ Non-WASI modules (Calculator) - Fully functional
+- ⚠️ WASI modules (File Processor) - File I/O needs MemFS mapping work
+
+**Future Enhancements:**
+- Real filesystem mapping for WASI
+- dDRM integration (Phase 6.5)
+- Binary marketplace integration
+- AI agent execution support
+
+---
+
+### 4. Data Storage
+
+**Three-Tier Storage:**
+
+1. **SQLite Database** (`data/pc2.db`)
+   - User metadata
+   - File system structure
+   - App configurations
+   - Session data
+
+2. **IPFS Node** (Helia)
+   - Distributed file storage
+   - Content-addressed storage
+   - P2P distribution capability
+   - Future: Global marketplace integration
+
+3. **Local Filesystem**
+   - User files (`data/users/{wallet}/`)
+   - WASM binaries (`data/wasm-apps/`)
+   - Backup files (`data/backups/`)
+   - App data (`data/apps/`)
+
+**Isolation:** All data is wallet-scoped, ensuring complete privacy between users
+
+---
+
+### 5. Authentication System
+
+**Technology:** Particle Auth (Wallet-based)
+
+**Flow:**
+1. User connects wallet (MetaMask, WalletConnect, etc.)
+2. Particle Auth creates Smart Account (UniversalX)
+3. PC2 node validates wallet signature
+4. Session token issued (7-day validity)
+5. All subsequent requests authenticated via token
+
+**Key Features:**
+- Decentralized identity (no email/password)
+- Multi-wallet support
+- Smart Account abstraction
+- Auto-reconnect on page refresh
+
+---
+
+## 🔄 Request Flow Examples
+
+### Example 1: File Upload
+
+```
+User → Frontend (drag & drop)
+  → POST /write?file=/path/to/file
+  → Backend validates auth token
+  → StorageService.write()
+  → IPFS.add() (distributed storage)
+  → SQLite.update() (metadata)
+  → WebSocket.broadcast() (real-time update)
+  → Frontend updates UI
+```
+
+### Example 2: WASM Calculator
+
+```
+User → Frontend (click "5 + 3 =")
+  → POST /api/wasm/execute-file
+  → Backend validates auth token
+  → WASMRuntime.execute()
+  → Load calculator.wasm from disk
+  → Compile & instantiate WASM
+  → Call instance.exports.add(5, 3)
+  → Return result: 8
+  → Frontend displays: 8
+```
+
+### Example 3: AI Chat
+
+```
+User → Frontend (type message)
+  → POST /api/ai/chat
+  → Backend validates auth token
+  → AIService.chat()
+  → Route to provider (Ollama/OpenAI/Claude)
+  → Stream response via WebSocket
+  → Frontend displays streaming text
+```
+
+---
+
+## 🆚 Why PC2 is Unique
+
+### 1. **Complete Data Sovereignty**
+- **Puter**: Data stored on provider's servers
+- **PC2**: Data stored on user's hardware
+- **Benefit**: User has full control, no third-party access
+
+### 2. **Self-Hosted Computation**
+- **Puter**: Computation on provider's servers (if any)
+- **PC2**: WASM execution on user's node
+- **Benefit**: Privacy, no data leakage, custom binaries
+
+### 3. **Wallet-Based Identity**
+- **Puter**: Email/password (centralized)
+- **PC2**: Wallet signature (decentralized)
+- **Benefit**: No account recovery issues, true ownership
+
+### 4. **No Subscription Model**
+- **Puter**: Monthly/yearly fees
+- **PC2**: One-time hardware cost
+- **Benefit**: Long-term cost savings, no vendor lock-in
+
+### 5. **Full Customization**
+- **Puter**: Limited to provider's features
+- **PC2**: User can add custom apps, WASM binaries, modify code
+- **Benefit**: Unlimited extensibility
+
+### 6. **WASM on Node (Not Browser)**
+- **Puter**: WASM runs in browser (limited, sandboxed)
+- **PC2**: WASM runs on node (full system access, privacy)
+- **Benefit**: More powerful, private computation
+
+---
+
+## 🚀 Current Status
+
+### ✅ Completed Features
+
+1. **Core Infrastructure**
+   - ✅ Desktop UI (Puter-compatible)
+   - ✅ File operations (CRUD)
+   - ✅ Wallet authentication
+   - ✅ IPFS integration
+   - ✅ SQLite database
+   - ✅ WebSocket real-time updates
+
+2. **WASM Integration**
+   - ✅ WASMRuntime service
+   - ✅ WASM API endpoints
+   - ✅ Calculator app (non-WASI)
+   - ✅ App registration system
+   - ✅ SDK injection for apps
+
+3. **AI Integration**
+   - ✅ Multi-provider support (Ollama, OpenAI, Claude, Gemini)
+   - ✅ AI chat sidebar
+   - ✅ File editing tools
+   - ✅ IPC tool system
+
+4. **Backup & Restore**
+   - ✅ One-click web UI restore
+   - ✅ Backup status indicators
+   - ✅ Comprehensive help system
+
+### 🚧 In Progress
+
+1. **WASI File I/O**
+   - MemFS to real filesystem mapping
+   - File Processor app enhancement
+
+2. **More WASM Apps**
+   - Environment reader (WASI)
+   - Additional demo apps
+
+### 📋 Planned (Future Phases)
+
+1. **Phase 6.5: Full WASMER Runtime**
+   - dDRM integration
+   - Binary marketplace
+   - AI agent execution
+   - Cross-platform support
+
+2. **Phase 6: Digital Rights Management**
+   - NFT-based licensing
+   - Access token system
+   - Royalty distribution
+
+3. **Phase 7: Agent Economy**
+   - AgentKit integration
+   - Bot-to-bot marketplace
+   - Autonomous agent execution
+
+---
+
+## 🔐 Security & Privacy
+
+### Data Isolation
+- **Wallet-scoped storage**: Each user's data is completely isolated
+- **No cross-user access**: Impossible to access another user's data
+- **Local-first**: Data never leaves user's hardware unless explicitly shared
+
+### Authentication
+- **Wallet signature**: Cryptographic proof of ownership
+- **No passwords**: No password database to breach
+- **Session tokens**: Time-limited, revocable
+
+### WASM Execution
+- **Sandboxed**: Each WASM execution is isolated
+- **User-scoped**: Binaries stored per-wallet
+- **No network access**: Unless explicitly granted (future)
+
+---
+
+## 📊 Performance Characteristics
+
+### File Operations
+- **Local filesystem**: Fast (native OS speed)
+- **IPFS**: Depends on network (local node is fast)
+- **SQLite**: Very fast for metadata queries
+
+### WASM Execution
+- **Compilation**: One-time cost (cached)
+- **Execution**: Near-native speed
+- **Memory**: Isolated per execution
+
+### Network
+- **Local network**: Minimal latency
+- **Remote access**: Depends on user's connection
+- **WebSocket**: Real-time updates with low overhead
+
+---
+
+## 🛠️ Development Workflow
+
+### Building
+```bash
+# Build frontend
+cd src/gui && npm run build
+
+# Build backend
+cd pc2-node/test-fresh-install && npm run build:backend
+
+# Build both
+npm run build
+```
+
+### Running
+```bash
+# Start server
+cd pc2-node/test-fresh-install
+PORT=4202 npm start
+
+# Access UI
+open http://localhost:4202
+```
+
+### Testing WASM
+```bash
+# Compile Rust to WASM
+cd data/wasm-apps
+rustc --target wasm32-unknown-unknown calculator.rs
+
+# Test via API
+curl -X POST http://localhost:4202/api/wasm/execute-file \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"filePath": "data/wasm-apps/calculator.wasm", "functionName": "add", "args": [5, 3]}'
+```
+
+---
+
+## 📚 Documentation References
+
+- **Strategic Implementation Plan**: `docs/STRATEGIC_IMPLEMENTATION_PLAN.md`
+- **WASM Showcase**: `docs/WASMER_SIMPLE_SHOWCASE.md`
+- **AI Roadmap**: `docs/AI_AGENT_MASTERY_ROADMAP.md`
+- **Backup System**: `docs/PHASE3_BACKUP_RESTORE_REQUIREMENTS.md`
+
+---
+
+## 🎯 Vision: The Future of PC2
+
+### Short-Term (Next 3 Months)
+- Complete WASI file I/O implementation
+- More WASM demo apps
+- Enhanced AI capabilities
+- Improved backup automation
+
+### Medium-Term (6-12 Months)
+- Full WASMER runtime with dDRM
+- Binary marketplace
+- P2P distribution
+- AI agent integration
+
+### Long-Term (1-2 Years)
+- Agent economy (bot-to-bot marketplace)
+- Cross-platform WASMER runtime
+- Global PC2 network
+- Decentralized identity federation
+
+---
+
+## 📝 Image Creation Guide
+
+The four images described above should be created as:
+
+1. **Image 1: High-Level Architecture**
+   - Use diagramming tool (draw.io, Lucidchart, Mermaid)
+   - Show: Browser → PC2 Node → Services → Data layers
+   - Color code: Frontend (blue), Backend (green), Services (yellow), Data (orange)
+
+2. **Image 2: WASM Calculator Flow**
+   - Sequence diagram showing: User → Frontend → API → WASMRuntime → WASM Binary → Response
+   - Include data payloads at each step
+   - Show where computation happens (PC2 node)
+
+3. **Image 3: PC2 vs Puter**
+   - Side-by-side comparison
+   - Highlight key differences with callouts
+   - Use contrasting colors (Puter: red/orange, PC2: green/blue)
+
+4. **Image 4: WASM Execution Architecture**
+   - Technical diagram showing WASM binary types
+   - WASMRuntime service internals
+   - WASI vs non-WASI paths
+   - Include current limitations
+
+---
+
+**End of Architecture Overview**
+

@@ -210,8 +210,8 @@ function App() {
           className="logo"
           onError={(e) => { e.currentTarget.style.display = 'none'; }}
         />
-        <h1>Welcome to PC2</h1>
-        <p>Connect your wallet to continue</p>
+        <h1>The World Computer</h1>
+        <p>Connect your wallet to login</p>
       </div>
 
       <div className="login-content">
@@ -249,11 +249,7 @@ function App() {
               className="connect-button"
               onClick={handleConnectClick}
             >
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="2" y="6" width="20" height="12" rx="2"/>
-                <path d="M12 12a2 2 0 100-4 2 2 0 000 4z"/>
-              </svg>
-              <span>Connect Wallet</span>
+              Connect Wallet
             </button>
             <p className="hint">MetaMask, WalletConnect, Coinbase, and more</p>
           </>

@@ -161,11 +161,11 @@ async function UIWindowParticleLogin(options = {}) {
         });
         
         // Set up message handler function that has access to options and resolve
-        function handleAuthSuccess(authData, container, el_window) {
+        async function handleAuthSuccess(authData, container, el_window) {
             // If the iframe already called the backend and got a token, use that directly
             if (authData.token && authData.user) {
                 console.log('[Particle Auth]: Using pre-authenticated data from iframe');
-                completeAuthentication(authData.token, authData.user, container, el_window);
+                await completeAuthentication(authData.token, authData.user, container, el_window);
                 return;
             }
             
@@ -218,7 +218,7 @@ async function UIWindowParticleLogin(options = {}) {
                 }
                 return response.json();
             })
-            .then(data => {
+            .then(async data => {
                 console.log('[Particle Auth]: Response data:', data);
                 
                 if (processingOverlay && processingOverlay.parentNode) {
@@ -227,7 +227,7 @@ async function UIWindowParticleLogin(options = {}) {
                 
                 if (data && data.success) {
                     console.log('[Particle Auth]: ✅ Authentication successful, token:', data.token?.substring(0, 16) + '...');
-                    completeAuthentication(data.token, data.user, container, el_window);
+                    await completeAuthentication(data.token, data.user, container, el_window);
                 } else {
                     console.warn('[Particle Auth]: ❌ Authentication failed, data:', data);
                     // Show error
@@ -260,9 +260,9 @@ async function UIWindowParticleLogin(options = {}) {
         }
         
         // Complete the authentication flow
-        function completeAuthentication(token, user, container, el_window) {
-            // Update Puter's auth state
-            window.update_auth_data(token, user);
+        async function completeAuthentication(token, user, container, el_window) {
+            // Update Puter's auth state - MUST await to ensure data is saved before reload
+            await window.update_auth_data(token, user);
             
             // Log smart account info for debugging
             if (user.smart_account_address) {

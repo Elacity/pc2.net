@@ -100,3 +100,46 @@ h1 {
     padding: 2em;
   }
 }
+
+/* Presented by Elacity Labs footer */
+.presented-by {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 8px;
+  backdrop-filter: blur(8px);
+  z-index: 2147483647; /* Maximum z-index to ensure visibility */
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.presented-by:hover {
+  background: rgba(0, 0, 0, 0.7);
+  transform: translateY(-2px);
+}
+
+.presented-by span {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.presented-by:hover span {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.presented-by img {
+  height: 16px;
+  width: auto;
+  opacity: 0.9;
+}
+
+.presented-by:hover img {
+  opacity: 1;
+}

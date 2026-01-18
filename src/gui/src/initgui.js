@@ -922,9 +922,9 @@ window.initgui = async function(options){
         // This ensures users see Particle Auth instead of Puter's standard login UI
         console.log('[initgui]: Showing Particle login (PC2 mode - skipping session list)...');
         // ELACITY: Embed Particle Auth inside the OS instead of redirecting
-        // Set reload_on_success to false so the desktop loads via the "login" event
+        // Set reload_on_success to true to ensure desktop loads correctly after login
         console.log('[initgui]: Calling UIWindowParticleLogin()...');
-        await UIWindowParticleLogin({ reload_on_success: false });
+        await UIWindowParticleLogin({ reload_on_success: true });
         console.log('[initgui]: ✅ UIWindowParticleLogin() completed');
     } else {
         console.log('[initgui]: ✅ User IS authenticated');

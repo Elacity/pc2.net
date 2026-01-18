@@ -1335,10 +1335,13 @@ async function UIDesktop(options) {
     // FIXED: Only refresh once to prevent duplicate icons
     const isEmbeddedCheck = window.is_embedded || false;
     const isFullpageCheck = window.is_fullpage_mode || false;
+    // PC2: Always refresh for wallet users (Web3 login) regardless of embedded/fullpage flags
+    const isPC2User = !!(window.user?.wallet_address);
     console.log('[UIDesktop]: Immediate desktop refresh check after taskbar...', {
         is_embedded: isEmbeddedCheck,
         is_fullpage_mode: isFullpageCheck,
-        shouldRefresh: !isEmbeddedCheck && !isFullpageCheck,
+        is_pc2_user: isPC2User,
+        shouldRefresh: !isEmbeddedCheck && !isFullpageCheck || isPC2User,
         desktop_path: window.desktop_path,
         window_location: window.location.href,
         parent_location: window.parent?.location?.href,
@@ -1346,7 +1349,8 @@ async function UIDesktop(options) {
     });
     
     // Single desktop refresh (removed duplicate refresh call to prevent duplicate icons)
-    if (!isEmbeddedCheck && !isFullpageCheck) {
+    // PC2: Force refresh for wallet users to ensure desktop icons appear after login
+    if (!isEmbeddedCheck && !isFullpageCheck || isPC2User) {
         setTimeout(() => {
             console.log('[UIDesktop]: Executing desktop refresh...');
             const desktopContainer = document.querySelector('.desktop.item-container') || 
@@ -1380,9 +1384,10 @@ async function UIDesktop(options) {
             }
         }, 200);
     } else {
-        console.warn('[UIDesktop]: Desktop refresh SKIPPED - embedded or fullpage mode', {
+        console.warn('[UIDesktop]: Desktop refresh SKIPPED - embedded or fullpage mode (and not PC2 user)', {
             is_embedded: isEmbeddedCheck,
-            is_fullpage_mode: isFullpageCheck
+            is_fullpage_mode: isFullpageCheck,
+            is_pc2_user: isPC2User
         });
     }
 

@@ -12,3 +12,48 @@
   max-width: 100%;
   width: auto;
 }
+
+/* Hide Particle Network branding and remove gap */
+[class*="PoweredBy"],
+[class*="poweredBy"],
+[class*="powered-by"],
+a[href*="particle.network"],
+div:has(> a[href*="particle.network"]),
+div:has(> img[alt*="Particle"]) {
+  display: none !important;
+  height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* Alternative selector for "Powered by" text */
+div[class*="cnDozH"],
+div[class*="iuOPfp"] {
+  display: none !important;
+  height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* Reduce modal bottom padding where branding was */
+[class*="kqqBuj"],
+[class*="lntVHp"],
+[class*="gjLKRm"] {
+  padding-bottom: 0 !important;
+}
+
+/* Target all inner containers to remove bottom spacing */
+[class*="bRkyCr"] + div:last-child,
+div[class*="Modal"] > div:last-child,
+[class*="cZqa-dg"],
+[class*="eAKupd"],
+[class*="jiYiOJ"] {
+  margin-bottom: 0 !important;
+  padding-bottom: 0 !important;
+}
+
+/* View all wallets button container - reduce spacing below */
+[class*="leaayh"],
+button[class*="leaayh"] {
+  margin-bottom: 16px !important;
+}

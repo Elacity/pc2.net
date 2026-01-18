@@ -2,6 +2,7 @@ import React from 'react';
 import './App.css';
 import { useModal } from '@particle-network/connectkit';
 import { useParticleNetwork } from './particle/hooks/useParticleNetwork';
+import elacityLogo from './assets/elacity-labs-logo.svg';
 
 
 function App() {
@@ -47,7 +48,22 @@ function App() {
     }
   }, [setOpen, active, isOpen, isWalletMode]);
   
-  return null;
+  // Don't show branding in wallet mode
+  if (isWalletMode) {
+    return null;
+  }
+  
+  return (
+    <a 
+      href="https://elacitylabs.com" 
+      target="_blank" 
+      rel="noopener noreferrer"
+      className="presented-by"
+    >
+      <span>Presented by</span>
+      <img src={elacityLogo} alt="Elacity Labs" />
+    </a>
+  );
 }
 
 export default App;

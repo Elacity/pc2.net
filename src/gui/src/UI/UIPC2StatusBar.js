@@ -169,7 +169,7 @@ function initPC2StatusBar() {
                     onClick: () => {
                         // Trigger Particle Auth login
                         import('./UIWindowParticleLogin.js').then(({ default: UIWindowParticleLogin }) => {
-                            UIWindowParticleLogin({ reload_on_success: false });
+                            UIWindowParticleLogin({ reload_on_success: true });
                         }).catch((err) => {
                             logger.error('[PC2]: Failed to open login:', err);
                         });

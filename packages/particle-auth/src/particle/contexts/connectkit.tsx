@@ -79,17 +79,23 @@ const config = createConfig({
   // Appearance configuration including theme integration
   appearance: {
     // Configure recommended wallets and their display
+    // Order: MetaMask (or Essentials if available), Phantom, WalletConnect
     recommendedWallets: [
       { walletId: (window as any)?.elastos ? 'essentialWallet' : 'metaMask', label: 'Recommended' },
+      { walletId: 'phantom', label: 'Popular' },
       { walletId: 'walletConnect', label: 'none' },
+      { walletId: 'coinbaseWallet', label: 'none' },
+      { walletId: 'okxWallet', label: 'none' },
+      { walletId: 'trustWallet', label: 'none' },
+      { walletId: 'bitKeep', label: 'none' },
     ],
     // UI configuration options
     splitEmailAndPhone: false,
     isDismissable: false,
     collapseWalletList: false,
     hideContinueButton: true,
-    // Order of connection methods
-    connectorsOrder: ['email', 'phone', 'social', 'wallet'],
+    // Order of connection methods (no social - requires domain whitelisting)
+    connectorsOrder: ['email', 'phone', 'wallet'],
     logo: elastosLogo,
     language: 'en-US',
     theme: {
@@ -118,7 +124,7 @@ const config = createConfig({
       "--pcm-button-font-weight":"500",
       "--pcm-modal-box-shadow":"0px 2px 4px rgba(0, 0, 0, 0.02)",
     },
-    inlineSelectorId: "__particle_custom_selector_id"
+    // inlineSelectorId: "__particle_custom_selector_id"
   },
 
   // Configure wallet connectors
@@ -127,9 +133,9 @@ const config = createConfig({
     evmWalletConnectors({
       metadata: { name: 'Elacity' },
       connectorFns: [
-        injected({
-          target: 'metaMask',
-        }),
+        // Primary wallets: MetaMask, Phantom, WalletConnect
+        injected({ target: 'metaMask' }),
+        injected({ target: 'phantom' }),
         ...(window as any).elastos ? [injected({
           target: 'essentialWallet',
         })] : [],
@@ -149,12 +155,22 @@ const config = createConfig({
             enableExplorer: true,
           },
         }),
+        // Additional wallets for "View all wallets"
+        injected({ target: 'coinbaseWallet' }),
+        injected({ target: 'okxWallet' }),
+        injected({ target: 'trustWallet' }),
+        injected({ target: 'bitKeep' }),
+        injected({ target: 'rainbow' }),
+        injected({ target: 'zerion' }),
       ],
       multiInjectedProviderDiscovery: true,
     }),
 
     // Authentication wallet connectors configuration
+    // Only email and phone - social logins require domain whitelisting which 
+    // doesn't work for self-hosted PC2 instances
     authWalletConnectors({
+      authTypes: ['email', 'phone'],
       fiatCoin: 'USD',
       promptSettingConfig: {
         promptMasterPasswordSettingWhenLogin: 1,

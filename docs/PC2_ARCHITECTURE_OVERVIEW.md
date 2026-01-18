@@ -705,5 +705,226 @@ The four images described above should be created as:
 
 ---
 
+## 🔍 Architecture Audit: Self-Contained Package Analysis
+
+**Audit Date:** 2025-01-18  
+**Status:** On Track for Sovereign Deployment
+
+### What Runs Locally (PC2 Node)
+
+| Component | Technology | Status | Notes |
+|-----------|------------|--------|-------|
+| **HTTP Server** | Express.js | ✅ Local | All API endpoints served locally |
+| **WebSocket** | Socket.io | ✅ Local | Real-time updates |
+| **Database** | SQLite (better-sqlite3) | ✅ Local | Users, sessions, file metadata |
+| **File Storage** | Local filesystem | ✅ Local | User files stored in `data/` |
+| **IPFS Node** | Helia | ✅ Local | Content-addressed storage |
+| **WASM Runtime** | Wasmer | ✅ Local | Server-side binary execution |
+| **Frontend GUI** | Built bundle.min.js | ✅ Local | Puter-compatible UI served as static files |
+| **AI Service** | Multi-provider | ⚠️ Mixed | Ollama (local), others require API keys |
+| **Thumbnails** | Sharp | ✅ Local | Image processing |
+| **PDF Processing** | pdfjs-dist | ✅ Local | Text extraction |
+
+### External Dependencies (Require Internet)
+
+| Service | Purpose | Required? | Credentials |
+|---------|---------|-----------|-------------|
+| **Particle Network** | Wallet authentication UI | ⚠️ Currently Yes | ✅ Pre-configured |
+| - `wallet-iframe.particle.network` | ConnectKit modal | Required | Hosted by Particle |
+| - Particle project credentials | API authentication | Required | **Baked into package** |
+| **WalletConnect** | Mobile wallet QR scanning | Optional | ✅ Pre-configured |
+| - `relay.walletconnect.org` | QR code relay | For mobile | **Baked into package** |
+| **Elastos RPC** | Blockchain queries | For Web3 features | Can use any EVM RPC |
+| - `api.ela.city/esc` | Primary RPC | Network access | Configurable |
+| - `api.elastos.io/esc` | Backup RPC | Network access | Configurable |
+| **AI Providers** (Optional) | Cloud AI | User choice | Ollama runs fully local |
+| - OpenAI API | GPT models | Optional | Requires API key |
+| - Anthropic API | Claude models | Optional | Requires API key |
+| - Google AI | Gemini models | Optional | Requires API key |
+
+### Current Login Flow (Particle Network)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        LOGIN FLOW                                 │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│  1. User opens PC2 → Local PC2 Node serves frontend              │
+│  2. Login modal loads → Particle ConnectKit iframe (EXTERNAL)    │
+│  3. User selects wallet → Particle handles connection            │
+│  4. Wallet signs challenge → Signature verified                  │
+│  5. PC2 Node creates session → SQLite (LOCAL)                    │
+│  6. User gets auth token → All subsequent requests LOCAL         │
+│                                                                   │
+│  External: Step 2-4 (Particle Network)                           │
+│  Local: Step 1, 5-6 (PC2 Node)                                   │
+│                                                                   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Data Sovereignty Analysis
+
+| Data Type | Storage | Privacy | Notes |
+|-----------|---------|---------|-------|
+| **User files** | Local filesystem + IPFS | ✅ Fully private | Never leaves device unless shared |
+| **Session tokens** | Local SQLite | ✅ Fully private | Generated locally |
+| **User preferences** | Local SQLite | ✅ Fully private | Desktop settings, etc. |
+| **File metadata** | Local SQLite | ✅ Fully private | Indexed locally |
+| **Wallet addresses** | Local SQLite | ✅ Private | Used as username |
+| **AI conversations** | In-memory | ✅ Private* | *Cloud AI sees prompts if used |
+
+### Security Considerations for Self-Hosted Deployment
+
+#### Current Security Features
+- ✅ Session tokens are cryptographically random (32 bytes)
+- ✅ Sessions expire (configurable, default 30 days)
+- ✅ Wallet-based auth (no passwords stored)
+- ✅ File isolation per wallet address
+- ✅ CORS headers for API security
+
+#### Recommendations for Production
+- ⚠️ **HTTPS Required**: Use reverse proxy (nginx/caddy) with Let's Encrypt
+- ⚠️ **Firewall**: Only expose port 443 (or chosen port)
+- ⚠️ **Backup**: Regular encrypted backups of `data/` and SQLite DB
+- ⚠️ **Updates**: Keep Node.js and dependencies updated
+
+### Raspberry Pi / ARM Deployment Considerations
+
+| Aspect | Status | Notes |
+|--------|--------|-------|
+| **Node.js** | ✅ Compatible | v20+ runs on ARM64 |
+| **SQLite** | ✅ Compatible | better-sqlite3 compiles natively |
+| **Sharp** | ⚠️ Needs ARM build | Pre-built binaries available |
+| **IPFS (Helia)** | ✅ Compatible | Pure JS, platform-agnostic |
+| **Wasmer** | ⚠️ Check ARM support | May need WASM interpreter fallback |
+| **Memory** | ⚠️ Minimum 2GB | 4GB recommended |
+| **Storage** | ✅ User files scale | SD card or SSD |
+
+### Roadmap to Full Self-Containment
+
+#### Phase 1: Current State (✅ Complete)
+- Particle Network for Web3 login
+- All file operations local
+- Multi-user SQLite database
+- AI with multiple providers
+
+#### Phase 2: Reduce External Dependencies (🔄 In Progress)
+- [ ] Add pure RainbowKit branch as alternative
+- [ ] Document self-hosted Particle (if available)
+- [ ] Add offline mode detection
+
+#### Phase 3: Full Sovereignty Mode (📋 Planned)
+- [ ] Direct wallet signature auth (no Particle iframe)
+- [ ] Self-hosted WalletConnect relay (or bypass)
+- [ ] Fully offline-capable mode
+- [ ] Local-only AI (Ollama required)
+
+### Environment Variables & Credentials
+
+#### Pre-Configured (No User Action Required)
+
+The following credentials are **baked into the PC2 package** and work out of the box:
+
+| Service | Status | Notes |
+|---------|--------|-------|
+| **Particle Network** | ✅ Pre-configured | Elacity's project credentials included |
+| **WalletConnect** | ✅ Pre-configured | Shared project ID for QR scanning |
+
+**Why this is safe:**
+- Particle only handles wallet connection UI (lightweight)
+- Each PC2 node serves few users (1-5 typically)
+- Free tier handles thousands of authentications/month
+- No sensitive data passes through Particle
+
+#### Optional Overrides (For Full Sovereignty)
+
+Users who want complete isolation can provide their own credentials:
+
+```bash
+# Optional: Override Particle Network credentials
+# Get from https://dashboard.particle.network (free tier available)
+VITE_PARTICLE_PROJECT_ID=xxx
+VITE_PARTICLE_CLIENT_KEY=xxx
+VITE_PARTICLE_APP_ID=xxx
+
+# Optional: Override WalletConnect project ID
+# Get from https://cloud.walletconnect.com (free)
+VITE_WALLETCONNECT_PROJECT_ID=xxx
+```
+
+#### AI Provider Keys (User Provides If Wanted)
+
+```bash
+# For cloud AI (completely optional - Ollama works locally without keys)
+ANTHROPIC_API_KEY=xxx             # For Claude
+OPENAI_API_KEY=xxx                # For GPT  
+GEMINI_API_KEY=xxx                # For Gemini
+```
+
+**Note:** For fully local AI, users can run [Ollama](https://ollama.ai) on their device - no API keys needed.
+
+### Packaging Recommendations
+
+For a distributable PC2 package (Docker, npm, or standalone):
+
+```yaml
+# docker-compose.yml concept
+version: '3.8'
+services:
+  pc2-node:
+    image: elastos/pc2-node:latest
+    ports:
+      - "4200:4200"
+    volumes:
+      - ./data:/app/data          # User files persist here
+      - ./config:/app/config      # Optional config overrides
+    environment:
+      # No credentials needed! They're baked into the image.
+      # Only add these if you want to use your own:
+      # - VITE_PARTICLE_PROJECT_ID=${PARTICLE_ID}
+      # - VITE_PARTICLE_CLIENT_KEY=${PARTICLE_KEY}
+      
+      # Optional: AI provider keys
+      - ANTHROPIC_API_KEY=${ANTHROPIC_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_KEY:-}
+```
+
+### Quick Start for Users
+
+```bash
+# Option 1: Docker (recommended)
+docker run -d -p 4200:4200 -v pc2-data:/app/data elastos/pc2-node
+
+# Option 2: npm
+npm install -g @elastos/pc2-node
+pc2-node start
+
+# Option 3: From source
+git clone https://github.com/puter/pc2.net
+cd pc2.net/pc2-node
+npm install && npm start
+```
+
+**That's it!** No API keys to configure. Open `http://localhost:4200` and login with your wallet.
+
+### Conclusion
+
+**Are we on the right track?** ✅ **YES**
+
+The PC2 architecture is fundamentally sound for self-hosted deployment:
+
+1. **Core is local**: All file operations, database, session management run on user's hardware
+2. **Login is the only external dependency**: Particle Network handles wallet connection UI
+3. **AI is user's choice**: Can use fully local Ollama or cloud providers
+4. **Data never leaves**: Files, metadata, sessions stay on local device
+
+**Key Wisdom:**
+- The current Particle dependency is acceptable for MVP - it provides excellent UX
+- For paranoid users, a pure RainbowKit or direct wallet auth can be added as alternative
+- The architecture already supports multi-tenant isolation (each wallet is siloed)
+- HTTPS is critical for production - wallets refuse to connect over HTTP
+
+---
+
 **End of Architecture Overview**
 

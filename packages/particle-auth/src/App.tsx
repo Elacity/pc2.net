@@ -33,8 +33,27 @@ function App() {
       hasDisconnectedOnMount.current = true;
       console.log('[RainbowKit]: Login mode - forcing disconnect on mount');
       
-      // Always disconnect, regardless of current state
+      // Always disconnect via wagmi
       disconnect();
+      
+      // Also try to revoke MetaMask permissions (clears "connected" state)
+      // This ensures MetaMask shows the account picker next time
+      if (window.ethereum) {
+        try {
+          // @ts-ignore - wallet_revokePermissions is not in types yet
+          window.ethereum.request({
+            method: 'wallet_revokePermissions',
+            params: [{ eth_accounts: {} }]
+          }).then(() => {
+            console.log('[RainbowKit]: MetaMask permissions revoked');
+          }).catch((err: Error) => {
+            // Not all wallets support this, that's OK
+            console.log('[RainbowKit]: wallet_revokePermissions not supported:', err.message);
+          });
+        } catch (e) {
+          // Ignore errors
+        }
+      }
       
       // Reset state
       setSelectedAddress(null);
@@ -98,10 +117,13 @@ function App() {
     }
   }, [isAuthenticating, authComplete]);
 
+  // Track when we actually initiated a connection attempt
+  const [connectionAttemptTime, setConnectionAttemptTime] = useState<number>(0);
+  
   // ONLY authenticate when:
   // 1. Modal was opened by user
-  // 2. Address changed (user selected a wallet)
-  // 3. We have a valid address
+  // 2. Address changed AFTER modal was opened
+  // 3. Connection happened recently (within 10 seconds of modal open)
   useEffect(() => {
     if (mode !== 'login') return;
     if (!modalWasOpened) return;
@@ -109,34 +131,50 @@ function App() {
     if (authComplete || isAuthenticating) return;
     
     // Check if this is a NEW connection (address changed after modal was opened)
-    if (address !== previousAddress.current) {
-      console.log('[RainbowKit]: New wallet selected via modal:', address);
+    // AND it happened recently (not a stale MetaMask connection)
+    const now = Date.now();
+    const timeSinceModalOpen = now - connectionAttemptTime;
+    
+    if (address !== previousAddress.current && timeSinceModalOpen < 30000) {
+      console.log('[RainbowKit]: New wallet selected via modal:', address, 'time since modal:', timeSinceModalOpen);
       previousAddress.current = address;
       setSelectedAddress(address);
       authenticateWithBackend(address);
+    } else if (address === previousAddress.current) {
+      // Same address as before, likely a stale connection - ignore
+      console.log('[RainbowKit]: Ignoring stale connection to:', address);
     }
-  }, [mode, modalWasOpened, isConnected, address, authComplete, isAuthenticating, authenticateWithBackend]);
+  }, [mode, modalWasOpened, isConnected, address, authComplete, isAuthenticating, authenticateWithBackend, connectionAttemptTime]);
 
   // Handle connect button click
-  const handleConnectClick = useCallback(() => {
+  const handleConnectClick = useCallback(async () => {
     console.log('[RainbowKit]: User clicked Connect Wallet');
     
-    // If somehow connected, disconnect first
-    if (isConnected) {
-      console.log('[RainbowKit]: Already connected, disconnecting first...');
-      disconnect();
-      // Give it a moment to disconnect
-      setTimeout(() => {
-        setModalWasOpened(true);
-        previousAddress.current = null;
-        openConnectModal?.();
-      }, 100);
-    } else {
+    // Always disconnect and revoke permissions first to ensure fresh wallet picker
+    disconnect();
+    
+    // Try to revoke MetaMask permissions for fresh account selection
+    if (window.ethereum) {
+      try {
+        // @ts-ignore
+        await window.ethereum.request({
+          method: 'wallet_revokePermissions',
+          params: [{ eth_accounts: {} }]
+        });
+        console.log('[RainbowKit]: MetaMask permissions revoked before connect');
+      } catch (e) {
+        // Not all wallets support this
+      }
+    }
+    
+    // Small delay to let disconnect complete
+    setTimeout(() => {
       setModalWasOpened(true);
+      setConnectionAttemptTime(Date.now());
       previousAddress.current = null;
       openConnectModal?.();
-    }
-  }, [isConnected, disconnect, openConnectModal]);
+    }, 150);
+  }, [disconnect, openConnectModal]);
 
   // In wallet mode, just report the address
   useEffect(() => {

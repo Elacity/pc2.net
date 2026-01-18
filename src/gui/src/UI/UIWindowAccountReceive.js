@@ -451,6 +451,7 @@ async function UIWindowAccountReceive(options = {}) {
             width: 580,
             height: 'auto',
             dominant: true,
+            stay_on_top: true,
             show_in_taskbar: false,
             draggable_body: false,
             window_class: 'window-account-receive',

@@ -106,17 +106,18 @@ export class DatabaseManager {
     createOrUpdateFile(metadata) {
         const db = this.getDB();
         db.prepare(`
-      INSERT INTO files (path, wallet_address, ipfs_hash, size, mime_type, thumbnail, is_dir, is_public, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO files (path, wallet_address, ipfs_hash, size, mime_type, thumbnail, content_text, is_dir, is_public, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(path, wallet_address) DO UPDATE SET
         ipfs_hash = excluded.ipfs_hash,
         size = excluded.size,
         mime_type = excluded.mime_type,
         thumbnail = excluded.thumbnail,
+        content_text = excluded.content_text,
         is_dir = excluded.is_dir,
         is_public = excluded.is_public,
         updated_at = excluded.updated_at
-    `).run(metadata.path, metadata.wallet_address, metadata.ipfs_hash, metadata.size, metadata.mime_type, metadata.thumbnail || null, metadata.is_dir ? 1 : 0, metadata.is_public ? 1 : 0, metadata.created_at, metadata.updated_at);
+    `).run(metadata.path, metadata.wallet_address, metadata.ipfs_hash, metadata.size, metadata.mime_type, metadata.thumbnail || null, metadata.content_text || null, metadata.is_dir ? 1 : 0, metadata.is_public ? 1 : 0, metadata.created_at, metadata.updated_at);
     }
     getFile(path, walletAddress) {
         const db = this.getDB();
@@ -127,6 +128,7 @@ export class DatabaseManager {
         }
         return {
             ...row,
+            content_text: row.content_text ?? null,
             is_dir: row.is_dir === 1,
             is_public: row.is_public === 1
         };
@@ -140,6 +142,7 @@ export class DatabaseManager {
     `).all(`${directoryPath}%`, walletAddress);
         return rows.map(row => ({
             ...row,
+            content_text: row.content_text ?? null,
             is_dir: row.is_dir === 1,
             is_public: row.is_public === 1
         }));
@@ -152,22 +155,6 @@ export class DatabaseManager {
     deleteFilesByWallet(walletAddress) {
         const db = this.getDB();
         db.prepare('DELETE FROM files WHERE wallet_address = ?').run(walletAddress);
-    }
-    getStorageStats(walletAddress) {
-        const db = this.getDB();
-        const stats = db.prepare(`
-      SELECT 
-        COALESCE(SUM(CASE WHEN is_dir = 0 THEN size ELSE 0 END), 0) as total_size,
-        COUNT(CASE WHEN is_dir = 0 THEN 1 END) as file_count,
-        COUNT(CASE WHEN is_dir = 1 THEN 1 END) as directory_count
-      FROM files
-      WHERE wallet_address = ?
-    `).get(walletAddress);
-        return {
-            totalSize: stats.total_size || 0,
-            fileCount: stats.file_count || 0,
-            directoryCount: stats.directory_count || 0
-        };
     }
     getSetting(key) {
         const db = this.getDB();
@@ -191,6 +178,14 @@ export class DatabaseManager {
     getAllSettings() {
         const db = this.getDB();
         return db.prepare('SELECT * FROM settings').all();
+    }
+    query(sql, ...params) {
+        const db = this.getDB();
+        return db.prepare(sql).all(...params);
+    }
+    queryOne(sql, ...params) {
+        const db = this.getDB();
+        return db.prepare(sql).get(...params);
     }
 }
 //# sourceMappingURL=database.js.map

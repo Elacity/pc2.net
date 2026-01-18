@@ -3,6 +3,7 @@ import { Server } from 'http';
 import { setupStaticServing } from './static.js';
 import { setupAPI } from './api/index.js';
 import { setupWebSocket, setGlobalIO } from './websocket/server.js';
+import { IndexingWorker } from './storage/indexer.js';
 export function createServer(options) {
     const app = express();
     app.use(express.text({
@@ -72,8 +73,16 @@ export function createServer(options) {
     const io = setupWebSocket(server, {
         database: options.database
     });
+    app.__pendingEvents = null;
     setGlobalIO(io);
     app.locals.io = io;
+    if (options.database && options.filesystem) {
+        const indexer = new IndexingWorker(options.database, options.filesystem);
+        indexer.start().catch((error) => {
+            console.error('[Server] Failed to start indexing worker:', error);
+        });
+        app.locals.indexer = indexer;
+    }
     return { app, server };
 }
 //# sourceMappingURL=server.js.map

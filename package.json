@@ -40,6 +40,11 @@
     "yaml": "^2.8.1"
   },
   "scripts": {
+    "start:pc2": "cd pc2-node && npm start",
+    "dev:pc2": "cd pc2-node && PORT=4200 npm start",
+    "build:pc2": "npm run build:particle-auth && npm run build:gui && npm run build:server",
+    "build:gui": "cd src/gui && node ./build.js && cp dist/bundle.min.js ../../pc2-node/frontend/",
+    "build:server": "cd pc2-node && npm run build",
     "test": "npx mocha src/phoenix/test && npx vitest run src/backend && node src/backend/tools/test.mjs",
     "test:puterjs-api": "vitest run tests/puterJsApiTests",
     "test:backend": "npm run build:ts; vitest run --config=src/backend/vitest.config.ts src/backend",
@@ -52,11 +57,12 @@
     "prepare": "husky",
     "build:ts": "tsc",
     "gen": "./scripts/gen.sh",
-    "build:particle-auth": "cd ./submodules/particle-auth && yarn install && yarn build && rm -rf ../../src/particle-auth && mv ./dist ../../src/particle-auth"
+    "build:particle-auth": "cd ./packages/particle-auth && yarn install && yarn build && rm -rf ../../src/particle-auth && mv ./dist ../../src/particle-auth"
   },
   "workspaces": [
     "src/*",
     "tools/*",
+    "packages/*",
     "experiments/js-parse-and-output"
   ],
   "nodemonConfig": {

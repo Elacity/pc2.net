@@ -32,11 +32,13 @@ export function authenticate(
     req.path === '/mkdir' || 
     req.path === '/delete' || 
     req.path === '/move' ||
+    req.path === '/writeFile' ||
     req.path.startsWith('/api/files/')
   )) {
     logger.info('[Auth Middleware] Filesystem POST request intercepted', {
       path: req.path,
       method: req.method,
+      query: req.query,
       hasAuthHeader: !!req.headers.authorization,
       bodyKeys: Object.keys(req.body || {}),
       bodyPreview: JSON.stringify(req.body).substring(0, 300)
@@ -188,23 +190,29 @@ export function authenticate(
       tokenPrefix: token.substring(0, 20) + '...'
     });
     
-    // Extract wallet address from path if present (for viewer apps and file operations)
+    // Extract wallet address from path or query params (for viewer apps and file operations)
     // Paths like /0x34daf31b.../Desktop should extract 0x34daf31b...
-    // CRITICAL: Check query params FIRST (req.query.file contains the actual file path)
+    // UUIDs like uuid--0x34daf31b...-Desktop-cool.jpg should extract 0x34daf31b...
+    // CRITICAL: Check query params FIRST (req.query.uid contains UUID with wallet, req.query.file contains file path)
     let mockWalletAddress = '0x0000000000000000000000000000000000000000';
-    const pathToCheck = (req.query.file as string) ||  // ✅ Check file param first (most common)
+    const pathToCheck = (req.query.uid as string) ||  // ✅ Check uid param first (contains UUID with wallet for writeFile)
+                        (req.query.file as string) ||  // ✅ Check file param (most common for read operations)
                         (req.query.path as string) || 
                         (req.body?.file as string) ||
                         (req.body?.path as string) || 
                         req.path;
     
-    // Try to extract wallet address from path (format: /0x{40 hex chars}/...)
-    const walletMatch = pathToCheck.match(/^\/(0x[a-fA-F0-9]{40})/);
+    // Try to extract wallet address from path or UUID (format: /0x{40 hex chars}/... or uuid--0x{40 hex chars}-...)
+    let walletMatch = pathToCheck.match(/^\/(0x[a-fA-F0-9]{40})/); // Path format: /0x.../
+    if (!walletMatch) {
+      walletMatch = pathToCheck.match(/uuid--(0x[a-fA-F0-9]{40})/); // UUID format: uuid--0x...-
+    }
     if (walletMatch && walletMatch[1]) {
       mockWalletAddress = walletMatch[1];
-      logger.info('[Auth Middleware] Extracted wallet address from path for mock token', {
+      logger.info('[Auth Middleware] Extracted wallet address for mock token', {
         walletAddress: mockWalletAddress,
-        path: pathToCheck
+        source: pathToCheck.includes('uuid--') ? 'UUID' : 'path',
+        path: pathToCheck.substring(0, 100) + '...'
       });
       
       // CRITICAL FIX: Try to find existing session for this wallet (matching mock server fallback)
@@ -311,10 +319,18 @@ export function errorHandler(
     return next(err);
   }
 
-  res.status(500).json({
-    error: 'Internal server error',
-    message: process.env.NODE_ENV === 'development' ? err.message : undefined
-  });
+  const errorResponse: any = {
+    success: false,
+    error: err.message || 'Internal server error',
+    errorName: err.name,
+  };
+  
+  // Include stack trace in development
+  if (process.env.NODE_ENV === 'development') {
+    errorResponse.details = err.stack?.substring(0, 1000);
+  }
+  
+  res.status(500).json(errorResponse);
 }
 
 /**

@@ -9,7 +9,6 @@ import { DatabaseManager } from '../storage/database.js';
 import { AuthenticatedRequest } from './middleware.js';
 import { UserInfo } from '../types/api.js';
 import { logger } from '../utils/logger.js';
-import { logger } from '../utils/logger.js';
 
 /**
  * Get current user information
@@ -257,6 +256,14 @@ export function handleWhoami(req: AuthenticatedRequest, res: Response): void {
     return;
   }
 
+  // Get desktop background settings from KV store
+  const desktopBgUrl = db.getSetting(`${walletAddress}:user_preferences.desktop_bg_url`) || '/images/flint-2.jpg';
+  const desktopBgColor = db.getSetting(`${walletAddress}:user_preferences.desktop_bg_color`) || null;
+  const desktopBgFit = db.getSetting(`${walletAddress}:user_preferences.desktop_bg_fit`) || 'cover';
+  
+  // Get profile picture path from KV store
+  const profilePictureUrl = db.getSetting(`${walletAddress}:user_preferences.profile_picture_url`) || null;
+
   const userInfo: UserInfo = {
     id: 1,
     uuid: walletAddress,
@@ -267,9 +274,10 @@ export function handleWhoami(req: AuthenticatedRequest, res: Response): void {
     email_confirmed: true,
     is_temp: false,
     taskbar_items: [],
-    desktop_bg_url: '/images/flint-2.jpg', // PC2 default background
-    desktop_bg_color: null,
-    desktop_bg_fit: 'cover',
+    desktop_bg_url: desktopBgUrl,
+    desktop_bg_color: desktopBgColor,
+    desktop_bg_fit: desktopBgFit,
+    profile_picture_url: profilePictureUrl,
     token: req.user.session_token,
     auth_type: (req.user.smart_account_address || session.smart_account_address) ? 'universalx' : 'wallet'
   };
@@ -281,4 +289,3 @@ export function handleWhoami(req: AuthenticatedRequest, res: Response): void {
 
   res.json(userInfo);
 }
-

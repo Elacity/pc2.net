@@ -68,6 +68,7 @@ export class FilesystemManager {
             size: size,
             mime_type: mimeType,
             thumbnail: thumbnail,
+            content_text: null,
             is_dir: false,
             is_public: options?.isPublic || false,
             created_at: Date.now(),
@@ -186,6 +187,8 @@ export class FilesystemManager {
             ipfs_hash: null,
             size: 0,
             mime_type: null,
+            thumbnail: null,
+            content_text: null,
             is_dir: true,
             is_public: isPublic,
             created_at: Date.now(),
@@ -230,7 +233,7 @@ export class FilesystemManager {
         }
         await this.createDirectory(normalizedPath, walletAddress);
     }
-    async deleteFile(path, walletAddress) {
+    async deleteFile(path, walletAddress, recursive = false) {
         const normalizedPath = this.normalizePath(path);
         const metadata = this.db.getFile(normalizedPath, walletAddress);
         if (!metadata) {
@@ -239,13 +242,29 @@ export class FilesystemManager {
         if (metadata.is_dir) {
             const children = this.listDirectory(normalizedPath, walletAddress);
             if (children.length > 0) {
-                throw new Error(`Directory not empty: ${path}`);
+                if (recursive) {
+                    for (const child of children) {
+                        await this.deleteFile(child.path, walletAddress, true);
+                    }
+                }
+                else {
+                    throw new Error(`Directory not empty: ${path}`);
+                }
+            }
+            if (metadata.ipfs_hash && this.isIPFSAvailable() && this.ipfs) {
+                try {
+                    await this.ipfs.unpinFile(metadata.ipfs_hash);
+                }
+                catch (error) {
+                    console.warn(`Failed to unpin directory ${metadata.ipfs_hash}:`, error);
+                }
             }
         }
         else {
             if (metadata.ipfs_hash && this.isIPFSAvailable() && this.ipfs) {
                 try {
                     await this.ipfs.unpinFile(metadata.ipfs_hash);
+                    console.log(`[Delete] Unpinned file from IPFS: ${metadata.ipfs_hash}`);
                 }
                 catch (error) {
                     console.warn(`Failed to unpin file ${metadata.ipfs_hash}:`, error);
@@ -253,6 +272,7 @@ export class FilesystemManager {
             }
         }
         this.db.deleteFile(normalizedPath, walletAddress);
+        console.log(`[Delete] Removed file from database: ${normalizedPath}`);
     }
     async moveFile(oldPath, newPath, walletAddress) {
         const normalizedOldPath = this.normalizePath(oldPath);
@@ -265,14 +285,43 @@ export class FilesystemManager {
         if (newParentPath !== '/' && newParentPath !== '.') {
             await this.ensureDirectory(newParentPath, walletAddress);
         }
-        const existingNew = this.db.getFile(normalizedNewPath, walletAddress);
-        if (existingNew) {
-            throw new Error(`Destination already exists: ${newPath}`);
+        if (normalizedOldPath !== normalizedNewPath) {
+            const existingNew = this.db.getFile(normalizedNewPath, walletAddress);
+            if (existingNew) {
+                if (!existingNew.is_dir) {
+                    console.log('[Filesystem] Destination already exists check:', {
+                        oldPath: normalizedOldPath,
+                        newPath: normalizedNewPath,
+                        existingFile: {
+                            path: existingNew.path,
+                            name: existingNew.path.split('/').pop(),
+                            is_dir: existingNew.is_dir,
+                            size: existingNew.size
+                        }
+                    });
+                    throw new Error(`Destination already exists: ${newPath}`);
+                }
+                else {
+                    console.log('[Filesystem] Destination is a directory, allowing move into it:', {
+                        oldPath: normalizedOldPath,
+                        newPath: normalizedNewPath,
+                        destinationDir: existingNew.path
+                    });
+                }
+            }
         }
         this.db.deleteFile(normalizedOldPath, walletAddress);
         const newMetadata = {
-            ...existing,
             path: normalizedNewPath,
+            wallet_address: existing.wallet_address,
+            ipfs_hash: existing.ipfs_hash,
+            size: existing.size,
+            mime_type: existing.mime_type,
+            thumbnail: existing.thumbnail ?? null,
+            content_text: existing.content_text ?? null,
+            is_dir: existing.is_dir,
+            is_public: existing.is_public,
+            created_at: existing.created_at,
             updated_at: Date.now()
         };
         this.db.createOrUpdateFile(newMetadata);

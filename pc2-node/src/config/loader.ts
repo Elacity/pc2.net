@@ -30,6 +30,25 @@ export interface Config {
     rate_limit_window_ms: number;
     rate_limit_max_requests: number;
   };
+  ai?: {
+    enabled?: boolean;
+    defaultProvider?: string;
+    providers?: {
+      ollama?: {
+        enabled?: boolean;
+        baseUrl?: string;
+        defaultModel?: string;
+      };
+      openai?: {
+        enabled?: boolean;
+        apiKey?: string;
+      };
+      claude?: {
+        enabled?: boolean;
+        apiKey?: string;
+      };
+    };
+  };
 }
 
 const DEFAULT_CONFIG_PATH = join(__dirname, '../../config/default.json');
@@ -174,4 +193,3 @@ export function saveConfig(config: Partial<Config>): void {
 export function getConfigPath(): string {
   return USER_CONFIG_PATH;
 }
-

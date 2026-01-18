@@ -15,6 +15,24 @@
     "session_duration_days": 7,
     "rate_limit_window_ms": 60000,
     "rate_limit_max_requests": 100
+  },
+  "ai": {
+    "enabled": true,
+    "defaultProvider": "ollama",
+    "providers": {
+      "ollama": {
+        "enabled": true,
+        "baseUrl": "http://localhost:11434",
+        "defaultModel": "deepseek-r1:1.5b"
+      },
+      "openai": {
+        "enabled": false,
+        "apiKey": ""
+      },
+      "claude": {
+        "enabled": false,
+        "apiKey": ""
+      }
+    }
   }
 }
-

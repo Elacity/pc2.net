@@ -1,8 +1,5 @@
 import { broadcastFileChange, broadcastItemAdded } from '../websocket/events.js';
 import { logger } from '../utils/logger.js';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
 export function handleAPIInfo(req, res) {
     res.json({
         version: '2.5.1',
@@ -19,15 +16,6 @@ export function handleGetLaunchApps(req, res) {
     const baseUrl = req.protocol + '://' + req.get('host');
     const loadIconAsBase64 = (appName) => {
         try {
-            const __filename = fileURLToPath(import.meta.url);
-            const __dirname = dirname(__filename);
-            const projectRoot = path.resolve(__dirname, '../..');
-            const possiblePaths = [
-                path.join(projectRoot, 'src/backend/apps', appName, 'img/icon.svg'),
-                path.join(process.cwd(), 'src/backend/apps', appName, 'img/icon.svg'),
-                path.join(process.cwd(), '../../src/backend/apps', appName, 'img/icon.svg'),
-                path.join('/Users/mtk/Documents/Cursor/pc2.net/src/backend/apps', appName, 'img/icon.svg')
-            ];
             const hardcodedIcons = {
                 'editor': 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIGZpbGw9IiM2MzY2RjEiLz48cGF0aCBkPSJNMjQgMTJDMjAgMTIgMTcgMTUgMTcgMTlWMjlDMTcgMzMgMjAgMzYgMjQgMzZDMjggMzYgMzEgMzMgMzEgMjlWMTlDMzEgMTUgMjggMTIgMjQgMTJaIiBmaWxsPSIjRkZGRkZGIi8+PHBhdGggZD0iTTIyIDI0SDI2VjI4SDIyVjI0WiIgZmlsbD0iIzYzNjZGMTIiLz48L3N2Zz4=',
                 'viewer': 'data:image/svg+xml;base64,PHN2ZyB2ZXJzaW9uPSIxLjIiIGJhc2VQcm9maWxlPSJ0aW55LXBzIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0OCA0OCIgd2lkdGg9IjQ4IiBoZWlnaHQ9IjQ4Ij4KCTx0aXRsZT5hcHAtaWNvbi12aWV3ZXItc3ZnPC90aXRsZT4KCTxkZWZzPgoJCTxsaW5lYXJHcmFkaWVudCBpZD0iZ3JkMSIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiICB4MT0iNDciIHkxPSIzOS41MTQiIHgyPSIxIiB5Mj0iOC40ODYiPgoJCQk8c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiMwMzYzYWQiICAvPgoJCQk8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiM1Njg0ZjUiICAvPgoJCTwvbGluZWFyR3JhZGllbnQ+Cgk8L2RlZnM+Cgk8c3R5bGU+CgkJdHNwYW4geyB3aGl0ZS1zcGFjZTpwcmUgfQoJCS5zaHAwIHsgZmlsbDogdXJsKCNncmQxKSB9IAoJCS5zaHAxIHsgZmlsbDogI2ZmZDc2NCB9IAoJCS5zaHAyIHsgZmlsbDogI2NiZWFmYiB9IAoJPC9zdHlsZT4KCTxnIGlkPSJMYXllciI+CgkJPHBhdGggaWQ9IlNoYXBlIDEiIGNsYXNzPSJzaHAwIiBkPSJNMSAxTDQ3IDFMNDcgNDdMMSA0N0wxIDFaIiAvPgoJCTxwYXRoIGlkPSJMYXllciIgY2xhc3M9InNocDEiIGQ9Ik0xOCAxOEMxNS43OSAxOCAxNCAxNi4yMSAxNCAxNEMxNCAxMS43OSAxNS43OSAxMCAxOCAxMEMyMC4yMSAxMCAyMiAxMS43OSAyMiAxNEMyMiAxNi4yMSAyMC4yMSAxOCAxOCAxOFoiIC8+CgkJPHBhdGggaWQ9IkxheWVyIiBjbGFzcz0ic2hwMiIgZD0iTTM5Ljg2IDM2LjUxQzM5LjgyIDM2LjU4IDM5Ljc3IDM2LjY1IDM5LjcgMzYuNzFDMzkuNjQgMzYuNzcgMzkuNTcgMzYuODIgMzkuNSAzNi44N0MzOS40MiAzNi45MSAzOS4zNCAzNi45NCAzOS4yNiAzNi45N0MzOS4xNyAzNi45OSAzOS4wOSAzNyAzOSAzN0w5IDM3QzguODIgMzcgOC42NCAzNi45NSA4LjQ5IDM2Ljg2QzguMzMgMzYuNzYgOC4yIDM2LjYzIDguMTIgMzYuNDdDOC4wMyAzNi4zMSA3Ljk5IDM2LjEzIDggMzUuOTVDOC4wMSAzNS43NyA4LjA3IDM1LjYgOC4xNyAzNS40NEwxNC4xNyAyNi40NUMxNC4yNCAyNi4zNCAxNC4zMyAyNi4yNCAxNC40NCAyNi4xN0MxNC41NSAyNi4xIDE0LjY4IDI2LjA0IDE0LjggMjYuMDJDMTQuOTMgMjUuOTkgMTUuMDcgMjUuOTkgMTUuMTkgMjYuMDJDMTUuMzIgMjYuMDQgMTUuNDUgMjYuMSAxNS41NSAyNi4xN0MxNS41NyAyNi4xOCAxNS41OCAyNi4xOSAxNS42IDI2LjJDMTUuNjEgMjYuMjEgMTUuNjIgMjYuMjIgMTUuNjMgMjYuMjNDMTUuNjUgMjYuMjQgMTUuNjYgMjYuMjUgMTUuNjcgMjYuMjZDMTUuNjggMjYuMjcgMTUuNyAyNi4yOCAxNS43MSAyNi4yOUwyMC44NiAzMS40NUwyOS4xOCAxOS40M0MyOS4yMyAxOS4zNiAyOS4yOCAxOS4zIDI5LjM1IDE5LjI0QzI5LjQxIDE5LjE5IDI5LjQ4IDE5LjE0IDI5LjU2IDE5LjFDMjkuNjMgMTkuMDYgMjkuNzEgMTkuMDQgMjkuNzkgMTkuMDJDMjkuODggMTkgMjkuOTYgMTkgMzAuMDUgMTlDMzAuMTMgMTkgMzAuMjEgMTkuMDIgMzAuMjkgMTkuMDRDMzAuMzggMTkuMDcgMzAuNDUgMTkuMSAzMC41MiAxOS4xNUMzMC42IDE5LjE5IDMwLjY2IDE5LjI1IDMwLjcyIDE5LjMxQzMwLjc4IDE5LjM3IDMwLjgzIDE5LjQ0IDMwLjg3IDE5LjUxTDM5Ljg3IDM1LjUxQzM5LjkxIDM1LjU5IDM5Ljk1IDM1LjY3IDM5Ljk3IDM1Ljc1QzM5Ljk5IDM1Ljg0IDQwIDM1LjkyIDQwIDM2LjAxQzQwIDM2LjEgMzkuOTkgMzYuMTggMzkuOTYgMzYuMjdDMzkuOTQgMzYuMzUgMzkuOTEgMzYuNDMgMzkuODYgMzYuNTFaIiAvPgoJPC9nPgo8L3N2Zz4=',
@@ -405,21 +393,16 @@ export async function handleBatch(req, res) {
                                 thumbnail: metadata.thumbnail || undefined
                             });
                         }
-                        if (io) {
-                            broadcastFileChange(io, {
-                                path: metadata.path,
-                                wallet_address: req.user.wallet_address,
-                                action: 'created',
-                                metadata: {
-                                    size: metadata.size,
-                                    mime_type: metadata.mime_type || undefined,
-                                    is_dir: false
-                                }
-                            });
-                        }
                     }
                 }
                 catch (error) {
+                    logger.error('[Batch] Error uploading file:', {
+                        error: error instanceof Error ? error.message : 'Unknown error',
+                        errorCode: error?.code,
+                        errorStack: error instanceof Error ? error.stack : undefined,
+                        filename: file.originalname || file.name,
+                        filePath: filePath
+                    });
                     results.push({
                         success: false,
                         error: error instanceof Error ? error.message : 'Unknown error',

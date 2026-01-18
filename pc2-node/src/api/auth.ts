@@ -103,6 +103,14 @@ export async function handleParticleAuth(req: Request, res: Response): Promise<v
     const sessionDuration = config.security.session_duration_days * 24 * 60 * 60 * 1000;
     const expiresAt = Date.now() + sessionDuration;
 
+    logger.info('🔐 Creating session', {
+      wallet: normalizedWallet.substring(0, 10) + '...',
+      sessionDurationDays: config.security.session_duration_days,
+      sessionDurationMs: sessionDuration,
+      expiresAt: new Date(expiresAt).toISOString(),
+      expiresIn: Math.round(sessionDuration / 1000 / 60) + ' minutes'
+    });
+
     db.createSession({
       token: sessionToken,
       wallet_address: normalizedWallet,

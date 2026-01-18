@@ -14,4 +14,3 @@ export {
   type FileChangeEvent,
   type DirectoryChangeEvent
 } from './events.js';
-

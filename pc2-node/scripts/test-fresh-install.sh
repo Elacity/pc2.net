@@ -288,4 +288,3 @@ echo "🧪 Or run the automated test:"
 echo "   cd $TEST_DIR"
 echo "   npm test"
 echo ""
-

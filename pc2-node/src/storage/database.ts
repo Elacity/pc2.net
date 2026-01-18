@@ -31,6 +31,7 @@ export interface FileMetadata {
   size: number;
   mime_type: string | null;
   thumbnail: string | null;
+  content_text: string | null;
   is_dir: boolean;
   is_public: boolean;
   created_at: number;
@@ -40,6 +41,28 @@ export interface FileMetadata {
 export interface Setting {
   key: string;
   value: string;
+  updated_at: number;
+}
+
+export interface FileVersion {
+  id: number;
+  file_path: string;
+  wallet_address: string;
+  version_number: number;
+  ipfs_hash: string;
+  size: number;
+  mime_type: string | null;
+  created_at: number;
+  created_by: string | null;
+  comment: string | null;
+}
+
+export interface AIConfig {
+  wallet_address: string;
+  default_provider: string;
+  default_model: string | null;
+  api_keys: string; // JSON string: { "openai": "sk-...", "claude": "sk-ant-..." }
+  ollama_base_url: string;
   updated_at: number;
 }
 
@@ -236,13 +259,14 @@ export class DatabaseManager {
   createOrUpdateFile(metadata: FileMetadata): void {
     const db = this.getDB();
     db.prepare(`
-      INSERT INTO files (path, wallet_address, ipfs_hash, size, mime_type, thumbnail, is_dir, is_public, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO files (path, wallet_address, ipfs_hash, size, mime_type, thumbnail, content_text, is_dir, is_public, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(path, wallet_address) DO UPDATE SET
         ipfs_hash = excluded.ipfs_hash,
         size = excluded.size,
         mime_type = excluded.mime_type,
         thumbnail = excluded.thumbnail,
+        content_text = excluded.content_text,
         is_dir = excluded.is_dir,
         is_public = excluded.is_public,
         updated_at = excluded.updated_at
@@ -253,6 +277,7 @@ export class DatabaseManager {
       metadata.size,
       metadata.mime_type,
       metadata.thumbnail || null,
+      metadata.content_text || null,
       metadata.is_dir ? 1 : 0,
       metadata.is_public ? 1 : 0,
       metadata.created_at,
@@ -274,6 +299,7 @@ export class DatabaseManager {
 
     return {
       ...row,
+      content_text: row.content_text ?? null, // Ensure content_text is always present (even if NULL)
       is_dir: row.is_dir === 1,
       is_public: row.is_public === 1
     };
@@ -292,6 +318,7 @@ export class DatabaseManager {
 
     return rows.map(row => ({
       ...row,
+      content_text: row.content_text ?? null, // Ensure content_text is always present (even if NULL)
       is_dir: row.is_dir === 1,
       is_public: row.is_public === 1
     }));
@@ -312,33 +339,6 @@ export class DatabaseManager {
   deleteFilesByWallet(walletAddress: string): void {
     const db = this.getDB();
     db.prepare('DELETE FROM files WHERE wallet_address = ?').run(walletAddress);
-  }
-
-  /**
-   * Get storage statistics for a wallet
-   */
-  getStorageStats(walletAddress: string): {
-    totalSize: number;
-    fileCount: number;
-    directoryCount: number;
-  } {
-    const db = this.getDB();
-    
-    // Get total size and counts
-    const stats = db.prepare(`
-      SELECT 
-        COALESCE(SUM(CASE WHEN is_dir = 0 THEN size ELSE 0 END), 0) as total_size,
-        COUNT(CASE WHEN is_dir = 0 THEN 1 END) as file_count,
-        COUNT(CASE WHEN is_dir = 1 THEN 1 END) as directory_count
-      FROM files
-      WHERE wallet_address = ?
-    `).get(walletAddress) as { total_size: number; file_count: number; directory_count: number };
-    
-    return {
-      totalSize: stats.total_size || 0,
-      fileCount: stats.file_count || 0,
-      directoryCount: stats.directory_count || 0
-    };
   }
 
   // ============================================================================
@@ -383,5 +383,229 @@ export class DatabaseManager {
     const db = this.getDB();
     return db.prepare('SELECT * FROM settings').all() as Setting[];
   }
-}
 
+  // ============================================================================
+  // File Version Operations
+  // ============================================================================
+
+  /**
+   * Create a new file version snapshot
+   */
+  createFileVersion(version: Omit<FileVersion, 'id'>): void {
+    const db = this.getDB();
+    db.prepare(`
+      INSERT INTO file_versions (
+        file_path, wallet_address, version_number, ipfs_hash, 
+        size, mime_type, created_at, created_by, comment
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      version.file_path,
+      version.wallet_address,
+      version.version_number,
+      version.ipfs_hash,
+      version.size,
+      version.mime_type || null,
+      version.created_at,
+      version.created_by || null,
+      version.comment || null
+    );
+  }
+
+  /**
+   * Get all versions for a file (ordered by version number, newest first)
+   */
+  getFileVersions(filePath: string, walletAddress: string): FileVersion[] {
+    const db = this.getDB();
+    const rows = db.prepare(`
+      SELECT * FROM file_versions
+      WHERE file_path = ? AND wallet_address = ?
+      ORDER BY version_number DESC
+    `).all(filePath, walletAddress) as FileVersion[];
+    return rows;
+  }
+
+  /**
+   * Get a specific version of a file
+   */
+  getFileVersion(filePath: string, walletAddress: string, versionNumber: number): FileVersion | null {
+    const db = this.getDB();
+    const row = db.prepare(`
+      SELECT * FROM file_versions
+      WHERE file_path = ? AND wallet_address = ? AND version_number = ?
+    `).get(filePath, walletAddress, versionNumber) as FileVersion | undefined;
+    return row ?? null;
+  }
+
+  /**
+   * Get the next version number for a file
+   */
+  getNextVersionNumber(filePath: string, walletAddress: string): number {
+    const db = this.getDB();
+    const row = db.prepare(`
+      SELECT MAX(version_number) as max_version
+      FROM file_versions
+      WHERE file_path = ? AND wallet_address = ?
+    `).get(filePath, walletAddress) as { max_version: number | null } | undefined;
+    return (row?.max_version ?? 0) + 1;
+  }
+
+  /**
+   * Delete all versions for a file (when file is deleted)
+   */
+  deleteFileVersions(filePath: string, walletAddress: string): void {
+    const db = this.getDB();
+    db.prepare(`
+      DELETE FROM file_versions
+      WHERE file_path = ? AND wallet_address = ?
+    `).run(filePath, walletAddress);
+  }
+
+  /**
+   * Update file path for all versions (when file is renamed/moved)
+   */
+  updateFileVersionPaths(oldPath: string, newPath: string, walletAddress: string): void {
+    const db = this.getDB();
+    db.prepare(`
+      UPDATE file_versions
+      SET file_path = ?
+      WHERE file_path = ? AND wallet_address = ?
+    `).run(newPath, oldPath, walletAddress);
+  }
+
+  /**
+   * Get version count for a file
+   */
+  getVersionCount(filePath: string, walletAddress: string): number {
+    const db = this.getDB();
+    const row = db.prepare(`
+      SELECT COUNT(*) as count
+      FROM file_versions
+      WHERE file_path = ? AND wallet_address = ?
+    `).get(filePath, walletAddress) as { count: number } | undefined;
+    return row?.count ?? 0;
+  }
+
+  /**
+   * Execute a raw SQL query (for custom queries not covered by standard methods)
+   * Use with caution - prefer using standard methods when possible
+   * Returns all rows
+   */
+  query(sql: string, ...params: any[]): any[] {
+    const db = this.getDB();
+    return db.prepare(sql).all(...params) as any[];
+  }
+
+  /**
+   * Execute a raw SQL query and return single row
+   * Returns single row or undefined
+   */
+  queryOne(sql: string, ...params: any[]): any {
+    const db = this.getDB();
+    return db.prepare(sql).get(...params);
+  }
+
+  // ============================================================================
+  // AI Configuration Operations (Wallet-Scoped)
+  // ============================================================================
+
+  /**
+   * Get AI configuration for a wallet
+   */
+  getAIConfig(walletAddress: string): AIConfig | null {
+    const db = this.getDB();
+    const row = db.prepare('SELECT * FROM ai_config WHERE wallet_address = ?')
+      .get(walletAddress) as AIConfig | undefined;
+    return row ?? null;
+  }
+
+  /**
+   * Create or update AI configuration
+   */
+  setAIConfig(
+    walletAddress: string,
+    defaultProvider: string = 'ollama',
+    defaultModel: string | null = null,
+    apiKeys: Record<string, string> | null = null,
+    ollamaBaseUrl: string = 'http://localhost:11434'
+  ): void {
+    const db = this.getDB();
+    const now = Math.floor(Date.now() / 1000);
+    const apiKeysJson = apiKeys ? JSON.stringify(apiKeys) : null;
+
+    db.prepare(`
+      INSERT INTO ai_config (wallet_address, default_provider, default_model, api_keys, ollama_base_url, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(wallet_address) DO UPDATE SET
+        default_provider = excluded.default_provider,
+        default_model = excluded.default_model,
+        api_keys = excluded.api_keys,
+        ollama_base_url = excluded.ollama_base_url,
+        updated_at = excluded.updated_at
+    `).run(walletAddress, defaultProvider, defaultModel, apiKeysJson, ollamaBaseUrl, now);
+  }
+
+  /**
+   * Update API keys for a wallet (merge with existing)
+   */
+  updateAIAPIKeys(walletAddress: string, apiKeys: Record<string, string>): void {
+    const db = this.getDB();
+    const existing = this.getAIConfig(walletAddress);
+    
+    // Merge with existing keys
+    let mergedKeys: Record<string, string> = {};
+    if (existing?.api_keys) {
+      try {
+        mergedKeys = JSON.parse(existing.api_keys);
+      } catch (e) {
+        // If parsing fails, start fresh
+      }
+    }
+    
+    // Merge new keys
+    Object.assign(mergedKeys, apiKeys);
+    
+    // Update config
+    const now = Math.floor(Date.now() / 1000);
+    db.prepare(`
+      INSERT INTO ai_config (wallet_address, default_provider, default_model, api_keys, ollama_base_url, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(wallet_address) DO UPDATE SET
+        api_keys = excluded.api_keys,
+        updated_at = excluded.updated_at
+    `).run(
+      walletAddress,
+      existing?.default_provider || 'ollama',
+      existing?.default_model || null,
+      JSON.stringify(mergedKeys),
+      existing?.ollama_base_url || 'http://localhost:11434',
+      now
+    );
+  }
+
+  /**
+   * Delete API key for a specific provider
+   */
+  deleteAIAPIKey(walletAddress: string, provider: string): void {
+    const db = this.getDB();
+    const existing = this.getAIConfig(walletAddress);
+    
+    if (!existing?.api_keys) {
+      return; // No keys to delete
+    }
+    
+    try {
+      const keys = JSON.parse(existing.api_keys);
+      delete keys[provider];
+      
+      const now = Math.floor(Date.now() / 1000);
+      db.prepare(`
+        UPDATE ai_config 
+        SET api_keys = ?, updated_at = ?
+        WHERE wallet_address = ?
+      `).run(JSON.stringify(keys), now, walletAddress);
+    } catch (e) {
+      // If parsing fails, ignore
+    }
+  }
+}

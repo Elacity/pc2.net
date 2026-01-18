@@ -72,19 +72,17 @@ export class FilesystemManager {
     // Calculate actual content size
     const contentSize = Buffer.isBuffer(content) 
       ? content.length 
-      : content instanceof Uint8Array
-      ? content.length
       : Buffer.byteLength(content, 'utf8');
     
     logger.info(`[Filesystem] Storing file in IPFS: ${normalizedPath} (size: ${contentSize} bytes)`, {
-      contentType: Buffer.isBuffer(content) ? 'Buffer' : (content instanceof Uint8Array ? 'Uint8Array' : typeof content),
+      contentType: Buffer.isBuffer(content) ? 'Buffer' : typeof content,
       contentLength: contentSize
     });
     
     const ipfsHash = await this.ipfs.storeFile(content, { pin: true });
     
     // Verify the stored file size matches
-    const storedSize = Buffer.isBuffer(content) ? content.length : (content instanceof Uint8Array ? content.length : Buffer.byteLength(content, 'utf8'));
+    const storedSize = Buffer.isBuffer(content) ? content.length : Buffer.byteLength(content, 'utf8');
     logger.info(`[Filesystem] File stored in IPFS: ${normalizedPath} -> CID: ${ipfsHash} (stored size: ${storedSize} bytes)`);
 
     // Calculate size
@@ -101,12 +99,10 @@ export class FilesystemManager {
         // Convert content to Buffer for thumbnail generation
         const contentBuffer = Buffer.isBuffer(content) 
           ? content 
-          : content instanceof Uint8Array
-          ? Buffer.from(content)
           : Buffer.from(content, 'utf8');
         
         const fileUuid = `uuid-${normalizedPath.replace(/\//g, '-').replace(/^-/, '')}`;
-        thumbnail = await generateThumbnail(contentBuffer, mimeType, fileUuid);
+        thumbnail = await generateThumbnail(contentBuffer, mimeType || 'application/octet-stream', fileUuid);
         
         if (thumbnail) {
           logger.info(`[Filesystem] 🖼️  Thumbnail generated for: ${normalizedPath}`);
@@ -117,6 +113,26 @@ export class FilesystemManager {
       }
     }
 
+    // Check if file already exists (for versioning and preserving created_at)
+    const existing = this.db.getFile(normalizedPath, walletAddress);
+    
+    // Create version snapshot if file already exists (before updating)
+    if (existing && existing.ipfs_hash) {
+      const nextVersion = this.db.getNextVersionNumber(normalizedPath, walletAddress);
+      this.db.createFileVersion({
+        file_path: normalizedPath,
+        wallet_address: walletAddress,
+        version_number: nextVersion,
+        ipfs_hash: existing.ipfs_hash,
+        size: existing.size,
+        mime_type: existing.mime_type,
+        created_at: existing.updated_at, // Use previous updated_at as version timestamp
+        created_by: null,
+        comment: null
+      });
+      logger.info(`[Filesystem] 📸 Created version ${nextVersion} snapshot for: ${normalizedPath} (CID: ${existing.ipfs_hash})`);
+    }
+
     // Create or update file metadata in database
     const metadata: FileMetadata = {
       path: normalizedPath,
@@ -125,17 +141,12 @@ export class FilesystemManager {
       size: size,
       mime_type: mimeType,
       thumbnail: thumbnail,
+      content_text: null, // Will be populated by indexer
       is_dir: false,
       is_public: options?.isPublic || false,
-      created_at: Date.now(),
+      created_at: existing?.created_at || Date.now(), // Preserve original creation time
       updated_at: Date.now()
     };
-
-    // Check if file already exists to preserve created_at
-    const existing = this.db.getFile(normalizedPath, walletAddress);
-    if (existing) {
-      metadata.created_at = existing.created_at;
-    }
 
     this.db.createOrUpdateFile(metadata);
 
@@ -299,6 +310,8 @@ export class FilesystemManager {
       ipfs_hash: null,
       size: 0,
       mime_type: null,
+      thumbnail: null,
+      content_text: null, // Directories don't have content
       is_dir: true,
       is_public: isPublic,
       created_at: Date.now(),
@@ -366,7 +379,7 @@ export class FilesystemManager {
   /**
    * Delete file or directory
    */
-  async deleteFile(path: string, walletAddress: string): Promise<void> {
+  async deleteFile(path: string, walletAddress: string, recursive: boolean = false): Promise<void> {
     const normalizedPath = this.normalizePath(path);
     const metadata = this.db.getFile(normalizedPath, walletAddress);
 
@@ -375,16 +388,35 @@ export class FilesystemManager {
     }
 
     if (metadata.is_dir) {
-      // For directories, check if it's empty
+      // For directories, handle children
       const children = this.listDirectory(normalizedPath, walletAddress);
+      
       if (children.length > 0) {
-        throw new Error(`Directory not empty: ${path}`);
+        if (recursive) {
+          // Recursively delete all children first
+          for (const child of children) {
+            await this.deleteFile(child.path, walletAddress, true);
+          }
+        } else {
+          throw new Error(`Directory not empty: ${path}`);
+        }
       }
-    } else {
-      // For files, unpin from IPFS (optional - allows garbage collection)
+      
+      // For directories, also unpin from IPFS if it has an IPFS hash
       if (metadata.ipfs_hash && this.isIPFSAvailable() && this.ipfs) {
         try {
           await this.ipfs.unpinFile(metadata.ipfs_hash);
+        } catch (error) {
+          // Non-critical - continue with deletion
+          console.warn(`Failed to unpin directory ${metadata.ipfs_hash}:`, error);
+        }
+      }
+    } else {
+      // For files, unpin from IPFS (allows garbage collection)
+      if (metadata.ipfs_hash && this.isIPFSAvailable() && this.ipfs) {
+        try {
+          await this.ipfs.unpinFile(metadata.ipfs_hash);
+          console.log(`[Delete] Unpinned file from IPFS: ${metadata.ipfs_hash}`);
         } catch (error) {
           // Non-critical - continue with deletion
           console.warn(`Failed to unpin file ${metadata.ipfs_hash}:`, error);
@@ -392,8 +424,11 @@ export class FilesystemManager {
       }
     }
 
-    // Remove from database
+    // Remove from database (this is the critical step - removes file metadata)
+    // Also delete all version history for this file
+    this.db.deleteFileVersions(normalizedPath, walletAddress);
     this.db.deleteFile(normalizedPath, walletAddress);
+    console.log(`[Delete] Removed file and version history from database: ${normalizedPath}`);
   }
 
   /**
@@ -419,29 +454,111 @@ export class FilesystemManager {
       await this.ensureDirectory(newParentPath, walletAddress);
     }
 
-    // Check if new path already exists
-    const existingNew = this.db.getFile(normalizedNewPath, walletAddress);
-    if (existingNew) {
-      throw new Error(`Destination already exists: ${newPath}`);
+    // Check if new path already exists (but allow moving to same path - that's a no-op)
+    if (normalizedOldPath !== normalizedNewPath) {
+      const existingNew = this.db.getFile(normalizedNewPath, walletAddress);
+      if (existingNew) {
+        // IMPORTANT: If the existing file is a directory, that's OK - we're moving INTO it, not replacing it
+        // Only fail if it's a file (we can't overwrite files without explicit overwrite flag)
+        if (!existingNew.is_dir) {
+          // Log details for debugging
+          console.log('[Filesystem] Destination already exists check:', {
+            oldPath: normalizedOldPath,
+            newPath: normalizedNewPath,
+            existingFile: {
+              path: existingNew.path,
+              name: existingNew.path.split('/').pop(),
+              is_dir: existingNew.is_dir,
+              size: existingNew.size
+            }
+          });
+          throw new Error(`Destination already exists: ${newPath}`);
+        } else {
+          // Destination is a directory - that's fine, we're moving the file INTO it
+          console.log('[Filesystem] Destination is a directory, allowing move into it:', {
+            oldPath: normalizedOldPath,
+            newPath: normalizedNewPath,
+            destinationDir: existingNew.path
+          });
+        }
+      }
     }
 
     // If it's a directory, we'd need to move all children too
     // For now, we'll just update the metadata
     // TODO: Implement recursive directory move if needed
 
+    // Update version history to new path BEFORE deleting old entry
+    // This preserves version history when files are renamed/moved
+    this.db.updateFileVersionPaths(normalizedOldPath, normalizedNewPath, walletAddress);
+
     // Delete old entry
     this.db.deleteFile(normalizedOldPath, walletAddress);
 
     // Create new entry with same data but new path
+    // Explicitly construct FileMetadata to ensure all required fields are present
+    // and no extra database fields (like rowid) are included
     const newMetadata: FileMetadata = {
-      ...existing,
       path: normalizedNewPath,
+      wallet_address: existing.wallet_address,
+      ipfs_hash: existing.ipfs_hash,
+      size: existing.size,
+      mime_type: existing.mime_type,
+      thumbnail: existing.thumbnail ?? null,
+      content_text: existing.content_text ?? null, // Explicitly preserve content_text
+      is_dir: existing.is_dir,
+      is_public: existing.is_public,
+      created_at: existing.created_at,
       updated_at: Date.now()
     };
 
     this.db.createOrUpdateFile(newMetadata);
 
     return newMetadata;
+  }
+
+  /**
+   * Copy file or directory
+   */
+  async copyFile(
+    sourcePath: string,
+    destPath: string,
+    walletAddress: string
+  ): Promise<FileMetadata> {
+    const normalizedSourcePath = this.normalizePath(sourcePath);
+    const normalizedDestPath = this.normalizePath(destPath);
+
+    // Get source file
+    const source = this.db.getFile(normalizedSourcePath, walletAddress);
+    if (!source) {
+      throw new Error(`File not found: ${sourcePath}`);
+    }
+
+    // Ensure destination parent directory exists
+    const destParentPath = dirname(normalizedDestPath);
+    if (destParentPath !== '/' && destParentPath !== '.') {
+      await this.ensureDirectory(destParentPath, walletAddress);
+    }
+
+    // Check if destination already exists
+    const existingDest = this.db.getFile(normalizedDestPath, walletAddress);
+    if (existingDest) {
+      throw new Error(`Destination already exists: ${destPath}`);
+    }
+
+    // If it's a directory, create a new directory
+    if (source.is_dir) {
+      return await this.createDirectory(normalizedDestPath, walletAddress);
+    }
+
+    // If it's a file, read the content and write it to the new location
+    const content = await this.readFile(normalizedSourcePath, walletAddress);
+    const mimeType = source.mime_type || this.guessMimeType(normalizedDestPath) || undefined;
+
+    return await this.writeFile(normalizedDestPath, content, walletAddress, {
+      mimeType,
+      isPublic: source.is_public || false
+    });
   }
 
   /**

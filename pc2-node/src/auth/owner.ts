@@ -186,4 +186,3 @@ export function removeTetheredWallet(
     success: true
   };
 }
-

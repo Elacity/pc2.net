@@ -8,4 +8,3 @@ export { DatabaseManager, type User, type Session, type FileMetadata, type Setti
 export { runMigrations } from './migrations.js';
 export { IPFSStorage, type IPFSOptions } from './ipfs.js';
 export { FilesystemManager, type FileContent } from './filesystem.js';
-

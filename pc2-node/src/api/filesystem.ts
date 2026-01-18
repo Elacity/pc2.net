@@ -21,14 +21,33 @@ import { logger } from '../utils/logger.js';
 export function handleStat(req: AuthenticatedRequest, res: Response): void {
   const filesystem = (req.app.locals.filesystem as FilesystemManager | undefined);
   // Support both GET (query param) and POST (body param)
-  // Also support various field names: path, file, subject
-  const path = (req.query.path as string) || 
-               (req.query.file as string) ||
-               (req.query.subject as string) ||
-               (req.body?.path as string) || 
-               (req.body?.file as string) ||
-               (req.body?.subject as string) ||
-               '/';
+  // Also support various field names: path, file, subject, uid, uuid
+  // CRITICAL: Check uid/uuid FIRST before defaulting to '/' - properties window uses uid
+  const uidFromQuery = req.query.uid as string;
+  const uidFromBody = req.body?.uid as string;
+  const uuidFromQuery = req.query.uuid as string;
+  const uuidFromBody = req.body?.uuid as string;
+  
+  logger.info(`[Stat] Parameter extraction:`, {
+    uidFromQuery,
+    uidFromBody,
+    uuidFromQuery,
+    uuidFromBody,
+    bodyKeys: Object.keys(req.body || {}),
+    hasBody: !!req.body
+  });
+  
+  let path = uidFromQuery ||
+             uuidFromQuery ||
+             uidFromBody ||
+             uuidFromBody ||
+             (req.query.path as string) || 
+             (req.query.file as string) ||
+             (req.query.subject as string) ||
+             (req.body?.path as string) || 
+             (req.body?.file as string) ||
+             (req.body?.subject as string) ||
+             '/';
 
   logger.info(`[Stat] Request received: method=${req.method}, path=${path}, query=${JSON.stringify(req.query)}, body=${JSON.stringify(req.body)}, hasUser=${!!req.user}`);
 
@@ -43,6 +62,59 @@ export function handleStat(req: AuthenticatedRequest, res: Response): void {
     logger.error(`[Stat] User object exists but wallet_address is null/undefined`);
     res.status(401).json({ error: 'Invalid user session - wallet address missing' });
     return;
+  }
+
+  // Handle UUID/UID parameter (convert uuid-/path/to/file to /path/to/file)
+  // This is used by the properties window which calls puter.fs.stat({ uid: item_uid })
+  if (path.startsWith('uuid-')) {
+    const walletAddress = req.user.wallet_address;
+    const userRoot = `/${walletAddress}`;
+    
+    // Get ALL files recursively using database directly
+    // listFiles with userRoot and '%' pattern gets all files recursively
+    const db = (req.app.locals.db as any);
+    if (db && typeof db.listFiles === 'function' && filesystem) {
+      // listFiles with userRoot will get all files recursively (uses LIKE pattern)
+      const allFiles = db.listFiles(userRoot, walletAddress) as FileMetadata[];
+      
+      logger.info(`[Stat] UUID lookup: searching ${allFiles.length} files for UUID: ${path}`);
+      
+      // Find file whose UUID matches exactly
+      let foundMetadata: FileMetadata | null = null;
+      for (const file of allFiles) {
+        // Generate UUID the same way: uuid-${path.replace(/\//g, '-')}
+        // Paths in database start with /, so /path becomes uuid--path (double dash after uuid-)
+        // This matches the frontend UUID format: uuid--0x34daf...-Desktop-filename.png
+        const fileUuid = `uuid-${file.path.replace(/\//g, '-')}`;
+        if (fileUuid === path) {
+          foundMetadata = file;
+          logger.info(`[Stat] ✅ UUID match found: ${fileUuid} -> ${file.path}`);
+          break;
+        }
+      }
+      
+      if (foundMetadata) {
+        path = foundMetadata.path;
+        logger.info(`[Stat] ✅ Found file by UUID lookup: ${path} (UUID: ${path})`);
+      } else {
+        logger.warn(`[Stat] ❌ UUID not found in database: ${path}, searched ${allFiles.length} files`);
+        // Log sample UUIDs for debugging
+        if (allFiles.length > 0) {
+          const sampleUuids = allFiles.slice(0, 10).map(f => {
+            const fileUuid = `uuid-${f.path.replace(/\//g, '-')}`;
+            return { path: f.path, uuid: fileUuid, matches: fileUuid === path };
+          });
+          logger.warn(`[Stat] Sample UUIDs from database:`, JSON.stringify(sampleUuids, null, 2));
+        }
+        // Will fall through and return 404
+      }
+    } else {
+      logger.warn(`[Stat] Cannot lookup UUID - database or filesystem not available`, {
+        hasDb: !!db,
+        hasListFiles: db && typeof db.listFiles === 'function',
+        hasFilesystem: !!filesystem
+      });
+    }
   }
 
   // Handle ~ (home directory) - replace with user's wallet address
@@ -133,18 +205,19 @@ export function handleStat(req: AuthenticatedRequest, res: Response): void {
       return;
     }
 
-    const stat: FileStat & { is_public?: boolean } = {
+    const stat: FileStat & { is_public?: boolean; ipfs_hash?: string | null } = {
       name: metadata.path.split('/').pop() || '/',
       path: resolvedPath, // Return the resolved path (with ~ expanded)
-      type: metadata.is_dir ? 'dir' : 'file',
+      type: metadata.is_dir ? 'dir' : 'file', // FileStat requires 'file' | 'dir'
       size: metadata.size,
-      created: metadata.created_at,
-      modified: metadata.updated_at,
-      mime_type: metadata.mime_type,
+      created: Math.floor(metadata.created_at / 1000), // Convert to seconds (Unix timestamp)
+      modified: Math.floor(metadata.updated_at / 1000), // Convert to seconds (Unix timestamp)
+      mime_type: metadata.mime_type, // MIME type is separate field (e.g., 'image/jpeg')
       thumbnail: metadata.thumbnail || undefined,
       is_dir: metadata.is_dir,
       uid: `uuid-${metadata.path.replace(/\//g, '-')}`,
-      uuid: `uuid-${metadata.path.replace(/\//g, '-')}`
+      uuid: `uuid-${metadata.path.replace(/\//g, '-')}`,
+      ipfs_hash: metadata.ipfs_hash || null // Include IPFS Content ID (CID)
     };
     
     // Add is_public if it exists (for frontend to determine shared status)
@@ -483,7 +556,22 @@ export async function handleRead(req: AuthenticatedRequest, res: Response): Prom
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges'
       });
-      return res.send(chunk);
+      res.send(chunk);
+      return;
+    }
+
+    // Set cache headers to prevent stale file content
+    // Use ETag based on IPFS hash (CID) - when file is updated, CID changes, so ETag changes
+    // This ensures browsers re-fetch when file is actually updated
+    if (metadata?.ipfs_hash) {
+      res.setHeader('ETag', `"${metadata.ipfs_hash}"`);
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate'); // Force revalidation
+      res.setHeader('Last-Modified', new Date(metadata.updated_at).toUTCString());
+    } else {
+      // No IPFS hash - use no-cache to prevent any caching
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
     }
 
     // No range request - send full file
@@ -969,9 +1057,24 @@ export async function handleDelete(req: AuthenticatedRequest, res: Response): Pr
         const path = actualPath.startsWith('/') ? actualPath : '/' + actualPath;
         
         // Check if file is already in Trash - if so, permanently delete
-        if (path.includes('/Trash/') || path.includes('/Trash')) {
-          // Permanently delete from Trash
-          await filesystem.deleteFile(path, walletAddress);
+        // Handle both /Trash and /.Trash paths (check normalized path)
+        const normalizedPath = path.replace(/\/+/g, '/');
+        const isInTrash = normalizedPath.includes('/Trash/') || 
+                         normalizedPath.includes('/.Trash/') ||
+                         normalizedPath.endsWith('/Trash') ||
+                         normalizedPath.endsWith('/.Trash') ||
+                         normalizedPath.includes('/Trash') ||
+                         normalizedPath.includes('/.Trash');
+        
+        if (isInTrash) {
+          logger.info('[Delete] File is in Trash, permanently deleting', { 
+            path, 
+            normalizedPath,
+            isInTrash 
+          });
+          
+          // Permanently delete from Trash (recursively for directories)
+          await filesystem.deleteFile(path, walletAddress, true); // true = recursive
           deleted.push({ path, success: true });
 
           // Broadcast item.removed event
@@ -1202,37 +1305,13 @@ export async function handleMove(req: AuthenticatedRequest, res: Response): Prom
         originalFileName = foundMetadata.path.split('/').pop() || undefined;
         logger.info('[Move] Found file by UUID lookup', { uuid: fromPath, path: foundMetadata.path, fileName: originalFileName });
       } else {
-        // UUID not found - file might have been renamed (UUID changes when path changes)
-        // Try to reconstruct path from UUID as fallback
-        const uuidWithoutPrefix = fromPath.replace(/^uuid-/, '');
-        const reconstructedPath = `/${uuidWithoutPrefix.replace(/-/g, '/')}`;
-        
-        logger.warn('[Move] UUID not found, trying reconstructed path', { 
-          uuid: fromPath,
-          reconstructedPath,
-          searchedFiles: allFiles.length
+        logger.error('[Move] UUID not found in database', { 
+          uuid: fromPath, 
+          searchedFiles: allFiles.length,
+          samplePaths: allFiles.slice(0, 5).map(f => f.path),
+          sampleUuids: allFiles.slice(0, 5).map(f => `uuid-${f.path.replace(/\//g, '-')}`)
         });
-        
-        // Check if reconstructed path exists
-        const reconstructedMetadata = filesystem.getFileMetadata(reconstructedPath, walletAddress);
-        if (reconstructedMetadata) {
-          fromPath = reconstructedMetadata.path;
-          originalFileName = reconstructedMetadata.path.split('/').pop() || undefined;
-          logger.info('[Move] Found file by reconstructed path', { 
-            uuid: fromPath, 
-            path: reconstructedMetadata.path, 
-            fileName: originalFileName 
-          });
-        } else {
-          logger.error('[Move] UUID not found and reconstructed path also not found', { 
-            uuid: fromPath,
-            reconstructedPath,
-            searchedFiles: allFiles.length,
-            samplePaths: allFiles.slice(0, 5).map(f => f.path),
-            sampleUuids: allFiles.slice(0, 5).map(f => `uuid-${f.path.replace(/\//g, '-')}`)
-          });
-          // Will fail later with better error - file was likely renamed and frontend has stale UUID
-        }
+        // Will fail later with better error
       }
     } else {
       logger.error('[Move] Database not available for UUID lookup', { uuid: fromPath, hasDb: !!db });
@@ -1257,8 +1336,21 @@ export async function handleMove(req: AuthenticatedRequest, res: Response): Prom
   
   // Handle newName parameter (if provided, use it instead of original filename)
   // BUT: If destination is Trash OR newName looks like a UUID, ignore newName and use original filename
-  const isMovingToTrash = toPath.includes('/Trash') || toPath.endsWith('/Trash') || toPath === '/Trash';
+  // IMPORTANT: Check for /Trash/ (with slash) to avoid false positives (e.g., if wallet address contains "Trash")
+  const isMovingToTrash = toPath.includes('/Trash/') || toPath.endsWith('/Trash') || toPath === '/Trash' || 
+                          toPath === `/${req.user.wallet_address}/Trash` || 
+                          toPath === `/${req.user.wallet_address}/Trash/`;
   const newNameIsUuid = newName && (newName.startsWith('uuid-') || newName.includes('uuid-'));
+  
+  logger.info('[Move] Move operation details', {
+    fromPath,
+    toPath,
+    isMovingToTrash,
+    newName,
+    newNameIsUuid,
+    originalFileName,
+    wallet: req.user.wallet_address
+  });
   
   // For Trash moves, ensure destination is treated as a directory
   if (isMovingToTrash) {
@@ -1377,11 +1469,30 @@ export async function handleMove(req: AuthenticatedRequest, res: Response): Prom
       // We already calculated the full Trash path above
       newPath = toPath;
     } else {
-      const destinationIsDir = toPath.endsWith('/') || toPath === '/';
+      // Check if destination is a directory by checking the database
+      // This is more reliable than just checking if path ends with '/'
+      const destinationMetadata = filesystem.getFileMetadata(toPath, req.user.wallet_address);
+      const destinationIsDir = destinationMetadata?.is_dir || toPath.endsWith('/') || toPath === '/';
+      
       const fileName = originalFileName || fromPath.split('/').pop() || '';
-      newPath = destinationIsDir 
-        ? `${toPath}${fileName}`
-        : toPath;
+      
+      if (destinationIsDir) {
+        // Destination is a directory - append filename
+        newPath = toPath.endsWith('/') 
+          ? `${toPath}${fileName}`
+          : `${toPath}/${fileName}`;
+      } else {
+        // Destination is a file path (rename operation)
+        newPath = toPath;
+      }
+      
+      logger.info('[Move] Calculated new path', {
+        toPath,
+        destinationIsDir,
+        destinationMetadata: destinationMetadata ? { path: destinationMetadata.path, is_dir: destinationMetadata.is_dir } : null,
+        fileName,
+        calculatedNewPath: newPath
+      });
     }
 
     logger.info('[Move] Moving file/directory', {
@@ -1454,21 +1565,32 @@ export async function handleMove(req: AuthenticatedRequest, res: Response): Prom
       } else {
         // Regular move: emit item.moved
         const fileUid = `uuid-${newPath.replace(/\//g, '-')}`;
+        const fileName = metadata.path.split('/').pop() || '';
         logger.info('[Move] Broadcasting item.moved', {
           from: fromPath,
           to: newPath,
           uid: fileUid,
           wallet: req.user.wallet_address
         });
+        // Get thumbnail if available (for image files)
+        const thumbnail = metadata.thumbnail || undefined;
+        
         broadcastItemMoved(io, req.user.wallet_address, {
           uid: fileUid,
           path: newPath,
           old_path: fromPath,
-          name: metadata.path.split('/').pop() || '',
+          name: fileName,
+          // Frontend expects these fields at top level, not just in metadata
+          is_dir: metadata.is_dir,
+          size: metadata.size || 0,
+          type: metadata.mime_type || null,
+          modified: new Date(metadata.updated_at).toISOString(),
+          thumbnail: thumbnail, // Include thumbnail for proper icon display
           metadata: {
             size: metadata.size,
             mime_type: metadata.mime_type || undefined,
-            is_dir: metadata.is_dir
+            is_dir: metadata.is_dir,
+            thumbnail: thumbnail // Also include in metadata for fallback
           },
           original_client_socket_id: null
         });
@@ -1482,11 +1604,40 @@ export async function handleMove(req: AuthenticatedRequest, res: Response): Prom
     // Return format matching mock server: { success: true, from, to }
     res.json({ success: true, from: fromPath, to: newPath });
   } catch (error) {
-    logger.error('Move error:', error instanceof Error ? error.message : 'Unknown error');
-    res.status(500).json({
-      error: 'Failed to move files',
-      message: error instanceof Error ? error.message : 'Unknown error'
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    const errorDetails = error instanceof Error ? {
+      name: error.name,
+      message: error.message,
+      stack: error.stack
+    } : { error };
+    
+    logger.error('[Move] Move error:', {
+      error: errorMessage,
+      fromPath,
+      toPath: body.destination,
+      isMovingToTrash,
+      errorDetails,
+      stack: errorStack
     });
+    
+    // Also log to console for immediate visibility
+    console.error('[Move] Detailed error:', errorDetails);
+    
+    // Check if it's a "destination already exists" error - return 409 Conflict
+    if (errorMessage.includes('Destination already exists')) {
+      res.status(409).json({
+        error: 'Destination already exists',
+        message: errorMessage,
+        from: fromPath,
+        to: toPath
+      });
+    } else {
+      res.status(500).json({
+        error: 'Failed to move files',
+        message: errorMessage
+      });
+    }
   }
 }
 
@@ -1617,6 +1768,9 @@ export async function handleRename(req: AuthenticatedRequest, res: Response): Pr
       // Get socket ID from request if available (for excluding original client)
       const socketId = (req as any).socketId || undefined;
       
+      // Get thumbnail from metadata to preserve it during rename
+      const thumbnail = metadata.thumbnail || null;
+      
       broadcastItemRenamed(io, req.user.wallet_address, {
         uid: `uuid-${newPath.replace(/\//g, '-')}`,
         name: newName,
@@ -1624,6 +1778,7 @@ export async function handleRename(req: AuthenticatedRequest, res: Response): Pr
         old_path: resolvedPath,
         is_dir: metadata.is_dir,
         type: metadata.mime_type || null,
+        thumbnail: thumbnail, // Include thumbnail to preserve it during rename
         original_client_socket_id: socketId
       });
     }

@@ -9,9 +9,12 @@
     "build:frontend": "node scripts/build-frontend.js",
     "build:backend": "tsc",
     "start": "node dist/index.js",
-    "dev": "tsc --watch & nodemon dist/index.js",
+    "dev": "tsx watch --exclude 'data/**' --exclude 'frontend/**' src/index.ts",
+    "dev:legacy": "tsc --watch & nodemon dist/index.js",
     "clean": "node scripts/clean.js",
-    "test": "npm run build:backend && node scripts/test-system.js"
+    "test": "npm run build:backend && node scripts/test-system.js",
+    "backup": "node scripts/backup.js",
+    "restore": "node scripts/restore.js"
   },
   "keywords": [
     "pc2",
@@ -23,6 +26,7 @@
   "author": "Elacity",
   "license": "AGPL-3.0",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.71.2",
     "@chainsafe/libp2p-yamux": "^8.0.1",
     "@helia/strings": "^5.0.3",
     "@helia/unixfs": "^6.0.4",
@@ -31,9 +35,10 @@
     "@libp2p/tcp": "^11.0.9",
     "@libp2p/websockets": "^10.1.2",
     "@types/multer": "^2.0.0",
+    "@wasmer/wasi": "^1.2.2",
+    "@wasmer/wasmfs": "^0.12.0",
     "better-sqlite3": "^9.2.2",
     "blockstore-fs": "^3.0.2",
-    "canvas": "^2.11.2",
     "cors": "^2.8.5",
     "datastore-fs": "^11.0.2",
     "dotenv": "^16.3.1",
@@ -42,9 +47,13 @@
     "libp2p": "^3.1.2",
     "multer": "^2.0.2",
     "multiformats": "^13.4.2",
-    "pdfjs-dist": "^4.0.379",
-    "sharp": "^0.33.2",
-    "socket.io": "^4.7.2"
+    "pdfjs-dist": "^4.0.0",
+    "sharp": "^0.33.0",
+    "socket.io": "^4.7.2",
+    "tar": "^7.5.2"
+  },
+  "optionalDependencies": {
+    "canvas": "^2.11.2"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.8",
@@ -52,6 +61,7 @@
     "@types/express": "^4.17.21",
     "@types/node": "^20.10.5",
     "nodemon": "^3.0.2",
+    "tsx": "^4.21.0",
     "typescript": "^5.3.3"
   },
   "engines": {

@@ -47,4 +47,3 @@ CREATE INDEX IF NOT EXISTS idx_sessions_wallet ON sessions(wallet_address);
 CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_files_wallet ON files(wallet_address);
 CREATE INDEX IF NOT EXISTS idx_files_path ON files(path);
-

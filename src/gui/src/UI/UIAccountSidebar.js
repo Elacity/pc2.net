@@ -287,20 +287,20 @@ async function UIAccountSidebar(options = {}) {
                 padding: 12px;
                 border: none;
                 border-radius: 10px;
-                background: #3b82f6;
-                color: white;
+                background: #ffffff;
+                color: #000000;
                 font-size: 12px;
                 font-weight: 500;
                 cursor: pointer;
             }
             .action-btn:hover {
-                background: #2563eb;
+                background: #e5e5e5;
             }
             .action-btn.action-receive {
-                background: #3b82f6;
+                background: #ffffff;
             }
             .action-btn.action-receive:hover {
-                background: #2563eb;
+                background: #e5e5e5;
             }
             .account-sidebar-tabs {
                 display: flex;

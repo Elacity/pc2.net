@@ -1,31 +1,30 @@
-# Build outputs
-dist/
-frontend/*
-
-# Runtime data
-data/*
-
 # Dependencies
 node_modules/
 
-# Configuration (user-specific)
-config/config.json
+# Build output
+dist/
+
+# Environment variables
+.env
+.env.local
 
 # Logs
 *.log
-logs/
+npm-debug.log*
 
-# Environment
-.env
-.env.local
+# OS files
+.DS_Store
+Thumbs.db
 
 # IDE
 .vscode/
 .idea/
-*.swp
-*.swo
 
-# OS
-.DS_Store
-Thumbs.db
-
+# Data
+data/
+*.db
+*.db-shm
+*.db-wal
+backups/*.tar.gz
+.old-backup/
+nohup.out

@@ -1,10 +1,8 @@
-// Import polyfills FIRST (before any other imports that might use them)
-import './utils/polyfill.js';
-
 import { createServer } from './server.js';
 import { DatabaseManager, IPFSStorage, FilesystemManager } from './storage/index.js';
 import { loadConfig, type Config } from './config/loader.js';
 import { logger } from './utils/logger.js';
+import { AIChatService } from './services/ai/AIChatService.js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -31,10 +29,11 @@ const DB_PATH = process.env.DB_PATH || config.storage.database_path;
 // IPFS repo path (from config or env)
 const IPFS_REPO_PATH = process.env.IPFS_REPO_PATH || config.storage.ipfs_repo_path;
 
-// Global storage instances
-let db: DatabaseManager | null = null;
-let ipfs: IPFSStorage | null = null;
-let filesystem: FilesystemManager | null = null;
+  // Global storage instances
+  let db: DatabaseManager | null = null;
+  let ipfs: IPFSStorage | null = null;
+  let filesystem: FilesystemManager | null = null;
+  let aiService: AIChatService | null = null;
 
 async function main() {
   logger.info('Starting PC2 Node...');
@@ -59,70 +58,42 @@ async function main() {
     process.exit(1);
   }
 
-  // Initialize IPFS (optional - server works without it)
+  // Initialize IPFS
   try {
-    logger.info('🌐 Initializing IPFS storage...');
-    logger.info(`   Repo path: ${IPFS_REPO_PATH}`);
-    
-    // Verify polyfill is loaded
-    if (typeof (Promise as any).withResolvers === 'undefined') {
-      logger.warn('⚠️  Promise.withResolvers polyfill not detected');
-      logger.warn('   This may cause IPFS initialization to fail on Node.js < 22');
-    } else {
-      logger.info('✅ Promise.withResolvers polyfill confirmed');
-    }
-    
     ipfs = new IPFSStorage({
       repoPath: IPFS_REPO_PATH
     });
-    
-    logger.info('   Starting IPFS node initialization...');
     await ipfs.initialize();
     
-    // Create filesystem manager (only if IPFS is available)
-    if (ipfs && ipfs.isReady()) {
-      filesystem = new FilesystemManager(ipfs, db);
-      logger.info('✅ Filesystem manager initialized with IPFS');
-      logger.info('   File uploads and storage are now available');
-    } else {
-      logger.warn('⚠️  IPFS initialization completed but isReady() returned false');
-      logger.warn('   Filesystem manager not created');
-      filesystem = null;
-    }
+    // Create filesystem manager
+    filesystem = new FilesystemManager(ipfs, db);
+    logger.info('✅ Filesystem manager initialized');
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    const errorStack = error instanceof Error ? error.stack : undefined;
-    
-    logger.error('❌ Failed to initialize IPFS:', errorMessage);
-    
-    if (errorStack) {
-      logger.error('   Full error stack:');
-      logger.error(errorStack);
-    }
-    
-    if (errorMessage.includes('withResolvers') || (errorStack && errorStack.includes('withResolvers'))) {
-      logger.error('   ⚠️  This error is due to Node.js version < 22');
-      logger.error('   💡 A polyfill has been added, but IPFS may still require Node.js 22+');
-      logger.error('   💡 Consider upgrading Node.js: nvm install 22 && nvm use 22');
-      logger.error('   💡 Or continue without IPFS (database-only mode)');
-    } else if (errorMessage.includes('EADDRINUSE')) {
-      logger.error('   ⚠️  IPFS ports (4001, 5001, 8080) are already in use');
-      logger.error('   💡 Another IPFS instance may be running');
-      logger.error('   💡 Try stopping other IPFS processes or change ports in config');
-    } else if (errorMessage.includes('repo') || errorMessage.includes('repository')) {
-      logger.error('   ⚠️  IPFS repository issue');
-      logger.error(`   💡 Repo path: ${IPFS_REPO_PATH}`);
-      logger.error('   💡 Try deleting the repo directory and restarting');
-    }
-    
-    logger.warn('   ⚠️  File storage will not be available');
-    logger.warn('   ⚠️  Server will continue without IPFS (database-only mode)');
-    logger.warn('   ⚠️  File uploads will fail until IPFS is initialized');
-    
+    logger.error('❌ Failed to initialize IPFS:', error);
+    logger.warn('   File storage will not be available');
     // Don't exit - server can still run without IPFS (for development)
-    // Set to null to prevent any further IPFS operations
-    ipfs = null;
-    filesystem = null;
+  }
+
+  // Initialize AI service
+  if (config.ai?.enabled !== false) {
+    try {
+      aiService = new AIChatService(config.ai, db);
+      await aiService.initialize();
+      
+      if (aiService.isAvailable()) {
+        const providers = aiService.listProviders();
+        logger.info(`🤖 AI service initialized (providers: ${providers.join(', ')})`);
+      } else {
+        logger.warn('⚠️  AI service initialized but no providers available');
+        logger.info('   💡 Install Ollama: curl -fsSL https://ollama.com/install.sh | sh');
+        logger.info('   💡 Or add API keys for cloud providers in config');
+      }
+    } catch (error) {
+      logger.error('❌ Failed to initialize AI service:', error);
+      logger.warn('   AI features will not be available');
+    }
+  } else {
+    logger.info('ℹ️  AI service disabled in config');
   }
 
   // Check owner status
@@ -144,7 +115,8 @@ async function main() {
     isProduction: IS_PRODUCTION,
     database: db,
     filesystem: filesystem || undefined,
-    config: config
+    config: config,
+    aiService: aiService || undefined
   });
 
   server.listen(PORT, () => {
@@ -157,13 +129,12 @@ async function main() {
   const shutdown = async () => {
     logger.info('Shutting down gracefully...');
     
-    if (ipfs && ipfs.isReady()) {
+    if (ipfs) {
       try {
         await ipfs.stop();
         logger.info('✅ IPFS stopped');
       } catch (error) {
         logger.error('Error stopping IPFS:', error);
-        // Don't throw - continue shutdown even if IPFS stop fails
       }
     }
     
@@ -181,30 +152,7 @@ async function main() {
   process.on('SIGINT', shutdown);
 }
 
-// Handle unhandled promise rejections
-process.on('unhandledRejection', (reason, promise) => {
-  const errorMessage = reason instanceof Error ? reason.message : String(reason);
-  logger.error('Unhandled Rejection:', errorMessage);
-  // Log stack trace if available
-  if (reason instanceof Error && reason.stack) {
-    logger.error('Stack:', reason.stack);
-  }
-  // Don't exit - let the server continue
-});
-
-// Handle uncaught exceptions
-process.on('uncaughtException', (error) => {
-  logger.error('Uncaught Exception:', error);
-  // Only exit if it's a critical error
-  if (error.message.includes('EADDRINUSE')) {
-    logger.error('Port already in use. Exiting.');
-    process.exit(1);
-  }
-  // Otherwise, log and continue
-});
-
 main().catch((error) => {
   logger.error('Failed to start server:', error);
   process.exit(1);
 });
-

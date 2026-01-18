@@ -40,24 +40,12 @@ export function handleGetLaunchApps(req: Request, res: Response): void {
   const iconSize = parseInt(req.query.icon_size as string) || 64;
   const baseUrl = req.protocol + '://' + req.get('host');
   
-  // Helper function to load SVG icon and convert to base64
+  // Helper function to load SVG icon as base64
+  // ALWAYS uses hardcoded base64 icons for 100% isolation - no file system dependencies
   const loadIconAsBase64 = (appName: string): string | undefined => {
     try {
-      // Get current file directory (ES module)
-      const __filename = fileURLToPath(import.meta.url);
-      const __dirname = dirname(__filename);
-      
-      // Try multiple possible paths for app icons
-      const projectRoot = path.resolve(__dirname, '../..');
-      const possiblePaths = [
-        path.join(projectRoot, 'src/backend/apps', appName, 'img/icon.svg'),
-        path.join(process.cwd(), 'src/backend/apps', appName, 'img/icon.svg'),
-        path.join(process.cwd(), '../../src/backend/apps', appName, 'img/icon.svg'),
-        path.join('/Users/mtk/Documents/Cursor/pc2.net/src/backend/apps', appName, 'img/icon.svg') // Fallback absolute path
-      ];
-      
-      // ALWAYS use hardcoded base64 icons first (matching mock server)
-      // This ensures 100% isolation - no file system dependencies
+      // Hardcoded base64 icons (matching mock server)
+      // This ensures 100% isolation - no external dependencies
       const hardcodedIcons: Record<string, string> = {
         'editor': 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIGZpbGw9IiM2MzY2RjEiLz48cGF0aCBkPSJNMjQgMTJDMjAgMTIgMTcgMTUgMTcgMTlWMjlDMTcgMzMgMjAgMzYgMjQgMzZDMjggMzYgMzEgMzMgMzEgMjlWMTlDMzEgMTUgMjggMTIgMjQgMTJaIiBmaWxsPSIjRkZGRkZGIi8+PHBhdGggZD0iTTIyIDI0SDI2VjI4SDIyVjI0WiIgZmlsbD0iIzYzNjZGMTIiLz48L3N2Zz4=',
         'viewer': 'data:image/svg+xml;base64,PHN2ZyB2ZXJzaW9uPSIxLjIiIGJhc2VQcm9maWxlPSJ0aW55LXBzIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0OCA0OCIgd2lkdGg9IjQ4IiBoZWlnaHQ9IjQ4Ij4KCTx0aXRsZT5hcHAtaWNvbi12aWV3ZXItc3ZnPC90aXRsZT4KCTxkZWZzPgoJCTxsaW5lYXJHcmFkaWVudCBpZD0iZ3JkMSIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiICB4MT0iNDciIHkxPSIzOS41MTQiIHgyPSIxIiB5Mj0iOC40ODYiPgoJCQk8c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiMwMzYzYWQiICAvPgoJCQk8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiM1Njg0ZjUiICAvPgoJCTwvbGluZWFyR3JhZGllbnQ+Cgk8L2RlZnM+Cgk8c3R5bGU+CgkJdHNwYW4geyB3aGl0ZS1zcGFjZTpwcmUgfQoJCS5zaHAwIHsgZmlsbDogdXJsKCNncmQxKSB9IAoJCS5zaHAxIHsgZmlsbDogI2ZmZDc2NCB9IAoJCS5zaHAyIHsgZmlsbDogI2NiZWFmYiB9IAoJPC9zdHlsZT4KCTxnIGlkPSJMYXllciI+CgkJPHBhdGggaWQ9IlNoYXBlIDEiIGNsYXNzPSJzaHAwIiBkPSJNMSAxTDQ3IDFMNDcgNDdMMSA0N0wxIDFaIiAvPgoJCTxwYXRoIGlkPSJMYXllciIgY2xhc3M9InNocDEiIGQ9Ik0xOCAxOEMxNS43OSAxOCAxNCAxNi4yMSAxNCAxNEMxNCAxMS43OSAxNS43OSAxMCAxOCAxMEMyMC4yMSAxMCAyMiAxMS43OSAyMiAxNEMyMiAxNi4yMSAyMC4yMSAxOCAxOCAxOFoiIC8+CgkJPHBhdGggaWQ9IkxheWVyIiBjbGFzcz0ic2hwMiIgZD0iTTM5Ljg2IDM2LjUxQzM5LjgyIDM2LjU4IDM5Ljc3IDM2LjY1IDM5LjcgMzYuNzFDMzkuNjQgMzYuNzcgMzkuNTcgMzYuODIgMzkuNSAzNi44N0MzOS40MiAzNi45MSAzOS4zNCAzNi45NCAzOS4yNiAzNi45N0MzOS4xNyAzNi45OSAzOS4wOSAzNyAzOSAzN0w5IDM3QzguODIgMzcgOC42NCAzNi45NSA4LjQ5IDM2Ljg2QzguMzMgMzYuNzYgOC4yIDM2LjYzIDguMTIgMzYuNDdDOC4wMyAzNi4zMSA3Ljk5IDM2LjEzIDggMzUuOTVDOC4wMSAzNS43NyA4LjA3IDM1LjYgOC4xNyAzNS40NEwxNC4xNyAyNi40NUMxNC4yNCAyNi4zNCAxNC4zMyAyNi4yNCAxNC40NCAyNi4xN0MxNC41NSAyNi4xIDE0LjY4IDI2LjA0IDE0LjggMjYuMDJDMTQuOTMgMjUuOTkgMTUuMDcgMjUuOTkgMTUuMTkgMjYuMDJDMTUuMzIgMjYuMDQgMTUuNDUgMjYuMSAxNS41NSAyNi4xN0MxNS41NyAyNi4xOCAxNS41OCAyNi4xOSAxNS42IDI2LjJDMTUuNjEgMjYuMjEgMTUuNjIgMjYuMjIgMTUuNjMgMjYuMjNDMTUuNjUgMjYuMjQgMTUuNjYgMjYuMjUgMTUuNjcgMjYuMjZDMTUuNjggMjYuMjcgMTUuNyAyNi4yOCAxNS43MSAyNi4yOUwyMC44NiAzMS40NUwyOS4xOCAxOS40M0MyOS4yMyAxOS4zNiAyOS4yOCAxOS4zIDI5LjM1IDE5LjI0QzI5LjQxIDE5LjE5IDI5LjQ4IDE5LjE0IDI5LjU2IDE5LjFDMjkuNjMgMTkuMDYgMjkuNzEgMTkuMDQgMjkuNzkgMTkuMDJDMjkuODggMTkgMjkuOTYgMTkgMzAuMDUgMTlDMzAuMTMgMTkgMzAuMjEgMTkuMDIgMzAuMjkgMTkuMDRDMzAuMzggMTkuMDcgMzAuNDUgMTkuMSAzMC41MiAxOS4xNUMzMC42IDE5LjE5IDMwLjY2IDE5LjI1IDMwLjcyIDE5LjMxQzMwLjc4IDE5LjM3IDMwLjgzIDE5LjQ0IDMwLjg3IDE5LjUxTDM5Ljg3IDM1LjUxQzM5LjkxIDM1LjU5IDM5Ljk1IDM1LjY3IDM5Ljk3IDM1Ljc1QzM5Ljk5IDM1Ljg0IDQwIDM1LjkyIDQwIDM2LjAxQzQwIDM2LjEgMzkuOTkgMzYuMTggMzkuOTYgMzYuMjdDMzkuOTQgMzYuMzUgMzkuOTEgMzYuNDMgMzkuODYgMzYuNTFaIiAvPgoJPC9nPgo8L3N2Zz4=',
@@ -67,7 +55,8 @@ export function handleGetLaunchApps(req: Request, res: Response): void {
         'app-center': 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIGZpbGw9IiM0YjU1NjMiLz48Y2lyY2xlIGN4PSIxNiIgY3k9IjE2IiByPSI2IiBmaWxsPSIjRUY0NDQ0Ii8+PHBvbHlnb24gcG9pbnRzPSIyNiwxMCAyOCwxNCAyNCwxNCIgZmlsbD0iI0ZGNkE0MCIvPjxwYXRoIGQ9Ik0yNiwyNkgzMkMyOCwyOCAyNiwzMCAyNiwzMlYyNloiIGZpbGw9IiM0MkE1RjUiLz48cmVjdCB4PSIzMiIgeT0iMzIiIHdpZHRoPSI4IiBoZWlnaHQ9IjgiIGZpbGw9IiM5QzI3QkIiLz48L3N2Zz4=',
         'recorder': 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIGZpbGw9IiNGRjY5MDAiLz48cGF0aCBkPSJNMjQgMTJDMjAgMTIgMTcgMTUgMTcgMTlWMjlDMTcgMzMgMjAgMzYgMjQgMzZDMjggMzYgMzEgMzMgMzEgMjlWMTlDMzEgMTUgMjggMTIgMjQgMTJaIiBmaWxsPSIjRkZGRkZGIi8+PHJlY3QgeD0iMTkiIHk9IjI2IiB3aWR0aD0iMTAiIGhlaWdodD0iNCIgZmlsbD0iI0ZGRkZGRiIvPjwvc3ZnPg==',
         'solitaire-frvr': 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIGZpbGw9IiNGRkZGRkYiLz48cmVjdCB4PSIxMiIgeT0iMTAiIHdpZHRoPSI4IiBoZWlnaHQ9IjEyIiByeD0iMiIgZmlsbD0iI0ZGRkZGRiIgc3Ryb2tlPSIjMDAwIiBzdHJva2Utd2lkdGg9IjEuNSIvPjx0ZXh0IHg9IjE2IiB5PSIyMCIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjE0IiBmaWxsPSIjMDAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5BPC90ZXh0PjxjaXJjbGUgY3g9IjE2IiBjeT0iMTYiIHI9IjMiIGZpbGw9IiNGRjAwMDAiLz48cmVjdCB4PSIyNCIgeT0iMTAiIHdpZHRoPSI4IiBoZWlnaHQ9IjEyIiByeD0iMiIgZmlsbD0iI0ZGRkZGRiIgc3Ryb2tlPSIjMDAwIiBzdHJva2Utd2lkdGg9IjEuNSIvPjx0ZXh0IHg9IjI4IiB5PSIyMCIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjE0IiBmaWxsPSIjMDAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5BPC90ZXh0PjxjaXJjbGUgY3g9IjI4IiBjeT0iMTYiIHI9IjMiIGZpbGw9IiNGRkZGRkYiLz48L3N2Zz4=',
-        'terminal': 'data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPHN2ZyBzdHlsZT0iZmlsdGVyOiBkcm9wLXNoYWRvdyggMHB4IDFweCAxcHggcmdiYSgwLCAwLCAwLCAuNSkpOyIgaGVpZ2h0PSI0OCIgd2lkdGg9IjQ4IiB2aWV3Qm94PSIwIDAgNDggNDgiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CiAgPHRpdGxlPndpbmRvdyBjb2RlPC90aXRsZT4KICA8ZyBjbGFzcz0ibmMtaWNvbi13cmFwcGVyIiBzdHlsZT0iIiB0cmFuc2Zvcm09Im1hdHJpeCgwLjk5NzcyNiwgMCwgMCwgMS4xMDI3NDgsIC0wLjAwMjc5MSwgLTIuODA5NzIxKSI+CiAgICA8cGF0aCBkPSJNIDQ1LjA5OCA0NS4zNjIgTCAzLjAwNCA0NS4zNjIgQyAxLjg5NyA0NS4zNjIgMSA0NC40NTkgMSA0My4zNDUgTCAxIDUuMDE3IEMgMSAzLjkwMyAxLjg5NyAzIDMuMDA0IDMgTCA0NS4wOTggMyBDIDQ2LjIwNiAzIDQ3LjEwMyAzLjkwMyA0Ny4xMDMgNS4wMTcgTCA0Ny4xMDMgNDMuMzQ1IEMgNDcuMTAzIDQ0LjQ1OSA0Ni4yMDYgNDUuMzYyIDQ1LjA5OCA0NS4zNjIgWiIgc3R5bGU9ImZpbGwtcnVsZTogbm9uemVybzsgcGFpbnQtb3JkZXI6IGZpbGw7IiBmaWxsPSIjZTNlNWVjIi8+CiAgICA8cmVjdCB4PSIzLjAwNCIgeT0iMTAuMDYiIGZpbGw9IiMyZTM3NDQiIHdpZHRoPSI0Mi4wOTQiIGhlaWdodD0iMzMuMjg0IiBzdHlsZT0iIi8+CiAgICA8cGF0aCBmaWxsPSIjRkZGRkZGIiBkPSJNIDEwLjAyIDMxLjI0MSBDIDkuNzY0IDMxLjI0MSA5LjUwNyAzMS4xNDIgOS4zMTIgMzAuOTQ2IEMgOC45MiAzMC41NTEgOC45MiAyOS45MTQgOS4zMTIgMjkuNTIgTCAxMi42MTIgMjYuMTk4IEwgOS4zMTIgMjIuODc3IEMgOC45MiAyMi40ODIgOC45MiAyMS44NDUgOS4zMTIgMjEuNDUxIEMgOS43MDMgMjEuMDU2IDEwLjMzNyAyMS4wNTYgMTAuNzI5IDIxLjQ1MSBMIDE0LjczOCAyNS40ODUgQyAxNS4xMyAyNS44NzkgMTUuMTMgMjYuNTE3IDE0LjczOCAyNi45MTEgTCAxMC43MjkgMzAuOTQ2IEMgMTAuNTMzIDMxLjE0MiAxMC4yNzcgMzEuMjQxIDEwLjAyIDMxLjI0MSBaIiBzdHlsZT0iIi8+CiAgICA8cGF0aCBmaWxsPSIjRkZGRkZGIiBkPSJNIDI4LjA2IDMxLjI0MSBMIDIwLjA0MyAzMS4yNDEgQyAxOS40ODkgMzEuMjQxIDE5LjA0IDMwLjc4OSAxOS4wNCAzMC4yMzMgQyAxOS4wNCAyOS42NzYgMTkuNDg5IDI5LjIyNCAyMC4wNDMgMjkuMjI0IEwgMjguMDYgMjkuMjI0IEMgMjguNjE0IDI5LjIyNCAyOS4wNjMgMjkuNjc2IDI5LjA2MyAzMC4yMzMgQyAyOS4wNjMgMzAuNzg5IDI4LjYxNCAzMS4yNDEgMjguMDYgMzEuMjQxIFoiIHN0eWxlPSIiLz4KICA8L2c+Cjwvc3ZnPg=='
+        'terminal': 'data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPHN2ZyBzdHlsZT0iZmlsdGVyOiBkcm9wLXNoYWRvdyggMHB4IDFweCAxcHggcmdiYSgwLCAwLCAwLCAuNSkpOyIgaGVpZ2h0PSI0OCIgd2lkdGg9IjQ4IiB2aWV3Qm94PSIwIDAgNDggNDgiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CiAgPHRpdGxlPndpbmRvdyBjb2RlPC90aXRsZT4KICA8ZyBjbGFzcz0ibmMtaWNvbi13cmFwcGVyIiBzdHlsZT0iIiB0cmFuc2Zvcm09Im1hdHJpeCgwLjk5NzcyNiwgMCwgMCwgMS4xMDI3NDgsIC0wLjAwMjc5MSwgLTIuODA5NzIxKSI+CiAgICA8cGF0aCBkPSJNIDQ1LjA5OCA0NS4zNjIgTCAzLjAwNCA0NS4zNjIgQyAxLjg5NyA0NS4zNjIgMSA0NC40NTkgMSA0My4zNDUgTCAxIDUuMDE3IEMgMSAzLjkwMyAxLjg5NyAzIDMuMDA0IDMgTCA0NS4wOTggMyBDIDQ2LjIwNiAzIDQ3LjEwMyAzLjkwMyA0Ny4xMDMgNS4wMTcgTCA0Ny4xMDMgNDMuMzQ1IEMgNDcuMTAzIDQ0LjQ1OSA0Ni4yMDYgNDUuMzYyIDQ1LjA5OCA0NS4zNjIgWiIgc3R5bGU9ImZpbGwtcnVsZTogbm9uemVybzsgcGFpbnQtb3JkZXI6IGZpbGw7IiBmaWxsPSIjZTNlNWVjIi8+CiAgICA8cmVjdCB4PSIzLjAwNCIgeT0iMTAuMDYiIGZpbGw9IiMyZTM3NDQiIHdpZHRoPSI0Mi4wOTQiIGhlaWdodD0iMzMuMjg0IiBzdHlsZT0iIi8+CiAgICA8cGF0aCBmaWxsPSIjRkZGRkZGIiBkPSJNIDEwLjAyIDMxLjI0MSBDIDkuNzY0IDMxLjI0MSA5LjUwNyAzMS4xNDIgOS4zMTIgMzAuOTQ2IEMgOC45MiAzMC41NTEgOC45MiAyOS45MTQgOS4zMTIgMjkuNTIgTCAxMi42MTIgMjYuMTk4IEwgOS4zMTIgMjIuODc3IEMgOC45MiAyMi40ODIgOC45MiAyMS44NDUgOS4zMTIgMjEuNDUxIEMgOS43MDMgMjEuMDU2IDEwLjMzNyAyMS4wNTYgMTAuNzI5IDIxLjQ1MSBMIDE0LjczOCAyNS40ODUgQyAxNS4xMyAyNS44NzkgMTUuMTMgMjYuNTE3IDE0LjczOCAyNi45MTEgTCAxMC43MjkgMzAuOTQ2IEMgMTAuNTMzIDMxLjE0MiAxMC4yNzcgMzEuMjQxIDEwLjAyIDMxLjI0MSBaIiBzdHlsZT0iIi8+CiAgICA8cGF0aCBmaWxsPSIjRkZGRkZGIiBkPSJNIDI4LjA2IDMxLjI0MSBMIDIwLjA0MyAzMS4yNDEgQyAxOS40ODkgMzEuMjQxIDE5LjA0IDMwLjc4OSAxOS4wNCAzMC4yMzMgQyAxOS4wNCAyOS42NzYgMTkuNDg5IDI5LjIyNCAyMC4wNDMgMjkuMjI0IEwgMjguMDYgMjkuMjI0IEMgMjguNjE0IDI5LjIyNCAyOS4wNjMgMjkuNjc2IDI5LjA2MyAzMC4yMzMgQyAyOS4wNjMgMzAuNzg5IDI4LjYxNCAzMS4yNDEgMjguMDYgMzEuMjQxIFoiIHN0eWxlPSIiLz4KICA8L2c+Cjwvc3ZnPg==',
+        'calculator': 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIGZpbGw9IiM2NjdlZWEiLz48cmVjdCB4PSI4IiB5PSI4IiB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHJ4PSI0IiBmaWxsPSIjRkZGRkZGIi8+PHJlY3QgeD0iMTIiIHk9IjE0IiB3aWR0aD0iMjQiIGhlaWdodD0iNCIgcng9IjIiIGZpbGw9IiM2NjdlZWEiLz48cmVjdCB4PSIxMiIgeT0iMjIiIHdpZHRoPSI4IiBoZWlnaHQ9IjgiIHJ4PSIyIiBmaWxsPSIjNjY3ZWVhIi8+PHJlY3QgeD0iMjIiIHk9IjIyIiB3aWR0aD0iOCIgaGVpZ2h0PSI4IiByeD0iMiIgZmlsbD0iIzY2N2VlYSIvPjxyZWN0IHg9IjMyIiB5PSIyMiIgd2lkdGg9IjgiIGhlaWdodD0iOCIgcng9IjIiIGZpbGw9IiM2NjdlZWEiLz48cmVjdCB4PSIxMiIgeT0iMzIiIHdpZHRoPSI4IiBoZWlnaHQ9IjgiIHJ4PSIyIiBmaWxsPSIjNjY3ZWVhIi8+PHJlY3QgeD0iMjIiIHk9IjMyIiB3aWR0aD0iOCIgaGVpZ2h0PSI4IiByeD0iMiIgZmlsbD0iIzY2N2VlYSIvPjxyZWN0IHg9IjMyIiB5PSIzMiIgd2lkdGg9IjgiIGhlaWdodD0iOCIgcng9IjIiIGZpbGw9IiM2NjdlZWEiLz48L3N2Zz4='
       };
       
       // Return hardcoded icon if available
@@ -154,6 +143,22 @@ export function handleGetLaunchApps(req: Request, res: Response): void {
       uuid: 'app-solitaire-frvr',
       icon: loadIconAsBase64('solitaire-frvr'),
       description: 'Play Solitaire card game'
+    },
+    {
+      name: 'calculator',
+      title: 'WASM Calculator',
+      uuid: 'app-calculator',
+      icon: loadIconAsBase64('calculator'),
+      description: 'Calculator powered by WASMER runtime',
+      index_url: `${baseUrl}/apps/calculator/index.html`
+    },
+    {
+      name: 'file-processor',
+      title: 'File Processor',
+      uuid: 'app-file-processor',
+      icon: loadIconAsBase64('pdf'), // Using PDF icon as placeholder
+      description: 'Text file processor powered by WASMER/WASI',
+      index_url: `${baseUrl}/apps/file-processor/index.html`
     }
   ];
   
@@ -418,9 +423,9 @@ export async function handleBatch(req: AuthenticatedRequest, res: Response): Pro
                 name: metadata.path.split('/').pop() || 'untitled',
                 path: metadata.path,
                 dirpath: dirpath, // CRITICAL: Frontend uses this to find where to add the item
-                  size: metadata.size,
+                size: metadata.size,
                 type: metadata.mime_type || null,
-                  mime_type: metadata.mime_type || undefined,
+                mime_type: metadata.mime_type || undefined,
                 is_dir: false,
                 created: new Date(metadata.created_at).toISOString(),
                 modified: new Date(metadata.updated_at).toISOString(),
@@ -515,21 +520,14 @@ export async function handleBatch(req: AuthenticatedRequest, res: Response): Pro
                 thumbnail: metadata.thumbnail || undefined // Include thumbnail if available
               });
             }
-            
-            if (io) {
-              broadcastFileChange(io, {
-                path: metadata.path,
-                wallet_address: req.user.wallet_address,
-                action: 'created',
-                metadata: {
-                  size: metadata.size,
-                  mime_type: metadata.mime_type || undefined,
-                  is_dir: false
-                }
-              });
-            }
           }
         } catch (error) {
+          logger.error('[Batch] Error uploading file:', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            errorCode: (error as any)?.code,
+            errorStack: error instanceof Error ? error.stack : undefined,
+            filename: file.originalname || file.name
+          });
           results.push({
             success: false,
             error: error instanceof Error ? error.message : 'Unknown error',

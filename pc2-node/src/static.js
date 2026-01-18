@@ -48,7 +48,7 @@ export function setupStaticServing(app, options) {
             res.setHeader('X-Frame-Options', 'SAMEORIGIN');
             if (!isProduction) {
                 res.setHeader('Content-Security-Policy', "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: ws: wss: https:; " +
-                    "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; " +
+                    "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://js.puter.com https://cdn.jsdelivr.net https://challenges.cloudflare.com; " +
                     "style-src 'self' 'unsafe-inline' https:; " +
                     "img-src 'self' data: blob: https:; " +
                     "font-src 'self' data: https: moz-extension: chrome-extension:; " +
@@ -191,7 +191,7 @@ export function setupStaticServing(app, options) {
             html = html.replace(/<head[^>]*>/i, (match) => `${match}${apiOriginScript}`);
             if (!isProduction) {
                 res.setHeader('Content-Security-Policy', "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: ws: wss: https:; " +
-                    "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; " +
+                    "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://js.puter.com https://cdn.jsdelivr.net https://challenges.cloudflare.com; " +
                     "style-src 'self' 'unsafe-inline' https:; " +
                     "img-src 'self' data: blob: https:; " +
                     "font-src 'self' data: https: moz-extension: chrome-extension:; " +
@@ -315,7 +315,7 @@ export function setupStaticServing(app, options) {
         }
         if (!isProduction) {
             res.setHeader('Content-Security-Policy', "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: ws: wss: https:; " +
-                "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; " +
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://js.puter.com https://cdn.jsdelivr.net https://challenges.cloudflare.com; " +
                 "style-src 'self' 'unsafe-inline' https:; " +
                 "img-src 'self' data: blob: https:; " +
                 "font-src 'self' data: https: moz-extension: chrome-extension:; " +

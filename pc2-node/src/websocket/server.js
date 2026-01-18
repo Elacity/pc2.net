@@ -69,6 +69,7 @@ export function setupWebSocket(server, options = {}) {
         const authenticatedSession = socket.request.__authenticated_session;
         const token = authenticatedSession?.token ||
             socket.handshake.auth?.token ||
+            socket.handshake.auth?.auth_token ||
             socket.handshake.headers?.authorization?.replace('Bearer ', '') ||
             socket.handshake.query?.token ||
             socket.handshake.query?.auth_token;
@@ -78,9 +79,10 @@ export function setupWebSocket(server, options = {}) {
             hasAuthenticatedSession: !!authenticatedSession,
             tokenSource: authenticatedSession ? 'allowRequest' :
                 socket.handshake.auth?.token ? 'auth.token' :
-                    socket.handshake.headers?.authorization ? 'headers.authorization' :
-                        socket.handshake.query?.token ? 'query.token' :
-                            socket.handshake.query?.auth_token ? 'query.auth_token' : 'none',
+                    socket.handshake.auth?.auth_token ? 'auth.auth_token' :
+                        socket.handshake.headers?.authorization ? 'headers.authorization' :
+                            socket.handshake.query?.token ? 'query.token' :
+                                socket.handshake.query?.auth_token ? 'query.auth_token' : 'none',
             tokenPrefix: token ? `${token.substring(0, 8)}...` : 'none'
         });
         if (!token) {
@@ -185,7 +187,8 @@ export function setupWebSocket(server, options = {}) {
                             lastSeen: Date.now()
                         });
                         console.log(`✅ WebSocket: Auto-authenticated from HTTP headers on connection: ${socket.id} (wallet: ${session.wallet_address.slice(0, 6)}...${session.wallet_address.slice(-4)})`);
-                        const room = `user:${session.wallet_address}`;
+                        const normalizedWallet = session.wallet_address.toLowerCase();
+                        const room = `user:${normalizedWallet}`;
                         socket.join(room);
                         const roomSockets = io.sockets.adapter.rooms.get(room);
                         const connectedCount = roomSockets ? roomSockets.size : 0;
@@ -209,12 +212,12 @@ export function setupWebSocket(server, options = {}) {
         }
         if (socket.user) {
             const { wallet_address } = socket.user;
-            const room = `user:${wallet_address}`;
+            const normalizedWallet = wallet_address.toLowerCase();
+            const room = `user:${normalizedWallet}`;
             socket.join(room);
             const roomSockets = io.sockets.adapter.rooms.get(room);
             const connectedCount = roomSockets ? roomSockets.size : 0;
             console.log(`✅ WebSocket client connected: ${socket.id} (wallet: ${wallet_address.slice(0, 6)}...${wallet_address.slice(-4)}, room: ${room}, total clients in room: ${connectedCount})`);
-            const normalizedWallet = wallet_address.toLowerCase();
             const queuedEvents = pendingEvents.filter(evt => {
                 return !evt.wallet || evt.wallet === normalizedWallet;
             });
@@ -260,7 +263,8 @@ export function setupWebSocket(server, options = {}) {
                 smart_account_address: session.smart_account_address,
                 session_token: token
             };
-            const room = `user:${session.wallet_address}`;
+            const normalizedWallet = session.wallet_address.toLowerCase();
+            const room = `user:${normalizedWallet}`;
             socket.join(room);
             authenticatedSessions.set(socket.id, {
                 wallet_address: session.wallet_address,
@@ -273,17 +277,20 @@ export function setupWebSocket(server, options = {}) {
             const roomSockets = io.sockets.adapter.rooms.get(room);
             const connectedCount = roomSockets ? roomSockets.size : 0;
             console.log(`✅ WebSocket client authenticated via 'authenticate' event: ${socket.id} (wallet: ${session.wallet_address.slice(0, 6)}...${session.wallet_address.slice(-4)}, room: ${room}, total clients: ${connectedCount})`);
-            const normalizedWallet = session.wallet_address.toLowerCase();
-            const queuedEvents = pendingEvents.filter(evt => {
+            const queuedEventsForAuth = pendingEvents.filter(evt => {
                 return !evt.wallet || evt.wallet === normalizedWallet;
             });
-            if (queuedEvents.length > 0) {
-                console.log(`📤 Delivering ${queuedEvents.length} queued events to ${socket.id} (wallet: ${normalizedWallet})`);
-                queuedEvents.forEach(evt => {
+            if (queuedEventsForAuth.length > 0) {
+                console.log(`📤 Delivering ${queuedEventsForAuth.length} queued events to ${socket.id} (wallet: ${normalizedWallet})`);
+                queuedEventsForAuth.forEach(evt => {
+                    console.log(`📤 Emitting queued event: ${evt.event}`, evt.data);
                     socket.emit(evt.event, evt.data);
                 });
-                pendingEvents.splice(0, pendingEvents.length, ...pendingEvents.filter(evt => !queuedEvents.includes(evt)));
-                console.log(`✅ Delivered ${queuedEvents.length} events, queue size now: ${pendingEvents.length}`);
+                pendingEvents.splice(0, pendingEvents.length, ...pendingEvents.filter(evt => !queuedEventsForAuth.includes(evt)));
+                console.log(`✅ Delivered ${queuedEventsForAuth.length} events, queue size now: ${pendingEvents.length}`);
+            }
+            else {
+                console.log(`📭 No queued events for ${socket.id} (wallet: ${normalizedWallet}), queue size: ${pendingEvents.length}`);
             }
             socket.emit('authenticated', { wallet_address: session.wallet_address, room });
         });
@@ -291,6 +298,19 @@ export function setupWebSocket(server, options = {}) {
             const handler = socket.listeners('authenticate')[0];
             if (handler) {
                 handler(data);
+            }
+        });
+        socket.on('puter_is_actually_open', () => {
+            if (socket.user) {
+                const normalizedWallet = socket.user.wallet_address.toLowerCase();
+                const room = `user:${normalizedWallet}`;
+                socket.join(room);
+                const roomSockets = io.sockets.adapter.rooms.get(room);
+                const connectedCount = roomSockets ? roomSockets.size : 0;
+                console.log(`💚 [puter_is_actually_open] Socket ${socket.id} confirmed open, room: ${room}, clients: ${connectedCount}`);
+            }
+            else {
+                console.log(`💚 [puter_is_actually_open] Socket ${socket.id} confirmed open (not authenticated yet)`);
             }
         });
         socket.on('file:subscribe', (data) => {
@@ -323,6 +343,15 @@ export function setupWebSocket(server, options = {}) {
         });
         socket.on('connect', () => {
             console.log(`✅ WebSocket socket connected: ${socket.id}`);
+        });
+        socket.on('item.removed', (data) => {
+            console.log(`✅ [VERIFY] Socket ${socket.id} received item.removed event:`, data);
+        });
+        socket.on('item.added', (data) => {
+            console.log(`✅ [VERIFY] Socket ${socket.id} received item.added event:`, data);
+        });
+        socket.on('item.moved', (data) => {
+            console.log(`✅ [VERIFY] Socket ${socket.id} received item.moved event:`, data);
         });
     });
     io.database = database;

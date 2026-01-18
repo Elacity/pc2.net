@@ -124,8 +124,10 @@ export function setupWebSocket(
     const authenticatedSession = (socket.request as any).__authenticated_session;
     
     // Get session token from handshake (check multiple sources for polling/websocket compatibility)
+    // Frontend sends auth_token in auth object, so check both token and auth_token
     const token = authenticatedSession?.token ||
                   socket.handshake.auth?.token || 
+                  socket.handshake.auth?.auth_token || // Frontend sends auth_token
                   socket.handshake.headers?.authorization?.replace('Bearer ', '') ||
                   socket.handshake.query?.token as string ||
                   socket.handshake.query?.auth_token as string;
@@ -136,6 +138,7 @@ export function setupWebSocket(
       hasAuthenticatedSession: !!authenticatedSession,
       tokenSource: authenticatedSession ? 'allowRequest' :
                    socket.handshake.auth?.token ? 'auth.token' : 
+                   socket.handshake.auth?.auth_token ? 'auth.auth_token' :
                    socket.handshake.headers?.authorization ? 'headers.authorization' :
                    socket.handshake.query?.token ? 'query.token' :
                    socket.handshake.query?.auth_token ? 'query.auth_token' : 'none',
@@ -278,7 +281,9 @@ export function setupWebSocket(
             console.log(`✅ WebSocket: Auto-authenticated from HTTP headers on connection: ${socket.id} (wallet: ${session.wallet_address.slice(0, 6)}...${session.wallet_address.slice(-4)})`);
             
             // Join room immediately
-            const room = `user:${session.wallet_address}`;
+            // Normalize wallet address to lowercase for room matching (must match broadcast functions)
+            const normalizedWallet = session.wallet_address.toLowerCase();
+            const room = `user:${normalizedWallet}`;
             socket.join(room);
             const roomSockets = io.sockets.adapter.rooms.get(room);
             const connectedCount = roomSockets ? roomSockets.size : 0;
@@ -312,7 +317,9 @@ export function setupWebSocket(
     // If client already has user (authenticated during handshake), join room immediately
     if (socket.user) {
       const { wallet_address } = socket.user;
-      const room = `user:${wallet_address}`;
+      // Normalize wallet address to lowercase for room matching (must match broadcast functions)
+      const normalizedWallet = wallet_address.toLowerCase();
+      const room = `user:${normalizedWallet}`;
 
       // Join user's room (for per-user broadcasts)
       socket.join(room);
@@ -324,7 +331,7 @@ export function setupWebSocket(
       console.log(`✅ WebSocket client connected: ${socket.id} (wallet: ${wallet_address.slice(0, 6)}...${wallet_address.slice(-4)}, room: ${room}, total clients in room: ${connectedCount})`);
 
       // Deliver queued events for this wallet (matching mock server pattern)
-      const normalizedWallet = wallet_address.toLowerCase();
+      // normalizedWallet already declared above
       const queuedEvents = pendingEvents.filter(evt => {
         return !evt.wallet || evt.wallet === normalizedWallet;
       });
@@ -385,7 +392,9 @@ export function setupWebSocket(
         session_token: token
       };
       
-      const room = `user:${session.wallet_address}`;
+      // Normalize wallet address to lowercase for room matching (must match broadcast functions)
+      const normalizedWallet = session.wallet_address.toLowerCase();
+      const room = `user:${normalizedWallet}`;
       socket.join(room);
       
       // Store authenticated session
@@ -406,19 +415,22 @@ export function setupWebSocket(
       console.log(`✅ WebSocket client authenticated via 'authenticate' event: ${socket.id} (wallet: ${session.wallet_address.slice(0, 6)}...${session.wallet_address.slice(-4)}, room: ${room}, total clients: ${connectedCount})`);
       
       // Deliver queued events for this wallet (matching mock server pattern)
-      const normalizedWallet = session.wallet_address.toLowerCase();
-      const queuedEvents = pendingEvents.filter(evt => {
+      // normalizedWallet already declared above
+      const queuedEventsForAuth = pendingEvents.filter(evt => {
         return !evt.wallet || evt.wallet === normalizedWallet;
       });
       
-      if (queuedEvents.length > 0) {
-        console.log(`📤 Delivering ${queuedEvents.length} queued events to ${socket.id} (wallet: ${normalizedWallet})`);
-        queuedEvents.forEach(evt => {
+      if (queuedEventsForAuth.length > 0) {
+        console.log(`📤 Delivering ${queuedEventsForAuth.length} queued events to ${socket.id} (wallet: ${normalizedWallet})`);
+        queuedEventsForAuth.forEach(evt => {
+          console.log(`📤 Emitting queued event: ${evt.event}`, evt.data);
           socket.emit(evt.event, evt.data);
         });
         // Remove delivered events from queue
-        pendingEvents.splice(0, pendingEvents.length, ...pendingEvents.filter(evt => !queuedEvents.includes(evt)));
-        console.log(`✅ Delivered ${queuedEvents.length} events, queue size now: ${pendingEvents.length}`);
+        pendingEvents.splice(0, pendingEvents.length, ...pendingEvents.filter(evt => !queuedEventsForAuth.includes(evt)));
+        console.log(`✅ Delivered ${queuedEventsForAuth.length} events, queue size now: ${pendingEvents.length}`);
+      } else {
+        console.log(`📭 No queued events for ${socket.id} (wallet: ${normalizedWallet}), queue size: ${pendingEvents.length}`);
       }
       
       socket.emit('authenticated', { wallet_address: session.wallet_address, room });
@@ -430,6 +442,21 @@ export function setupWebSocket(
       const handler = socket.listeners('authenticate')[0] as (data: any) => void;
       if (handler) {
         handler(data);
+      }
+    });
+
+    // Handle puter_is_actually_open event (frontend sends this to keep connection alive)
+    socket.on('puter_is_actually_open', () => {
+      if (socket.user) {
+        // Ensure socket is still in the room
+        const normalizedWallet = socket.user.wallet_address.toLowerCase();
+        const room = `user:${normalizedWallet}`;
+        socket.join(room);
+        const roomSockets = io.sockets.adapter.rooms.get(room);
+        const connectedCount = roomSockets ? roomSockets.size : 0;
+        console.log(`💚 [puter_is_actually_open] Socket ${socket.id} confirmed open, room: ${room}, clients: ${connectedCount}`);
+      } else {
+        console.log(`💚 [puter_is_actually_open] Socket ${socket.id} confirmed open (not authenticated yet)`);
       }
     });
 
@@ -481,6 +508,21 @@ export function setupWebSocket(
     // Log when socket is ready
     socket.on('connect', () => {
       console.log(`✅ WebSocket socket connected: ${socket.id}`);
+    });
+    
+    // Listen for item.removed events to verify delivery
+    socket.on('item.removed', (data) => {
+      console.log(`✅ [VERIFY] Socket ${socket.id} received item.removed event:`, data);
+    });
+    
+    // Listen for item.added events to verify delivery
+    socket.on('item.added', (data) => {
+      console.log(`✅ [VERIFY] Socket ${socket.id} received item.added event:`, data);
+    });
+    
+    // Listen for item.moved events to verify delivery
+    socket.on('item.moved', (data) => {
+      console.log(`✅ [VERIFY] Socket ${socket.id} received item.moved event:`, data);
     });
   });
 

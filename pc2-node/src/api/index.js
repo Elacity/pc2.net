@@ -1,12 +1,21 @@
 import multer from 'multer';
 import { authenticate, corsMiddleware, errorHandler } from './middleware.js';
+import { logger } from '../utils/logger.js';
 import { handleWhoami } from './whoami.js';
 import { handleParticleAuth, handleGrantUserApp, handleGetUserAppToken } from './auth.js';
 import { handleStat, handleReaddir, handleRead, handleWrite, handleMkdir, handleDelete, handleMove, handleRename } from './filesystem.js';
 import { handleSign, handleVersion, handleOSUser, handleKV, handleRAO, handleContactUs, handleDriversCall, handleGetWallets, handleOpenItem, handleSuggestApps, handleItemMetadata, handleWriteFile } from './other.js';
 import { handleAPIInfo, handleGetLaunchApps, handleDF, handleBatch, handleCacheTimestamp, handleStats } from './info.js';
 import { handleFile } from './file.js';
+import storageRouter from './storage.js';
+import { handleSearch } from './search.js';
 export function setupAPI(app) {
+    app.use((req, res, next) => {
+        if (req.path === '/stat' || req.path.startsWith('/stat')) {
+            logger.info(`[Route Debug] /stat request: method=${req.method}, path=${req.path}, url=${req.url}, query=${JSON.stringify(req.query)}, body=${JSON.stringify(req.body)}`);
+        }
+        next();
+    });
     app.use(corsMiddleware);
     app.get('/health', (req, res) => {
         const db = app.locals.db;
@@ -47,8 +56,9 @@ export function setupAPI(app) {
     app.get('/os/user', handleOSUser);
     app.get('/api/stats', authenticate, handleStats);
     app.get('/api/wallets', authenticate, handleGetWallets);
-    app.get('/stat', authenticate, handleStat);
-    app.post('/stat', authenticate, handleStat);
+    app.use('/api/storage', storageRouter);
+    app.post('/search', authenticate, handleSearch);
+    app.all('/stat', authenticate, handleStat);
     app.post('/readdir', authenticate, handleReaddir);
     app.get('/read', authenticate, handleRead);
     app.post('/read', authenticate, handleRead);

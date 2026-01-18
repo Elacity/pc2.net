@@ -1,4 +1,3 @@
-import './utils/polyfill.js';
 import { createServer } from './server.js';
 import { DatabaseManager, IPFSStorage, FilesystemManager } from './storage/index.js';
 import { loadConfig } from './config/loader.js';
@@ -44,60 +43,16 @@ async function main() {
         process.exit(1);
     }
     try {
-        logger.info('🌐 Initializing IPFS storage...');
-        logger.info(`   Repo path: ${IPFS_REPO_PATH}`);
-        if (typeof Promise.withResolvers === 'undefined') {
-            logger.warn('⚠️  Promise.withResolvers polyfill not detected');
-            logger.warn('   This may cause IPFS initialization to fail on Node.js < 22');
-        }
-        else {
-            logger.info('✅ Promise.withResolvers polyfill confirmed');
-        }
         ipfs = new IPFSStorage({
             repoPath: IPFS_REPO_PATH
         });
-        logger.info('   Starting IPFS node initialization...');
         await ipfs.initialize();
-        if (ipfs && ipfs.isReady()) {
-            filesystem = new FilesystemManager(ipfs, db);
-            logger.info('✅ Filesystem manager initialized with IPFS');
-            logger.info('   File uploads and storage are now available');
-        }
-        else {
-            logger.warn('⚠️  IPFS initialization completed but isReady() returned false');
-            logger.warn('   Filesystem manager not created');
-            filesystem = null;
-        }
+        filesystem = new FilesystemManager(ipfs, db);
+        logger.info('✅ Filesystem manager initialized');
     }
     catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        const errorStack = error instanceof Error ? error.stack : undefined;
-        logger.error('❌ Failed to initialize IPFS:', errorMessage);
-        if (errorStack) {
-            logger.error('   Full error stack:');
-            logger.error(errorStack);
-        }
-        if (errorMessage.includes('withResolvers') || (errorStack && errorStack.includes('withResolvers'))) {
-            logger.error('   ⚠️  This error is due to Node.js version < 22');
-            logger.error('   💡 A polyfill has been added, but IPFS may still require Node.js 22+');
-            logger.error('   💡 Consider upgrading Node.js: nvm install 22 && nvm use 22');
-            logger.error('   💡 Or continue without IPFS (database-only mode)');
-        }
-        else if (errorMessage.includes('EADDRINUSE')) {
-            logger.error('   ⚠️  IPFS ports (4001, 5001, 8080) are already in use');
-            logger.error('   💡 Another IPFS instance may be running');
-            logger.error('   💡 Try stopping other IPFS processes or change ports in config');
-        }
-        else if (errorMessage.includes('repo') || errorMessage.includes('repository')) {
-            logger.error('   ⚠️  IPFS repository issue');
-            logger.error(`   💡 Repo path: ${IPFS_REPO_PATH}`);
-            logger.error('   💡 Try deleting the repo directory and restarting');
-        }
-        logger.warn('   ⚠️  File storage will not be available');
-        logger.warn('   ⚠️  Server will continue without IPFS (database-only mode)');
-        logger.warn('   ⚠️  File uploads will fail until IPFS is initialized');
-        ipfs = null;
-        filesystem = null;
+        logger.error('❌ Failed to initialize IPFS:', error);
+        logger.warn('   File storage will not be available');
     }
     if (!config.owner.wallet_address) {
         logger.warn('⚠️  No owner wallet set');
@@ -126,7 +81,7 @@ async function main() {
     });
     const shutdown = async () => {
         logger.info('Shutting down gracefully...');
-        if (ipfs && ipfs.isReady()) {
+        if (ipfs) {
             try {
                 await ipfs.stop();
                 logger.info('✅ IPFS stopped');
@@ -146,20 +101,6 @@ async function main() {
     process.on('SIGTERM', shutdown);
     process.on('SIGINT', shutdown);
 }
-process.on('unhandledRejection', (reason, promise) => {
-    const errorMessage = reason instanceof Error ? reason.message : String(reason);
-    logger.error('Unhandled Rejection:', errorMessage);
-    if (reason instanceof Error && reason.stack) {
-        logger.error('Stack:', reason.stack);
-    }
-});
-process.on('uncaughtException', (error) => {
-    logger.error('Uncaught Exception:', error);
-    if (error.message.includes('EADDRINUSE')) {
-        logger.error('Port already in use. Exiting.');
-        process.exit(1);
-    }
-});
 main().catch((error) => {
     logger.error('Failed to start server:', error);
     process.exit(1);

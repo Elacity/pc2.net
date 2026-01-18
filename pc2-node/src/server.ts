@@ -5,6 +5,9 @@ import { setupAPI } from './api/index.js';
 import { setupWebSocket, setGlobalIO } from './websocket/server.js';
 import { DatabaseManager, FilesystemManager } from './storage/index.js';
 import { Config } from './config/loader.js';
+import { IndexingWorker } from './storage/indexer.js';
+import { AIChatService } from './services/ai/AIChatService.js';
+import { logger } from './utils/logger.js';
 
 export interface ServerOptions {
   port: number;
@@ -13,6 +16,7 @@ export interface ServerOptions {
   database?: DatabaseManager;
   filesystem?: FilesystemManager;
   config?: Config;
+  aiService?: AIChatService;
 }
 
 export function createServer(options: ServerOptions): { app: Express; server: Server } {
@@ -65,7 +69,16 @@ export function createServer(options: ServerOptions): { app: Express; server: Se
     next();
   });
   
+  // Handle binary data for /writeFile endpoint (PDFs, images, etc.)
+  // CRITICAL: Accept ALL content types for /writeFile to handle Blobs from viewer app
+  // The viewer app sends Blobs which may have various content types
+  app.use('/writeFile', express.raw({ 
+    type: '*/*', // Accept all content types for /writeFile
+    limit: '100mb' // Allow large files
+  }));
+  
   app.use(express.json({ 
+    limit: '50mb', // Allow large JSON payloads (for AI chat with large PDF text content)
     verify: (req: any, res, buf) => {
       // Capture raw body for debugging (especially for /drivers/call and /mkdir)
       if (req.path === '/drivers/call' || req.path === '/mkdir') {
@@ -79,15 +92,23 @@ export function createServer(options: ServerOptions): { app: Express; server: Se
   }));
   app.use(express.urlencoded({ extended: true }));
   
-  // Make database, filesystem, and config available to routes via app.locals
+  // Make database, filesystem, config, and AI service available to routes via app.locals
   if (options.database) {
     app.locals.db = options.database;
   }
   if (options.filesystem) {
     app.locals.filesystem = options.filesystem;
+    // Also store in global as fallback
+    (global as any).__filesystem = options.filesystem;
+    logger.info('[Server] ✅ Filesystem stored in app.locals and global');
+  } else {
+    logger.warn('[Server] ⚠️ No filesystem provided - tool execution will be disabled');
   }
   if (options.config) {
     app.locals.config = options.config;
+  }
+  if (options.aiService) {
+    app.locals.aiService = options.aiService;
   }
   
   // API routes (must come before static serving to avoid SPA fallback)
@@ -107,11 +128,25 @@ export function createServer(options: ServerOptions): { app: Express; server: Se
     database: options.database
   });
   
+  // Store pendingEvents reference for polling middleware
+  // This will be set by setupWebSocket
+  (app as any).__pendingEvents = null;
+  
   // Make WebSocket server available globally for event broadcasting
   setGlobalIO(io);
   
   // Make WebSocket server available to routes via app.locals
   app.locals.io = io;
+  
+  // Initialize background indexing worker (if database and filesystem are available)
+  if (options.database && options.filesystem) {
+    const indexer = new IndexingWorker(options.database, options.filesystem);
+    indexer.start().catch((error) => {
+      console.error('[Server] Failed to start indexing worker:', error);
+    });
+    // Store indexer in app.locals for potential API access
+    app.locals.indexer = indexer;
+  }
   
   return { app, server };
 }

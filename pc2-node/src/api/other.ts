@@ -9,7 +9,13 @@ import { AuthenticatedRequest } from './middleware.js';
 import { SignRequest, SignResponse } from '../types/api.js';
 import { FilesystemManager } from '../storage/filesystem.js';
 import { logger } from '../utils/logger.js';
+import { broadcastItemUpdated } from '../websocket/events.js';
+import { Server as SocketIOServer } from 'socket.io';
 import crypto from 'crypto';
+import { AIChatService } from '../services/ai/AIChatService.js';
+import * as pdfjsLib from 'pdfjs-dist';
+import fs from 'fs/promises';
+import path from 'path';
 
 /**
  * Sign files for app access
@@ -273,7 +279,9 @@ export function handleDriversCall(req: AuthenticatedRequest, res: Response): voi
         'terminal': { name: 'terminal', title: 'Terminal', uuid: 'app-terminal', uid: 'app-terminal', icon: undefined, index_url: `${baseUrl}/apps/terminal/index.html` },
         'phoenix': { name: 'phoenix', title: 'Phoenix Shell', uuid: 'app-phoenix', uid: 'app-phoenix', icon: undefined, index_url: `${baseUrl}/apps/phoenix/index.html` },
         'recorder': { name: 'recorder', title: 'Recorder', uuid: 'app-recorder', uid: 'app-recorder', icon: undefined, index_url: `${baseUrl}/apps/recorder/index.html` },
-        'solitaire-frvr': { name: 'solitaire-frvr', title: 'Solitaire FRVR', uuid: 'app-solitaire-frvr', uid: 'app-solitaire-frvr', icon: undefined, index_url: `${baseUrl}/apps/solitaire-frvr/index.html` }
+        'solitaire-frvr': { name: 'solitaire-frvr', title: 'Solitaire FRVR', uuid: 'app-solitaire-frvr', uid: 'app-solitaire-frvr', icon: undefined, index_url: `${baseUrl}/apps/solitaire-frvr/index.html` },
+        'calculator': { name: 'calculator', title: 'WASM Calculator', uuid: 'app-calculator', uid: 'app-calculator', icon: undefined, index_url: `${baseUrl}/apps/calculator/index.html` },
+        'file-processor': { name: 'file-processor', title: 'File Processor', uuid: 'app-file-processor', uid: 'app-file-processor', icon: undefined, index_url: `${baseUrl}/apps/file-processor/index.html` }
       };
       const appInfo = appMap[String(appNameFromQuery)];
       if (appInfo) {
@@ -472,6 +480,484 @@ export function handleDriversCall(req: AuthenticatedRequest, res: Response): voi
       // PC2 node doesn't use subdomains - apps are served from /apps/* paths
       // Return empty list to indicate no subdomains are configured
       res.json({ success: true, result: [] });
+      return;
+    }
+
+    // Handle puter-ocr interface (OCR for images)
+    if (body.interface === 'puter-ocr') {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+
+      const method = body.method || 'recognize';
+      const args = body.args || {};
+
+      if (method === 'recognize') {
+        const source = args.source;
+        if (!source) {
+          res.status(400).json({ 
+            success: false, 
+            error: 'Missing required argument: source' 
+          });
+          return;
+        }
+
+        // Note: OCR is best handled by vision-capable AI models
+        // For now, return a message suggesting to use vision models
+        // Future: Could integrate Tesseract.js or cloud OCR services
+        
+        logger.info('[Drivers] OCR requested for:', source);
+        res.json({ 
+          success: true, 
+          result: { 
+            text: '',
+            note: 'OCR is handled by vision-capable AI models. The image will be analyzed directly by the AI model.'
+          } 
+        });
+        return;
+      }
+
+      res.status(400).json({ 
+        success: false, 
+        error: `Unknown method: ${method}` 
+      });
+      return;
+    }
+
+    // Handle puter-pdf interface (PDF text extraction)
+    if (body.interface === 'puter-pdf') {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+
+      const method = body.method || 'extract_text';
+      const args = body.args || {};
+
+      if (method === 'extract_text') {
+        const source = args.source;
+        if (!source) {
+          res.status(400).json({ 
+            success: false, 
+            error: 'Missing required argument: source' 
+          });
+          return;
+        }
+
+        // Extract text from PDF using pdfjs-dist
+        (async () => {
+          try {
+            if (!req.user) {
+              res.status(401).json({ success: false, error: 'Unauthorized' });
+              return;
+            }
+
+            const filesystem = (req.app.locals.filesystem as FilesystemManager | undefined);
+            if (!filesystem) {
+              res.status(500).json({ 
+                success: false, 
+                error: 'Filesystem not initialized' 
+              });
+              return;
+            }
+
+            // Get file path - source could be a path or UID
+            let filePath: string;
+            if (source.startsWith('/')) {
+              filePath = source;
+            } else {
+              // Assume it's a UID, need to resolve to path
+              // For now, treat as path
+              filePath = source;
+            }
+
+            // Ensure path is within user's directory
+            const walletAddress = req.user.wallet_address;
+            const userPath = `/${walletAddress}`;
+            if (!filePath.startsWith(userPath)) {
+              res.status(403).json({ 
+                success: false, 
+                error: 'Access denied' 
+              });
+              return;
+            }
+
+            // Read PDF file
+            const fileContent = await filesystem.readFile(filePath, walletAddress);
+            if (!fileContent) {
+              res.status(404).json({ 
+                success: false, 
+                error: 'File not found' 
+              });
+              return;
+            }
+
+            // Convert Buffer to Uint8Array for pdfjs-dist
+            const uint8Array = new Uint8Array(fileContent);
+
+            // Load PDF with pdfjs-dist
+            const pdf = await pdfjsLib.getDocument({ data: uint8Array }).promise;
+            let fullText = '';
+
+            // Extract text from all pages
+            for (let i = 1; i <= pdf.numPages; i++) {
+              const page = await pdf.getPage(i);
+              const textContent = await page.getTextContent();
+              const pageText = textContent.items.map((item: any) => item.str).join(' ');
+              fullText += pageText + '\n\n';
+            }
+
+            res.json({ 
+              success: true, 
+              result: { 
+                text: fullText.trim(),
+                pages: pdf.numPages
+              } 
+            });
+          } catch (error: any) {
+            logger.error('[Drivers] PDF extraction error:', error);
+            res.status(500).json({ 
+              success: false, 
+              error: error.message || 'PDF text extraction failed' 
+            });
+          }
+        })();
+        return;
+      }
+
+      res.status(400).json({ 
+        success: false, 
+        error: `Unknown method: ${method}` 
+      });
+      return;
+    }
+
+    // Handle puter-chat-completion interface (AI chat)
+    if (body.interface === 'puter-chat-completion') {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+
+      const aiService = (req.app.locals.aiService as AIChatService | undefined);
+      if (!aiService) {
+        res.status(503).json({ 
+          success: false, 
+          error: 'AI service not available. Please ensure Ollama is installed and running.' 
+        });
+        return;
+      }
+
+      const method = body.method || 'complete';
+
+      // Make handler async to support streaming
+      (async () => {
+        try {
+          if (method === 'complete') {
+            const args = body.args || {};
+            const messages = args.messages || [];
+            let model = args.model;
+            const stream = args.stream || false;
+            const tools = args.tools;
+            const max_tokens = args.max_tokens;
+            const temperature = args.temperature;
+            
+            // Get user's AI config to use default model/provider if not specified
+            const db = (req.app.locals.db as any);
+            const walletAddress = req.user?.wallet_address;
+            if (db && walletAddress && !model) {
+              try {
+                const userConfig = db.getAIConfig(walletAddress);
+                if (userConfig) {
+                  const provider = userConfig.default_provider || 'ollama';
+                  const defaultModel = userConfig.default_model || (provider === 'ollama' ? 'deepseek-r1:1.5b' : null);
+                  if (defaultModel) {
+                    // Format: provider:model (e.g., "ollama:deepseek-r1:1.5b" or "claude:claude-3-5-sonnet-20240620")
+                    model = `${provider}:${defaultModel}`;
+                    logger.info('[Drivers] Using user default model from config:', model);
+                  }
+                }
+              } catch (e) {
+                // Config not found or error - use default
+                logger.debug('[Drivers] Could not load user AI config, using defaults');
+              }
+            }
+            
+            // If model still not set, use default
+            if (!model) {
+              model = 'ollama:deepseek-r1:1.5b';
+            }
+
+            if (!messages || !Array.isArray(messages) || messages.length === 0) {
+              res.status(400).json({ 
+                success: false, 
+                error: 'Missing or invalid messages array' 
+              });
+              return;
+            }
+
+            // Log message sizes for debugging
+            const totalMessageLength = JSON.stringify(messages).length;
+            logger.info('[Drivers] AI chat request:', {
+              messageCount: messages.length,
+              totalMessageLength,
+              model,
+              stream,
+              hasTools: !!tools,
+            });
+            
+            // Log the last user message to help debug content generation issues
+            const lastUserMessage = messages.find((m: any) => m.role === 'user');
+            if (lastUserMessage) {
+              const userText = typeof lastUserMessage.content === 'string' 
+                ? lastUserMessage.content 
+                : (Array.isArray(lastUserMessage.content) 
+                  ? lastUserMessage.content.filter((c: any) => c.type === 'text').map((c: any) => c.text).join(' ')
+                  : JSON.stringify(lastUserMessage.content));
+              logger.info('[Drivers] Last user message:', userText.substring(0, 200));
+            }
+            
+            // Warn if message is very large
+            if (totalMessageLength > 100000) {
+              logger.warn('[Drivers] Large AI chat request detected:', {
+                totalMessageLength,
+                messageCount: messages.length,
+              });
+            }
+
+            if (stream) {
+              // Streaming response - Use Puter's exact format: application/x-ndjson
+              res.status(200); // Set status before headers
+              res.setHeader('Content-Type', 'application/x-ndjson');
+              res.setHeader('Cache-Control', 'no-cache');
+              res.setHeader('Connection', 'keep-alive');
+              res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
+              
+              // Disable Express response buffering
+              res.setTimeout(0); // No timeout
+              
+              // Send headers immediately (don't wait for first write)
+              res.writeHead(200, {
+                'Content-Type': 'application/x-ndjson',
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
+                'X-Accel-Buffering': 'no',
+              });
+
+              try {
+                // Get filesystem and wallet address for tool execution
+                // CRITICAL: filesystem must be available for tool execution
+                let filesystem = (req.app.locals.filesystem as FilesystemManager | undefined);
+                const walletAddress = req.user?.wallet_address;
+
+                // Get WebSocket server for live updates
+                const io = (req.app.locals.io as any | undefined);
+                logger.info('[Drivers] AI streamComplete - io available:', !!io, 'filesystem:', !!filesystem, 'walletAddress:', walletAddress);
+                
+                if (!filesystem) {
+                  logger.error('[Drivers] ⚠️ CRITICAL: filesystem not available in app.locals - tool execution will be disabled!');
+                  logger.error('[Drivers] app.locals keys:', Object.keys(req.app.locals || {}));
+                  logger.error('[Drivers] app.locals.filesystem type:', typeof req.app.locals.filesystem);
+                  logger.error('[Drivers] app.locals.filesystem value:', req.app.locals.filesystem);
+                  
+                  // Try to get filesystem from global if available
+                  const globalFilesystem = (global as any).__filesystem;
+                  if (globalFilesystem) {
+                    logger.warn('[Drivers] Found filesystem in global, using it as fallback');
+                    filesystem = globalFilesystem;
+                  }
+                }
+
+                // Register user providers before streaming (loads API keys from database)
+                if (walletAddress) {
+                  await (aiService as any).registerUserProviders(walletAddress);
+                }
+
+                for await (const chunk of aiService.streamComplete({
+                  messages,
+                  model,
+                  stream: true,
+                  tools,
+                  max_tokens,
+                  temperature,
+                  walletAddress,
+                  filesystem,
+                  io,
+                })) {
+                  // Puter's format: {"type": "text", "text": "chunk content"}\n
+                  const content = chunk.message?.content || '';
+                  if (content) {
+                    const textChunk = JSON.stringify({
+                      type: 'text',
+                      text: content,
+                    });
+                    res.write(`${textChunk}\n`);
+                    // Force flush after each write to ensure immediate delivery
+                    if (typeof (res as any).flush === 'function') {
+                      (res as any).flush();
+                    }
+                  }
+                  
+                  // Handle tool calls if present
+                  if (chunk.message?.tool_calls && Array.isArray(chunk.message.tool_calls)) {
+                    for (const toolCall of chunk.message.tool_calls) {
+                      try {
+                        const args = typeof toolCall.function?.arguments === 'string'
+                          ? JSON.parse(toolCall.function.arguments)
+                          : toolCall.function?.arguments || {};
+                        
+                        // Get tool source from tool call metadata (set by AIChatService)
+                        const toolName = toolCall.function?.name;
+                        const toolSource = (toolCall as any).__source;
+                        
+                        const toolChunk: any = {
+                          type: 'tool_use',
+                          name: toolName,
+                          input: args,
+                        };
+                        
+                        // Include source metadata if available
+                        if (toolSource) {
+                          toolChunk.source = toolSource;
+                        }
+                        
+                        res.write(`${JSON.stringify(toolChunk)}\n`);
+                        if (typeof (res as any).flush === 'function') {
+                          (res as any).flush();
+                        }
+                      } catch (e) {
+                        logger.error('[Drivers] Failed to format tool call chunk:', e);
+                      }
+                    }
+                  }
+                }
+                res.end();
+              } catch (error: any) {
+                const errorMessage = error?.message || 'AI stream error';
+                const errorStack = error?.stack;
+                
+                logger.error('[Drivers] AI stream error:', error);
+                logger.error('[Drivers] AI stream error message:', errorMessage);
+                logger.error('[Drivers] AI stream error stack:', errorStack);
+                logger.error('[Drivers] AI stream error details:', {
+                  message: errorMessage,
+                  name: error?.name,
+                  cause: error?.cause,
+                  toString: String(error),
+                });
+                
+                // Check if headers are already sent (stream might have started)
+                if (!res.headersSent) {
+                  // Headers not sent yet - send error as regular JSON response
+                  res.status(500).json({ 
+                    success: false, 
+                    error: errorMessage,
+                    errorName: error?.name,
+                    details: errorStack?.substring(0, 1000)
+                  });
+                } else {
+                  // Headers already sent - send error in ndjson format
+                  try {
+                    const errorChunk = JSON.stringify({
+                      type: 'error',
+                      message: errorMessage,
+                      errorName: error?.name,
+                      details: errorStack?.substring(0, 1000)
+                    });
+                    res.write(`${errorChunk}\n`);
+                    res.end();
+                  } catch (writeError) {
+                    logger.error('[Drivers] Failed to write stream error:', writeError);
+                    // Can't write to stream, just end it
+                    res.end();
+                  }
+                }
+              }
+            } else {
+              // Non-streaming response
+              try {
+                // Get filesystem and wallet address for tool execution
+                const filesystem = (req.app.locals.filesystem as FilesystemManager | undefined);
+                const walletAddress = req.user?.wallet_address;
+
+                // Get WebSocket server for live updates
+                const io = (req.app.locals.io as any | undefined);
+
+                const result = await aiService.complete({
+                  messages,
+                  model,
+                  stream: false,
+                  tools,
+                  max_tokens,
+                  temperature,
+                  walletAddress,
+                  filesystem,
+                  io,
+                });
+
+                res.json({ 
+                  success: true, 
+                  result: result 
+                });
+              } catch (completeError: any) {
+                const errorMessage = completeError?.message || 'AI chat completion failed';
+                const errorStack = completeError?.stack;
+                
+                logger.error('[Drivers] AI complete error:', completeError);
+                logger.error('[Drivers] AI complete error message:', errorMessage);
+                logger.error('[Drivers] AI complete error stack:', errorStack);
+                logger.error('[Drivers] AI complete error details:', {
+                  message: errorMessage,
+                  name: completeError?.name,
+                  cause: completeError?.cause,
+                  toString: String(completeError),
+                });
+                
+                // Always return error message to client for debugging
+                res.status(500).json({ 
+                  success: false, 
+                  error: errorMessage,
+                  errorName: completeError?.name,
+                  details: errorStack?.substring(0, 1000) // First 1000 chars of stack
+                });
+              }
+            }
+          } else if (method === 'models' || method === 'list') {
+            // List available models
+            const models = await aiService.listModels();
+            res.json({ 
+              success: true, 
+              result: models 
+            });
+          } else if (method === 'providers') {
+            // List available providers
+            const providers = aiService.listProviders();
+            res.json({ 
+              success: true, 
+              result: providers 
+            });
+          } else {
+            res.status(400).json({ 
+              success: false, 
+              error: `Unknown method: ${method}` 
+            });
+          }
+        } catch (error: any) {
+          logger.error('[Drivers] AI chat error:', error);
+          logger.error('[Drivers] AI chat error stack:', error.stack);
+          logger.error('[Drivers] AI chat error details:', {
+            message: error.message,
+            name: error.name,
+            cause: error.cause,
+          });
+          res.status(500).json({ 
+            success: false, 
+            error: error.message || 'AI chat completion failed',
+            details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+          });
+        }
+      })();
       return;
     }
 
@@ -1044,52 +1530,143 @@ export function handleItemMetadata(req: AuthenticatedRequest, res: Response): vo
  * POST /writeFile?uid=...&signature=...&expires=...
  */
 export async function handleWriteFile(req: AuthenticatedRequest, res: Response): Promise<void> {
+  logger.info('[WriteFile] 🔵 HANDLER CALLED', {
+    path: req.path,
+    method: req.method,
+    query: req.query,
+    hasUser: !!req.user,
+    userWallet: req.user?.wallet_address
+  });
+
   const filesystem = (req.app.locals.filesystem as FilesystemManager | undefined);
   const fileUid = req.query.uid as string;
   const signature = req.query.signature as string;
 
   if (!filesystem) {
+    logger.error('[WriteFile] Filesystem not initialized');
     res.status(500).json({ error: 'Filesystem not initialized' });
     return;
   }
 
   if (!req.user) {
+    logger.warn('[WriteFile] Unauthorized - no user in request');
     res.status(401).json({ error: 'Unauthorized' });
     return;
   }
 
   if (!fileUid) {
+    logger.warn('[WriteFile] Missing uid parameter', { query: req.query });
     res.status(400).json({ error: 'Missing uid parameter' });
     return;
   }
 
-  logger.info('[WriteFile] Request received', { uid: fileUid, signature: signature ? signature.substring(0, 20) + '...' : 'none' });
+  logger.info('[WriteFile] 🔵 Request received', { 
+    uid: fileUid, 
+    signature: signature ? signature.substring(0, 20) + '...' : 'none',
+    method: req.method,
+    contentType: req.get('Content-Type'),
+    contentLength: req.get('Content-Length'),
+    hasBody: !!req.body,
+    bodyType: typeof req.body,
+    isBuffer: Buffer.isBuffer(req.body),
+    bodyLength: Buffer.isBuffer(req.body) ? req.body.length : (typeof req.body === 'string' ? req.body.length : 'N/A'),
+    walletAddress: req.user?.wallet_address
+  });
 
   // Convert UUID to path: uuid-/path/to/file -> /path/to/file
+  // UID format: uuid--0x34daf...-Desktop-filename.jpg (double dash because path starts with /)
+  // First, try direct conversion
   const uuidPath = fileUid.replace(/^uuid-+/, '');
   let potentialPath = '/' + uuidPath.replace(/-/g, '/');
   
-  // Remove leading wallet address if present
+  // Remove leading wallet address if present (it's already in the path)
   const pathParts = potentialPath.split('/').filter(p => p);
   if (pathParts.length > 0 && pathParts[0].startsWith('0x')) {
     potentialPath = '/' + pathParts.join('/');
   }
 
-  const existingMetadata = filesystem.getFileMetadata(potentialPath, req.user.wallet_address);
+  // Try to find file by converted path
+  let existingMetadata = filesystem.getFileMetadata(potentialPath, req.user.wallet_address);
+
+  // If not found, try database lookup by UUID (handles case sensitivity issues)
+  if (!existingMetadata) {
+    logger.info('[WriteFile] File not found by path conversion, trying UUID lookup', { 
+      uid: fileUid, 
+      convertedPath: potentialPath 
+    });
+    
+    const db = (req.app.locals.db as any);
+    if (db && typeof db.listFiles === 'function') {
+      // listFiles takes (directoryPath, walletAddress) - use '/' to get all files
+      const allFiles = db.listFiles('/', req.user.wallet_address);
+      logger.info('[WriteFile] UUID lookup - searching files', { 
+        totalFiles: allFiles.length,
+        searchingFor: fileUid
+      });
+      for (const file of allFiles) {
+        // Generate UUID the same way as frontend: uuid-${path.replace(/\//g, '-')}
+        // CRITICAL: Make comparison case-insensitive to handle Desktop vs desktop mismatch
+        const fileUuid = `uuid-${file.path.replace(/\//g, '-')}`;
+        const fileUuidLower = fileUuid.toLowerCase();
+        const fileUidLower = fileUid.toLowerCase();
+        if (fileUuidLower === fileUidLower) {
+          existingMetadata = file;
+          potentialPath = file.path; // Update potentialPath with the correct casing
+          logger.info('[WriteFile] ✅ Found file by UUID lookup (case-insensitive)', { 
+            uid: fileUid, 
+            path: potentialPath,
+            filePath: file.path,
+            generatedUuid: fileUuid,
+            matched: true
+          });
+          break;
+        }
+      }
+      if (!existingMetadata) {
+        logger.warn('[WriteFile] UUID not found in database', {
+          searchedFiles: allFiles.length,
+          sampleUuids: allFiles.slice(0, 3).map((f: any) => `uuid-${f.path.replace(/\//g, '-')}`)
+        });
+      }
+    }
+  }
 
   if (!existingMetadata) {
-    logger.warn('[WriteFile] File not found for UID', { uid: fileUid, convertedPath: potentialPath });
+    logger.warn('[WriteFile] File not found for UID', { 
+      uid: fileUid, 
+      convertedPath: potentialPath,
+      walletAddress: req.user.wallet_address
+    });
     res.status(404).json({ error: 'File not found' });
     return;
   }
 
   // Get file content from request body
-  // Support multiple formats: raw text, JSON with content field, multipart
+  // Support multiple formats: binary (Buffer), raw text, JSON with content field, multipart
   let fileContent: string | Buffer = '';
   const contentType = req.get('Content-Type') || '';
   
+  logger.info('[WriteFile] Request received', { 
+    contentType, 
+    bodyType: typeof req.body, 
+    isBuffer: Buffer.isBuffer(req.body),
+    bodyLength: Buffer.isBuffer(req.body) ? req.body.length : (typeof req.body === 'string' ? req.body.length : 'N/A'),
+    method: req.method,
+    query: req.query
+  });
+  
+  // Check if body is a Buffer (binary data - PDFs, images, etc.)
+  if (Buffer.isBuffer(req.body) && req.body.length > 0) {
+    fileContent = req.body;
+    logger.info('[WriteFile] ✅ Using body as binary Buffer', { 
+      length: fileContent.length, 
+      contentType,
+      firstBytes: fileContent.slice(0, 16).toString('hex'),
+      lastBytes: fileContent.slice(-16).toString('hex')
+    });
+  }
   // Check if body is a string (raw text)
-  if (typeof req.body === 'string' && req.body.length > 0) {
+  else if (typeof req.body === 'string' && req.body.length > 0) {
     fileContent = req.body;
     logger.info('[WriteFile] Using body as raw text', { length: fileContent.length });
   }
@@ -1111,21 +1688,36 @@ export async function handleWriteFile(req: AuthenticatedRequest, res: Response):
 
   // If no content found, try raw body buffer (for PUT requests with plain text)
   if (!fileContent && (req as any).rawBody) {
-    fileContent = (req as any).rawBody.toString('utf8');
-    logger.info('[WriteFile] Using raw body buffer', { length: fileContent.length });
+    // Check if rawBody is already a Buffer
+    if (Buffer.isBuffer((req as any).rawBody)) {
+      fileContent = (req as any).rawBody;
+      logger.info('[WriteFile] Using rawBody as Buffer', { length: fileContent.length });
+    } else {
+      fileContent = (req as any).rawBody.toString('utf8');
+      logger.info('[WriteFile] Using rawBody as text', { length: fileContent.length });
+    }
   }
 
-  if (!fileContent || (typeof fileContent === 'string' && fileContent.length === 0)) {
-    logger.warn('[WriteFile] No file content found in request');
+  if (!fileContent || (typeof fileContent === 'string' && fileContent.length === 0) || (Buffer.isBuffer(fileContent) && fileContent.length === 0)) {
+    logger.warn('[WriteFile] No file content found in request', {
+      hasFileContent: !!fileContent,
+      fileContentType: typeof fileContent,
+      fileContentLength: Buffer.isBuffer(fileContent) ? fileContent.length : (typeof fileContent === 'string' ? fileContent.length : 'N/A'),
+      contentType,
+      bodyKeys: req.body && typeof req.body === 'object' ? Object.keys(req.body) : 'N/A'
+    });
     res.status(400).json({ error: 'No file content provided' });
     return;
   }
 
   try {
     // Write file content
-    const contentBuffer = typeof fileContent === 'string' 
-      ? Buffer.from(fileContent, 'utf8')
-      : fileContent;
+    // If already a Buffer (binary data), use it directly; otherwise convert string to Buffer
+    const contentBuffer = Buffer.isBuffer(fileContent)
+      ? fileContent
+      : typeof fileContent === 'string'
+        ? Buffer.from(fileContent, 'utf8')
+        : Buffer.from(fileContent);
 
     const updatedMetadata = await filesystem.writeFile(
       potentialPath,
@@ -1136,9 +1728,57 @@ export async function handleWriteFile(req: AuthenticatedRequest, res: Response):
       }
     );
 
-    logger.info('[WriteFile] File updated successfully', { path: updatedMetadata.path, size: updatedMetadata.size });
+    logger.info('[WriteFile] ✅ File updated successfully', { 
+      path: updatedMetadata.path, 
+      size: updatedMetadata.size,
+      newIPFSHash: updatedMetadata.ipfs_hash?.substring(0, 20) + '...',
+      oldIPFSHash: existingMetadata?.ipfs_hash?.substring(0, 20) + '...',
+      hashChanged: updatedMetadata.ipfs_hash !== existingMetadata?.ipfs_hash,
+      contentSize: contentBuffer.length,
+      walletAddress: req.user.wallet_address
+    });
 
-    // Return file metadata
+    // Broadcast item.updated event to refresh desktop thumbnail
+    const io = (req.app.locals.io as SocketIOServer | undefined);
+    if (io) {
+      // Build read URL for thumbnail (images use read URL as thumbnail)
+      // Include cache-busting parameter using IPFS hash to ensure fresh thumbnail
+      const isHttps = req.protocol === 'https';
+      const baseUrl = isHttps 
+        ? `https://${req.get('host')}`
+        : `http://${req.get('host')}`;
+      
+      // For image files, include thumbnail URL with cache-busting
+      let thumbnail: string | undefined = undefined;
+      if (updatedMetadata.mime_type?.startsWith('image/')) {
+        const cacheBuster = updatedMetadata.ipfs_hash 
+          ? `_cid=${updatedMetadata.ipfs_hash.substring(0, 16)}`
+          : `_t=${Date.now()}`;
+        thumbnail = `${baseUrl}/read?file=${encodeURIComponent(updatedMetadata.path)}&${cacheBuster}`;
+      }
+      
+      broadcastItemUpdated(io, req.user.wallet_address, {
+        uid: fileUid,
+        name: updatedMetadata.path.split('/').pop() || '',
+        path: updatedMetadata.path,
+        size: updatedMetadata.size,
+        modified: new Date(updatedMetadata.updated_at).toISOString(),
+        original_client_socket_id: null,
+        thumbnail: thumbnail, // Include thumbnail URL with cache-busting for image files
+        type: updatedMetadata.mime_type || undefined,
+        is_dir: false
+      });
+      
+      logger.info('[WriteFile] 📡 Broadcasted item.updated event for thumbnail refresh', {
+        path: updatedMetadata.path,
+        hasThumbnail: !!thumbnail,
+        mimeType: updatedMetadata.mime_type
+      });
+    } else {
+      logger.warn('[WriteFile] ⚠️ WebSocket server not available, cannot broadcast thumbnail update');
+    }
+
+    // Return file metadata (include IPFS hash for cache-busting)
     res.json({
       uid: fileUid,
       name: updatedMetadata.path.split('/').pop() || '',
@@ -1148,11 +1788,108 @@ export async function handleWriteFile(req: AuthenticatedRequest, res: Response):
       type: updatedMetadata.mime_type || 'application/octet-stream',
       created: new Date(updatedMetadata.created_at).toISOString(),
       modified: new Date(updatedMetadata.updated_at).toISOString(),
+      ipfs_hash: updatedMetadata.ipfs_hash, // Include IPFS hash so frontend can verify update
     });
   } catch (error) {
     logger.error('[WriteFile] Error writing file:', error);
     res.status(500).json({
       error: 'Failed to write file',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+}
+
+/**
+ * Set desktop background
+ * POST /set-desktop-bg
+ */
+export function handleSetDesktopBg(req: AuthenticatedRequest, res: Response): void {
+  const db = (req.app.locals.db as any);
+  const body = req.body as { url?: string; color?: string; fit?: string };
+
+  if (!db) {
+    res.status(500).json({ error: 'Database not initialized' });
+    return;
+  }
+
+  if (!req.user) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
+  try {
+    const walletAddress = req.user.wallet_address;
+
+    // Save desktop background settings to KV store
+    if (body.url !== undefined) {
+      const kvKey = `${walletAddress}:user_preferences.desktop_bg_url`;
+      db.setSetting(kvKey, body.url);
+    }
+
+    if (body.color !== undefined) {
+      const kvKey = `${walletAddress}:user_preferences.desktop_bg_color`;
+      db.setSetting(kvKey, body.color || null);
+    }
+
+    if (body.fit !== undefined) {
+      const kvKey = `${walletAddress}:user_preferences.desktop_bg_fit`;
+      db.setSetting(kvKey, body.fit || 'cover');
+    }
+
+    logger.info('[SetDesktopBg] Desktop background saved', {
+      walletAddress,
+      url: body.url,
+      color: body.color,
+      fit: body.fit
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    logger.error('[SetDesktopBg] Error:', error instanceof Error ? error.message : 'Unknown error');
+    res.status(500).json({
+      error: 'Failed to save desktop background',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+}
+
+/**
+ * Set profile picture
+ * POST /set-profile-picture
+ */
+export function handleSetProfilePicture(req: AuthenticatedRequest, res: Response): void {
+  const db = (req.app.locals.db as any);
+  const body = req.body as { url?: string };
+
+  if (!db) {
+    res.status(500).json({ error: 'Database not initialized' });
+    return;
+  }
+
+  if (!req.user) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
+  try {
+    const walletAddress = req.user.wallet_address;
+
+    // Save profile picture path to KV store
+    if (body.url !== undefined) {
+      const kvKey = `${walletAddress}:user_preferences.profile_picture_url`;
+      db.setSetting(kvKey, body.url);
+    }
+
+    logger.info('[SetProfilePicture] Profile picture saved', {
+      walletAddress,
+      url: body.url
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    logger.error('[SetProfilePicture] Error:', error instanceof Error ? error.message : 'Unknown error');
+    res.status(500).json({
+      error: 'Failed to save profile picture',
       message: error instanceof Error ? error.message : 'Unknown error'
     });
   }

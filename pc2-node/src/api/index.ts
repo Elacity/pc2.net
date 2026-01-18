@@ -1,15 +1,23 @@
-import express, { Express, Request, Response } from 'express';
+import express, { Express, Request, Response, NextFunction } from 'express';
 import multer from 'multer';
 import { DatabaseManager, FilesystemManager } from '../storage/index.js';
 import { Config } from '../config/loader.js';
 import { Server as SocketIOServer } from 'socket.io';
 import { authenticate, corsMiddleware, errorHandler } from './middleware.js';
+import { logger } from '../utils/logger.js';
 import { handleWhoami } from './whoami.js';
 import { handleParticleAuth, handleGrantUserApp, handleGetUserAppToken } from './auth.js';
 import { handleStat, handleReaddir, handleRead, handleWrite, handleMkdir, handleDelete, handleMove, handleRename } from './filesystem.js';
-import { handleSign, handleVersion, handleOSUser, handleKV, handleRAO, handleContactUs, handleDriversCall, handleGetWallets, handleOpenItem, handleSuggestApps, handleItemMetadata, handleWriteFile } from './other.js';
+import { handleSign, handleVersion, handleOSUser, handleKV, handleRAO, handleContactUs, handleDriversCall, handleGetWallets, handleOpenItem, handleSuggestApps, handleItemMetadata, handleWriteFile, handleSetDesktopBg, handleSetProfilePicture } from './other.js';
 import { handleAPIInfo, handleGetLaunchApps, handleDF, handleBatch, handleCacheTimestamp, handleStats } from './info.js';
 import { handleFile } from './file.js';
+import storageRouter from './storage.js';
+import aiRouter from './ai.js';
+import wasmRouter from './wasm.js';
+import { handleSearch } from './search.js';
+import { handleGetApp } from './apps.js';
+import { handleGetVersions, handleGetVersion, handleRestoreVersion } from './versions.js';
+import { createBackup, listBackups, downloadBackup, deleteBackup, restoreBackup } from './backup.js';
 
 // Extend Express Request to include database, filesystem, config, and WebSocket
 declare global {
@@ -26,6 +34,14 @@ declare global {
 }
 
 export function setupAPI(app: Express): void {
+  // Debug middleware to log all requests (temporary)
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    if (req.path === '/stat' || req.path.startsWith('/stat')) {
+      logger.info(`[Route Debug] /stat request: method=${req.method}, path=${req.path}, url=${req.url}, query=${JSON.stringify(req.query)}, body=${JSON.stringify(req.body)}`);
+    }
+    next();
+  });
+  
   // CORS middleware (applied to all routes)
   app.use(corsMiddleware);
 
@@ -82,6 +98,10 @@ export function setupAPI(app: Express): void {
   // Get launch apps (no auth required)
   app.get('/get-launch-apps', handleGetLaunchApps);
   
+  // Get app info by name (no auth required - used by window.get_apps)
+  // IMPORTANT: This must be registered BEFORE static file middleware to catch /apps/:name requests
+  app.get('/apps/:name', handleGetApp);
+  
   // Cache timestamp (no auth required - SDK calls this during initialization)
   app.get('/cache/last-change-timestamp', handleCacheTimestamp);
   
@@ -100,10 +120,23 @@ export function setupAPI(app: Express): void {
   app.get('/os/user', handleOSUser);
   app.get('/api/stats', authenticate, handleStats);
   app.get('/api/wallets', authenticate, handleGetWallets);
+  
+  // Storage usage endpoint
+  app.use('/api/storage', storageRouter);
+  app.use('/api/ai', aiRouter);
+  app.use('/api/wasm', wasmRouter);
+
+  // Search endpoint (require auth)
+  app.post('/search', authenticate, handleSearch);
+
+  // File versions endpoints (require auth)
+  app.get('/versions', authenticate, handleGetVersions);
+  app.get('/versions/:versionNumber', authenticate, handleGetVersion);
+  app.post('/versions/:versionNumber/restore', authenticate, handleRestoreVersion);
 
   // Filesystem endpoints (require auth)
-  app.get('/stat', authenticate, handleStat);
-  app.post('/stat', authenticate, handleStat); // Also support POST for /stat
+  // Register /stat BEFORE other routes to ensure it's matched correctly
+  app.all('/stat', authenticate, handleStat); // Use app.all() to handle both GET and POST
   app.post('/readdir', authenticate, handleReaddir);
   app.get('/read', authenticate, handleRead);
   app.post('/read', authenticate, handleRead); // Also support POST for /read
@@ -128,6 +161,14 @@ export function setupAPI(app: Express): void {
     storage: multer.memoryStorage(),
     limits: {
       fileSize: 100 * 1024 * 1024 // 100MB max file size
+    }
+  });
+  
+  // Restore endpoint with larger file size limit (backups can be GB)
+  const restoreUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+      fileSize: 10 * 1024 * 1024 * 1024 // 10GB max file size for backups
     }
   });
   
@@ -165,6 +206,41 @@ export function setupAPI(app: Express): void {
   // Write file using signed URL (require auth)
   app.post('/writeFile', authenticate, handleWriteFile);
   app.put('/writeFile', authenticate, handleWriteFile);
+
+  // Desktop background (require auth)
+  app.post('/set-desktop-bg', authenticate, handleSetDesktopBg);
+  app.post('/set-profile-picture', authenticate, handleSetProfilePicture);
+
+  // Elastos blockchain explorer proxy (to avoid CORS issues)
+  app.get('/api/elastos/transactions', authenticate, async (req: Request, res: Response) => {
+    try {
+      const { address, page = '1', pageSize = '20' } = req.query;
+      
+      if (!address || typeof address !== 'string') {
+        res.status(400).json({ error: 'Address is required' });
+        return;
+      }
+      
+      // Proxy to Elastos Smart Chain explorer API
+      const offset = (parseInt(page as string) - 1) * parseInt(pageSize as string);
+      const apiUrl = `https://esc.elastos.io/api?module=account&action=txlist&address=${address}&offset=${offset}&limit=${pageSize}&sort=desc`;
+      
+      const response = await fetch(apiUrl);
+      const data = await response.json();
+      
+      res.json(data);
+    } catch (error) {
+      logger.error('[Elastos Proxy] Error:', error);
+      res.status(500).json({ error: 'Failed to fetch Elastos transactions' });
+    }
+  });
+
+  // Backup management endpoints (require auth)
+  app.post('/api/backups/create', authenticate, createBackup);
+  app.get('/api/backups', authenticate, listBackups);
+  app.get('/api/backups/download/:filename', authenticate, downloadBackup);
+  app.delete('/api/backups/:filename', authenticate, deleteBackup);
+  app.post('/api/backups/restore', authenticate, restoreUpload.single('file'), restoreBackup);
 
   // Error handling middleware (must be last)
   app.use(errorHandler);

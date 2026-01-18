@@ -87,4 +87,3 @@ export function isStaticAsset(path: string): boolean {
 
   return staticExtensions.includes(ext);
 }
-

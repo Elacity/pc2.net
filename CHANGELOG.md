@@ -1,5 +1,74 @@
 # Changelog
 
+## PC2 - Personal Cloud Computer
+
+> PC2 is a sovereign fork of Puter, focused on self-hosted decentralized computing with blockchain authentication.
+
+---
+
+## [UNRELEASED] PC2 v1.0.0-alpha
+
+### 🎉 Major Features
+
+#### Blockchain Authentication (Particle Network)
+- **Wallet Login**: Login with MetaMask, WalletConnect, Coinbase Wallet, or social login
+- **Session Persistence**: Wallet sessions persist across page refreshes and device switches
+- **Particle Auth Integration**: Full Particle Network Connect SDK integration as an extension
+- **Wallet-Scoped Storage**: Each wallet address gets isolated, encrypted storage
+
+#### WASM Runtime (Phase 2.6 - 60% Complete)
+- **Server-side WASM Execution**: Run WebAssembly binaries on YOUR node, not in the browser
+- **WASI Support**: WebAssembly System Interface for file I/O (in progress)
+- **MemFS Integration**: In-memory filesystem for WASM modules
+- **Calculator Demo App**: Proof-of-concept showing computation on YOUR hardware
+
+#### IPFS Storage
+- **Decentralized File Storage**: Files stored on IPFS via Helia
+- **Node-local IPFS**: Your files stay on YOUR hardware
+- **Persistence Layer**: SQLite-backed file metadata
+
+#### AI Integration
+- **Local AI via Ollama**: Connect to local AI models
+- **Cloud AI Providers**: OpenAI, Claude, Groq, Mistral, and more
+- **AI Filesystem Tools**: AI can read, write, and manage files
+- **WebSocket Broadcasting**: Real-time AI events across sessions
+
+#### Backup & Restore
+- **One-click Backup**: Export your entire node to a zip file
+- **Restore to Any Node**: Import backup to any PC2 instance
+- **Database + Files**: Complete state preservation
+
+### 🏗️ Architecture Changes
+- **Extension System**: Particle Auth, PC2 Node, and IPFS as extensions
+- **Submodule Structure**: Particle Auth as a Git submodule for clean separation
+- **Config-driven Features**: `pc2_enabled` flag for PC2-specific functionality
+
+### 📋 Technical Details
+- Built on Puter v2.5.1 as upstream
+- Node.js 20+ required (23+ recommended)
+- SQLite for local persistence
+- Socket.io for real-time communication
+
+### 🐛 Known Issues
+- Preamble worker build warning (non-critical)
+- Some filesystem provider errors under WASM branch (non-critical)
+- WASI file I/O still in progress
+
+### 🔜 Coming Next
+- Docker image
+- Raspberry Pi image
+- SSL/TLS auto-configuration
+- DApp marketplace integration
+- dDRM (decentralized Digital Rights Management)
+
+---
+
+## Puter Upstream Changelog
+
+> The following is the changelog from the upstream Puter project.
+
+---
+
 ## v2.5.1 (2025-02-13)
 
 ### Puter

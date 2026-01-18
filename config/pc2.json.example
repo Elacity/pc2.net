@@ -1,11 +1,24 @@
 {
-    "config_name": "PC2 - Personal Cloud Compute",
+    "config_name": "PC2 - Personal Cloud Computer",
     "$imports": ["config.json"],
     
-    "_comment": "PC2 Configuration - Copy to volatile/config/pc2.json to use",
-    "_usage": "Start with: PUTER_CONFIG_PROFILE=pc2 npm start",
+    "_comment": "PC2 Configuration - Sovereign Cloud Computing",
+    "_usage": "Copy to volatile/config/pc2.json, then: PUTER_CONFIG_PROFILE=pc2 npm start",
     
     "services": {
+        "database": {
+            "engine": "sqlite",
+            "path": "pc2-database.sqlite"
+        },
+        "thumbnails": {
+            "engine": "purejs"
+        },
+        "file-cache": {
+            "disk_limit": 16384,
+            "disk_max_size": 16384,
+            "precache_size": 16384,
+            "path": "./file-cache"
+        },
         "mountpoint": {
             "mountpoints": {
                 "/": {
@@ -18,10 +31,24 @@
         }
     },
     
+    "pc2_enabled": true,
+    
     "pc2": {
         "enabled": true,
         "ipfs_node_url": "http://localhost:5001",
         "storage_mode": "ipfs"
-    }
+    },
+    
+    "_particle_auth_note": "Particle Auth credentials are configured in submodules/particle-auth/.env",
+    "_particle_auth_instructions": [
+        "1. Create account at https://dashboard.particle.network",
+        "2. Create a new project and get credentials",
+        "3. Copy submodules/particle-auth/.env.example to .env",
+        "4. Fill in VITE_PARTICLE_PROJECT_ID, VITE_PARTICLE_CLIENT_KEY, VITE_PARTICLE_APP_ID",
+        "5. Run: npm run build:particle-auth"
+    ],
+    
+    "_wasm_note": "WASM apps are stored in pc2-node/test-fresh-install/data/wasm-apps/",
+    
+    "_backup_note": "Backups are created via Settings > PC2 > Create Backup"
 }
-

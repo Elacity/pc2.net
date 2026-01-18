@@ -51,7 +51,8 @@ const logger = createLogger('WalletService');
 class WalletService {
     constructor() {
         // Wallet mode: 'universal' (Smart Account + multi-chain) or 'elastos' (EOA + ELA)
-        this.walletMode = 'universal';
+        // Default to 'elastos' for lightweight Web3 login (no Particle SDK)
+        this.walletMode = 'elastos';
         
         // Universal Account wallet data
         this.walletData = {
@@ -438,8 +439,16 @@ class WalletService {
     
     /**
      * Create or get the hidden particle-auth iframe for wallet operations
+     * NOTE: Only needed for Universal Account mode. Elastos mode uses direct RPC.
      */
     _getOrCreateIframe() {
+        // In Elastos mode, we don't need the Particle iframe at all
+        // Balance fetching uses direct Elastos RPC, transactions use window.ethereum
+        if (this.walletMode === 'elastos') {
+            logger.log('Elastos mode - skipping Particle iframe');
+            return null;
+        }
+        
         let iframe = document.getElementById('particle-wallet-iframe');
         
         if (!iframe) {
@@ -667,14 +676,19 @@ class WalletService {
     }
     
     /**
-     * Initialize wallet connection (create iframe if user is logged in)
-     * Call this early in app initialization if user has a wallet
+     * Initialize wallet connection
+     * - Elastos mode: Ready immediately (no iframe needed)
+     * - Universal mode: Create Particle iframe for Smart Account operations
      */
     initialize() {
         if (this.isConnected()) {
-            logger.log('User has wallet, initializing iframe...');
-            this._getOrCreateIframe();
-            // Don't auto-fetch on init - let sidebar trigger it when opened
+            if (this.walletMode === 'elastos') {
+                logger.log('User has wallet, Elastos mode - ready (no iframe needed)');
+                this._iframeReady = true; // Mark as ready since we don't need iframe
+            } else {
+                logger.log('User has wallet, initializing Particle iframe...');
+                this._getOrCreateIframe();
+            }
         }
     }
     
@@ -1535,9 +1549,14 @@ class WalletService {
             error: null,
         };
         
-        // Create new iframe with current user's addresses
+        // Initialize based on mode
         if (this.isConnected()) {
-            this._getOrCreateIframe();
+            if (this.walletMode === 'elastos') {
+                logger.log('Elastos mode - ready (no iframe needed)');
+                this._iframeReady = true;
+            } else {
+                this._getOrCreateIframe();
+            }
         }
     }
 }

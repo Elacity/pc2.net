@@ -25,6 +25,13 @@ import { CHAIN_INFO } from '../helpers/particle-constants.js';
 
 // Network asset support configuration
 const NETWORK_ASSET_SUPPORT = {
+    'Elastos': {
+        chainId: 20,
+        chainType: 'evm',
+        assets: ['ELA'],
+        gasWarning: false,
+        recommended: true, // Default for Elastos mode
+    },
     'Solana': {
         chainId: 101,
         chainType: 'solana',

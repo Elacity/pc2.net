@@ -163,13 +163,13 @@ function initPC2StatusBar() {
         // Note: Sign Out removed - users can use Log Out from profile dropdown instead
         if (isPC2Mode) {
             if (effectiveStatus !== 'connected') {
-                // Not authenticated - show sign in (triggers Particle Auth)
+                // Not authenticated - show sign in (Web3 wallet connect)
                 items.push({
                     html: 'Sign In',
                     onClick: () => {
-                        // Trigger Particle Auth login
-                        import('./UIWindowParticleLogin.js').then(({ default: UIWindowParticleLogin }) => {
-                            UIWindowParticleLogin({ reload_on_success: false });
+                        // Trigger lightweight Web3 login (Elastos EOA)
+                        import('./UIWindowWeb3Login.js').then(({ default: UIWindowWeb3Login }) => {
+                            UIWindowWeb3Login({ reload_on_success: false });
                         }).catch((err) => {
                             logger.error('[PC2]: Failed to open login:', err);
                         });

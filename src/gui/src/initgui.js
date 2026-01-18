@@ -21,7 +21,9 @@
 import UIDesktop from './UI/UIDesktop.js'
 import UIWindow from './UI/UIWindow.js'
 import UIAlert from './UI/UIAlert.js'
-import UIWindowParticleLogin from './UI/UIWindowParticleLogin.js';
+import UIWindowWeb3Login from './UI/UIWindowWeb3Login.js';
+// Legacy Particle login (heavy SDK) - kept for reference but not used
+// import UIWindowParticleLogin from './UI/UIWindowParticleLogin.js';
 import UIWindowSignup from './UI/UIWindowSignup.js';
 import path from "./lib/path.js";
 import UIWindowSaveAccount from './UI/UIWindowSaveAccount.js';
@@ -434,11 +436,10 @@ window.initgui = async function(options){
         await UIWindowChangeUsername();
     }
     //--------------------------------------------------------------------------------------
-    // Action: Login with Particle
+    // Action: Login with Web3 Wallet (Elastos EOA)
     //--------------------------------------------------------------------------------------
     else if(action === 'login'){
-        // await UIWindowParticleLogin();
-        window.location.href = '/particle-auth';
+        await UIWindowWeb3Login({ reload_on_success: true });
     }
     //--------------------------------------------------------------------------------------
     // Action: Signup
@@ -918,14 +919,14 @@ window.initgui = async function(options){
     
     if(!window.is_auth()){
         console.log('[initgui]: ❌ User is NOT authenticated');
-        // PC2: Always show Particle login directly (skip Puter session list)
-        // This ensures users see Particle Auth instead of Puter's standard login UI
-        console.log('[initgui]: Showing Particle login (PC2 mode - skipping session list)...');
-        // ELACITY: Embed Particle Auth inside the OS instead of redirecting
-        // Set reload_on_success to false so the desktop loads via the "login" event
-        console.log('[initgui]: Calling UIWindowParticleLogin()...');
-        await UIWindowParticleLogin({ reload_on_success: false });
-        console.log('[initgui]: ✅ UIWindowParticleLogin() completed');
+        // PC2: Show lightweight Web3 login (Elastos EOA via MetaMask)
+        // This is much faster than Particle SDK - no heavy iframe needed
+        console.log('[initgui]: Showing Web3 login (Elastos EOA mode)...');
+        // Use reload_on_success: true for clean desktop initialization
+        // The authenticated flow after reload properly initializes all UI components
+        console.log('[initgui]: Calling UIWindowWeb3Login()...');
+        await UIWindowWeb3Login({ reload_on_success: true });
+        console.log('[initgui]: ✅ UIWindowWeb3Login() completed');
     } else {
         console.log('[initgui]: ✅ User IS authenticated');
         // Mark initialization as complete when user is already authenticated
@@ -1517,6 +1518,26 @@ window.initgui = async function(options){
         // Clear PC2 session data
         localStorage.removeItem('pc2_session');
         localStorage.removeItem('pc2_config');
+        
+        // Clear ALL wagmi/RainbowKit/WalletConnect cached data
+        const keysToRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && (
+                key.startsWith('wagmi') || 
+                key.startsWith('rk-') || 
+                key.startsWith('wc@') || 
+                key.startsWith('WC') ||
+                key.includes('walletconnect') ||
+                key.includes('WALLETCONNECT')
+            )) {
+                keysToRemove.push(key);
+            }
+        }
+        keysToRemove.forEach(key => {
+            console.log('[Logout]: Clearing wallet cache key:', key);
+            localStorage.removeItem(key);
+        });
         
         // Clear sessionStorage to remove any cached auth
         sessionStorage.clear();

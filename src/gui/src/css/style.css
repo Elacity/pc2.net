@@ -1463,12 +1463,19 @@ input[type=text]:focus, input[type=password]:focus, input[type=email]:focus, sel
     width: max-content;
     margin: 0;
     pointer-events: all;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    text-align: left;
 }
 
 .device-phone .item-container-list .item {
     height: 50px;
     width: 100%;
     padding-left: 10px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
 }
 
 .item-container-details .item {
@@ -1557,15 +1564,19 @@ span.header-sort-icon img {
 }
 
 .item-container-list .item-icon {
-    float: left;
+    flex-shrink: 0;
     height: 15px;
     width: 15px;
+    margin-right: 6px;
+    padding: 0;
 }
 
 .device-phone .item-container-list .item-icon {
-    float: left;
+    flex-shrink: 0;
     height: 45px;
     width: 45px;
+    margin-right: 10px;
+    padding: 0;
 }
 
 .item-container-details .item-icon {
@@ -1682,9 +1693,16 @@ span.header-sort-icon img {
 }
 
 .item-container-list .item-name {
-    margin-top: 2px;
-    float: left;
+    margin: 0;
+    padding: 0;
     max-width: initial;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: flex;
+    align-items: center;
+    height: 15px;
+    line-height: 1;
 }
 
 .item-container-details .item-name {
@@ -1825,6 +1843,15 @@ span.header-sort-icon img {
     font-weight: 500;
     font-size: 13px;
     margin-left: 3px;
+}
+
+.window-body .item-container-list .item .item-name {
+    padding: 0;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    height: 15px;
+    line-height: 1;
 }
 
 .device-phone .item-container-list .item .item-name {

@@ -29,7 +29,7 @@ const refresh_item_container = function (el_item_container, options) {
     options = options || {};
 
     let container_path =  $(el_item_container).attr('data-path');
-    console.log('[refresh_item_container] Refreshing container:', container_path, 'element classes:', $(el_item_container).attr('class'));
+    false && console.log('[refresh_item_container] Refreshing container:', container_path, 'element classes:', $(el_item_container).attr('class'));
     let el_window = $(el_item_container).closest('.window');
     let el_window_head_icon = $(el_window).find('.window-head-icon');
     const loading_spinner = $(el_item_container).find('.explorer-loading-spinner');
@@ -86,6 +86,30 @@ const refresh_item_container = function (el_item_container, options) {
             $(el_window).attr('data-path', html_encode(container_path));
             $(el_window).find('.window-navbar-path-input').val(container_path);
             $(el_window).find('.window-navbar-path-input').attr('data-path', container_path);
+            
+            // Handle Public folder banner - remove first, then add if needed
+            const windowBody = el_window.find('.window-body')[0];
+            if (windowBody) {
+                // Always remove existing banner first
+                const existingBanner = windowBody.querySelector('.public-folder-banner');
+                if (existingBanner) {
+                    existingBanner.remove();
+                }
+                
+                // Check if this is the Public folder (path ends with /Public or contains /Public/)
+                const isPublicFolder = container_path && (
+                    container_path.endsWith('/Public') || 
+                    container_path.includes('/Public/')
+                );
+                
+                if (isPublicFolder) {
+                    const banner = document.createElement('div');
+                    banner.className = 'public-folder-banner';
+                    banner.style.cssText = 'display: flex; align-items: center; gap: 8px; padding: 10px 15px; margin: 10px 10px 0 10px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; font-size: 12px; color: #856404; position: relative; z-index: 10;';
+                    banner.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg><span><strong>Public Folder</strong> - Files here are publicly accessible via IPFS. Anyone with the link can find them.</span>';
+                    windowBody.insertBefore(banner, windowBody.firstChild);
+                }
+            }
         }
         $(el_item_container).attr('data-sort_by', fsentry.sort_by ?? 'name');
         $(el_item_container).attr('data-sort_order', fsentry.sort_order ?? 'asc');
@@ -230,6 +254,7 @@ const refresh_item_container = function (el_item_container, options) {
                         disabled: is_disabled,
                         visible: visible,
                         position: position,
+                        ipfs_hash: fsentry.ipfs_hash,
                     });
                 }
             }
@@ -260,7 +285,7 @@ const refresh_item_container = function (el_item_container, options) {
                         });
                         window.sort_items(el_item_container, $(el_item_container).attr('data-sort_by'), $(el_item_container).attr('data-sort_order'));
                     } else {
-                        console.log('[refresh_item_container]: Trash icon already exists, skipping duplicate');
+                        false && console.log('[refresh_item_container]: Trash icon already exists, skipping duplicate');
                     }
                 } catch (e) {
                     // Log error for debugging (but don't break the UI)

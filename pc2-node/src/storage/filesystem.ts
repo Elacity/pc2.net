@@ -36,6 +36,13 @@ export class FilesystemManager {
   }
 
   /**
+   * Get the IPFS storage instance (for public gateway)
+   */
+  getIPFS(): IPFSStorage | null {
+    return this.ipfs;
+  }
+
+  /**
    * Normalize file path
    */
   private normalizePath(path: string): string {

@@ -400,6 +400,16 @@ async function UIWindow(options) {
 
             // Directory
             if(options.is_dir){
+                // Public folder info banner - shown only for Public folder (BEFORE table headers so it stays at top)
+                const isPublicFolder = options.path && (options.path.includes('/Public') || options.path === window.public_path);
+                false && console.log('[UIWindow] Directory path:', options.path, 'isPublicFolder:', isPublicFolder, 'window.public_path:', window.public_path);
+                if (isPublicFolder) {
+                    h += `<div class="public-folder-banner" style="display: flex; align-items: center; gap: 8px; padding: 10px 15px; margin: 0 0 10px 0; background: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; font-size: 12px; color: #856404; position: sticky; top: 0; z-index: 10;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+                        <span><strong>Public Folder</strong> - Files here are accessible via the IPFS gateway. Anyone with the link can find them.</span>
+                    </div>`;
+                }
+                
                 // Detail layout header
                 h += window.explore_table_headers();
                 
@@ -562,6 +572,20 @@ async function UIWindow(options) {
             window.init_upload_using_dialog(el_window_body, $(el_window).attr('data-path') + '/');
         });
     }
+
+    // Inject Public folder banner dynamically (more reliable than static HTML generation)
+    if (options.is_dir && el_window_body) {
+        const windowPath = options.path || '';
+        const isPublicFolder = windowPath.includes('/Public');
+        false && console.log('[UIWindow] Dynamic banner check - path:', windowPath, 'isPublic:', isPublicFolder);
+        if (isPublicFolder && !el_window_body.querySelector('.public-folder-banner')) {
+            const banner = document.createElement('div');
+            banner.className = 'public-folder-banner';
+            banner.style.cssText = 'display: flex; align-items: center; gap: 8px; padding: 10px 15px; margin: 10px 10px 0 10px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; font-size: 12px; color: #856404; position: sticky; top: 0; z-index: 10;';
+            banner.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg><span><strong>Public Folder</strong> - Files here are publicly accessible via IPFS. Anyone with the link can find them.</span>';
+            el_window_body.insertBefore(banner, el_window_body.firstChild);
+        }
+    }
     // attach optional event listeners
     el_window.on_before_exit = options.on_before_exit;
 
@@ -629,7 +653,7 @@ async function UIWindow(options) {
     // Run this after a short delay to ensure all plugins are initialized
     if (options.is_maximized) {
         setTimeout(() => {
-            console.log('[UIWindow] Window created maximized, applying full viewport fix');
+            false && console.log('[UIWindow] Window created maximized, applying full viewport fix');
             window.update_maximized_window_for_taskbar(el_window);
         }, 50);
     }

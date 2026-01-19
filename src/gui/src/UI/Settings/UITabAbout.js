@@ -21,7 +21,7 @@
 export default {
     id: 'about',
     title_i18n_key: 'about',
-    icon: 'logo-outline.svg',
+    icon: 'info-outline.svg',
     html: () => {
         // Check if we're in PC2 mode
         const isPC2Mode = window.api_origin && (

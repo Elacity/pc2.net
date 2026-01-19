@@ -182,5 +182,67 @@ router.get('/usage', authenticate, async (req: AuthenticatedRequest, res: Respon
   }
 });
 
+/**
+ * GET /api/storage/limit
+ * Returns the current storage limit setting
+ */
+router.get('/limit', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const db = req.app.locals.db;
+    
+    if (!req.user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    
+    const limitSetting = db?.getSetting('storage_limit') || 'auto';
+    res.json({ limit: limitSetting });
+  } catch (error) {
+    logger.error('[Storage API]: Error getting storage limit:', error);
+    res.status(500).json({ error: 'Failed to get storage limit' });
+  }
+});
+
+/**
+ * POST /api/storage/limit
+ * Sets the storage limit preference
+ */
+router.post('/limit', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const db = req.app.locals.db;
+    
+    if (!req.user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    
+    const { limit } = req.body;
+    
+    // Validate limit value
+    const validLimits = ['auto', '10GB', '25GB', '50GB', '100GB', '250GB', '500GB', 'unlimited'];
+    if (!validLimits.includes(limit)) {
+      return res.status(400).json({ error: 'Invalid limit value', validValues: validLimits });
+    }
+    
+    db?.setSetting('storage_limit', limit);
+    
+    // Update global config so it takes effect immediately
+    if (!(global as any).pc2Config) {
+      (global as any).pc2Config = {};
+    }
+    if (!(global as any).pc2Config.resources) {
+      (global as any).pc2Config.resources = {};
+    }
+    if (!(global as any).pc2Config.resources.storage) {
+      (global as any).pc2Config.resources.storage = {};
+    }
+    (global as any).pc2Config.resources.storage.limit = limit;
+    
+    logger.info(`[Storage API]: Storage limit set to ${limit}`);
+    res.json({ success: true, limit });
+  } catch (error) {
+    logger.error('[Storage API]: Error setting storage limit:', error);
+    res.status(500).json({ error: 'Failed to set storage limit' });
+  }
+});
+
 export default router;
 

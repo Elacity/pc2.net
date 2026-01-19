@@ -98,6 +98,7 @@ function UIItem (options) {
                 data-type = "${html_encode(options.type) ?? ''}"
                 data-modified = "${options.modified ?? ''}"
                 data-associated_app_name = "${html_encode(options.associated_app_name) ?? ''}"
+                data-ipfs_hash = "${html_encode(options.ipfs_hash) ?? ''}"
                 data-path="${html_encode(options.path)}">`;
 
     // spinner
@@ -164,6 +165,14 @@ function UIItem (options) {
                         src="${html_encode(window.icons['shortcut.svg'])}" 
                         data-item-id="${item_id}"
                         title="${i18n('item_shortcut')}"
+                    >`;
+    // public IPFS badge (for files in /Public folder)
+    const isInPublicFolder = options.path && (options.path.includes('/Public/') || (window.public_path && options.path.startsWith(window.public_path)));
+    h += `<img  class="item-badge item-is-public-ipfs" 
+                        style="background-color: #d4edda; padding: 2px; border-radius: 50%; ${isInPublicFolder ? 'display:block;' : ''}" 
+                        src="${html_encode(window.icons['world.svg'])}" 
+                        data-item-id="${item_id}"
+                        title="Publicly accessible via IPFS gateway"
                     >`;
 
     h += '</div>';
@@ -527,11 +536,30 @@ function UIItem (options) {
                 }
                 // Otherwise, move items
                 else if ( options.is_dir ) {
+                    const targetPath = $(el_item).attr('data-shortcut_to_path') !== '' ? $(el_item).attr('data-shortcut_to_path') : $(el_item).attr('data-path');
+                    const isMovingToPublic = targetPath && (targetPath.includes('/Public') || targetPath === window.public_path);
+                    
+                    // Check if moving to Public folder - show confirmation
+                    if (isMovingToPublic) {
+                        const fileNames = items_to_move.map(item => $(item).attr('data-name')).join(', ');
+                        const confirmMessage = items_to_move.length === 1 
+                            ? `"${fileNames}" will be publicly accessible via IPFS. Anyone with the link can view this file. Continue?`
+                            : `${items_to_move.length} files will be publicly accessible via IPFS. Anyone with the link can view them. Continue?`;
+                        
+                        if (!confirm(confirmMessage)) {
+                            // User cancelled - restore item positions
+                            for (let i = 0; i < items_to_move.length; i++) {
+                                $(items_to_move[i]).removeClass('item-selected');
+                            }
+                            return false;
+                        }
+                    }
+                    
                     if ( $(el_item).closest('.item-container').attr('data-path') === window.desktop_path ) {
                         delete window.desktop_item_positions[$(el_item).attr('data-uid')];
                         window.save_desktop_item_positions();
                     }
-                    window.move_items(items_to_move, $(el_item).attr('data-shortcut_to_path') !== '' ? $(el_item).attr('data-shortcut_to_path') : $(el_item).attr('data-path'));
+                    window.move_items(items_to_move, targetPath);
                 }
             }
 
@@ -1598,6 +1626,47 @@ function UIItem (options) {
             // -
             // -------------------------------------------
             menu_items.push('-');
+            // -------------------------------------------
+            // Copy IPFS CID (if file has IPFS hash)
+            // -------------------------------------------
+            const itemIpfsHash = $(el_item).attr('data-ipfs_hash') || $(el_item).attr('data-ipfs-hash');
+            if (itemIpfsHash) {
+                menu_items.push({
+                    html: 'Copy IPFS CID',
+                    onClick: function () {
+                        navigator.clipboard.writeText(itemIpfsHash).then(() => {
+                            // Show brief notification
+                            puter.ui.toast && puter.ui.toast('CID copied to clipboard');
+                        }).catch(err => {
+                            console.error('Failed to copy CID:', err);
+                        });
+                    },
+                });
+                // Copy Gateway URL and Open in Gateway (for public files)
+                const itemPath = $(el_item).attr('data-path');
+                const isPublicFile = itemPath && (itemPath.includes('/Public/') || (window.public_path && itemPath.startsWith(window.public_path)));
+                if (isPublicFile) {
+                    const apiOrigin = window.api_origin || window.location.origin;
+                    const gatewayUrl = `${apiOrigin}/ipfs/${itemIpfsHash}`;
+                    menu_items.push({
+                        html: 'Copy Gateway URL',
+                        onClick: function () {
+                            navigator.clipboard.writeText(gatewayUrl).then(() => {
+                                puter.ui.toast && puter.ui.toast('Gateway URL copied to clipboard');
+                            }).catch(err => {
+                                console.error('Failed to copy gateway URL:', err);
+                            });
+                        },
+                    });
+                    menu_items.push({
+                        html: 'Open in Gateway',
+                        onClick: function () {
+                            window.open(gatewayUrl, '_blank');
+                        },
+                    });
+                }
+                menu_items.push('-');
+            }
             // -------------------------------------------
             // Properties
             // -------------------------------------------

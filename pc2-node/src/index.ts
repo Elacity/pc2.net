@@ -1,5 +1,5 @@
 import { createServer } from './server.js';
-import { DatabaseManager, IPFSStorage, FilesystemManager } from './storage/index.js';
+import { DatabaseManager, IPFSStorage, FilesystemManager, type IPFSNetworkMode } from './storage/index.js';
 import { loadConfig, type Config } from './config/loader.js';
 import { logger } from './utils/logger.js';
 import { AIChatService } from './services/ai/AIChatService.js';
@@ -60,14 +60,23 @@ async function main() {
 
   // Initialize IPFS
   try {
+    // Get IPFS config from config file
+    const ipfsConfig = (config as any).ipfs || {};
+    const ipfsMode = (ipfsConfig.mode || 'private') as IPFSNetworkMode;
+    
     ipfs = new IPFSStorage({
-      repoPath: IPFS_REPO_PATH
+      repoPath: IPFS_REPO_PATH,
+      mode: ipfsMode,
+      enableDHT: ipfsConfig.enable_dht,
+      enableBootstrap: ipfsConfig.enable_bootstrap,
+      customBootstrap: ipfsConfig.custom_bootstrap
     });
     await ipfs.initialize();
     
     // Create filesystem manager
     filesystem = new FilesystemManager(ipfs, db);
     logger.info('✅ Filesystem manager initialized');
+    logger.info(`   IPFS mode: ${ipfsMode}`);
   } catch (error) {
     logger.error('❌ Failed to initialize IPFS:', error);
     logger.warn('   File storage will not be available');

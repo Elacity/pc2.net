@@ -20,36 +20,6 @@
 import path from "../lib/path.js"
 import UIWindowClaimReferral from "./UIWindowClaimReferral.js"
 
-// Debug logging - set to true for verbose event logging
-const DEBUG_SOCKET_EVENTS = false;
-
-// Event deduplication cache - prevents processing same event twice from multiple socket connections
-const processedEvents = new Map();
-const EVENT_DEDUP_TTL = 2000; // 2 seconds TTL for dedup cache
-
-function isDuplicateEvent(eventType, item) {
-    const key = `${eventType}:${item.uid || item.path || JSON.stringify(item)}`;
-    const now = Date.now();
-    
-    // Clean old entries
-    for (const [k, timestamp] of processedEvents) {
-        if (now - timestamp > EVENT_DEDUP_TTL) {
-            processedEvents.delete(k);
-        }
-    }
-    
-    if (processedEvents.has(key)) {
-        return true; // Duplicate
-    }
-    
-    processedEvents.set(key, now);
-    return false;
-}
-
-// Conditional debug logging
-function debugLog(...args) {
-    if (DEBUG_SOCKET_EVENTS) console.log(...args);
-}
 import UIContextMenu from './UIContextMenu.js'
 import UIItem from './UIItem.js'
 import UIAlert from './UIAlert.js'
@@ -79,11 +49,21 @@ import initPC2StatusBar from "./UIPC2StatusBar.js"
 import UIAIChat from "./AI/UIAIChat.js"
 
 async function UIDesktop(options) {
+    // Guard against multiple UIDesktop calls
+    // This prevents socket disconnection issues when the function is called multiple times
+    if (window._uidesktop_initialized) {
+        false && console.log('[UIDesktop] Already initialized, skipping duplicate call');
+        // If socket exists but disconnected, just let it reconnect automatically
+        return;
+    }
+    window._uidesktop_initialized = true;
+    false && console.log('[UIDesktop] First initialization');
+    
     let h = '';
 
     // Initialize wallet service early if user has a wallet
     if (window.user?.wallet_address) {
-        debugLog('[UIDesktop] Initializing wallet service');
+        false && console.log('[UIDesktop] Initializing wallet service');
         walletService.initialize();
     }
 
@@ -181,41 +161,50 @@ async function UIDesktop(options) {
             puter.kv.set('has_set_default_app_user_permissions', true);
         }
     })
-    // connect socket - reuse SDK socket if available to avoid duplicate connections
-    if (window.puter?.socket?.connected) {
-        window.socket = window.puter.socket;
-    } else if (puter?.socket?.connected) {
-        window.socket = puter.socket;
-    } else {
-        window.socket = io(window.gui_origin + '/', {
-            auth: {
-                auth_token: window.auth_token
-            }
-        });
-    }
+    
+    // connect socket
+    window.socket = io(window.gui_origin + '/', {
+        auth: {
+            auth_token: window.auth_token
+        }
+    });
 
     window.socket.on('error', (error) => {
-        console.error('Socket error:', error);
+        console.error('[Socket] Error:', error);
     });
 
     window.socket.on('connect', function () {
+        false && console.log('[Socket] ✅ Connected:', window.socket.id);
+        // Explicitly authenticate to ensure we join the room
+        if (window.auth_token) {
+            window.socket.emit('authenticate', { auth_token: window.auth_token });
+        }
         window.socket.emit('puter_is_actually_open');
+    });
+    
+    // Listen for authentication confirmation
+    window.socket.on('authenticated', (data) => {
+        false && console.log('[Socket] ✅ Authenticated, room:', data?.room);
+    });
+    
+    window.socket.on('connected', (data) => {
+        // Connection confirmed - no need to log
     });
 
     window.socket.on('reconnect', function () {
-        console.log('GUI Socket: Reconnected', window.socket.id);
+        false && console.log('[Socket] Reconnected');
     });
 
     window.socket.on('disconnect', () => {
-        console.log('GUI Socket: Disconnected');
+        false && console.log('[Socket] Disconnected');
     });
 
     window.socket.on('reconnect', (attempt) => {
-        console.log('GUI Socket: Reconnection', attempt);
+        // Duplicate handler - keep silent
     });
 
     window.socket.on('reconnect_attempt', (attempt) => {
-        console.log('GUI Socket: Reconnection Attemps', attempt);
+        // Reconnection attempts - keep silent
     });
 
     window.socket.on('reconnect_error', (error) => {
@@ -385,14 +374,19 @@ async function UIDesktop(options) {
     })
 
     window.socket.on('item.removed', async (item) => {
-        // Deduplicate events from multiple socket connections
-        if (isDuplicateEvent('item.removed', item)) return;
+        console.log('[Frontend] ✅ Received item.removed event:', item, 'socket.id:', window.socket.id);
         
         // don't update if this is the original client that initiated the action
-        if (item.original_client_socket_id === window.socket.id) return;
+        if (item.original_client_socket_id === window.socket.id) {
+            console.log('[Frontend] ⏭️  Skipping item.removed - same client');
+            return;
+        }
 
         // don't remove items if this was a descendants_only operation
-        if (item.descendants_only) return;
+        if (item.descendants_only) {
+            console.log('[Frontend] ⏭️  Skipping item.removed - descendants_only operation');
+            return;
+        }
         // Use html_encode for path selector (matching other handlers)
         const encodedPath = html_encode(item.path);
         const matchingItems = $(`.item[data-path="${encodedPath}" i]`);
@@ -420,7 +414,7 @@ async function UIDesktop(options) {
     })
 
     window.socket.on('item.updated', async (item) => {
-        debugLog('[UIDesktop] item.updated event received', {
+        false && console.log('[UIDesktop] item.updated event received', {
             uid: item.uid,
             path: item.path,
             hasThumbnail: !!item.thumbnail,
@@ -435,7 +429,7 @@ async function UIDesktop(options) {
         
         // Don't update if this is the original client that initiated the action (unless it's a thumbnail update)
         if (!isThumbnailUpdate && item.original_client_socket_id === window.socket.id) {
-            debugLog('[UIDesktop] Skipping item.updated - same client');
+            false && console.log('[UIDesktop] Skipping item.updated - same client');
             return;
         }
 
@@ -448,11 +442,11 @@ async function UIDesktop(options) {
         if (item.thumbnail && !item.is_dir) {
             // Use provided thumbnail URL directly (includes cache-busting for live updates)
             new_icon = item.thumbnail;
-            debugLog('[UIDesktop] Using provided thumbnail');
+            false && console.log('[UIDesktop] Using provided thumbnail');
         } else {
             // Generate icon via item_icon (for non-image files or when thumbnail not provided)
             new_icon = (item.is_dir ? window.icons['folder.svg'] : (await item_icon(item)).image);
-            debugLog('[UIDesktop] Generated icon via item_icon');
+            false && console.log('[UIDesktop] Generated icon via item_icon');
         }
         
         // Find elements and force reload
@@ -468,7 +462,7 @@ async function UIDesktop(options) {
                 
                 if (containers.length > 0) {
                     // Refresh the container to ensure the item is created
-                    debugLog('[UIDesktop] Refreshing container:', containerPath);
+                    false && console.log('[UIDesktop] Refreshing container:', containerPath);
                     await refresh_item_container(containers[0], { consistency: 'strong' });
                     
                     // Try to find the item again after refresh
@@ -489,7 +483,7 @@ async function UIDesktop(options) {
         const thumbElement = itemElements.find('.item-icon-thumb');
         const iconElement = itemElements.find('.item-icon-icon');
         
-        debugLog('[UIDesktop] Updating thumbnail', {
+        false && console.log('[UIDesktop] Updating thumbnail', {
             foundElements: itemElements.length,
             foundThumb: thumbElement.length,
             foundIcon: iconElement.length,
@@ -511,7 +505,7 @@ async function UIDesktop(options) {
             img.onload = function() {
                 // Image loaded successfully, update the element
                 element.attr('src', cacheBuster);
-                debugLog('[UIDesktop] Thumbnail image loaded', {
+                false && console.log('[UIDesktop] Thumbnail image loaded', {
                     old: oldSrc?.substring(0, 50),
                     new: cacheBuster.substring(0, 50)
                 });
@@ -536,7 +530,7 @@ async function UIDesktop(options) {
             if (parentContainer.length > 0) {
                 const containerPath = parentContainer.attr('data-path');
                 if (containerPath) {
-                    debugLog('[UIDesktop] Refreshing parent container:', containerPath);
+                    false && console.log('[UIDesktop] Refreshing parent container:', containerPath);
                     // Trigger a lightweight refresh of just this item's container
                     // This ensures the thumbnail is fully updated
                     refresh_item_container(parentContainer[0], { consistency: 'strong' });
@@ -592,30 +586,17 @@ async function UIDesktop(options) {
     })
 
     window.socket.on('item.moved', async (resp) => {
-        // Deduplicate events from multiple socket connections
-        if (isDuplicateEvent('item.moved', resp)) return;
         try {
+            // Single consolidated log for item.moved
+            false && console.log('[item.moved] 📦', resp.old_path, '→', resp.path);
             
             let fsentry = resp;
             
             // Validate fsentry has required fields
             if (!fsentry || !fsentry.uid || !fsentry.path) {
-                console.error('[Frontend] ❌ Invalid item.moved event data:', fsentry);
-                return; // Skip invalid events silently
+                console.error('[item.moved] ❌ Invalid event data');
+                return;
             }
-            
-            // Log received fields for debugging
-            debugLog('[Frontend] item.moved fields:', {
-                uid: fsentry.uid,
-                path: fsentry.path,
-                old_path: fsentry.old_path,
-                name: fsentry.name,
-                is_dir: fsentry.is_dir,
-                size: fsentry.size,
-                type: fsentry.type,
-                modified: fsentry.modified,
-                has_metadata: !!fsentry.metadata
-            });
             
             // Notify all apps that are watching this item (with safe name access)
             const safeName = fsentry.name || fsentry.path.split('/').pop() || 'untitled';
@@ -632,14 +613,11 @@ async function UIDesktop(options) {
 
         // don't update if this is the original client that initiated the action
         if (resp.original_client_socket_id === window.socket.id) {
-            debugLog('[Frontend] Skipping item.moved - same client');
             return;
         }
 
         let dest_path = path.dirname(fsentry.path);
         let metadata = fsentry.metadata;
-        
-        debugLog('[Frontend] Move destination path:', dest_path);
 
         // update all shortcut_to_path
         $(`.item[data-shortcut_to_path="${html_encode(resp.old_path)}" i]`).attr(`data-shortcut_to_path`, html_encode(fsentry.path));
@@ -649,35 +627,20 @@ async function UIDesktop(options) {
         // Use html_encode for path selector to ensure correct matching
         const encodedOldPath = html_encode(resp.old_path);
         const oldPathItems = $(`.item[data-path="${encodedOldPath}" i]`);
-        debugLog('[Frontend] Removing items from old location:', {
-            old_path: resp.old_path,
-            encoded_old_path: encodedOldPath,
-            found_items: oldPathItems.length,
-            item_uids: oldPathItems.map((i, el) => $(el).attr('data-uid')).get()
-        });
         
         oldPathItems.fadeOut(150, function () {
-            // find all parent windows that contain this item BEFORE removing
             const parent_windows = $(this).closest('.window');
-            // remove this item
             $(this).removeItems();
-            // update parent windows' item counts
             $(parent_windows).each(function (index) {
                 window.update_explorer_footer_item_count(this);
                 window.update_explorer_footer_selected_items_count(this)
             });
-            debugLog('[Frontend] Removed item from old location:', resp.old_path);
         });
         
         // Also try to remove by old UID (in case UID format is consistent)
-        // Generate old UID the same way backend does: uuid-${oldPath.replace(/\//g, '-')}
         const oldUid = `uuid-${resp.old_path.replace(/\//g, '-')}`;
         const oldUidItems = $(`.item[data-uid='${oldUid}']`);
         if (oldUidItems.length > 0) {
-            debugLog('[Frontend] Also removing items by old UID:', {
-                old_uid: oldUid,
-                found_items: oldUidItems.length
-            });
             oldUidItems.fadeOut(150, function () {
                 const parent_windows = $(this).closest('.window');
                 $(this).removeItems();
@@ -726,12 +689,10 @@ async function UIDesktop(options) {
 
         // create new item on matching containers
         const destContainer = $(`.item-container[data-path='${html_encode(dest_path)}' i]`);
-        debugLog('[Frontend] Found', destContainer.length, 'container(s) for path:', dest_path);
         
         if (destContainer.length === 0) {
-            console.warn('[Frontend] ⚠️  No container found for destination path:', dest_path);
-            console.warn('[Frontend] 🔍 Available containers:', Array.from($('.item-container')).map(el => $(el).attr('data-path')).filter(Boolean));
-            return; // Can't add item if no container exists
+            // Container not open, no UI update needed
+            return;
         }
         
         // Use metadata fields as fallback if top-level fields are missing
@@ -752,19 +713,7 @@ async function UIDesktop(options) {
         const existingItemByPath = $(`.item[data-path="${html_encode(fsentry.path)}" i]`);
         
         if (existingItemByUid.length > 0 || existingItemByPath.length > 0) {
-            debugLog('[Frontend] Item already exists in item.moved, skipping:', {
-                uid: fsentry.uid,
-                path: fsentry.path,
-                existing_by_uid: existingItemByUid.length,
-                existing_by_path: existingItemByPath.length,
-                existing_locations: existingItemByUid.map((i, el) => ({
-                    uid: $(el).attr('data-uid'),
-                    path: $(el).attr('data-path'),
-                    container_path: $(el).closest('.item-container').attr('data-path')
-                })).get()
-            });
-            
-            // Update existing item's icon if thumbnail is now available (especially important for desktop moves)
+            // Update existing item's icon if thumbnail is now available
             if (thumbnail) {
                 const iconFsentry = {
                     ...fsentry,
@@ -778,26 +727,17 @@ async function UIDesktop(options) {
                     const iconResult = await item_icon(iconFsentry);
                     existingItemByUid.find('.item-icon-thumb').attr('src', iconResult.image);
                     existingItemByUid.find('.item-icon-icon').attr('src', iconResult.image);
-                    debugLog('[Frontend] Updated existing item icon:', {
-                        thumbnail: thumbnail,
-                        icon_image: iconResult.image,
-                        icon_type: iconResult.type
-                    });
                 } catch (iconError) {
-                    console.error('[Frontend] ❌ Error updating icon for existing item:', iconError);
+                    // Ignore icon errors
                 }
             }
             
-            // Also ensure item is in the correct container (move it if needed)
+            // Ensure item is in the correct container (move it if needed)
             const correctContainer = $(`.item-container[data-path='${html_encode(dest_path)}' i]`);
             if (correctContainer.length > 0 && existingItemByUid.length > 0) {
                 const currentContainer = existingItemByUid.closest('.item-container');
                 const currentContainerPath = currentContainer.attr('data-path');
                 if (currentContainerPath !== dest_path) {
-                    debugLog('[Frontend] Moving existing item to container:', {
-                        from: currentContainerPath,
-                        to: dest_path
-                    });
                     existingItemByUid.appendTo(correctContainer);
                 }
             }
@@ -805,37 +745,21 @@ async function UIDesktop(options) {
             return; // Don't create duplicate
         }
         if (!fsentry.name) {
-            console.warn('[Frontend] ⚠️  fsentry.name is undefined, using filename from path:', itemName);
             fsentry.name = itemName;
         }
         
-        // Ensure fsentry has all required properties for item_icon, including thumbnail
+        // Ensure fsentry has all required properties for item_icon
         const iconFsentry = {
             ...fsentry,
             name: itemName,
             is_dir: is_dir,
             type: type,
             path: fsentry.path,
-            thumbnail: thumbnail // Include thumbnail for proper icon display
+            thumbnail: thumbnail
         };
-        
-        debugLog('[Frontend] Creating UIItem:', {
-            dest_path,
-            uid: fsentry.uid,
-            name: itemName,
-            is_dir,
-            size,
-            type,
-            modified,
-            has_icon_data: !!iconFsentry.name
-        });
         
         try {
             const iconResult = await item_icon(iconFsentry);
-            debugLog('[Frontend] Icon result:', {
-                has_image: !!iconResult?.image,
-                icon_type: iconResult?.type
-            });
             
             UIItem({
                 appendTo: destContainer,
@@ -853,11 +777,10 @@ async function UIDesktop(options) {
                 is_shortcut: fsentry.is_shortcut,
                 shortcut_to: fsentry.shortcut_to,
                 shortcut_to_path: fsentry.shortcut_to_path,
-                // has_website: $(el_item).attr('data-has_website') === '1',
                 metadata: JSON.stringify(fsentry.metadata || {}) ?? '',
             });
             
-            debugLog('[Frontend] UIItem created for moved file');
+            false && console.log('[item.moved] ✅ Created item in', dest_path);
         } catch (iconError) {
             console.error('[Frontend] ❌ Error creating icon for moved file:', iconError);
             // Fallback: create item with default icon
@@ -879,7 +802,7 @@ async function UIDesktop(options) {
                 shortcut_to_path: fsentry.shortcut_to_path,
                 metadata: JSON.stringify(fsentry.metadata || {}) ?? '',
             });
-            debugLog('[Frontend] UIItem created with fallback icon');
+            console.log('[Frontend] UIItem created with fallback icon');
         }
 
         if (fsentry && fsentry.parent_dirs_created && fsentry.parent_dirs_created.length > 0) {
@@ -914,29 +837,8 @@ async function UIDesktop(options) {
             window.sort_items(this, $(this).attr('data-sort_by'), $(this).attr('data-sort_order'))
         })
         } catch (error) {
-            // CRITICAL: Catch all errors to prevent error dialogs from appearing
-            // Log error but don't show popup - real-time updates should be silent
-            console.error('[Frontend] ❌ Error in item.moved handler:', error);
-            console.error('[Frontend] ❌ Error details:', {
-                error_message: error?.message,
-                error_stack: error?.stack,
-                fsentry: typeof fsentry !== 'undefined' ? {
-                    uid: fsentry?.uid,
-                    path: fsentry?.path,
-                    old_path: fsentry?.old_path,
-                    has_name: !!fsentry?.name,
-                    has_metadata: !!fsentry?.metadata
-                } : 'fsentry is undefined',
-                resp: resp ? {
-                    uid: resp.uid,
-                    path: resp.path,
-                    old_path: resp.old_path,
-                    has_name: !!resp.name
-                } : 'resp is null/undefined'
-            });
-            // Don't show UIAlert - just log and continue
-            // The file move succeeded on the backend, we just failed to update the UI
-            // User can refresh if needed, but most moves will work fine
+            // Silent error handling - don't show popup for real-time updates
+            console.error('[item.moved] ❌ Error:', error.message);
         }
     });
 
@@ -980,7 +882,7 @@ async function UIDesktop(options) {
         // Find all items with the old path
         const itemsByOldPath = $(`.item[data-path="${html_encode(oldPath)}"]`);
         
-        debugLog('[Frontend] item.renamed: updating items', {
+        console.log('[Frontend] item.renamed: updating items', {
             old_path: oldPath,
             new_path: newPath,
             new_uid: newUid,
@@ -1020,7 +922,7 @@ async function UIDesktop(options) {
         $(`.item[data-uid='${newUid}']`).find('.item-icon-thumb').attr('src', new_icon);
         $(`.item[data-uid='${newUid}']`).find('.item-icon-icon').attr('src', new_icon);
         
-        debugLog('[Frontend] Updated icon after rename:', {
+        console.log('[Frontend] Updated icon after rename:', {
             uid: newUid,
             name: item.name,
             path: newPath,
@@ -1079,7 +981,7 @@ async function UIDesktop(options) {
             const windowEl = $(this);
             // Check if this is a properties window (has class window-item-properties)
             if (windowEl.hasClass('window-item-properties')) {
-                debugLog('[Frontend] Refreshing properties window after rename', {
+                console.log('[Frontend] Refreshing properties window after rename', {
                     old_path: oldPath,
                     new_path: newPath,
                     new_uid: newUid
@@ -1116,11 +1018,13 @@ async function UIDesktop(options) {
     });
 
     window.socket.on('item.added', async (item) => {
-        // Deduplicate events from multiple socket connections
-        if (isDuplicateEvent('item.added', item)) return;
+        console.log('[Frontend] ✅ Received item.added event:', item, 'socket.id:', window.socket.id);
         
         // if item is empty, don't proceed
-        if (_.isEmpty(item)) return;
+        if (_.isEmpty(item)) {
+            console.log('[Frontend] ⏭️  Skipping item.added - empty item');
+            return;
+        }
 
         // Notify all apps that are watching this item
         window.sendItemChangeEventToWatchingApps(item.uid, {
@@ -1134,7 +1038,7 @@ async function UIDesktop(options) {
 
         // Don't update if this is the original client that initiated the action
         if (item.original_client_socket_id === window.socket.id) {
-            debugLog('[Frontend] Skipping item.added - same client');
+            console.log('[Frontend] Skipping item.added - same client');
             return;
         }
 
@@ -1166,7 +1070,7 @@ async function UIDesktop(options) {
             const existingItemByPath = $(`.item[data-path="${html_encode(item.path)}" i]`);
             
             if (existingItemByUid.length > 0 || existingItemByPath.length > 0) {
-                debugLog('[Frontend] Item already exists, skipping:', {
+                console.log('[Frontend] Item already exists, skipping:', {
                     uid: item.uid,
                     path: item.path,
                     existing_by_uid: existingItemByUid.length,
@@ -1184,7 +1088,7 @@ async function UIDesktop(options) {
                         const iconResult = await item_icon(item);
                         existingItemByUid.find('.item-icon-thumb').attr('src', iconResult.image);
                         existingItemByUid.find('.item-icon-icon').attr('src', iconResult.image);
-                        debugLog('[Frontend] Updated existing item icon:', {
+                        console.log('[Frontend] Updated existing item icon:', {
                             thumbnail: item.thumbnail,
                             icon_image: iconResult.image,
                             icon_type: iconResult.type
@@ -1200,7 +1104,7 @@ async function UIDesktop(options) {
                     const currentContainer = existingItemByUid.closest('.item-container');
                     const currentContainerPath = currentContainer.attr('data-path');
                     if (currentContainerPath !== item.dirpath) {
-                        debugLog('[Frontend] Moving existing item to container:', {
+                        console.log('[Frontend] Moving existing item to container:', {
                             from: currentContainerPath,
                             to: item.dirpath
                         });
@@ -1308,7 +1212,7 @@ async function UIDesktop(options) {
     // This prevents taskbar from being created with height: 0
     if (!window.taskbar_height || window.taskbar_height === 0) {
         window.taskbar_height = window.default_taskbar_height || 50;
-        debugLog('[UIDesktop] taskbar_height set to default:', window.taskbar_height);
+        false && console.log('[UIDesktop] taskbar_height set to default:', window.taskbar_height);
     }
 
     // Set desktop height - desktop should be full viewport height
@@ -1331,12 +1235,12 @@ async function UIDesktop(options) {
         'height': '100vh' // Full viewport height
     });
 
-    debugLog('[UIDesktop] Calling UITaskbar');
+    false && console.log('[UIDesktop] Calling UITaskbar');
     // ---------------------------------------------------------------
     // Taskbar - MUST await since UITaskbar is async
     // ---------------------------------------------------------------
     await UITaskbar();
-    debugLog('[UIDesktop] UITaskbar completed');
+    false && console.log('[UIDesktop] UITaskbar completed');
     
     // Ensure taskbar is visible after initialization
     // Sometimes taskbar items don't render immediately, so force a refresh
@@ -1347,7 +1251,7 @@ async function UIDesktop(options) {
             if (currentHeight === 0) {
                 const correctHeight = window.taskbar_height || window.default_taskbar_height || 50;
                 $taskbar.css('height', `${correctHeight}px`);
-                debugLog('[UIDesktop] Post-init taskbar height fix:', correctHeight);
+                false && console.log('[UIDesktop] Post-init taskbar height fix:', correctHeight);
             }
             // Force show taskbar items
             $taskbar.find('.taskbar-item').show();
@@ -1361,7 +1265,7 @@ async function UIDesktop(options) {
     const isFullpageCheck = window.is_fullpage_mode || false;
     // PC2: Always refresh for wallet users (Web3 login) regardless of embedded/fullpage flags
     const isPC2User = !!(window.user?.wallet_address);
-    debugLog('[UIDesktop] Desktop refresh check', {
+    false && console.log('[UIDesktop] Desktop refresh check', {
         is_embedded: isEmbeddedCheck,
         is_fullpage_mode: isFullpageCheck,
         is_pc2_user: isPC2User,
@@ -1376,10 +1280,10 @@ async function UIDesktop(options) {
     // PC2: Force refresh for wallet users to ensure desktop icons appear after login
     if (!isEmbeddedCheck && !isFullpageCheck || isPC2User) {
         setTimeout(() => {
-            debugLog('[UIDesktop] Executing desktop refresh');
+            false && console.log('[UIDesktop] Executing desktop refresh');
             const desktopContainer = document.querySelector('.desktop.item-container') || 
                                    (document.querySelector('.desktop')?.classList.contains('item-container') ? document.querySelector('.desktop') : null);
-            debugLog('[UIDesktop] Desktop container search result:', {
+            false && console.log('[UIDesktop] Desktop container search result:', {
                 found: !!desktopContainer,
                 selector1: !!document.querySelector('.desktop.item-container'),
                 selector2: !!document.querySelector('.desktop'),
@@ -1388,14 +1292,14 @@ async function UIDesktop(options) {
             });
             
             if (desktopContainer && window.desktop_path) {
-                debugLog('[UIDesktop] Found desktop container, refreshing', {
+                false && console.log('[UIDesktop] Found desktop container, refreshing', {
                     container: desktopContainer,
                     data_path: $(desktopContainer).attr('data-path'),
                     desktop_path: window.desktop_path
                 });
                 if (!$(desktopContainer).attr('data-path') || $(desktopContainer).attr('data-path') !== window.desktop_path) {
                     $(desktopContainer).attr('data-path', window.desktop_path);
-                    debugLog('[UIDesktop] Updated desktop container data-path');
+                    false && console.log('[UIDesktop] Updated desktop container data-path');
                 }
                 refresh_item_container(desktopContainer, { fadeInItems: true });
             } else {
@@ -1419,7 +1323,7 @@ async function UIDesktop(options) {
     // PC2 Status Bar - Shows connection status in taskbar
     // ---------------------------------------------------------------
     if (window.user?.wallet_address) {
-        debugLog('[UIDesktop] Initializing PC2 status bar');
+        false && console.log('[UIDesktop] Initializing PC2 status bar');
         initPC2StatusBar();
     }
 
@@ -1724,7 +1628,7 @@ async function UIDesktop(options) {
     const isFullpage = window.is_fullpage_mode || false;
     const shouldRefresh = !isEmbedded && !isFullpage;
     
-    debugLog('[UIDesktop] Checking desktop refresh conditions:', {
+    false && console.log('[UIDesktop] Checking desktop refresh conditions:', {
         is_embedded: isEmbedded,
         is_fullpage_mode: isFullpage,
         shouldRefresh: shouldRefresh,
@@ -1732,10 +1636,10 @@ async function UIDesktop(options) {
     });
     
     if (shouldRefresh) {
-        debugLog('[UIDesktop] Desktop refresh conditions met');
+        false && console.log('[UIDesktop] Desktop refresh conditions met');
         // Use a function to refresh desktop items, with retry logic
         const refreshDesktopItems = () => {
-            debugLog('[UIDesktop] refreshDesktopItems called');
+            false && console.log('[UIDesktop] refreshDesktopItems called');
             
             // Ensure el_desktop is the correct element (with .item-container class)
             // Try both selectors in case the element structure is different
@@ -1750,7 +1654,7 @@ async function UIDesktop(options) {
             
             if (desktopContainer) {
                 const currentDataPath = $(desktopContainer).attr('data-path');
-                debugLog('[UIDesktop] Desktop container found:', {
+                false && console.log('[UIDesktop] Desktop container found:', {
                     el_desktop: desktopContainer,
                     desktop_path: window.desktop_path,
                     data_path: currentDataPath,
@@ -1763,7 +1667,7 @@ async function UIDesktop(options) {
                 // Ensure desktop container has correct path attribute before refreshing
                 if (!currentDataPath || currentDataPath !== window.desktop_path) {
                     $(desktopContainer).attr('data-path', window.desktop_path);
-                    debugLog('[UIDesktop] Updated desktop container data-path');
+                    false && console.log('[UIDesktop] Updated desktop container data-path');
                 }
                 
                 // Verify container is in DOM before refreshing
@@ -1773,7 +1677,7 @@ async function UIDesktop(options) {
                     return;
                 }
                 
-                debugLog('[UIDesktop] Calling refresh_item_container for desktop');
+                false && console.log('[UIDesktop] Calling refresh_item_container for desktop');
                 refresh_item_container(desktopContainer, { fadeInItems: true });
             } else {
                 console.error('[UIDesktop] Desktop container not found! Tried .desktop.item-container and .desktop');
@@ -1789,10 +1693,10 @@ async function UIDesktop(options) {
         
         // Wait for DOM to be ready, then refresh
         // Use requestAnimationFrame to ensure DOM is fully rendered
-        debugLog('[UIDesktop] Scheduling desktop items refresh');
+        false && console.log('[UIDesktop] Scheduling desktop items refresh');
         requestAnimationFrame(() => {
             setTimeout(() => {
-                debugLog('[UIDesktop] Executing scheduled desktop items refresh');
+                false && console.log('[UIDesktop] Executing scheduled desktop items refresh');
                 refreshDesktopItems();
             }, 50);
         });
@@ -3061,7 +2965,7 @@ window.set_desktop_background = function (options) {
     }
 
     if (options.url) {
-        console.log('[set_desktop_background] Setting background-image to:', options.url);
+        false && console.log('[set_desktop_background] Setting background-image to:', options.url);
         $('body').css('background-image', `url("${options.url}")`);
         // Also set background-size and position for proper display
         if (options.fit) {
@@ -3080,7 +2984,7 @@ window.set_desktop_background = function (options) {
         }
         window.desktop_bg_url = options.url;
         window.desktop_bg_color = undefined;
-        console.log('[set_desktop_background] Background set, checking computed style:', $('body').css('background-image'));
+        false && console.log('[set_desktop_background] Background set, checking computed style:', $('body').css('background-image'));
     }
     else if (options.color) {
         $('body').css({

@@ -18,6 +18,16 @@
  */
 
 
+// Debug flag for initgui logging
+const INITGUI_DEBUG = false;
+
+// CRITICAL: Guard against multiple initgui.js executions
+// This can happen when Particle Auth iframes trigger page events
+if (window._initgui_js_loaded) {
+    console.log('[initgui.js] Already loaded, skipping module re-execution');
+}
+window._initgui_js_loaded = true;
+
 import UIDesktop from './UI/UIDesktop.js'
 import UIWindow from './UI/UIWindow.js'
 import UIAlert from './UI/UIAlert.js'
@@ -53,25 +63,27 @@ import initKeyboardShortcuts from './helpers/keyboard_shortcuts.js';
 
 // DEBUG: Add global message listener to see ALL messages before xd-incoming filtering
 // Also try to directly call ipc_listener if xd-incoming is filtering it out
-if (typeof window !== 'undefined') {
+// Guard: Only register once
+if (typeof window !== 'undefined' && !window._initgui_message_listener_registered) {
+    window._initgui_message_listener_registered = true;
     window.addEventListener('message', async (event) => {
         if (event.data && (event.data.msg === 'showSaveFilePicker' || event.data.msg === 'showOpenFilePicker')) {
             const sourceInfo = event.source ? (event.source === window ? 'self' : (event.source.location ? 'cross-origin-frame' : 'unknown-source')) : 'no-source';
-            console.log('[initgui.js]: 🔍 RAW window message received:', event.data.msg, 'appInstanceID:', event.data.appInstanceID, 'env:', event.data.env, 'origin:', event.origin, 'source:', sourceInfo, 'full data:', event.data);
+            INITGUI_DEBUG && console.log('[initgui.js]: 🔍 RAW window message received:', event.data.msg, 'appInstanceID:', event.data.appInstanceID, 'env:', event.data.env, 'origin:', event.origin, 'source:', sourceInfo, 'full data:', event.data);
             
             // Try to directly call ipc_listener if it's available (bypass xd-incoming filter)
             if (window.ipc_listener_direct) {
-                console.log('[initgui.js]: 🚀 Attempting direct ipc_listener call (bypassing xd-incoming)');
-                const handled = { resolve: (val) => console.log('[initgui.js]: ipc_listener handled:', val) };
+                INITGUI_DEBUG && console.log('[initgui.js]: 🚀 Attempting direct ipc_listener call (bypassing xd-incoming)');
+                const handled = { resolve: (val) => INITGUI_DEBUG && console.log('[initgui.js]: ipc_listener handled:', val) };
                 try {
                     await window.ipc_listener_direct(event, handled);
                 } catch (e) {
-                    console.error('[initgui.js]: Direct ipc_listener call failed:', e);
+                    INITGUI_DEBUG && console.error('[initgui.js]: Direct ipc_listener call failed:', e);
                 }
             }
         }
     }, false);
-    console.log('[initgui.js]: ✅ Global message listener registered');
+    INITGUI_DEBUG && console.log('[initgui.js]: ✅ Global message listener registered');
 }
 
 const launch_services = async function (options) {
@@ -178,32 +190,37 @@ if(jQuery){
 }
 
 window.initgui = async function(options){
-    // Guard: Prevent multiple simultaneous initializations
-    // BUT: Allow re-initialization on page reload (after Particle Auth redirect)
-    // Check if this is a fresh page load by checking if desktop exists
-    const isFreshPageLoad = !document.querySelector('.desktop');
-    const hasAuthTokenInUrl = window.url_query_params?.has('auth_token');
-    
-    if (window.initgui_in_progress && !isFreshPageLoad) {
-        console.log('[initgui]: ⚠️ initgui() already in progress, skipping duplicate call');
-        return;
-    }
-    // Only skip if completed AND not a fresh page load (page reload after auth)
-    if (window.initgui_completed && !isFreshPageLoad && !hasAuthTokenInUrl) {
-        console.log('[initgui]: ⚠️ initgui() already completed, skipping duplicate call');
+    // CRITICAL: Skip initialization if we're inside an iframe
+    // The particle-auth creates hidden iframes that load copies of the main page
+    // These iframe copies should NOT run initgui
+    if (window !== window.top) {
+        INITGUI_DEBUG && console.log('[initgui]: ⚠️ BLOCKED - running inside iframe, skipping');
         return;
     }
     
-    // Reset flags on fresh page load (after redirect)
-    if (isFreshPageLoad || hasAuthTokenInUrl) {
-        console.log('[initgui]: Fresh page load detected, resetting initialization flags');
-        window.initgui_in_progress = false;
-        window.initgui_completed = false;
-        window.desktop_loaded = false; // Reset desktop loaded flag on fresh page load
+    // Also skip if this is the particle-auth page
+    if (window.location.pathname.includes('particle-auth')) {
+        INITGUI_DEBUG && console.log('[initgui]: ⚠️ BLOCKED - particle-auth page, skipping');
+        return;
     }
+    
+    // Use DOM-based guard as backup
+    const GUARD_ID = '__pc2_initgui_guard__';
+    const existingGuard = document.getElementById(GUARD_ID);
+    
+    if (existingGuard) {
+        INITGUI_DEBUG && console.log('[initgui]: ⚠️ BLOCKED by DOM guard - initgui() already ran');
+        return;
+    }
+    
+    // Create DOM guard element IMMEDIATELY before any async work
+    const guard = document.createElement('div');
+    guard.id = GUARD_ID;
+    guard.style.display = 'none';
+    document.body.appendChild(guard);
+    INITGUI_DEBUG && console.log('[initgui]: ✅ Running in top window, starting initialization...');
     
     window.initgui_in_progress = true;
-    console.log('[initgui]: 🚀 Starting initgui()...');
     // 🚀 Initialize PC2ConnectionService EARLY to redirect API calls before SDK initializes
     // This prevents SDK from calling api.puter.com or constructing api.puter.localhost URLs
     try {
@@ -214,7 +231,7 @@ window.initgui = async function(options){
     }
     
     const url = new URL(window.location).href;
-    console.log('[initgui]: URL:', url);
+    INITGUI_DEBUG && console.log('[initgui]: URL:', url);
     window.url = url;
     const url_paths = window.location.pathname.split('/').filter(element => element);
     window.url_paths = url_paths
@@ -231,7 +248,7 @@ window.initgui = async function(options){
     // This handles 'puter.auth.token' param that apps receive when launched
     const urlAuthToken = window.url_query_params.get('puter.auth.token');
     if (urlAuthToken) {
-        console.log('[initgui]: Found puter.auth.token in URL params, setting SDK auth token');
+        INITGUI_DEBUG && console.log('[initgui]: Found puter.auth.token in URL params, setting SDK auth token');
         puter.setAuthToken(urlAuthToken);
         window.auth_token = urlAuthToken;
     }
@@ -239,7 +256,7 @@ window.initgui = async function(options){
     // Check for API origin in URL params (for apps)
     const urlApiOrigin = window.url_query_params.get('puter.api_origin');
     if (urlApiOrigin) {
-        console.log('[initgui]: Found puter.api_origin in URL params, setting SDK API origin:', urlApiOrigin);
+        INITGUI_DEBUG && console.log('[initgui]: Found puter.api_origin in URL params, setting SDK API origin:', urlApiOrigin);
         puter.setAPIOrigin(urlApiOrigin);
         window.api_origin = urlApiOrigin;
     }
@@ -251,15 +268,18 @@ window.initgui = async function(options){
     if(window.api_origin && puter.APIOrigin !== window.api_origin)
         puter.setAPIOrigin(window.api_origin);
 
-    // Print the version to the console
-    puter.os.version()
-    .then(res => {
-        const deployed_date = new Date(res.deploy_timestamp);
-        console.log(`Your Puter information:\n• Version: ${(res.version)}\n• Server: ${(res.location)}\n• Deployed: ${(deployed_date)}`);
-    })
-    .catch(error => {
-        console.error("Failed to fetch server info:", error);
-    });
+    // Print the version to the console (only once)
+    if (!window._puter_version_printed) {
+        window._puter_version_printed = true;
+        puter.os.version()
+        .then(res => {
+            const deployed_date = new Date(res.deploy_timestamp);
+            console.log(`Your Puter information:\n• Version: ${(res.version)}\n• Server: ${(res.location)}\n• Deployed: ${(deployed_date)}`);
+        })
+        .catch(error => {
+            console.error("Failed to fetch server info:", error);
+        });
+    }
 
     // Checks the type of device the user is on (phone, tablet, or desktop).
     // Depending on the device type, it sets a class attribute on the body tag
@@ -469,12 +489,12 @@ window.initgui = async function(options){
     // `auth_token` provided in URL, use it to log in
     // -------------------------------------------------------------------------------------
     else if(window.url_query_params.has('auth_token')){
-        console.log('[initgui]: Processing auth_token from URL');
+        INITGUI_DEBUG && console.log('[initgui]: Processing auth_token from URL');
         
         // Guard: If user is already authenticated and desktop is loaded, skip processing
         // This prevents double initialization when Particle Auth redirects after login event
         if (window.is_auth() && window.desktop_loaded) {
-            console.log('[initgui]: User already authenticated and desktop loaded, removing auth_token from URL');
+            INITGUI_DEBUG && console.log('[initgui]: User already authenticated and desktop loaded, removing auth_token from URL');
             window.history.pushState(null, document.title, '/');
             return;
         }
@@ -554,7 +574,7 @@ window.initgui = async function(options){
     // Authed
     // -------------------------------------------------------------------------------------
     if(window.is_auth()){
-        console.log('[initgui]: User is authed, proceeding with desktop initialization');
+        INITGUI_DEBUG && console.log('[initgui]: User is authed, proceeding with desktop initialization');
         // try to get user data using /whoami, only if that data is missing
         if(!whoami){
             try{
@@ -588,17 +608,17 @@ window.initgui = async function(options){
             if(!window.embedded_in_popup){
                 // Guard: Prevent duplicate desktop loading
                 if (window.desktop_loaded) {
-                    console.log('[initgui]: Desktop already loaded, skipping UIDesktop call');
+                    INITGUI_DEBUG && console.log('[initgui]: Desktop already loaded, skipping UIDesktop call');
                     window.initgui_in_progress = false;
                     window.initgui_completed = true;
                     return;
                 }
                 
                 window.desktop_loaded = true; // Mark as loaded
-                console.log('[initgui]: Loading desktop for path:', window.desktop_path);
+                INITGUI_DEBUG && console.log('[initgui]: Loading desktop for path:', window.desktop_path);
                 await window.get_auto_arrange_data()
                 puter.fs.stat(window.desktop_path, async function(desktop_fsentry){
-                    console.log('[initgui]: puter.fs.stat callback, calling UIDesktop');
+                    INITGUI_DEBUG && console.log('[initgui]: puter.fs.stat callback, calling UIDesktop');
                     // Mark initialization as complete when desktop loads
                     window.initgui_in_progress = false;
                     window.initgui_completed = true;
@@ -912,22 +932,22 @@ window.initgui = async function(options){
     // -------------------------------------------------------------------------------------
     // Un-authed but not first visit -> try to log in/sign up
     // -------------------------------------------------------------------------------------
-    console.log('[initgui]: Checking authentication status...');
-    console.log('[initgui]: window.is_auth():', window.is_auth());
-    console.log('[initgui]: window.logged_in_users.length:', window.logged_in_users?.length || 0);
+    INITGUI_DEBUG && console.log('[initgui]: Checking authentication status...');
+    INITGUI_DEBUG && console.log('[initgui]: window.is_auth():', window.is_auth());
+    INITGUI_DEBUG && console.log('[initgui]: window.logged_in_users.length:', window.logged_in_users?.length || 0);
     
     if(!window.is_auth()){
-        console.log('[initgui]: ❌ User is NOT authenticated');
+        INITGUI_DEBUG && console.log('[initgui]: ❌ User is NOT authenticated');
         // PC2: Always show Particle login directly (skip Puter session list)
         // This ensures users see Particle Auth instead of Puter's standard login UI
-        console.log('[initgui]: Showing Particle login (PC2 mode - skipping session list)...');
+        INITGUI_DEBUG && console.log('[initgui]: Showing Particle login (PC2 mode - skipping session list)...');
         // ELACITY: Embed Particle Auth inside the OS instead of redirecting
         // Set reload_on_success to true to ensure desktop loads correctly after login
-        console.log('[initgui]: Calling UIWindowParticleLogin()...');
+        INITGUI_DEBUG && console.log('[initgui]: Calling UIWindowParticleLogin()...');
         await UIWindowParticleLogin({ reload_on_success: true });
-        console.log('[initgui]: ✅ UIWindowParticleLogin() completed');
+        INITGUI_DEBUG && console.log('[initgui]: ✅ UIWindowParticleLogin() completed');
     } else {
-        console.log('[initgui]: ✅ User IS authenticated');
+        INITGUI_DEBUG && console.log('[initgui]: ✅ User IS authenticated');
         // Mark initialization as complete when user is already authenticated
         window.initgui_in_progress = false;
         window.initgui_completed = true;
@@ -1033,7 +1053,7 @@ window.initgui = async function(options){
     $(document).on("login", async (e) => {
         // Guard: Prevent duplicate desktop loading
         if (window.desktop_loaded) {
-            console.log('[initgui]: Desktop already loaded, skipping login event handler');
+            INITGUI_DEBUG && console.log('[initgui]: Desktop already loaded, skipping login event handler');
             return;
         }
         
@@ -1551,7 +1571,7 @@ window.initgui = async function(options){
         // Clear sessionStorage to remove any cached auth
         sessionStorage.clear();
         
-        console.log('[initgui]: Logout complete, redirecting to home...');
+        INITGUI_DEBUG && console.log('[initgui]: Logout complete, redirecting to home...');
         // Use location.href instead of location.replace to ensure full page reload
         window.location.href = '/';
     });

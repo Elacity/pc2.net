@@ -1,10 +1,22 @@
+/**
+ * Route Utilities
+ *
+ * Helper functions for route detection and handling
+ */
+/**
+ * Check if a path is an API route
+ * API routes should not be handled by static file serving or SPA fallback
+ */
 export function isAPIRoute(path) {
+    // API routes
     if (path.startsWith('/api/')) {
         return true;
     }
+    // Authentication routes
     if (path.startsWith('/auth/')) {
         return true;
     }
+    // Puter API endpoints (for compatibility)
     const puterEndpoints = [
         '/whoami',
         '/stat',
@@ -37,19 +49,25 @@ export function isAPIRoute(path) {
             return true;
         }
     }
+    // WebSocket
     if (path.startsWith('/socket.io/')) {
         return true;
     }
+    // Health check
     if (path === '/health') {
         return true;
     }
     return false;
 }
+/**
+ * Check if a path is a static asset (has file extension)
+ */
 export function isStaticAsset(path) {
     const ext = path.split('.').pop()?.toLowerCase();
     if (!ext) {
         return false;
     }
+    // Common static file extensions
     const staticExtensions = [
         'js', 'css', 'json', 'xml', 'txt',
         'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'ico',

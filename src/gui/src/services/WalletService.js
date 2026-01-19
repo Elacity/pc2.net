@@ -440,41 +440,47 @@ class WalletService {
      * Create or get the hidden particle-auth iframe for wallet operations
      */
     _getOrCreateIframe() {
+        // CRITICAL: Use a GLOBAL flag to ensure only ONE iframe is ever created
+        // This prevents the cascade of reinitializations
         let iframe = document.getElementById('particle-wallet-iframe');
         
-        if (!iframe) {
-            // Create a hidden iframe for wallet operations
-            iframe = document.createElement('iframe');
-            iframe.id = 'particle-wallet-iframe';
-            
-            // Pass user addresses via URL params so iframe can initialize UniversalAccount
-            // without needing to restore the ConnectKit session
-            const eoaAddress = window.user?.wallet_address || '';
-            const smartAddress = window.user?.smart_account_address || '';
-            const params = new URLSearchParams({
-                mode: 'wallet',
-                ...(eoaAddress && { address: eoaAddress }),
-                ...(smartAddress && { smartAddress: smartAddress }),
-                // Cache-busting timestamp to force fresh load
-                _t: Date.now().toString(),
-            });
-            
-            iframe.src = `/particle-auth?${params.toString()}`;
-            iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:none;visibility:hidden;';
-            document.body.appendChild(iframe);
-            
-            logger.log('Created hidden particle-auth iframe with addresses:', {
-                eoaAddress: eoaAddress ? `${eoaAddress.slice(0, 10)}...` : 'none',
-                smartAddress: smartAddress ? `${smartAddress.slice(0, 10)}...` : 'none',
-            });
-            
-            // Mark that we need to wait for iframe to load
-            this._iframeReady = false;
-            iframe.onload = () => {
-                logger.log('Particle iframe loaded');
-                this._iframeReady = true;
-            };
+        if (iframe) {
+            return iframe; // Already exists, return it
         }
+        
+        // Check global flag - if we've already created an iframe this session, don't create another
+        if (window._particle_iframe_created) {
+            return null; // Return null to indicate no iframe available
+        }
+        
+        // Set global flag BEFORE creating to prevent race conditions
+        window._particle_iframe_created = true;
+        
+        // Create a hidden iframe for wallet operations
+        iframe = document.createElement('iframe');
+        iframe.id = 'particle-wallet-iframe';
+        
+        // Pass user addresses via URL params so iframe can initialize UniversalAccount
+        // without needing to restore the ConnectKit session
+        const eoaAddress = window.user?.wallet_address || '';
+        const smartAddress = window.user?.smart_account_address || '';
+        const params = new URLSearchParams({
+            mode: 'wallet',
+            ...(eoaAddress && { address: eoaAddress }),
+            ...(smartAddress && { smartAddress: smartAddress }),
+            // Cache-busting timestamp to force fresh load
+            _t: Date.now().toString(),
+        });
+        
+        iframe.src = `/particle-auth?${params.toString()}`;
+        iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:none;visibility:hidden;';
+        document.body.appendChild(iframe);
+        
+        // Mark that we need to wait for iframe to load
+        this._iframeReady = false;
+        iframe.onload = () => {
+            this._iframeReady = true;
+        };
         
         return iframe;
     }
@@ -1503,17 +1509,38 @@ class WalletService {
     _destroyIframe() {
         const iframe = document.getElementById('particle-wallet-iframe');
         if (iframe) {
-            logger.log('Destroying particle-wallet-iframe');
             iframe.remove();
         }
         this._iframeReady = false;
+        // Reset the global flag so a new iframe can be created if needed
+        window._particle_iframe_created = false;
     }
     
     /**
      * Reinitialize for a new user (call after login with different wallet)
      */
     reinitialize() {
-        logger.log('Reinitializing for new user:', window.user?.wallet_address);
+        // CRITICAL: Only reinitialize if wallet address actually changed
+        const currentAddress = window.user?.wallet_address;
+        if (this._lastInitializedAddress === currentAddress) {
+            return; // Same user, no need to reinitialize
+        }
+        
+        // CRITICAL: Only reinitialize ONCE per session unless address changes
+        if (this._hasInitializedOnce && !currentAddress) {
+            return; // Already initialized, don't reinit with undefined address
+        }
+        
+        this._lastInitializedAddress = currentAddress;
+        this._hasInitializedOnce = true;
+        
+        // Debounce: Don't reinitialize if we did so recently
+        const now = Date.now();
+        if (this._lastReinitTime && (now - this._lastReinitTime) < 5000) {
+            return;
+        }
+        this._lastReinitTime = now;
+        
         this._destroyIframe();
         this._iframeReady = false;
         
@@ -1535,10 +1562,8 @@ class WalletService {
             error: null,
         };
         
-        // Create new iframe with current user's addresses
-        if (this.isConnected()) {
-            this._getOrCreateIframe();
-        }
+        // DON'T create iframe automatically - it will be created lazily when needed
+        // This prevents the cascade of reinitializations
     }
 }
 

@@ -52,7 +52,7 @@ window.ipc_handlers = {};
 const ipc_listener = async (event, handled) => {
     // Debug: Log ALL puter-ipc messages when IPC listener is called
     if (event.data && event.data.$ === 'puter-ipc') {
-        console.log('[IPC.js]: 🎯 IPC listener CALLED for puter-ipc message:', {
+        false && console.log('[IPC.js]: 🎯 IPC listener CALLED for puter-ipc message:', {
             $: event.data.$,
             v: event.data.v,
             msg: event.data.msg,
@@ -66,7 +66,7 @@ const ipc_listener = async (event, handled) => {
     
     // Debug: Log puter-ipc messages when they reach the IPC listener
     if (event.data && event.data.$ === 'puter-ipc' && event.data.env === 'app') {
-        console.log('[IPC.js]: 🎯 IPC listener called for puter-ipc message:', {
+        false && console.log('[IPC.js]: 🎯 IPC listener called for puter-ipc message:', {
             msg: event.data.msg,
             appInstanceID: event.data.appInstanceID,
             origin: event.origin
@@ -75,24 +75,24 @@ const ipc_listener = async (event, handled) => {
     
     // Debug: Log ALL messages to see what's coming through
     if (event.data && (event.data.msg === 'showSaveFilePicker' || event.data.msg === 'showOpenFilePicker')) {
-        console.log('[IPC.js]: 🔍 Message received (before filtering):', event.data.msg, 'appInstanceID:', event.data.appInstanceID, 'env:', event.data.env, 'origin:', event.origin, 'full data:', event.data);
+        false && console.log('[IPC.js]: 🔍 Message received (before filtering):', event.data.msg, 'appInstanceID:', event.data.appInstanceID, 'env:', event.data.env, 'origin:', event.origin, 'full data:', event.data);
     }
     
     const app_env = event.data?.env ?? 'app';
     
     // Debug: Log early returns
     if (event.data && event.data.$ === 'puter-ipc') {
-        console.log('[IPC.js]: 🔍 Checking app_env:', app_env, 'app_env !== "app":', app_env !== 'app');
+        false && console.log('[IPC.js]: 🔍 Checking app_env:', app_env, 'app_env !== "app":', app_env !== 'app');
     }
 
     // Debug: Log all messages from apps
     if (app_env === 'app' && event.data?.msg) {
-        console.log('[IPC.js]: 📥 Received message:', event.data.msg, 'appInstanceID:', event.data.appInstanceID, 'full data:', event.data);
+        false && console.log('[IPC.js]: 📥 Received message:', event.data.msg, 'appInstanceID:', event.data.appInstanceID, 'full data:', event.data);
     }
     
     // Debug: Log puter-ipc messages specifically
     if (event.data && event.data.$ === 'puter-ipc') {
-        console.log('[IPC.js]: 🔵 puter-ipc message received:', {
+        false && console.log('[IPC.js]: 🔵 puter-ipc message received:', {
             $: event.data.$,
             v: event.data.v,
             msg: event.data.msg,
@@ -101,10 +101,10 @@ const ipc_listener = async (event, handled) => {
             parameters: event.data.parameters,
             uuid: event.data.uuid
         });
-        console.log('[IPC.js]: 🔍 Checking appInstanceID registration...');
-        console.log('[IPC.js]:   window.app_instance_ids:', window.app_instance_ids);
-        console.log('[IPC.js]:   Has appInstanceID?', window.app_instance_ids?.has(event.data.appInstanceID));
-        console.log('[IPC.js]:   Available IDs:', Array.from(window.app_instance_ids || []));
+        false && console.log('[IPC.js]: 🔍 Checking appInstanceID registration...');
+        false && console.log('[IPC.js]:   window.app_instance_ids:', window.app_instance_ids);
+        false && console.log('[IPC.js]:   Has appInstanceID?', window.app_instance_ids?.has(event.data.appInstanceID));
+        false && console.log('[IPC.js]:   Available IDs:', Array.from(window.app_instance_ids || []));
     }
 
     // Only process messages from apps
@@ -1523,7 +1523,7 @@ const ipc_listener = async (event, handled) => {
                 res.path = target_path;
             }
             
-            console.log('[IPC.js] tell_caller_and_update_views - validated res:', {
+            false && console.log('[IPC.js] tell_caller_and_update_views - validated res:', {
                 uid: res.uid,
                 name: res.name,
                 type: res.type,
@@ -1665,8 +1665,8 @@ const ipc_listener = async (event, handled) => {
                 fileNameParts: filenameForSDK.split('.'),
                 typeParts: typeForSDK.split('/')
             };
-            console.log('[IPC.js] Calling puter.fs.write with validated File:', JSON.stringify(writeInfo, null, 2));
-            console.log('[IPC.js] File object being passed:', {
+            false && console.log('[IPC.js] Calling puter.fs.write with validated File:', JSON.stringify(writeInfo, null, 2));
+            false && console.log('[IPC.js] File object being passed:', {
                 name: file_to_upload.name,
                 type: file_to_upload.type,
                 size: file_to_upload.size,
@@ -1682,14 +1682,14 @@ const ipc_listener = async (event, handled) => {
                             });
 
                 // Log the response to see what puter.fs.write() returns
-                console.log('[IPC.js] puter.fs.write() raw response:', JSON.stringify({
+                false && console.log('[IPC.js] puter.fs.write() raw response:', JSON.stringify({
                     hasResult: !!res.result,
                     hasSuccess: 'success' in res,
                     hasPath: !!res.path,
                     allKeys: Object.keys(res || {}),
                     resultKeys: res.result ? Object.keys(res.result) : null
                 }, null, 2));
-                console.log('[IPC.js] Full response object:', res);
+                false && console.log('[IPC.js] Full response object:', res);
                 
                 // Ensure response has required properties before processing
                 if (!res || typeof res !== 'object') {
@@ -1699,7 +1699,7 @@ const ipc_listener = async (event, handled) => {
                 // Extract actual item data - SDK might return { success, path, result: { uid, name, type, ... } }
                 let itemData = res;
                 if (res.result && typeof res.result === 'object') {
-                    console.log('[IPC.js] Response has nested result, extracting item data from res.result');
+                    false && console.log('[IPC.js] Response has nested result, extracting item data from res.result');
                     itemData = res.result;
                     // Preserve path from outer response if not in result
                     if (!itemData.path && res.path) {
@@ -1708,7 +1708,7 @@ const ipc_listener = async (event, handled) => {
                 }
                 
                 // Log extracted item data
-                console.log('[IPC.js] Extracted item data:', JSON.stringify({
+                false && console.log('[IPC.js] Extracted item data:', JSON.stringify({
                     hasUid: !!itemData.uid,
                     hasName: !!itemData.name,
                     hasType: !!itemData.type,
@@ -1726,7 +1726,7 @@ const ipc_listener = async (event, handled) => {
                 
                 // Handle mime_type -> type mapping (backend uses mime_type, SDK expects type)
                 if (itemData.mime_type && !itemData.type) {
-                    console.log('[IPC.js] Converting mime_type to type:', itemData.mime_type);
+                    false && console.log('[IPC.js] Converting mime_type to type:', itemData.mime_type);
                     itemData.type = itemData.mime_type;
                 }
                 
@@ -1756,7 +1756,7 @@ const ipc_listener = async (event, handled) => {
                     console.warn('[IPC.js] Item data missing uid, fetching from stat()');
                     try {
                         const statResult = await puter.fs.stat({ path: itemData.path, consistency: 'eventual' });
-                        console.log('[IPC.js] stat() result:', JSON.stringify({
+                        false && console.log('[IPC.js] stat() result:', JSON.stringify({
                             hasUid: !!statResult.uid,
                             uid: statResult.uid,
                             allKeys: Object.keys(statResult || {})
@@ -1770,7 +1770,7 @@ const ipc_listener = async (event, handled) => {
                         
                         if (statUid && typeof statUid === 'string') {
                             itemData.uid = statUid;
-                            console.log('[IPC.js] ✅ Retrieved uid from stat():', itemData.uid);
+                            false && console.log('[IPC.js] ✅ Retrieved uid from stat():', itemData.uid);
                         } else {
                             throw new Error('stat() did not return uid');
                         }
@@ -1885,8 +1885,8 @@ const ipc_listener = async (event, handled) => {
                 value: typeof event.data.content === 'string' ? event.data.content : 
                        event.data.content instanceof Blob ? '[Blob]' : String(event.data.content)
             };
-            console.log('[IPC.js] Content received:', JSON.stringify(contentInfo, null, 2));
-            console.log('[IPC.js] Content raw:', event.data.content);
+            false && console.log('[IPC.js] Content received:', JSON.stringify(contentInfo, null, 2));
+            false && console.log('[IPC.js] Content raw:', event.data.content);
             
             // Ensure target_path is a valid string
             if (!target_path || typeof target_path !== 'string') {
@@ -2047,8 +2047,8 @@ const ipc_listener = async (event, handled) => {
                 file_to_upload = new File([fileContent], final_filename, { type: 'text/plain' });
             }
             
-            console.log('[IPC.js] File object validated:', JSON.stringify(fileValidation, null, 2));
-            console.log('[IPC.js] File object details:', {
+            false && console.log('[IPC.js] File object validated:', JSON.stringify(fileValidation, null, 2));
+            false && console.log('[IPC.js] File object details:', {
                 name: file_to_upload.name,
                 type: file_to_upload.type,
                 size: file_to_upload.size,
@@ -2189,7 +2189,7 @@ const ipc_listener = async (event, handled) => {
                 // Ensure .txt extension is added if no extension provided (for editor app)
                 if (app_name === 'editor' && !target_path.includes('.')) {
                     target_path = target_path + '.txt';
-                    console.log('[IPC.js]: ✅ Added .txt extension to target_path:', target_path);
+                    false && console.log('[IPC.js]: ✅ Added .txt extension to target_path:', target_path);
                 }
 
                 if ( event.data.url ) {
@@ -2454,7 +2454,7 @@ window.when_puter_happens.push(async () => {
     // Add a global message listener to catch ALL messages before xd-incoming filtering
     window.addEventListener('message', (event) => {
         if (event.data && event.data.$ === 'puter-ipc' && event.data.env === 'app') {
-            console.log('[IPC.js]: 🌐 GLOBAL listener caught puter-ipc message BEFORE xd-incoming filter:', {
+            false && console.log('[IPC.js]: 🌐 GLOBAL listener caught puter-ipc message BEFORE xd-incoming filter:', {
                 msg: event.data.msg,
                 appInstanceID: event.data.appInstanceID,
                 origin: event.origin,
@@ -2465,7 +2465,7 @@ window.when_puter_happens.push(async () => {
     
     // In the GUI, we register the IPC listener directly as a window message listener
     // since the GUI doesn't use puter.services/xd-incoming
-    console.log('[IPC.js]: 📝 Registering IPC listener directly as window message listener (GUI mode)...');
+    false && console.log('[IPC.js]: 📝 Registering IPC listener directly as window message listener (GUI mode)...');
     
     // Create a wrapper that provides the handled TeePromise that ipc_listener expects
     // Simple TeePromise-like object for GUI (we don't need the full filtering behavior)
@@ -2486,5 +2486,5 @@ window.when_puter_happens.push(async () => {
     
     // Register directly as a window message listener
     window.addEventListener('message', ipc_listener_wrapper, false);
-    console.log('[IPC.js]: ✅ IPC listener registered directly as window message listener');
+    false && console.log('[IPC.js]: ✅ IPC listener registered directly as window message listener');
 });

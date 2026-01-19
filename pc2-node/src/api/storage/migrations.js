@@ -1,0 +1,94 @@
+/**
+ * Database Migrations
+ *
+ * Manages database schema versioning and migrations
+ */
+import { readFileSync, existsSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+// Schema file is in source directory, not dist
+// In production, this will be in dist/storage, but schema.sql needs to be copied
+// For now, use source path (works in both dev and after copying schema.sql)
+const SCHEMA_FILE = join(__dirname, 'schema.sql');
+// Fallback: try source directory if not found in dist
+function findSchemaFile() {
+    if (existsSync(SCHEMA_FILE)) {
+        return SCHEMA_FILE;
+    }
+    // Try source directory (for development)
+    const sourceSchema = join(__dirname, '../../src/storage/schema.sql');
+    if (existsSync(sourceSchema)) {
+        return sourceSchema;
+    }
+    throw new Error(`Schema file not found. Tried: ${SCHEMA_FILE} and ${sourceSchema}`);
+}
+const CURRENT_VERSION = 2;
+/**
+ * Get current database version
+ */
+function getCurrentVersion(db) {
+    // Create migrations table if it doesn't exist
+    db.exec(`
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      version INTEGER PRIMARY KEY,
+      applied_at INTEGER NOT NULL
+    )
+  `);
+    const row = db.prepare('SELECT MAX(version) as version FROM schema_migrations').get();
+    return row.version ?? 0;
+}
+/**
+ * Record migration as applied
+ */
+function recordMigration(db, version) {
+    db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)')
+        .run(version, Date.now());
+}
+/**
+ * Run initial schema creation
+ */
+function runInitialSchema(db) {
+    const schemaFile = findSchemaFile();
+    const schema = readFileSync(schemaFile, 'utf8');
+    db.exec(schema);
+    recordMigration(db, CURRENT_VERSION);
+}
+/**
+ * Run all pending migrations
+ */
+export function runMigrations(db) {
+    const currentVersion = getCurrentVersion(db);
+    if (currentVersion === 0) {
+        // First run: create initial schema
+        console.log('📦 Creating initial database schema...');
+        runInitialSchema(db);
+        console.log('✅ Database schema created');
+        return;
+    }
+    if (currentVersion < CURRENT_VERSION) {
+        console.log(`📦 Running migrations from version ${currentVersion} to ${CURRENT_VERSION}...`);
+        // Migration 2: Add thumbnail column to files table
+        if (currentVersion < 2) {
+            try {
+                db.exec('ALTER TABLE files ADD COLUMN thumbnail TEXT');
+                console.log('✅ Added thumbnail column to files table');
+            }
+            catch (error) {
+                // Column might already exist (e.g., from fresh install with new schema)
+                if (!error.message.includes('duplicate column')) {
+                    console.warn(`⚠️  Migration 2 warning: ${error.message}`);
+                }
+            }
+        }
+        recordMigration(db, CURRENT_VERSION);
+        console.log('✅ Migrations completed');
+    }
+    else if (currentVersion === CURRENT_VERSION) {
+        console.log('✅ Database schema is up to date');
+    }
+    else {
+        console.warn(`⚠️  Database version (${currentVersion}) is newer than expected (${CURRENT_VERSION})`);
+    }
+}

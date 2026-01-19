@@ -645,8 +645,52 @@ export function handleStats(req: AuthenticatedRequest, res: Response): void {
   try {
     const walletAddress = req.user.wallet_address;
     
-    // Default storage limit: 10GB
-      const storageLimit = 10 * 1024 * 1024 * 1024; // 10 GB
+    // Dynamic storage limit: check database setting first, then config, then auto-detect
+    let storageLimit: number;
+    const dbLimit = db?.getSetting('storage_limit');
+    const configLimit = dbLimit || (global as any).pc2Config?.resources?.storage?.limit;
+    
+    if (configLimit === 'auto' || !configLimit) {
+      // Auto-detect: use 80% of available disk space, max 500GB
+      try {
+        const fs = require('fs');
+        const os = require('os');
+        // Get disk stats using sync method
+        const dataPath = process.cwd();
+        const stats = fs.statfsSync ? fs.statfsSync(dataPath) : null;
+        if (stats) {
+          const totalDiskBytes = stats.blocks * stats.bsize;
+          const reserveBytes = 10 * 1024 * 1024 * 1024; // Reserve 10GB free
+          storageLimit = Math.min(
+            Math.floor((totalDiskBytes - reserveBytes) * 0.8),
+            500 * 1024 * 1024 * 1024 // Max 500GB
+          );
+          // Ensure minimum 1GB
+          storageLimit = Math.max(storageLimit, 1 * 1024 * 1024 * 1024);
+        } else {
+          // Fallback for older Node.js versions
+          storageLimit = 100 * 1024 * 1024 * 1024; // 100GB default
+        }
+      } catch {
+        // Fallback to 100GB if disk detection fails
+        storageLimit = 100 * 1024 * 1024 * 1024;
+      }
+    } else if (configLimit === 'unlimited') {
+      storageLimit = Number.MAX_SAFE_INTEGER;
+    } else if (typeof configLimit === 'string') {
+      // Parse string like "50GB", "100GB"
+      const match = configLimit.match(/^(\d+)(GB|MB|TB)$/i);
+      if (match) {
+        const value = parseInt(match[1], 10);
+        const unit = match[2].toUpperCase();
+        const multipliers: Record<string, number> = { 'MB': 1024 * 1024, 'GB': 1024 * 1024 * 1024, 'TB': 1024 * 1024 * 1024 * 1024 };
+        storageLimit = value * (multipliers[unit] || 1024 * 1024 * 1024);
+      } else {
+        storageLimit = 100 * 1024 * 1024 * 1024; // Default 100GB
+      }
+    } else {
+      storageLimit = configLimit as number;
+    }
     
     // If database doesn't exist, return empty stats
     if (!db) {
@@ -705,4 +749,5 @@ export function handleStats(req: AuthenticatedRequest, res: Response): void {
     });
   }
 }
+
 

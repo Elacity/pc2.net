@@ -342,6 +342,108 @@ export class DatabaseManager {
   }
 
   // ============================================================================
+  // Public File Operations (for IPFS Gateway)
+  // ============================================================================
+
+  /**
+   * Get file metadata by IPFS CID (hash)
+   * Used for serving content via /ipfs/:cid gateway
+   */
+  getFileByCID(cid: string): FileMetadata | null {
+    const db = this.getDB();
+    const row = db.prepare('SELECT * FROM files WHERE ipfs_hash = ? LIMIT 1')
+      .get(cid) as any;
+
+    if (!row) {
+      return null;
+    }
+
+    return {
+      ...row,
+      content_text: row.content_text ?? null,
+      is_dir: row.is_dir === 1,
+      is_public: row.is_public === 1
+    };
+  }
+
+  /**
+   * Get all public files for a wallet
+   * Optionally filter by base path (for directory listings)
+   */
+  getPublicFiles(walletAddress: string, basePath?: string): FileMetadata[] {
+    const db = this.getDB();
+    
+    let query: string;
+    let params: string[];
+    
+    if (basePath) {
+      // Get direct children of the specified path (path-based public detection)
+      query = `
+        SELECT * FROM files 
+        WHERE wallet_address = ? 
+          AND path LIKE '%/Public/%'
+          AND path LIKE ?
+          AND path NOT LIKE ?
+        ORDER BY is_dir DESC, path ASC
+      `;
+      // Match direct children only (path/% but not path/%/%)
+      params = [walletAddress, `${basePath}/%`, `${basePath}/%/%`];
+    } else {
+      // Get all public files (in /Public folder) - path-based detection
+      query = `
+        SELECT * FROM files 
+        WHERE wallet_address = ? 
+          AND path LIKE ?
+        ORDER BY is_dir DESC, path ASC
+      `;
+      params = [walletAddress, `/${walletAddress}/Public/%`];
+    }
+
+    const rows = db.prepare(query).all(...params) as any[];
+
+    return rows.map(row => ({
+      ...row,
+      content_text: row.content_text ?? null,
+      is_dir: row.is_dir === 1,
+      is_public: row.is_public === 1
+    }));
+  }
+
+  /**
+   * Get statistics for public files
+   */
+  getPublicStats(): { publicFileCount: number; totalPublicSize: number } {
+    const db = this.getDB();
+    // Use path-based detection: files in /*/Public/* are public
+    const row = db.prepare(`
+      SELECT 
+        COUNT(*) as count,
+        COALESCE(SUM(size), 0) as total_size
+      FROM files 
+      WHERE path LIKE '%/Public/%' AND is_dir = 0
+    `).get() as { count: number; total_size: number };
+
+    return {
+      publicFileCount: row.count,
+      totalPublicSize: row.total_size
+    };
+  }
+
+  /**
+   * Check if a CID is publicly accessible
+   */
+  isPublicCID(cid: string): boolean {
+    const db = this.getDB();
+    // Use path-based detection: files in /*/Public/* are public
+    const row = db.prepare(`
+      SELECT 1 FROM files 
+      WHERE ipfs_hash = ? AND path LIKE '%/Public/%'
+      LIMIT 1
+    `).get(cid);
+    return !!row;
+  }
+
+  // ============================================================================
   // Settings Operations
   // ============================================================================
 

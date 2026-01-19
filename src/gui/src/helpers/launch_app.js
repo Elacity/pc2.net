@@ -104,7 +104,33 @@ const launch_app = async (options) => {
     }
     else
     {
+        // Try app-specific icon first
         icon = window.icons[`app-icon-${options.name}.svg`];
+        
+        // If not found, use fallback icons based on app type
+        if ( !icon ) {
+            const appIconFallbacks = {
+                'viewer': 'file-image.svg',
+                'player': 'file-video.svg',
+                'camera': 'file-image.svg',
+                'pdf': 'file-pdf.svg',
+                'recorder': 'file-audio.svg',
+                'editor': 'file-text.svg',
+                'terminal': 'file-text.svg',
+                'phoenix': 'file-text.svg',
+                'system-terminal': 'cog.svg',
+                'calculator': 'cube-outline.svg',
+                'app-center': 'folders.svg',
+                'solitaire-frvr': 'app.svg'
+            };
+            const fallbackIcon = appIconFallbacks[options.name];
+            if ( fallbackIcon && window.icons[fallbackIcon] ) {
+                icon = window.icons[fallbackIcon];
+            } else {
+                // Final fallback to generic app icon
+                icon = window.icons['app.svg'];
+            }
+        }
     }
 
     //-----------------------------------

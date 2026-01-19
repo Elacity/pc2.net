@@ -10,31 +10,66 @@ import '../utils/polyfill.js';
 
 import { createHelia, type Helia } from 'helia';
 import { unixfs, type UnixFS } from '@helia/unixfs';
-import { createLibp2p } from 'libp2p';
+import { createLibp2p, type Libp2pOptions } from 'libp2p';
 import { tcp } from '@libp2p/tcp';
 import { webSockets } from '@libp2p/websockets';
 import { noise } from '@chainsafe/libp2p-noise';
 import { yamux } from '@chainsafe/libp2p-yamux';
+import { kadDHT } from '@libp2p/kad-dht';
+import { identify } from '@libp2p/identify';
+import { bootstrap } from '@libp2p/bootstrap';
 import { FsBlockstore } from 'blockstore-fs';
 import { FsDatastore } from 'datastore-fs';
 import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 
+/**
+ * IPFS Network Modes:
+ * - private: Isolated node, no network connectivity (personal cloud only)
+ * - public: Full DHT participation, content discoverable globally
+ * - hybrid: Connect to network but only announce public content
+ */
+export type IPFSNetworkMode = 'private' | 'public' | 'hybrid';
+
+/**
+ * Public IPFS bootstrap nodes
+ */
+const PUBLIC_BOOTSTRAP_NODES = [
+  '/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN',
+  '/dnsaddr/bootstrap.libp2p.io/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa',
+  '/dnsaddr/bootstrap.libp2p.io/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb',
+  '/dnsaddr/bootstrap.libp2p.io/p2p/QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt',
+  '/ip4/104.131.131.82/tcp/4001/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ',
+];
+
 export interface IPFSOptions {
   repoPath: string;
-  enableSwarm?: boolean;
-  enablePubsub?: boolean;
+  mode?: IPFSNetworkMode;           // Network mode (default: private)
+  enableDHT?: boolean;              // Enable DHT (auto for public/hybrid)
+  enableBootstrap?: boolean;        // Use public bootstrap nodes
+  customBootstrap?: string[];       // Additional bootstrap nodes
 }
 
 export class IPFSStorage {
   private helia: Helia | null = null;
   private fs: UnixFS | null = null;
-  private blockstore: FsBlockstore | null = null; // Store reference to original blockstore
+  private blockstore: FsBlockstore | null = null;
   private repoPath: string;
   private isInitialized: boolean = false;
+  private networkMode: IPFSNetworkMode;
+  private options: IPFSOptions;
 
   constructor(options: IPFSOptions) {
     this.repoPath = options.repoPath;
+    this.networkMode = options.mode || 'private';
+    this.options = options;
+  }
+
+  /**
+   * Get the current network mode
+   */
+  getNetworkMode(): IPFSNetworkMode {
+    return this.networkMode;
   }
 
   /**
@@ -68,15 +103,19 @@ export class IPFSStorage {
       
       console.log('🌐 Initializing Helia IPFS node...');
       console.log(`   Repo path: ${this.repoPath}`);
+      console.log(`   Network mode: ${this.networkMode}`);
 
       // Create blockstore and datastore
       this.blockstore = new FsBlockstore(blockstorePath);
       const datastore = new FsDatastore(datastorePath);
 
-      // Create libp2p instance without WebRTC (Node.js doesn't need it)
-      // This avoids the WebRTC certificate file requirement
-      // We must explicitly provide transports to prevent Helia from adding WebRTC by default
-      const libp2p = await createLibp2p({
+      // Determine if we should enable network features
+      const enableNetwork = this.networkMode !== 'private';
+      const enableDHT = this.options.enableDHT ?? enableNetwork;
+      const enableBootstrap = this.options.enableBootstrap ?? enableNetwork;
+
+      // Build libp2p configuration
+      const libp2pConfig: Libp2pOptions = {
         addresses: {
           listen: [
             '/ip4/0.0.0.0/tcp/4001',
@@ -86,7 +125,6 @@ export class IPFSStorage {
         transports: [
           tcp(),
           webSockets()
-          // Explicitly exclude WebRTC - browser-only transport
         ],
         connectionEncrypters: [
           noise()
@@ -94,9 +132,40 @@ export class IPFSStorage {
         streamMuxers: [
           yamux()
         ],
-        // Explicitly disable services that might auto-add WebRTC
-        services: {}
-      });
+        services: {} as any
+      };
+
+      // Add network services for public/hybrid modes
+      if (enableNetwork) {
+        console.log(`   DHT: ${enableDHT ? 'enabled' : 'disabled'}`);
+        console.log(`   Bootstrap: ${enableBootstrap ? 'enabled' : 'disabled'}`);
+
+        // Add identify service (required for DHT)
+        (libp2pConfig.services as any).identify = identify();
+
+        // Add DHT for content discovery
+        if (enableDHT) {
+          (libp2pConfig.services as any).dht = kadDHT({
+            clientMode: false,  // Full DHT node, not just client
+          });
+        }
+
+        // Add bootstrap nodes for initial peer discovery
+        if (enableBootstrap) {
+          const bootstrapNodes = [
+            ...PUBLIC_BOOTSTRAP_NODES,
+            ...(this.options.customBootstrap || [])
+          ];
+          libp2pConfig.peerDiscovery = [
+            bootstrap({ list: bootstrapNodes })
+          ];
+        }
+      } else {
+        console.log('   Network: disabled (private mode)');
+      }
+
+      // Create libp2p instance
+      const libp2p = await createLibp2p(libp2pConfig);
 
       // Create Helia node with custom libp2p (no WebRTC)
       // Let Helia start libp2p - don't start it ourselves
@@ -328,6 +397,80 @@ export class IPFSStorage {
   }
 
   /**
+   * Pin a remote CID from the IPFS network
+   * Fetches content from other nodes and stores locally
+   * Used for marketplace purchases and network participation
+   */
+  async pinRemoteCID(cidString: string): Promise<{
+    success: boolean;
+    size: number;
+    chunks: number;
+  }> {
+    if (this.networkMode === 'private') {
+      throw new Error('Remote pinning requires public or hybrid network mode');
+    }
+
+    const fs = this.getUnixFS();
+
+    try {
+      const { CID } = await import('multiformats/cid');
+      const cid = CID.parse(cidString);
+
+      console.log(`[IPFS] Fetching remote CID from network: ${cidString}`);
+
+      // Fetch content from the network using UnixFS cat
+      // This will query DHT and retrieve from peers
+      const chunks: Uint8Array[] = [];
+      let totalSize = 0;
+
+      for await (const chunk of fs.cat(cid)) {
+        chunks.push(chunk);
+        totalSize += chunk.length;
+      }
+
+      console.log(`[IPFS] ✅ Pinned remote CID: ${cidString} (${totalSize} bytes, ${chunks.length} chunks)`);
+
+      return {
+        success: true,
+        size: totalSize,
+        chunks: chunks.length
+      };
+    } catch (error) {
+      console.error(`[IPFS] Failed to pin remote CID ${cidString}:`, error);
+      throw new Error(`Failed to pin remote CID: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * List all connected peers
+   */
+  async getConnectedPeers(): Promise<string[]> {
+    if (!this.helia || !this.isInitialized) {
+      return [];
+    }
+    
+    const connections = this.helia.libp2p.getConnections();
+    return connections.map(conn => conn.remotePeer.toString());
+  }
+
+  /**
+   * Get network statistics
+   */
+  async getNetworkStats(): Promise<{
+    mode: IPFSNetworkMode;
+    peerId: string | null;
+    connectedPeers: number;
+    addresses: string[];
+  }> {
+    return {
+      mode: this.networkMode,
+      peerId: this.getNodeId(),
+      connectedPeers: this.helia ? this.helia.libp2p.getConnections().length : 0,
+      addresses: this.getMultiaddrs()
+    };
+  }
+
+  /**
    * Get IPFS node information
    */
   async getNodeInfo(): Promise<{
@@ -346,6 +489,26 @@ export class IPFSStorage {
       agentVersion: 'helia',
       protocolVersion: '1.0'
     };
+  }
+
+  /**
+   * Get node peer ID (short form for display)
+   */
+  getNodeId(): string | null {
+    if (!this.helia || !this.isInitialized) {
+      return null;
+    }
+    return this.helia.libp2p.peerId.toString();
+  }
+
+  /**
+   * Get multiaddresses for this node
+   */
+  getMultiaddrs(): string[] {
+    if (!this.helia || !this.isInitialized) {
+      return [];
+    }
+    return this.helia.libp2p.getMultiaddrs().map(addr => addr.toString());
   }
 
   /**

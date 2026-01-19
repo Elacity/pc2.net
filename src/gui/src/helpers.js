@@ -498,8 +498,11 @@ window.update_auth_data = async (auth_token, user)=>{
     
     // Reinitialize wallet service for the new user (destroys old iframe, creates new one)
     // This ensures the wallet sidebar shows the correct wallet for THIS user
-    if (window.walletService) {
-        console.log('[update_auth_data]: Reinitializing wallet service for new user:', user.wallet_address);
+    // Guard: Only reinitialize if wallet address actually changed
+    const currentWalletAddress = window._lastWalletAddress;
+    if (window.walletService && user.wallet_address !== currentWalletAddress) {
+        window._lastWalletAddress = user.wallet_address;
+        false && console.log('[update_auth_data]: Reinitializing wallet service for new user:', user.wallet_address);
         window.walletService.reinitialize();
     }
 
@@ -1843,12 +1846,12 @@ window.refresh_desktop_background = async function() {
     if (window.user && (window.user.desktop_bg_url !== null || window.user.desktop_bg_color !== null)) {
         let bg_url = window.user.desktop_bg_url;
         
-        console.log('[refresh_desktop_background] Loading background:', bg_url);
+        false && console.log('[refresh_desktop_background] Loading background:', bg_url);
         
         // If bg_url is null or the default wallpaper, use it directly (no signing needed)
         // Always use 'cover' fit for default wallpapers, regardless of saved fit
         if (!bg_url || bg_url === '/images/wallpaper-elastos.jpg' || bg_url === '/images/flint-2.jpg') {
-            console.log('[refresh_desktop_background] Using default wallpaper:', bg_url || '/images/wallpaper-elastos.jpg');
+            false && console.log('[refresh_desktop_background] Using default wallpaper:', bg_url || '/images/wallpaper-elastos.jpg');
             window.set_desktop_background({
                 url: bg_url || '/images/wallpaper-elastos.jpg',
                 fit: 'cover', // Always use 'cover' for default wallpapers
@@ -1869,9 +1872,9 @@ window.refresh_desktop_background = async function() {
                     filePath = filePath.replace('~', `/${walletAddress}`);
                 }
                 
-                console.log('[refresh_desktop_background] Signing path:', filePath);
+                false && console.log('[refresh_desktop_background] Signing path:', filePath);
                 const signed = await puter.fs.sign(undefined, { path: filePath, action: 'read' });
-                console.log('[refresh_desktop_background] Sign response:', signed);
+                false && console.log('[refresh_desktop_background] Sign response:', signed);
                 
                 // Handle different response structures
                 let items = null;
@@ -1885,20 +1888,20 @@ window.refresh_desktop_background = async function() {
                 
                 if (items && items.length > 0 && items[0].read_url) {
                     bg_url = items[0].read_url;
-                    console.log('[refresh_desktop_background] Got signed URL:', bg_url);
+                    false && console.log('[refresh_desktop_background] Got signed URL:', bg_url);
                 } else {
-                    console.warn('[refresh_desktop_background] Sign response missing read_url:', signed);
+                    false && console.warn('[refresh_desktop_background] Sign response missing read_url:', signed);
                     // Fall back to default if signing fails
                     bg_url = '/images/wallpaper-elastos.jpg';
                 }
             } catch (err) {
-                console.warn('[refresh_desktop_background] Failed to sign background URL:', err);
+                false && console.warn('[refresh_desktop_background] Failed to sign background URL:', err);
                 // Fall back to default if signing fails
                 bg_url = '/images/wallpaper-elastos.jpg';
             }
         }
         
-        console.log('[refresh_desktop_background] Setting background with URL:', bg_url);
+        false && console.log('[refresh_desktop_background] Setting background with URL:', bg_url);
         window.set_desktop_background({
             url: bg_url,
             fit: window.user.desktop_bg_fit,
@@ -2969,12 +2972,12 @@ window.get_profile_picture = async function(username){
  */
 window.refresh_profile_picture = async function() {
     if (!window.user || !window.user.profile_picture_url) {
-        console.log('[refresh_profile_picture] No profile picture URL set');
+        false && console.log('[refresh_profile_picture] No profile picture URL set');
         return;
     }
     
     const pic_url = window.user.profile_picture_url;
-    console.log('[refresh_profile_picture] Loading profile picture:', pic_url);
+    false && console.log('[refresh_profile_picture] Loading profile picture:', pic_url);
     
     // Check if it's a local file path (starts with / or ~, not already a signed URL or HTTP URL)
     const isLocalFile = pic_url && 
@@ -2991,9 +2994,9 @@ window.refresh_profile_picture = async function() {
                 filePath = filePath.replace('~', `/${window.user?.username || window.user?.wallet_address || ''}`);
             }
             
-            console.log('[refresh_profile_picture] Signing path:', filePath);
+            false && console.log('[refresh_profile_picture] Signing path:', filePath);
             const signed = await puter.fs.sign(undefined, { path: filePath, action: 'read' });
-            console.log('[refresh_profile_picture] Sign response:', signed);
+            false && console.log('[refresh_profile_picture] Sign response:', signed);
             
             // Handle different response structures
             let signed_url = null;
@@ -3012,12 +3015,12 @@ window.refresh_profile_picture = async function() {
             }
             
             if (signed_url) {
-                console.log('[refresh_profile_picture] Got signed URL:', signed_url);
+                false && console.log('[refresh_profile_picture] Got signed URL:', signed_url);
                 // Update profile picture display
                 $('.profile-picture').css('background-image', `url("${signed_url}")`);
                 $('.profile-image').css('background-image', `url("${signed_url}")`);
                 $('.profile-image').addClass('profile-image-has-picture');
-                console.log('[refresh_profile_picture] Profile picture set with signed URL');
+                false && console.log('[refresh_profile_picture] Profile picture set with signed URL');
             } else {
                 console.warn('[refresh_profile_picture] Sign response missing read_url:', signed);
             }
@@ -3026,7 +3029,7 @@ window.refresh_profile_picture = async function() {
         }
     } else if (pic_url) {
         // Already a URL (signed URL or HTTP), use it directly
-        console.log('[refresh_profile_picture] Using existing URL:', pic_url);
+        false && console.log('[refresh_profile_picture] Using existing URL:', pic_url);
         $('.profile-picture').css('background-image', `url("${pic_url}")`);
         $('.profile-image').css('background-image', `url("${pic_url}")`);
         $('.profile-image').addClass('profile-image-has-picture');

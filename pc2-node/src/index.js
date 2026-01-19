@@ -2,10 +2,12 @@ import { createServer } from './server.js';
 import { DatabaseManager, IPFSStorage, FilesystemManager } from './storage/index.js';
 import { loadConfig } from './config/loader.js';
 import { logger } from './utils/logger.js';
+import { AIChatService } from './services/ai/AIChatService.js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+// Load configuration
 let config;
 try {
     config = loadConfig();
@@ -18,11 +20,15 @@ catch (error) {
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : config.server.port;
 const FRONTEND_PATH = join(__dirname, '../frontend');
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+// Database path (from config or env)
 const DB_PATH = process.env.DB_PATH || config.storage.database_path;
+// IPFS repo path (from config or env)
 const IPFS_REPO_PATH = process.env.IPFS_REPO_PATH || config.storage.ipfs_repo_path;
+// Global storage instances
 let db = null;
 let ipfs = null;
 let filesystem = null;
+let aiService = null;
 async function main() {
     logger.info('Starting PC2 Node...');
     logger.info(`Port: ${PORT}`);
@@ -30,9 +36,11 @@ async function main() {
     logger.info(`Database path: ${DB_PATH}`);
     logger.info(`IPFS repo path: ${IPFS_REPO_PATH}`);
     logger.info(`Mode: ${IS_PRODUCTION ? 'production' : 'development'}`);
+    // Initialize database
     try {
         db = new DatabaseManager(DB_PATH);
         db.initialize();
+        // Cleanup expired sessions on startup
         const cleaned = db.cleanupExpiredSessions();
         if (cleaned > 0) {
             logger.info(`🧹 Cleaned up ${cleaned} expired session(s)`);
@@ -42,18 +50,53 @@ async function main() {
         logger.error('❌ Failed to initialize database:', error);
         process.exit(1);
     }
+    // Initialize IPFS
     try {
+        // Get IPFS config from config file
+        const ipfsConfig = config.ipfs || {};
+        const ipfsMode = (ipfsConfig.mode || 'private');
         ipfs = new IPFSStorage({
-            repoPath: IPFS_REPO_PATH
+            repoPath: IPFS_REPO_PATH,
+            mode: ipfsMode,
+            enableDHT: ipfsConfig.enable_dht,
+            enableBootstrap: ipfsConfig.enable_bootstrap,
+            customBootstrap: ipfsConfig.custom_bootstrap
         });
         await ipfs.initialize();
+        // Create filesystem manager
         filesystem = new FilesystemManager(ipfs, db);
         logger.info('✅ Filesystem manager initialized');
+        logger.info(`   IPFS mode: ${ipfsMode}`);
     }
     catch (error) {
         logger.error('❌ Failed to initialize IPFS:', error);
         logger.warn('   File storage will not be available');
+        // Don't exit - server can still run without IPFS (for development)
     }
+    // Initialize AI service
+    if (config.ai?.enabled !== false) {
+        try {
+            aiService = new AIChatService(config.ai, db);
+            await aiService.initialize();
+            if (aiService.isAvailable()) {
+                const providers = aiService.listProviders();
+                logger.info(`🤖 AI service initialized (providers: ${providers.join(', ')})`);
+            }
+            else {
+                logger.warn('⚠️  AI service initialized but no providers available');
+                logger.info('   💡 Install Ollama: curl -fsSL https://ollama.com/install.sh | sh');
+                logger.info('   💡 Or add API keys for cloud providers in config');
+            }
+        }
+        catch (error) {
+            logger.error('❌ Failed to initialize AI service:', error);
+            logger.warn('   AI features will not be available');
+        }
+    }
+    else {
+        logger.info('ℹ️  AI service disabled in config');
+    }
+    // Check owner status
     if (!config.owner.wallet_address) {
         logger.warn('⚠️  No owner wallet set');
         logger.info('   First wallet to authenticate will become the owner');
@@ -72,13 +115,15 @@ async function main() {
         isProduction: IS_PRODUCTION,
         database: db,
         filesystem: filesystem || undefined,
-        config: config
+        config: config,
+        aiService: aiService || undefined
     });
     server.listen(PORT, () => {
         logger.info(`🚀 PC2 Node running on http://localhost:${PORT}`);
         logger.info(`   Health check: http://localhost:${PORT}/health`);
         logger.info(`   API: http://localhost:${PORT}/api`);
     });
+    // Graceful shutdown
     const shutdown = async () => {
         logger.info('Shutting down gracefully...');
         if (ipfs) {

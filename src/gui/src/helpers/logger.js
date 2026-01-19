@@ -6,18 +6,13 @@
  */
 
 /**
- * Check if we're in development mode
+ * Check if we're in development mode with logging enabled
  * @returns {boolean}
  */
 const isDev = () => {
-    // Check various indicators of development mode
-    return (
-        window.location.hostname === 'localhost' ||
-        window.location.hostname === '127.0.0.1' ||
-        window.location.hostname.includes('.localhost') ||
-        window.location.port === '4100' ||
-        window.DEBUG_MODE === true
-    );
+    // DISABLED: Too much console spam in development
+    // Only log when DEBUG_LOGGING is explicitly enabled
+    return window.DEBUG_LOGGING === true;
 };
 
 /**

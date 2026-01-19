@@ -1,18 +1,34 @@
+/**
+ * WebSocket Events
+ *
+ * Event types and broadcasting for real-time updates
+ */
+/**
+ * Broadcast file change event to user's room
+ */
 export function broadcastFileChange(io, event) {
     const room = `user:${event.wallet_address}`;
     io.to(room).emit('file:changed', event);
     console.log(`📡 Broadcasted file change to ${room}: ${event.action} ${event.path}`);
 }
+/**
+ * Broadcast directory change event to user's room
+ */
 export function broadcastDirectoryChange(io, event) {
     const room = `user:${event.wallet_address}`;
     io.to(room).emit('directory:changed', event);
     console.log(`📡 Broadcasted directory change to ${room}: ${event.action} ${event.path}`);
 }
+/**
+ * Broadcast item renamed event (matching mock server format)
+ */
 export function broadcastItemRenamed(io, walletAddress, item) {
     const room = `user:${walletAddress}`;
     io.to(room).emit('item.renamed', item);
     console.log(`📡 Broadcasted item.renamed to ${room}: ${item.old_path} → ${item.path}`);
 }
+// Global event queue (matching mock server pattern)
+// This will be set by the WebSocket server
 let globalPendingEvents = null;
 export function setEventQueue(queue) {
     globalPendingEvents = queue;
@@ -20,11 +36,18 @@ export function setEventQueue(queue) {
 export function getEventQueue() {
     return globalPendingEvents;
 }
+/**
+ * Broadcast item added event (for file uploads/creation)
+ * Frontend listens for 'item.added' to update UI immediately
+ * Also queues event for polling-based delivery (matching mock server)
+ */
 export function broadcastItemAdded(io, walletAddress, item) {
+    // Normalize wallet address to lowercase for room matching (rooms are created with lowercase)
     const normalizedWallet = walletAddress.toLowerCase();
     const room = `user:${normalizedWallet}`;
     const roomSockets = io.sockets.adapter.rooms.get(room);
     const connectedCount = roomSockets ? roomSockets.size : 0;
+    // Queue event for polling-based delivery (matching mock server pattern)
     if (globalPendingEvents) {
         const normalizedWallet = walletAddress.toLowerCase();
         globalPendingEvents.push({
@@ -33,16 +56,20 @@ export function broadcastItemAdded(io, walletAddress, item) {
             wallet: normalizedWallet,
             timestamp: Date.now()
         });
+        // Keep only last 100 events
         if (globalPendingEvents.length > 100) {
             globalPendingEvents.shift();
         }
         console.log(`🔔 Queued item.added event for wallet: ${normalizedWallet}, queue size: ${globalPendingEvents.length}`);
     }
+    // Always emit to room (Socket.io will queue for polling if no WebSocket connection)
+    // This ensures events are delivered even if clients are using polling
     console.log(`📡 Emitting item.added to room: ${room}, name: ${item.name}, dirpath: ${item.dirpath}, connectedCount: ${connectedCount}`);
     io.to(room).emit('item.added', item);
     console.log(`📡 Event emitted - Socket.io should deliver to ${connectedCount} WebSocket clients or via polling`);
     if (connectedCount > 0) {
         console.log(`📡 Broadcasted item.added to ${room} (${connectedCount} clients): ${item.name} in ${item.dirpath}`);
+        // Also emit directly to each socket to ensure delivery
         const roomSocketsArray = Array.from(roomSockets || []);
         roomSocketsArray.forEach(socketId => {
             const socket = io.sockets.sockets.get(socketId);
@@ -61,19 +88,31 @@ export function broadcastItemAdded(io, walletAddress, item) {
         console.log(`📡 Available rooms (${allRooms.length}):`, allRooms.slice(0, 10));
     }
 }
+/**
+ * Broadcast item removed event (for file deletion)
+ * Frontend listens for 'item.removed' to remove from UI
+ * Matches mock server format: { path, descendants_only: false, uid?, original_client_socket_id? }
+ * Also queues event for polling-based delivery (matching mock server)
+ */
 export function broadcastItemRemoved(io, walletAddress, item) {
+    // Normalize wallet address to lowercase for room matching (rooms are created with lowercase)
     const normalizedWallet = walletAddress.toLowerCase();
     const room = `user:${normalizedWallet}`;
     const roomSockets = io.sockets.adapter.rooms.get(room);
     const connectedCount = roomSockets ? roomSockets.size : 0;
+    // Ensure descendants_only is set (mock server format)
+    // Only include original_client_socket_id if it's a non-null string (to avoid null === null comparison issues)
     const eventData = {
         path: item.path,
         descendants_only: item.descendants_only !== undefined ? item.descendants_only : false,
         ...(item.uid && { uid: item.uid })
     };
+    // Only include original_client_socket_id if it's a valid string (not null/undefined)
+    // This prevents frontend handler from skipping events when window.socket.id is null/undefined
     if (item.original_client_socket_id && typeof item.original_client_socket_id === 'string') {
         eventData.original_client_socket_id = item.original_client_socket_id;
     }
+    // Queue event for polling-based delivery (matching mock server pattern)
     if (globalPendingEvents) {
         const normalizedWallet = walletAddress.toLowerCase();
         globalPendingEvents.push({
@@ -82,12 +121,16 @@ export function broadcastItemRemoved(io, walletAddress, item) {
             wallet: normalizedWallet,
             timestamp: Date.now()
         });
+        // Keep only last 100 events
         if (globalPendingEvents.length > 100) {
             globalPendingEvents.shift();
         }
         console.log(`🔔 Queued item.removed event for wallet: ${normalizedWallet}, queue size: ${globalPendingEvents.length}`);
     }
+    // Always emit to room (Socket.io will queue for polling if no WebSocket connection)
+    // This ensures events are delivered even if clients are using polling
     console.log(`📡 Emitting item.removed to room: ${room}, path: ${item.path}, connectedCount: ${connectedCount}`);
+    // Double-check room membership right before emitting (sockets might have disconnected)
     const currentRoomSockets = io.sockets.adapter.rooms.get(room);
     const currentConnectedCount = currentRoomSockets ? currentRoomSockets.size : 0;
     if (currentConnectedCount !== connectedCount) {
@@ -98,8 +141,10 @@ export function broadcastItemRemoved(io, walletAddress, item) {
     if (currentConnectedCount > 0) {
         console.log(`📡 Broadcasted item.removed to ${room} (${currentConnectedCount} clients): ${item.path}`);
         console.log(`📡 Event data:`, JSON.stringify(eventData, null, 2));
+        // Log all sockets in the room for debugging
         const roomSocketsArray = Array.from(currentRoomSockets || []);
         console.log(`📡 Room ${room} has ${currentConnectedCount} client(s):`, roomSocketsArray.map(sid => sid.substring(0, 10) + '...'));
+        // Also emit directly to each socket to ensure delivery
         roomSocketsArray.forEach(socketId => {
             const socket = io.sockets.sockets.get(socketId);
             if (socket && socket.connected) {
@@ -119,11 +164,20 @@ export function broadcastItemRemoved(io, walletAddress, item) {
         console.log(`📡 Looking for room: ${room}, normalized wallet: ${normalizedWallet}`);
     }
 }
+/**
+ * Broadcast item moved event (for file moves)
+ * Frontend listens for 'item.moved' to update UI
+ * Also queues event for polling-based delivery (matching mock server)
+ */
 export function broadcastItemMoved(io, walletAddress, item) {
+    // Normalize wallet address to lowercase for room matching (rooms are created with lowercase)
     const normalizedWallet = walletAddress.toLowerCase();
     const room = `user:${normalizedWallet}`;
     const roomSockets = io.sockets.adapter.rooms.get(room);
     const connectedCount = roomSockets ? roomSockets.size : 0;
+    // Build event data (matching mock server format)
+    // Frontend expects is_dir, size, type, modified, thumbnail at top level
+    // Only include original_client_socket_id if it's a non-null string (to avoid null === null comparison issues)
     const eventData = {
         uid: item.uid,
         path: item.path,
@@ -133,12 +187,15 @@ export function broadcastItemMoved(io, walletAddress, item) {
         ...(item.size !== undefined && { size: item.size }),
         ...(item.type !== undefined && { type: item.type }),
         ...(item.modified !== undefined && { modified: item.modified }),
-        ...(item.thumbnail !== undefined && { thumbnail: item.thumbnail }),
+        ...(item.thumbnail !== undefined && { thumbnail: item.thumbnail }), // Include thumbnail if available
         ...(item.metadata && { metadata: item.metadata })
     };
+    // Only include original_client_socket_id if it's a valid string (not null/undefined)
+    // This prevents frontend handler from skipping events when window.socket.id is null/undefined
     if (item.original_client_socket_id && typeof item.original_client_socket_id === 'string') {
         eventData.original_client_socket_id = item.original_client_socket_id;
     }
+    // Queue event for polling-based delivery (matching mock server pattern)
     if (globalPendingEvents) {
         globalPendingEvents.push({
             event: 'item.moved',
@@ -146,19 +203,24 @@ export function broadcastItemMoved(io, walletAddress, item) {
             wallet: normalizedWallet,
             timestamp: Date.now()
         });
+        // Keep only last 100 events
         if (globalPendingEvents.length > 100) {
             globalPendingEvents.shift();
         }
         console.log(`🔔 Queued item.moved event for wallet: ${normalizedWallet}, queue size: ${globalPendingEvents.length}`);
     }
+    // Always emit to room (Socket.io will queue for polling if no WebSocket connection)
+    // This ensures events are delivered even if clients are using polling
     console.log(`📡 Emitting item.moved to room: ${room}, from: ${eventData.old_path}, to: ${eventData.path}, connectedCount: ${connectedCount}`);
     io.to(room).emit('item.moved', eventData);
     console.log(`📡 Event emitted - Socket.io should deliver to ${connectedCount} WebSocket clients or via polling`);
     if (connectedCount > 0) {
         console.log(`📡 Broadcasted item.moved to ${room} (${connectedCount} clients): ${eventData.old_path} → ${eventData.path}`);
         console.log(`📡 Event data:`, JSON.stringify(eventData, null, 2));
+        // Log all sockets in the room for debugging
         const roomSocketsArray = Array.from(roomSockets || []);
         console.log(`📡 Room ${room} has ${connectedCount} client(s):`, roomSocketsArray.map(sid => sid.substring(0, 10) + '...'));
+        // Also emit directly to each socket to ensure delivery
         roomSocketsArray.forEach(socketId => {
             const socket = io.sockets.sockets.get(socketId);
             if (socket && socket.connected) {
@@ -177,15 +239,42 @@ export function broadcastItemMoved(io, walletAddress, item) {
         console.log(`📡 Looking for room: ${room}, normalized wallet: ${normalizedWallet}`);
     }
 }
+/**
+ * Broadcast item updated event (for file updates)
+ * Frontend listens for 'item.updated' to refresh UI
+ */
 export function broadcastItemUpdated(io, walletAddress, item) {
-    const room = `user:${walletAddress}`;
+    // Normalize wallet address to lowercase for room matching
+    const normalizedWallet = walletAddress.toLowerCase();
+    const room = `user:${normalizedWallet}`;
+    // Queue event for polling-based delivery (matching mock server pattern)
+    if (globalPendingEvents) {
+        globalPendingEvents.push({
+            event: 'item.updated',
+            data: item,
+            wallet: normalizedWallet,
+            timestamp: Date.now()
+        });
+        // Keep only last 100 events
+        if (globalPendingEvents.length > 100) {
+            globalPendingEvents.shift();
+        }
+        console.log(`🔔 Queued item.updated event for wallet: ${normalizedWallet}, queue size: ${globalPendingEvents.length}`);
+    }
+    // Always emit to room (Socket.io will queue for polling if no WebSocket connection)
     io.to(room).emit('item.updated', item);
-    console.log(`📡 Broadcasted item.updated to ${room}: ${item.path}`);
+    console.log(`📡 Broadcasted item.updated to ${room}: ${item.path}${item.thumbnail ? ' (with thumbnail)' : ''}`);
 }
+/**
+ * Broadcast to specific user by wallet address
+ */
 export function broadcastToUser(io, walletAddress, event, data) {
     const room = `user:${walletAddress}`;
     io.to(room).emit(event, data);
 }
+/**
+ * Get connected clients for a user
+ */
 export function getConnectedClients(io, walletAddress) {
     const room = `user:${walletAddress}`;
     const roomSockets = io.sockets.adapter.rooms.get(room);

@@ -1,3 +1,8 @@
+/**
+ * Logger Utility
+ *
+ * Simple logging system with levels and optional file output
+ */
 export var LogLevel;
 (function (LogLevel) {
     LogLevel[LogLevel["DEBUG"] = 0] = "DEBUG";
@@ -47,6 +52,7 @@ class Logger {
         this.log(LogLevel.ERROR, 'ERROR', message, ...args);
     }
 }
+// Create singleton logger instance
 const logLevel = process.env.LOG_LEVEL
     ? (LogLevel[process.env.LOG_LEVEL.toUpperCase()] ?? LogLevel.INFO)
     : LogLevel.INFO;

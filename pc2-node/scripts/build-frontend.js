@@ -319,45 +319,63 @@ async function main() {
     
     <!-- Initialize GUI -->
     <script type="text/javascript">
-        // Wait for both scripts to load before initializing
-        function initializeGUI() {
-            console.log('[PC2]: Checking for gui function...');
-            console.log('[PC2]: typeof gui:', typeof gui);
-            console.log('[PC2]: typeof window.gui:', typeof window.gui);
-            
-            if (typeof gui === 'function' || typeof window.gui === 'function') {
-                const guiFunc = gui || window.gui;
-                console.log('[PC2]: ✅ gui() function found, initializing...');
-                guiFunc({
-                    gui_origin: window.location.origin, // CRITICAL: Use same origin for socket.io connection
-                    api_origin: undefined, // Will auto-detect from window.location.origin
-                    title: 'ElastOS',
-                    max_item_name_length: 150,
-                    require_email_verification_to_publish_website: false,
-                    short_description: 'ElastOS is a privacy-first personal cloud that houses all your files, apps, and games in one private and secure place, accessible from anywhere at any time.',
-                }).then(() => {
-                    console.log('[PC2]: ✅ gui() initialization completed');
-                }).catch((e) => {
-                    console.error('[PC2]: ❌ gui() initialization failed:', e);
-                    console.error('[PC2]: Error details:', e.stack || e.message);
-                });
-            } else {
-                console.error('[PC2]: ❌ GUI function not found. typeof gui:', typeof gui, 'typeof window.gui:', typeof window.gui);
-                console.error('[PC2]: Available window properties:', Object.keys(window).filter(k => k.includes('gui')));
-                // Retry after a short delay in case scripts are still loading
-                setTimeout(initializeGUI, 500);
-            }
+        // CRITICAL: Guard against multiple initializations
+        // IMPORTANT: Don't reset flags if already set (prevents re-init on script re-execution)
+        if (typeof window._gui_init_started === 'undefined') {
+            window._gui_init_started = false;
+        }
+        if (typeof window._gui_init_completed === 'undefined') {
+            window._gui_init_completed = false;
         }
         
-        window.addEventListener('load', function() {
-            console.log('[PC2]: Window loaded, initializing GUI...');
-            // Small delay to ensure all scripts are loaded
-            setTimeout(initializeGUI, 100);
-        });
+        // Only define initializeGUI once
+        if (!window._initializeGUI_defined) {
+            window._initializeGUI_defined = true;
+            
+            window.initializeGUI = function() {
+                // Guard: Only initialize once
+                if (window._gui_init_started || window._gui_init_completed) {
+                    return;
+                }
+                window._gui_init_started = true;
+                
+                if (typeof gui === 'function' || typeof window.gui === 'function') {
+                    const guiFunc = gui || window.gui;
+                    guiFunc({
+                        gui_origin: window.location.origin,
+                        api_origin: undefined,
+                        title: 'ElastOS',
+                        max_item_name_length: 150,
+                        require_email_verification_to_publish_website: false,
+                        short_description: 'ElastOS is a privacy-first personal cloud.',
+                    }).then(() => {
+                        window._gui_init_completed = true;
+                    }).catch((e) => {
+                        console.error('[PC2]: GUI init failed:', e);
+                        // Only allow retry if we haven't completed initialization
+                        if (!window._gui_init_completed) {
+                            window._gui_init_started = false;
+                        }
+                    });
+                } else {
+                    window._gui_init_started = false; // Allow retry
+                    setTimeout(window.initializeGUI, 500);
+                }
+            };
+            
+            // Only add event listener once
+            window.addEventListener('load', function() {
+                if (!window._gui_init_started && !window._gui_init_completed) {
+                    setTimeout(window.initializeGUI, 100);
+                }
+            });
+        }
         
-        // Also try immediately if DOM is already ready
+        // Initial trigger (but guard against re-execution)
         if (document.readyState === 'complete' || document.readyState === 'interactive') {
-            setTimeout(initializeGUI, 100);
+            if (!window._gui_init_started && !window._gui_init_completed) {
+                setTimeout(window.initializeGUI, 100);
+            }
         }
     </script>
 </body>

@@ -1,5 +1,14 @@
+/**
+ * Authentication Endpoints
+ *
+ * Handles Particle Auth authentication and session creation
+ */
 import { logger } from '../utils/logger.js';
 import crypto from 'crypto';
+/**
+ * Authenticate with Particle Auth
+ * POST /auth/particle
+ */
 export async function handleParticleAuth(req, res) {
     const db = req.app.locals.db;
     const config = req.app.locals.config;
@@ -17,8 +26,10 @@ export async function handleParticleAuth(req, res) {
         return;
     }
     try {
-        const body = req.body;
+        const body = req.body; // Accept flexible field names from Particle Auth
+        // Particle Auth may send: address, walletAddress, eoaAddress, or wallet_address
         const wallet_address = body.wallet_address || body.address || body.walletAddress || body.eoaAddress;
+        // Smart account may be: smartAccountAddress or smart_account_address
         const smart_account_address = body.smart_account_address || body.smartAccountAddress;
         logger.info('🔐 Auth request details', {
             hasWalletAddress: !!wallet_address,
@@ -31,13 +42,19 @@ export async function handleParticleAuth(req, res) {
             res.status(400).json({ error: 'Missing wallet address', received: Object.keys(body || {}) });
             return;
         }
+        // Normalize wallet address
         const normalizedWallet = wallet_address.toLowerCase();
+        // MULTI-USER MODE: Allow any wallet to create an account
+        // No owner restriction - each wallet gets its own isolated account
+        // Files are already isolated per wallet_address in the database
         logger.info('🔐 User authentication', {
             wallet: normalizedWallet.substring(0, 10) + '...',
-            mode: 'multi-user'
+            mode: 'multi-user' // All wallets can create accounts
         });
+        // Create or get user
         db.createOrUpdateUser(normalizedWallet, smart_account_address || null);
         db.updateLastLogin(normalizedWallet);
+        // Check for existing valid session
         const existingSession = db.getSessionByWallet(normalizedWallet);
         if (existingSession && existingSession.expires_at > Date.now()) {
             logger.info('✅ Returning existing session', {
@@ -45,6 +62,7 @@ export async function handleParticleAuth(req, res) {
                 tokenPrefix: existingSession.token.substring(0, 8) + '...',
                 expiresAt: new Date(existingSession.expires_at).toISOString()
             });
+            // Return existing session
             const userInfo = buildUserInfo(normalizedWallet, smart_account_address, existingSession.token, config);
             const response = {
                 success: true,
@@ -60,6 +78,7 @@ export async function handleParticleAuth(req, res) {
                 expiredAt: new Date(existingSession.expires_at).toISOString()
             });
         }
+        // Create new session
         const sessionToken = crypto.randomBytes(32).toString('hex');
         const sessionDuration = config.security.session_duration_days * 24 * 60 * 60 * 1000;
         const expiresAt = Date.now() + sessionDuration;
@@ -77,16 +96,20 @@ export async function handleParticleAuth(req, res) {
             created_at: Date.now(),
             expires_at: expiresAt
         });
+        // Ensure user's home directory structure exists (matching mock server behavior)
         const filesystem = req.app.locals.filesystem;
         if (filesystem) {
             try {
+                // Create user's root directory
                 const userRoot = `/${normalizedWallet}`;
                 try {
                     await filesystem.createDirectory(userRoot, normalizedWallet);
                 }
                 catch (error) {
+                    // Directory might already exist, that's fine
                     logger.debug(`User root ${userRoot} already exists`);
                 }
+                // Create standard directories (Desktop, Documents, Public, Pictures, Videos, Trash)
                 const standardDirs = ['Desktop', 'Documents', 'Public', 'Pictures', 'Videos', 'Trash'];
                 for (const dirName of standardDirs) {
                     const dirPath = `${userRoot}/${dirName}`;
@@ -95,11 +118,13 @@ export async function handleParticleAuth(req, res) {
                         logger.info(`✅ Created user directory: ${dirPath}`);
                     }
                     catch (error) {
+                        // Directory might already exist, that's fine
                         logger.debug(`Directory ${dirPath} already exists or creation failed:`, error instanceof Error ? error.message : 'Unknown');
                     }
                 }
             }
             catch (error) {
+                // Log but don't fail auth if directory creation fails
                 logger.warn('Failed to create user home directory structure:', error instanceof Error ? error.message : 'Unknown');
             }
         }
@@ -111,12 +136,14 @@ export async function handleParticleAuth(req, res) {
             tokenLength: sessionToken.length,
             expiresAt: new Date(expiresAt).toISOString()
         });
+        // Build user info
         const userInfo = buildUserInfo(normalizedWallet, smart_account_address, sessionToken, config);
         const response = {
             success: true,
             token: sessionToken,
             user: userInfo
         };
+        // Set CORS headers (matching mock server)
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
         res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -130,13 +157,28 @@ export async function handleParticleAuth(req, res) {
         });
     }
 }
+/**
+ * Grant user app access
+ * POST /auth/grant-user-app
+ */
 export function handleGrantUserApp(req, res) {
+    // This endpoint is used by the frontend to grant app permissions
+    // For now, just acknowledge the request
     res.json({ success: true, granted: true });
 }
+/**
+ * GET /auth/get-user-app-token
+ * Returns a token for app access (used by SDK)
+ */
 export function handleGetUserAppToken(req, res) {
+    // Return the user's session token as the app token
+    // The SDK uses this to authenticate app requests
     const token = req.user?.session_token || '';
     res.json({ success: true, token });
 }
+/**
+ * Build user info response
+ */
 function buildUserInfo(walletAddress, smartAccountAddress, sessionToken, config) {
     return {
         id: 1,

@@ -45,6 +45,27 @@ PORT=4202 npm start
 
 ### 🎯 Recent Progress (2026-01-19)
 
+**Puter SDK Initialization Fix - ✅ COMPLETE**
+
+**Problem Solved:** Excessive console logging (10-20+ duplicate initializations) and duplicate desktop items caused by Puter SDK creating hidden iframes that load copies of the main page.
+
+**Solution Implemented:**
+1. ✅ **Iframe Detection Guard** - `window !== window.top` check skips initialization in iframe contexts
+2. ✅ **Particle-Auth Page Guard** - Skips initialization on `/particle-auth` route
+3. ✅ **DOM-based Guard** - Hidden `<div>` element serves as persistent guard across JS contexts
+4. ✅ **Module-level Throw** - `gui.js` throws error to halt duplicate script execution
+
+**Files Modified:**
+- `src/gui/src/index.js` - Added throw for duplicate gui.js execution
+- `src/gui/src/initgui.js` - Iframe detection + DOM guard + conditional debug logging
+- `src/gui/src/services/WalletService.js` - Global iframe creation flag, lazy iframe creation
+
+**Key Discovery:** The Puter SDK (`v2/`) creates hidden iframes that load the full application. Each iframe has isolated JavaScript contexts where standard singleton patterns and window properties don't persist. This is an architectural limitation that requires investigation of the SDK's iframe behavior.
+
+**See:** "Technical Debt & Foundation Work" section for full analysis and recommended proper fixes.
+
+---
+
 **Settings Window UX Improvements - ✅ COMPLETE**
 
 **Major Features Delivered:**
@@ -2635,6 +2656,90 @@ Before adding many features, consider:
 4. **Documentation** - API docs, user guides
 5. **Migration Tools** - Database migrations, data upgrades
 6. **Configuration Management** - Centralized config system
+
+---
+
+### 🔧 Puter SDK & Initialization Architecture Issues (2026-01-19)
+
+**Status:** Workaround Implemented | **Priority:** Medium | **Effort:** High to fix properly
+
+#### Problem Discovery
+
+During investigation of excessive console logging and duplicate desktop item rendering, we discovered a critical architectural issue:
+
+**Root Cause:** The Puter SDK (`v2/`) creates **hidden iframes** that load copies of the main page. Each iframe has its own isolated JavaScript execution context where:
+- `window` properties don't persist across contexts
+- DOM elements don't persist across contexts  
+- Module-level guards fail (each context starts fresh)
+- Standard singleton patterns break
+
+This caused:
+- Multiple `initgui()` executions (10-20+ times per page load)
+- Duplicate desktop items appearing
+- Excessive console spam
+- Wasted API calls and resources
+
+#### Current Workaround (Implemented)
+
+We implemented a multi-layer guard system:
+
+1. **Iframe Detection** (`window !== window.top`) - Skips initialization if running inside an iframe
+2. **Particle-Auth Page Detection** - Skips if on `/particle-auth` route
+3. **DOM-based Guard** - Creates a hidden `<div>` element as backup (DOM persists even when window doesn't)
+4. **Module-level Throw** - `gui.js` throws error to halt duplicate script execution
+
+**Files Modified:**
+- `src/gui/src/index.js` - Added throw for duplicate execution
+- `src/gui/src/initgui.js` - Iframe detection + DOM guard
+- `src/gui/src/services/WalletService.js` - Global iframe creation flag
+
+#### Proper Fix (Future Work)
+
+To properly address this, consider:
+
+1. **Investigate Puter SDK Iframe Creation**
+   - Why does `v2/` create hidden iframes that load the full application?
+   - Can this be disabled or configured?
+   - Is this intentional behavior (sandboxing) or a bug?
+
+2. **SDK Forking/Modification**
+   - Fork `@puter/puter-js` and modify to prevent iframe-based reloading
+   - Or contribute upstream fix if this is unintended behavior
+
+3. **Lazy Initialization Pattern**
+   - Delay all GUI initialization until explicitly triggered
+   - Don't auto-run on script load
+   - Provides more control over when/how initialization happens
+
+4. **WebSocket Consolidation**
+   - The SDK creates its own socket.io connection
+   - GUI creates another connection
+   - Consolidate to single connection to prevent duplicate events
+   - (Partially addressed - see socket deduplication in UIDesktop.js)
+
+#### Related Issues to Address
+
+1. **`.profile` 404 Error** - Every page load attempts to read `/Public/.profile` which doesn't exist
+   - Fix: Create default profile file OR suppress error gracefully
+
+2. **WebSocket Connection Instability**
+   ```
+   WebSocket connection to 'ws://localhost:4200/socket.io/...' failed: 
+   WebSocket is closed before the connection is established.
+   ```
+   - Multiple connection attempts during initialization
+   - Consider connection pooling or retry logic
+
+3. **Particle Network CORS Errors** - External API issues with `particle.network` and `walletconnect.org`
+   - Not related to our code
+   - May need server-side proxy for production
+
+#### Lessons Learned
+
+1. **Standard Patterns Fail in Multi-Context Environments** - Singletons, module guards, window flags all assume single JS context
+2. **DOM is More Persistent Than Window** - When window properties fail, DOM elements can serve as guards
+3. **Iframe Detection is Essential** - Always check `window !== window.top` when dealing with embedded SDKs
+4. **Debug Logging Must Be Conditional** - Use `DEBUG_FLAG && console.log()` pattern, not unconditional logging
 
 ---
 

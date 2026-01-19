@@ -39,6 +39,28 @@
         "storage_mode": "ipfs"
     },
     
+    "resources": {
+        "_comment": "Resource limits - 'auto' means detect from system, or set explicit values",
+        "storage": {
+            "limit": "auto",
+            "_limit_options": ["auto", "10GB", "50GB", "100GB", "500GB", "unlimited"],
+            "reserve_free_space": "10GB",
+            "_note": "auto = (total disk - reserve_free_space) * 0.8"
+        },
+        "compute": {
+            "max_cpu_percent": 80,
+            "max_memory_mb": "auto",
+            "_max_memory_options": ["auto", 512, 1024, 2048, 4096, 8192],
+            "max_concurrent_wasm": 4,
+            "_note": "auto = 50% of system RAM"
+        },
+        "network": {
+            "max_upload_mbps": "unlimited",
+            "max_download_mbps": "unlimited",
+            "max_connections": 100
+        }
+    },
+    
     "terminal": {
         "_comment": "Terminal isolation mode configuration",
         "_modes": {
@@ -50,6 +72,57 @@
         "allow_insecure_fallback": false,
         "max_terminals_per_user": 5,
         "idle_timeout_minutes": 30
+    },
+    
+    "ipfs": {
+        "_comment": "IPFS network mode configuration",
+        "_modes": {
+            "private": "Isolated node - no network connectivity (personal cloud only)",
+            "public": "Full DHT participation - content discoverable globally", 
+            "hybrid": "Connect to network but only for public content (recommended for dDRM)"
+        },
+        "mode": "private",
+        "enable_dht": false,
+        "enable_bootstrap": false,
+        "announce_public": false,
+        "custom_bootstrap": [],
+        "_note": "For dDRM marketplace integration, set mode to 'hybrid' or 'public'",
+        
+        "_gateway_note": "Gateway URL is automatically derived from request Host header",
+        "_gateway_examples": {
+            "local_dev": "http://localhost:4200/ipfs/:cid",
+            "lan_access": "http://192.168.1.100:4200/ipfs/:cid",
+            "vps_production": "https://mycloud.example.com/ipfs/:cid",
+            "ngrok_tunnel": "https://abc123.ngrok.io/ipfs/:cid"
+        },
+        
+        "_deployment_profiles": {
+            "raspberry_pi": {
+                "mode": "hybrid",
+                "enable_dht": true,
+                "enable_bootstrap": true,
+                "_reason": "Lightweight participation, can fetch dDRM content"
+            },
+            "desktop": {
+                "mode": "hybrid",
+                "enable_dht": true,
+                "enable_bootstrap": true,
+                "_reason": "Full participation when online, serve to LAN"
+            },
+            "vps_seeder": {
+                "mode": "public",
+                "enable_dht": true,
+                "enable_bootstrap": true,
+                "announce_public": true,
+                "_reason": "Always-on seeder, earns rewards for serving content"
+            },
+            "air_gapped": {
+                "mode": "private",
+                "enable_dht": false,
+                "enable_bootstrap": false,
+                "_reason": "Maximum privacy, no network discovery"
+            }
+        }
     },
     
     "_particle_auth_note": "Particle Auth credentials are configured in submodules/particle-auth/.env",

@@ -40,7 +40,7 @@ function refreshWalletAddress() {
         
         // If wallet changed, clear old conversation ID (user switched accounts)
         if (oldWallet && oldWallet !== currentWalletAddress) {
-            console.log('[UIAIChat] Wallet address changed, clearing old conversation ID');
+            false && console.log('[UIAIChat] Wallet address changed, clearing old conversation ID');
             currentConversationId = null;
         }
         
@@ -213,7 +213,7 @@ function clearChatHistoryForCurrentWallet() {
         currentConversationId = null;
         currentWalletAddress = null;
         
-        console.log('[UIAIChat] Cleared chat history for wallet:', wallet.substring(0, 10) + '...');
+        false && console.log('[UIAIChat] Cleared chat history for wallet:', wallet.substring(0, 10) + '...');
     }
 }
 
@@ -510,7 +510,7 @@ export default function UIAIChat() {
     
     // Listen for AI config updates from Settings
     $(document).on('ai-config-updated', function() {
-        console.log('[UIAIChat] AI config updated, reloading...');
+        false && console.log('[UIAIChat] AI config updated, reloading...');
         loadAIConfigForChat();
     });
 }
@@ -570,7 +570,7 @@ async function loadAIConfigForChat() {
                 const deprecatedModels = ['claude-3-5-sonnet-20241022', 'claude-3-5-sonnet-20240620'];
                 if (deprecatedModels.includes(model)) {
                     cleanModel = 'claude-sonnet-4-5-20250929';
-                    console.log('[UIAIChat] Fixed deprecated Claude model name:', model, '->', cleanModel);
+                    false && console.log('[UIAIChat] Fixed deprecated Claude model name:', model, '->', cleanModel);
                 }
             }
             
@@ -628,11 +628,11 @@ async function loadAIConfigForChat() {
             
             // Add the configured model option with formatted name
             const displayName = formatModelName(provider, cleanModel);
-            console.log('[UIAIChat] [NEW CODE v2] formatModelName result:', displayName, 'for provider:', provider, 'model:', cleanModel);
+            false && console.log('[UIAIChat] [NEW CODE v2] formatModelName result:', displayName, 'for provider:', provider, 'model:', cleanModel);
             $modelSelect.append(`<option value="${modelValue}">${displayName}</option>`);
             $modelSelect.val(modelValue);
             
-            console.log('[UIAIChat] [NEW CODE v2] Updated model selector to:', modelValue, 'display name:', displayName, '(provider:', provider, ', model:', cleanModel, ')');
+            false && console.log('[UIAIChat] [NEW CODE v2] Updated model selector to:', modelValue, 'display name:', displayName, '(provider:', provider, ', model:', cleanModel, ')');
         }
     } catch (error) {
         console.error('[UIAIChat] Error loading AI config:', error);
@@ -675,7 +675,7 @@ function setupDragAndDrop() {
         
         // Method 1: Check event.detail.items (PC2 custom event)
         if (originalEvent.detail?.items && originalEvent.detail.items.length > 0) {
-            console.log('[UIAIChat] Found PC2 files in event.detail:', originalEvent.detail.items);
+            false && console.log('[UIAIChat] Found PC2 files in event.detail:', originalEvent.detail.items);
             pc2Files = originalEvent.detail.items;
         }
         // Method 2: Check dataTransfer for PC2 files
@@ -684,7 +684,7 @@ function setupDragAndDrop() {
                 // Use puter.ui.getEntriesFromDataTransferItems to get PC2 files
                 const entries = await puter.ui.getEntriesFromDataTransferItems(originalEvent.dataTransfer.items);
                 if (entries && entries.length > 0) {
-                    console.log('[UIAIChat] Found PC2 files via getEntriesFromDataTransferItems:', entries);
+                    false && console.log('[UIAIChat] Found PC2 files via getEntriesFromDataTransferItems:', entries);
                     pc2Files = entries;
                 }
             } catch (error) {
@@ -694,7 +694,7 @@ function setupDragAndDrop() {
         
         // If we have PC2 files, process them
         if (pc2Files.length > 0) {
-            console.log('[UIAIChat] Processing', pc2Files.length, 'PC2 filesystem files');
+            false && console.log('[UIAIChat] Processing', pc2Files.length, 'PC2 filesystem files');
             
             // Sign files to get read URLs
             const itemsToSign = pc2Files.map(file => ({
@@ -709,11 +709,11 @@ function setupDragAndDrop() {
             }
             
             try {
-                console.log('[UIAIChat] Signing files:', itemsToSign);
+                false && console.log('[UIAIChat] Signing files:', itemsToSign);
                 const signedFiles = await puter.fs.sign(null, itemsToSign);
                 const filesArray = Array.isArray(signedFiles.items) ? signedFiles.items : [signedFiles.items];
                 
-                console.log('[UIAIChat] Signed files:', filesArray);
+                false && console.log('[UIAIChat] Signed files:', filesArray);
                 
                 // Add files to attached list
                 filesArray.forEach((file, idx) => {
@@ -731,11 +731,11 @@ function setupDragAndDrop() {
                             read_url: file.read_url || file.readURL,
                         };
                         attachedFiles.push(mergedFile);
-                        console.log('[UIAIChat] ✅ Added file to attachments:', mergedFile.name);
+                        false && console.log('[UIAIChat] ✅ Added file to attachments:', mergedFile.name);
                     }
                 });
                 
-                console.log('[UIAIChat] Total attached files:', attachedFiles.length);
+                false && console.log('[UIAIChat] Total attached files:', attachedFiles.length);
                 updateAttachedFilesDisplay();
             } catch (error) {
                 console.error('[UIAIChat] Failed to process dropped PC2 files:', error);
@@ -743,7 +743,7 @@ function setupDragAndDrop() {
             }
         } else {
             // No PC2 files found - might be local OS files
-            console.log('[UIAIChat] No PC2 filesystem files detected in drop event');
+            false && console.log('[UIAIChat] No PC2 filesystem files detected in drop event');
             // Silently ignore - user needs to upload to PC2 first
         }
     });
@@ -824,8 +824,8 @@ $(document).on('click', '.ai-attach-btn', async function () {
         // Listen for file selection - we need to intercept when files are selected
         // The file_opened event is dispatched on the window, but we'll also listen on document
         const fileOpenedHandler = async function(e) {
-            console.log('[UIAIChat] file_opened event received:', e);
-            console.log('[UIAIChat] Event detail:', e.detail);
+            false && console.log('[UIAIChat] file_opened event received:', e);
+            false && console.log('[UIAIChat] Event detail:', e.detail);
             
             const selectedFiles = Array.isArray(e.detail) ? e.detail : [e.detail];
             
@@ -834,7 +834,7 @@ $(document).on('click', '.ai-attach-btn', async function () {
                 return;
             }
             
-            console.log('[UIAIChat] Processing', selectedFiles.length, 'file(s)');
+            false && console.log('[UIAIChat] Processing', selectedFiles.length, 'file(s)');
             
             // Sign files to get read URLs
             const itemsToSign = selectedFiles.map(file => ({
@@ -844,11 +844,11 @@ $(document).on('click', '.ai-attach-btn', async function () {
             }));
             
                 try {
-                    console.log('[UIAIChat] Signing files:', itemsToSign);
+                    false && console.log('[UIAIChat] Signing files:', itemsToSign);
                     const signedFiles = await puter.fs.sign(null, itemsToSign);
                     const filesArray = Array.isArray(signedFiles.items) ? signedFiles.items : [signedFiles.items];
                     
-                    console.log('[UIAIChat] Signed files:', filesArray);
+                    false && console.log('[UIAIChat] Signed files:', filesArray);
                     
                     // Add files to attached list
                     filesArray.forEach((file, idx) => {
@@ -874,13 +874,13 @@ $(document).on('click', '.ai-attach-btn', async function () {
                                 read_url: file.read_url || file.readURL || originalFile?.read_url || originalFile?.readURL,
                             };
                             attachedFiles.push(mergedFile);
-                            console.log('[UIAIChat] ✅ Added file to attachments:', mergedFile.name, 'Type:', mergedFile.type, 'Read URL:', mergedFile.read_url ? 'yes' : 'no', 'Path:', mergedFile.path);
+                            false && console.log('[UIAIChat] ✅ Added file to attachments:', mergedFile.name, 'Type:', mergedFile.type, 'Read URL:', mergedFile.read_url ? 'yes' : 'no', 'Path:', mergedFile.path);
                         } else {
-                            console.log('[UIAIChat] File already attached, skipping:', file.name || file.path);
+                            false && console.log('[UIAIChat] File already attached, skipping:', file.name || file.path);
                         }
                     });
                     
-                    console.log('[UIAIChat] Total attached files:', attachedFiles.length);
+                    false && console.log('[UIAIChat] Total attached files:', attachedFiles.length);
                     updateAttachedFilesDisplay();
                 } catch (error) {
                     console.error('[UIAIChat] Failed to sign files:', error);
@@ -894,18 +894,18 @@ $(document).on('click', '.ai-attach-btn', async function () {
             return;
         }
         
-        console.log('[UIAIChat] Window element found:', windowElement);
+        false && console.log('[UIAIChat] Window element found:', windowElement);
         const windowId = $(windowElement).attr('id');
-        console.log('[UIAIChat] Window ID:', windowId);
+        false && console.log('[UIAIChat] Window ID:', windowId);
         
         // Set up a global listener for file_opened events that checks if it's from our dialog
         const globalFileOpenedHandler = function(e) {
-            console.log('[UIAIChat] Global file_opened event received:', e);
+            false && console.log('[UIAIChat] Global file_opened event received:', e);
             const target = e.target;
             
             // Check if this event is from our file dialog window
             if (target && target.id === windowId) {
-                console.log('[UIAIChat] Event is from our file dialog!');
+                false && console.log('[UIAIChat] Event is from our file dialog!');
                 fileOpenedHandler(e);
                 // Remove listener after handling
                 document.removeEventListener('file_opened', globalFileOpenedHandler, true);
@@ -920,7 +920,7 @@ $(document).on('click', '.ai-attach-btn', async function () {
         document.addEventListener('file_opened', globalFileOpenedHandler, false);
         windowElement.addEventListener('file_opened', globalFileOpenedHandler, true);
         windowElement.addEventListener('file_opened', globalFileOpenedHandler, false);
-        console.log('[UIAIChat] Added global file_opened listeners (all phases)');
+        false && console.log('[UIAIChat] Added global file_opened listeners (all phases)');
         
         // Also set up a MutationObserver to watch for when the window closes
         // This will help us catch files even if the event doesn't fire
@@ -931,11 +931,11 @@ $(document).on('click', '.ai-attach-btn', async function () {
                     if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
                         const display = $(windowElement).css('display');
                         if (display === 'none') {
-                            console.log('[UIAIChat] Window closed, checking for selected files...');
+                            false && console.log('[UIAIChat] Window closed, checking for selected files...');
                             // Window closed - check if files were selected
                             const selectedEls = $(windowElement).find('.item-selected[data-is_dir="0"]');
                             if (selectedEls.length > 0) {
-                                console.log('[UIAIChat] Found', selectedEls.length, 'selected files after window closed');
+                                false && console.log('[UIAIChat] Found', selectedEls.length, 'selected files after window closed');
                                 // Process files
                                 processSelectedFiles(selectedEls, windowElement);
                             }
@@ -950,7 +950,7 @@ $(document).on('click', '.ai-attach-btn', async function () {
                     attributes: true,
                     attributeFilter: ['style', 'class']
                 });
-                console.log('[UIAIChat] Set up MutationObserver to watch window');
+                false && console.log('[UIAIChat] Set up MutationObserver to watch window');
             } catch (error) {
                 console.warn('[UIAIChat] Failed to set up MutationObserver:', error);
             }
@@ -970,11 +970,11 @@ $(document).on('click', '.ai-attach-btn', async function () {
             }
             
             try {
-                console.log('[UIAIChat] Signing files:', itemsToSign);
+                false && console.log('[UIAIChat] Signing files:', itemsToSign);
                 const signedFiles = await puter.fs.sign(null, itemsToSign);
                 const filesArray = Array.isArray(signedFiles.items) ? signedFiles.items : [signedFiles.items];
                 
-                console.log('[UIAIChat] Signed files:', filesArray);
+                false && console.log('[UIAIChat] Signed files:', filesArray);
                 
                 filesArray.forEach((file, idx) => {
                     const existing = attachedFiles.find(f => f.path === file.path || f.uid === file.uid);
@@ -990,11 +990,11 @@ $(document).on('click', '.ai-attach-btn', async function () {
                             read_url: file.read_url || file.readURL,
                         };
                         attachedFiles.push(mergedFile);
-                        console.log('[UIAIChat] ✅ Added file to attachments:', mergedFile.name);
+                        false && console.log('[UIAIChat] ✅ Added file to attachments:', mergedFile.name);
                     }
                 });
                 
-                console.log('[UIAIChat] Total attached files:', attachedFiles.length);
+                false && console.log('[UIAIChat] Total attached files:', attachedFiles.length);
                 updateAttachedFilesDisplay();
             } catch (error) {
                 console.error('[UIAIChat] Failed to process files:', error);
@@ -1019,7 +1019,7 @@ function updateAttachedFilesDisplay() {
     const $container = $('.ai-attached-files');
     $container.empty();
     
-    console.log('[UIAIChat] Updating attached files display, count:', attachedFiles.length);
+    false && console.log('[UIAIChat] Updating attached files display, count:', attachedFiles.length);
     
     if (attachedFiles.length === 0) {
         $container.hide();
@@ -1059,7 +1059,7 @@ function updateAttachedFilesDisplay() {
         }
     });
     
-    console.log('[UIAIChat] Attached files displayed:', attachedFiles.length);
+    false && console.log('[UIAIChat] Attached files displayed:', attachedFiles.length);
 }
 
 // Get file type from filename
@@ -1113,14 +1113,14 @@ async function processFilesForAI(files) {
             
             if (fileType.startsWith('image/')) {
                 // For images: perform OCR to extract text, and also include the image for visual analysis
-                console.log('[UIAIChat] Processing image for OCR:', fileName);
+                false && console.log('[UIAIChat] Processing image for OCR:', fileName);
                 
                 try {
                     // Perform OCR on the image (optional, don't fail if it doesn't work)
                     let ocrResult = { text: '' };
                     try {
                         ocrResult = await performOCR(filePath);
-                        console.log('[UIAIChat] OCR result:', ocrResult);
+                        false && console.log('[UIAIChat] OCR result:', ocrResult);
                     } catch (ocrError) {
                         console.warn('[UIAIChat] OCR failed (non-fatal):', ocrError);
                         // Continue without OCR text
@@ -1131,7 +1131,7 @@ async function processFilesForAI(files) {
                     let imageData;
                     if (file.read_url) {
                         // Use existing signed URL
-                        console.log('[UIAIChat] Using existing read_url for image');
+                        false && console.log('[UIAIChat] Using existing read_url for image');
                         const response = await fetch(file.read_url);
                         if (!response.ok) {
                             throw new Error(`Failed to fetch image: ${response.statusText}`);
@@ -1139,7 +1139,7 @@ async function processFilesForAI(files) {
                         imageData = await response.blob();
                     } else {
                         // Fallback: sign and read the file
-                        console.log('[UIAIChat] Signing file for image read');
+                        false && console.log('[UIAIChat] Signing file for image read');
                         imageData = await readFileFromPC2(filePath, 'blob');
                     }
                     
@@ -1160,11 +1160,11 @@ async function processFilesForAI(files) {
                 }
             } else if (fileType === 'application/pdf') {
                 // For PDFs: extract text content
-                console.log('[UIAIChat] Processing PDF for text extraction:', fileName);
+                false && console.log('[UIAIChat] Processing PDF for text extraction:', fileName);
                 
                 try {
                     const pdfText = await extractPDFText(filePath);
-                    console.log('[UIAIChat] Extracted PDF text length:', pdfText?.length || 0);
+                    false && console.log('[UIAIChat] Extracted PDF text length:', pdfText?.length || 0);
                     
                     processedFiles.push({
                         type: 'text',
@@ -1204,7 +1204,7 @@ async function processFilesForAI(files) {
                        fileName.endsWith('.py') || fileName.endsWith('.html') ||
                        fileName.endsWith('.css') || fileName.endsWith('.xml')) {
                 // Read text content from PC2 storage
-                console.log('[UIAIChat] Processing text file:', fileName, 'Type:', fileType);
+                false && console.log('[UIAIChat] Processing text file:', fileName, 'Type:', fileType);
                 const text = await readFileFromPC2(filePath, 'text');
                 
                 // Truncate very large files
@@ -1240,12 +1240,12 @@ async function performOCR(filePath) {
     try {
         // Use puter.ai.img2txt or drivers/call with puter-ocr interface
         if (window.puter && window.puter.ai && window.puter.ai.img2txt) {
-            console.log('[UIAIChat] Using puter.ai.img2txt for OCR');
+            false && console.log('[UIAIChat] Using puter.ai.img2txt for OCR');
             const result = await window.puter.ai.img2txt(filePath);
             return { text: result?.text || result || '' };
         } else {
             // Fallback: use drivers/call endpoint
-            console.log('[UIAIChat] Using drivers/call for OCR');
+            false && console.log('[UIAIChat] Using drivers/call for OCR');
             
             // Get auth token
             const authToken = window.localStorage.getItem('puter_auth_token') || 
@@ -1292,13 +1292,13 @@ async function extractPDFText(filePath) {
     try {
         // Try using puter.ai API if available
         if (window.puter && window.puter.ai && window.puter.ai.pdf2txt) {
-            console.log('[UIAIChat] Using puter.ai.pdf2txt for PDF extraction');
+            false && console.log('[UIAIChat] Using puter.ai.pdf2txt for PDF extraction');
             const result = await window.puter.ai.pdf2txt(filePath);
             return result?.text || result || '';
         }
         
         // Fallback: use drivers/call endpoint
-        console.log('[UIAIChat] Using drivers/call for PDF text extraction');
+        false && console.log('[UIAIChat] Using drivers/call for PDF text extraction');
         
         // Get auth token
         const authToken = window.localStorage.getItem('puter_auth_token') || 
@@ -1327,11 +1327,11 @@ async function extractPDFText(filePath) {
         }
         
         const data = await response.json();
-        console.log('[UIAIChat] PDF extraction response:', data);
+        false && console.log('[UIAIChat] PDF extraction response:', data);
         
         if (data.success && data.result) {
             const extractedText = data.result.text || data.result || '';
-            console.log('[UIAIChat] Extracted PDF text length:', extractedText.length);
+            false && console.log('[UIAIChat] Extracted PDF text length:', extractedText.length);
             return extractedText;
         }
         throw new Error('PDF extraction response missing text');
@@ -1339,7 +1339,7 @@ async function extractPDFText(filePath) {
         console.error('[UIAIChat] PDF extraction error:', error);
         // Try using pdfjs-dist as last resort (if available)
         if (typeof pdfjsLib !== 'undefined') {
-            console.log('[UIAIChat] Trying pdfjs-dist for PDF extraction');
+            false && console.log('[UIAIChat] Trying pdfjs-dist for PDF extraction');
             try {
                 return await extractPDFTextWithPDFJS(filePath);
             } catch (pdfjsError) {
@@ -1630,7 +1630,7 @@ async function sendAIMessage() {
             };
             
             allTools = await aiToolService.collectAllTools(getFilesystemTools);
-            console.log('[UIAIChat] Collected', allTools.length, 'tools for AI request (app tools only - backend will add filesystem tools)');
+            false && console.log('[UIAIChat] Collected', allTools.length, 'tools for AI request (app tools only - backend will add filesystem tools)');
         } else {
             console.warn('[UIAIChat] AIToolService not available, proceeding without app tools');
         }
@@ -1749,7 +1749,7 @@ async function sendAIMessage() {
                         
                         if (toolSource?.appInstanceID) {
                             // App tool - execute via IPC
-                            console.log('[UIAIChat] Executing app tool:', chunk.name, 'from app:', toolSource.appInstanceID);
+                            false && console.log('[UIAIChat] Executing app tool:', chunk.name, 'from app:', toolSource.appInstanceID);
                             try {
                                 const aiToolService = window.services?.get('ai-tool');
                                 if (aiToolService) {
@@ -1758,7 +1758,7 @@ async function sendAIMessage() {
                                         chunk.input || {},
                                         toolSource
                                     );
-                                    console.log('[UIAIChat] App tool execution result:', result);
+                                    false && console.log('[UIAIChat] App tool execution result:', result);
                                     // TODO: Add tool result to conversation and continue AI response
                                     // For now, backend handles filesystem tools, app tools need result handling
                                 } else {
@@ -1770,7 +1770,7 @@ async function sendAIMessage() {
                             }
                         } else {
                             // Filesystem tool - backend handles it
-                            console.log('[UIAIChat] Filesystem tool call detected:', chunk.name);
+                            false && console.log('[UIAIChat] Filesystem tool call detected:', chunk.name);
                         }
                     }
                     // Handle errors
@@ -1782,7 +1782,7 @@ async function sendAIMessage() {
                     }
                     // Log any other chunk types for debugging
                     else {
-                        console.log('[UIAIChat] Received chunk with type:', chunk.type, chunk);
+                        false && console.log('[UIAIChat] Received chunk with type:', chunk.type, chunk);
                     }
                 } catch (e) {
                     // Skip invalid JSON lines (might be partial chunks)

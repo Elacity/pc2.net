@@ -43,6 +43,8 @@ async function UIWindowItemProperties (item_name, item_path, item_uid, left, top
     h += `<tr><td class="item-prop-label">${i18n('modified')}</td><td class="item-prop-val item-prop-val-modified"></td></tr>`;
     h += `<tr><td class="item-prop-label">${i18n('created')}</td><td class="item-prop-val item-prop-val-created"></td></tr>`;
     h += '<tr class="item-prop-ipfs-hash"><td class="item-prop-label">IPFS Content ID</td><td class="item-prop-val item-prop-val-ipfs-hash"></td></tr>';
+    h += '<tr class="item-prop-ipfs-visibility" style="display:none;"><td class="item-prop-label">Visibility</td><td class="item-prop-val item-prop-val-ipfs-visibility"></td></tr>';
+    h += '<tr class="item-prop-ipfs-gateway" style="display:none;"><td class="item-prop-label">Gateway URL</td><td class="item-prop-val item-prop-val-ipfs-gateway"></td></tr>';
     h += `<tr><td class="item-prop-label">${i18n('versions')}</td><td class="item-prop-val item-prop-val-versions"></td></tr>`;
     h += `<tr><td class="item-prop-label">${i18n('associated_websites')}</td><td class="item-prop-val item-prop-val-websites">`;
     h += '</td></tr>';
@@ -308,9 +310,84 @@ async function UIWindowItemProperties (item_name, item_path, item_uid, left, top
             $(el_window).find('.item-prop-val-modified').html(fsentry.modified === 0 ? '-' : timeago.format(fsentry.modified * 1000));
             // created
             $(el_window).find('.item-prop-val-created').html(fsentry.created === 0 ? '-' : timeago.format(fsentry.created * 1000));
-            // IPFS Content ID (CID)
+            // IPFS Content ID (CID) with copy button (using SVG icon)
             if (fsentry.ipfs_hash) {
-                $(el_window).find('.item-prop-val-ipfs-hash').html(`<code style="font-size: 11px; word-break: break-all;">${html_encode(fsentry.ipfs_hash)}</code>`);
+                // Copy icon SVG (inline for reliability)
+                const copyIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
+                const checkIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+                
+                const cidHtml = `
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <code style="font-size: 11px; word-break: break-all; flex: 1;">${html_encode(fsentry.ipfs_hash)}</code>
+                        <button class="copy-cid-btn" data-cid="${html_encode(fsentry.ipfs_hash)}" 
+                                style="padding: 4px 6px; cursor: pointer; border: 1px solid #ccc; border-radius: 3px; background: #fff; display: flex; align-items: center; justify-content: center;"
+                                title="Copy CID to clipboard">${copyIconSvg}</button>
+                    </div>
+                `;
+                $(el_window).find('.item-prop-val-ipfs-hash').html(cidHtml);
+                
+                // Copy CID button handler
+                $(el_window).find('.copy-cid-btn').on('click', function() {
+                    const cid = $(this).attr('data-cid');
+                    const btn = $(this);
+                    navigator.clipboard.writeText(cid).then(() => {
+                        btn.html(checkIconSvg).css('background', '#d4edda');
+                        setTimeout(() => btn.html(copyIconSvg).css('background', '#fff'), 1500);
+                    }).catch(err => {
+                        console.error('[Properties] Failed to copy CID:', err);
+                    });
+                });
+                
+                // Determine if file is public (in /Public folder)
+                const isPublic = item_path && (item_path.startsWith('/Public/') || item_path.includes('/Public/'));
+                
+                // Icon SVGs for visibility badges
+                const worldIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>`;
+                const shieldIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>`;
+                
+                // Show visibility row
+                $(el_window).find('.item-prop-ipfs-visibility').show();
+                if (isPublic) {
+                    $(el_window).find('.item-prop-val-ipfs-visibility').html(`
+                        <span style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; background: #d4edda; color: #155724; border-radius: 12px; font-size: 11px;">
+                            ${worldIconSvg} Public
+                        </span>
+                    `);
+                    
+                    // Show gateway URL for public files
+                    const apiOrigin = window.api_origin || window.location.origin;
+                    const gatewayUrl = `${apiOrigin}/ipfs/${fsentry.ipfs_hash}`;
+                    $(el_window).find('.item-prop-ipfs-gateway').show();
+                    $(el_window).find('.item-prop-val-ipfs-gateway').html(`
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <a href="${html_encode(gatewayUrl)}" target="_blank" 
+                               style="font-size: 11px; word-break: break-all; flex: 1; color: #0066cc;">
+                                ${html_encode(gatewayUrl)}
+                            </a>
+                            <button class="copy-gateway-btn" data-url="${html_encode(gatewayUrl)}" 
+                                    style="padding: 4px 6px; cursor: pointer; border: 1px solid #ccc; border-radius: 3px; background: #fff; display: flex; align-items: center; justify-content: center;"
+                                    title="Copy Gateway URL">${copyIconSvg}</button>
+                        </div>
+                    `);
+                    
+                    // Copy Gateway URL button handler
+                    $(el_window).find('.copy-gateway-btn').on('click', function() {
+                        const url = $(this).attr('data-url');
+                        const btn = $(this);
+                        navigator.clipboard.writeText(url).then(() => {
+                            btn.html(checkIconSvg).css('background', '#d4edda');
+                            setTimeout(() => btn.html(copyIconSvg).css('background', '#fff'), 1500);
+                        }).catch(err => {
+                            console.error('[Properties] Failed to copy gateway URL:', err);
+                        });
+                    });
+                } else {
+                    $(el_window).find('.item-prop-val-ipfs-visibility').html(`
+                        <span style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; background: #e2e3e5; color: #383d41; border-radius: 12px; font-size: 11px;">
+                            ${shieldIconSvg} Private
+                        </span>
+                    `);
+                }
             } else {
                 $(el_window).find('.item-prop-val-ipfs-hash').html('-');
             }

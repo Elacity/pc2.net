@@ -17,7 +17,19 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+// CRITICAL: Prevent gui.js from executing multiple times
+// This can happen when Particle Auth iframes trigger page events
+if (window._gui_js_executed) {
+    console.log('[gui.js] Already executed, halting');
+    // Use throw to halt module execution - can't use return at module level
+    throw new Error('[gui.js] Duplicate execution prevented');
+}
+window._gui_js_executed = true;
+
 window.puter_gui_enabled = true;
+
+// Debug flag for PC2 initialization logging
+const PC2_DEBUG = false;
 
 /**
  * Initializes and configures the GUI (Graphical User Interface) settings based on the provided options.
@@ -46,6 +58,13 @@ window.puter_gui_enabled = true;
  */
 
 window.gui = async (options) => {
+    // CRITICAL: Prevent gui() from being called multiple times
+    if (window._gui_function_executed) {
+        console.log('[gui.js] gui() already executed, skipping');
+        return;
+    }
+    window._gui_function_executed = true;
+    
     options = options ?? {};
     // app_origin is deprecated, use gui_origin instead
     window.gui_params = options;
@@ -59,22 +78,22 @@ window.gui = async (options) => {
     try {
         const savedConfig = localStorage.getItem('pc2_config');
         const savedSession = localStorage.getItem('pc2_session');
-        console.log('[PC2]: Checking localStorage for PC2 config...', { hasConfig: !!savedConfig, hasSession: !!savedSession });
+        PC2_DEBUG && PC2_DEBUG && console.log('[PC2]: Checking localStorage for PC2 config...', { hasConfig: !!savedConfig, hasSession: !!savedSession });
         if (savedConfig && savedSession) {
             const config = JSON.parse(savedConfig);
             const sessionData = JSON.parse(savedSession);
             const now = Date.now();
             const sessionAge = now - (sessionData.timestamp || 0);
             const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 days
-            console.log('[PC2]: Config check:', { nodeUrl: config?.nodeUrl, hasToken: !!sessionData?.session?.token, sessionAge, maxAge, isValid: sessionAge < maxAge });
+            PC2_DEBUG && PC2_DEBUG && console.log('[PC2]: Config check:', { nodeUrl: config?.nodeUrl, hasToken: !!sessionData?.session?.token, sessionAge, maxAge, isValid: sessionAge < maxAge });
             if (config?.nodeUrl && sessionData?.session?.token && sessionAge < maxAge) {
                 pc2ApiOrigin = config.nodeUrl.replace(/\/+$/, '');
-                console.log('[PC2]: ✅ Early API origin set to PC2 node:', pc2ApiOrigin);
+                PC2_DEBUG && PC2_DEBUG && console.log('[PC2]: ✅ Early API origin set to PC2 node:', pc2ApiOrigin);
             } else {
-                console.log('[PC2]: ⚠️ PC2 config exists but session invalid or expired');
+                PC2_DEBUG && console.log('[PC2]: ⚠️ PC2 config exists but session invalid or expired');
             }
         } else {
-            console.log('[PC2]: ⚠️ No PC2 config/session in localStorage');
+            PC2_DEBUG && console.log('[PC2]: ⚠️ No PC2 config/session in localStorage');
         }
     } catch (e) {
         console.warn('[PC2]: Failed to check PC2 config, using default API origin:', e);
@@ -91,31 +110,31 @@ window.gui = async (options) => {
     
     if (isAlreadySameOrigin) {
         // Already set to same origin by HTML - keep it!
-        console.log('[PC2]: ✅ Same-origin API already set by HTML:', currentApiOrigin);
+        PC2_DEBUG && console.log('[PC2]: ✅ Same-origin API already set by HTML:', currentApiOrigin);
         // Don't change it - it's already correct
     } else if (pc2ApiOrigin) {
         // Use PC2 node from config
         window.api_origin = pc2ApiOrigin;
-        console.log('[PC2]: ✅ Using PC2 node from config:', pc2ApiOrigin);
+        PC2_DEBUG && console.log('[PC2]: ✅ Using PC2 node from config:', pc2ApiOrigin);
     } else if (!options.api_origin && currentOrigin) {
         // If no api_origin provided, use same origin (frontend and backend on same server)
         window.api_origin = currentOrigin;
-        console.log('[PC2]: 🚀 Same-origin detected (Puter on PC2), using:', window.api_origin);
+        PC2_DEBUG && console.log('[PC2]: 🚀 Same-origin detected (Puter on PC2), using:', window.api_origin);
     } else {
         // Legacy: If we're on elastos.localhost or puter.localhost (local dev), default to mock PC2 server
         const hostname = typeof window !== 'undefined' && window.location ? window.location.hostname : '';
-        console.log('[PC2]: Current hostname:', hostname);
+        PC2_DEBUG && console.log('[PC2]: Current hostname:', hostname);
         if (!pc2ApiOrigin && (hostname === 'elastos.localhost' || hostname === 'puter.localhost' || hostname === 'localhost' || hostname.includes('localhost'))) {
             pc2ApiOrigin = 'http://127.0.0.1:4200';
-            console.log('[PC2]: 🚀 Local dev detected, defaulting to mock PC2 server:', pc2ApiOrigin);
+            PC2_DEBUG && console.log('[PC2]: 🚀 Local dev detected, defaulting to mock PC2 server:', pc2ApiOrigin);
         }
         
         // Only set default if we don't already have a same-origin API set
         if (!currentApiOrigin || currentApiOrigin !== currentOrigin) {
             window.api_origin = pc2ApiOrigin || options.api_origin || 'https://api.puter.com';
-            console.log('[PC2]: Final window.api_origin set to:', window.api_origin);
+            PC2_DEBUG && console.log('[PC2]: Final window.api_origin set to:', window.api_origin);
         } else {
-            console.log('[PC2]: ✅ Preserving same-origin API:', currentApiOrigin);
+            PC2_DEBUG && console.log('[PC2]: ✅ Preserving same-origin API:', currentApiOrigin);
         }
     }
     
@@ -151,7 +170,7 @@ window.gui = async (options) => {
                 console.warn('[PC2]: ⚠️ SDK tried to set api.puter.com, keeping same origin:', _protectedApiOrigin);
                 return; // Don't allow api.puter.com when same origin is set
             }
-            console.log('[PC2]: api_origin changed to:', value);
+            PC2_DEBUG && console.log('[PC2]: api_origin changed to:', value);
             _protectedApiOrigin = value;
         },
         configurable: true
@@ -163,14 +182,14 @@ window.gui = async (options) => {
 
     // 🚀 Ensure window.api_origin is set and protected BEFORE SDK loads
     // This prevents SDK from using default api.puter.com during initialization
-    console.log('[PC2]: Pre-SDK load - window.api_origin:', window.api_origin);
+    PC2_DEBUG && console.log('[PC2]: Pre-SDK load - window.api_origin:', window.api_origin);
     
     // DEV: Load the initgui.js file if we are in development mode
     if ( !window.gui_env || window.gui_env === 'dev' ) {
         await window.loadScript('/sdk/puter.dev.js');
         // Immediately set API origin after SDK loads
         if (window.puter && typeof window.puter.setAPIOrigin === 'function') {
-            console.log('[PC2]: SDK loaded, setting API origin to:', window.api_origin);
+            PC2_DEBUG && console.log('[PC2]: SDK loaded, setting API origin to:', window.api_origin);
             window.puter.setAPIOrigin(window.api_origin);
         }
     }
@@ -179,7 +198,7 @@ window.gui = async (options) => {
         await window.loadScript('/puter.js/v2');
         await window.loadCSS('/dist/bundle.min.css');
         if (window.puter && typeof window.puter.setAPIOrigin === 'function') {
-            console.log('[PC2]: SDK loaded, setting API origin to:', window.api_origin);
+            PC2_DEBUG && console.log('[PC2]: SDK loaded, setting API origin to:', window.api_origin);
             window.puter.setAPIOrigin(window.api_origin);
         }
     }
@@ -192,7 +211,7 @@ window.gui = async (options) => {
         // Load the minified bundles
         await window.loadCSS('/dist/bundle.min.css');
         if (window.puter && typeof window.puter.setAPIOrigin === 'function') {
-            console.log('[PC2]: SDK loaded, setting API origin to:', window.api_origin);
+            PC2_DEBUG && console.log('[PC2]: SDK loaded, setting API origin to:', window.api_origin);
             window.puter.setAPIOrigin(window.api_origin);
         }
     }
@@ -277,7 +296,11 @@ window.loadCSS = async function (url) {
         document.head.appendChild(link);
     });
 };
-console.log("%c⚠️Warning⚠️\n%cPlease refrain from adding or pasting any sort of code here, as doing so could potentially compromise your account. \nYou don't get what you intended anyway, but the hacker will! \n\n%cFor further information please visit https://developer.chrome.com/blog/self-xss",
-                "color:red; font-size:2rem; display:block; margin-left:0; margin-bottom: 20px; background: black; width: 100%; margin-top:20px; font-family: 'Helvetica Neue', HelveticaNeue, Helvetica, Arial, sans-serif;",
-                "font-size:1rem; font-family: 'Helvetica Neue', HelveticaNeue, Helvetica, Arial, sans-serif;",
-                "font-size:0.9rem; font-family: 'Helvetica Neue', HelveticaNeue, Helvetica, Arial, sans-serif;");
+// Self-XSS warning - only show once
+if (!window._self_xss_warning_shown) {
+    window._self_xss_warning_shown = true;
+    console.log("%c⚠️Warning⚠️\n%cPlease refrain from adding or pasting any sort of code here, as doing so could potentially compromise your account. \nYou don't get what you intended anyway, but the hacker will! \n\n%cFor further information please visit https://developer.chrome.com/blog/self-xss",
+                    "color:red; font-size:2rem; display:block; margin-left:0; margin-bottom: 20px; background: black; width: 100%; margin-top:20px; font-family: 'Helvetica Neue', HelveticaNeue, Helvetica, Arial, sans-serif;",
+                    "font-size:1rem; font-family: 'Helvetica Neue', HelveticaNeue, Helvetica, Arial, sans-serif;",
+                    "font-size:0.9rem; font-family: 'Helvetica Neue', HelveticaNeue, Helvetica, Arial, sans-serif;");
+}

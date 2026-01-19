@@ -1,4 +1,14 @@
+/**
+ * Search API Endpoint
+ *
+ * Handles file search operations - filename, path, and metadata search
+ */
 import { logger } from '../utils/logger.js';
+/**
+ * Search for files by filename, path, content, or metadata
+ * POST /search
+ * Body: { text: string, fileType?: string, mimeType?: string, minSize?: number, maxSize?: number, minDate?: number, maxDate?: number, ipfsHash?: string, searchMode?: 'filename'|'content'|'both', limit?: number }
+ */
 export function handleSearch(req, res) {
     try {
         const db = req.app.locals.db;
@@ -11,6 +21,7 @@ export function handleSearch(req, res) {
             res.status(500).json({ error: 'Database not available' });
             return;
         }
+        // Parse search request
         const searchReq = {
             text: req.body?.text || '',
             fileType: req.body?.fileType,
@@ -23,12 +34,15 @@ export function handleSearch(req, res) {
             searchMode: req.body?.searchMode || 'both',
             limit: req.body?.limit || 50
         };
+        // If searching by IPFS hash only, skip text search
         if (searchReq.ipfsHash && (!searchReq.text || searchReq.text.trim() === '')) {
             return handleIPFSSearch(db, userAddress, searchReq, res);
         }
+        // Also check if text looks like a CID (starts with bafkrei, bafy, bafz, Qm, etc.)
         const textValue = searchReq.text?.trim() || '';
         const looksLikeCID = /^(bafkrei|bafy|bafz|Qm|z[a-z0-9]+)/i.test(textValue) && textValue.length >= 10;
         if (looksLikeCID && !searchReq.ipfsHash) {
+            // Treat as CID search
             searchReq.ipfsHash = textValue;
             return handleIPFSSearch(db, userAddress, searchReq, res);
         }
@@ -36,11 +50,21 @@ export function handleSearch(req, res) {
             res.json([]);
             return;
         }
+        // Sanitize search text for SQL LIKE (escape special characters)
         const sanitizedText = searchReq.text.trim().replace(/%/g, '\\%').replace(/_/g, '\\_');
         const searchPattern = `%${sanitizedText}%`;
+        // Search files by:
+        // 1. Filename (extracted from path) - highest priority
+        // 2. Full-text content search (FTS5) - if content_text is available
+        // 3. Full path contains search text
+        // 4. MIME type (if search text matches)
+        // 
+        // Filename match pattern: path ends with /searchtext (e.g., /path/to/searchtext)
         const filenameMatchPattern = `%/${sanitizedText}%`;
+        // Build metadata filters
         const metadataFilters = [];
         const filterParams = [userAddress];
+        // File type filter (e.g., 'image', 'video', 'document')
         if (searchReq.fileType) {
             const mimePrefixes = {
                 'image': ['image/'],
@@ -57,10 +81,12 @@ export function handleSearch(req, res) {
                 filterParams.push(...prefixes.map(p => `${p}%`));
             }
         }
+        // Specific MIME type filter
         if (searchReq.mimeType) {
             metadataFilters.push('mime_type = ?');
             filterParams.push(searchReq.mimeType);
         }
+        // Size filters
         if (searchReq.minSize !== undefined) {
             metadataFilters.push('size >= ?');
             filterParams.push(searchReq.minSize);
@@ -69,32 +95,42 @@ export function handleSearch(req, res) {
             metadataFilters.push('size <= ?');
             filterParams.push(searchReq.maxSize);
         }
+        // Date filters (on updated_at)
         if (searchReq.minDate !== undefined) {
             metadataFilters.push('updated_at >= ?');
-            filterParams.push(searchReq.minDate * 1000);
+            filterParams.push(searchReq.minDate * 1000); // Convert to milliseconds
         }
         if (searchReq.maxDate !== undefined) {
             metadataFilters.push('updated_at <= ?');
-            filterParams.push(searchReq.maxDate * 1000);
+            filterParams.push(searchReq.maxDate * 1000); // Convert to milliseconds
         }
         const metadataFilterClause = metadataFilters.length > 0
             ? `AND ${metadataFilters.join(' AND ')}`
             : '';
+        // Try FTS5 content search first (if FTS5 table exists and has content)
         let results = [];
         try {
+            // Check if FTS5 table exists and try content search
             const dbInstance = db.getDB();
             const fts5Exists = dbInstance.prepare(`
         SELECT name FROM sqlite_master 
         WHERE type='table' AND name='files_fts'
       `).get();
             if (fts5Exists) {
+                // FTS5 search: search in name, path, and content columns
+                // FTS5 uses MATCH operator - escape special characters
+                // FTS5 syntax: "term" for exact phrase, term* for prefix, term OR term2 for OR
                 const ftsQuery = searchReq.text.trim()
-                    .replace(/"/g, '""')
-                    .replace(/'/g, "''")
-                    .replace(/[^\w\s]/g, ' ');
+                    .replace(/"/g, '""') // Escape quotes
+                    .replace(/'/g, "''") // Escape single quotes
+                    .replace(/[^\w\s]/g, ' '); // Replace special chars with spaces
+                // Build FTS5 query: search in all columns (name, path, content)
                 const ftsMatchQuery = `"${ftsQuery}"* OR ${ftsQuery}*`;
                 try {
+                    // Build FTS5 query with metadata filters
                     const ftsFilterParams = [userAddress, ftsMatchQuery, ...filterParams.slice(1)];
+                    // FTS5 search - prioritize filename matches by checking path pattern
+                    // We'll use a subquery to calculate priority based on path matching
                     const ftsResults = dbInstance.prepare(`
             SELECT 
               f.path,
@@ -121,14 +157,18 @@ export function handleSearch(req, res) {
             LIMIT ?
           `).all(filenameMatchPattern, searchPattern, userAddress, ftsMatchQuery, ...filterParams.slice(1), searchReq.limit);
                     if (ftsResults.length > 0) {
+                        // Prioritize filename matches over content matches
                         results = ftsResults
                             .sort((a, b) => {
+                            // First sort by match priority (filename > path > content)
                             if (b.match_priority !== a.match_priority) {
                                 return b.match_priority - a.match_priority;
                             }
+                            // Then by BM25 rank (lower is better)
                             if (a.rank !== b.rank) {
                                 return a.rank - b.rank;
                             }
+                            // Finally by recency
                             return b.modified - a.modified;
                         })
                             .map(r => ({
@@ -144,15 +184,21 @@ export function handleSearch(req, res) {
                     }
                 }
                 catch (ftsError) {
+                    // FTS5 query might fail (e.g., invalid syntax), fall back to LIKE
                     logger.debug('[Search] FTS5 query failed, using LIKE search:', ftsError);
                 }
             }
         }
         catch (error) {
+            // FTS5 table might not exist, fall back to LIKE search
             logger.debug('[Search] FTS5 table not available, using LIKE search:', error);
         }
+        // If FTS5 didn't return results, or we want to combine with filename search,
+        // also search by filename/path using LIKE
         if (results.length < 100) {
+            // Build query parameters
             const queryParams = [userAddress, searchPattern, searchPattern];
+            // Add exclusion list if we have FTS5 results
             let exclusionClause = '';
             if (results.length > 0) {
                 const excludePaths = results.map(r => r.path);
@@ -187,12 +233,19 @@ export function handleSearch(req, res) {
           updated_at DESC
         LIMIT ?
       `, ...queryParams);
+            // Combine results (FTS5 results first, then LIKE results)
             results = [...results, ...likeResults];
         }
+        // Remove duplicates and limit to 100
         const uniqueResults = Array.from(new Map(results.map(r => [r.path, r])).values()).slice(0, 100);
+        // Transform results to match frontend expectations
         const formattedResults = results.map(file => {
+            // Extract filename from path
             const pathParts = file.path.split('/');
             const fileName = pathParts[pathParts.length - 1] || file.path;
+            // Generate uid from path (matching filesystem.ts pattern)
+            // Pattern: uuid-${path.replace(/\//g, '-')}
+            // Paths start with /, so /path/to/file becomes uuid--path-to-file
             const uid = `uuid-${file.path.replace(/\//g, '-')}`;
             return {
                 path: file.path,
@@ -221,6 +274,9 @@ export function handleSearch(req, res) {
         res.status(500).json({ error: 'Search failed' });
     }
 }
+/**
+ * Handle IPFS CID search
+ */
 function handleIPFSSearch(db, userAddress, searchReq, res) {
     try {
         const dbInstance = db.getDB();
@@ -229,9 +285,11 @@ function handleIPFSSearch(db, userAddress, searchReq, res) {
             res.json([]);
             return;
         }
+        // Build query - support exact match or partial match
         let query;
         let params;
         if (ipfsHash.length >= 10) {
+            // Partial or exact CID search
             query = `
         SELECT 
           path,
@@ -256,6 +314,7 @@ function handleIPFSSearch(db, userAddress, searchReq, res) {
             return;
         }
         const results = dbInstance.prepare(query).all(...params);
+        // Transform results
         const formattedResults = results.map(file => {
             const pathParts = file.path.split('/');
             const fileName = pathParts[pathParts.length - 1] || file.path;

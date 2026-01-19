@@ -240,7 +240,7 @@ function initKeyboardShortcuts() {
         }
     });
 
-    console.log('[Keyboard Shortcuts] ✅ Initialized');
+    false && console.log('[Keyboard Shortcuts] ✅ Initialized');
 }
 
 // Export for use in other modules

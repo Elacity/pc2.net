@@ -281,13 +281,14 @@ export default {
                     line-height: 1.5;
                 }
                 
-                /* Access Control Card - Dynamic height */
+                /* Access Control Card - match settings-card width */
                 .pc2-access-control-card {
                     border: 1px solid #e5e7eb;
                     border-radius: 6px;
                     background: #fff;
                     padding: 15px;
-                    margin: 0 15px;
+                    margin: 0;
+                    margin-bottom: 10px;
                 }
                 .pc2-access-header {
                     display: flex;
@@ -373,13 +374,14 @@ export default {
                     border-radius: 4px;
                 }
                 
-                /* Backup Card */
+                /* Backup Card - match settings-card width */
                 .pc2-backup-card {
                     border: 1px solid #e5e7eb;
                     border-radius: 6px;
                     background: #fff;
                     padding: 15px;
-                    margin: 0 15px;
+                    margin: 0;
+                    margin-bottom: 10px;
                 }
                 .pc2-backup-header {
                     display: flex;

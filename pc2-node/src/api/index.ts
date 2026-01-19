@@ -3,7 +3,7 @@ import multer from 'multer';
 import { DatabaseManager, FilesystemManager } from '../storage/index.js';
 import { Config } from '../config/loader.js';
 import { Server as SocketIOServer } from 'socket.io';
-import { authenticate, corsMiddleware, errorHandler } from './middleware.js';
+import { authenticate, corsMiddleware, errorHandler, AuthenticatedRequest } from './middleware.js';
 import { logger } from '../utils/logger.js';
 import { handleWhoami } from './whoami.js';
 import { handleParticleAuth, handleGrantUserApp, handleGetUserAppToken } from './auth.js';
@@ -19,6 +19,8 @@ import { handleGetApp } from './apps.js';
 import { handleGetVersions, handleGetVersion, handleRestoreVersion } from './versions.js';
 import { createBackup, listBackups, downloadBackup, deleteBackup, restoreBackup } from './backup.js';
 import { handleTerminalStats, handleTerminalAdminStats, handleDestroyAllTerminals, handleTerminalStatus } from './terminal.js';
+import { createPublicRouter } from './public.js';
+import { IPFSStorage } from '../storage/ipfs.js';
 
 // Extend Express Request to include database, filesystem, config, and WebSocket
 declare global {
@@ -139,6 +141,23 @@ export function setupAPI(app: Express): void {
   // File access (signed URLs - no auth required, signature verified in query)
   app.get('/file', handleFile);
 
+  // ============================================================================
+  // Public IPFS Gateway (no auth required)
+  // ============================================================================
+  const db = app.locals.db;
+  const filesystem = app.locals.filesystem;
+  
+  // Get IPFS instance from filesystem if available
+  const ipfs = filesystem?.getIPFS() || null;
+  
+  if (db && filesystem) {
+    const publicRouter = createPublicRouter(db, filesystem, ipfs);
+    app.use(publicRouter);
+    logger.info('[API] Public IPFS gateway enabled at /ipfs/:cid and /public/:wallet/*');
+  } else {
+    logger.warn('[API] Public IPFS gateway disabled - database or filesystem not available');
+  }
+
   // Authentication endpoints
   app.post('/auth/particle', handleParticleAuth);
   app.post('/auth/grant-user-app', authenticate, handleGrantUserApp);
@@ -151,6 +170,139 @@ export function setupAPI(app: Express): void {
   app.get('/os/user', handleOSUser);
   app.get('/api/stats', authenticate, handleStats);
   app.get('/api/wallets', authenticate, handleGetWallets);
+  
+  // User profile endpoint (per-wallet settings)
+  app.post('/api/user/profile', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+      
+      const db = req.app.locals.db;
+      const { display_name } = req.body;
+      
+      if (display_name !== undefined) {
+        // Save per-wallet display name
+        const key = `user_${req.user.wallet_address}_display_name`;
+        db?.setSetting(key, display_name);
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error('[User Profile] Error:', error);
+      res.status(500).json({ error: 'Failed to save profile' });
+    }
+  });
+  
+  app.get('/api/user/profile', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+      
+      const db = req.app.locals.db;
+      const key = `user_${req.user.wallet_address}_display_name`;
+      const displayName = db?.getSetting(key) || '';
+      
+      res.json({ display_name: displayName });
+    } catch (error) {
+      console.error('[User Profile] Error:', error);
+      res.status(500).json({ error: 'Failed to get profile' });
+    }
+  });
+  
+  // Login history endpoint (per-wallet)
+  app.get('/api/user/login-history', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+      
+      const db = req.app.locals.db;
+      const walletAddress = req.user.wallet_address;
+      const currentToken = req.headers.authorization?.replace('Bearer ', '');
+      
+      // Get sessions from database (using available columns)
+      const sessions = db?.db?.prepare(`
+        SELECT token, created_at, expires_at
+        FROM sessions 
+        WHERE wallet_address = ?
+        ORDER BY created_at DESC
+        LIMIT 20
+      `).all(walletAddress) || [];
+      
+      const logins = sessions.map((s: any) => ({
+        timestamp: new Date(s.created_at).toISOString(),
+        ip: 'Local Session',
+        user_agent: 'PC2 Desktop',
+        is_current: s.token === currentToken
+      }));
+      
+      res.json({ logins });
+    } catch (error) {
+      console.error('[Login History] Error:', error);
+      res.json({ logins: [] });
+    }
+  });
+  
+  // List sessions endpoint for Session Manager
+  app.get('/auth/list-sessions', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+      
+      const db = req.app.locals.db;
+      const walletAddress = req.user.wallet_address;
+      const currentToken = req.headers.authorization?.replace('Bearer ', '');
+      
+      const sessions = db?.db?.prepare(`
+        SELECT token, created_at, expires_at
+        FROM sessions 
+        WHERE wallet_address = ? AND expires_at > ?
+        ORDER BY created_at DESC
+      `).all(walletAddress, Date.now()) || [];
+      
+      const result = sessions.map((s: any, index: number) => ({
+        uuid: s.token.substring(0, 16),
+        current: s.token === currentToken,
+        meta: {
+          'Created': new Date(s.created_at).toLocaleString(),
+          'Expires': new Date(s.expires_at).toLocaleString(),
+          'Type': 'Wallet Session'
+        }
+      }));
+      
+      res.json(result);
+    } catch (error) {
+      console.error('[List Sessions] Error:', error);
+      res.json([]);
+    }
+  });
+  
+  // Revoke session endpoint
+  app.post('/auth/revoke-session', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+      
+      const db = req.app.locals.db;
+      const { uuid } = req.body;
+      const walletAddress = req.user.wallet_address;
+      
+      // Find and delete session that starts with this uuid
+      db?.db?.prepare(`
+        DELETE FROM sessions 
+        WHERE wallet_address = ? AND token LIKE ?
+      `).run(walletAddress, `${uuid}%`);
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error('[Revoke Session] Error:', error);
+      res.status(500).json({ error: 'Failed to revoke session' });
+    }
+  });
   
   // Storage usage endpoint
   app.use('/api/storage', storageRouter);

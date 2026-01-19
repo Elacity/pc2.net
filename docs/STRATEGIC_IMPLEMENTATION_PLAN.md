@@ -43,7 +43,45 @@ PORT=4202 npm start
 
 ## 📊 Current State Assessment
 
-### 🎯 Recent Progress (2025-01-20)
+### 🎯 Recent Progress (2026-01-19)
+
+**Settings Window UX Improvements - ✅ COMPLETE**
+
+**Major Features Delivered:**
+1. ✅ **About Tab Rebrand** - ElastOS Personal Cloud branding with SVG logo, updated description ("One of millions of self-hosted personal clouds... interconnected above blockchain governance to form the World Computer")
+2. ✅ **Account Tab Enhancements** - Display name setting (per-wallet, persists across refreshes), public IPFS profile pictures (copied to `/Public` folder for sharing)
+3. ✅ **Security Tab** - Re-enabled with login history display, wallet security info, session management
+4. ✅ **Personalization Tab** - Dark mode toggle, font size selector, notification preferences (sound/desktop)
+5. ✅ **Storage Tab Performance** - Parallel API loading with timeout protection, prevents hanging
+6. ✅ **PC2 Tab UI Consistency** - Container widths aligned across all sections
+7. ✅ **WebSocket Optimization** - Socket connection consolidation (reuses SDK socket), event deduplication to prevent duplicate processing
+8. ✅ **Console Logging Cleanup** - Debug logs behind `DEBUG_SOCKET_EVENTS` flag, reduced noise in production
+
+**Backend Additions:**
+- `POST /copy` endpoint for file copying (was missing, caused profile picture public copy to fail)
+- `POST /api/user/profile` for display name persistence
+- `GET /api/user/login-history` for session history
+- `/whoami` now returns `display_name` field
+
+**Files Modified:**
+- `src/gui/src/UI/Settings/UITabAbout.js` - ElastOS branding, scrollable content fix
+- `src/gui/src/UI/Settings/UITabAccount.js` - Display name, public IPFS profile pictures
+- `src/gui/src/UI/Settings/UITabSecurity.js` - Login history, wallet security
+- `src/gui/src/UI/Settings/UITabPersonalization.js` - Dark mode, font size, notifications
+- `src/gui/src/UI/Settings/UITabStorage.js` - Parallel loading, timeout protection
+- `src/gui/src/UI/Settings/UITabPC2.js` - Container width consistency
+- `src/gui/src/UI/UIDesktop.js` - Socket consolidation, event deduplication, debug logging
+- `pc2-node/src/api/filesystem.js` - Added `handleCopy` endpoint
+- `pc2-node/src/api/index.js` - Registered new endpoints
+- `pc2-node/src/api/whoami.js` - Display name in response
+
+**Key Learnings:**
+1. **Missing Backend Endpoints** - `puter.fs.copy()` SDK calls require a `/copy` endpoint that wasn't implemented
+2. **Socket.io Duplicate Connections** - GUI creates its own socket while SDK has another; consolidated to single connection
+3. **Event Deduplication** - When multiple sockets exist, same events fire twice; implemented TTL-based dedup cache
+4. **Verbose Logging Impact** - 100+ console.logs per file causes noise; use conditional debug flags
+
+---
 
 **Phase 2.6: WASM/WASMER Runtime Integration - ✅ IN PROGRESS (60% Complete)**
 
@@ -4323,6 +4361,110 @@ Both `/health` and `/api/health` now return:
 - [ ] Error monitoring (Sentry)
 - [ ] Electron desktop app packaging
 - [ ] CI/CD pipeline for automated builds
+
+---
+
+## 🌐 IPFS Network & Resource Management (2025-01-19)
+
+### Current State
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| IPFS Gateway URL | ✅ Dynamic | Uses `req.headers.host` - works on any domain/IP |
+| Storage Quota | ⚠️ Hardcoded | 10GB fixed - needs config-based |
+| CPU/Memory Limits | ❌ None | No resource throttling |
+| IPFS Network Mode | ✅ Configurable | private/hybrid/public modes |
+
+### How IPFS Gateway Works in Production
+
+The gateway URL is **automatically derived** from the request's Host header:
+
+```
+Local Development:    http://localhost:4200/ipfs/:cid
+LAN Access:           http://192.168.1.100:4200/ipfs/:cid
+VPS (direct):         http://123.45.67.89:4200/ipfs/:cid
+VPS (domain):         https://mycloud.example.com/ipfs/:cid
+Ngrok Tunnel:         https://abc123.ngrok.io/ipfs/:cid
+```
+
+**No configuration needed** - the backend reads `req.headers.host` and constructs URLs dynamically.
+
+### Deployment Profiles
+
+| Profile | Storage | IPFS Mode | DHT | Use Case |
+|---------|---------|-----------|-----|----------|
+| **Desktop** | 500GB+ | hybrid | ✅ | Power user, media library, dDRM participation |
+| **Raspberry Pi** | 20GB | hybrid | ✅ | Personal cloud, light storage, dDRM downloads |
+| **VPS Seeder** | 80GB | public | ✅ | Always-on, earns rewards, full DHT participation |
+| **Air-Gapped** | Any | private | ❌ | Maximum privacy, no network discovery |
+
+### dDRM Marketplace Integration
+
+For dDRM to work, nodes must be able to:
+1. **Discover content** - Find CIDs announced by other nodes
+2. **Fetch content** - Download encrypted assets from the network
+3. **Serve content** - Help distribute content (earn rewards)
+
+**Required IPFS config for dDRM:**
+```json
+{
+  "ipfs": {
+    "mode": "hybrid",
+    "enable_dht": true,
+    "enable_bootstrap": true,
+    "announce_public": true
+  }
+}
+```
+
+### Resource Management Configuration
+
+Added to `config/pc2.json.example`:
+
+```json
+{
+  "resources": {
+    "storage": {
+      "limit": "auto",
+      "reserve_free_space": "10GB"
+    },
+    "compute": {
+      "max_cpu_percent": 80,
+      "max_memory_mb": "auto",
+      "max_concurrent_wasm": 4
+    },
+    "network": {
+      "max_upload_mbps": "unlimited",
+      "max_download_mbps": "unlimited"
+    }
+  }
+}
+```
+
+**"auto" detection:**
+- Storage: `(total_disk - reserve) * 0.8`
+- Memory: `system_ram * 0.5`
+
+### UI Features Implemented (2025-01-19)
+
+| Feature | Status | Location |
+|---------|--------|----------|
+| Storage quota progress bar | ✅ | Settings > Storage |
+| Public/Private visibility breakdown | ✅ | Settings > Storage |
+| IPFS Network info (Node ID, Peers, Gateway) | ✅ | Settings > Storage |
+| Export public files list (CSV) | ✅ | Settings > Storage |
+| Pin remote CID dialog | ✅ | Settings > Storage |
+| Public folder warning banner | ✅ | File explorer |
+| File properties with CID & visibility | ✅ | Right-click > Properties |
+| Context menu IPFS options | ✅ | Right-click menu |
+
+### TODO: Dynamic Resource Detection
+
+- [ ] Implement auto-detection of available disk space
+- [ ] Read resource limits from config file
+- [ ] Add Settings UI to configure limits
+- [ ] Implement CPU/memory throttling for WASM
+- [ ] Add real-time IPFS sync status (WebSocket)
 
 ---
 

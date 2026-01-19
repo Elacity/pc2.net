@@ -17,12 +17,130 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-// About
+// About - Updated for PC2 Personal Cloud
 export default {
     id: 'about',
     title_i18n_key: 'about',
     icon: 'logo-outline.svg',
     html: () => {
+        // Check if we're in PC2 mode
+        const isPC2Mode = window.api_origin && (
+            window.api_origin.includes('127.0.0.1:4200') || 
+            window.api_origin.includes('localhost:4200') ||
+            window.api_origin.includes('127.0.0.1:4202') ||
+            window.api_origin.includes('localhost:4202') ||
+            window.location.origin === window.api_origin
+        );
+        
+        if (isPC2Mode) {
+            return `
+                <style>
+                    /* Override default centering - content starts at top and scrolls */
+                    .settings-content[data-settings="about"] .about-container {
+                        height: auto !important;
+                        min-height: 100%;
+                        display: block !important;
+                        align-items: flex-start !important;
+                        justify-content: flex-start !important;
+                        overflow-y: auto;
+                        overflow-x: hidden;
+                        padding: 20px;
+                        box-sizing: border-box;
+                    }
+                    .settings-content[data-settings="about"] .about {
+                        text-align: center;
+                        max-width: 500px;
+                        margin: 0 auto;
+                        padding: 0;
+                    }
+                </style>
+                <div class="about-container">
+                    <div class="about">
+                        <div style="text-align: center; margin-bottom: 20px;">
+                            <svg width="80" height="80" viewBox="0 0 1080 1080" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-bottom: 10px;">
+                                <rect width="1080" height="1080" rx="200" fill="#141414"/>
+                                <path d="M793.209 532.947L732.073 496.935L706.111 481.861C696.061 475.998 684.336 475.998 674.286 481.861L555.363 550.534C545.314 556.396 533.589 556.396 523.539 550.534L405.454 481.861C395.404 475.998 383.679 475.998 373.629 481.861L347.667 496.935L286.531 532.947C265.594 545.509 265.594 575.658 286.531 587.383L390.379 647.682L525.214 725.567C535.264 731.43 546.989 731.43 557.038 725.567L691.873 647.682L795.722 587.383C814.984 575.658 814.984 545.509 793.209 532.947Z" fill="url(#paint0_about)"/>
+                                <path d="M793.218 406.483L705.283 355.397C695.233 349.534 683.508 349.534 673.458 355.397L554.535 424.07C544.486 429.933 532.761 429.933 522.711 424.07L403.788 355.397C393.738 349.534 382.014 349.534 371.964 355.397L285.703 406.483C264.766 419.045 264.766 449.195 285.703 460.919L347.677 496.931L389.551 521.218L524.386 599.104C534.436 604.966 546.16 604.966 556.21 599.104L691.045 521.218L732.92 496.931L794.893 460.919C814.993 449.195 814.993 419.045 793.218 406.483Z" fill="url(#paint1_about)"/>
+                                <defs>
+                                    <linearGradient id="paint0_about" x1="539.755" y1="730.757" x2="539.755" y2="477.963" gradientUnits="userSpaceOnUse">
+                                        <stop stop-color="#F6921A"/><stop offset="1" stop-color="#B04200"/>
+                                    </linearGradient>
+                                    <linearGradient id="paint1_about" x1="539.75" y1="447.142" x2="539.75" y2="604.378" gradientUnits="userSpaceOnUse">
+                                        <stop stop-color="#FFEEDC"/><stop offset="1" stop-color="#FFC382"/>
+                                    </linearGradient>
+                                </defs>
+                            </svg>
+                            <h1 style="margin: 0; font-size: 24px; font-weight: 600;">ElastOS Personal Cloud</h1>
+                            <p style="color: #666; margin: 5px 0 0;">Your Sovereign Cloud Computer</p>
+                        </div>
+                        
+                        <p class="description" style="text-align: center; color: #555; line-height: 1.6;">
+                            One of millions of self-hosted personal clouds running on your own hardware, 
+                            interconnected above blockchain governance to form the World Computer. 
+                            Your data, your control, powered by decentralized identity.
+                        </p>
+                        
+                        <!-- System Information -->
+                        <h2 style="font-size: 14px; margin: 25px 0 10px; color: #333; border-bottom: 1px solid #eee; padding-bottom: 8px;">System Information</h2>
+                        
+                        <div class="settings-card" style="margin-bottom: 8px;">
+                            <strong>Node Version</strong>
+                            <span id="about-node-version" style="font-size: 13px; color: #666;">Loading...</span>
+                        </div>
+                        
+                        <div class="settings-card" style="margin-bottom: 8px;">
+                            <strong>Node Uptime</strong>
+                            <span id="about-node-uptime" style="font-size: 13px; color: #666;">Loading...</span>
+                        </div>
+                        
+                        <div class="settings-card" style="margin-bottom: 8px;">
+                            <strong>Database</strong>
+                            <span id="about-database-status" style="font-size: 13px; color: #666;">Loading...</span>
+                        </div>
+                        
+                        <div class="settings-card" style="margin-bottom: 8px;">
+                            <strong>IPFS</strong>
+                            <span id="about-ipfs-status" style="font-size: 13px; color: #666;">Loading...</span>
+                        </div>
+                        
+                        <div class="settings-card" style="margin-bottom: 8px;">
+                            <strong>Gateway URL</strong>
+                            <span id="about-gateway-url" style="font-size: 12px; font-family: monospace; color: #666;">Loading...</span>
+                        </div>
+                        
+                        <!-- Links -->
+                        <h2 style="font-size: 14px; margin: 25px 0 10px; color: #333; border-bottom: 1px solid #eee; padding-bottom: 8px;">Resources</h2>
+                        
+                        <p class="links" style="text-align: center;">
+                            <a href="https://elastos.info" target="_blank">ElastOS</a>
+                            <span style="color: #CCC;">•</span>
+                            <a href="https://github.com/elastos" target="_blank">GitHub</a>
+                            <span style="color: #CCC;">•</span>
+                            <a href="https://discord.gg/elastos" target="_blank">Discord</a>
+                            <span style="color: #CCC;">•</span>
+                            <a href="#" class="show-credits">${i18n('credits')}</a>
+                        </p>
+                    </div>
+                    
+                    <dialog class="credits">
+                        <div class="credit-content">
+                            <p style="margin: 0; font-size: 18px; text-align: center;">Open Source Credits</p>
+                            <div style="max-height: 300px; overflow-y: scroll;">
+                                <ul style="padding-left: 25px; padding-top:15px;">
+                                    <li>Puter - Base desktop environment</li>
+                                    <li>Helia - IPFS implementation</li>
+                                    <li>libp2p - P2P networking</li>
+                                    <li>better-sqlite3 - Database</li>
+                                    <li>Express.js - HTTP server</li>
+                                    <li>Particle Network - Wallet authentication</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </dialog>
+                </div>`;
+        }
+        
+        // Original Puter About for non-PC2 mode
         return `
             <div class="about-container">
                 <div class="about">
@@ -92,27 +210,74 @@ export default {
                 </dialog>
             </div>`;
     },
-    init: ($el_window) => {
-        // server and version infomration
-        puter.os.version()
-            .then(res => {
-                const deployed_date = new Date(res.deploy_timestamp).toLocaleString();
-                $el_window.find('.version').html(`Version: ${html_encode(res.version)} &bull; Server: ${html_encode(res.location)} &bull; Deployed: ${html_encode(deployed_date)}`);
-            })
-            .catch(error => {
-                console.error('Failed to fetch server info:', error);
-                $el_window.find('.version').html('Failed to load version information.');
-            });
-
+    init: async ($el_window) => {
+        // Check if PC2 mode
+        const isPC2Mode = window.api_origin && (
+            window.api_origin.includes('127.0.0.1:4200') || 
+            window.api_origin.includes('localhost:4200') ||
+            window.api_origin.includes('127.0.0.1:4202') ||
+            window.api_origin.includes('localhost:4202') ||
+            window.location.origin === window.api_origin
+        );
+        
+        if (isPC2Mode) {
+            // Load system info from health endpoint
+            try {
+                const apiOrigin = window.api_origin || window.location.origin;
+                const response = await fetch(`${apiOrigin}/health`);
+                if (response.ok) {
+                    const health = await response.json();
+                    
+                    // Format uptime
+                    const uptimeSeconds = health.uptime || 0;
+                    const days = Math.floor(uptimeSeconds / 86400);
+                    const hours = Math.floor((uptimeSeconds % 86400) / 3600);
+                    const mins = Math.floor((uptimeSeconds % 3600) / 60);
+                    let uptimeStr = '';
+                    if (days > 0) uptimeStr += `${days}d `;
+                    if (hours > 0) uptimeStr += `${hours}h `;
+                    uptimeStr += `${mins}m`;
+                    
+                    $el_window.find('#about-node-version').text(health.version || '0.1.0');
+                    $el_window.find('#about-node-uptime').text(uptimeStr || '-');
+                    $el_window.find('#about-database-status').html(
+                        health.database === 'connected' 
+                            ? '<span style="color: #16a34a;">Connected</span>' 
+                            : '<span style="color: #dc2626;">Disconnected</span>'
+                    );
+                    $el_window.find('#about-ipfs-status').html(
+                        health.ipfs === 'available' 
+                            ? '<span style="color: #16a34a;">Available</span>' 
+                            : '<span style="color: #dc2626;">Unavailable</span>'
+                    );
+                    $el_window.find('#about-gateway-url').text(`${apiOrigin}/ipfs/`);
+                }
+            } catch (error) {
+                console.error('[About] Failed to load system info:', error);
+                $el_window.find('#about-node-version, #about-node-uptime, #about-database-status, #about-ipfs-status').text('Error');
+            }
+        } else {
+            // Original Puter version info for non-PC2 mode
+            puter.os.version()
+                .then(res => {
+                    const deployed_date = new Date(res.deploy_timestamp).toLocaleString();
+                    $el_window.find('.version').html(`Version: ${html_encode(res.version)} &bull; Server: ${html_encode(res.location)} &bull; Deployed: ${html_encode(deployed_date)}`);
+                })
+                .catch(error => {
+                    console.error('Failed to fetch server info:', error);
+                    $el_window.find('.version').html('Failed to load version information.');
+                });
+        }
+        
+        // Credits dialog handler (works for both modes)
         $el_window.find('.credits').on('click', function (e) {
-            if ( $(e.target).hasClass('credits') ) {
-                $('.credits').get(0).close();
+            if ($(e.target).hasClass('credits')) {
+                $(this).get(0).close();
             }
         });
 
         $el_window.find('.show-credits').on('click', function (e) {
-            $('.credits').get(0).showModal();
+            $el_window.find('.credits').get(0).showModal();
         });
-
     },
 };

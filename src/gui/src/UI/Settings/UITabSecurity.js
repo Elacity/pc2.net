@@ -28,8 +28,17 @@ export default {
         let h = `<h1>${i18n('security')}</h1>`;
         let user = window.user;
 
-        // change password button
-        if ( ! user.is_temp ) {
+        // Check if PC2 mode
+        const isPC2Mode = window.api_origin && (
+            window.api_origin.includes('127.0.0.1:4200') || 
+            window.api_origin.includes('localhost:4200') ||
+            window.api_origin.includes('127.0.0.1:4202') ||
+            window.api_origin.includes('localhost:4202') ||
+            window.location.origin === window.api_origin
+        );
+
+        // change password button (not for wallet users)
+        if (!user.is_temp && !user.wallet_address) {
             h += '<div class="settings-card">';
             h += `<strong>${i18n('password')}</strong>`;
             h += '<div style="flex-grow:1;">';
@@ -46,8 +55,8 @@ export default {
         h += '</div>';
         h += '</div>';
 
-        // configure 2FA
-        if ( !user.is_temp && user.email_confirmed ) {
+        // configure 2FA (only for email users)
+        if (!user.is_temp && user.email_confirmed && !user.wallet_address) {
             h += `<div class="settings-card settings-card-security ${user.otp ? 'settings-card-success' : 'settings-card-warning'}">`;
             h += '<div>';
             h += `<strong style="display:block;">${i18n('two_factor')}</strong>`;
@@ -60,6 +69,38 @@ export default {
             h += `<button class="button disable-2fa" style="float:right;${user.otp ? '' : 'display:none;'}">${i18n('disable_2fa')}</button>`;
             h += '</div>';
             h += '</div>';
+        }
+        
+        // Login History (PC2 mode)
+        if (isPC2Mode) {
+            h += '<h2 style="font-size: 14px; margin: 25px 0 10px; color: #333;">Login History</h2>';
+            h += '<div id="security-login-history" class="settings-card" style="flex-direction: column; align-items: stretch; min-height: 100px;">';
+            h += '<div style="text-align: center; padding: 20px; color: #999;">Loading...</div>';
+            h += '</div>';
+            
+            // Wallet Security (for wallet users)
+            if (user.wallet_address) {
+                h += '<h2 style="font-size: 14px; margin: 25px 0 10px; color: #333;">Wallet Security</h2>';
+                h += '<div class="settings-card">';
+                h += '<div>';
+                h += '<strong style="display: block;">Authentication Method</strong>';
+                h += '<span style="font-size: 12px; color: #666;">Secured by your wallet signature</span>';
+                h += '</div>';
+                h += '<div style="flex-grow:1; text-align: right;">';
+                h += '<span style="color: #16a34a; font-size: 13px;">Wallet Connected</span>';
+                h += '</div>';
+                h += '</div>';
+                
+                h += '<div class="settings-card" style="background: #f0fdf4; border-color: #86efac;">';
+                h += '<div style="display: flex; align-items: center; gap: 10px;">';
+                h += '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><polyline points="9 12 11 14 15 10"></polyline></svg>';
+                h += '<div>';
+                h += '<strong style="display: block; color: #166534;">Decentralized Identity</strong>';
+                h += '<span style="font-size: 12px; color: #15803d;">Your identity is secured by blockchain cryptography</span>';
+                h += '</div>';
+                h += '</div>';
+                h += '</div>';
+            }
         }
 
         return h;
@@ -166,5 +207,62 @@ export default {
             $el_window.find('.settings-card-security').removeClass('settings-card-success');
             $el_window.find('.settings-card-security').addClass('settings-card-warning');
         });
+        
+        // Load login history for PC2 mode
+        const isPC2Mode = window.api_origin && (
+            window.api_origin.includes('127.0.0.1:4200') || 
+            window.api_origin.includes('localhost:4200') ||
+            window.api_origin.includes('127.0.0.1:4202') ||
+            window.api_origin.includes('localhost:4202') ||
+            window.location.origin === window.api_origin
+        );
+        
+        if (isPC2Mode) {
+            (async () => {
+                try {
+                    const apiOrigin = window.api_origin || window.location.origin;
+                    const authToken = puter.authToken;
+                    
+                    const response = await fetch(`${apiOrigin}/api/user/login-history`, {
+                        headers: authToken ? { 'Authorization': `Bearer ${authToken}` } : {}
+                    });
+                    
+                    const container = $el_window.find('#security-login-history');
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        const logins = data.logins || [];
+                        
+                        if (logins.length === 0) {
+                            container.html('<div style="text-align: center; padding: 20px; color: #999;">No login history available</div>');
+                        } else {
+                            let h = '';
+                            logins.slice(0, 10).forEach(login => {
+                                const date = new Date(login.timestamp).toLocaleString();
+                                const isCurrent = login.is_current;
+                                h += `<div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #eee;">`;
+                                h += `<div>`;
+                                h += `<strong style="font-size: 13px;">${login.ip || 'Unknown'}</strong>`;
+                                h += `<span style="font-size: 11px; color: #666; display: block;">${login.user_agent || 'Unknown device'}</span>`;
+                                h += `</div>`;
+                                h += `<div style="text-align: right;">`;
+                                h += `<span style="font-size: 12px; color: #666;">${date}</span>`;
+                                if (isCurrent) {
+                                    h += `<span style="font-size: 10px; color: #16a34a; display: block;">Current session</span>`;
+                                }
+                                h += `</div>`;
+                                h += `</div>`;
+                            });
+                            container.html(h);
+                        }
+                    } else {
+                        container.html('<div style="text-align: center; padding: 20px; color: #999;">Login history not available</div>');
+                    }
+                } catch (error) {
+                    console.error('[Security] Failed to load login history:', error);
+                    $el_window.find('#security-login-history').html('<div style="text-align: center; padding: 20px; color: #999;">Failed to load</div>');
+                }
+            })();
+        }
     },
 };

@@ -20,6 +20,7 @@ import { Service } from '../definitions.js';
 
 import AboutTab from '../UI/Settings/UITabAbout.js';
 import AccountTab from '../UI/Settings/UITabAccount.js';
+import SecurityTab from '../UI/Settings/UITabSecurity.js';
 import PersonalizationTab from '../UI/Settings/UITabPersonalization.js';
 import LanguageTag from '../UI/Settings/UITabLanguage.js';
 import PC2Tab from '../UI/Settings/UITabPC2.js';
@@ -31,10 +32,10 @@ const TSettingsTab = use('ui.traits.TSettingsTab');
 export class SettingsService extends Service {
     #tabs = [];
     async _init () {
-        // Account first, then Personal Cloud (PC2)
-        // Security tab removed
+        // Account first, then Security, Personal Cloud (PC2), etc.
         ;[
             AccountTab,
+            SecurityTab,
             PC2Tab,
             StorageTab,
             AITab,

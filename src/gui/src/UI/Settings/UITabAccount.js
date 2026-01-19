@@ -36,8 +36,24 @@ export default {
         // profile picture
         // Use profile_picture_url from whoami response if available, otherwise fall back to profile.picture or default icon
         const profilePicUrl = window.user?.profile_picture_url || window.user?.profile?.picture || window.icons['profile.svg'];
+        const displayName = window.user?.display_name || '';
+        
         h += `<div style="overflow: hidden; display: flex; margin-bottom: 20px; flex-direction: column; align-items: center;">`;
             h += `<div class="profile-picture change-profile-picture" style="background-image: url('${html_encode(profilePicUrl)}'); cursor: pointer;" title="Click to change profile picture">`;
+            h += `</div>`;
+            // Display name shown below profile picture
+            h += `<div id="profile-display-name" style="margin-top: 12px; font-size: 20px; font-weight: 600; color: #333; text-align: center;">${html_encode(displayName) || '<span style="color: #999; font-weight: 400;">Set your display name</span>'}</div>`;
+        h += `</div>`;
+        
+        // Display name setting (per-wallet)
+        h += `<div class="settings-card">`;
+            h += `<div style="flex: 1;">`;
+                h += `<strong style="display:block;">Display Name</strong>`;
+                h += `<span style="display:block; margin-top:5px; font-size: 12px; color: #666;">How you appear to others</span>`;
+            h += `</div>`;
+            h += `<div style="display: flex; align-items: center; gap: 8px;">`;
+                h += `<input type="text" id="account-display-name" value="${html_encode(displayName)}" placeholder="Enter display name" style="padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; width: 180px; font-size: 13px;">`;
+                h += `<button class="button save-display-name" style="font-size: 12px; padding: 0 12px; height: 28px; line-height: 28px;">Save</button>`;
             h += `</div>`;
         h += `</div>`;
 
@@ -131,6 +147,45 @@ export default {
         const copyIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
         const checkIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
 
+        // Save display name
+        $el_window.find('.save-display-name').on('click', async function() {
+            const displayName = $el_window.find('#account-display-name').val().trim();
+            const btn = $(this);
+            btn.prop('disabled', true).text('Saving...');
+            
+            try {
+                const apiOrigin = window.api_origin || window.location.origin;
+                const authToken = puter.authToken;
+                
+                if (!authToken) {
+                    throw new Error('Not authenticated');
+                }
+                
+                const response = await fetch(`${apiOrigin}/api/user/profile`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({ display_name: displayName })
+                });
+                
+                if (response.ok) {
+                    window.user.display_name = displayName;
+                    // Update the display name shown below profile picture
+                    $el_window.find('#profile-display-name').html(displayName || '<span style="color: #999; font-weight: 400;">Set your display name</span>');
+                    puter.ui.toast('Display name saved', { type: 'success' });
+                } else {
+                    throw new Error('Failed to save');
+                }
+            } catch (error) {
+                console.error('[Account] Failed to save display name:', error);
+                puter.ui.toast('Failed to save display name', { type: 'error' });
+            } finally {
+                btn.prop('disabled', false).text('Save');
+            }
+        });
+        
         // Copy address to clipboard
         $el_window.find('.copy-address-btn').on('click', function (e) {
             const address = $(this).data('address');
@@ -207,13 +262,9 @@ export default {
 
         // Profile picture click handler
         const $profilePic = $el_window.find('.change-profile-picture');
-        console.log('[UITabAccount] Setting up profile picture click handler, found elements:', $profilePic.length);
         
         // Refresh profile picture with signed URL when Account tab is opened
-        // This ensures the profile picture displays correctly even if Settings window opens after page load
         if (window.user?.profile_picture_url && $profilePic.length > 0) {
-            console.log('[UITabAccount] Refreshing profile picture for Settings window');
-            // Small delay to ensure DOM is ready
             setTimeout(() => {
                 if (typeof window.refresh_profile_picture === 'function') {
                     window.refresh_profile_picture();
@@ -222,13 +273,10 @@ export default {
         }
         
         $profilePic.on('click', async function (e) {
-            console.log('[UITabAccount] Profile picture clicked');
             e.preventDefault();
             e.stopPropagation();
             
             const parentUuid = $el_window.attr('data-element_uuid');
-            console.log('[UITabAccount] Parent UUID:', parentUuid);
-            console.log('[UITabAccount] Opening file dialog for profile picture');
             
             // open dialog
             UIWindow({
@@ -246,15 +294,10 @@ export default {
         });
 
         // File opened event listener - must be on the window element (not jQuery wrapper)
-        console.log('[UITabAccount] Setting up file_opened event listener on window element');
         const windowElement = $el_window.get(0);
         if (windowElement) {
             windowElement.addEventListener('file_opened', async function(e) {
-                console.log('[UITabAccount] file_opened event received:', e);
-                console.log('[UITabAccount] Event detail:', e.detail);
             let selected_file = Array.isArray(e.detail) ? e.detail[0] : e.detail;
-            console.log('[UITabAccount] File opened:', selected_file);
-            console.log('[UITabAccount] File properties:', Object.keys(selected_file));
             
             // Get signed read_url for immediate display (works for CSS background-image)
             let signed_url = null;
@@ -262,25 +305,19 @@ export default {
             // Check various possible property names for the read URL
             if (selected_file.read_url) {
                 signed_url = selected_file.read_url;
-                console.log('[UITabAccount] Using read_url:', signed_url);
             } else if (selected_file.readURL) {
                 signed_url = selected_file.readURL;
-                console.log('[UITabAccount] Using readURL:', signed_url);
             } else if (selected_file.url) {
                 signed_url = selected_file.url;
-                console.log('[UITabAccount] Using url:', signed_url);
             } else if (selected_file.path) {
                 // If we only have a path, sign it to get a read_url
                 try {
-                    console.log('[UITabAccount] Signing file path:', selected_file.path);
-                    // Expand ~ to full path if needed
                     let filePath = selected_file.path;
                     if (filePath.startsWith('~')) {
                         filePath = filePath.replace('~', `/${window.user?.username || window.user?.wallet_address || ''}`);
                     }
                     
                     const signed = await puter.fs.sign(undefined, { path: filePath, action: 'read' });
-                    console.log('[UITabAccount] Sign response:', signed);
                     
                     // Handle different response structures
                     let items = null;
@@ -292,17 +329,14 @@ export default {
                         items = signed;
                     } else if (signed && signed.read_url) {
                         signed_url = signed.read_url;
-                        console.log('[UITabAccount] Got signed URL from single item:', signed_url);
                     }
                     
                     if (items && items.length > 0) {
                         const firstItem = items[0];
                         if (firstItem.read_url) {
                             signed_url = firstItem.read_url;
-                            console.log('[UITabAccount] Got signed URL from items array:', signed_url);
                         } else if (firstItem.url) {
                             signed_url = firstItem.url;
-                            console.log('[UITabAccount] Got URL from items array:', signed_url);
                         }
                     }
                 } catch (err) {
@@ -313,41 +347,104 @@ export default {
             if (signed_url) {
                 // Store the file path for saving (not the signed URL)
                 const profile_pic_path = selected_file.path || null;
-                console.log('[UITabAccount] Setting profile picture - path:', profile_pic_path, 'signed_url:', signed_url);
                 
                 // Use signed URL for immediate display
                 $el_window.find('.profile-picture').css('background-image', `url("${signed_url}")`);
                 $('.profile-image').css('background-image', `url("${signed_url}")`);
                 $('.profile-image').addClass('profile-image-has-picture');
                 
-                // Save the file path to backend (not base64)
-                $.ajax({
-                    url: `${window.api_origin}/set-profile-picture`,
-                    type: 'POST',
-                    data: JSON.stringify({
-                        url: profile_pic_path,
-                    }),
-                    async: true,
-                    contentType: 'application/json',
-                    headers: {
-                        'Authorization': `Bearer ${window.auth_token}`,
-                    },
-                    success: function(response) {
-                        console.log('[UITabAccount] Profile picture saved successfully:', response);
-                        // Also update window.user for immediate access
-                        if (window.user) {
-                            window.user.profile_picture_url = profile_pic_path;
-                        }
-                    },
-                    error: function(xhr, status, error) {
-                        console.error('[UITabAccount] Failed to save profile picture:', error, xhr);
-                    },
-                    statusCode: {
-                        401: function () {
-                            window.logout();
+                // Copy the file to Public folder for public IPFS access
+                const userRoot = window.user?.username || window.user?.wallet_address || '';
+                const publicFolder = `/${userRoot}/Public`;
+                const fileName = profile_pic_path.split('/').pop();
+                const publicPath = `${publicFolder}/profile-picture-${Date.now()}-${fileName}`;
+                
+                // Expand ~ in source path if needed
+                let sourcePath = profile_pic_path;
+                if (sourcePath.startsWith('~')) {
+                    sourcePath = sourcePath.replace('~', `/${userRoot}`);
+                }
+                
+                try {
+                    // Ensure Public folder exists first
+                    try {
+                        await puter.fs.mkdir(publicFolder);
+                    } catch (mkdirErr) {
+                        // Folder might already exist, that's fine
+                    }
+                    
+                    // Copy to Public folder
+                    const targetFileName = `profile-picture-${Date.now()}-${fileName}`;
+                    const copyResult = await puter.fs.copy(sourcePath, publicFolder, {
+                        newName: targetFileName,
+                        overwrite: true
+                    });
+                    
+                    // Get the actual path from the copy result
+                    let savedPath = publicPath;
+                    if (copyResult && copyResult[0] && copyResult[0].copied && copyResult[0].copied.path) {
+                        savedPath = copyResult[0].copied.path;
+                    }
+                    
+                    // Save the public path to backend
+                    $.ajax({
+                        url: `${window.api_origin}/set-profile-picture`,
+                        type: 'POST',
+                        data: JSON.stringify({
+                            url: savedPath,
+                        }),
+                        async: true,
+                        contentType: 'application/json',
+                        headers: {
+                            'Authorization': `Bearer ${puter.authToken}`,
                         },
-                    },
-                });
+                        success: function(response) {
+                            if (window.user) {
+                                window.user.profile_picture_url = savedPath;
+                            }
+                            if (typeof puter?.ui?.toast === 'function') {
+                                puter.ui.toast('Profile picture saved', { type: 'success' });
+                            }
+                        },
+                        error: function(xhr, status, error) {
+                            console.error('[UITabAccount] Failed to save profile picture:', error);
+                        },
+                        statusCode: {
+                            401: function () {
+                                window.logout();
+                            },
+                        },
+                    });
+                } catch (copyErr) {
+                    console.error('[UITabAccount] Failed to copy to Public folder:', copyErr?.message || copyErr);
+                    
+                    // Show user that we're using private storage instead
+                    if (typeof puter?.ui?.toast === 'function') {
+                        puter.ui.toast('Profile picture saved (private storage)', { type: 'info' });
+                    }
+                    
+                    // Fall back to private storage
+                    $.ajax({
+                        url: `${window.api_origin}/set-profile-picture`,
+                        type: 'POST',
+                        data: JSON.stringify({
+                            url: profile_pic_path,
+                        }),
+                        async: true,
+                        contentType: 'application/json',
+                        headers: {
+                            'Authorization': `Bearer ${puter.authToken}`,
+                        },
+                        success: function(response) {
+                            if (window.user) {
+                                window.user.profile_picture_url = profile_pic_path;
+                            }
+                        },
+                        error: function(xhr, status, error) {
+                            console.error('[UITabAccount] Failed to save profile picture:', error, xhr);
+                        },
+                    });
+                }
             } else {
                 console.warn('[UITabAccount] No signed URL available for file. File object:', selected_file);
             }

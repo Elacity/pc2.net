@@ -1,5 +1,6 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
 import { Server } from 'http';
+import path from 'path';
 import { setupStaticServing } from './static.js';
 import { setupAPI } from './api/index.js';
 import { setupWebSocket, setGlobalIO } from './websocket/server.js';
@@ -123,9 +124,37 @@ export function createServer(options: ServerOptions): { app: Express; server: Se
   // Create HTTP server
   const server = new Server(app);
   
+  // Determine user homes base directory for terminal isolation
+  // Use data directory from config or derive from database path
+  let userHomesBase = '';
+  if (options.config?.storage?.database_path) {
+    // User homes are at the same level as the database
+    userHomesBase = path.dirname(options.config.storage.database_path);
+  } else {
+    // Fallback to volatile/data
+    userHomesBase = path.join(process.cwd(), 'volatile', 'data');
+  }
+  logger.info(`[Server] Terminal user homes base: ${userHomesBase}`);
+  
+  // Read terminal configuration from config
+  const terminalConfig = (options.config as any)?.terminal || {};
+  const terminalIsolationMode = terminalConfig.isolation_mode || 'none';
+  const terminalAllowFallback = terminalConfig.allow_insecure_fallback || false;
+  const terminalMaxPerUser = terminalConfig.max_terminals_per_user || 5;
+  const terminalIdleTimeout = (terminalConfig.idle_timeout_minutes || 30) * 60 * 1000;
+  
+  logger.info(`[Server] Terminal config: isolation_mode=${terminalIsolationMode}, max_per_user=${terminalMaxPerUser}`);
+  
   // WebSocket setup
   const io = setupWebSocket(server, {
-    database: options.database
+    database: options.database,
+    userHomesBase: userHomesBase,
+    terminalConfig: {
+      isolationMode: terminalIsolationMode,
+      allowInsecureFallback: terminalAllowFallback,
+      maxTerminalsPerUser: terminalMaxPerUser,
+      idleTimeout: terminalIdleTimeout,
+    },
   });
   
   // Store pendingEvents reference for polling middleware

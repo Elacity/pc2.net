@@ -18,6 +18,7 @@ import { handleSearch } from './search.js';
 import { handleGetApp } from './apps.js';
 import { handleGetVersions, handleGetVersion, handleRestoreVersion } from './versions.js';
 import { createBackup, listBackups, downloadBackup, deleteBackup, restoreBackup } from './backup.js';
+import { handleTerminalStats, handleTerminalAdminStats, handleDestroyAllTerminals, handleTerminalStatus } from './terminal.js';
 
 // Extend Express Request to include database, filesystem, config, and WebSocket
 declare global {
@@ -46,7 +47,8 @@ export function setupAPI(app: Express): void {
   app.use(corsMiddleware);
 
   // Health check endpoint (no auth required)
-  app.get('/health', (req: Request, res: Response) => {
+  // Available at both /health and /api/health for Docker compatibility
+  const healthHandler = (req: Request, res: Response) => {
     const db = app.locals.db;
     const filesystem = app.locals.filesystem;
     const config = app.locals.config;
@@ -56,12 +58,32 @@ export function setupAPI(app: Express): void {
     const ipfsStatus = filesystem ? 'available' : 'not initialized';
     const websocketStatus = io ? 'active' : 'not initialized';
     
+    // Import terminal service to check isolation mode
+    let terminalStatus = 'not initialized';
+    let terminalIsolation = 'unknown';
+    try {
+      const { getTerminalService } = require('./terminal.js');
+      const terminalService = getTerminalService();
+      if (terminalService) {
+        terminalStatus = terminalService.isAvailable() ? 'available' : 'unavailable';
+        terminalIsolation = terminalService.getEffectiveIsolationMode();
+      }
+    } catch {
+      terminalStatus = 'not available';
+    }
+    
     const health: {
       status: string;
       timestamp: string;
+      version: string;
+      uptime: number;
       database: string;
       ipfs: string;
       websocket: string;
+      terminal: {
+        status: string;
+        isolationMode: string;
+      };
       owner?: {
         set: boolean;
         tethered_wallets: number;
@@ -69,9 +91,15 @@ export function setupAPI(app: Express): void {
     } = {
       status: 'ok',
       timestamp: new Date().toISOString(),
+      version: '0.1.0',
+      uptime: process.uptime(),
       database: dbStatus,
       ipfs: ipfsStatus,
-      websocket: websocketStatus
+      websocket: websocketStatus,
+      terminal: {
+        status: terminalStatus,
+        isolationMode: terminalIsolation
+      }
     };
 
     if (config) {
@@ -87,7 +115,10 @@ export function setupAPI(app: Express): void {
     }
     
     res.json(health);
-  });
+  };
+  
+  app.get('/health', healthHandler);
+  app.get('/api/health', healthHandler);
 
   // Version endpoint (no auth required)
   app.get('/version', handleVersion);
@@ -241,6 +272,12 @@ export function setupAPI(app: Express): void {
   app.get('/api/backups/download/:filename', authenticate, downloadBackup);
   app.delete('/api/backups/:filename', authenticate, deleteBackup);
   app.post('/api/backups/restore', authenticate, restoreUpload.single('file'), restoreBackup);
+
+  // Terminal endpoints
+  app.get('/api/terminal/status', handleTerminalStatus);  // No auth - check if available
+  app.get('/api/terminal/stats', authenticate, handleTerminalStats);
+  app.get('/api/terminal/admin/stats', authenticate, handleTerminalAdminStats);
+  app.post('/api/terminal/destroy-all', authenticate, handleDestroyAllTerminals);
 
   // Error handling middleware (must be last)
   app.use(errorHandler);

@@ -39,6 +39,19 @@
         "storage_mode": "ipfs"
     },
     
+    "terminal": {
+        "_comment": "Terminal isolation mode configuration",
+        "_modes": {
+            "none": "Direct PTY access - ONLY for single-user personal nodes",
+            "namespace": "Linux namespace isolation - Safe for multi-user (requires bubblewrap on Linux)",
+            "disabled": "Terminal feature completely disabled"
+        },
+        "isolation_mode": "none",
+        "allow_insecure_fallback": false,
+        "max_terminals_per_user": 5,
+        "idle_timeout_minutes": 30
+    },
+    
     "_particle_auth_note": "Particle Auth credentials are configured in submodules/particle-auth/.env",
     "_particle_auth_instructions": [
         "1. Create account at https://dashboard.particle.network",

@@ -9,9 +9,19 @@ import { Server as HTTPServer } from 'http';
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { DatabaseManager } from '../storage/database.js';
 import { SocketUser, setEventQueue } from './events.js';
+import { initializeTerminalHandlers, getTerminalService } from './terminal.js';
+
+export interface TerminalConfigOptions {
+  isolationMode?: 'none' | 'namespace' | 'disabled';
+  allowInsecureFallback?: boolean;
+  maxTerminalsPerUser?: number;
+  idleTimeout?: number;
+}
 
 export interface WebSocketOptions {
   database?: DatabaseManager;
+  userHomesBase?: string;  // Base directory for user home directories (for terminal isolation)
+  terminalConfig?: TerminalConfigOptions;  // Terminal service configuration
 }
 
 // Extend Socket interface to include user
@@ -26,7 +36,10 @@ export function setupWebSocket(
   server: HTTPServer,
   options: WebSocketOptions = {}
 ): SocketIOServer {
-  const { database } = options;
+  const { database, userHomesBase, terminalConfig } = options;
+  
+  // Track sockets with initialized terminal handlers
+  const terminalInitializedSockets = new Set<string>();
 
   // Store authenticated sessions by socket ID for reconnection
   const authenticatedSessions = new Map<string, { wallet_address: string; token: string }>();
@@ -296,6 +309,17 @@ export function setupWebSocket(
               timestamp: new Date().toISOString()
             });
             
+            // Initialize terminal handlers for this auto-authenticated socket
+            if (userHomesBase && !terminalInitializedSockets.has(socket.id)) {
+              try {
+                initializeTerminalHandlers(socket, session.wallet_address, userHomesBase, terminalConfig);
+                terminalInitializedSockets.add(socket.id);
+                console.log(`🖥️  [Terminal] Initialized terminal handlers for ${socket.id} (auto-auth)`);
+              } catch (termError: any) {
+                console.error(`❌ [Terminal] Failed to initialize terminal handlers:`, termError);
+              }
+            }
+            
             // Continue to authenticate event handler setup below
           }
         }
@@ -353,6 +377,17 @@ export function setupWebSocket(
         room: room,
         timestamp: new Date().toISOString()
       });
+      
+      // Initialize terminal handlers for this authenticated socket
+      if (userHomesBase && !terminalInitializedSockets.has(socket.id)) {
+        try {
+          initializeTerminalHandlers(socket, wallet_address, userHomesBase, terminalConfig);
+          terminalInitializedSockets.add(socket.id);
+          console.log(`🖥️  [Terminal] Initialized terminal handlers for ${socket.id} (handshake auth)`);
+        } catch (termError: any) {
+          console.error(`❌ [Terminal] Failed to initialize terminal handlers:`, termError);
+        }
+      }
     }
 
     // Handle ping/pong for connection health (Socket.io handles this automatically, but we can add custom handling)
@@ -434,6 +469,17 @@ export function setupWebSocket(
       }
       
       socket.emit('authenticated', { wallet_address: session.wallet_address, room });
+      
+      // Initialize terminal handlers for this authenticated socket
+      if (userHomesBase && !terminalInitializedSockets.has(socket.id)) {
+        try {
+          initializeTerminalHandlers(socket, session.wallet_address, userHomesBase, terminalConfig);
+          terminalInitializedSockets.add(socket.id);
+          console.log(`🖥️  [Terminal] Initialized terminal handlers for ${socket.id}`);
+        } catch (termError: any) {
+          console.error(`❌ [Terminal] Failed to initialize terminal handlers:`, termError);
+        }
+      }
     });
     
     // Also handle 'auth' event (alternative event name)
@@ -490,6 +536,9 @@ export function setupWebSocket(
         console.log(`🧹 Cleaning up session for ${socket.id} (wallet: ${session.wallet_address.slice(0, 6)}...${session.wallet_address.slice(-4)})`);
       }
       authenticatedSessions.delete(socket.id);
+      
+      // Clean up terminal initialized tracking
+      terminalInitializedSockets.delete(socket.id);
       
       // Note: We keep walletSessions even after disconnect to allow auto-reauthentication
       // They'll expire naturally when the session expires in the database

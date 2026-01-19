@@ -4048,5 +4048,283 @@ for (const capsule of capsules) {
 
 ---
 
+## 🎯 Phase 7: MVP Production Release & Decentralized Network (2025-01)
+
+### Current Focus: MVP Demo Preparation
+
+**Goal:** Enable others to download, run, and test PC2 on their own hardware.
+
+### 7.1 MVP Production Release (High Priority)
+
+| Task | Status | Notes |
+|------|--------|-------|
+| **HTTPS Documentation** | 🔲 Todo | nginx/Caddy/Cloudflare setup guides |
+| **Production Build Script** | 🔲 Todo | `npm run build:production` |
+| **Docker Containerization** | 🔲 Todo | Dockerfile, docker-compose, arm64 support |
+| **Logout Flow** | 🔲 Todo | Clean Particle session clearing |
+| **Error Handling** | 🔲 Todo | Network/wallet connection errors |
+| **Mobile Testing** | 🔲 Todo | Login modal on mobile browsers |
+
+**Deliverables:**
+- `docs/DEPLOYMENT_GUIDE.md` - Complete deployment instructions
+- `pc2-node/Dockerfile` - Container definition
+- `pc2-node/docker-compose.yml` - Easy deployment
+- `npm run build:production` - Single build command
+
+### 7.2 Decentralized Network Access (Future Phase)
+
+**Vision:** Zero-config URL generation for any PC2 node, accessible from anywhere.
+
+**Architecture:**
+```
+User's PC2 Node
+├── Tor Hidden Service (.onion) - Fully decentralized fallback
+├── Gateway Registration (*.pc2.network) - Federated web access
+└── Custom Domain (optional) - User's own domain
+```
+
+**Key Features:**
+1. **Automatic URL Generation** - `pc2 start` → get URL immediately
+2. **Tor Integration** - Embedded Tor for decentralized access
+3. **Federated Gateways** - Multiple operators, no single point of failure
+4. **Self-Updating** - Updates through PC2 desktop UI
+
+**Implementation Phases:**
+- **7.2.1** Tor Hidden Service Integration (1-2 weeks)
+- **7.2.2** Gateway Server + Federation Protocol (2-3 weeks)
+- **7.2.3** Self-Update System (1-2 weeks)
+- **7.2.4** Custom Subdomain Support (1 week)
+
+**See:** `docs/PC2_NETWORK_SPECIFICATION.md` for detailed technical specification.
+
+### 7.3 Particle Login Improvements (✅ Complete)
+
+- ✅ Elacity Labs branding on login modal
+- ✅ Social login removed (domain whitelisting issues)
+- ✅ Wallet order: MetaMask, Phantom, WalletConnect
+- ✅ Desktop icons fix after login
+- ✅ Page reload for proper initialization
+
+---
+
+## 🖥️ Phase 7.4: System Terminal (✅ COMPLETE - 2025-01-19)
+
+### Overview
+Replaced the non-functional Phoenix/Terminal shell with a **real PTY-based System Terminal** that provides actual shell access to the PC2 node.
+
+### Features Implemented
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| **Real PTY Shell** | ✅ Complete | Uses `node-pty` for real shell access (zsh/bash/sh) |
+| **WebSocket I/O** | ✅ Complete | Real-time terminal I/O via Socket.io |
+| **xterm.js Frontend** | ✅ Complete | Full terminal emulator in browser |
+| **Session Management** | ✅ Complete | Per-user session tracking, idle timeout |
+| **Configurable Isolation** | ✅ Complete | `none`, `namespace`, `disabled` modes |
+| **Namespace Isolation** | ✅ Complete | Linux bubblewrap support for multi-user safety |
+| **Security Warnings** | ✅ Complete | Clear warnings when running in insecure mode |
+| **Audit Logging** | ✅ Complete | All terminal sessions logged |
+
+### Files Created/Modified
+
+**Backend (pc2-node/src/):**
+- `services/terminal/TerminalService.ts` - Core terminal service with isolation modes
+- `websocket/terminal.ts` - WebSocket handlers for terminal I/O
+- `websocket/server.ts` - Terminal handler integration
+- `api/terminal.ts` - REST endpoints for status/management
+
+**Frontend (src/gui/src/UI/):**
+- `UIWindowSystemTerminal.js` - xterm.js-based terminal window
+
+**Configuration:**
+- `config/pc2.json.example` - Terminal isolation settings
+
+### Isolation Modes
+
+| Mode | Platform | Security | Use Case |
+|------|----------|----------|----------|
+| `none` | All | Single-user only | Personal nodes |
+| `namespace` | Linux only | Multi-user safe | Shared hosting |
+| `disabled` | All | N/A | Disable terminal |
+
+### Configuration Example
+
+```json
+"terminal": {
+    "isolation_mode": "none",
+    "allow_insecure_fallback": false,
+    "max_terminals_per_user": 5,
+    "idle_timeout_minutes": 30
+}
+```
+
+### Removed Apps
+- ❌ Terminal (old Puter terminal - non-functional)
+- ❌ Phoenix Shell (non-functional)
+- ✅ System Terminal replaces both with real functionality
+
+---
+
+## 🚀 Phase 7.5: Production Readiness Assessment (2025-01-19)
+
+### Current Status: Ready for Demo with Caveats
+
+| Component | Status | Production Ready? | Notes |
+|-----------|--------|-------------------|-------|
+| **Authentication** | ✅ | Yes | Particle Auth with wallet login |
+| **File System (IPFS)** | ✅ | Yes | Per-user paths, embedded Helia |
+| **Database** | ✅ | Yes | SQLite, embedded |
+| **AI Chat** | ✅ | Yes | Multi-provider support |
+| **Terminal** | ⚠️ | Partial | Safe for single-user; needs namespace for multi-user |
+| **Backup/Restore** | ✅ | Yes | Web UI and CLI |
+| **App Launcher** | ✅ | Yes | All apps functional |
+| **WASM Runtime** | ✅ | Yes | Calculator working |
+
+### What's Missing for Production
+
+| Area | Priority | Status | Action Needed |
+|------|----------|--------|---------------|
+| **HTTPS** | 🔴 High | ⚠️ Docs Ready | Nginx reverse proxy guide created |
+| **Rate Limiting** | 🟠 Medium | ⚠️ Basic | Add API rate limits for abuse prevention |
+| **Health Checks** | ✅ Complete | ✅ Done | `/health` and `/api/health` endpoints |
+| **Error Monitoring** | 🟡 Low | ❌ Missing | Add Sentry or similar |
+| **Docker Package** | ✅ Complete | ✅ Done | Full Dockerfile with bubblewrap bundled |
+| **Namespace Isolation** | ✅ Complete | ✅ Done | Bundled in Docker, auto-enabled |
+
+---
+
+## 🐳 Phase 7.6: Docker Packaging & Deployment (✅ COMPLETE - 2025-01-19)
+
+### Overview
+Created complete Docker packaging for PC2 Node with all dependencies bundled, enabling one-command deployment.
+
+### Files Created
+
+| File | Purpose |
+|------|---------|
+| `pc2-node/Dockerfile` | Multi-stage build with bubblewrap pre-installed |
+| `pc2-node/docker-compose.yml` | One-command deployment with proper security caps |
+| `pc2-node/scripts/docker-entrypoint.sh` | Auto-configuration on startup |
+| `config/pc2.production.json` | Production defaults (namespace isolation ON) |
+| `docs/DEPLOYMENT.md` | Complete VPS deployment guide |
+
+### What's Bundled in Docker Image
+
+```
+Docker Image (elastos/pc2-node)
+├── Node.js 20 Alpine
+├── bubblewrap (namespace isolation)  ← Installed automatically
+├── node-pty (compiled for container)
+├── All PC2 source code
+├── Production config (namespace mode default)
+├── Entrypoint script with auto-setup
+└── Health check configured
+```
+
+### Docker Commands
+
+**Build:**
+```bash
+cd pc2-node
+docker build -t elastos/pc2-node -f Dockerfile ..
+```
+
+**Run (simple):**
+```bash
+docker run -d --name pc2-node \
+  -p 4200:4200 \
+  -v pc2-data:/app/data \
+  --security-opt seccomp=unconfined \
+  --cap-add SYS_ADMIN \
+  elastos/pc2-node
+```
+
+**Run (with docker-compose):**
+```bash
+cd pc2-node
+docker-compose up -d
+```
+
+### Enhanced Health Endpoint
+
+Both `/health` and `/api/health` now return:
+```json
+{
+  "status": "ok",
+  "timestamp": "2025-01-19T04:23:54.806Z",
+  "version": "0.1.0",
+  "uptime": 14.5,
+  "database": "connected",
+  "ipfs": "available",
+  "websocket": "active",
+  "terminal": {
+    "status": "available",
+    "isolationMode": "namespace"
+  },
+  "owner": {
+    "set": true,
+    "tethered_wallets": 0
+  }
+}
+```
+
+### Production Configuration
+
+`config/pc2.production.json` defaults:
+- Terminal isolation: `namespace` (multi-user safe)
+- Max terminals per user: 3
+- Idle timeout: 15 minutes
+- Rate limiting: enabled
+
+---
+
+## 📋 Deployment Checklist for Demo Server (pc2.net)
+
+### Pre-Deployment
+- [x] Dockerfile created with bubblewrap bundled
+- [x] docker-compose.yml for easy deployment
+- [x] Production config with namespace isolation default
+- [x] Health endpoints for monitoring
+- [x] Deployment documentation
+
+### VPS Deployment Steps
+- [ ] Provision Linux VPS (Ubuntu 22.04+ on InterServer/DigitalOcean/Vultr)
+- [ ] Install Docker: `curl -fsSL https://get.docker.com | sh`
+- [ ] Clone repo and build: `docker build -t elastos/pc2-node -f pc2-node/Dockerfile .`
+- [ ] Run with docker-compose
+- [ ] Set up Nginx reverse proxy for HTTPS
+- [ ] Configure Let's Encrypt SSL
+- [ ] Test Particle Auth works over HTTPS
+- [ ] Test terminal namespace isolation
+- [ ] Set up monitoring/alerts
+
+### Post-Deployment Verification
+- [ ] `/api/health` returns `status: ok`
+- [ ] Terminal shows `isolationMode: namespace`
+- [ ] Multiple users cannot access each other's files
+- [ ] Backup/restore works
+- [ ] AI chat works (if API keys configured)
+
+---
+
+## 📋 Remaining TODO
+
+### High Priority (For Launch)
+- [ ] Deploy to VPS and test
+- [ ] Configure HTTPS with Let's Encrypt
+- [ ] Verify Particle Auth works in production
+
+### Medium Priority
+- [ ] Add API rate limiting middleware
+- [ ] Create automated backup schedule
+- [ ] Set up uptime monitoring
+
+### Low Priority (Future)
+- [ ] Error monitoring (Sentry)
+- [ ] Electron desktop app packaging
+- [ ] CI/CD pipeline for automated builds
+
+---
+
 *This document is a living guide and will be updated as the project evolves.*
 

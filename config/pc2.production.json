@@ -1,0 +1,47 @@
+{
+  "_comment": "PC2 Production Configuration - Multi-user secure defaults",
+  "_documentation": "Copy to volatile/config/pc2.json or /app/data/config/pc2.json",
+  
+  "owner": {
+    "_comment": "Leave wallet_address null for first-login ownership claim",
+    "wallet_address": null,
+    "tethered_wallets": [],
+    "display_name": "Node Owner",
+    "default_profile_picture": "/assets/images/default-avatar.png"
+  },
+  
+  "server": {
+    "port": 4200,
+    "host": "0.0.0.0",
+    "_comment": "Set domain for production CORS"
+  },
+  
+  "terminal": {
+    "_comment": "PRODUCTION: namespace isolation for multi-user security",
+    "_modes": {
+      "none": "Direct PTY access - ONLY for single-user personal nodes",
+      "namespace": "Linux namespace isolation - Safe for multi-user (requires bubblewrap)",
+      "disabled": "Terminal feature completely disabled"
+    },
+    "isolation_mode": "namespace",
+    "allow_insecure_fallback": false,
+    "max_terminals_per_user": 3,
+    "idle_timeout_minutes": 15
+  },
+  
+  "security": {
+    "_comment": "Production security settings",
+    "rate_limiting": {
+      "enabled": true,
+      "window_ms": 60000,
+      "max_requests": 100
+    },
+    "session_timeout_minutes": 60
+  },
+  
+  "ipfs": {
+    "_comment": "IPFS/Helia configuration",
+    "enabled": true,
+    "repo_path": "/app/data/ipfs"
+  }
+}

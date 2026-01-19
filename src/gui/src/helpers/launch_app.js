@@ -20,6 +20,7 @@
 import path from '../lib/path.js';
 import { PROCESS_IPC_ATTACHED, PROCESS_RUNNING, PortalProcess, PseudoProcess } from '../definitions.js';
 import UIWindow from '../UI/UIWindow.js';
+import UIWindowSystemTerminal from '../UI/UIWindowSystemTerminal.js';
 
 /**
  * Launches an app.
@@ -221,6 +222,27 @@ const launch_app = async (options) => {
             app: 'explorer',
             ...window_options,
             is_maximized: options.maximized,
+        });
+    }
+    //------------------------------------
+    // System Terminal (PC2-exclusive)
+    //------------------------------------
+    else if ( options.name === 'system-terminal' ) {
+        process = new PseudoProcess({
+            uuid,
+            name: 'system-terminal',
+            parent: options.parent_instance_id,
+            meta: {
+                launch_options: options,
+                app_info: app_info,
+            },
+        });
+        const svc_process = globalThis.services.get('process');
+        svc_process.register(process);
+
+        // Open the System Terminal window
+        el_win = await UIWindowSystemTerminal({
+            ...window_options,
         });
     }
     //------------------------------------

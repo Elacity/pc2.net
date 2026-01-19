@@ -115,6 +115,16 @@ export function handleGetApp(req: Request, res: Response): void {
       uid: 'app-file-processor', 
       icon: undefined, 
       index_url: `${baseUrl}/apps/file-processor/index.html` 
+    },
+    'system-terminal': { 
+      name: 'system-terminal', 
+      title: 'System Terminal', 
+      uuid: 'app-system-terminal', 
+      uid: 'app-system-terminal', 
+      icon: undefined, 
+      index_url: null, // Built-in window, no external URL
+      is_builtin: true,
+      pc2_exclusive: true // Only available in PC2 node
     }
   };
   

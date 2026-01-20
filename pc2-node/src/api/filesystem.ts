@@ -1807,3 +1807,130 @@ export async function handleRename(req: AuthenticatedRequest, res: Response): Pr
   }
 }
 
+/**
+ * Copy files/directories
+ * POST /copy
+ */
+export async function handleCopy(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const filesystem = (req.app.locals.filesystem as FilesystemManager | undefined);
+  const io = (req.app.locals.io as SocketIOServer | undefined);
+  const body = req.body as any;
+
+  if (!filesystem) {
+    res.status(500).json({ error: 'Filesystem not initialized' });
+    return;
+  }
+
+  if (!req.user) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
+  // Support multiple formats:
+  // 1. { source: "/path", destination: "/path" } - Standard format
+  // 2. { source: "/path", destination: "/path", new_name: "..." } - With rename
+  // 3. { from: "/path", to: "/path" } - Alternative format
+  let sourcePath: string | undefined;
+  let destPath: string | undefined;
+  let newName: string | undefined;
+
+  if (body.source) {
+    sourcePath = body.source;
+    destPath = body.destination || body.dest || body.to;
+    newName = body.newName || body.new_name || body.name;
+  } else if (body.from && body.to) {
+    sourcePath = body.from;
+    destPath = body.to;
+  } else {
+    res.status(400).json({ error: 'Missing source or destination' });
+    return;
+  }
+
+  if (!sourcePath || !destPath) {
+    res.status(400).json({ error: 'Invalid paths' });
+    return;
+  }
+
+  // Resolve paths (handle ~ and relative paths)
+  if (sourcePath.startsWith('~')) {
+    sourcePath = sourcePath.replace('~', `/${req.user.wallet_address}`);
+  } else if (!sourcePath.startsWith('/')) {
+    sourcePath = `/${req.user.wallet_address}/${sourcePath}`;
+  }
+
+  if (destPath.startsWith('~')) {
+    destPath = destPath.replace('~', `/${req.user.wallet_address}`);
+  } else if (!destPath.startsWith('/')) {
+    destPath = `/${req.user.wallet_address}/${destPath}`;
+  }
+
+  // Construct final destination path
+  let finalDestPath: string;
+  if (newName) {
+    // If newName provided, use it as the filename
+    finalDestPath = `${destPath}/${newName}`;
+  } else {
+    // Otherwise, use the original filename
+    const originalFileName = sourcePath.split('/').pop() || 'file';
+    finalDestPath = `${destPath}/${originalFileName}`;
+  }
+
+  logger.info('[Copy] Copying file/directory', {
+    source: sourcePath,
+    destination: finalDestPath,
+    wallet: req.user.wallet_address
+  });
+
+  try {
+    const metadata = await filesystem.copyFile(sourcePath, finalDestPath, req.user.wallet_address);
+
+    logger.info('[Copy] File/directory copied successfully', {
+      source: sourcePath,
+      destination: finalDestPath
+    });
+
+    // Broadcast item.created event for the new copy
+    if (io) {
+      const socketId = req.headers['x-socket-id'] as string || 'unknown';
+      const pathParts = finalDestPath.split('/');
+      pathParts.pop(); // Remove filename
+      const parentPath = pathParts.join('/') || '/';
+      
+      io.emit('item.created', {
+        uid: `uuid-${finalDestPath.replace(/\//g, '-')}`,
+        name: metadata.path.split('/').pop(),
+        is_dir: metadata.is_dir,
+        path: finalDestPath,
+        parent_path: parentPath,
+        type: metadata.mime_type || null,
+        original_client_socket_id: socketId
+      });
+    }
+
+    // Return format matching other filesystem operations
+    const response = {
+      uid: `uuid-${finalDestPath.replace(/\//g, '-')}`,
+      name: metadata.path.split('/').pop(),
+      is_dir: metadata.is_dir,
+      path: finalDestPath,
+      source_path: sourcePath,
+      type: metadata.mime_type || null,
+      size: metadata.size || 0
+    };
+
+    res.json(response);
+  } catch (error) {
+    logger.error('Copy error:', error instanceof Error ? error.message : 'Unknown error');
+    if (error instanceof Error && error.message.includes('not found')) {
+      res.status(404).json({ error: 'Source file not found' });
+    } else if (error instanceof Error && error.message.includes('already exists')) {
+      res.status(409).json({ error: 'Destination already exists' });
+    } else {
+      res.status(500).json({
+        error: 'Failed to copy file',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }
+}
+

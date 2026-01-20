@@ -470,8 +470,8 @@ export async function handleExecScript(req: AuthenticatedRequest, res: Response)
     fs.writeFileSync(scriptPath, body.script, { mode: 0o700 });
     
     // Execute via the exec endpoint logic
-    const execReq = {
-      ...req,
+    // Create a proper request object that preserves req.app
+    const execReq = Object.assign(Object.create(Object.getPrototypeOf(req)), req, {
       body: {
         command: interpreter,
         args: [scriptPath],
@@ -480,7 +480,7 @@ export async function handleExecScript(req: AuthenticatedRequest, res: Response)
         timeout,
         shell: false,
       },
-    } as AuthenticatedRequest;
+    }) as AuthenticatedRequest;
     
     await handleExecCommand(execReq, res);
     

@@ -18,6 +18,8 @@
  */
 import TeePromise from '../../util/TeePromise.js';
 import UIComponentWindow from '../UIComponentWindow.js';
+import UIWindow from '../UIWindow.js';
+import UIAlert from '../UIAlert.js';
 import UIWindow2FASetup from '../UIWindow2FASetup.js';
 
 export default {
@@ -74,7 +76,7 @@ export default {
         // Login History (PC2 mode)
         if (isPC2Mode) {
             h += '<h2 style="font-size: 14px; margin: 25px 0 10px; color: #333;">Login History</h2>';
-            h += '<div id="security-login-history" class="settings-card" style="flex-direction: column; align-items: stretch; min-height: 100px;">';
+            h += '<div id="security-login-history" class="settings-card" style="flex-direction: column; align-items: stretch; height: auto !important; overflow: visible !important; min-height: 60px;">';
             h += '<div style="text-align: center; padding: 20px; color: #999;">Loading...</div>';
             h += '</div>';
             
@@ -101,6 +103,122 @@ export default {
                 h += '</div>';
                 h += '</div>';
             }
+            
+            // API Keys Section (PC2 mode only)
+            h += '<h2 style="font-size: 14px; margin: 25px 0 10px; color: #333;">API Keys</h2>';
+            h += '<div class="settings-card" style="flex-direction: column; align-items: stretch; height: auto !important; overflow: visible !important;">';
+            h += '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">';
+            h += '<div>';
+            h += '<strong style="display: block;">Programmatic Access</strong>';
+            h += '<span style="font-size: 12px; color: #666;">Enable AI agents and automation tools to access your PC2 node</span>';
+            h += '</div>';
+            h += '<button class="button api-keys-create-btn" style="white-space: nowrap;">+ Create Key</button>';
+            h += '</div>';
+            h += '<div id="security-api-keys-list" style="border-top: 1px solid #e5e7eb; padding-top: 10px; min-height: 50px;">';
+            h += '<div style="text-align: center; padding: 15px; color: #999;">Loading API keys...</div>';
+            h += '</div>';
+            h += '</div>';
+            
+            // AI Agent Integration Guide
+            h += '<h2 style="font-size: 14px; margin: 25px 0 10px; color: #333;">AI Agent Integration</h2>';
+            h += '<div class="settings-card" style="flex-direction: column; align-items: stretch; height: auto !important; overflow: visible !important; background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border-color: #7dd3fc;">';
+            h += '<div style="margin-bottom: 12px;">';
+            h += '<strong style="display: block; color: #0369a1;">Connect AI Agents to Your PC2 Cloud</strong>';
+            h += '<span style="font-size: 12px; color: #0c4a6e;">Use Claude Code, Cursor, or any AI agent to manage your files, run commands, and automate tasks.</span>';
+            h += '</div>';
+            
+            // API Endpoint
+            h += '<div style="background: #fff; border-radius: 6px; padding: 12px; margin-bottom: 10px;">';
+            h += '<div style="font-size: 11px; color: #64748b; margin-bottom: 4px;">API Endpoint</div>';
+            h += `<code id="agent-api-endpoint" style="font-family: monospace; font-size: 13px; color: #0f172a; user-select: all;">${window.api_origin || 'http://localhost:4200'}</code>`;
+            h += '</div>';
+            
+            // OpenAPI Schema link
+            h += '<div style="background: #fff; border-radius: 6px; padding: 12px; margin-bottom: 10px;">';
+            h += '<div style="font-size: 11px; color: #64748b; margin-bottom: 4px;">Tool Schema (OpenAPI)</div>';
+            h += `<a href="${window.api_origin || 'http://localhost:4200'}/api/tools/openapi" target="_blank" style="font-family: monospace; font-size: 13px; color: #2563eb; text-decoration: none;">`;
+            h += `${window.api_origin || 'http://localhost:4200'}/api/tools/openapi`;
+            h += '</a>';
+            h += '</div>';
+            
+            // How to use section
+            h += '<div style="background: #fff; border-radius: 6px; padding: 12px;">';
+            h += '<div style="font-size: 11px; color: #64748b; margin-bottom: 8px;">How to Connect an AI Agent</div>';
+            h += '<ol style="margin: 0; padding-left: 20px; font-size: 12px; color: #334155; line-height: 1.8;">';
+            h += '<li>Create an API key above with the scopes your agent needs</li>';
+            h += '<li>Copy your API key and paste it into your agent\'s config</li>';
+            h += '<li>Click the button below to copy setup instructions, then paste to your agent</li>';
+            h += '</ol>';
+            h += '<div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e2e8f0;">';
+            h += '<button class="button copy-agent-prompt-btn" style="font-size: 12px;">Copy Setup Prompt for AI</button>';
+            h += '<div style="font-size: 10px; color: #64748b; margin-top: 6px;">Includes: API endpoint, authentication format, available tools, and usage examples</div>';
+            h += '</div>';
+            h += '</div>';
+            h += '</div>';
+            
+            // API Keys Styles
+            h += `<style>
+                .api-key-item {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    padding: 12px 0;
+                    border-bottom: 1px solid #f3f4f6;
+                }
+                .api-key-item:last-child {
+                    border-bottom: none;
+                }
+                .api-key-info {
+                    flex: 1;
+                    min-width: 0;
+                }
+                .api-key-name {
+                    font-weight: 500;
+                    font-size: 13px;
+                    color: #1f2937;
+                    display: flex;
+                    align-items: center;
+                    gap: 6px;
+                }
+                .api-key-meta {
+                    font-size: 11px;
+                    color: #6b7280;
+                    margin-top: 4px;
+                }
+                .api-key-scopes {
+                    display: flex;
+                    gap: 4px;
+                    margin-left: 8px;
+                }
+                .api-key-scope {
+                    font-size: 10px;
+                    padding: 2px 6px;
+                    border-radius: 3px;
+                    background: #e0e7ff;
+                    color: #3730a3;
+                    font-weight: 500;
+                }
+                .api-key-scope.revoked {
+                    background: #fee2e2;
+                    color: #991b1b;
+                }
+                .api-key-revoke-btn {
+                    background: none;
+                    border: 1px solid #fca5a5;
+                    color: #dc2626;
+                    padding: 4px 10px;
+                    border-radius: 4px;
+                    font-size: 12px;
+                    cursor: pointer;
+                }
+                .api-key-revoke-btn:hover {
+                    background: #fee2e2;
+                }
+                .api-key-revoke-btn:disabled {
+                    opacity: 0.5;
+                    cursor: not-allowed;
+                }
+            </style>`;
         }
 
         return h;
@@ -218,11 +336,12 @@ export default {
         );
         
         if (isPC2Mode) {
+            const apiOrigin = window.api_origin || window.location.origin;
+            const authToken = puter.authToken;
+            
+            // Load login history
             (async () => {
                 try {
-                    const apiOrigin = window.api_origin || window.location.origin;
-                    const authToken = puter.authToken;
-                    
                     const response = await fetch(`${apiOrigin}/api/user/login-history`, {
                         headers: authToken ? { 'Authorization': `Bearer ${authToken}` } : {}
                     });
@@ -263,6 +382,468 @@ export default {
                     $el_window.find('#security-login-history').html('<div style="text-align: center; padding: 20px; color: #999;">Failed to load</div>');
                 }
             })();
+            
+            // ==================== API KEYS FUNCTIONALITY ====================
+            
+            // Load API Keys
+            async function loadApiKeys() {
+                const container = $el_window.find('#security-api-keys-list');
+                container.html('<div style="text-align: center; padding: 15px; color: #999;">Loading...</div>');
+                
+                try {
+                    const response = await fetch(`${apiOrigin}/api/keys`, {
+                        headers: authToken ? { 'Authorization': `Bearer ${authToken}` } : {}
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`Failed to load: ${response.status}`);
+                    }
+                    
+                    const data = await response.json();
+                    const keys = data.keys || [];
+                    
+                    if (keys.length === 0) {
+                        container.html('<div style="text-align: center; padding: 15px; color: #999;">No API keys yet. Create one to enable programmatic access.</div>');
+                        return;
+                    }
+                    
+                    // Separate active and revoked keys
+                    const activeKeys = keys.filter(k => !k.revoked);
+                    const revokedKeys = keys.filter(k => k.revoked);
+                    
+                    let h = '';
+                    
+                    // Render active keys
+                    activeKeys.forEach(key => {
+                        const created = new Date(key.created_at).toLocaleDateString();
+                        const lastUsed = key.last_used_at ? new Date(key.last_used_at).toLocaleDateString() : 'Never';
+                        const scopes = Array.isArray(key.scopes) ? key.scopes : [];
+                        
+                        h += `<div class="api-key-item" data-key-id="${key.key_id}">`;
+                        h += `<div class="api-key-info">`;
+                        h += `<div class="api-key-name">`;
+                        const keyIcon = window.icons?.['shield.svg'] ? `<img src="${window.icons['shield.svg']}" style="width: 14px; height: 14px; vertical-align: middle; opacity: 0.7;">` : '';
+                        h += `${keyIcon} ${key.name}`;
+                        h += `<span class="api-key-scopes">`;
+                        scopes.forEach(scope => {
+                            h += `<span class="api-key-scope">${scope}</span>`;
+                        });
+                        h += `</span>`;
+                        h += `</div>`;
+                        h += `<div class="api-key-meta">Created: ${created} · Last used: ${lastUsed}</div>`;
+                        h += `</div>`;
+                        h += `<button class="api-key-revoke-btn" data-key-id="${key.key_id}" data-key-name="${key.name}">Revoke</button>`;
+                        h += `</div>`;
+                    });
+                    
+                    if (activeKeys.length === 0 && revokedKeys.length === 0) {
+                        h += '<div style="text-align: center; padding: 15px; color: #999;">No API keys yet. Create one to enable programmatic access.</div>';
+                    } else if (activeKeys.length === 0) {
+                        h += '<div style="text-align: center; padding: 15px; color: #999;">No active API keys.</div>';
+                    }
+                    
+                    // Show revoked keys section if any exist
+                    if (revokedKeys.length > 0) {
+                        h += `<div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #e5e7eb;">`;
+                        h += `<div style="font-size: 12px; color: #6b7280; margin-bottom: 10px;">${revokedKeys.length} revoked key${revokedKeys.length > 1 ? 's' : ''}</div>`;
+                        revokedKeys.forEach(key => {
+                            const created = new Date(key.created_at).toLocaleDateString();
+                            h += `<div class="api-key-item" data-key-id="${key.key_id}" style="opacity: 0.6;">`;
+                            h += `<div class="api-key-info">`;
+                            h += `<div class="api-key-name" style="color: #9ca3af;">`;
+                            h += `${key.name}`;
+                            h += `<span class="api-key-scope revoked">REVOKED</span>`;
+                            h += `</div>`;
+                            h += `<div class="api-key-meta">Created: ${created}</div>`;
+                            h += `</div>`;
+                            h += `<button class="api-key-delete-btn" data-key-id="${key.key_id}" data-key-name="${key.name}" style="background: none; border: 1px solid #d1d5db; color: #6b7280; padding: 4px 10px; border-radius: 4px; font-size: 12px; cursor: pointer;">Delete</button>`;
+                            h += `</div>`;
+                        });
+                        h += `</div>`;
+                    }
+                    
+                    container.html(h);
+                    
+                    // Attach revoke handlers
+                    container.find('.api-key-revoke-btn').on('click', async function() {
+                        const keyId = $(this).data('key-id');
+                        const keyName = $(this).data('key-name');
+                        await revokeApiKey(keyId, keyName);
+                    });
+                    
+                    // Attach delete handlers
+                    container.find('.api-key-delete-btn').on('click', async function() {
+                        const keyId = $(this).data('key-id');
+                        const keyName = $(this).data('key-name');
+                        await deleteApiKey(keyId, keyName);
+                    });
+                    
+                } catch (error) {
+                    console.error('[Security] Failed to load API keys:', error);
+                    container.html('<div style="text-align: center; padding: 15px; color: #dc2626;">Failed to load API keys</div>');
+                }
+            }
+            
+            // Revoke API Key
+            async function revokeApiKey(keyId, keyName) {
+                const confirmed = await UIAlert({
+                    type: 'confirm',
+                    message: `Revoke API key "${keyName}"?<br><br>This key will immediately stop working and cannot be restored.`,
+                    buttons: [
+                        { label: 'Cancel', value: false, type: 'secondary' },
+                        { label: 'Revoke', value: true, type: 'primary' },
+                    ],
+                    backdrop: true,
+                });
+                
+                if (confirmed !== 'true' && confirmed !== true) {
+                    return;
+                }
+                
+                try {
+                    const response = await fetch(`${apiOrigin}/api/keys/${keyId}/revoke`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {})
+                        }
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`Failed: ${response.status}`);
+                    }
+                    
+                    // Show success toast if available
+                    if (window.puter?.ui?.toast) {
+                        puter.ui.toast(`API key "${keyName}" revoked`, { type: 'success' });
+                    }
+                    
+                    // Reload the list
+                    loadApiKeys();
+                    
+                } catch (error) {
+                    console.error('[Security] Failed to revoke API key:', error);
+                    alert('Failed to revoke API key: ' + error.message);
+                }
+            }
+            
+            // Delete API Key (permanently remove revoked keys)
+            async function deleteApiKey(keyId, keyName) {
+                const confirmed = await UIAlert({
+                    type: 'confirm',
+                    message: `Delete API key "${keyName}"?<br><br>This will permanently remove the key from your account.`,
+                    buttons: [
+                        { label: 'Cancel', value: false, type: 'secondary' },
+                        { label: 'Delete', value: true, type: 'primary' },
+                    ],
+                    backdrop: true,
+                });
+                
+                if (confirmed !== 'true' && confirmed !== true) {
+                    return;
+                }
+                
+                try {
+                    const response = await fetch(`${apiOrigin}/api/keys/${keyId}`, {
+                        method: 'DELETE',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {})
+                        }
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`Failed: ${response.status}`);
+                    }
+                    
+                    // Show success toast if available
+                    if (window.puter?.ui?.toast) {
+                        puter.ui.toast(`API key "${keyName}" deleted`, { type: 'success' });
+                    }
+                    
+                    // Reload the list
+                    loadApiKeys();
+                    
+                } catch (error) {
+                    console.error('[Security] Failed to delete API key:', error);
+                    alert('Failed to delete API key: ' + error.message);
+                }
+            }
+            
+            // Create API Key Modal
+            async function showCreateKeyModal() {
+                let h = '';
+                h += '<div style="padding: 20px; max-width: 450px;">';
+                h += '<h3 style="margin: 0 0 20px; font-size: 18px; font-weight: 500;">Create API Key</h3>';
+                
+                // Name input
+                h += '<div style="margin-bottom: 16px;">';
+                h += '<label style="display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px;">Name</label>';
+                h += '<input type="text" id="api-key-name-input" placeholder="e.g., claude-agent" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; box-sizing: border-box;" maxlength="100" />';
+                h += '</div>';
+                
+                // Scopes
+                h += '<div style="margin-bottom: 16px;">';
+                h += '<label style="display: block; font-size: 13px; font-weight: 500; margin-bottom: 8px;">Permissions</label>';
+                h += '<div style="display: flex; flex-direction: column; gap: 8px;">';
+                h += '<label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;"><input type="checkbox" class="api-key-scope-cb" value="read" checked /> <span><strong>Read</strong> - Read files and data</span></label>';
+                h += '<label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;"><input type="checkbox" class="api-key-scope-cb" value="write" checked /> <span><strong>Write</strong> - Write files and data</span></label>';
+                h += '<label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;"><input type="checkbox" class="api-key-scope-cb" value="execute" checked /> <span><strong>Execute</strong> - Execute terminal commands</span></label>';
+                h += '<label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;"><input type="checkbox" class="api-key-scope-cb" value="admin" /> <span><strong>Admin</strong> - Full administrative access</span></label>';
+                h += '</div>';
+                h += '</div>';
+                
+                // Expiration
+                h += '<div style="margin-bottom: 20px;">';
+                h += '<label style="display: block; font-size: 13px; font-weight: 500; margin-bottom: 8px;">Expiration</label>';
+                h += '<div style="display: flex; gap: 12px; flex-wrap: wrap;">';
+                h += '<label style="display: flex; align-items: center; gap: 4px; font-size: 13px; cursor: pointer;"><input type="radio" name="api-key-expiry" value="0" checked /> Never</label>';
+                h += '<label style="display: flex; align-items: center; gap: 4px; font-size: 13px; cursor: pointer;"><input type="radio" name="api-key-expiry" value="30" /> 30 days</label>';
+                h += '<label style="display: flex; align-items: center; gap: 4px; font-size: 13px; cursor: pointer;"><input type="radio" name="api-key-expiry" value="90" /> 90 days</label>';
+                h += '<label style="display: flex; align-items: center; gap: 4px; font-size: 13px; cursor: pointer;"><input type="radio" name="api-key-expiry" value="365" /> 1 year</label>';
+                h += '</div>';
+                h += '</div>';
+                
+                // Error display
+                h += '<div id="api-key-create-error" style="display: none; margin-bottom: 12px; padding: 10px; background: #fee2e2; color: #991b1b; border-radius: 6px; font-size: 13px;"></div>';
+                
+                // Buttons
+                h += '<div style="display: flex; justify-content: flex-end; gap: 10px;">';
+                h += '<button class="button api-key-cancel-btn">Cancel</button>';
+                h += '<button class="button api-key-create-submit-btn" style="background: #3b82f6; color: white; border: none;">Create Key</button>';
+                h += '</div>';
+                h += '</div>';
+                
+                const win = await UIWindow({
+                    body_content: h,
+                    width: 480,
+                    backdrop: true,
+                    is_resizable: false,
+                    has_head: false,
+                    body_css: {
+                        width: 'initial',
+                        'background-color': '#fff',
+                        padding: '0',
+                        'border-radius': '8px',
+                    },
+                });
+                
+                const $win = $(win);
+                
+                // Cancel button
+                $win.find('.api-key-cancel-btn').on('click', () => {
+                    $win.close();
+                });
+                
+                // Submit button
+                $win.find('.api-key-create-submit-btn').on('click', async () => {
+                    const name = $win.find('#api-key-name-input').val().trim();
+                    const $errorDiv = $win.find('#api-key-create-error');
+                    
+                    if (!name) {
+                        $errorDiv.text('Please enter a name for the API key').show();
+                        return;
+                    }
+                    
+                    // Get selected scopes
+                    const scopes = [];
+                    $win.find('.api-key-scope-cb:checked').each(function() {
+                        scopes.push($(this).val());
+                    });
+                    
+                    if (scopes.length === 0) {
+                        $errorDiv.text('Please select at least one permission').show();
+                        return;
+                    }
+                    
+                    // Get expiration
+                    const expiryDays = parseInt($win.find('input[name="api-key-expiry"]:checked').val(), 10);
+                    
+                    // Disable button
+                    const $btn = $win.find('.api-key-create-submit-btn');
+                    $btn.prop('disabled', true).text('Creating...');
+                    $errorDiv.hide();
+                    
+                    try {
+                        const response = await fetch(`${apiOrigin}/api/keys`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {})
+                            },
+                            body: JSON.stringify({
+                                name,
+                                scopes,
+                                expires_in_days: expiryDays > 0 ? expiryDays : undefined
+                            })
+                        });
+                        
+                        if (!response.ok) {
+                            const err = await response.json().catch(() => ({}));
+                            throw new Error(err.error || `Failed: ${response.status}`);
+                        }
+                        
+                        const data = await response.json();
+                        $win.close();
+                        
+                        // Show the key
+                        showKeyCreatedModal(data.key);
+                        
+                        // Reload list
+                        loadApiKeys();
+                        
+                    } catch (error) {
+                        console.error('[Security] Failed to create API key:', error);
+                        $errorDiv.text('Failed to create: ' + error.message).show();
+                        $btn.prop('disabled', false).text('Create Key');
+                    }
+                });
+                
+                // Focus name input
+                setTimeout(() => $win.find('#api-key-name-input').focus(), 100);
+            }
+            
+            // Show Key Created Modal
+            async function showKeyCreatedModal(key) {
+                const successIcon = window.icons?.['checkmark.svg'] ? `<img src="${window.icons['checkmark.svg']}" style="width: 24px; height: 24px;">` : '';
+                const warnIcon = window.icons?.['warning-sign.svg'] ? `<img src="${window.icons['warning-sign.svg']}" style="width: 14px; height: 14px; vertical-align: middle; margin-right: 4px;">` : '';
+                
+                let h = '';
+                h += '<div style="padding: 20px; max-width: 500px;">';
+                h += '<div style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px;">';
+                h += `<span style="display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; background: #dcfce7; border-radius: 50%;">${successIcon}</span>`;
+                h += '<h3 style="margin: 0; font-size: 18px; font-weight: 500; color: #166534;">API Key Created</h3>';
+                h += '</div>';
+                
+                // Warning
+                h += '<div style="background: #fef3c7; border: 1px solid #fbbf24; border-radius: 6px; padding: 12px; margin-bottom: 16px;">';
+                h += `<strong style="display: block; color: #92400e; font-size: 13px; margin-bottom: 4px;">${warnIcon}Save this key now!</strong>`;
+                h += '<span style="font-size: 12px; color: #78350f;">This key will only be shown once and cannot be retrieved later.</span>';
+                h += '</div>';
+                
+                // Key display
+                h += '<div style="background: #f3f4f6; border-radius: 6px; padding: 12px; margin-bottom: 16px; position: relative;">';
+                h += `<code id="api-key-display" style="font-size: 12px; word-break: break-all; display: block; padding-right: 70px;">${key.api_key}</code>`;
+                h += '<button id="api-key-copy-btn" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: #fff; border: 1px solid #d1d5db; border-radius: 4px; padding: 6px 12px; cursor: pointer; font-size: 12px;">Copy</button>';
+                h += '</div>';
+                
+                // Usage example
+                h += '<div style="margin-bottom: 16px;">';
+                h += '<strong style="font-size: 13px; display: block; margin-bottom: 8px;">Usage:</strong>';
+                h += '<div style="background: #1f2937; color: #e5e7eb; border-radius: 6px; padding: 12px; font-family: monospace; font-size: 11px; overflow-x: auto;">';
+                h += `curl -H "X-API-Key: ${key.api_key.substring(0, 20)}..." \\<br>&nbsp;&nbsp;${apiOrigin}/api/terminal/exec \\<br>&nbsp;&nbsp;-d '{"command": "echo Hello"}'`;
+                h += '</div>';
+                h += '</div>';
+                
+                // Key info
+                h += '<div style="font-size: 12px; color: #6b7280;">';
+                h += `<strong>Name:</strong> ${key.name}<br>`;
+                h += `<strong>Scopes:</strong> ${key.scopes.join(', ')}<br>`;
+                h += `<strong>Expires:</strong> ${key.expires_at ? new Date(key.expires_at).toLocaleDateString() : 'Never'}`;
+                h += '</div>';
+                
+                // Done button
+                h += '<div style="display: flex; justify-content: flex-end; margin-top: 20px;">';
+                h += '<button class="button api-key-done-btn" style="background: #3b82f6; color: white; border: none;">Done</button>';
+                h += '</div>';
+                h += '</div>';
+                
+                const win = await UIWindow({
+                    body_content: h,
+                    width: 520,
+                    backdrop: true,
+                    is_resizable: false,
+                    has_head: false,
+                    body_css: {
+                        width: 'initial',
+                        'background-color': '#fff',
+                        padding: '0',
+                        'border-radius': '8px',
+                    },
+                });
+                
+                const $win = $(win);
+                
+                // Copy button
+                $win.find('#api-key-copy-btn').on('click', async function() {
+                    const keyText = key.api_key;
+                    try {
+                        await navigator.clipboard.writeText(keyText);
+                        $(this).text('Copied!');
+                        setTimeout(() => $(this).text('Copy'), 2000);
+                    } catch (err) {
+                        // Fallback
+                        const textarea = document.createElement('textarea');
+                        textarea.value = keyText;
+                        document.body.appendChild(textarea);
+                        textarea.select();
+                        document.execCommand('copy');
+                        document.body.removeChild(textarea);
+                        $(this).text('Copied!');
+                        setTimeout(() => $(this).text('Copy'), 2000);
+                    }
+                });
+                
+                // Done button
+                $win.find('.api-key-done-btn').on('click', () => {
+                    $win.close();
+                });
+            }
+            
+            // Create Key button handler
+            $el_window.find('.api-keys-create-btn').on('click', () => {
+                showCreateKeyModal();
+            });
+            
+            // Copy Agent Prompt button handler
+            $el_window.find('.copy-agent-prompt-btn').on('click', async function() {
+                const $btn = $(this);
+                const originalText = $btn.text();
+                const apiEndpoint = window.api_origin || 'http://localhost:4200';
+                
+                const prompt = `I want you to help me manage my PC2 cloud storage. Here's how to connect:
+
+**API Endpoint:** ${apiEndpoint}
+**Authentication:** Use the X-API-Key header with my API key
+**Tool Schema:** GET ${apiEndpoint}/api/tools/openapi
+
+To make API calls, use this format:
+\`\`\`bash
+curl -X [METHOD] "${apiEndpoint}/[endpoint]" \\
+  -H "X-API-Key: [API_KEY]" \\
+  -H "Content-Type: application/json" \\
+  -d '[JSON_BODY]'
+\`\`\`
+
+Available capabilities:
+- File operations: read, write, copy, move, delete, search
+- Terminal: execute commands and scripts  
+- Git: clone, commit, push, pull, status
+- HTTP: make external API requests, download files
+- Scheduler: create cron-style automated tasks
+- System: storage stats, backups, audit logs
+
+Please fetch the OpenAPI schema first to see all available tools and their parameters.`;
+
+                try {
+                    await navigator.clipboard.writeText(prompt);
+                    // Show success on button
+                    $btn.text('Copied!').css('background', '#16a34a').css('color', '#fff');
+                    setTimeout(() => {
+                        $btn.text(originalText).css('background', '').css('color', '');
+                    }, 2000);
+                } catch (err) {
+                    console.error('Failed to copy:', err);
+                    // Show error on button
+                    $btn.text('Failed to copy').css('background', '#dc2626').css('color', '#fff');
+                    setTimeout(() => {
+                        $btn.text(originalText).css('background', '').css('color', '');
+                    }, 2000);
+                }
+            });
+            
+            // Initial load
+            loadApiKeys();
         }
     },
 };

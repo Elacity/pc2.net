@@ -103,7 +103,7 @@ export class DatabaseManager {
   /**
    * Get database instance (throws if not initialized)
    */
-  private getDB(): Database.Database {
+  getDB(): Database.Database {
     if (!this.db) {
       throw new Error('Database not initialized. Call initialize() first.');
     }
@@ -824,5 +824,201 @@ export class DatabaseManager {
     `).run(keyId, walletAddress);
     
     return result.changes > 0;
+  }
+
+  // ============================================================================
+  // Audit Log Methods
+  // ============================================================================
+
+  /**
+   * Create an audit log entry
+   */
+  createAuditLog(entry: {
+    wallet_address: string;
+    action: string;
+    resource?: string;
+    resource_path?: string;
+    method: string;
+    endpoint: string;
+    status_code?: number;
+    request_body?: string | null;
+    response_summary?: string | null;
+    ip_address?: string;
+    user_agent?: string;
+    api_key_id?: string;
+    duration_ms?: number;
+    created_at: number;
+  }): void {
+    const db = this.getDB();
+    db.prepare(`
+      INSERT INTO audit_logs (
+        wallet_address, action, resource, resource_path, method, endpoint,
+        status_code, request_body, response_summary, ip_address, user_agent,
+        api_key_id, duration_ms, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      entry.wallet_address,
+      entry.action,
+      entry.resource || null,
+      entry.resource_path || null,
+      entry.method,
+      entry.endpoint,
+      entry.status_code || null,
+      entry.request_body || null,
+      entry.response_summary || null,
+      entry.ip_address || null,
+      entry.user_agent || null,
+      entry.api_key_id || null,
+      entry.duration_ms || null,
+      entry.created_at
+    );
+  }
+
+  /**
+   * Get audit logs for a user
+   */
+  getAuditLogs(
+    walletAddress: string,
+    options: {
+      limit?: number;
+      offset?: number;
+      action?: string;
+      since?: number;
+      until?: number;
+    } = {}
+  ): Array<{
+    id: number;
+    action: string;
+    resource: string | null;
+    resource_path: string | null;
+    method: string;
+    endpoint: string;
+    status_code: number | null;
+    request_body: string | null;
+    response_summary: string | null;
+    ip_address: string | null;
+    user_agent: string | null;
+    api_key_id: string | null;
+    duration_ms: number | null;
+    created_at: number;
+  }> {
+    const db = this.getDB();
+    const limit = options.limit || 50;
+    const offset = options.offset || 0;
+    
+    let query = `
+      SELECT id, action, resource, resource_path, method, endpoint,
+        status_code, request_body, response_summary, ip_address, user_agent,
+        api_key_id, duration_ms, created_at
+      FROM audit_logs
+      WHERE wallet_address = ?
+    `;
+    const params: any[] = [walletAddress];
+
+    if (options.action) {
+      query += ' AND action = ?';
+      params.push(options.action);
+    }
+    if (options.since) {
+      query += ' AND created_at >= ?';
+      params.push(options.since);
+    }
+    if (options.until) {
+      query += ' AND created_at <= ?';
+      params.push(options.until);
+    }
+
+    query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
+    params.push(limit, offset);
+
+    return db.prepare(query).all(...params) as any[];
+  }
+
+  /**
+   * Get audit log count for a user
+   */
+  getAuditLogsCount(
+    walletAddress: string,
+    options: {
+      action?: string;
+      since?: number;
+      until?: number;
+    } = {}
+  ): number {
+    const db = this.getDB();
+    
+    let query = 'SELECT COUNT(*) as count FROM audit_logs WHERE wallet_address = ?';
+    const params: any[] = [walletAddress];
+
+    if (options.action) {
+      query += ' AND action = ?';
+      params.push(options.action);
+    }
+    if (options.since) {
+      query += ' AND created_at >= ?';
+      params.push(options.since);
+    }
+    if (options.until) {
+      query += ' AND created_at <= ?';
+      params.push(options.until);
+    }
+
+    const result = db.prepare(query).get(...params) as { count: number };
+    return result.count;
+  }
+
+  /**
+   * Get audit stats for a user
+   */
+  getAuditStats(
+    walletAddress: string,
+    since: number
+  ): {
+    total_actions: number;
+    actions_by_type: Record<string, number>;
+    average_duration_ms: number;
+    success_rate: number;
+  } {
+    const db = this.getDB();
+    
+    // Total actions
+    const totalResult = db.prepare(`
+      SELECT COUNT(*) as count FROM audit_logs
+      WHERE wallet_address = ? AND created_at >= ?
+    `).get(walletAddress, since) as { count: number };
+
+    // Actions by type
+    const actionResults = db.prepare(`
+      SELECT action, COUNT(*) as count FROM audit_logs
+      WHERE wallet_address = ? AND created_at >= ?
+      GROUP BY action ORDER BY count DESC
+    `).all(walletAddress, since) as Array<{ action: string; count: number }>;
+
+    const actionsByType: Record<string, number> = {};
+    for (const row of actionResults) {
+      actionsByType[row.action] = row.count;
+    }
+
+    // Average duration
+    const durationResult = db.prepare(`
+      SELECT AVG(duration_ms) as avg FROM audit_logs
+      WHERE wallet_address = ? AND created_at >= ? AND duration_ms IS NOT NULL
+    `).get(walletAddress, since) as { avg: number | null };
+
+    // Success rate (status 2xx or response_summary contains 'success')
+    const successResult = db.prepare(`
+      SELECT 
+        COUNT(*) as total,
+        SUM(CASE WHEN (status_code >= 200 AND status_code < 300) OR response_summary LIKE '%success%' THEN 1 ELSE 0 END) as success
+      FROM audit_logs
+      WHERE wallet_address = ? AND created_at >= ?
+    `).get(walletAddress, since) as { total: number; success: number };
+
+    return {
+      total_actions: totalResult.count,
+      actions_by_type: actionsByType,
+      average_duration_ms: Math.round(durationResult.avg || 0),
+      success_rate: successResult.total > 0 ? (successResult.success / successResult.total) * 100 : 100,
+    };
   }
 }

@@ -29,7 +29,7 @@ function findSchemaFile(): string {
   }
   throw new Error(`Schema file not found. Tried: ${SCHEMA_FILE} and ${sourceSchema}`);
 }
-const CURRENT_VERSION = 9;
+const CURRENT_VERSION = 11;
 
 interface Migration {
   version: number;
@@ -379,6 +379,100 @@ export function runMigrations(db: Database.Database): void {
         recordMigration(db, 9);
       } catch (error: any) {
         console.error(`❌ Migration 9 error: ${error.message}`);
+        throw error;
+      }
+    }
+
+    // Migration 10: Add audit_logs table for tracking agent actions
+    if (currentVersion < 10) {
+      try {
+        console.log('📦 Running Migration 10: Audit logs table...');
+        
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS audit_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            wallet_address TEXT NOT NULL,
+            action TEXT NOT NULL,
+            resource TEXT,
+            resource_path TEXT,
+            method TEXT NOT NULL,
+            endpoint TEXT NOT NULL,
+            status_code INTEGER,
+            request_body TEXT,
+            response_summary TEXT,
+            ip_address TEXT,
+            user_agent TEXT,
+            api_key_id TEXT,
+            duration_ms INTEGER,
+            created_at INTEGER NOT NULL,
+            FOREIGN KEY (wallet_address) REFERENCES users(wallet_address) ON DELETE CASCADE
+          )
+        `);
+        
+        db.exec(`
+          CREATE INDEX IF NOT EXISTS idx_audit_logs_wallet 
+          ON audit_logs(wallet_address)
+        `);
+        
+        db.exec(`
+          CREATE INDEX IF NOT EXISTS idx_audit_logs_created 
+          ON audit_logs(created_at DESC)
+        `);
+        
+        db.exec(`
+          CREATE INDEX IF NOT EXISTS idx_audit_logs_action 
+          ON audit_logs(action)
+        `);
+        
+        console.log('✅ Migration 10 complete: Audit logs table created');
+        recordMigration(db, 10);
+      } catch (error: any) {
+        console.error(`❌ Migration 10 error: ${error.message}`);
+        throw error;
+      }
+    }
+
+    // Migration 11: Add scheduled_tasks table for cron-like task scheduling
+    if (currentVersion < 11) {
+      try {
+        console.log('📦 Running Migration 11: Scheduled tasks table...');
+        
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS scheduled_tasks (
+            id TEXT PRIMARY KEY,
+            wallet_address TEXT NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT,
+            cron_expression TEXT NOT NULL,
+            action TEXT NOT NULL,
+            action_params TEXT,
+            enabled INTEGER DEFAULT 1,
+            last_run_at INTEGER,
+            last_run_status TEXT,
+            last_run_result TEXT,
+            next_run_at INTEGER,
+            run_count INTEGER DEFAULT 0,
+            error_count INTEGER DEFAULT 0,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            FOREIGN KEY (wallet_address) REFERENCES users(wallet_address) ON DELETE CASCADE
+          )
+        `);
+        
+        db.exec(`
+          CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_wallet 
+          ON scheduled_tasks(wallet_address)
+        `);
+        
+        db.exec(`
+          CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_next_run 
+          ON scheduled_tasks(next_run_at)
+        `);
+        
+        console.log('✅ Migration 11 complete: Scheduled tasks table created');
+        recordMigration(db, 11);
+      } catch (error: any) {
+        console.error(`❌ Migration 11 error: ${error.message}`);
         throw error;
       }
     }

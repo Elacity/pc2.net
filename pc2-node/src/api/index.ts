@@ -7,7 +7,7 @@ import { authenticate, corsMiddleware, errorHandler, AuthenticatedRequest } from
 import { logger } from '../utils/logger.js';
 import { handleWhoami } from './whoami.js';
 import { handleParticleAuth, handleGrantUserApp, handleGetUserAppToken } from './auth.js';
-import { handleStat, handleReaddir, handleRead, handleWrite, handleMkdir, handleDelete, handleMove, handleRename } from './filesystem.js';
+import { handleStat, handleReaddir, handleRead, handleWrite, handleMkdir, handleDelete, handleMove, handleRename, handleCopy } from './filesystem.js';
 import { handleSign, handleVersion, handleOSUser, handleKV, handleRAO, handleContactUs, handleDriversCall, handleGetWallets, handleOpenItem, handleSuggestApps, handleItemMetadata, handleWriteFile, handleSetDesktopBg, handleSetProfilePicture } from './other.js';
 import { handleAPIInfo, handleGetLaunchApps, handleDF, handleBatch, handleCacheTimestamp, handleStats } from './info.js';
 import { handleFile } from './file.js';
@@ -24,6 +24,11 @@ import { handleListApiKeys, handleCreateApiKey, handleDeleteApiKey, handleRevoke
 import { handleListTools as handleListAgentTools, handleGetTool, handleListCategories, handleGetOpenAPISchema } from './tools.js';
 import { createPublicRouter } from './public.js';
 import { IPFSStorage } from '../storage/ipfs.js';
+import { httpClientRouter } from './http-client.js';
+import { gitRouter } from './git.js';
+import { auditRouter, auditMiddleware } from './audit.js';
+import { rateLimitMiddleware, getRateLimitStatus } from './rate-limit.js';
+import { schedulerRouter } from './scheduler.js';
 
 // Extend Express Request to include database, filesystem, config, and WebSocket
 declare global {
@@ -312,6 +317,31 @@ export function setupAPI(app: Express): void {
   app.use('/api/ai', aiRouter);
   app.use('/api/wasm', wasmRouter);
   app.use('/api/resources', resourcesRouter);
+  app.use('/api/http', httpClientRouter);
+  app.use('/api/git', gitRouter);
+  app.use('/api/audit', auditRouter);
+  app.use('/api/scheduler', schedulerRouter);
+  
+  // Rate limit status endpoint
+  app.get('/api/rate-limit/status', authenticate, (req: AuthenticatedRequest, res: Response) => {
+    if (!req.user) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    
+    const apiKeyId = (req as any).apiKeyId;
+    const status = getRateLimitStatus(req.user.wallet_address, apiKeyId);
+    res.json({
+      success: true,
+      wallet: req.user.wallet_address.substring(0, 10) + '...',
+      api_key_id: apiKeyId || 'session',
+      limits: status,
+    });
+  });
+  
+  // Apply rate limiting and audit middleware to all routes (after authentication)
+  app.use(rateLimitMiddleware());
+  app.use(auditMiddleware);
 
   // Search endpoint (require auth)
   app.post('/search', authenticate, handleSearch);
@@ -333,6 +363,7 @@ export function setupAPI(app: Express): void {
   app.post('/delete', authenticate, handleDelete);
   app.post('/move', authenticate, handleMove);
   app.post('/rename', authenticate, handleRename);
+  app.post('/copy', authenticate, handleCopy);
   
   // Filesystem endpoints (API format - matching mock server)
   app.post('/api/files/mkdir', authenticate, handleMkdir);

@@ -65,6 +65,47 @@ CREATE TABLE IF NOT EXISTS api_keys (
   FOREIGN KEY (wallet_address) REFERENCES users(wallet_address) ON DELETE CASCADE
 );
 
+-- Scheduled tasks table: Cron-like task scheduling
+CREATE TABLE IF NOT EXISTS scheduled_tasks (
+  id TEXT PRIMARY KEY,
+  wallet_address TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  cron_expression TEXT NOT NULL,
+  action TEXT NOT NULL,
+  action_params TEXT,
+  enabled INTEGER DEFAULT 1,
+  last_run_at INTEGER,
+  last_run_status TEXT,
+  last_run_result TEXT,
+  next_run_at INTEGER,
+  run_count INTEGER DEFAULT 0,
+  error_count INTEGER DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  FOREIGN KEY (wallet_address) REFERENCES users(wallet_address) ON DELETE CASCADE
+);
+
+-- Audit logs table: Track agent and API actions
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  wallet_address TEXT NOT NULL,
+  action TEXT NOT NULL,
+  resource TEXT,
+  resource_path TEXT,
+  method TEXT NOT NULL,
+  endpoint TEXT NOT NULL,
+  status_code INTEGER,
+  request_body TEXT,
+  response_summary TEXT,
+  ip_address TEXT,
+  user_agent TEXT,
+  api_key_id TEXT,
+  duration_ms INTEGER,
+  created_at INTEGER NOT NULL,
+  FOREIGN KEY (wallet_address) REFERENCES users(wallet_address) ON DELETE CASCADE
+);
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_sessions_wallet ON sessions(wallet_address);
 CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
@@ -73,3 +114,8 @@ CREATE INDEX IF NOT EXISTS idx_files_path ON files(path);
 CREATE INDEX IF NOT EXISTS idx_recent_apps_wallet ON recent_apps(wallet_address);
 CREATE INDEX IF NOT EXISTS idx_api_keys_wallet ON api_keys(wallet_address);
 CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_wallet ON audit_logs(wallet_address);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
+CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_wallet ON scheduled_tasks(wallet_address);
+CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_next_run ON scheduled_tasks(next_run_at);

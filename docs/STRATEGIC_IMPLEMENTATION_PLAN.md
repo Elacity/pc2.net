@@ -4378,8 +4378,9 @@ Replaced the non-functional Phoenix/Terminal shell with a **real PTY-based Syste
 | Area | Priority | Status | Action Needed |
 |------|----------|--------|---------------|
 | **HTTPS** | 🔴 High | ⚠️ Docs Ready | Nginx reverse proxy guide created |
-| **Rate Limiting** | 🟠 Medium | ⚠️ Basic | Add API rate limits for abuse prevention |
+| **Rate Limiting** | ✅ Complete | ✅ Done | Per-scope rate limits with sliding window (Phase 7.7) |
 | **Health Checks** | ✅ Complete | ✅ Done | `/health` and `/api/health` endpoints |
+| **Audit Logging** | ✅ Complete | ✅ Done | All agent actions logged (Phase 7.7) |
 | **Error Monitoring** | 🟡 Low | ❌ Missing | Add Sentry or similar |
 | **Docker Package** | ✅ Complete | ✅ Done | Full Dockerfile with bubblewrap bundled |
 | **Namespace Isolation** | ✅ Complete | ✅ Done | Bundled in Docker, auto-enabled |
@@ -4508,14 +4509,16 @@ Both `/health` and `/api/health` now return:
 - [ ] Verify Particle Auth works in production
 
 ### Medium Priority
-- [ ] Add API rate limiting middleware
-- [ ] Create automated backup schedule
+- [x] Add API rate limiting middleware ✅ **COMPLETE (Phase 7.7)**
+- [x] Create automated backup schedule ✅ **COMPLETE (Scheduler in Phase 7.7)**
 - [ ] Set up uptime monitoring
 
 ### Low Priority (Future)
 - [ ] Error monitoring (Sentry)
 - [ ] Electron desktop app packaging
 - [ ] CI/CD pipeline for automated builds
+- [ ] Agent package management (npm, pip, apt)
+- [ ] Agent persistent sessions
 
 ---
 
@@ -4620,6 +4623,144 @@ Added to `config/pc2.json.example`:
 - [ ] Add Settings UI to configure limits
 - [ ] Implement CPU/memory throttling for WASM
 - [ ] Add real-time IPFS sync status (WebSocket)
+
+---
+
+## 🤖 Phase 7.7: Programmatic AI Agent API (✅ COMPLETE - 2026-01-20)
+
+### Overview
+
+Implemented a comprehensive programmatic API that enables external AI agents (Claude Code, Cursor, custom bots) to manage a user's PC2 cloud storage. This differs from the built-in AI Chat (which uses Ollama/OpenAI for conversations) - this is about **giving external AI agents tool access** to the PC2 node.
+
+### Key Insight: Personalized API Endpoints
+
+**The API endpoint shown in the UI automatically adapts to each user's setup:**
+
+```javascript
+// From pc2-node/frontend/index.html and gui.js:
+window.api_origin = window.location.origin;
+```
+
+This means:
+- **Local Development**: `http://localhost:4200`
+- **LAN Access**: `http://192.168.1.100:4200`
+- **VPS (direct IP)**: `http://123.45.67.89:4200`
+- **VPS (domain)**: `https://mynode.example.com`
+- **Custom Port**: `https://cloud.mydomain.com:8443`
+
+**No hardcoding** - the UI reads from `window.api_origin` which is set to `window.location.origin`. Every sovereign node operator sees their correct URL automatically.
+
+### Features Implemented
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| **API Key Management** | ✅ Complete | Create, list, revoke, delete keys via Settings > Security |
+| **Scoped Permissions** | ✅ Complete | Read, Write, Execute, Admin scope granularity |
+| **Tool Registry** | ✅ Complete | 40+ tools across 8 categories, OpenAPI schema at `/api/tools/openapi` |
+| **Rate Limiting** | ✅ Complete | Per-scope limits with sliding window, headers in responses |
+| **Audit Logging** | ✅ Complete | All agent actions logged with timestamps and duration |
+| **Task Scheduler** | ✅ Complete | Cron-style task automation (backup, git pull, http requests) |
+| **Git Integration** | ✅ Complete | Clone, commit, push, pull, status, diff, log |
+| **HTTP Client** | ✅ Complete | External API calls with security restrictions |
+| **File Copy** | ✅ Complete | Copy files within user storage |
+| **Agent Integration Guide** | ✅ Complete | In-app guide in Settings > Security with copy-to-clipboard prompt |
+
+### Tool Categories (40+ Tools)
+
+| Category | Tools | Description |
+|----------|-------|-------------|
+| **Filesystem** | 12 tools | read, write, list, stat, mkdir, delete, move, copy, rename, search, write_json, read_json |
+| **Terminal** | 3 tools | exec, script, stats |
+| **System** | 8 tools | get_stats, disk_free, list_backups, create_backup, kv_get, kv_set, list_audit_logs, get_audit_stats, get_rate_limit_status |
+| **HTTP** | 2 tools | http_request, download |
+| **Git** | 7 tools | clone, status, commit, push, pull, log, diff |
+| **Scheduler** | 6 tools | create/list/get/update/delete/trigger tasks |
+
+### Files Created/Modified
+
+**New Backend Files:**
+- `pc2-node/src/api/http-client.ts` - External HTTP requests with security blocks
+- `pc2-node/src/api/git.ts` - Git operations API
+- `pc2-node/src/api/audit.ts` - Audit logging middleware and endpoints
+- `pc2-node/src/api/rate-limit.ts` - Rate limiting middleware
+- `pc2-node/src/api/scheduler.ts` - Cron-style task scheduler
+
+**Modified Backend Files:**
+- `pc2-node/src/api/tools.ts` - Expanded tool registry (40+ tools)
+- `pc2-node/src/api/filesystem.ts` - Added `handleCopy`
+- `pc2-node/src/api/index.ts` - Registered new routes and middleware
+- `pc2-node/src/storage/database.ts` - Audit log methods
+- `pc2-node/src/storage/schema.sql` - `audit_logs`, `scheduled_tasks` tables
+- `pc2-node/src/storage/migrations.ts` - Migrations 10 & 11
+
+**Frontend Files:**
+- `src/gui/src/UI/Settings/UITabSecurity.js` - API Keys UI + Agent Integration Guide
+
+### API Authentication
+
+```bash
+# All agent requests use X-API-Key header
+curl -X GET "https://mynode.example.com/api/tools" \
+  -H "X-API-Key: pc2_xxxxxxxxxxxx"
+```
+
+### Security Architecture
+
+| Layer | Implementation |
+|-------|----------------|
+| **Per-User Isolation** | All operations scoped to `wallet_address` from authenticated key |
+| **Scope Enforcement** | Keys can only access endpoints matching their scopes |
+| **Rate Limiting** | Read: 1000/min, Write: 200/min, Execute: 100/min, Admin: 50/min |
+| **Audit Trail** | Every action logged with timestamp, duration, response status |
+| **HTTP Restrictions** | Blocked hosts: localhost, internal IPs, cloud metadata |
+| **Path Validation** | All file paths validated and constrained to user's home directory |
+
+### How External Agents Connect
+
+The Settings > Security panel now includes an "AI Agent Integration Guide" section with:
+
+1. **API Endpoint**: Shows the user's actual node URL (auto-detected)
+2. **OpenAPI Schema Link**: `/api/tools/openapi` for tool discovery
+3. **Setup Instructions**: How to configure Claude Code, Cursor, or custom agents
+4. **Copy Prompt Button**: One-click copy of a complete setup prompt for AI
+
+### Use Cases Enabled
+
+| Use Case | Tools Used |
+|----------|------------|
+| **Organize files** | list, move, mkdir, rename |
+| **Sync git repos** | git_clone, git_pull, git_push |
+| **Automated backups** | create_backup, scheduler |
+| **Download from web** | http_request, download |
+| **Run scripts** | terminal_exec, terminal_script |
+| **Monitor system** | get_stats, disk_free, audit_stats |
+| **Build automation** | scheduler with terminal_exec |
+
+### Key Learnings
+
+1. **Dynamic URL Detection**: Using `window.location.origin` ensures every sovereign node shows its correct URL without configuration
+2. **Scope Separation**: Separating read/write/execute/admin scopes allows users to create least-privilege keys for specific agents
+3. **Audit Everything**: External agent access requires complete audit trails for security and debugging
+4. **Rate Limits Essential**: Without rate limits, a misconfigured agent could overwhelm the node
+5. **OpenAPI Schema**: Providing machine-readable tool schemas enables any AI agent to discover and use the API
+6. **In-App Guidance**: Users need clear, copy-paste-ready instructions to connect external agents
+
+### Testing
+
+Created `pc2-node/test-agent-capabilities.sh` for comprehensive API testing:
+```bash
+API_KEY="pc2_xxx" ./test-agent-capabilities.sh
+```
+
+Tests all tool categories, rate limiting, audit logging, and scheduler functionality.
+
+### Remaining TODO
+
+- [ ] Persistent sessions for long-running agent tasks
+- [ ] Package management tools (npm, pip, apt)
+- [ ] WebSocket real-time updates for agents
+- [ ] Multi-agent collaboration (shared workspaces)
+- [ ] Agent marketplace (pre-configured agent templates)
 
 ---
 

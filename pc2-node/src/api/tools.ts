@@ -399,6 +399,44 @@ const TOOLS: Tool[] = [
     },
     requiredScopes: ['write'],
   },
+  {
+    name: 'copy',
+    category: 'filesystem',
+    description: 'Copy a file or directory to a new location',
+    endpoint: '/copy',
+    method: 'POST',
+    parameters: {
+      type: 'object',
+      properties: {
+        source: {
+          type: 'string',
+          description: 'Source file or directory path',
+        },
+        destination: {
+          type: 'string',
+          description: 'Destination directory path',
+        },
+        new_name: {
+          type: 'string',
+          description: 'Optional new name for the copied file',
+        },
+      },
+      required: ['source', 'destination'],
+    },
+    returns: {
+      type: 'object',
+      properties: {
+        uid: { type: 'string' },
+        name: { type: 'string' },
+        path: { type: 'string' },
+        source_path: { type: 'string' },
+        is_dir: { type: 'boolean' },
+        type: { type: 'string' },
+        size: { type: 'number' },
+      },
+    },
+    requiredScopes: ['write'],
+  },
 
   // ============================================================================
   // AI Tools
@@ -458,6 +496,352 @@ const TOOLS: Tool[] = [
             output_tokens: { type: 'number' },
           },
         },
+      },
+    },
+    requiredScopes: ['read'],
+  },
+
+  // ============================================================================
+  // HTTP Client Tools
+  // ============================================================================
+  {
+    name: 'http_request',
+    category: 'http',
+    description: 'Make an HTTP request to an external API. Supports GET, POST, PUT, PATCH, DELETE methods. Blocked for internal/localhost URLs for security.',
+    endpoint: '/api/http',
+    method: 'POST',
+    parameters: {
+      type: 'object',
+      properties: {
+        url: {
+          type: 'string',
+          description: 'The URL to request (must be HTTP or HTTPS)',
+        },
+        method: {
+          type: 'string',
+          description: 'HTTP method',
+          enum: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'],
+        },
+        headers: {
+          type: 'object',
+          description: 'Request headers as key-value pairs',
+        },
+        body: {
+          type: 'object',
+          description: 'Request body (for POST, PUT, PATCH)',
+        },
+        timeout: {
+          type: 'number',
+          description: 'Request timeout in milliseconds (max 30000)',
+        },
+        follow_redirects: {
+          type: 'boolean',
+          description: 'Whether to follow redirects (default: true)',
+        },
+      },
+      required: ['url'],
+    },
+    returns: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean' },
+        status: { type: 'number', description: 'HTTP status code' },
+        status_text: { type: 'string' },
+        headers: { type: 'object', description: 'Response headers' },
+        body: { type: 'object', description: 'Response body (parsed as JSON if possible)' },
+        url: { type: 'string', description: 'Final URL after redirects' },
+      },
+    },
+    requiredScopes: ['execute'],
+    notes: [
+      'Requests to localhost, internal IPs, and cloud metadata services are blocked',
+      'Maximum response size is 10MB',
+      'Maximum timeout is 30 seconds',
+    ],
+  },
+  {
+    name: 'download',
+    category: 'http',
+    description: 'Download a file from a URL and save it to user storage',
+    endpoint: '/api/http/download',
+    method: 'POST',
+    parameters: {
+      type: 'object',
+      properties: {
+        url: {
+          type: 'string',
+          description: 'The URL to download from (HTTP or HTTPS)',
+        },
+        destination: {
+          type: 'string',
+          description: 'Destination directory path in user storage',
+        },
+        filename: {
+          type: 'string',
+          description: 'Optional filename (defaults to filename from URL)',
+        },
+        timeout: {
+          type: 'number',
+          description: 'Download timeout in milliseconds (max 120000)',
+        },
+      },
+      required: ['url', 'destination'],
+    },
+    returns: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean' },
+        path: { type: 'string', description: 'Full path of saved file' },
+        filename: { type: 'string' },
+        size: { type: 'number', description: 'File size in bytes' },
+        content_type: { type: 'string' },
+        source_url: { type: 'string' },
+      },
+    },
+    requiredScopes: ['write'],
+    notes: [
+      'Maximum file size is 50MB',
+      'Maximum timeout is 2 minutes',
+      'Downloads from localhost and internal IPs are blocked',
+    ],
+  },
+
+  // ============================================================================
+  // Git Tools
+  // ============================================================================
+  {
+    name: 'git_clone',
+    category: 'git',
+    description: 'Clone a git repository into user storage',
+    endpoint: '/api/git/clone',
+    method: 'POST',
+    parameters: {
+      type: 'object',
+      properties: {
+        url: {
+          type: 'string',
+          description: 'Repository URL (HTTPS or SSH)',
+        },
+        destination: {
+          type: 'string',
+          description: 'Destination directory name',
+        },
+        branch: {
+          type: 'string',
+          description: 'Branch to clone',
+        },
+        depth: {
+          type: 'number',
+          description: 'Shallow clone depth',
+        },
+      },
+      required: ['url'],
+    },
+    returns: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean' },
+        path: { type: 'string' },
+        full_path: { type: 'string' },
+        output: { type: 'string' },
+      },
+    },
+    requiredScopes: ['execute'],
+  },
+  {
+    name: 'git_status',
+    category: 'git',
+    description: 'Get the status of a git repository',
+    endpoint: '/api/git/status',
+    method: 'POST',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description: 'Path to the repository (relative to home)',
+        },
+      },
+    },
+    returns: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean' },
+        branch: { type: 'string' },
+        clean: { type: 'boolean' },
+        changes: { type: 'array' },
+        last_commit: { type: 'object' },
+      },
+    },
+    requiredScopes: ['read'],
+  },
+  {
+    name: 'git_commit',
+    category: 'git',
+    description: 'Commit changes to a git repository',
+    endpoint: '/api/git/commit',
+    method: 'POST',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description: 'Path to the repository',
+        },
+        message: {
+          type: 'string',
+          description: 'Commit message',
+        },
+        add_all: {
+          type: 'boolean',
+          description: 'Add all changes before committing',
+        },
+        files: {
+          type: 'array',
+          description: 'Specific files to add and commit',
+          items: { type: 'string' },
+        },
+      },
+      required: ['message'],
+    },
+    returns: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean' },
+        hash: { type: 'string' },
+        message: { type: 'string' },
+        output: { type: 'string' },
+      },
+    },
+    requiredScopes: ['execute'],
+  },
+  {
+    name: 'git_push',
+    category: 'git',
+    description: 'Push commits to remote repository',
+    endpoint: '/api/git/push',
+    method: 'POST',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description: 'Path to the repository',
+        },
+        remote: {
+          type: 'string',
+          description: 'Remote name (default: origin)',
+        },
+        branch: {
+          type: 'string',
+          description: 'Branch to push',
+        },
+        force: {
+          type: 'boolean',
+          description: 'Force push (use with caution)',
+        },
+      },
+    },
+    returns: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean' },
+        remote: { type: 'string' },
+        branch: { type: 'string' },
+        output: { type: 'string' },
+      },
+    },
+    requiredScopes: ['execute'],
+  },
+  {
+    name: 'git_pull',
+    category: 'git',
+    description: 'Pull changes from remote repository',
+    endpoint: '/api/git/pull',
+    method: 'POST',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description: 'Path to the repository',
+        },
+        remote: {
+          type: 'string',
+          description: 'Remote name (default: origin)',
+        },
+        branch: {
+          type: 'string',
+          description: 'Branch to pull',
+        },
+      },
+    },
+    returns: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean' },
+        remote: { type: 'string' },
+        branch: { type: 'string' },
+        output: { type: 'string' },
+      },
+    },
+    requiredScopes: ['execute'],
+  },
+  {
+    name: 'git_log',
+    category: 'git',
+    description: 'Get commit history',
+    endpoint: '/api/git/log',
+    method: 'POST',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description: 'Path to the repository',
+        },
+        count: {
+          type: 'number',
+          description: 'Number of commits to show (max 100)',
+        },
+      },
+    },
+    returns: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean' },
+        count: { type: 'number' },
+        commits: { type: 'array' },
+      },
+    },
+    requiredScopes: ['read'],
+  },
+  {
+    name: 'git_diff',
+    category: 'git',
+    description: 'Get diff of current changes',
+    endpoint: '/api/git/diff',
+    method: 'POST',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description: 'Path to the repository',
+        },
+        staged: {
+          type: 'boolean',
+          description: 'Show staged changes only',
+        },
+      },
+    },
+    returns: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean' },
+        staged: { type: 'boolean' },
+        diff: { type: 'string' },
+        has_changes: { type: 'boolean' },
       },
     },
     requiredScopes: ['read'],
@@ -539,6 +923,474 @@ const TOOLS: Tool[] = [
       },
     },
     requiredScopes: ['read'],
+  },
+  {
+    name: 'search',
+    category: 'filesystem',
+    description: 'Search for files and folders by name or content',
+    endpoint: '/search',
+    method: 'POST',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'Search query string',
+        },
+        path: {
+          type: 'string',
+          description: 'Directory path to search in (defaults to user root)',
+        },
+        type: {
+          type: 'string',
+          description: 'Filter by type: file, directory, or all',
+          enum: ['file', 'directory', 'all'],
+        },
+      },
+      required: ['query'],
+    },
+    returns: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          path: { type: 'string' },
+          is_dir: { type: 'boolean' },
+          size: { type: 'number' },
+        },
+      },
+    },
+    requiredScopes: ['read'],
+  },
+  {
+    name: 'get_stats',
+    category: 'system',
+    description: 'Get storage statistics for the authenticated user',
+    endpoint: '/api/stats',
+    method: 'GET',
+    parameters: {
+      type: 'object',
+      properties: {},
+    },
+    returns: {
+      type: 'object',
+      properties: {
+        storageUsed: { type: 'number', description: 'Bytes used' },
+        storageLimit: { type: 'number', description: 'Storage limit in bytes' },
+        filesCount: { type: 'number', description: 'Total number of files' },
+      },
+    },
+    requiredScopes: ['read'],
+  },
+  {
+    name: 'disk_free',
+    category: 'system',
+    description: 'Get disk usage information',
+    endpoint: '/df',
+    method: 'GET',
+    parameters: {
+      type: 'object',
+      properties: {},
+    },
+    returns: {
+      type: 'object',
+      properties: {
+        used: { type: 'number' },
+        available: { type: 'number' },
+        total: { type: 'number' },
+        percentage: { type: 'number' },
+      },
+    },
+    requiredScopes: ['read'],
+  },
+  {
+    name: 'kv_get',
+    category: 'system',
+    description: 'Get a value from the key-value store',
+    endpoint: '/kv/:key',
+    method: 'GET',
+    parameters: {
+      type: 'object',
+      properties: {
+        key: {
+          type: 'string',
+          description: 'The key to retrieve',
+        },
+      },
+      required: ['key'],
+    },
+    returns: {
+      type: 'object',
+      properties: {
+        key: { type: 'string' },
+        value: { type: 'string' },
+      },
+    },
+    requiredScopes: ['read'],
+    notes: ['Key-value store is scoped to your user account'],
+  },
+  {
+    name: 'kv_set',
+    category: 'system',
+    description: 'Set a value in the key-value store',
+    endpoint: '/kv/:key',
+    method: 'POST',
+    parameters: {
+      type: 'object',
+      properties: {
+        key: {
+          type: 'string',
+          description: 'The key to set',
+        },
+        value: {
+          type: 'string',
+          description: 'The value to store',
+        },
+      },
+      required: ['key', 'value'],
+    },
+    returns: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean' },
+      },
+    },
+    requiredScopes: ['write'],
+  },
+  {
+    name: 'list_backups',
+    category: 'system',
+    description: 'List available backups for this PC2 node',
+    endpoint: '/api/backups',
+    method: 'GET',
+    parameters: {
+      type: 'object',
+      properties: {},
+    },
+    returns: {
+      type: 'object',
+      properties: {
+        backups: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              filename: { type: 'string' },
+              size: { type: 'number' },
+              created: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+    requiredScopes: ['admin'],
+  },
+  {
+    name: 'create_backup',
+    category: 'system',
+    description: 'Create a new backup of the PC2 node data',
+    endpoint: '/api/backups/create',
+    method: 'POST',
+    parameters: {
+      type: 'object',
+      properties: {},
+    },
+    returns: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean' },
+        message: { type: 'string' },
+        filename: { type: 'string' },
+      },
+    },
+    requiredScopes: ['admin'],
+  },
+
+  // ============================================================================
+  // Audit Tools
+  // ============================================================================
+  {
+    name: 'list_audit_logs',
+    category: 'system',
+    description: 'List audit logs of agent/API actions for this user',
+    endpoint: '/api/audit',
+    method: 'GET',
+    parameters: {
+      type: 'object',
+      properties: {
+        limit: {
+          type: 'number',
+          description: 'Maximum logs to return (max 200)',
+        },
+        offset: {
+          type: 'number',
+          description: 'Pagination offset',
+        },
+        action: {
+          type: 'string',
+          description: 'Filter by action type (e.g., file_write, terminal_exec)',
+        },
+        since: {
+          type: 'number',
+          description: 'Filter logs after this timestamp (ms)',
+        },
+        until: {
+          type: 'number',
+          description: 'Filter logs before this timestamp (ms)',
+        },
+      },
+    },
+    returns: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean' },
+        logs: { type: 'array' },
+        pagination: { type: 'object' },
+      },
+    },
+    requiredScopes: ['read'],
+  },
+  {
+    name: 'get_audit_stats',
+    category: 'system',
+    description: 'Get audit statistics summary for this user',
+    endpoint: '/api/audit/stats',
+    method: 'GET',
+    parameters: {
+      type: 'object',
+      properties: {
+        since: {
+          type: 'number',
+          description: 'Get stats since this timestamp (default: 24h ago)',
+        },
+      },
+    },
+    returns: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean' },
+        since: { type: 'number' },
+        stats: {
+          type: 'object',
+          properties: {
+            total_actions: { type: 'number' },
+            actions_by_type: { type: 'object' },
+            average_duration_ms: { type: 'number' },
+            success_rate: { type: 'number' },
+          },
+        },
+      },
+    },
+    requiredScopes: ['read'],
+  },
+  {
+    name: 'get_rate_limit_status',
+    category: 'system',
+    description: 'Get current rate limit status for this API key/session',
+    endpoint: '/api/rate-limit/status',
+    method: 'GET',
+    parameters: {
+      type: 'object',
+      properties: {},
+    },
+    returns: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean' },
+        wallet: { type: 'string' },
+        api_key_id: { type: 'string' },
+        limits: {
+          type: 'object',
+          description: 'Rate limits by scope with remaining/limit/reset values',
+        },
+      },
+    },
+    requiredScopes: ['read'],
+  },
+
+  // ============================================================================
+  // Scheduler Tools
+  // ============================================================================
+  {
+    name: 'create_scheduled_task',
+    category: 'scheduler',
+    description: 'Create a scheduled task to run actions on a cron schedule',
+    endpoint: '/api/scheduler/tasks',
+    method: 'POST',
+    parameters: {
+      type: 'object',
+      properties: {
+        name: {
+          type: 'string',
+          description: 'Task name',
+        },
+        description: {
+          type: 'string',
+          description: 'Task description',
+        },
+        cron_expression: {
+          type: 'string',
+          description: 'Cron expression (e.g., "0 * * * *" for hourly) or preset (@hourly, @daily, @weekly)',
+        },
+        action: {
+          type: 'string',
+          description: 'Action to execute (terminal_exec, terminal_script, http_request, git_pull, backup_create)',
+          enum: ['terminal_exec', 'terminal_script', 'http_request', 'git_pull', 'backup_create'],
+        },
+        action_params: {
+          type: 'object',
+          description: 'Parameters for the action',
+        },
+        enabled: {
+          type: 'boolean',
+          description: 'Whether the task is enabled (default: true)',
+        },
+      },
+      required: ['name', 'cron_expression', 'action'],
+    },
+    returns: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean' },
+        task: { type: 'object' },
+      },
+    },
+    requiredScopes: ['admin'],
+  },
+  {
+    name: 'list_scheduled_tasks',
+    category: 'scheduler',
+    description: 'List all scheduled tasks for this user',
+    endpoint: '/api/scheduler/tasks',
+    method: 'GET',
+    parameters: {
+      type: 'object',
+      properties: {
+        enabled: {
+          type: 'boolean',
+          description: 'Filter by enabled status',
+        },
+      },
+    },
+    returns: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean' },
+        count: { type: 'number' },
+        tasks: { type: 'array' },
+      },
+    },
+    requiredScopes: ['read'],
+  },
+  {
+    name: 'get_scheduled_task',
+    category: 'scheduler',
+    description: 'Get details of a specific scheduled task',
+    endpoint: '/api/scheduler/tasks/:id',
+    method: 'GET',
+    parameters: {
+      type: 'object',
+      properties: {
+        id: {
+          type: 'string',
+          description: 'Task ID',
+        },
+      },
+      required: ['id'],
+    },
+    returns: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean' },
+        task: { type: 'object' },
+      },
+    },
+    requiredScopes: ['read'],
+  },
+  {
+    name: 'update_scheduled_task',
+    category: 'scheduler',
+    description: 'Update a scheduled task',
+    endpoint: '/api/scheduler/tasks/:id',
+    method: 'PUT',
+    parameters: {
+      type: 'object',
+      properties: {
+        id: {
+          type: 'string',
+          description: 'Task ID',
+        },
+        name: { type: 'string' },
+        description: { type: 'string' },
+        cron_expression: { type: 'string' },
+        action_params: { type: 'object' },
+        enabled: { type: 'boolean' },
+      },
+      required: ['id'],
+    },
+    returns: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean' },
+        task: { type: 'object' },
+      },
+    },
+    requiredScopes: ['admin'],
+  },
+  {
+    name: 'delete_scheduled_task',
+    category: 'scheduler',
+    description: 'Delete a scheduled task',
+    endpoint: '/api/scheduler/tasks/:id',
+    method: 'DELETE',
+    parameters: {
+      type: 'object',
+      properties: {
+        id: {
+          type: 'string',
+          description: 'Task ID',
+        },
+      },
+      required: ['id'],
+    },
+    returns: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean' },
+        message: { type: 'string' },
+      },
+    },
+    requiredScopes: ['admin'],
+  },
+  {
+    name: 'trigger_scheduled_task',
+    category: 'scheduler',
+    description: 'Trigger a scheduled task immediately (for testing)',
+    endpoint: '/api/scheduler/tasks/:id/trigger',
+    method: 'POST',
+    parameters: {
+      type: 'object',
+      properties: {
+        id: {
+          type: 'string',
+          description: 'Task ID',
+        },
+      },
+      required: ['id'],
+    },
+    returns: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean' },
+        message: { type: 'string' },
+        task_id: { type: 'string' },
+        action: { type: 'string' },
+        triggered_at: { type: 'number' },
+        next_run_at: { type: 'number' },
+      },
+    },
+    requiredScopes: ['admin'],
   },
 ];
 

@@ -58,13 +58,14 @@
             border-color: #3b82f6;
             background: white;
         }
-        .search-icon {
+        .search-icon-wrapper {
             position: absolute;
             left: 12px;
             top: 50%;
             transform: translateY(-50%);
-            color: #94a3b8;
-            font-size: 14px;
+            width: 16px;
+            height: 16px;
+            opacity: 0.5;
         }
         .tabs {
             display: flex;
@@ -138,8 +139,13 @@
             background: #eff6ff;
             color: #3b82f6;
         }
-        .category-icon {
-            font-size: 16px;
+        .category-item.active .cat-icon {
+            opacity: 1;
+        }
+        .cat-icon {
+            width: 18px;
+            height: 18px;
+            opacity: 0.7;
         }
         
         /* Main content */
@@ -160,7 +166,7 @@
             gap: 24px;
             color: white;
         }
-        .featured-icon {
+        .featured-icon-wrap {
             width: 100px;
             height: 100px;
             background: rgba(255,255,255,0.2);
@@ -168,8 +174,12 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 48px;
             flex-shrink: 0;
+        }
+        .featured-icon-wrap svg {
+            width: 56px;
+            height: 56px;
+            fill: white;
         }
         .featured-content h2 {
             font-size: 24px;
@@ -194,12 +204,49 @@
             background: #f8fafc;
         }
         
-        /* Section titles */
+        /* Section with horizontal scroll */
+        .section {
+            margin-bottom: 32px;
+        }
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
         .section-title {
             font-size: 16px;
             font-weight: 600;
             color: #1e293b;
-            margin-bottom: 16px;
+        }
+        .section-link {
+            font-size: 13px;
+            color: #3b82f6;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .section-link:hover {
+            text-decoration: underline;
+        }
+        
+        /* Horizontal scroll container */
+        .apps-scroll {
+            display: flex;
+            gap: 16px;
+            overflow-x: auto;
+            padding-bottom: 8px;
+            scroll-behavior: smooth;
+        }
+        .apps-scroll::-webkit-scrollbar {
+            height: 6px;
+        }
+        .apps-scroll::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 3px;
+        }
+        .apps-scroll::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
         }
         
         /* Apps grid */
@@ -207,7 +254,6 @@
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
             gap: 16px;
-            margin-bottom: 32px;
         }
         
         /* App card */
@@ -218,6 +264,8 @@
             padding: 16px;
             cursor: pointer;
             transition: all 0.2s;
+            min-width: 280px;
+            flex-shrink: 0;
         }
         .app-card:hover {
             box-shadow: 0 4px 12px rgba(0,0,0,0.08);
@@ -235,8 +283,12 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 28px;
             flex-shrink: 0;
+        }
+        .app-icon svg {
+            width: 32px;
+            height: 32px;
+            fill: white;
         }
         .app-icon.gradient-blue { background: linear-gradient(135deg, #3b82f6, #1d4ed8); }
         .app-icon.gradient-purple { background: linear-gradient(135deg, #8b5cf6, #6d28d9); }
@@ -261,10 +313,15 @@
             color: #94a3b8;
             margin-bottom: 4px;
         }
+        .app-version {
+            font-size: 11px;
+            color: #94a3b8;
+        }
         .app-badges {
             display: flex;
             gap: 4px;
             flex-wrap: wrap;
+            margin-top: 4px;
         }
         .badge {
             font-size: 10px;
@@ -351,6 +408,7 @@
             border-bottom: 1px solid #e2e8f0;
             display: flex;
             gap: 16px;
+            position: relative;
         }
         .modal-icon {
             width: 80px;
@@ -359,8 +417,12 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 40px;
             flex-shrink: 0;
+        }
+        .modal-icon svg {
+            width: 44px;
+            height: 44px;
+            fill: white;
         }
         .modal-title-section {
             flex: 1;
@@ -374,6 +436,11 @@
         .modal-developer {
             font-size: 14px;
             color: #64748b;
+            margin-bottom: 4px;
+        }
+        .modal-version {
+            font-size: 12px;
+            color: #94a3b8;
             margin-bottom: 8px;
         }
         .modal-badges {
@@ -384,20 +451,30 @@
             position: absolute;
             top: 16px;
             right: 16px;
-            background: none;
+            background: #f1f5f9;
             border: none;
-            font-size: 24px;
-            color: #94a3b8;
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             cursor: pointer;
         }
         .modal-close:hover {
-            color: #64748b;
+            background: #e2e8f0;
+        }
+        .modal-close svg {
+            width: 16px;
+            height: 16px;
+            fill: #64748b;
         }
         
         /* Gallery */
         .modal-gallery {
             padding: 24px;
             border-bottom: 1px solid #e2e8f0;
+            background: #f8fafc;
         }
         .gallery-scroll {
             display: flex;
@@ -408,7 +485,7 @@
         .gallery-img {
             width: 200px;
             height: 130px;
-            background: #f1f5f9;
+            background: linear-gradient(135deg, #e2e8f0, #cbd5e1);
             border-radius: 8px;
             flex-shrink: 0;
             display: flex;
@@ -436,6 +513,36 @@
             color: #475569;
             line-height: 1.6;
         }
+        
+        /* What's New */
+        .whats-new {
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 16px;
+        }
+        .whats-new-version {
+            font-size: 13px;
+            font-weight: 600;
+            color: #1e293b;
+            margin-bottom: 8px;
+        }
+        .whats-new-date {
+            font-size: 11px;
+            color: #94a3b8;
+            margin-left: 8px;
+            font-weight: 400;
+        }
+        .whats-new-list {
+            font-size: 13px;
+            color: #475569;
+            line-height: 1.6;
+            padding-left: 16px;
+        }
+        .whats-new-list li {
+            margin-bottom: 4px;
+        }
+        
+        /* Requirements */
         .requirements-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
@@ -457,6 +564,8 @@
             font-size: 11px;
             color: #94a3b8;
         }
+        
+        /* Permissions */
         .permissions-list {
             list-style: none;
         }
@@ -473,7 +582,36 @@
             border-bottom: none;
         }
         .permission-icon {
-            color: #22c55e;
+            width: 16px;
+            height: 16px;
+        }
+        .permission-icon svg {
+            width: 16px;
+            height: 16px;
+            fill: #22c55e;
+        }
+        
+        /* Developer info */
+        .developer-links {
+            display: flex;
+            gap: 16px;
+        }
+        .dev-link {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            color: #3b82f6;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .dev-link:hover {
+            text-decoration: underline;
+        }
+        .dev-link svg {
+            width: 14px;
+            height: 14px;
+            fill: #3b82f6;
         }
         
         /* Modal footer */
@@ -525,7 +663,11 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 32px;
+        }
+        .install-modal-icon svg {
+            width: 36px;
+            height: 36px;
+            fill: white;
         }
         .install-modal-title {
             font-size: 18px;
@@ -573,7 +715,10 @@
         .installed-item .app-icon {
             width: 48px;
             height: 48px;
-            font-size: 24px;
+        }
+        .installed-item .app-icon svg {
+            width: 28px;
+            height: 28px;
         }
         .installed-info {
             flex: 1;
@@ -583,7 +728,7 @@
             font-weight: 600;
             color: #1e293b;
         }
-        .installed-size {
+        .installed-meta {
             font-size: 12px;
             color: #94a3b8;
         }
@@ -622,8 +767,10 @@
             padding: 60px 20px;
         }
         .empty-icon {
-            font-size: 48px;
-            margin-bottom: 16px;
+            width: 48px;
+            height: 48px;
+            margin: 0 auto 16px;
+            opacity: 0.5;
         }
         .empty-title {
             font-size: 18px;
@@ -652,7 +799,12 @@
             <div class="header-top">
                 <h1 class="header-title">App Center</h1>
                 <div class="search-container">
-                    <span class="search-icon">&#128269;</span>
+                    <div class="search-icon-wrapper">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <path d="m21 21-4.35-4.35"></path>
+                        </svg>
+                    </div>
                     <input type="text" class="search-input" placeholder="Search apps..." id="searchInput">
                 </div>
             </div>
@@ -668,31 +820,31 @@
             <div class="sidebar">
                 <div class="sidebar-title">Categories</div>
                 <div class="category-item active" data-category="all">
-                    <span class="category-icon">&#128218;</span>
+                    <svg class="cat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
                     <span>All Apps</span>
                 </div>
                 <div class="category-item" data-category="ai">
-                    <span class="category-icon">&#129504;</span>
+                    <svg class="cat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a4 4 0 0 1 4 4v2a4 4 0 0 1-8 0V6a4 4 0 0 1 4-4z"></path><path d="M16 12v4a4 4 0 0 1-8 0v-4"></path><path d="M8 16h8"></path><circle cx="9" cy="9" r="1" fill="currentColor"></circle><circle cx="15" cy="9" r="1" fill="currentColor"></circle></svg>
                     <span>AI</span>
                 </div>
                 <div class="category-item" data-category="media">
-                    <span class="category-icon">&#127910;</span>
+                    <svg class="cat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
                     <span>Media</span>
                 </div>
                 <div class="category-item" data-category="blockchain">
-                    <span class="category-icon">&#128279;</span>
+                    <svg class="cat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="6" height="6" rx="1"></rect><rect x="16" y="7" width="6" height="6" rx="1"></rect><rect x="9" y="2" width="6" height="6" rx="1"></rect><rect x="9" y="16" width="6" height="6" rx="1"></rect><path d="M8 10h2"></path><path d="M14 10h2"></path><path d="M12 8v2"></path><path d="M12 14v2"></path></svg>
                     <span>Blockchain</span>
                 </div>
                 <div class="category-item" data-category="tools">
-                    <span class="category-icon">&#128295;</span>
+                    <svg class="cat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
                     <span>Tools</span>
                 </div>
                 <div class="category-item" data-category="privacy">
-                    <span class="category-icon">&#128274;</span>
+                    <svg class="cat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
                     <span>Privacy</span>
                 </div>
                 <div class="category-item" data-category="games">
-                    <span class="category-icon">&#127918;</span>
+                    <svg class="cat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"></rect><path d="M6 12h4"></path><path d="M8 10v4"></path><circle cx="17" cy="10" r="1" fill="currentColor"></circle><circle cx="15" cy="14" r="1" fill="currentColor"></circle></svg>
                     <span>Games</span>
                 </div>
             </div>
@@ -703,7 +855,9 @@
                 <div class="tab-content active" id="discover-content">
                     <!-- Featured banner -->
                     <div class="featured-banner">
-                        <div class="featured-icon">&#127911;</div>
+                        <div class="featured-icon-wrap">
+                            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+                        </div>
                         <div class="featured-content">
                             <h2>Elacity Player</h2>
                             <p>The official dDRM-protected media player. Stream encrypted content securely on your personal cloud.</p>
@@ -711,19 +865,42 @@
                         </div>
                     </div>
                     
-                    <h3 class="section-title">Popular Apps</h3>
-                    <div class="apps-grid" id="appsGrid"></div>
+                    <!-- Popular Apps Section -->
+                    <div class="section">
+                        <div class="section-header">
+                            <h3 class="section-title">Popular Apps</h3>
+                            <span class="section-link" onclick="showAllApps()">View all</span>
+                        </div>
+                        <div class="apps-scroll" id="popularApps"></div>
+                    </div>
+                    
+                    <!-- New Apps Section -->
+                    <div class="section">
+                        <div class="section-header">
+                            <h3 class="section-title">New Apps</h3>
+                            <span class="section-link" onclick="showAllApps()">View all</span>
+                        </div>
+                        <div class="apps-scroll" id="newApps"></div>
+                    </div>
+                    
+                    <!-- All Apps Grid -->
+                    <div class="section" id="allAppsSection" style="display:none;">
+                        <div class="section-header">
+                            <h3 class="section-title">All Apps</h3>
+                        </div>
+                        <div class="apps-grid" id="appsGrid"></div>
+                    </div>
                 </div>
                 
                 <!-- Installed tab -->
                 <div class="tab-content" id="installed-content">
-                    <h3 class="section-title">Installed Apps</h3>
+                    <h3 class="section-title" style="margin-bottom:16px;">Installed Apps</h3>
                     <div class="installed-list" id="installedList"></div>
                 </div>
                 
                 <!-- Updates tab -->
                 <div class="tab-content" id="updates-content">
-                    <h3 class="section-title">Available Updates</h3>
+                    <h3 class="section-title" style="margin-bottom:16px;">Available Updates</h3>
                     <div class="apps-grid" id="updatesGrid"></div>
                 </div>
             </div>
@@ -741,7 +918,27 @@
     </div>
 
     <script>
-        // Mock app catalog - representing future dDRM store
+        // SVG Icons
+        const icons = {
+            play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>',
+            brain: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>',
+            bitcoin: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M14.24 10.56C13.93 11.8 12 12.34 12 12.34l.46 1.86s1.93-.54 2.24-1.78c.31-1.24-.46-1.86-.46-1.86zm.67-2.66c.3-1.22-.48-1.85-.48-1.85-.01.01-.01.01-.01.01-1.15-.2-1.94.42-2.25 1.65L12.62 9l-.45-1.83s-1.93.54-2.24 1.78c-.31 1.24.46 1.86.46 1.86l.45 1.83c.54.16 1.93-.54 2.24-1.78.3-1.22-.48-1.85-.48-1.85l.45 1.83 1.86-.46.45-1.83z"/><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
+            wallet: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 18v1c0 1.1-.9 2-2 2H5c-1.11 0-2-.9-2-2V5c0-1.1.89-2 2-2h14c1.1 0 2 .9 2 2v1h-9c-1.11 0-2 .9-2 2v8c0 1.1.89 2 2 2h9zm-9-2h10V8H12v8zm4-2.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>',
+            sync: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>',
+            camera: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="3.2"/><path d="M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/></svg>',
+            code: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/></svg>',
+            chess: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 22H5v-2h14v2M17.16 8.26A8.94 8.94 0 0 0 19 3H5c.34 2.21 1.31 4.18 2.84 5.26C6.07 9.63 5 11.71 5 14c0 1.05.21 2.05.59 2.97L7 18h10l1.41-1.03c.38-.92.59-1.92.59-2.97 0-2.29-1.07-4.37-2.84-5.74z"/></svg>',
+            shield: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg>',
+            home: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>',
+            check: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>',
+            close: '<svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>',
+            link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>',
+            github: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>',
+            search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg>',
+            package: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16.5 9.4l-9-5.19M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>'
+        };
+        
+        // Mock app catalog
         const mockApps = [
             {
                 id: 'elacity-player',
@@ -750,12 +947,21 @@
                 category: 'media',
                 description: 'The official dDRM-protected media player. Stream encrypted video and audio content securely on your personal cloud. Supports all major formats with hardware acceleration.',
                 size: '45 MB',
-                icon: '&#127911;',
+                version: '2.1.0',
+                icon: 'play',
                 gradient: 'gradient-purple',
                 badges: ['ddrm'],
                 permissions: ['Access to your media files', 'Network access for streaming', 'Hardware acceleration'],
-                requirements: { storage: '100 MB', memory: '256 MB', dependencies: 'None' },
-                installed: false
+                requirements: { storage: '100 MB', memory: '256 MB', compatibility: 'PC2 1.0+' },
+                installed: false,
+                isNew: false,
+                isPopular: true,
+                website: 'https://elacity.io',
+                source: 'https://github.com/elastos/elacity-player',
+                changelog: [
+                    { version: '2.1.0', date: 'Jan 15, 2026', changes: ['Added hardware acceleration', 'Fixed audio sync issues', 'Improved streaming performance'] },
+                    { version: '2.0.0', date: 'Dec 1, 2025', changes: ['Major UI overhaul', 'Added dDRM support'] }
+                ]
             },
             {
                 id: 'knowledge-ai',
@@ -764,12 +970,20 @@
                 category: 'ai',
                 description: 'Run local large language models on your PC2 node. Powered by WASM for cross-platform compatibility. Supports Llama, Mistral, and more.',
                 size: '2.1 GB',
-                icon: '&#129504;',
+                version: '1.3.0',
+                icon: 'brain',
                 gradient: 'gradient-blue',
                 badges: ['wasm'],
                 permissions: ['Access to your files', 'High CPU/GPU usage', 'Network for model downloads'],
-                requirements: { storage: '8 GB', memory: '4 GB', dependencies: 'None' },
-                installed: false
+                requirements: { storage: '8 GB', memory: '4 GB', compatibility: 'PC2 1.0+' },
+                installed: false,
+                isNew: true,
+                isPopular: true,
+                website: 'https://elacity.io/ai',
+                source: null,
+                changelog: [
+                    { version: '1.3.0', date: 'Jan 10, 2026', changes: ['Added DeepSeek R1 support', 'Improved memory management'] }
+                ]
             },
             {
                 id: 'bitcoin-node',
@@ -778,12 +992,20 @@
                 category: 'blockchain',
                 description: 'Run a full Bitcoin Core node on your PC2. Verify transactions independently, support the network, and achieve maximum privacy.',
                 size: '35 MB',
-                icon: '&#8383;',
+                version: '27.0.0',
+                icon: 'bitcoin',
                 gradient: 'gradient-orange',
                 badges: ['opensource'],
                 permissions: ['Network access', 'Significant storage (500GB+)', 'Background processing'],
-                requirements: { storage: '500 GB', memory: '2 GB', dependencies: 'None' },
-                installed: false
+                requirements: { storage: '500 GB', memory: '2 GB', compatibility: 'PC2 1.0+' },
+                installed: false,
+                isNew: false,
+                isPopular: true,
+                website: 'https://bitcoin.org',
+                source: 'https://github.com/bitcoin/bitcoin',
+                changelog: [
+                    { version: '27.0.0', date: 'Jan 5, 2026', changes: ['Performance improvements', 'Security patches'] }
+                ]
             },
             {
                 id: 'esc-wallet',
@@ -792,12 +1014,20 @@
                 category: 'blockchain',
                 description: 'Official ElastOS sidechain wallet. Manage your ELA, ESC tokens, and interact with smart contracts on the Elastos ecosystem.',
                 size: '28 MB',
-                icon: '&#128176;',
+                version: '3.2.1',
+                icon: 'wallet',
                 gradient: 'gradient-green',
                 badges: ['ddrm'],
                 permissions: ['Wallet signing access', 'Network access'],
-                requirements: { storage: '50 MB', memory: '128 MB', dependencies: 'None' },
-                installed: true
+                requirements: { storage: '50 MB', memory: '128 MB', compatibility: 'PC2 1.0+' },
+                installed: true,
+                isNew: false,
+                isPopular: true,
+                website: 'https://elastos.org',
+                source: 'https://github.com/elastos/esc-wallet',
+                changelog: [
+                    { version: '3.2.1', date: 'Jan 12, 2026', changes: ['Bug fixes', 'Added new token support'] }
+                ]
             },
             {
                 id: 'secure-sync',
@@ -806,12 +1036,20 @@
                 category: 'tools',
                 description: 'End-to-end encrypted file synchronization across your devices. Your files never leave your control.',
                 size: '18 MB',
-                icon: '&#128259;',
+                version: '1.0.2',
+                icon: 'sync',
                 gradient: 'gradient-cyan',
                 badges: ['ddrm'],
                 permissions: ['Full file system access', 'Network access', 'Background sync'],
-                requirements: { storage: '20 MB', memory: '64 MB', dependencies: 'None' },
-                installed: false
+                requirements: { storage: '20 MB', memory: '64 MB', compatibility: 'PC2 1.0+' },
+                installed: false,
+                isNew: true,
+                isPopular: false,
+                website: 'https://elacity.io/sync',
+                source: null,
+                changelog: [
+                    { version: '1.0.2', date: 'Jan 8, 2026', changes: ['Initial release', 'Cross-device sync'] }
+                ]
             },
             {
                 id: 'photo-vault',
@@ -820,12 +1058,20 @@
                 category: 'media',
                 description: 'Private photo management with AI-powered organization. Your memories, encrypted and searchable.',
                 size: '52 MB',
-                icon: '&#128247;',
+                version: '2.0.0',
+                icon: 'camera',
                 gradient: 'gradient-pink',
                 badges: ['wasm'],
                 permissions: ['Access to photos', 'Local AI processing'],
-                requirements: { storage: '100 MB', memory: '512 MB', dependencies: 'None' },
-                installed: true
+                requirements: { storage: '100 MB', memory: '512 MB', compatibility: 'PC2 1.0+' },
+                installed: true,
+                isNew: false,
+                isPopular: true,
+                website: 'https://elacity.io/photos',
+                source: null,
+                changelog: [
+                    { version: '2.0.0', date: 'Dec 20, 2025', changes: ['AI-powered search', 'Face recognition'] }
+                ]
             },
             {
                 id: 'code-studio',
@@ -834,12 +1080,20 @@
                 category: 'tools',
                 description: 'A powerful web-based code editor inspired by VS Code. Syntax highlighting, extensions, and Git integration.',
                 size: '85 MB',
-                icon: '&#128187;',
+                version: '1.85.0',
+                icon: 'code',
                 gradient: 'gradient-blue',
                 badges: ['opensource'],
                 permissions: ['File system access', 'Terminal access'],
-                requirements: { storage: '150 MB', memory: '256 MB', dependencies: 'System Terminal' },
-                installed: false
+                requirements: { storage: '150 MB', memory: '256 MB', compatibility: 'PC2 1.0+' },
+                installed: false,
+                isNew: true,
+                isPopular: false,
+                website: 'https://code.visualstudio.com',
+                source: 'https://github.com/microsoft/vscode',
+                changelog: [
+                    { version: '1.85.0', date: 'Jan 1, 2026', changes: ['New extensions API', 'Performance improvements'] }
+                ]
             },
             {
                 id: 'chess-master',
@@ -848,26 +1102,42 @@
                 category: 'games',
                 description: 'Play chess against AI or friends. Features multiple difficulty levels, puzzles, and game analysis.',
                 size: '12 MB',
-                icon: '&#9819;',
+                version: '1.2.0',
+                icon: 'chess',
                 gradient: 'gradient-slate',
                 badges: ['wasm'],
                 permissions: ['None required'],
-                requirements: { storage: '15 MB', memory: '64 MB', dependencies: 'None' },
-                installed: false
+                requirements: { storage: '15 MB', memory: '64 MB', compatibility: 'PC2 1.0+' },
+                installed: false,
+                isNew: false,
+                isPopular: false,
+                website: null,
+                source: 'https://github.com/elacity/chess-master',
+                changelog: [
+                    { version: '1.2.0', date: 'Nov 15, 2025', changes: ['Added puzzles mode', 'Improved AI'] }
+                ]
             },
             {
-                id: 'ad-blocker',
+                id: 'network-guard',
                 name: 'Network Guard',
                 developer: 'Open Source',
                 category: 'privacy',
                 description: 'Network-wide ad and tracker blocking. Protect all devices on your network without installing anything on them.',
                 size: '8 MB',
-                icon: '&#128737;',
+                version: '5.18.0',
+                icon: 'shield',
                 gradient: 'gradient-green',
                 badges: ['opensource'],
                 permissions: ['Network DNS access', 'Background service'],
-                requirements: { storage: '20 MB', memory: '128 MB', dependencies: 'None' },
-                installed: false
+                requirements: { storage: '20 MB', memory: '128 MB', compatibility: 'PC2 1.0+' },
+                installed: false,
+                isNew: false,
+                isPopular: true,
+                website: 'https://pi-hole.net',
+                source: 'https://github.com/pi-hole/pi-hole',
+                changelog: [
+                    { version: '5.18.0', date: 'Dec 10, 2025', changes: ['Updated blocklists', 'Performance improvements'] }
+                ]
             },
             {
                 id: 'home-control',
@@ -876,29 +1146,86 @@
                 category: 'tools',
                 description: 'Smart home automation hub. Control lights, thermostats, and IoT devices from your personal cloud.',
                 size: '120 MB',
-                icon: '&#127968;',
+                version: '2024.1.0',
+                icon: 'home',
                 gradient: 'gradient-yellow',
                 badges: ['opensource'],
                 permissions: ['Network access', 'Device discovery', 'Background service'],
-                requirements: { storage: '200 MB', memory: '256 MB', dependencies: 'None' },
-                installed: false
+                requirements: { storage: '200 MB', memory: '256 MB', compatibility: 'PC2 1.0+' },
+                installed: false,
+                isNew: true,
+                isPopular: false,
+                website: 'https://www.home-assistant.io',
+                source: 'https://github.com/home-assistant/core',
+                changelog: [
+                    { version: '2024.1.0', date: 'Jan 1, 2026', changes: ['New device integrations', 'UI improvements'] }
+                ]
             }
         ];
         
         // State
         let currentCategory = 'all';
         let currentTab = 'discover';
+        let showingAllApps = false;
         
         // Initialize
         function init() {
-            renderApps();
+            renderPopularApps();
+            renderNewApps();
             renderInstalledApps();
             renderUpdates();
             setupEventListeners();
         }
         
+        // Render app card HTML
+        function renderAppCard(app) {
+            return `
+                <div class="app-card" onclick="showAppDetail('${app.id}')">
+                    <div class="app-card-header">
+                        <div class="app-icon ${app.gradient}">${icons[app.icon]}</div>
+                        <div class="app-card-info">
+                            <div class="app-name">${app.name}</div>
+                            <div class="app-developer">${app.developer}</div>
+                            <div class="app-version">v${app.version}</div>
+                            <div class="app-badges">
+                                ${app.badges.map(badge => `<span class="badge ${badge}">${getBadgeText(badge)}</span>`).join('')}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="app-description">${app.description}</div>
+                    <div class="app-card-footer">
+                        <span class="app-size">${app.size}</span>
+                        <button class="install-btn ${app.installed ? 'installed' : ''}" onclick="event.stopPropagation(); ${app.installed ? `openApp('${app.id}')` : `installApp('${app.id}')`}">
+                            ${app.installed ? 'Open' : 'Install'}
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // Render popular apps (horizontal scroll)
+        function renderPopularApps() {
+            const container = document.getElementById('popularApps');
+            const apps = mockApps.filter(a => a.isPopular);
+            container.innerHTML = apps.map(renderAppCard).join('');
+        }
+        
+        // Render new apps (horizontal scroll)
+        function renderNewApps() {
+            const container = document.getElementById('newApps');
+            const apps = mockApps.filter(a => a.isNew);
+            container.innerHTML = apps.map(renderAppCard).join('');
+        }
+        
+        // Show all apps grid
+        function showAllApps() {
+            showingAllApps = true;
+            document.getElementById('allAppsSection').style.display = 'block';
+            renderAppsGrid();
+        }
+        
         // Render apps grid
-        function renderApps(filter = '') {
+        function renderAppsGrid(filter = '') {
             const grid = document.getElementById('appsGrid');
             let apps = mockApps;
             
@@ -917,7 +1244,7 @@
             if (apps.length === 0) {
                 grid.innerHTML = `
                     <div class="empty-state" style="grid-column: 1/-1;">
-                        <div class="empty-icon">&#128269;</div>
+                        <div class="empty-icon">${icons.search}</div>
                         <div class="empty-title">No apps found</div>
                         <div class="empty-description">Try a different search or category</div>
                     </div>
@@ -925,27 +1252,7 @@
                 return;
             }
             
-            grid.innerHTML = apps.map(app => `
-                <div class="app-card" onclick="showAppDetail('${app.id}')">
-                    <div class="app-card-header">
-                        <div class="app-icon ${app.gradient}">${app.icon}</div>
-                        <div class="app-card-info">
-                            <div class="app-name">${app.name}</div>
-                            <div class="app-developer">${app.developer}</div>
-                            <div class="app-badges">
-                                ${app.badges.map(badge => `<span class="badge ${badge}">${getBadgeText(badge)}</span>`).join('')}
-                            </div>
-                        </div>
-                    </div>
-                    <div class="app-description">${app.description}</div>
-                    <div class="app-card-footer">
-                        <span class="app-size">${app.size}</span>
-                        <button class="install-btn ${app.installed ? 'installed' : ''}" onclick="event.stopPropagation(); ${app.installed ? `openApp('${app.id}')` : `installApp('${app.id}')`}">
-                            ${app.installed ? 'Open' : 'Install'}
-                        </button>
-                    </div>
-                </div>
-            `).join('');
+            grid.innerHTML = apps.map(renderAppCard).join('');
         }
         
         // Render installed apps
@@ -956,7 +1263,7 @@
             if (installed.length === 0) {
                 list.innerHTML = `
                     <div class="empty-state">
-                        <div class="empty-icon">&#128230;</div>
+                        <div class="empty-icon">${icons.package}</div>
                         <div class="empty-title">No apps installed</div>
                         <div class="empty-description">Browse the Discover tab to find apps</div>
                     </div>
@@ -966,10 +1273,10 @@
             
             list.innerHTML = installed.map(app => `
                 <div class="installed-item">
-                    <div class="app-icon ${app.gradient}">${app.icon}</div>
+                    <div class="app-icon ${app.gradient}">${icons[app.icon]}</div>
                     <div class="installed-info">
                         <div class="installed-name">${app.name}</div>
-                        <div class="installed-size">${app.size}</div>
+                        <div class="installed-meta">v${app.version} - ${app.size}</div>
                     </div>
                     <div class="installed-actions">
                         <button class="action-btn open" onclick="openApp('${app.id}')">Open</button>
@@ -982,13 +1289,12 @@
         // Render updates
         function renderUpdates() {
             const grid = document.getElementById('updatesGrid');
-            // Mock: show first 2 installed apps as having updates
             const withUpdates = mockApps.filter(app => app.installed).slice(0, 2);
             
             if (withUpdates.length === 0) {
                 grid.innerHTML = `
                     <div class="empty-state" style="grid-column: 1/-1;">
-                        <div class="empty-icon">&#10003;</div>
+                        <div class="empty-icon">${icons.check}</div>
                         <div class="empty-title">All apps are up to date</div>
                         <div class="empty-description">Check back later for updates</div>
                     </div>
@@ -999,7 +1305,7 @@
             grid.innerHTML = withUpdates.map(app => `
                 <div class="app-card">
                     <div class="app-card-header">
-                        <div class="app-icon ${app.gradient}">${app.icon}</div>
+                        <div class="app-icon ${app.gradient}">${icons[app.icon]}</div>
                         <div class="app-card-info">
                             <div class="app-name">${app.name}</div>
                             <div class="app-developer">${app.developer}</div>
@@ -1024,18 +1330,20 @@
             
             const modal = document.getElementById('detailModal');
             const content = document.getElementById('detailContent');
+            const latestChangelog = app.changelog[0];
             
             content.innerHTML = `
-                <div class="modal-header" style="position:relative;">
-                    <div class="modal-icon ${app.gradient}">${app.icon}</div>
+                <div class="modal-header">
+                    <div class="modal-icon ${app.gradient}">${icons[app.icon]}</div>
                     <div class="modal-title-section">
                         <div class="modal-title">${app.name}</div>
                         <div class="modal-developer">${app.developer}</div>
+                        <div class="modal-version">Version ${app.version}</div>
                         <div class="modal-badges">
                             ${app.badges.map(badge => `<span class="badge ${badge}">${getBadgeText(badge)}</span>`).join('')}
                         </div>
                     </div>
-                    <button class="modal-close" onclick="closeDetailModal()">&times;</button>
+                    <button class="modal-close" onclick="closeDetailModal()">${icons.close}</button>
                 </div>
                 <div class="modal-gallery">
                     <div class="gallery-scroll">
@@ -1049,6 +1357,17 @@
                         <div class="modal-section-title">About</div>
                         <div class="modal-description">${app.description}</div>
                     </div>
+                    
+                    <div class="modal-section">
+                        <div class="modal-section-title">What's New</div>
+                        <div class="whats-new">
+                            <div class="whats-new-version">Version ${latestChangelog.version}<span class="whats-new-date">${latestChangelog.date}</span></div>
+                            <ul class="whats-new-list">
+                                ${latestChangelog.changes.map(c => `<li>${c}</li>`).join('')}
+                            </ul>
+                        </div>
+                    </div>
+                    
                     <div class="modal-section">
                         <div class="modal-section-title">Requirements</div>
                         <div class="requirements-grid">
@@ -1061,16 +1380,25 @@
                                 <div class="requirement-label">Memory</div>
                             </div>
                             <div class="requirement-item">
-                                <div class="requirement-value">${app.requirements.dependencies}</div>
-                                <div class="requirement-label">Dependencies</div>
+                                <div class="requirement-value">${app.requirements.compatibility}</div>
+                                <div class="requirement-label">Compatibility</div>
                             </div>
                         </div>
                     </div>
+                    
                     <div class="modal-section">
                         <div class="modal-section-title">Permissions</div>
                         <ul class="permissions-list">
-                            ${app.permissions.map(p => `<li><span class="permission-icon">&#10003;</span> ${p}</li>`).join('')}
+                            ${app.permissions.map(p => `<li><span class="permission-icon">${icons.check}</span> ${p}</li>`).join('')}
                         </ul>
+                    </div>
+                    
+                    <div class="modal-section">
+                        <div class="modal-section-title">Developer</div>
+                        <div class="developer-links">
+                            ${app.website ? `<a class="dev-link" href="${app.website}" target="_blank">${icons.link} Website</a>` : ''}
+                            ${app.source ? `<a class="dev-link" href="${app.source}" target="_blank">${icons.github} Source Code</a>` : ''}
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -1098,7 +1426,7 @@
             const content = document.getElementById('installContent');
             
             content.innerHTML = `
-                <div class="install-modal-icon ${app.gradient}">${app.icon}</div>
+                <div class="install-modal-icon ${app.gradient}">${icons[app.icon]}</div>
                 <div class="install-modal-title">${isUpdate ? 'Updating' : 'Installing'} ${app.name}</div>
                 <div class="install-modal-status" id="installStatus">Preparing...</div>
                 <div class="progress-bar">
@@ -1109,7 +1437,6 @@
             
             modal.classList.add('active');
             
-            // Simulate install progress
             const steps = [
                 { progress: 20, status: 'Checking requirements...' },
                 { progress: 40, status: 'Downloading package...' },
@@ -1124,15 +1451,17 @@
                     app.installed = true;
                     
                     content.innerHTML = `
-                        <div class="install-modal-icon ${app.gradient}">${app.icon}</div>
+                        <div class="install-modal-icon ${app.gradient}">${icons[app.icon]}</div>
                         <div class="install-modal-title">${app.name} ${isUpdate ? 'Updated' : 'Installed'}</div>
-                        <div class="install-modal-status" style="color:#22c55e;">&#10003; Successfully ${isUpdate ? 'updated' : 'installed'}</div>
+                        <div class="install-modal-status" style="color:#22c55e;">${icons.check} Successfully ${isUpdate ? 'updated' : 'installed'}</div>
                         <button class="modal-btn primary" onclick="closeInstallModal(); openApp('${app.id}')">Open App</button>
                     `;
                     
-                    renderApps();
+                    renderPopularApps();
+                    renderNewApps();
                     renderInstalledApps();
                     renderUpdates();
+                    if (showingAllApps) renderAppsGrid();
                     return;
                 }
                 
@@ -1142,55 +1471,45 @@
             }, 800);
         }
         
-        // Cancel install
         function cancelInstall() {
             document.getElementById('installModal').classList.remove('active');
         }
         
-        // Close install modal
         function closeInstallModal() {
             document.getElementById('installModal').classList.remove('active');
         }
         
-        // Open app (mock)
         function openApp(appId) {
             const app = mockApps.find(a => a.id === appId);
             if (!app) return;
-            
             alert(`Opening ${app.name}...\n\nThis is a mock UI. When dDRM is integrated, this will launch the actual WASM app.`);
         }
         
-        // Uninstall app (mock)
         function uninstallApp(appId) {
             const app = mockApps.find(a => a.id === appId);
             if (!app) return;
             
             if (confirm(`Uninstall ${app.name}?\n\nThis will remove the app and its data.`)) {
                 app.installed = false;
-                renderApps();
+                renderPopularApps();
+                renderNewApps();
                 renderInstalledApps();
                 renderUpdates();
+                if (showingAllApps) renderAppsGrid();
             }
         }
         
-        // Get badge text
         function getBadgeText(badge) {
-            const texts = {
-                wasm: 'WASM',
-                ddrm: 'dDRM',
-                opensource: 'Open Source'
-            };
+            const texts = { wasm: 'WASM', ddrm: 'dDRM', opensource: 'Open Source' };
             return texts[badge] || badge;
         }
         
-        // Setup event listeners
         function setupEventListeners() {
             // Tabs
             document.querySelectorAll('.tab').forEach(tab => {
                 tab.addEventListener('click', () => {
                     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
                     tab.classList.add('active');
-                    
                     currentTab = tab.dataset.tab;
                     document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
                     document.getElementById(`${currentTab}-content`).classList.add('active');
@@ -1203,13 +1522,16 @@
                     document.querySelectorAll('.category-item').forEach(i => i.classList.remove('active'));
                     item.classList.add('active');
                     currentCategory = item.dataset.category;
-                    renderApps();
+                    showAllApps();
                 });
             });
             
             // Search
             document.getElementById('searchInput').addEventListener('input', (e) => {
-                renderApps(e.target.value);
+                if (e.target.value) {
+                    showAllApps();
+                    renderAppsGrid(e.target.value);
+                }
             });
             
             // Close modals on overlay click
@@ -1222,7 +1544,6 @@
             });
         }
         
-        // Initialize on load
         init();
     </script>
 </body>

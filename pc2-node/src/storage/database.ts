@@ -710,4 +710,39 @@ export class DatabaseManager {
       // If parsing fails, ignore
     }
   }
+
+  // ============================================================================
+  // Recent Apps Operations
+  // ============================================================================
+
+  /**
+   * Record a recent app launch (upsert - update launched_at if exists)
+   */
+  recordRecentApp(walletAddress: string, appName: string): void {
+    const db = this.getDB();
+    const now = Date.now();
+    
+    db.prepare(`
+      INSERT INTO recent_apps (wallet_address, app_name, launched_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(wallet_address, app_name) DO UPDATE SET
+        launched_at = excluded.launched_at
+    `).run(walletAddress, appName, now);
+  }
+
+  /**
+   * Get recent apps for a user, ordered by most recent first
+   */
+  getRecentApps(walletAddress: string, limit: number = 10): string[] {
+    const db = this.getDB();
+    const rows = db.prepare(`
+      SELECT app_name
+      FROM recent_apps
+      WHERE wallet_address = ?
+      ORDER BY launched_at DESC
+      LIMIT ?
+    `).all(walletAddress, limit) as Array<{ app_name: string }>;
+    
+    return rows.map(row => row.app_name);
+  }
 }

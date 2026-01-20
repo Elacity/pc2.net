@@ -14,11 +14,11 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Script is in pc2-node/test-fresh-install/scripts/, so go up 3 levels to project root
-const PROJECT_ROOT = join(__dirname, '../../..');
+// Script is in pc2-node/scripts/, so go up 2 levels to project root
+const PROJECT_ROOT = join(__dirname, '../..');
 const GUI_DIR = join(PROJECT_ROOT, 'src/gui');
 const FRONTEND_DIST = join(GUI_DIR, 'dist');
-// Target is pc2-node/test-fresh-install/frontend (relative to script location)
+// Target is pc2-node/frontend (relative to script location)
 const TARGET_DIR = join(__dirname, '..', 'frontend');
 
 async function main() {
@@ -93,6 +93,39 @@ async function main() {
     } else {
       console.warn(`   ⚠️  SDK file not found: ${SDK_SOURCE}`);
       console.warn(`   ⚠️  Terminal app will proxy SDK from api.puter.com`);
+    }
+
+    // Copy apps from src/backend/apps/ to frontend/apps/
+    const APPS_SOURCE = join(PROJECT_ROOT, 'src/backend/apps');
+    const APPS_TARGET = join(TARGET_DIR, 'apps');
+    
+    if (existsSync(APPS_SOURCE)) {
+      console.log('\n📦 Copying apps directory...');
+      if (!existsSync(APPS_TARGET)) {
+        mkdirSync(APPS_TARGET, { recursive: true });
+      }
+      cpSync(APPS_SOURCE, APPS_TARGET, { recursive: true });
+      console.log(`   ✅ Apps copied: ${APPS_TARGET}`);
+    } else {
+      console.warn(`   ⚠️  Apps directory not found: ${APPS_SOURCE}`);
+    }
+
+    // Copy WASM apps from pc2-node/wasm-apps/ to frontend/apps/ if they exist
+    const WASM_APPS_SOURCE = join(__dirname, '..', 'wasm-apps');
+    if (existsSync(WASM_APPS_SOURCE)) {
+      console.log('\n📦 Copying WASM apps...');
+      const wasmApps = readdirSync(WASM_APPS_SOURCE, { withFileTypes: true });
+      for (const app of wasmApps) {
+        if (app.isDirectory()) {
+          const appSource = join(WASM_APPS_SOURCE, app.name);
+          const appTarget = join(APPS_TARGET, app.name);
+          if (!existsSync(appTarget)) {
+            mkdirSync(appTarget, { recursive: true });
+          }
+          cpSync(appSource, appTarget, { recursive: true });
+          console.log(`   ✅ WASM app copied: ${app.name}`);
+        }
+      }
     }
 
     // Restore .gitkeep if it existed

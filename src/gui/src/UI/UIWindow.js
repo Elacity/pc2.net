@@ -569,7 +569,12 @@ async function UIWindow(options) {
 
     if(el_window_filedialog_upload_here){
         el_window_filedialog_upload_here.addEventListener('click', function(){
-            window.init_upload_using_dialog(el_window_body, $(el_window).attr('data-path') + '/');
+            // For OpenFileDialog, use special upload handler that auto-selects and completes the dialog
+            if(options.is_openFileDialog){
+                window.init_upload_for_open_dialog(el_window_body, $(el_window).attr('data-path') + '/', el_window, options);
+            } else {
+                window.init_upload_using_dialog(el_window_body, $(el_window).attr('data-path') + '/');
+            }
         });
     }
 

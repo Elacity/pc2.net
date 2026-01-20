@@ -17,6 +17,19 @@ import * as pdfjsLib from 'pdfjs-dist';
 import fs from 'fs/promises';
 import path from 'path';
 
+// Hardcoded base64 icons - must match apps.ts and info.ts for consistency
+const hardcodedIcons: Record<string, string> = {
+  'editor': 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImVkZ3JhZCIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiM2MzY2RjEiLz48c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiM0RjQ2RTUiLz48L2xpbmVhckdyYWRpZW50PjxjbGlwUGF0aCBpZD0icm91bmRlZCI+PHJlY3Qgd2lkdGg9IjQ4IiBoZWlnaHQ9IjQ4IiByeD0iMTAiLz48L2NsaXBQYXRoPjwvZGVmcz48ZyBjbGlwLXBhdGg9InVybCgjcm91bmRlZCkiPjxyZWN0IHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCIgZmlsbD0idXJsKCNlZGdyYWQpIi8+PHJlY3QgeD0iMTIiIHk9IjgiIHdpZHRoPSIyNCIgaGVpZ2h0PSIzMiIgcng9IjIiIGZpbGw9IiNmZmYiLz48cmVjdCB4PSIxNiIgeT0iMTQiIHdpZHRoPSIxNiIgaGVpZ2h0PSIyIiBmaWxsPSIjYzdkMmZlIi8+PHJlY3QgeD0iMTYiIHk9IjIwIiB3aWR0aD0iMTYiIGhlaWdodD0iMiIgZmlsbD0iI2M3ZDJmZSIvPjxyZWN0IHg9IjE2IiB5PSIyNiIgd2lkdGg9IjEyIiBoZWlnaHQ9IjIiIGZpbGw9IiNjN2QyZmUiLz48cmVjdCB4PSIxNiIgeT0iMzIiIHdpZHRoPSI4IiBoZWlnaHQ9IjIiIGZpbGw9IiNjN2QyZmUiLz48L2c+PC9zdmc+',
+  'viewer': 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9InZpZXdncmFkIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iIzU2ODRmNSIvPjxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzAzNjNhZCIvPjwvbGluZWFyR3JhZGllbnQ+PGNsaXBQYXRoIGlkPSJyb3VuZGVkIj48cmVjdCB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHJ4PSIxMCIvPjwvY2xpcFBhdGg+PC9kZWZzPjxnIGNsaXAtcGF0aD0idXJsKCNyb3VuZGVkKSI+PHJlY3Qgd2lkdGg9IjQ4IiBoZWlnaHQ9IjQ4IiBmaWxsPSJ1cmwoI3ZpZXdncmFkKSIvPjxjaXJjbGUgY3g9IjE2IiBjeT0iMTQiIHI9IjUiIGZpbGw9IiNmZmQ3NjQiLz48cGF0aCBkPSJNNiAzOGwxMC0xMiA4IDYgMTAtMTQgMTAgMTR2MTJINnoiIGZpbGw9IiNjYmVhZmIiLz48L2c+PC9zdmc+',
+  'player': 'data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iaXNvLTg4NTktMSI/Pg0KPCEtLSBHZW5lcmF0b3I6IEFkb2JlIElsbHVzdHJhdG9yIDE5LjAuMCwgU1ZHIEV4cG9ydCBQbHVnLUluIC4gU1ZHIFZlcnNpb246IDYuMDAgQnVpbGQgMCkgIC0tPg0KPHN2ZyB2ZXJzaW9uPSIxLjEiIGlkPSJMYXllcl8xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB4PSIwcHgiIHk9IjBweCINCgkgdmlld0JveD0iMCAwIDUxMi4wMDEgNTEyLjAwMSIgc3R5bGU9ImVuYWJsZS1iYWNrZ3JvdW5kOm5ldyAwIDAgNTEyLjAwMSA1MTIuMDAxOyIgeG1sOnNwYWNlPSJwcmVzZXJ2ZSI+DQo8cGF0aCBzdHlsZT0iZmlsbDojNTE1MDRFOyIgZD0iTTQ5MC42NjUsNDMuNTU3SDIxLjMzM0M5LjU1Miw0My41NTcsMCw1My4xMDgsMCw2NC44OXYzODIuMjJjMCwxMS43ODIsOS41NTIsMjEuMzM0LDIxLjMzMywyMS4zMzQNCgloNDY5LjMzMmMxMS43ODMsMCwyMS4zMzUtOS41NTIsMjEuMzM1LTIxLjMzNFY2NC44OUM1MTIsNTMuMTA4LDUwMi40NDgsNDMuNTU3LDQ5MC42NjUsNDMuNTU3eiIvPg0KPC9zdmc+',
+  'pdf': 'data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iaXNvLTg4NTktMSI/Pg0KPHN2ZyB2ZXJzaW9uPSIxLjEiIGlkPSJDYXBhXzEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiIHg9IjBweCIgeT0iMHB4Ig0KCSB2aWV3Qm94PSIwIDAgNTYgNTYiIHN0eWxlPSJlbmFibGUtYmFja2dyb3VuZDpuZXcgMCAwIDU2IDU2OyIgeG1sOnNwYWNlPSJwcmVzZXJ2ZSI+DQo8cGF0aCBzdHlsZT0iZmlsbDojQ0M0QjRDOyIgZD0iTTQ4LjAzNyw1Nkg3Ljk2M0M3LjE1NSw1Niw2LjUsNTUuMzQ1LDYuNSw1NC41MzdWMzloNDN2MTUuNTM3QzQ5LjUsNTUuMzQ1LDQ4Ljg0NSw1Niw0OC4wMzcsNTZ6Ii8+DQo8L3N2Zz4=',
+  'camera': 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImNhbWdyYWQiIHgxPSIwIiB5MT0iMCIgeDI9IjEiIHkyPSIxIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjMzRkMzk5Ii8+PHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjMDU5NjY5Ii8+PC9saW5lYXJHcmFkaWVudD48Y2xpcFBhdGggaWQ9InJvdW5kZWQiPjxyZWN0IHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCIgcng9IjEwIi8+PC9jbGlwUGF0aD48L2RlZnM+PGcgY2xpcC1wYXRoPSJ1cmwoI3JvdW5kZWQpIj48cmVjdCB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIGZpbGw9InVybCgjY2FtZ3JhZCkiLz48cmVjdCB4PSI2IiB5PSIxNCIgd2lkdGg9IjM2IiBoZWlnaHQ9IjI0IiByeD0iNCIgZmlsbD0iIzI1MjUyNSIvPjxyZWN0IHg9IjE2IiB5PSI4IiB3aWR0aD0iMTYiIGhlaWdodD0iNiIgcng9IjIiIGZpbGw9IiMzNzQxNTEiLz48Y2lyY2xlIGN4PSIyNCIgY3k9IjI2IiByPSI4IiBmaWxsPSIjMWUzYTVmIiBzdHJva2U9IiM2NGI1ZjMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjI0IiBjeT0iMjYiIHI9IjQiIGZpbGw9IiMzYjgyZjYiLz48Y2lyY2xlIGN4PSIyMiIgY3k9IjI0IiByPSIxIiBmaWxsPSIjZmZmIiBvcGFjaXR5PSIwLjYiLz48Y2lyY2xlIGN4PSIzOCIgY3k9IjE4IiByPSIyIiBmaWxsPSIjZWY0NDQ0Ii8+PC9nPjwvc3ZnPg==',
+  'app-center': 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImFwcGdyYWQiIHgxPSIwIiB5MT0iMCIgeDI9IjEiIHkyPSIxIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjNjQ3NDhiIi8+PHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjMzM0MTU1Ii8+PC9saW5lYXJHcmFkaWVudD48Y2xpcFBhdGggaWQ9InJvdW5kZWQiPjxyZWN0IHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCIgcng9IjEwIi8+PC9jbGlwUGF0aD48L2RlZnM+PGcgY2xpcC1wYXRoPSJ1cmwoI3JvdW5kZWQpIj48cmVjdCB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIGZpbGw9InVybCgjYXBwZ3JhZCkiLz48cmVjdCB4PSI4IiB5PSI4IiB3aWR0aD0iMTIiIGhlaWdodD0iMTIiIHJ4PSIzIiBmaWxsPSIjZWY0NDQ0Ii8+PHJlY3QgeD0iMjgiIHk9IjgiIHdpZHRoPSIxMiIgaGVpZ2h0PSIxMiIgcng9IjMiIGZpbGw9IiNmOTczMTYiLz48cmVjdCB4PSI4IiB5PSIyOCIgd2lkdGg9IjEyIiBoZWlnaHQ9IjEyIiByeD0iMyIgZmlsbD0iIzNiODJmNiIvPjxyZWN0IHg9IjI4IiB5PSIyOCIgd2lkdGg9IjEyIiBoZWlnaHQ9IjEyIiByeD0iMyIgZmlsbD0iI2E4NTVmNyIvPjxyZWN0IHg9IjE4IiB5PSIxOCIgd2lkdGg9IjEyIiBoZWlnaHQ9IjEyIiByeD0iMyIgZmlsbD0iIzIyYzU1ZSIvPjwvZz48L3N2Zz4=',
+  'recorder': 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9InJlY2dyYWQiIHgxPSIwIiB5MT0iMCIgeDI9IjEiIHkyPSIxIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjZjk3MzE2Ii8+PHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjZWE1ODBjIi8+PC9saW5lYXJHcmFkaWVudD48Y2xpcFBhdGggaWQ9InJvdW5kZWQiPjxyZWN0IHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCIgcng9IjEwIi8+PC9jbGlwUGF0aD48L2RlZnM+PGcgY2xpcC1wYXRoPSJ1cmwoI3JvdW5kZWQpIj48cmVjdCB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIGZpbGw9InVybCgjcmVjZ3JhZCkiLz48cmVjdCB4PSIxOSIgeT0iOCIgd2lkdGg9IjEwIiBoZWlnaHQ9IjE2IiByeD0iNSIgZmlsbD0iI2ZmZiIvPjxwYXRoIGQ9Ik0xNSAyMHYzYzAgNC45NyA0LjAzIDkgOSA5czktNC4wMyA5LTl2LTMiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIyLjUiIGZpbGw9Im5vbmUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjxsaW5lIHgxPSIyNCIgeTE9IjMyIiB4Mj0iMjQiIHkyPSIzOCIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PGxpbmUgeDE9IjE4IiB5MT0iMzgiIHgyPSIzMCIgeTI9IjM4IiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iMi41IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48L2c+PC9zdmc+',
+  'solitaire-frvr': 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9InNvbGdyYWQiIHgxPSIwIiB5MT0iMCIgeDI9IjEiIHkyPSIxIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjMDY1ZjQ2Ii8+PHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjMDQ3ODU3Ii8+PC9saW5lYXJHcmFkaWVudD48Y2xpcFBhdGggaWQ9InJvdW5kZWQiPjxyZWN0IHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCIgcng9IjEwIi8+PC9jbGlwUGF0aD48L2RlZnM+PGcgY2xpcC1wYXRoPSJ1cmwoI3JvdW5kZWQpIj48cmVjdCB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIGZpbGw9InVybCgjc29sZ3JhZCkiLz48cmVjdCB4PSIxMSIgeT0iMTEiIHdpZHRoPSIxOCIgaGVpZ2h0PSIyNiIgcng9IjIiIGZpbGw9IiMxZjI5MzciIHRyYW5zZm9ybT0icm90YXRlKC01IDIwIDI0KSIvPjxyZWN0IHg9IjE1IiB5PSI5IiB3aWR0aD0iMTgiIGhlaWdodD0iMjYiIHJ4PSIyIiBmaWxsPSIjMzc0MTUxIi8+PHJlY3QgeD0iMTkiIHk9IjciIHdpZHRoPSIxOCIgaGVpZ2h0PSIyNiIgcng9IjIiIGZpbGw9IiNmZmYiIHN0cm9rZT0iI2U1ZTdlYiIgc3Ryb2tlLXdpZHRoPSIxIi8+PHBhdGggZD0iTTI4IDEzYy0xLjUgMC0yLjUgMS0zIDItLjUtMS0xLjUtMi0zLTItMiAwLTMgMS41LTMgMy41IDAgMyAzIDUuNSA2IDggMy0yLjUgNi01IDYtOCAwLTItMS0zLjUtMy0zLjV6IiBmaWxsPSIjZWY0NDQ0Ii8+PC9nPjwvc3ZnPg==',
+  'terminal': 'data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPHN2ZyBzdHlsZT0iZmlsdGVyOiBkcm9wLXNoYWRvdyggMHB4IDFweCAxcHggcmdiYSgwLCAwLCAwLCAuNSkpOyIgaGVpZ2h0PSI0OCIgd2lkdGg9IjQ4IiB2aWV3Qm94PSIwIDAgNDggNDgiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CiAgPHRpdGxlPndpbmRvdyBjb2RlPC90aXRsZT4KICA8ZyBjbGFzcz0ibmMtaWNvbi13cmFwcGVyIiBzdHlsZT0iIiB0cmFuc2Zvcm09Im1hdHJpeCgwLjk5NzcyNiwgMCwgMCwgMS4xMDI3NDgsIC0wLjAwMjc5MSwgLTIuODA5NzIxKSI+CiAgICA8cGF0aCBkPSJNIDQ1LjA5OCA0NS4zNjIgTCAzLjAwNCA0NS4zNjIgQyAxLjg5NyA0NS4zNjIgMSA0NC40NTkgMSA0My4zNDUgTCAxIDUuMDE3IEMgMSAzLjkwMyAxLjg5NyAzIDMuMDA0IDMgTCA0NS4wOTggMyBDIDQ2LjIwNiAzIDQ3LjEwMyAzLjkwMyA0Ny4xMDMgNS4wMTcgTCA0Ny4xMDMgNDMuMzQ1IEMgNDcuMTAzIDQ0LjQ1OSA0Ni4yMDYgNDUuMzYyIDQ1LjA5OCA0NS4zNjIgWiIgc3R5bGU9ImZpbGwtcnVsZTogbm9uemVybzsgcGFpbnQtb3JkZXI6IGZpbGw7IiBmaWxsPSIjZTNlNWVjIi8+CiAgICA8cmVjdCB4PSIzLjAwNCIgeT0iMTAuMDYiIGZpbGw9IiMyZTM3NDQiIHdpZHRoPSI0Mi4wOTQiIGhlaWdodD0iMzMuMjg0IiBzdHlsZT0iIi8+CiAgICA8cGF0aCBmaWxsPSIjRkZGRkZGIiBkPSJNIDEwLjAyIDMxLjI0MSBDIDkuNzY0IDMxLjI0MSA5LjUwNyAzMS4xNDIgOS4zMTIgMzAuOTQ2IEMgOC45MiAzMC41NTEgOC45MiAyOS45MTQgOS4zMTIgMjkuNTIgTCAxMi42MTIgMjYuMTk4IEwgOS4zMTIgMjIuODc3IEMgOC45MiAyMi40ODIgOC45MiAyMS44NDUgOS4zMTIgMjEuNDUxIEMgOS43MDMgMjEuMDU2IDEwLjMzNyAyMS4wNTYgMTAuNzI5IDIxLjQ1MSBMIDE0LjczOCAyNS40ODUgQyAxNS4xMyAyNS44NzkgMTUuMTMgMjYuNTE3IDE0LjczOCAyNi45MTEgTCAxMC43MjkgMzAuOTQ2IEMgMTAuNTMzIDMxLjE0MiAxMC4yNzcgMzEuMjQxIDEwLjAyIDMxLjI0MSBaIiBzdHlsZT0iIi8+CiAgICA8cGF0aCBmaWxsPSIjRkZGRkZGIiBkPSJNIDI4LjA2IDMxLjI0MSBMIDIwLjA0MyAzMS4yNDEgQyAxOS40ODkgMzEuMjQxIDE5LjA0IDMwLjc4OSAxOS4wNCAzMC4yMzMgQyAxOS4wNCAyOS42NzYgMTkuNDg5IDI5LjIyNCAyMC4wNDMgMjkuMjI0IEwgMjguMDYgMjkuMjI0IEMgMjguNjE0IDI5LjIyNCAyOS4wNjMgMjkuNjc2IDI5LjA2MyAzMC4yMzMgQyAyOS4wNjMgMzAuNzg5IDI4LjYxNCAzMS4yNDEgMjguMDYgMzEuMjQxIFoiIHN0eWxlPSIiLz4KICA8L2c+Cjwvc3ZnPg==',
+};
+
 /**
  * Sign files for app access
  * POST /sign
@@ -193,9 +206,32 @@ export function handleKV(req: AuthenticatedRequest, res: Response): void {
 /**
  * Record app open
  * POST /rao
+ * Stores recently launched apps in database for persistence
  */
-export function handleRAO(req: Request, res: Response): void {
-  // Just acknowledge - we don't need to track app opens
+export function handleRAO(req: AuthenticatedRequest, res: Response): void {
+  const db = (req.app.locals.db as any);
+  const body = req.body as { app_uid?: string; original_client_socket_id?: string };
+  
+  // Store recent app in database if possible
+  if (db && req.user?.wallet_address && body.app_uid) {
+    try {
+      // Parse app name from uid (e.g., "app-camera" -> "camera", "app-file-processor" -> "file-processor")
+      let appName = body.app_uid;
+      if (appName.startsWith('app-')) {
+        appName = appName.substring(4);
+      }
+      
+      // Skip explorer as it's not a real app
+      if (appName && appName !== 'explorer') {
+        db.recordRecentApp(req.user.wallet_address, appName);
+        logger.info('[RAO] Recorded recent app', { wallet: req.user.wallet_address.substring(0, 10), app: appName });
+      }
+    } catch (error: any) {
+      // Don't fail the request if recording fails
+      logger.warn('[RAO] Failed to record recent app:', error.message);
+    }
+  }
+  
   res.json({ code: 'ok', message: 'ok' });
 }
 
@@ -270,12 +306,12 @@ export function handleDriversCall(req: AuthenticatedRequest, res: Response): voi
       logger.info(`[Drivers] Found app name in query params: ${appNameFromQuery}, treating as puter-apps request`);
       const baseUrl = req.protocol + '://' + req.get('host');
       const appMap: Record<string, any> = {
-        'editor': { name: 'editor', title: 'Text Editor', uuid: 'app-editor', uid: 'app-editor', icon: `${baseUrl}/apps/editor/img/icon.svg`, index_url: `${baseUrl}/apps/editor/index.html` },
-        'viewer': { name: 'viewer', title: 'Image Viewer', uuid: 'app-viewer', uid: 'app-viewer', icon: undefined, index_url: `${baseUrl}/apps/viewer/index.html` },
-        'player': { name: 'player', title: 'Media Player', uuid: 'app-player', uid: 'app-player', icon: undefined, index_url: `${baseUrl}/apps/player/index.html` },
-        'camera': { name: 'camera', title: 'Camera', uuid: 'app-camera', uid: 'app-camera', icon: undefined, index_url: `${baseUrl}/apps/camera/index.html` },
-        'app-center': { name: 'app-center', title: 'App Center', uuid: 'app-app-center', uid: 'app-app-center', icon: undefined, index_url: `${baseUrl}/apps/app-center/index.html` },
-        'pdf': { name: 'pdf', title: 'PDF', uuid: 'app-pdf', uid: 'app-pdf', icon: undefined, index_url: `${baseUrl}/apps/pdf/index.html` },
+        'editor': { name: 'editor', title: 'Text Editor', uuid: 'app-editor', uid: 'app-editor', icon: hardcodedIcons['editor'], index_url: `${baseUrl}/apps/editor/index.html` },
+        'viewer': { name: 'viewer', title: 'Image Viewer', uuid: 'app-viewer', uid: 'app-viewer', icon: hardcodedIcons['viewer'], index_url: `${baseUrl}/apps/viewer/index.html` },
+        'player': { name: 'player', title: 'Media Player', uuid: 'app-player', uid: 'app-player', icon: hardcodedIcons['player'], index_url: `${baseUrl}/apps/player/index.html` },
+        'camera': { name: 'camera', title: 'Camera', uuid: 'app-camera', uid: 'app-camera', icon: hardcodedIcons['camera'], index_url: `${baseUrl}/apps/camera/index.html` },
+        'app-center': { name: 'app-center', title: 'App Center', uuid: 'app-app-center', uid: 'app-app-center', icon: hardcodedIcons['app-center'], index_url: `${baseUrl}/apps/app-center/index.html` },
+        'pdf': { name: 'pdf', title: 'PDF', uuid: 'app-pdf', uid: 'app-pdf', icon: hardcodedIcons['pdf'], index_url: `${baseUrl}/apps/pdf/index.html` },
         'terminal': { name: 'terminal', title: 'Terminal', uuid: 'app-terminal', uid: 'app-terminal', icon: undefined, index_url: `${baseUrl}/apps/terminal/index.html` },
         'phoenix': { name: 'phoenix', title: 'Phoenix Shell', uuid: 'app-phoenix', uid: 'app-phoenix', icon: undefined, index_url: `${baseUrl}/apps/phoenix/index.html` },
         'recorder': { name: 'recorder', title: 'Recorder', uuid: 'app-recorder', uid: 'app-recorder', icon: undefined, index_url: `${baseUrl}/apps/recorder/index.html` },
@@ -393,7 +429,7 @@ export function handleDriversCall(req: AuthenticatedRequest, res: Response): voi
             title: 'Image Viewer',
             uuid: 'app-viewer',
             uid: 'app-viewer',
-            icon: undefined,
+            icon: hardcodedIcons['viewer'],
             index_url: `${baseUrl}/apps/viewer/index.html`
           },
           'player': {
@@ -401,7 +437,7 @@ export function handleDriversCall(req: AuthenticatedRequest, res: Response): voi
             title: 'Media Player',
             uuid: 'app-player',
             uid: 'app-player',
-            icon: undefined,
+            icon: hardcodedIcons['player'],
             index_url: `${baseUrl}/apps/player/index.html`
           },
           'camera': {
@@ -409,7 +445,7 @@ export function handleDriversCall(req: AuthenticatedRequest, res: Response): voi
             title: 'Camera',
             uuid: 'app-camera',
             uid: 'app-camera',
-            icon: undefined,
+            icon: hardcodedIcons['camera'],
             index_url: `${baseUrl}/apps/camera/index.html`
           },
           'app-center': {
@@ -417,7 +453,7 @@ export function handleDriversCall(req: AuthenticatedRequest, res: Response): voi
             title: 'App Center',
             uuid: 'app-app-center',
             uid: 'app-app-center',
-            icon: undefined,
+            icon: hardcodedIcons['app-center'],
             index_url: `${baseUrl}/apps/app-center/index.html`
           },
           'pdf': {
@@ -425,7 +461,7 @@ export function handleDriversCall(req: AuthenticatedRequest, res: Response): voi
             title: 'PDF',
             uuid: 'app-pdf',
             uid: 'app-pdf',
-            icon: undefined,
+            icon: hardcodedIcons['pdf'],
             index_url: `${baseUrl}/apps/pdf/index.html`
           },
           'terminal': {
@@ -433,7 +469,7 @@ export function handleDriversCall(req: AuthenticatedRequest, res: Response): voi
             title: 'Terminal',
             uuid: 'app-terminal',
             uid: 'app-terminal',
-            icon: undefined,
+            icon: hardcodedIcons['terminal'],
             index_url: `${baseUrl}/apps/terminal/index.html`
           },
           'recorder': {
@@ -441,7 +477,7 @@ export function handleDriversCall(req: AuthenticatedRequest, res: Response): voi
             title: 'Recorder',
             uuid: 'app-recorder',
             uid: 'app-recorder',
-            icon: undefined,
+            icon: hardcodedIcons['recorder'],
             index_url: `${baseUrl}/apps/recorder/index.html`
           },
           'solitaire-frvr': {
@@ -449,7 +485,7 @@ export function handleDriversCall(req: AuthenticatedRequest, res: Response): voi
             title: 'Solitaire FRVR',
             uuid: 'app-solitaire-frvr',
             uid: 'app-solitaire-frvr',
-            icon: undefined,
+            icon: hardcodedIcons['solitaire-frvr'],
             index_url: `${baseUrl}/apps/solitaire-frvr/index.html`
           }
         };
@@ -1006,16 +1042,16 @@ export function handleDriversCall(req: AuthenticatedRequest, res: Response): voi
       
       if (method === 'read' || !method) { // Default to 'read' if method not specified
         const appMap: Record<string, any> = {
-          'editor': { name: 'editor', title: 'Text Editor', uuid: 'app-editor', uid: 'app-editor', icon: `${baseUrl}/apps/editor/img/icon.svg`, index_url: `${baseUrl}/apps/editor/index.html` },
-          'viewer': { name: 'viewer', title: 'Image Viewer', uuid: 'app-viewer', uid: 'app-viewer', icon: undefined, index_url: `${baseUrl}/apps/viewer/index.html` },
-          'player': { name: 'player', title: 'Media Player', uuid: 'app-player', uid: 'app-player', icon: undefined, index_url: `${baseUrl}/apps/player/index.html` },
-          'camera': { name: 'camera', title: 'Camera', uuid: 'app-camera', uid: 'app-camera', icon: undefined, index_url: `${baseUrl}/apps/camera/index.html` },
-          'app-center': { name: 'app-center', title: 'App Center', uuid: 'app-app-center', uid: 'app-app-center', icon: undefined, index_url: `${baseUrl}/apps/app-center/index.html` },
-          'pdf': { name: 'pdf', title: 'PDF', uuid: 'app-pdf', uid: 'app-pdf', icon: undefined, index_url: `${baseUrl}/apps/pdf/index.html` },
-          'terminal': { name: 'terminal', title: 'Terminal', uuid: 'app-terminal', uid: 'app-terminal', icon: undefined, index_url: `${baseUrl}/apps/terminal/index.html` },
-          'phoenix': { name: 'phoenix', title: 'Phoenix Shell', uuid: 'app-phoenix', uid: 'app-phoenix', icon: undefined, index_url: `${baseUrl}/apps/phoenix/index.html` },
-          'recorder': { name: 'recorder', title: 'Recorder', uuid: 'app-recorder', uid: 'app-recorder', icon: undefined, index_url: `${baseUrl}/apps/recorder/index.html` },
-          'solitaire-frvr': { name: 'solitaire-frvr', title: 'Solitaire FRVR', uuid: 'app-solitaire-frvr', uid: 'app-solitaire-frvr', icon: undefined, index_url: `${baseUrl}/apps/solitaire-frvr/index.html` }
+          'editor': { name: 'editor', title: 'Text Editor', uuid: 'app-editor', uid: 'app-editor', icon: hardcodedIcons['editor'], index_url: `${baseUrl}/apps/editor/index.html` },
+          'viewer': { name: 'viewer', title: 'Image Viewer', uuid: 'app-viewer', uid: 'app-viewer', icon: hardcodedIcons['viewer'], index_url: `${baseUrl}/apps/viewer/index.html` },
+          'player': { name: 'player', title: 'Media Player', uuid: 'app-player', uid: 'app-player', icon: hardcodedIcons['player'], index_url: `${baseUrl}/apps/player/index.html` },
+          'camera': { name: 'camera', title: 'Camera', uuid: 'app-camera', uid: 'app-camera', icon: hardcodedIcons['camera'], index_url: `${baseUrl}/apps/camera/index.html` },
+          'app-center': { name: 'app-center', title: 'App Center', uuid: 'app-app-center', uid: 'app-app-center', icon: hardcodedIcons['app-center'], index_url: `${baseUrl}/apps/app-center/index.html` },
+          'pdf': { name: 'pdf', title: 'PDF', uuid: 'app-pdf', uid: 'app-pdf', icon: hardcodedIcons['pdf'], index_url: `${baseUrl}/apps/pdf/index.html` },
+          'terminal': { name: 'terminal', title: 'Terminal', uuid: 'app-terminal', uid: 'app-terminal', icon: hardcodedIcons['terminal'], index_url: `${baseUrl}/apps/terminal/index.html` },
+          'phoenix': { name: 'phoenix', title: 'Phoenix Shell', uuid: 'app-phoenix', uid: 'app-phoenix', icon: hardcodedIcons['terminal'], index_url: `${baseUrl}/apps/phoenix/index.html` },
+          'recorder': { name: 'recorder', title: 'Recorder', uuid: 'app-recorder', uid: 'app-recorder', icon: hardcodedIcons['recorder'], index_url: `${baseUrl}/apps/recorder/index.html` },
+          'solitaire-frvr': { name: 'solitaire-frvr', title: 'Solitaire FRVR', uuid: 'app-solitaire-frvr', uid: 'app-solitaire-frvr', icon: hardcodedIcons['solitaire-frvr'], index_url: `${baseUrl}/apps/solitaire-frvr/index.html` }
         };
         
         const appInfo = appName ? appMap[appName] : null;
@@ -1296,11 +1332,12 @@ export async function handleOpenItem(req: AuthenticatedRequest, res: Response): 
     uuid: appUid, // Both uid and uuid for compatibility
     name: appName,
     title: appName.charAt(0).toUpperCase() + appName.slice(1),
+    icon: hardcodedIcons[appName] || undefined,
     index_url: appIndexUrl,
     approved_for_opening_items: true,
   };
   
-  logger.info('[OpenItem] Returning app info', { appName, indexUrl: appIndexUrl });
+  logger.info('[OpenItem] Returning app info', { appName, indexUrl: appIndexUrl, hasIcon: !!app.icon });
   
   res.json({
     signature: signatureObj,
@@ -1429,6 +1466,7 @@ export async function handleSuggestApps(req: AuthenticatedRequest, res: Response
     uuid: appUid,
     name: appName,
     title: appName.charAt(0).toUpperCase() + appName.slice(1),
+    icon: hardcodedIcons[appName] || undefined,
     index_url: appIndexUrl,
   };
   

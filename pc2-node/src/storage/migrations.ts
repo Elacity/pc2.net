@@ -29,7 +29,7 @@ function findSchemaFile(): string {
   }
   throw new Error(`Schema file not found. Tried: ${SCHEMA_FILE} and ${sourceSchema}`);
 }
-const CURRENT_VERSION = 7;
+const CURRENT_VERSION = 8;
 
 interface Migration {
   version: number;
@@ -316,10 +316,35 @@ export function runMigrations(db: Database.Database): void {
         throw error;
       }
     }
-    
-    if (currentVersion < CURRENT_VERSION) {
-      recordMigration(db, CURRENT_VERSION);
+
+    // Migration 8: Add recent_apps table for tracking recently launched apps
+    if (currentVersion < 8) {
+      try {
+        console.log('📦 Running Migration 8: Recent apps table...');
+        
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS recent_apps (
+            wallet_address TEXT NOT NULL,
+            app_name TEXT NOT NULL,
+            launched_at INTEGER NOT NULL,
+            PRIMARY KEY (wallet_address, app_name),
+            FOREIGN KEY (wallet_address) REFERENCES users(wallet_address) ON DELETE CASCADE
+          )
+        `);
+        
+        db.exec(`
+          CREATE INDEX IF NOT EXISTS idx_recent_apps_wallet 
+          ON recent_apps(wallet_address)
+        `);
+        
+        console.log('✅ Migration 8 complete: Recent apps table created');
+        recordMigration(db, 8);
+      } catch (error: any) {
+        console.error(`❌ Migration 8 error: ${error.message}`);
+        throw error;
+      }
     }
+    
     console.log('✅ Migrations completed');
   } else if (currentVersion === CURRENT_VERSION) {
     // Even if migration version is current, check if FTS5 table exists

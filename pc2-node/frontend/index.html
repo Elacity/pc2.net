@@ -21,10 +21,15 @@
                             .replace(/https?:\/\/api\.puter\.com/g, localOrigin)
                             .replace(/wss?:\/\/puter\.com/g, localOrigin)
                             .replace(/https?:\/\/puter\.com/g, localOrigin);
+                        console.log('[PC2]: 🔌 Intercepting WebSocket (EARLY):', url, '->', localUrl);
                         url = localUrl;
                     }
                 }
-                return new OriginalWebSocket(url, protocols);
+                const ws = new OriginalWebSocket(url, protocols);
+                if (url && typeof url === 'string' && url.includes('socket.io')) {
+                    console.log('[PC2]: ✅ WebSocket created for:', url);
+                }
+                return ws;
             };
             Object.setPrototypeOf(window.WebSocket, OriginalWebSocket);
             Object.defineProperty(window.WebSocket, 'prototype', {
@@ -35,16 +40,19 @@
             Object.defineProperty(window.WebSocket, 'OPEN', { value: OriginalWebSocket.OPEN });
             Object.defineProperty(window.WebSocket, 'CLOSING', { value: OriginalWebSocket.CLOSING });
             Object.defineProperty(window.WebSocket, 'CLOSED', { value: OriginalWebSocket.CLOSED });
+            console.log('[PC2]: ✅ WebSocket interceptor installed (EARLY)');
         })();
         
         // Auto-detect API origin from current page URL
         window.api_origin = window.location.origin;
+        console.log('[PC2]: Auto-detected API origin:', window.api_origin);
         window.puter_gui_enabled = true;
         
         // Load stored auth token from localStorage
         const storedToken = localStorage.getItem('auth_token');
         if (storedToken) {
             window.auth_token = storedToken;
+            console.log('[PC2]: ✅ Loaded auth token from localStorage, length:', storedToken.length, 'prefix:', storedToken.substring(0, 8) + '...');
         }
         
         // Extract auth_token from URL if present
@@ -53,6 +61,7 @@
         if (urlToken) {
             window.auth_token = urlToken;
             localStorage.setItem('auth_token', urlToken);
+            console.log('[PC2]: ✅ Extracted auth token from URL, length:', urlToken.length, 'prefix:', urlToken.substring(0, 8) + '...');
             const newUrl = window.location.pathname + (window.location.hash || '');
             window.history.replaceState({}, '', newUrl);
         }
@@ -71,6 +80,8 @@
                     let localUrl = cleanUrl
                         .replace(/https?:\/\/api\.puter\.com/g, localOrigin)
                         .replace(/https?:\/\/puter\.com/g, localOrigin);
+                    console.log('[PC2]: Intercepting fetch:', url, '->', localUrl);
+                    
                     if (token && (!options.headers || !options.headers['Authorization'])) {
                         options.headers = options.headers || {};
                         if (typeof options.headers === 'object' && !Array.isArray(options.headers)) {
@@ -100,6 +111,7 @@
                     let localUrl = cleanUrl
                         .replace(/https?:\/\/api\.puter\.com/g, localOrigin)
                         .replace(/https?:\/\/puter\.com/g, localOrigin);
+                    console.log('[PC2]: Intercepting XHR:', url, '->', localUrl);
                     url = localUrl;
                     this._interceptedUrl = localUrl;
                     this._url = localUrl;
@@ -132,8 +144,9 @@
                 if (token) {
                     try {
                         originalXHRSetRequestHeader.call(this, 'Authorization', 'Bearer ' + token);
+                        console.log('[PC2]: ✅ Injected auth token into XHR request:', url || 'local API', 'token:', token.substring(0, 8) + '...');
                     } catch (e) {
-                        // Silently fail
+                        console.error('[PC2]: ❌ Failed to inject token:', e);
                     }
                 }
             }
@@ -149,6 +162,7 @@
                                 if (token.length === 64 && /^[0-9a-f]+$/i.test(token)) {
                                     window.auth_token = token;
                                     localStorage.setItem('auth_token', token);
+                                    console.log('[PC2]: ✅ Captured real session token from response, length:', token.length, 'prefix:', token.substring(0, 8) + '...');
                                 }
                             }
                         }

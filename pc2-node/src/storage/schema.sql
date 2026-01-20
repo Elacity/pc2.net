@@ -42,8 +42,18 @@ CREATE TABLE IF NOT EXISTS settings (
   updated_at INTEGER NOT NULL
 );
 
+-- Recent apps table: Track recently launched apps per user
+CREATE TABLE IF NOT EXISTS recent_apps (
+  wallet_address TEXT NOT NULL,
+  app_name TEXT NOT NULL,
+  launched_at INTEGER NOT NULL,
+  PRIMARY KEY (wallet_address, app_name),
+  FOREIGN KEY (wallet_address) REFERENCES users(wallet_address) ON DELETE CASCADE
+);
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_sessions_wallet ON sessions(wallet_address);
 CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_files_wallet ON files(wallet_address);
 CREATE INDEX IF NOT EXISTS idx_files_path ON files(path);
+CREATE INDEX IF NOT EXISTS idx_recent_apps_wallet ON recent_apps(wallet_address);

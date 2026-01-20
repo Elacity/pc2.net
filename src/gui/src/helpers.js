@@ -1969,6 +1969,166 @@ window.init_upload_using_dialog = function(el_target_container, target_path = nu
     })
 }
 
+/**
+ * Special upload handler for OpenFileDialog context.
+ * After upload completes, automatically returns the uploaded file(s) to the requesting app
+ * and closes the dialog, avoiding the "double dialog" issue.
+ */
+window.init_upload_for_open_dialog = function(el_target_container, target_path, el_window, options){
+    $("#upload-file-dialog").unbind('onchange');
+    $("#upload-file-dialog").unbind('change');
+    $("#upload-file-dialog").unbind('onChange');
+
+    target_path = target_path === null ? $(el_target_container).attr('data-path') : path.resolve(target_path);
+    $('#upload-file-dialog').trigger('click');
+    $("#upload-file-dialog").on('change', async function(e){        
+        if($("#upload-file-dialog").val() !== ''){            
+            const files = $('#upload-file-dialog')[0].files;
+            if(files.length > 0){
+                try{
+                    // Upload with a custom success handler that completes the OpenFileDialog
+                    await window.upload_items_for_open_dialog(files, target_path, el_window, options);
+                }
+                catch(err){
+                    UIAlert(err.message ?? err)
+                }
+                $('#upload-file-dialog').val('');
+            }
+        }
+        else{
+            return
+        }
+    })
+}
+
+/**
+ * Upload items and automatically complete the OpenFileDialog with the uploaded files.
+ */
+window.upload_items_for_open_dialog = async function(items, dest_path, el_window, options){
+    let upload_progress_window;
+    let opid;
+
+    if(dest_path == window.trash_path){
+        UIAlert('Uploading to trash is not allowed!');
+        return;
+    }
+
+    try {
+        puter.fs.upload(
+            items, 
+            dest_path,
+            {
+                init: async(operation_id, xhr)=>{
+                    opid = operation_id;
+                    upload_progress_window = await UIWindowProgress({
+                        title: i18n('upload'),
+                        icon: window.icons[`app-icon-uploader.svg`],
+                        operation_id: operation_id,
+                        show_progress: true,
+                        on_cancel: () => {
+                            window.show_save_account_notice_if_needed();
+                            xhr.abort();
+                        },
+                    });
+                    window.active_uploads[opid] = 0;
+                },
+                start: async function(){
+                    upload_progress_window.set_status('Uploading');
+                    upload_progress_window.set_progress(0);
+                },
+                progress: async function(operation_id, op_progress){
+                    upload_progress_window.set_progress(op_progress);
+                    window.active_uploads[opid] = op_progress;
+                    if(document.visibilityState !== "visible"){
+                        update_title_based_on_uploads();
+                    }
+                },
+                success: async function(uploaded_items){
+                    // Close progress window
+                    setTimeout(() => {
+                        upload_progress_window.close();
+                        window.show_save_account_notice_if_needed();
+                    }, Math.abs(window.upload_progress_hide_delay));
+                    delete window.active_uploads[opid];
+
+                    // Prepare uploaded files for the OpenFileDialog response
+                    const uploaded_files = [];
+                    const items_array = Array.isArray(uploaded_items) ? uploaded_items : [uploaded_items];
+                    
+                    // Prepare items to sign
+                    const items_to_sign = items_array
+                        .filter(item => !item.is_dir) // Only files, not directories
+                        .map(item => ({
+                            uid: item.uid,
+                            action: 'write',
+                            path: item.path
+                        }));
+
+                    if(items_to_sign.length === 0){
+                        // No files uploaded (only directories), just refresh and return
+                        return;
+                    }
+
+                    // Sign the uploaded files
+                    let signed_files = await puter.fs.sign(options.initiating_app_uuid, items_to_sign);
+                    signed_files = signed_files.items;
+                    signed_files = Array.isArray(signed_files) ? signed_files : [signed_files];
+
+                    // Apply privacy-aware paths
+                    for(let i = 0; i < signed_files.length; i++){
+                        signed_files[i].path = privacy_aware_path(signed_files[i].path);
+                    }
+
+                    // Send fileOpenPicked message to the requesting app
+                    const ifram_msg_uid = $(el_window).attr('data-iframe_msg_uid');
+                    
+                    if(options.return_to_parent_window){
+                        window.opener.postMessage({
+                            msg: "fileOpenPicked", 
+                            original_msg_id: ifram_msg_uid, 
+                            items: [...signed_files],
+                            ...(signed_files.length === 1 && signed_files[0])
+                        }, '*');
+                        window.close();
+                        window.open('','_self').close();
+                    }
+                    else if(options.parent_uuid){
+                        const target_iframe = $(`.window[data-element_uuid="${options.parent_uuid}"]`).find('.window-app-iframe').get(0);
+                        if(target_iframe){
+                            target_iframe.contentWindow.postMessage({
+                                msg: "fileOpenPicked", 
+                                original_msg_id: ifram_msg_uid, 
+                                items: [...signed_files],
+                                ...(signed_files.length === 1 && signed_files[0])
+                            }, '*');
+                        }
+                        $(target_iframe).get(0)?.focus({preventScroll:true});
+                        const file_opened_event = new CustomEvent('file_opened', {detail: [...signed_files]});
+                        $(`.window[data-element_uuid="${options.parent_uuid}"]`).get(0)?.dispatchEvent(file_opened_event);
+                        $(el_window).close();
+                    }
+                    else {
+                        const file_opened_event = new CustomEvent('file_opened', {detail: [...signed_files]});
+                        $(el_window).get(0)?.dispatchEvent(file_opened_event);
+                        $(el_window).close();
+                    }
+                },
+                error: async function(err){
+                    console.error('[upload_items_for_open_dialog] Upload error:', err);
+                    upload_progress_window.show_error(i18n('error_uploading_files'), err.message || 'Unknown upload error');
+                    delete window.active_uploads[opid];
+                },
+            }
+        );
+    } catch (error) {
+        console.error('[upload_items_for_open_dialog] Exception:', error);
+        if(upload_progress_window){
+            upload_progress_window.show_error(i18n('error_uploading_files'), error.message || 'Unknown error');
+        }
+        throw error;
+    }
+}
+
 window.upload_items = async function(items, dest_path){
     let upload_progress_window;
     let opid;

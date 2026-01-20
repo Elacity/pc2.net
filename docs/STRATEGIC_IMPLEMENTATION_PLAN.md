@@ -43,7 +43,28 @@ npm start
 
 ## 📊 Current State Assessment
 
-### 🎯 Recent Progress (2026-01-19)
+### 🎯 Recent Progress (2026-01-20)
+
+**dApp Centre UI Overhaul - ✅ COMPLETE**
+
+**What Was Done:**
+1. ✅ **Renamed to dApp Centre** - "App Center" → "dApp Centre" across all API files and UI
+2. ✅ **Umbrel-Inspired Design** - Staff Picks with large feature cards, edge-to-edge carousels, hidden scrollbars
+3. ✅ **20+ Mock Apps** - Elastos ecosystem apps (DID, DAO, RPC, Wallets), DeFi (Uniswap, Aave, Glide), Bitcoin (BTCD, BTC Wallet)
+4. ✅ **Category Filtering** - Unique views per category, clicking category hides carousels and shows filtered grid
+5. ✅ **Pricing Display** - Free apps vs paid apps with dollar pricing
+6. ✅ **Professional Icons** - SVG icons replacing emoji, version + badges inline
+
+**Files Modified:**
+- `src/backend/apps/app-center/index.html` - Complete UI rewrite
+- `pc2-node/src/api/apps.ts`, `info.ts`, `other.ts` - Title renamed to "dApp Centre"
+- `pc2-node/src/api/apps.js`, `info.js`, `other.js` - JavaScript versions updated
+
+**Purpose:** Validate dApp Store UX and inspire the vision before building dDRM/blockchain backend.
+
+---
+
+### 🎯 Previous Progress (2026-01-19)
 
 **Puter SDK Initialization Fix - ✅ COMPLETE**
 
@@ -4365,40 +4386,69 @@ User's PC2 Node
 
 ---
 
-### 7.8 App Center UI Mockup (✅ COMPLETE - 2026-01-20)
+### 7.8 dApp Centre UI (✅ COMPLETE - 2026-01-20)
 
-**Purpose:** Validate App Store UX before building dDRM/blockchain backend.
+**Purpose:** Validate dApp Store UX before building dDRM/blockchain backend. Inspired by Umbrel's app store design patterns.
 
 **What Was Built:**
-- Complete App Center UI with Discover/Installed/Updates tabs
-- Category filtering (AI, Media, Blockchain, Tools, Privacy, Games)
-- App detail modal with gallery, requirements, permissions
-- Install/uninstall flow with progress indicators
-- 10 mock apps representing future dDRM store
 
-**Mock Apps Created:**
-| App | Category | Badge |
-|-----|----------|-------|
-| Elacity Player | Media | dDRM |
-| Knowledge AI | AI | WASM |
-| Bitcoin Node | Blockchain | Open Source |
-| ESC Wallet | Blockchain | dDRM |
-| Secure Sync | Tools | dDRM |
-| Photo Vault | Media | WASM |
-| Code Studio | Tools | Open Source |
-| Chess Master | Games | WASM |
-| Network Guard | Privacy | Open Source |
-| Home Control | Tools | Open Source |
+**UI/UX Features (Umbrel-Inspired):**
+- Renamed from "App Center" to "dApp Centre" to reflect decentralized focus
+- Staff Picks section with large feature cards (Umbrel-style)
+- Edge-to-edge horizontal carousels with hidden scrollbars
+- Category filtering with unique views per category (hides carousels, shows filtered grid)
+- App detail modal with version, changelog, requirements, permissions
+- Install/uninstall flow with progress indicators
+- Pricing display for paid apps (free or $X.XX)
+- SVG icons replacing emoji for professional appearance
+- Version numbers and badges (WASM, dDRM, Open Source) displayed inline
+
+**Mock Apps Created (20+ apps):**
+
+| App | Category | Price | Badge | Purpose |
+|-----|----------|-------|-------|---------|
+| Elastos DID | Blockchain | Free | dDRM | W3C-compliant decentralized identity |
+| Elacity Player | Media | Free | dDRM | Media player with rights management |
+| Elacity Connect | IoT | Free | WASM | P2P connectivity to smart devices |
+| Elacity Media | Media | $4.99 | dDRM | Premium media management |
+| BTCD | Blockchain | Free | dDRM | Bitcoin Dollar - collateralize BTC, mint stablecoin |
+| BTC Wallet | Blockchain | Free | Open Source | Bitcoin wallet management |
+| Elastos Mainchain Wallet | Blockchain | Free | dDRM | ELA wallet with staking |
+| Elastos BPoS Node | Blockchain | Free | Open Source | Run a validator node |
+| Elastos DAO | Blockchain | Free | dDRM | Governance participation |
+| Elastos RPC Node | Blockchain | Free | Open Source | Run an RPC endpoint |
+| ESC Wallet | Blockchain | Free | dDRM | Smart contract wallet |
+| Uniswap | DeFi | Free | WASM | Decentralized exchange |
+| Glide Finance | DeFi | Free | WASM | DEX on Elastos |
+| Aave | DeFi | Free | WASM | Lending protocol |
+| OpenSea | NFT | Free | WASM | NFT marketplace |
+| Chainlink Oracle | Blockchain | $9.99 | Open Source | Oracle node |
+| The Graph Node | Blockchain | Free | Open Source | Indexing protocol |
+| Lido Staking | DeFi | Free | WASM | Liquid staking |
+| Photo Vault | Media | Free | WASM | Encrypted photo storage |
+| Code Studio | Tools | Free | Open Source | Development environment |
 
 **Files Modified:**
-- `src/backend/apps/app-center/index.html` - Complete rewrite with store UI
+- `src/backend/apps/app-center/index.html` - Complete UI with Umbrel-inspired patterns
+- `pc2-node/src/api/apps.ts` - App title renamed to "dApp Centre"
+- `pc2-node/src/api/info.ts` - App metadata updated
+- `pc2-node/src/api/other.ts` - Driver layer app info updated
+- `pc2-node/src/api/apps.js`, `info.js`, `other.js` - JavaScript versions updated
+
+**Design Decisions from Umbrel Audit:**
+1. **Edge-to-edge carousels** - No side padding on horizontal scroll sections
+2. **Large feature cards** - Staff Picks use gradient backgrounds with app icon
+3. **Hidden scrollbars** - Cleaner appearance while maintaining scroll functionality
+4. **Version + badges inline** - Compact display of app metadata
+5. **Category-specific views** - Clicking a category shows only that category's apps
 
 **Future Backend (dDRM Integration):**
-When ready, the App Center will connect to:
-1. Blockchain registry for app listings
+When ready, the dApp Centre will connect to:
+1. Blockchain registry for app listings (Elastos Smart Contract)
 2. IPFS for WASM binary downloads
-3. Token validation for access rights
+3. Token validation for access rights (dDRM)
 4. WASMER runtime for execution
+5. Tor/Tailscale for secure app distribution
 
 ### 7.3 Particle Login Improvements (✅ Complete)
 

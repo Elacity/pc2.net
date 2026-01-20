@@ -4273,6 +4273,7 @@ for (const capsule of capsules) {
 User's PC2 Node
 ├── Tor Hidden Service (.onion) - Fully decentralized fallback
 ├── Gateway Registration (*.pc2.network) - Federated web access
+├── Tailscale VPN (optional) - High-performance secure tunnel
 └── Custom Domain (optional) - User's own domain
 ```
 
@@ -4289,6 +4290,115 @@ User's PC2 Node
 - **7.2.4** Custom Subdomain Support (1 week)
 
 **See:** `docs/PC2_NETWORK_SPECIFICATION.md` for detailed technical specification.
+
+---
+
+### 7.2.1 Tor Integration - Detailed Design (Research from Umbrel)
+
+**Umbrel's Approach (for inspiration, not copying):**
+- Auto-generates unique .onion address per app on install
+- Stores keys in `/umbrel/tor/data/<app-name>/` with `hostname` and `hs_ed25519_secret_key`
+- Uses `app_proxy` to wrap all apps with authentication before exposing via Tor
+- Zero configuration required from user
+
+**PC2 Implementation Plan:**
+
+1. **Embed Tor Binary**
+   - Bundle `tor` in PC2 node distribution (or install via apt/brew on first run)
+   - Store configuration in `data/tor/torrc`
+   - Auto-start Tor service with PC2 node
+
+2. **Hidden Service Generation**
+   - Create hidden service for main PC2 UI on first startup
+   - Store keys in `data/tor/services/main/` per wallet
+   - Display .onion address in Settings > Network
+
+3. **Per-App Hidden Services** (Future, with App Store)
+   - Each installed app gets its own .onion
+   - Apps are protected by wallet-based auth (already implemented)
+   - Store in `data/tor/services/<app-id>/`
+
+4. **Key Management**
+   - Include Tor keys in backup/restore
+   - Allow user to rotate .onion address (delete key, restart)
+   - Never expose private keys in UI
+
+**Files to Create:**
+- `pc2-node/src/services/tor/TorService.ts` - Tor daemon management
+- `pc2-node/src/services/tor/HiddenService.ts` - Hidden service generation
+- `pc2-node/data/tor/` - Runtime data directory
+
+**Why Tor for PC2:**
+- Works behind ANY NAT/firewall (no port forwarding)
+- Fully decentralized (no central server dependency)
+- Privacy-preserving (IP not exposed)
+- Already familiar to crypto/Web3 users
+
+---
+
+### 7.2.5 Tailscale Integration (Optional, Future)
+
+**What Tailscale Offers:**
+- VPN-based secure tunnel using WireGuard
+- Works with native mobile apps (no Tor browser needed)
+- Better performance than Tor (~2-5ms vs ~200-500ms latency)
+- Magic DNS: access node as `pc2-node.tail1234.ts.net`
+
+**Trade-offs:**
+- Requires Tailscale account (centralized component)
+- Not fully decentralized like Tor
+- Free tier limited to 100 devices
+
+**PC2 Integration Options:**
+
+1. **Option A: App Store App** (Recommended)
+   - Offer Tailscale as an installable app in PC2 App Store
+   - User configures their own Tailscale account
+   - PC2 remains decentralized by default
+
+2. **Option B: Built-in Optional**
+   - Embed Tailscale daemon in PC2
+   - Offer as toggle in Settings > Network
+   - Requires Tailscale account setup
+
+**Recommendation:** Start with Tor (fully decentralized), offer Tailscale as optional App Store app for users who want better performance and are okay with the Tailscale account requirement.
+
+---
+
+### 7.8 App Center UI Mockup (✅ COMPLETE - 2026-01-20)
+
+**Purpose:** Validate App Store UX before building dDRM/blockchain backend.
+
+**What Was Built:**
+- Complete App Center UI with Discover/Installed/Updates tabs
+- Category filtering (AI, Media, Blockchain, Tools, Privacy, Games)
+- App detail modal with gallery, requirements, permissions
+- Install/uninstall flow with progress indicators
+- 10 mock apps representing future dDRM store
+
+**Mock Apps Created:**
+| App | Category | Badge |
+|-----|----------|-------|
+| Elacity Player | Media | dDRM |
+| Knowledge AI | AI | WASM |
+| Bitcoin Node | Blockchain | Open Source |
+| ESC Wallet | Blockchain | dDRM |
+| Secure Sync | Tools | dDRM |
+| Photo Vault | Media | WASM |
+| Code Studio | Tools | Open Source |
+| Chess Master | Games | WASM |
+| Network Guard | Privacy | Open Source |
+| Home Control | Tools | Open Source |
+
+**Files Modified:**
+- `src/backend/apps/app-center/index.html` - Complete rewrite with store UI
+
+**Future Backend (dDRM Integration):**
+When ready, the App Center will connect to:
+1. Blockchain registry for app listings
+2. IPFS for WASM binary downloads
+3. Token validation for access rights
+4. WASMER runtime for execution
 
 ### 7.3 Particle Login Improvements (✅ Complete)
 

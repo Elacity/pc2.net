@@ -12,474 +12,1218 @@
         }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: #f5f5f5;
+            background: #f8fafc;
             height: 100vh;
             overflow: hidden;
         }
         .app-center-container {
             display: flex;
+            flex-direction: column;
             height: 100vh;
+            background: #f8fafc;
+        }
+        
+        /* Header with tabs */
+        .header {
+            background: white;
+            border-bottom: 1px solid #e2e8f0;
+            padding: 0 24px;
+            flex-shrink: 0;
+        }
+        .header-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 0;
+        }
+        .header-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: #1e293b;
+        }
+        .search-container {
+            position: relative;
+            width: 300px;
+        }
+        .search-input {
+            width: 100%;
+            padding: 8px 12px 8px 36px;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 14px;
+            background: #f8fafc;
+        }
+        .search-input:focus {
+            outline: none;
+            border-color: #3b82f6;
             background: white;
         }
+        .search-icon {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #94a3b8;
+            font-size: 14px;
+        }
+        .tabs {
+            display: flex;
+            gap: 32px;
+        }
+        .tab {
+            padding: 12px 0;
+            font-size: 14px;
+            font-weight: 500;
+            color: #64748b;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+        .tab:hover {
+            color: #3b82f6;
+        }
+        .tab.active {
+            color: #3b82f6;
+            border-bottom-color: #3b82f6;
+        }
+        .tab .badge {
+            background: #ef4444;
+            color: white;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 10px;
+            margin-left: 6px;
+        }
+        
+        /* Main content area */
+        .content-wrapper {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        
+        /* Sidebar */
         .sidebar {
-            width: 240px;
+            width: 200px;
             background: white;
-            border-right: 1px solid #e0e0e0;
-            padding: 20px;
+            border-right: 1px solid #e2e8f0;
+            padding: 16px;
             overflow-y: auto;
             flex-shrink: 0;
         }
-        .add-app-btn {
-            width: 100%;
-            background: #1976d2;
-            color: white;
-            border: none;
-            padding: 12px 16px;
-            border-radius: 4px;
-            font-size: 14px;
+        .sidebar-title {
+            font-size: 11px;
             font-weight: 600;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 30px;
-            transition: background 0.2s;
-        }
-        .add-app-btn:hover {
-            background: #1565c0;
-        }
-        .add-app-icon {
-            width: 20px;
-            height: 20px;
-            background: rgba(255,255,255,0.2);
-            border-radius: 4px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background-repeat: no-repeat;
-            background-position: center;
-            background-size: 16px 16px;
-            flex-shrink: 0;
-        }
-        .featured-link {
-            color: #1976d2;
-            text-decoration: none;
-            font-weight: 600;
-            font-size: 14px;
-            display: block;
-            margin-bottom: 20px;
-            padding: 8px 0;
-            transition: opacity 0.2s;
-        }
-        .featured-link:hover {
-            opacity: 0.8;
-        }
-        .categories-title {
-            font-size: 12px;
-            font-weight: 600;
-            color: #666;
+            color: #94a3b8;
             text-transform: uppercase;
             letter-spacing: 0.5px;
             margin-bottom: 12px;
-            margin-top: 20px;
-            user-select: none;
         }
         .category-item {
             display: flex;
             align-items: center;
-            gap: 12px;
-            padding: 10px;
-            border-radius: 4px;
+            gap: 10px;
+            padding: 8px 12px;
+            border-radius: 6px;
             cursor: pointer;
-            color: #333;
-            font-size: 14px;
-            margin-bottom: 4px;
-            transition: background 0.2s;
-            user-select: none;
+            font-size: 13px;
+            color: #475569;
+            margin-bottom: 2px;
+            transition: all 0.15s;
         }
         .category-item:hover {
-            background: #e8e8e8;
+            background: #f1f5f9;
         }
         .category-item.active {
-            background: #e0e0e0;
+            background: #eff6ff;
+            color: #3b82f6;
         }
         .category-icon {
-            width: 20px;
-            height: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background-repeat: no-repeat;
-            background-position: center;
-            background-size: contain;
-            flex-shrink: 0;
+            font-size: 16px;
         }
+        
+        /* Main content */
         .main-content {
             flex: 1;
             overflow-y: auto;
-            padding: 30px;
+            padding: 24px;
         }
-        .search-bar {
-            width: 100%;
-            max-width: 600px;
-            padding: 12px 16px;
-            border: 1px solid #e0e0e0;
-            border-radius: 8px;
-            font-size: 14px;
-            margin-bottom: 30px;
+        
+        /* Featured banner */
+        .featured-banner {
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            border-radius: 16px;
+            padding: 32px;
+            margin-bottom: 32px;
             display: flex;
             align-items: center;
-            gap: 10px;
-            background: white;
+            gap: 24px;
+            color: white;
         }
-        .search-bar input {
-            flex: 1;
-            border: none;
-            outline: none;
-            font-size: 14px;
-        }
-        .search-icon {
-            width: 20px;
-            height: 20px;
-            background-repeat: no-repeat;
-            background-position: center;
-            background-size: contain;
+        .featured-icon {
+            width: 100px;
+            height: 100px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 48px;
             flex-shrink: 0;
-            opacity: 0.6;
         }
+        .featured-content h2 {
+            font-size: 24px;
+            margin-bottom: 8px;
+        }
+        .featured-content p {
+            opacity: 0.9;
+            font-size: 14px;
+            margin-bottom: 16px;
+        }
+        .featured-btn {
+            background: white;
+            color: #6366f1;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .featured-btn:hover {
+            background: #f8fafc;
+        }
+        
+        /* Section titles */
+        .section-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1e293b;
+            margin-bottom: 16px;
+        }
+        
+        /* Apps grid */
         .apps-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-            gap: 24px;
+            gap: 16px;
+            margin-bottom: 32px;
         }
+        
+        /* App card */
         .app-card {
             background: white;
-            border: 1px solid #e0e0e0;
+            border: 1px solid #e2e8f0;
             border-radius: 12px;
-            padding: 20px;
+            padding: 16px;
             cursor: pointer;
             transition: all 0.2s;
         }
         .app-card:hover {
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
             transform: translateY(-2px);
         }
-        .app-header {
+        .app-card-header {
             display: flex;
-            gap: 16px;
-            margin-bottom: 16px;
+            gap: 12px;
+            margin-bottom: 12px;
         }
-        .app-icon-large {
-            width: 80px;
-            height: 80px;
+        .app-icon {
+            width: 56px;
+            height: 56px;
             border-radius: 12px;
-            flex-shrink: 0;
-            background: #f5f5f5;
             display: flex;
             align-items: center;
             justify-content: center;
-            overflow: hidden;
+            font-size: 28px;
+            flex-shrink: 0;
         }
-        .app-icon-large img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-        .app-info {
+        .app-icon.gradient-blue { background: linear-gradient(135deg, #3b82f6, #1d4ed8); }
+        .app-icon.gradient-purple { background: linear-gradient(135deg, #8b5cf6, #6d28d9); }
+        .app-icon.gradient-green { background: linear-gradient(135deg, #22c55e, #16a34a); }
+        .app-icon.gradient-orange { background: linear-gradient(135deg, #f97316, #ea580c); }
+        .app-icon.gradient-pink { background: linear-gradient(135deg, #ec4899, #db2777); }
+        .app-icon.gradient-cyan { background: linear-gradient(135deg, #06b6d4, #0891b2); }
+        .app-icon.gradient-yellow { background: linear-gradient(135deg, #eab308, #ca8a04); }
+        .app-icon.gradient-slate { background: linear-gradient(135deg, #64748b, #475569); }
+        .app-card-info {
             flex: 1;
+            min-width: 0;
         }
         .app-name {
-            font-size: 18px;
+            font-size: 15px;
             font-weight: 600;
-            color: #333;
+            color: #1e293b;
+            margin-bottom: 2px;
+        }
+        .app-developer {
+            font-size: 12px;
+            color: #94a3b8;
             margin-bottom: 4px;
         }
-        .app-users {
-            font-size: 12px;
-            color: #999;
-            margin-bottom: 8px;
+        .app-badges {
+            display: flex;
+            gap: 4px;
+            flex-wrap: wrap;
         }
-        .app-category {
-            display: inline-block;
-            background: #f0f0f0;
-            color: #666;
-            padding: 4px 12px;
-            border-radius: 12px;
-            font-size: 12px;
+        .badge {
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 4px;
             font-weight: 500;
         }
+        .badge.wasm { background: #dbeafe; color: #1d4ed8; }
+        .badge.ddrm { background: #fae8ff; color: #a21caf; }
+        .badge.opensource { background: #dcfce7; color: #16a34a; }
         .app-description {
-            color: #666;
-            font-size: 14px;
-            line-height: 1.5;
-            margin-bottom: 16px;
+            font-size: 13px;
+            color: #64748b;
+            line-height: 1.4;
+            margin-bottom: 12px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
         }
-        .app-actions {
+        .app-card-footer {
             display: flex;
-            gap: 8px;
             align-items: center;
+            justify-content: space-between;
         }
-        .open-btn {
-            flex: 1;
-            background: #1976d2;
+        .app-size {
+            font-size: 12px;
+            color: #94a3b8;
+        }
+        .install-btn {
+            background: #3b82f6;
             color: white;
             border: none;
-            padding: 10px 16px;
+            padding: 6px 16px;
             border-radius: 6px;
-            font-size: 14px;
-            font-weight: 600;
+            font-size: 13px;
+            font-weight: 500;
             cursor: pointer;
+            transition: background 0.15s;
         }
-        .open-btn:hover {
-            background: #1565c0;
+        .install-btn:hover {
+            background: #2563eb;
         }
-        .action-icon {
-            width: 36px;
-            height: 36px;
-            border: 1px solid #e0e0e0;
-            border-radius: 6px;
+        .install-btn.installed {
+            background: #e2e8f0;
+            color: #64748b;
+        }
+        .install-btn.installed:hover {
+            background: #cbd5e1;
+        }
+        
+        /* Modal overlay */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
             display: flex;
             align-items: center;
             justify-content: center;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.2s;
+        }
+        .modal-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+        
+        /* App detail modal */
+        .app-detail-modal {
+            background: white;
+            border-radius: 16px;
+            width: 90%;
+            max-width: 700px;
+            max-height: 85vh;
+            overflow-y: auto;
+        }
+        .modal-header {
+            padding: 24px;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            gap: 16px;
+        }
+        .modal-icon {
+            width: 80px;
+            height: 80px;
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            flex-shrink: 0;
+        }
+        .modal-title-section {
+            flex: 1;
+        }
+        .modal-title {
+            font-size: 22px;
+            font-weight: 600;
+            color: #1e293b;
+            margin-bottom: 4px;
+        }
+        .modal-developer {
+            font-size: 14px;
+            color: #64748b;
+            margin-bottom: 8px;
+        }
+        .modal-badges {
+            display: flex;
+            gap: 6px;
+        }
+        .modal-close {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            background: none;
+            border: none;
+            font-size: 24px;
+            color: #94a3b8;
             cursor: pointer;
-            color: #666;
         }
-        .action-icon:hover {
-            background: #f5f5f5;
+        .modal-close:hover {
+            color: #64748b;
         }
+        
+        /* Gallery */
+        .modal-gallery {
+            padding: 24px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        .gallery-scroll {
+            display: flex;
+            gap: 12px;
+            overflow-x: auto;
+            padding-bottom: 8px;
+        }
+        .gallery-img {
+            width: 200px;
+            height: 130px;
+            background: #f1f5f9;
+            border-radius: 8px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #94a3b8;
+            font-size: 12px;
+        }
+        
+        /* Modal body */
+        .modal-body {
+            padding: 24px;
+        }
+        .modal-section {
+            margin-bottom: 24px;
+        }
+        .modal-section-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #1e293b;
+            margin-bottom: 8px;
+        }
+        .modal-description {
+            font-size: 14px;
+            color: #475569;
+            line-height: 1.6;
+        }
+        .requirements-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+        }
+        .requirement-item {
+            background: #f8fafc;
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .requirement-value {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1e293b;
+            margin-bottom: 2px;
+        }
+        .requirement-label {
+            font-size: 11px;
+            color: #94a3b8;
+        }
+        .permissions-list {
+            list-style: none;
+        }
+        .permissions-list li {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 0;
+            font-size: 13px;
+            color: #475569;
+            border-bottom: 1px solid #f1f5f9;
+        }
+        .permissions-list li:last-child {
+            border-bottom: none;
+        }
+        .permission-icon {
+            color: #22c55e;
+        }
+        
+        /* Modal footer */
+        .modal-footer {
+            padding: 16px 24px;
+            border-top: 1px solid #e2e8f0;
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+        .modal-btn {
+            padding: 10px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .modal-btn.secondary {
+            background: white;
+            border: 1px solid #e2e8f0;
+            color: #475569;
+        }
+        .modal-btn.secondary:hover {
+            background: #f8fafc;
+        }
+        .modal-btn.primary {
+            background: #3b82f6;
+            border: none;
+            color: white;
+        }
+        .modal-btn.primary:hover {
+            background: #2563eb;
+        }
+        
+        /* Install progress modal */
+        .install-modal {
+            background: white;
+            border-radius: 16px;
+            width: 400px;
+            padding: 32px;
+            text-align: center;
+        }
+        .install-modal-icon {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 16px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+        }
+        .install-modal-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #1e293b;
+            margin-bottom: 8px;
+        }
+        .install-modal-status {
+            font-size: 14px;
+            color: #64748b;
+            margin-bottom: 24px;
+        }
+        .progress-bar {
+            height: 8px;
+            background: #e2e8f0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 24px;
+        }
+        .progress-fill {
+            height: 100%;
+            background: #3b82f6;
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+        .install-modal .modal-btn {
+            width: 100%;
+        }
+        
+        /* Installed apps list */
+        .installed-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .installed-item {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 16px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .installed-item .app-icon {
+            width: 48px;
+            height: 48px;
+            font-size: 24px;
+        }
+        .installed-info {
+            flex: 1;
+        }
+        .installed-name {
+            font-size: 15px;
+            font-weight: 600;
+            color: #1e293b;
+        }
+        .installed-size {
+            font-size: 12px;
+            color: #94a3b8;
+        }
+        .installed-actions {
+            display: flex;
+            gap: 8px;
+        }
+        .action-btn {
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .action-btn.open {
+            background: #3b82f6;
+            color: white;
+            border: none;
+        }
+        .action-btn.open:hover {
+            background: #2563eb;
+        }
+        .action-btn.uninstall {
+            background: white;
+            color: #ef4444;
+            border: 1px solid #fecaca;
+        }
+        .action-btn.uninstall:hover {
+            background: #fef2f2;
+        }
+        
+        /* Empty state */
         .empty-state {
             text-align: center;
             padding: 60px 20px;
-            color: #999;
+        }
+        .empty-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+        .empty-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #1e293b;
+            margin-bottom: 8px;
+        }
+        .empty-description {
+            font-size: 14px;
+            color: #64748b;
+        }
+        
+        /* Hide sections */
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
         }
     </style>
 </head>
 <body>
     <div class="app-center-container">
-        <div class="sidebar">
-            <button class="add-app-btn">
-                <div class="add-app-icon" id="add-app-icon"></div>
-                Add your app!
-            </button>
-            <a href="#" class="featured-link">Featured</a>
-            <div class="categories-title">Categories</div>
-            <div class="category-item" data-category="games">
-                <div class="category-icon" id="icon-games"></div>
-                <span>Games</span>
+        <!-- Header -->
+        <div class="header">
+            <div class="header-top">
+                <h1 class="header-title">App Center</h1>
+                <div class="search-container">
+                    <span class="search-icon">&#128269;</span>
+                    <input type="text" class="search-input" placeholder="Search apps..." id="searchInput">
+                </div>
             </div>
-            <div class="category-item" data-category="productivity">
-                <div class="category-icon" id="icon-productivity"></div>
-                <span>Productivity</span>
-            </div>
-            <div class="category-item" data-category="photo-video">
-                <div class="category-icon" id="icon-photo-video"></div>
-                <span>Photo & Video</span>
-            </div>
-            <div class="category-item" data-category="developer-tools">
-                <div class="category-icon" id="icon-developer-tools"></div>
-                <span>Developer Tools</span>
-            </div>
-            <div class="category-item" data-category="graphics-design">
-                <div class="category-icon" id="icon-graphics-design"></div>
-                <span>Graphics & Design</span>
-            </div>
-            <div class="category-item" data-category="utilities">
-                <div class="category-icon" id="icon-utilities"></div>
-                <span>Utilities</span>
-            </div>
-            <div class="category-item" data-category="music-audio">
-                <div class="category-icon" id="icon-music-audio"></div>
-                <span>Music & Audio</span>
-            </div>
-            <div class="category-item" data-category="entertainment">
-                <div class="category-icon" id="icon-entertainment"></div>
-                <span>Entertainment</span>
-            </div>
-            <div class="category-item" data-category="education">
-                <div class="category-icon" id="icon-education"></div>
-                <span>Education</span>
-            </div>
-            <div class="category-item" data-category="finance">
-                <div class="category-icon" id="icon-finance"></div>
-                <span>Finance</span>
-            </div>
-            <div class="category-item" data-category="business">
-                <div class="category-icon" id="icon-business"></div>
-                <span>Business</span>
-            </div>
-            <div class="category-item" data-category="lifestyle">
-                <div class="category-icon" id="icon-lifestyle"></div>
-                <span>Lifestyle</span>
+            <div class="tabs">
+                <div class="tab active" data-tab="discover">Discover</div>
+                <div class="tab" data-tab="installed">Installed</div>
+                <div class="tab" data-tab="updates">Updates <span class="badge">2</span></div>
             </div>
         </div>
-        <div class="main-content">
-            <div class="search-bar">
-                <span class="search-icon" id="search-icon"></span>
-                <input type="text" placeholder="Search apps..." id="searchInput">
+        
+        <div class="content-wrapper">
+            <!-- Sidebar -->
+            <div class="sidebar">
+                <div class="sidebar-title">Categories</div>
+                <div class="category-item active" data-category="all">
+                    <span class="category-icon">&#128218;</span>
+                    <span>All Apps</span>
+                </div>
+                <div class="category-item" data-category="ai">
+                    <span class="category-icon">&#129504;</span>
+                    <span>AI</span>
+                </div>
+                <div class="category-item" data-category="media">
+                    <span class="category-icon">&#127910;</span>
+                    <span>Media</span>
+                </div>
+                <div class="category-item" data-category="blockchain">
+                    <span class="category-icon">&#128279;</span>
+                    <span>Blockchain</span>
+                </div>
+                <div class="category-item" data-category="tools">
+                    <span class="category-icon">&#128295;</span>
+                    <span>Tools</span>
+                </div>
+                <div class="category-item" data-category="privacy">
+                    <span class="category-icon">&#128274;</span>
+                    <span>Privacy</span>
+                </div>
+                <div class="category-item" data-category="games">
+                    <span class="category-icon">&#127918;</span>
+                    <span>Games</span>
+                </div>
             </div>
-            <div class="apps-grid" id="appsGrid">
-                <div class="empty-state">Loading apps...</div>
+            
+            <!-- Main content -->
+            <div class="main-content">
+                <!-- Discover tab -->
+                <div class="tab-content active" id="discover-content">
+                    <!-- Featured banner -->
+                    <div class="featured-banner">
+                        <div class="featured-icon">&#127911;</div>
+                        <div class="featured-content">
+                            <h2>Elacity Player</h2>
+                            <p>The official dDRM-protected media player. Stream encrypted content securely on your personal cloud.</p>
+                            <button class="featured-btn" onclick="showAppDetail('elacity-player')">Learn More</button>
+                        </div>
+                    </div>
+                    
+                    <h3 class="section-title">Popular Apps</h3>
+                    <div class="apps-grid" id="appsGrid"></div>
+                </div>
+                
+                <!-- Installed tab -->
+                <div class="tab-content" id="installed-content">
+                    <h3 class="section-title">Installed Apps</h3>
+                    <div class="installed-list" id="installedList"></div>
+                </div>
+                
+                <!-- Updates tab -->
+                <div class="tab-content" id="updates-content">
+                    <h3 class="section-title">Available Updates</h3>
+                    <div class="apps-grid" id="updatesGrid"></div>
+                </div>
             </div>
         </div>
     </div>
+    
+    <!-- App Detail Modal -->
+    <div class="modal-overlay" id="detailModal">
+        <div class="app-detail-modal" id="detailContent"></div>
+    </div>
+    
+    <!-- Install Progress Modal -->
+    <div class="modal-overlay" id="installModal">
+        <div class="install-modal" id="installContent"></div>
+    </div>
 
-    <script src="https://js.puter.com/v2/"></script>
     <script>
-        // Icon mapping - using available icons from the GUI
-        // Icons are served from the frontend bundle, accessible via /icons/ path
-        const iconMap = {
-            'add-app': '/icons/app-icon-uploader.svg',
-            'games': '/icons/app.svg',
-            'productivity': '/icons/file-doc.svg',
-            'photo-video': '/icons/file-image.svg',
-            'developer-tools': '/icons/file-js.svg',
-            'graphics-design': '/icons/palette.svg',
-            'utilities': '/icons/cog.svg',
-            'music-audio': '/icons/file-audio.svg',
-            'entertainment': '/icons/file-video.svg',
-            'education': '/icons/file-doc.svg',
-            'finance': '/icons/wallet.svg',
-            'business': '/icons/file-doc.svg',
-            'lifestyle': '/icons/user.svg',
-            'search': '/icons/magnifier-outline.svg'
-        };
-        
-        // Try to get icons from window.icons if available (from main GUI)
-        function getIconPath(key) {
-            if (typeof window !== 'undefined' && window.icons && window.icons[iconMap[key]?.split('/').pop()]) {
-                return window.icons[iconMap[key].split('/').pop()];
+        // Mock app catalog - representing future dDRM store
+        const mockApps = [
+            {
+                id: 'elacity-player',
+                name: 'Elacity Player',
+                developer: 'Elacity Labs',
+                category: 'media',
+                description: 'The official dDRM-protected media player. Stream encrypted video and audio content securely on your personal cloud. Supports all major formats with hardware acceleration.',
+                size: '45 MB',
+                icon: '&#127911;',
+                gradient: 'gradient-purple',
+                badges: ['ddrm'],
+                permissions: ['Access to your media files', 'Network access for streaming', 'Hardware acceleration'],
+                requirements: { storage: '100 MB', memory: '256 MB', dependencies: 'None' },
+                installed: false
+            },
+            {
+                id: 'knowledge-ai',
+                name: 'Knowledge AI',
+                developer: 'Elacity Labs',
+                category: 'ai',
+                description: 'Run local large language models on your PC2 node. Powered by WASM for cross-platform compatibility. Supports Llama, Mistral, and more.',
+                size: '2.1 GB',
+                icon: '&#129504;',
+                gradient: 'gradient-blue',
+                badges: ['wasm'],
+                permissions: ['Access to your files', 'High CPU/GPU usage', 'Network for model downloads'],
+                requirements: { storage: '8 GB', memory: '4 GB', dependencies: 'None' },
+                installed: false
+            },
+            {
+                id: 'bitcoin-node',
+                name: 'Bitcoin Node',
+                developer: 'Open Source',
+                category: 'blockchain',
+                description: 'Run a full Bitcoin Core node on your PC2. Verify transactions independently, support the network, and achieve maximum privacy.',
+                size: '35 MB',
+                icon: '&#8383;',
+                gradient: 'gradient-orange',
+                badges: ['opensource'],
+                permissions: ['Network access', 'Significant storage (500GB+)', 'Background processing'],
+                requirements: { storage: '500 GB', memory: '2 GB', dependencies: 'None' },
+                installed: false
+            },
+            {
+                id: 'esc-wallet',
+                name: 'ESC Wallet',
+                developer: 'Elastos Foundation',
+                category: 'blockchain',
+                description: 'Official ElastOS sidechain wallet. Manage your ELA, ESC tokens, and interact with smart contracts on the Elastos ecosystem.',
+                size: '28 MB',
+                icon: '&#128176;',
+                gradient: 'gradient-green',
+                badges: ['ddrm'],
+                permissions: ['Wallet signing access', 'Network access'],
+                requirements: { storage: '50 MB', memory: '128 MB', dependencies: 'None' },
+                installed: true
+            },
+            {
+                id: 'secure-sync',
+                name: 'Secure Sync',
+                developer: 'Elacity Labs',
+                category: 'tools',
+                description: 'End-to-end encrypted file synchronization across your devices. Your files never leave your control.',
+                size: '18 MB',
+                icon: '&#128259;',
+                gradient: 'gradient-cyan',
+                badges: ['ddrm'],
+                permissions: ['Full file system access', 'Network access', 'Background sync'],
+                requirements: { storage: '20 MB', memory: '64 MB', dependencies: 'None' },
+                installed: false
+            },
+            {
+                id: 'photo-vault',
+                name: 'Photo Vault',
+                developer: 'Elacity Labs',
+                category: 'media',
+                description: 'Private photo management with AI-powered organization. Your memories, encrypted and searchable.',
+                size: '52 MB',
+                icon: '&#128247;',
+                gradient: 'gradient-pink',
+                badges: ['wasm'],
+                permissions: ['Access to photos', 'Local AI processing'],
+                requirements: { storage: '100 MB', memory: '512 MB', dependencies: 'None' },
+                installed: true
+            },
+            {
+                id: 'code-studio',
+                name: 'Code Studio',
+                developer: 'Open Source',
+                category: 'tools',
+                description: 'A powerful web-based code editor inspired by VS Code. Syntax highlighting, extensions, and Git integration.',
+                size: '85 MB',
+                icon: '&#128187;',
+                gradient: 'gradient-blue',
+                badges: ['opensource'],
+                permissions: ['File system access', 'Terminal access'],
+                requirements: { storage: '150 MB', memory: '256 MB', dependencies: 'System Terminal' },
+                installed: false
+            },
+            {
+                id: 'chess-master',
+                name: 'Chess Master',
+                developer: 'Elacity Labs',
+                category: 'games',
+                description: 'Play chess against AI or friends. Features multiple difficulty levels, puzzles, and game analysis.',
+                size: '12 MB',
+                icon: '&#9819;',
+                gradient: 'gradient-slate',
+                badges: ['wasm'],
+                permissions: ['None required'],
+                requirements: { storage: '15 MB', memory: '64 MB', dependencies: 'None' },
+                installed: false
+            },
+            {
+                id: 'ad-blocker',
+                name: 'Network Guard',
+                developer: 'Open Source',
+                category: 'privacy',
+                description: 'Network-wide ad and tracker blocking. Protect all devices on your network without installing anything on them.',
+                size: '8 MB',
+                icon: '&#128737;',
+                gradient: 'gradient-green',
+                badges: ['opensource'],
+                permissions: ['Network DNS access', 'Background service'],
+                requirements: { storage: '20 MB', memory: '128 MB', dependencies: 'None' },
+                installed: false
+            },
+            {
+                id: 'home-control',
+                name: 'Home Control',
+                developer: 'Open Source',
+                category: 'tools',
+                description: 'Smart home automation hub. Control lights, thermostats, and IoT devices from your personal cloud.',
+                size: '120 MB',
+                icon: '&#127968;',
+                gradient: 'gradient-yellow',
+                badges: ['opensource'],
+                permissions: ['Network access', 'Device discovery', 'Background service'],
+                requirements: { storage: '200 MB', memory: '256 MB', dependencies: 'None' },
+                installed: false
             }
-            return iconMap[key];
+        ];
+        
+        // State
+        let currentCategory = 'all';
+        let currentTab = 'discover';
+        
+        // Initialize
+        function init() {
+            renderApps();
+            renderInstalledApps();
+            renderUpdates();
+            setupEventListeners();
         }
         
-        // Set icon backgrounds
-        function setIconBackground(elementId, iconPath) {
-            const element = document.getElementById(elementId);
-            if (element) {
-                element.style.backgroundImage = `url(${iconPath})`;
+        // Render apps grid
+        function renderApps(filter = '') {
+            const grid = document.getElementById('appsGrid');
+            let apps = mockApps;
+            
+            if (currentCategory !== 'all') {
+                apps = apps.filter(app => app.category === currentCategory);
             }
+            
+            if (filter) {
+                const query = filter.toLowerCase();
+                apps = apps.filter(app => 
+                    app.name.toLowerCase().includes(query) || 
+                    app.description.toLowerCase().includes(query)
+                );
+            }
+            
+            if (apps.length === 0) {
+                grid.innerHTML = `
+                    <div class="empty-state" style="grid-column: 1/-1;">
+                        <div class="empty-icon">&#128269;</div>
+                        <div class="empty-title">No apps found</div>
+                        <div class="empty-description">Try a different search or category</div>
+                    </div>
+                `;
+                return;
+            }
+            
+            grid.innerHTML = apps.map(app => `
+                <div class="app-card" onclick="showAppDetail('${app.id}')">
+                    <div class="app-card-header">
+                        <div class="app-icon ${app.gradient}">${app.icon}</div>
+                        <div class="app-card-info">
+                            <div class="app-name">${app.name}</div>
+                            <div class="app-developer">${app.developer}</div>
+                            <div class="app-badges">
+                                ${app.badges.map(badge => `<span class="badge ${badge}">${getBadgeText(badge)}</span>`).join('')}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="app-description">${app.description}</div>
+                    <div class="app-card-footer">
+                        <span class="app-size">${app.size}</span>
+                        <button class="install-btn ${app.installed ? 'installed' : ''}" onclick="event.stopPropagation(); ${app.installed ? `openApp('${app.id}')` : `installApp('${app.id}')`}">
+                            ${app.installed ? 'Open' : 'Install'}
+                        </button>
+                    </div>
+                </div>
+            `).join('');
         }
         
-        // Initialize icons
-        Object.keys(iconMap).forEach(key => {
-            const elementId = key === 'add-app' ? 'add-app-icon' : 
-                            key === 'search' ? 'search-icon' : 
-                            `icon-${key}`;
-            const iconPath = getIconPath(key);
-            setIconBackground(elementId, iconPath);
-        });
+        // Render installed apps
+        function renderInstalledApps() {
+            const list = document.getElementById('installedList');
+            const installed = mockApps.filter(app => app.installed);
+            
+            if (installed.length === 0) {
+                list.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">&#128230;</div>
+                        <div class="empty-title">No apps installed</div>
+                        <div class="empty-description">Browse the Discover tab to find apps</div>
+                    </div>
+                `;
+                return;
+            }
+            
+            list.innerHTML = installed.map(app => `
+                <div class="installed-item">
+                    <div class="app-icon ${app.gradient}">${app.icon}</div>
+                    <div class="installed-info">
+                        <div class="installed-name">${app.name}</div>
+                        <div class="installed-size">${app.size}</div>
+                    </div>
+                    <div class="installed-actions">
+                        <button class="action-btn open" onclick="openApp('${app.id}')">Open</button>
+                        <button class="action-btn uninstall" onclick="uninstallApp('${app.id}')">Uninstall</button>
+                    </div>
+                </div>
+            `).join('');
+        }
         
-        // Category selection
-        document.querySelectorAll('.category-item').forEach(item => {
-            item.addEventListener('click', function() {
-                document.querySelectorAll('.category-item').forEach(i => i.classList.remove('active'));
-                this.classList.add('active');
-                // TODO: Filter apps by category
-            });
-        });
+        // Render updates
+        function renderUpdates() {
+            const grid = document.getElementById('updatesGrid');
+            // Mock: show first 2 installed apps as having updates
+            const withUpdates = mockApps.filter(app => app.installed).slice(0, 2);
+            
+            if (withUpdates.length === 0) {
+                grid.innerHTML = `
+                    <div class="empty-state" style="grid-column: 1/-1;">
+                        <div class="empty-icon">&#10003;</div>
+                        <div class="empty-title">All apps are up to date</div>
+                        <div class="empty-description">Check back later for updates</div>
+                    </div>
+                `;
+                return;
+            }
+            
+            grid.innerHTML = withUpdates.map(app => `
+                <div class="app-card">
+                    <div class="app-card-header">
+                        <div class="app-icon ${app.gradient}">${app.icon}</div>
+                        <div class="app-card-info">
+                            <div class="app-name">${app.name}</div>
+                            <div class="app-developer">${app.developer}</div>
+                            <div class="app-badges">
+                                <span class="badge" style="background:#fef3c7;color:#d97706;">Update available</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="app-description">New version available with bug fixes and improvements.</div>
+                    <div class="app-card-footer">
+                        <span class="app-size">${app.size}</span>
+                        <button class="install-btn" onclick="installApp('${app.id}', true)">Update</button>
+                    </div>
+                </div>
+            `).join('');
+        }
         
-        (async () => {
-            try {
-                await puter.init();
-                console.log('[App Center] Puter SDK initialized');
-                
-                const response = await fetch('/get-launch-apps');
-                const data = await response.json();
-                
-                const appsGrid = document.getElementById('appsGrid');
-                appsGrid.innerHTML = '';
-                
-                const allApps = [...(data.recommended || []), ...(data.all || [])]
-                    .filter((app, index, self) => 
-                        app && 
-                        app.name !== 'app-center' && 
-                        app.name !== 'about' &&
-                        index === self.findIndex(a => a.name === app.name)
-                    );
-                
-                if (allApps.length === 0) {
-                    appsGrid.innerHTML = '<div class="empty-state">No apps available yet</div>';
+        // Show app detail modal
+        function showAppDetail(appId) {
+            const app = mockApps.find(a => a.id === appId);
+            if (!app) return;
+            
+            const modal = document.getElementById('detailModal');
+            const content = document.getElementById('detailContent');
+            
+            content.innerHTML = `
+                <div class="modal-header" style="position:relative;">
+                    <div class="modal-icon ${app.gradient}">${app.icon}</div>
+                    <div class="modal-title-section">
+                        <div class="modal-title">${app.name}</div>
+                        <div class="modal-developer">${app.developer}</div>
+                        <div class="modal-badges">
+                            ${app.badges.map(badge => `<span class="badge ${badge}">${getBadgeText(badge)}</span>`).join('')}
+                        </div>
+                    </div>
+                    <button class="modal-close" onclick="closeDetailModal()">&times;</button>
+                </div>
+                <div class="modal-gallery">
+                    <div class="gallery-scroll">
+                        <div class="gallery-img">Screenshot 1</div>
+                        <div class="gallery-img">Screenshot 2</div>
+                        <div class="gallery-img">Screenshot 3</div>
+                    </div>
+                </div>
+                <div class="modal-body">
+                    <div class="modal-section">
+                        <div class="modal-section-title">About</div>
+                        <div class="modal-description">${app.description}</div>
+                    </div>
+                    <div class="modal-section">
+                        <div class="modal-section-title">Requirements</div>
+                        <div class="requirements-grid">
+                            <div class="requirement-item">
+                                <div class="requirement-value">${app.requirements.storage}</div>
+                                <div class="requirement-label">Storage</div>
+                            </div>
+                            <div class="requirement-item">
+                                <div class="requirement-value">${app.requirements.memory}</div>
+                                <div class="requirement-label">Memory</div>
+                            </div>
+                            <div class="requirement-item">
+                                <div class="requirement-value">${app.requirements.dependencies}</div>
+                                <div class="requirement-label">Dependencies</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-section">
+                        <div class="modal-section-title">Permissions</div>
+                        <ul class="permissions-list">
+                            ${app.permissions.map(p => `<li><span class="permission-icon">&#10003;</span> ${p}</li>`).join('')}
+                        </ul>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="modal-btn secondary" onclick="closeDetailModal()">Close</button>
+                    <button class="modal-btn primary" onclick="closeDetailModal(); ${app.installed ? `openApp('${app.id}')` : `installApp('${app.id}')`}">
+                        ${app.installed ? 'Open' : 'Install'}
+                    </button>
+                </div>
+            `;
+            
+            modal.classList.add('active');
+        }
+        
+        // Close detail modal
+        function closeDetailModal() {
+            document.getElementById('detailModal').classList.remove('active');
+        }
+        
+        // Install app (mock)
+        function installApp(appId, isUpdate = false) {
+            const app = mockApps.find(a => a.id === appId);
+            if (!app) return;
+            
+            const modal = document.getElementById('installModal');
+            const content = document.getElementById('installContent');
+            
+            content.innerHTML = `
+                <div class="install-modal-icon ${app.gradient}">${app.icon}</div>
+                <div class="install-modal-title">${isUpdate ? 'Updating' : 'Installing'} ${app.name}</div>
+                <div class="install-modal-status" id="installStatus">Preparing...</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+                </div>
+                <button class="modal-btn secondary" onclick="cancelInstall()">Cancel</button>
+            `;
+            
+            modal.classList.add('active');
+            
+            // Simulate install progress
+            const steps = [
+                { progress: 20, status: 'Checking requirements...' },
+                { progress: 40, status: 'Downloading package...' },
+                { progress: 70, status: 'Installing...' },
+                { progress: 100, status: 'Complete!' }
+            ];
+            
+            let step = 0;
+            const interval = setInterval(() => {
+                if (step >= steps.length) {
+                    clearInterval(interval);
+                    app.installed = true;
+                    
+                    content.innerHTML = `
+                        <div class="install-modal-icon ${app.gradient}">${app.icon}</div>
+                        <div class="install-modal-title">${app.name} ${isUpdate ? 'Updated' : 'Installed'}</div>
+                        <div class="install-modal-status" style="color:#22c55e;">&#10003; Successfully ${isUpdate ? 'updated' : 'installed'}</div>
+                        <button class="modal-btn primary" onclick="closeInstallModal(); openApp('${app.id}')">Open App</button>
+                    `;
+                    
+                    renderApps();
+                    renderInstalledApps();
+                    renderUpdates();
                     return;
                 }
                 
-                allApps.forEach(app => {
-                    const appCard = document.createElement('div');
-                    appCard.className = 'app-card';
-                    appCard.onclick = () => {
-                        if (app.index_url) {
-                            puter.apps.launch(app.name);
-                        }
-                    };
-                    
-                    const categoryMap = {
-                        'viewer': 'Photo & Video',
-                        'player': 'Entertainment',
-                        'pdf': 'Utilities',
-                        'editor': 'Productivity',
-                        'terminal': 'Developer Tools',
-                        'camera': 'Photo & Video',
-                        'recorder': 'Utilities',
-                        'solitaire-frvr': 'Games'
-                    };
-                    
-                    appCard.innerHTML = `
-                        <div class="app-header">
-                            <div class="app-icon-large">
-                                ${app.icon ? `<img src="${app.icon}" alt="${app.title}" />` : '📱'}
-                            </div>
-                            <div class="app-info">
-                                <div class="app-name">${app.title || app.name}</div>
-                                <div class="app-users">Available</div>
-                                <span class="app-category">${categoryMap[app.name] || 'Utilities'}</span>
-                            </div>
-                        </div>
-                        <div class="app-description">
-                            ${getAppDescription(app.name)}
-                        </div>
-                        <div class="app-actions">
-                            <button class="open-btn">Open</button>
-                            <div class="action-icon" title="Share">🔗</div>
-                            <div class="action-icon" title="Download">⬇</div>
-                        </div>
-                    `;
-                    
-                    appsGrid.appendChild(appCard);
-                });
-                
-                // Search functionality
-                const searchInput = document.getElementById('searchInput');
-                searchInput.addEventListener('input', (e) => {
-                    const query = e.target.value.toLowerCase();
-                    const cards = appsGrid.querySelectorAll('.app-card');
-                    cards.forEach(card => {
-                        const name = card.querySelector('.app-name').textContent.toLowerCase();
-                        const desc = card.querySelector('.app-description').textContent.toLowerCase();
-                        if (name.includes(query) || desc.includes(query)) {
-                            card.style.display = '';
-                        } else {
-                            card.style.display = 'none';
-                        }
-                    });
-                });
-            } catch (error) {
-                console.error('[App Center] Error loading apps:', error);
-                document.getElementById('appsGrid').innerHTML = '<div class="empty-state">Error loading apps. Please refresh the page.</div>';
-            }
-        })();
-        
-        function getAppDescription(name) {
-            const descriptions = {
-                'viewer': 'View and manage your images and photos',
-                'player': 'Play video and audio files',
-                'pdf': 'View and read PDF documents',
-                'editor': 'Edit text files and code',
-                'terminal': 'Command line interface for your PC2 node',
-                'camera': 'Capture photos using your webcam',
-                'recorder': 'Record audio from your microphone',
-                'solitaire-frvr': 'Classic solitaire card game'
-            };
-            return descriptions[name] || 'Application for your PC2 node';
+                document.getElementById('progressFill').style.width = steps[step].progress + '%';
+                document.getElementById('installStatus').textContent = steps[step].status;
+                step++;
+            }, 800);
         }
+        
+        // Cancel install
+        function cancelInstall() {
+            document.getElementById('installModal').classList.remove('active');
+        }
+        
+        // Close install modal
+        function closeInstallModal() {
+            document.getElementById('installModal').classList.remove('active');
+        }
+        
+        // Open app (mock)
+        function openApp(appId) {
+            const app = mockApps.find(a => a.id === appId);
+            if (!app) return;
+            
+            alert(`Opening ${app.name}...\n\nThis is a mock UI. When dDRM is integrated, this will launch the actual WASM app.`);
+        }
+        
+        // Uninstall app (mock)
+        function uninstallApp(appId) {
+            const app = mockApps.find(a => a.id === appId);
+            if (!app) return;
+            
+            if (confirm(`Uninstall ${app.name}?\n\nThis will remove the app and its data.`)) {
+                app.installed = false;
+                renderApps();
+                renderInstalledApps();
+                renderUpdates();
+            }
+        }
+        
+        // Get badge text
+        function getBadgeText(badge) {
+            const texts = {
+                wasm: 'WASM',
+                ddrm: 'dDRM',
+                opensource: 'Open Source'
+            };
+            return texts[badge] || badge;
+        }
+        
+        // Setup event listeners
+        function setupEventListeners() {
+            // Tabs
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                    
+                    currentTab = tab.dataset.tab;
+                    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                    document.getElementById(`${currentTab}-content`).classList.add('active');
+                });
+            });
+            
+            // Categories
+            document.querySelectorAll('.category-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    document.querySelectorAll('.category-item').forEach(i => i.classList.remove('active'));
+                    item.classList.add('active');
+                    currentCategory = item.dataset.category;
+                    renderApps();
+                });
+            });
+            
+            // Search
+            document.getElementById('searchInput').addEventListener('input', (e) => {
+                renderApps(e.target.value);
+            });
+            
+            // Close modals on overlay click
+            document.querySelectorAll('.modal-overlay').forEach(modal => {
+                modal.addEventListener('click', (e) => {
+                    if (e.target === modal) {
+                        modal.classList.remove('active');
+                    }
+                });
+            });
+        }
+        
+        // Initialize on load
+        init();
     </script>
 </body>
 </html>

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>App Center - PC2</title>
+    <title>dApp Centre - PC2</title>
     <style>
         * {
             margin: 0;
@@ -152,7 +152,15 @@
         .main-content {
             flex: 1;
             overflow-y: auto;
-            padding: 24px;
+            padding: 24px 0;
+        }
+        .main-content .section-header,
+        .main-content .apps-grid,
+        .main-content .installed-list,
+        .main-content .updates-list,
+        .main-content .empty-state {
+            padding-left: 24px;
+            padding-right: 24px;
         }
         
         /* Featured banner */
@@ -160,7 +168,7 @@
             background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
             border-radius: 16px;
             padding: 32px;
-            margin-bottom: 32px;
+            margin: 0 24px 32px 24px;
             display: flex;
             align-items: center;
             gap: 24px;
@@ -208,6 +216,82 @@
         .section {
             margin-bottom: 32px;
         }
+        
+        /* Staff Picks - Large feature cards like Umbrel */
+        .staff-picks-scroll {
+            display: flex;
+            gap: 16px;
+            overflow-x: auto;
+            padding: 0 24px 8px 24px;
+            scroll-behavior: smooth;
+        }
+        .staff-picks-scroll::-webkit-scrollbar {
+            display: none;
+        }
+        .staff-picks-scroll {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        .staff-pick-card {
+            min-width: 320px;
+            height: 200px;
+            border-radius: 16px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+            flex-shrink: 0;
+            transition: transform 0.2s;
+        }
+        .staff-pick-card:hover {
+            transform: translateY(-2px);
+        }
+        .staff-pick-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(to top, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0) 60%);
+            z-index: 1;
+        }
+        .staff-pick-icon {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            width: 56px;
+            height: 56px;
+            background: white;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            z-index: 2;
+        }
+        .staff-pick-icon svg {
+            width: 32px;
+            height: 32px;
+        }
+        .staff-pick-content {
+            position: relative;
+            z-index: 2;
+            color: white;
+        }
+        .staff-pick-name {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        .staff-pick-desc {
+            font-size: 13px;
+            opacity: 0.9;
+            line-height: 1.4;
+        }
         .section-header {
             display: flex;
             align-items: center;
@@ -234,19 +318,15 @@
             display: flex;
             gap: 16px;
             overflow-x: auto;
-            padding-bottom: 8px;
+            padding: 0 24px 8px 24px;
             scroll-behavior: smooth;
         }
         .apps-scroll::-webkit-scrollbar {
-            height: 6px;
+            display: none;
         }
-        .apps-scroll::-webkit-scrollbar-track {
-            background: #f1f5f9;
-            border-radius: 3px;
-        }
-        .apps-scroll::-webkit-scrollbar-thumb {
-            background: #cbd5e1;
-            border-radius: 3px;
+        .apps-scroll {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
         }
         
         /* Apps grid */
@@ -264,8 +344,15 @@
             padding: 16px;
             cursor: pointer;
             transition: all 0.2s;
-            min-width: 280px;
             flex-shrink: 0;
+        }
+        .apps-scroll .app-card {
+            min-width: 280px;
+            max-width: 320px;
+        }
+        .apps-grid .app-card {
+            min-width: 0;
+            max-width: none;
         }
         .app-card:hover {
             box-shadow: 0 4px 12px rgba(0,0,0,0.08);
@@ -313,6 +400,12 @@
             color: #94a3b8;
             margin-bottom: 4px;
         }
+        .app-version-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
         .app-version {
             font-size: 11px;
             color: #94a3b8;
@@ -347,9 +440,22 @@
             align-items: center;
             justify-content: space-between;
         }
+        .app-footer-left {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
         .app-size {
             font-size: 12px;
             color: #94a3b8;
+        }
+        .app-price {
+            font-size: 13px;
+            font-weight: 600;
+            color: #1e293b;
+        }
+        .app-price.free {
+            color: #22c55e;
         }
         .install-btn {
             background: #3b82f6;
@@ -619,8 +725,25 @@
             padding: 16px 24px;
             border-top: 1px solid #e2e8f0;
             display: flex;
-            justify-content: flex-end;
+            justify-content: space-between;
+            align-items: center;
             gap: 12px;
+        }
+        .modal-footer-price {
+            display: flex;
+            align-items: center;
+        }
+        .modal-footer-actions {
+            display: flex;
+            gap: 12px;
+        }
+        .price-tag {
+            font-size: 18px;
+            font-weight: 700;
+            color: #1e293b;
+        }
+        .price-tag.free {
+            color: #22c55e;
         }
         .modal-btn {
             padding: 10px 24px;
@@ -797,7 +920,7 @@
         <!-- Header -->
         <div class="header">
             <div class="header-top">
-                <h1 class="header-title">App Center</h1>
+                <h1 class="header-title">dApp Centre</h1>
                 <div class="search-container">
                     <div class="search-icon-wrapper">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -819,31 +942,31 @@
             <!-- Sidebar -->
             <div class="sidebar">
                 <div class="sidebar-title">Categories</div>
-                <div class="category-item active" data-category="all">
+                <div class="category-item active" data-category="all" onclick="selectCategory(this, 'all')">
                     <svg class="cat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
                     <span>All Apps</span>
                 </div>
-                <div class="category-item" data-category="ai">
+                <div class="category-item" data-category="ai" onclick="selectCategory(this, 'ai')">
                     <svg class="cat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a4 4 0 0 1 4 4v2a4 4 0 0 1-8 0V6a4 4 0 0 1 4-4z"></path><path d="M16 12v4a4 4 0 0 1-8 0v-4"></path><path d="M8 16h8"></path><circle cx="9" cy="9" r="1" fill="currentColor"></circle><circle cx="15" cy="9" r="1" fill="currentColor"></circle></svg>
                     <span>AI</span>
                 </div>
-                <div class="category-item" data-category="media">
+                <div class="category-item" data-category="media" onclick="selectCategory(this, 'media')">
                     <svg class="cat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
                     <span>Media</span>
                 </div>
-                <div class="category-item" data-category="blockchain">
+                <div class="category-item" data-category="blockchain" onclick="selectCategory(this, 'blockchain')">
                     <svg class="cat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="6" height="6" rx="1"></rect><rect x="16" y="7" width="6" height="6" rx="1"></rect><rect x="9" y="2" width="6" height="6" rx="1"></rect><rect x="9" y="16" width="6" height="6" rx="1"></rect><path d="M8 10h2"></path><path d="M14 10h2"></path><path d="M12 8v2"></path><path d="M12 14v2"></path></svg>
                     <span>Blockchain</span>
                 </div>
-                <div class="category-item" data-category="tools">
+                <div class="category-item" data-category="tools" onclick="selectCategory(this, 'tools')">
                     <svg class="cat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
                     <span>Tools</span>
                 </div>
-                <div class="category-item" data-category="privacy">
+                <div class="category-item" data-category="privacy" onclick="selectCategory(this, 'privacy')">
                     <svg class="cat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
                     <span>Privacy</span>
                 </div>
-                <div class="category-item" data-category="games">
+                <div class="category-item" data-category="games" onclick="selectCategory(this, 'games')">
                     <svg class="cat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"></rect><path d="M6 12h4"></path><path d="M8 10v4"></path><circle cx="17" cy="10" r="1" fill="currentColor"></circle><circle cx="15" cy="14" r="1" fill="currentColor"></circle></svg>
                     <span>Games</span>
                 </div>
@@ -853,40 +976,39 @@
             <div class="main-content">
                 <!-- Discover tab -->
                 <div class="tab-content active" id="discover-content">
-                    <!-- Featured banner -->
-                    <div class="featured-banner">
-                        <div class="featured-icon-wrap">
-                            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+                    <!-- Staff Picks Section - Umbrel style large cards -->
+                    <div class="section" id="staffPicksSection">
+                        <div class="section-header">
+                            <div>
+                                <div style="font-size:12px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Staff Picks</div>
+                                <h3 class="section-title" style="margin-bottom:0;">Curated for you</h3>
+                            </div>
                         </div>
-                        <div class="featured-content">
-                            <h2>Elacity Player</h2>
-                            <p>The official dDRM-protected media player. Stream encrypted content securely on your personal cloud.</p>
-                            <button class="featured-btn" onclick="showAppDetail('elacity-player')">Learn More</button>
-                        </div>
+                        <div class="staff-picks-scroll" id="staffPicks"></div>
                     </div>
                     
                     <!-- Popular Apps Section -->
-                    <div class="section">
+                    <div class="section" id="popularSection">
                         <div class="section-header">
                             <h3 class="section-title">Popular Apps</h3>
-                            <span class="section-link" onclick="showAllApps()">View all</span>
+                            <span class="section-link" onclick="selectCategory(document.querySelector('[data-category=all]'), 'all')">View all</span>
                         </div>
                         <div class="apps-scroll" id="popularApps"></div>
                     </div>
                     
                     <!-- New Apps Section -->
-                    <div class="section">
+                    <div class="section" id="newAppsSection">
                         <div class="section-header">
                             <h3 class="section-title">New Apps</h3>
-                            <span class="section-link" onclick="showAllApps()">View all</span>
+                            <span class="section-link" onclick="selectCategory(document.querySelector('[data-category=all]'), 'all')">View all</span>
                         </div>
                         <div class="apps-scroll" id="newApps"></div>
                     </div>
                     
                     <!-- All Apps Grid -->
-                    <div class="section" id="allAppsSection" style="display:none;">
+                    <div class="section" id="allAppsSection">
                         <div class="section-header">
-                            <h3 class="section-title">All Apps</h3>
+                            <h3 class="section-title" id="allAppsSectionTitle">All Apps</h3>
                         </div>
                         <div class="apps-grid" id="appsGrid"></div>
                     </div>
@@ -935,7 +1057,20 @@
             link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>',
             github: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>',
             search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg>',
-            package: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16.5 9.4l-9-5.19M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>'
+            package: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16.5 9.4l-9-5.19M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>',
+            governance: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3L1 9l4 2.18v6L12 21l7-3.82v-6l2-1.09V17h2V9L12 3zm6.82 6L12 12.72 5.18 9 12 5.28 18.82 9zM17 15.99l-5 2.73-5-2.73v-3.72L12 15l5-2.73v3.72z"/></svg>',
+            server: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 1h16c1.1 0 2 .9 2 2v4c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V3c0-1.1.9-2 2-2zm0 8h16c1.1 0 2 .9 2 2v4c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2v-4c0-1.1.9-2 2-2zm0 8h16c1.1 0 2 .9 2 2v4c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2v-4c0-1.1.9-2 2-2zm2-12v2h2V5H6zm0 8v2h2v-2H6zm0 8v2h2v-2H6z"/></svg>',
+            swap: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6.99 11L3 15l3.99 4v-3H14v-2H6.99v-3zM21 9l-3.99-4v3H10v2h7.01v3L21 9z"/></svg>',
+            chart: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z"/></svg>',
+            bank: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 10h3v7H4v-7zm6.5 0h3v7h-3v-7zM2 19h20v3H2v-3zm15-9h3v7h-3v-7zm-5-9L2 6v2h20V6L12 1z"/></svg>',
+            nft: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M22 9V7h-2V5c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-2h2v-2h-2v-2h2v-2h-2V9h2zm-4 10H4V5h14v14zM6 13h5v4H6v-4zm6-6h4v3h-4V7zM6 7h5v5H6V7zm6 4h4v6h-4v-6z"/></svg>',
+            graph: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 6l-3.75 5 2.85 3.8-1.6 1.2C9.81 13.75 7 10 7 10l-6 8h22L14 6z"/></svg>',
+            stake: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"/></svg>',
+            marketplace: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.36 9l.6 3H5.04l.6-3h12.72M20 4H4v2h16V4zm0 3H4l-1 5v2h1v6h10v-6h4v6h2v-6h1v-2l-1-5zM6 18v-4h6v4H6z"/></svg>',
+            validator: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg>',
+            stablecoin: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.94-.49-7-3.85-7-7.93s3.06-7.44 7-7.93v2.02c-2.84.48-5 2.94-5 5.91s2.16 5.43 5 5.91v2.02zm2-2.02c2.84-.48 5-2.94 5-5.91s-2.16-5.43-5-5.91V4.07c3.94.49 7 3.85 7 7.93s-3.06 7.44-7 7.93v-2.02zM11 11h2v6h-2zm0-4h2v2h-2z"/></svg>',
+            iot: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zM6.5 9L10 5.5 13.5 9H11v4H9V9H6.5zm11 6L14 18.5 10.5 15H13v-4h2v4h2.5z"/></svg>',
+            identity: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/><path d="M20 4h-4l-1-1h-2l-1 1H8v2h12V4z" opacity="0.3"/></svg>'
         };
         
         // Mock app catalog
@@ -946,6 +1081,7 @@
                 developer: 'Elacity Labs',
                 category: 'media',
                 description: 'The official dDRM-protected media player. Stream encrypted video and audio content securely on your personal cloud. Supports all major formats with hardware acceleration.',
+                shortDesc: 'Secure dDRM media streaming',
                 size: '45 MB',
                 version: '2.1.0',
                 icon: 'play',
@@ -956,6 +1092,7 @@
                 installed: false,
                 isNew: false,
                 isPopular: true,
+                isStaffPick: true,
                 website: 'https://elacity.io',
                 source: 'https://github.com/elastos/elacity-player',
                 changelog: [
@@ -964,33 +1101,193 @@
                 ]
             },
             {
-                id: 'knowledge-ai',
-                name: 'Knowledge AI',
+                id: 'elacity-connect',
+                name: 'Elacity Connect',
                 developer: 'Elacity Labs',
-                category: 'ai',
-                description: 'Run local large language models on your PC2 node. Powered by WASM for cross-platform compatibility. Supports Llama, Mistral, and more.',
-                size: '2.1 GB',
-                version: '1.3.0',
-                icon: 'brain',
-                gradient: 'gradient-blue',
-                badges: ['wasm'],
-                permissions: ['Access to your files', 'High CPU/GPU usage', 'Network for model downloads'],
-                requirements: { storage: '8 GB', memory: '4 GB', compatibility: 'PC2 1.0+' },
+                category: 'tools',
+                description: 'Peer-to-peer connectivity for your smart devices. Control IoT devices, sync data between nodes, and build your own mesh network. No central servers required.',
+                shortDesc: 'P2P smart device connectivity',
+                size: '45 MB',
+                version: '2.0.0',
+                icon: 'iot',
+                gradient: 'gradient-teal',
+                badges: ['ddrm'],
+                permissions: ['Network access', 'Device discovery', 'Bluetooth/WiFi access'],
+                requirements: { storage: '80 MB', memory: '256 MB', compatibility: 'PC2 1.0+' },
                 installed: false,
                 isNew: true,
                 isPopular: true,
-                website: 'https://elacity.io/ai',
+                isStaffPick: true,
+                website: 'https://elacity.io/connect',
                 source: null,
                 changelog: [
-                    { version: '1.3.0', date: 'Jan 10, 2026', changes: ['Added DeepSeek R1 support', 'Improved memory management'] }
+                    { version: '2.0.0', date: 'Jan 12, 2026', changes: ['Mesh networking support', 'Smart home integrations', 'End-to-end encryption'] },
+                    { version: '1.5.0', date: 'Nov 1, 2025', changes: ['Device pairing improvements', 'New device types'] }
                 ]
             },
+            // Elacity & Elastos Core Apps (Featured)
+            {
+                id: 'elastos-did',
+                name: 'Elastos DID',
+                developer: 'Elastos Foundation',
+                category: 'blockchain',
+                description: 'Generate and manage your Elastos Decentralized Identifier (DID). W3C compliant, self-sovereign identity that you own and control. Use across Web3 applications without centralized accounts.',
+                shortDesc: 'W3C compliant decentralized identity',
+                size: '18 MB',
+                version: '3.0.0',
+                icon: 'identity',
+                gradient: 'gradient-indigo',
+                badges: ['opensource'],
+                permissions: ['Secure key storage', 'Network access'],
+                requirements: { storage: '30 MB', memory: '128 MB', compatibility: 'PC2 1.0+' },
+                installed: false,
+                isNew: false,
+                isPopular: true,
+                isStaffPick: true,
+                price: null,
+                website: 'https://elastos.io/did',
+                source: 'https://github.com/elastos/Elastos.DID.SDK',
+                changelog: [
+                    { version: '3.0.0', date: 'Jan 8, 2026', changes: ['W3C DID 1.0 compliance', 'Verifiable Credentials support', 'Cross-chain resolution'] },
+                    { version: '2.5.0', date: 'Oct 1, 2025', changes: ['Improved key management', 'DID document updates'] }
+                ]
+            },
+            {
+                id: 'elacity-media',
+                name: 'Elacity Media',
+                developer: 'Elacity Labs',
+                category: 'media',
+                description: 'The decentralized marketplace for trading media assets. Buy, sell, and license digital content with dDRM protection. Earn royalties automatically through smart contracts.',
+                shortDesc: 'Trade and license media assets',
+                size: '38 MB',
+                version: '1.5.0',
+                icon: 'marketplace',
+                gradient: 'gradient-purple',
+                badges: ['ddrm'],
+                permissions: ['Wallet access', 'Media access', 'Network access'],
+                requirements: { storage: '100 MB', memory: '256 MB', compatibility: 'PC2 1.0+' },
+                installed: false,
+                isNew: true,
+                isPopular: true,
+                isStaffPick: true,
+                price: null,
+                website: 'https://elacity.io/media',
+                source: null,
+                changelog: [
+                    { version: '1.5.0', date: 'Jan 18, 2026', changes: ['Royalty dashboard', 'Bulk uploads', 'License templates'] },
+                    { version: '1.0.0', date: 'Nov 1, 2025', changes: ['Initial release', 'dDRM integration'] }
+                ]
+            },
+            {
+                id: 'btcd-stablecoin',
+                name: 'BTCD',
+                developer: 'BeL2 Labs',
+                category: 'blockchain',
+                description: 'Bitcoin Dollar Service - Collateralize your BTC and mint BTCD stablecoins. Unlock liquidity from your Bitcoin holdings without selling. Decentralized, over-collateralized, and fully transparent.',
+                shortDesc: 'Mint stablecoins from your BTC',
+                size: '28 MB',
+                version: '1.2.0',
+                icon: 'stablecoin',
+                gradient: 'gradient-green',
+                badges: ['ddrm'],
+                permissions: ['Wallet access', 'Network access', 'Smart contract interaction'],
+                requirements: { storage: '40 MB', memory: '256 MB', compatibility: 'PC2 1.0+' },
+                installed: false,
+                isNew: true,
+                isPopular: true,
+                isStaffPick: true,
+                price: null,
+                website: 'https://bel2.org/btcd',
+                source: null,
+                changelog: [
+                    { version: '1.2.0', date: 'Jan 15, 2026', changes: ['Lower collateral ratios', 'Improved liquidation protection', 'Yield strategies'] },
+                    { version: '1.0.0', date: 'Dec 1, 2025', changes: ['Initial launch', 'BTC collateralization', 'BTCD minting'] }
+                ]
+            },
+            {
+                id: 'elastos-mainchain-wallet',
+                name: 'Elastos Mainchain Wallet',
+                developer: 'Elastos Foundation',
+                category: 'blockchain',
+                description: 'The official wallet for Elastos mainchain. Securely manage your ELA tokens, view transaction history, and interact with the Elastos ecosystem.',
+                shortDesc: 'Official ELA mainchain wallet',
+                size: '25 MB',
+                version: '3.0.0',
+                icon: 'wallet',
+                gradient: 'gradient-blue',
+                badges: ['opensource'],
+                permissions: ['Secure key storage', 'Network access'],
+                requirements: { storage: '50 MB', memory: '128 MB', compatibility: 'PC2 1.0+' },
+                installed: false,
+                isNew: false,
+                isPopular: true,
+                isStaffPick: true,
+                price: null,
+                website: 'https://elastos.io/wallet',
+                source: 'https://github.com/elastos/Elastos.ELA.Wallet',
+                changelog: [
+                    { version: '3.0.0', date: 'Jan 10, 2026', changes: ['New security features', 'Multi-sig support', 'Hardware wallet integration'] },
+                    { version: '2.5.0', date: 'Oct 15, 2025', changes: ['UI refresh', 'QR code scanning'] }
+                ]
+            },
+            {
+                id: 'elastos-bpos-node',
+                name: 'Elastos BPoS Node',
+                developer: 'Elastos Foundation',
+                category: 'blockchain',
+                description: 'Run your own Elastos BPoS (Bonded Proof of Stake) validator node. Stake ELA, validate transactions, earn block rewards, and help secure the Elastos network.',
+                shortDesc: 'Run a staking validator node',
+                size: '180 MB',
+                version: '2.0.0',
+                icon: 'validator',
+                gradient: 'gradient-indigo',
+                badges: ['opensource'],
+                permissions: ['Network access', 'Background service', 'Significant storage'],
+                requirements: { storage: '200 GB', memory: '8 GB', compatibility: 'PC2 1.0+' },
+                installed: false,
+                isNew: true,
+                isPopular: true,
+                price: null,
+                website: 'https://elastos.io/bpos',
+                source: 'https://github.com/elastos/Elastos.ELA',
+                changelog: [
+                    { version: '2.0.0', date: 'Jan 5, 2026', changes: ['BPoS consensus upgrade', 'Improved reward distribution', 'Node monitoring dashboard'] }
+                ]
+            },
+            {
+                id: 'btc-wallet',
+                name: 'BTC Wallet',
+                developer: 'Open Source',
+                category: 'blockchain',
+                description: 'A secure, self-custodial Bitcoin wallet. Full control of your private keys, hardware wallet support, and Lightning Network integration for fast payments.',
+                shortDesc: 'Self-custodial Bitcoin wallet',
+                size: '32 MB',
+                version: '5.0.0',
+                icon: 'bitcoin',
+                gradient: 'gradient-orange',
+                badges: ['opensource'],
+                permissions: ['Secure key storage', 'Network access'],
+                requirements: { storage: '50 MB', memory: '128 MB', compatibility: 'PC2 1.0+' },
+                installed: false,
+                isNew: false,
+                isPopular: true,
+                isStaffPick: true,
+                price: null,
+                website: 'https://bitcoin.org/wallets',
+                source: 'https://github.com/user/btc-wallet',
+                changelog: [
+                    { version: '5.0.0', date: 'Jan 12, 2026', changes: ['Lightning Network support', 'Taproot addresses', 'Improved security'] },
+                    { version: '4.5.0', date: 'Nov 20, 2025', changes: ['Hardware wallet integration', 'Multi-sig support'] }
+                ]
+            },
+            // Other Blockchain Apps
             {
                 id: 'bitcoin-node',
                 name: 'Bitcoin Node',
                 developer: 'Open Source',
                 category: 'blockchain',
                 description: 'Run a full Bitcoin Core node on your PC2. Verify transactions independently, support the network, and achieve maximum privacy.',
+                shortDesc: 'Full Bitcoin Core node',
                 size: '35 MB',
                 version: '27.0.0',
                 icon: 'bitcoin',
@@ -1001,6 +1298,7 @@
                 installed: false,
                 isNew: false,
                 isPopular: true,
+                isStaffPick: true,
                 website: 'https://bitcoin.org',
                 source: 'https://github.com/bitcoin/bitcoin',
                 changelog: [
@@ -1160,20 +1458,263 @@
                 changelog: [
                     { version: '2024.1.0', date: 'Jan 1, 2026', changes: ['New device integrations', 'UI improvements'] }
                 ]
+            },
+            // Web3 DeFi & DAO Apps
+            {
+                id: 'elastos-dao',
+                name: 'Elastos DAO',
+                developer: 'Elastos Foundation',
+                category: 'blockchain',
+                description: 'Participate in Elastos governance. Vote on proposals, stake ELA, and shape the future of the Elastos ecosystem.',
+                shortDesc: 'Decentralized governance for Elastos',
+                size: '22 MB',
+                version: '2.0.0',
+                icon: 'governance',
+                gradient: 'gradient-purple',
+                badges: ['ddrm'],
+                permissions: ['Wallet access', 'Network access'],
+                requirements: { storage: '50 MB', memory: '128 MB', compatibility: 'PC2 1.0+' },
+                installed: false,
+                isNew: true,
+                isPopular: true,
+                isStaffPick: true,
+                price: null,
+                website: 'https://elastos.io/dao',
+                source: 'https://github.com/elastos/Elastos.DAO',
+                changelog: [
+                    { version: '2.0.0', date: 'Jan 18, 2026', changes: ['New voting UI', 'Multi-chain governance', 'Improved staking'] }
+                ]
+            },
+            {
+                id: 'elastos-rpc',
+                name: 'Elastos RPC Node',
+                developer: 'Elastos Foundation',
+                category: 'blockchain',
+                description: 'Run your own Elastos RPC endpoint. Full node access for dApps, direct blockchain queries, and maximum decentralization.',
+                shortDesc: 'Your personal Elastos RPC endpoint',
+                size: '85 MB',
+                version: '1.5.0',
+                icon: 'server',
+                gradient: 'gradient-indigo',
+                badges: ['opensource'],
+                permissions: ['Network access', 'Significant storage', 'Background service'],
+                requirements: { storage: '100 GB', memory: '4 GB', compatibility: 'PC2 1.0+' },
+                installed: false,
+                isNew: false,
+                isPopular: true,
+                price: null,
+                website: 'https://elastos.io/rpc',
+                source: 'https://github.com/elastos/Elastos.ELA',
+                changelog: [
+                    { version: '1.5.0', date: 'Dec 15, 2025', changes: ['Performance optimizations', 'Reduced sync time'] }
+                ]
+            },
+            {
+                id: 'uniswap',
+                name: 'Uniswap',
+                developer: 'Uniswap Labs',
+                category: 'blockchain',
+                description: 'The leading decentralized exchange. Swap tokens, provide liquidity, and earn fees on the largest DEX in DeFi.',
+                shortDesc: 'Decentralized token exchange',
+                size: '18 MB',
+                version: '4.0.0',
+                icon: 'swap',
+                gradient: 'gradient-pink',
+                badges: ['ddrm'],
+                permissions: ['Wallet access', 'Network access'],
+                requirements: { storage: '30 MB', memory: '128 MB', compatibility: 'PC2 1.0+' },
+                installed: false,
+                isNew: false,
+                isPopular: true,
+                isStaffPick: true,
+                price: 4.99,
+                website: 'https://uniswap.org',
+                source: 'https://github.com/Uniswap',
+                changelog: [
+                    { version: '4.0.0', date: 'Jan 10, 2026', changes: ['V4 hooks support', 'Gas optimizations', 'New LP interface'] }
+                ]
+            },
+            {
+                id: 'glide-finance',
+                name: 'Glide Finance',
+                developer: 'Glide Team',
+                category: 'blockchain',
+                description: 'The premier DEX on Elastos Smart Chain. Swap ESC tokens, farm yields, and participate in the Elastos DeFi ecosystem.',
+                shortDesc: 'Elastos native DEX and yield farming',
+                size: '15 MB',
+                version: '3.2.0',
+                icon: 'chart',
+                gradient: 'gradient-teal',
+                badges: ['ddrm'],
+                permissions: ['Wallet access', 'Network access'],
+                requirements: { storage: '25 MB', memory: '128 MB', compatibility: 'PC2 1.0+' },
+                installed: false,
+                isNew: false,
+                isPopular: true,
+                price: null,
+                website: 'https://glidefinance.io',
+                source: 'https://github.com/pjdelport/glide-finance',
+                changelog: [
+                    { version: '3.2.0', date: 'Dec 28, 2025', changes: ['New farming pools', 'UI refresh', 'Gas savings'] }
+                ]
+            },
+            {
+                id: 'aave',
+                name: 'Aave',
+                developer: 'Aave Labs',
+                category: 'blockchain',
+                description: 'Decentralized lending and borrowing. Deposit crypto to earn interest or borrow against your collateral.',
+                size: '20 MB',
+                version: '3.1.0',
+                icon: 'bank',
+                gradient: 'gradient-purple',
+                badges: ['ddrm'],
+                permissions: ['Wallet access', 'Network access'],
+                requirements: { storage: '35 MB', memory: '128 MB', compatibility: 'PC2 1.0+' },
+                installed: false,
+                isNew: false,
+                isPopular: false,
+                price: 9.99,
+                website: 'https://aave.com',
+                source: 'https://github.com/aave',
+                changelog: [
+                    { version: '3.1.0', date: 'Jan 5, 2026', changes: ['New markets', 'Risk parameter updates'] }
+                ]
+            },
+            {
+                id: 'opensea',
+                name: 'OpenSea',
+                developer: 'OpenSea Inc',
+                category: 'blockchain',
+                description: 'The largest NFT marketplace. Browse, buy, sell, and create digital collectibles across multiple blockchains.',
+                size: '25 MB',
+                version: '2.5.0',
+                icon: 'nft',
+                gradient: 'gradient-blue',
+                badges: ['ddrm'],
+                permissions: ['Wallet access', 'Network access', 'Media access'],
+                requirements: { storage: '50 MB', memory: '256 MB', compatibility: 'PC2 1.0+' },
+                installed: false,
+                isNew: true,
+                isPopular: true,
+                price: 2.99,
+                website: 'https://opensea.io',
+                source: null,
+                changelog: [
+                    { version: '2.5.0', date: 'Jan 12, 2026', changes: ['Pro tools', 'Bulk actions', 'Analytics dashboard'] }
+                ]
+            },
+            {
+                id: 'metamask-snap',
+                name: 'MetaMask Snap',
+                developer: 'ConsenSys',
+                category: 'blockchain',
+                description: 'Extended wallet functionality for MetaMask. Custom transaction insights, multi-chain support, and enhanced security.',
+                size: '5 MB',
+                version: '1.0.0',
+                icon: 'wallet',
+                gradient: 'gradient-orange',
+                badges: ['opensource'],
+                permissions: ['Wallet integration'],
+                requirements: { storage: '10 MB', memory: '64 MB', compatibility: 'PC2 1.0+' },
+                installed: false,
+                isNew: true,
+                isPopular: false,
+                price: null,
+                website: 'https://metamask.io/snaps',
+                source: 'https://github.com/MetaMask/snaps',
+                changelog: [
+                    { version: '1.0.0', date: 'Jan 15, 2026', changes: ['Initial release', 'Elastos chain support'] }
+                ]
+            },
+            {
+                id: 'chainlink-oracle',
+                name: 'Chainlink Oracle',
+                developer: 'Chainlink Labs',
+                category: 'blockchain',
+                description: 'Run a Chainlink oracle node. Provide real-world data to smart contracts and earn LINK tokens.',
+                size: '150 MB',
+                version: '2.8.0',
+                icon: 'link',
+                gradient: 'gradient-blue',
+                badges: ['opensource'],
+                permissions: ['Network access', 'Background service', 'API access'],
+                requirements: { storage: '500 MB', memory: '2 GB', compatibility: 'PC2 1.0+' },
+                installed: false,
+                isNew: false,
+                isPopular: false,
+                price: 19.99,
+                website: 'https://chain.link',
+                source: 'https://github.com/smartcontractkit/chainlink',
+                changelog: [
+                    { version: '2.8.0', date: 'Dec 20, 2025', changes: ['New data feeds', 'VRF v2.5 support'] }
+                ]
+            },
+            {
+                id: 'the-graph',
+                name: 'The Graph Node',
+                developer: 'The Graph Foundation',
+                category: 'blockchain',
+                description: 'Index blockchain data with GraphQL. Run subgraphs locally for fast, reliable dApp data queries.',
+                size: '200 MB',
+                version: '0.35.0',
+                icon: 'graph',
+                gradient: 'gradient-purple',
+                badges: ['opensource'],
+                permissions: ['Network access', 'Database access', 'Background service'],
+                requirements: { storage: '50 GB', memory: '4 GB', compatibility: 'PC2 1.0+' },
+                installed: false,
+                isNew: false,
+                isPopular: false,
+                price: 14.99,
+                website: 'https://thegraph.com',
+                source: 'https://github.com/graphprotocol/graph-node',
+                changelog: [
+                    { version: '0.35.0', date: 'Jan 8, 2026', changes: ['Firehose support', 'Query optimization'] }
+                ]
+            },
+            {
+                id: 'lido-staking',
+                name: 'Lido Staking',
+                developer: 'Lido DAO',
+                category: 'blockchain',
+                description: 'Liquid staking for Ethereum and more. Stake ETH, receive stETH, and earn rewards while keeping liquidity.',
+                size: '12 MB',
+                version: '2.0.0',
+                icon: 'stake',
+                gradient: 'gradient-cyan',
+                badges: ['ddrm'],
+                permissions: ['Wallet access', 'Network access'],
+                requirements: { storage: '20 MB', memory: '128 MB', compatibility: 'PC2 1.0+' },
+                installed: false,
+                isNew: true,
+                isPopular: true,
+                price: null,
+                website: 'https://lido.fi',
+                source: 'https://github.com/lidofinance',
+                changelog: [
+                    { version: '2.0.0', date: 'Jan 16, 2026', changes: ['Withdrawals enabled', 'New staking dashboard'] }
+                ]
             }
         ];
         
         // State
         let currentCategory = 'all';
         let currentTab = 'discover';
-        let showingAllApps = false;
+        // All Apps grid is always shown by default
         
         // Initialize
         function init() {
+            renderStaffPicks();
             renderPopularApps();
             renderNewApps();
             renderInstalledApps();
             renderUpdates();
+            // Select "All Apps" category by default to show the grid
+            const allCategory = document.querySelector('[data-category="all"]');
+            if (allCategory) {
+                selectCategory(allCategory, 'all');
+            }
             setupEventListeners();
         }
         
@@ -1186,21 +1727,62 @@
                         <div class="app-card-info">
                             <div class="app-name">${app.name}</div>
                             <div class="app-developer">${app.developer}</div>
-                            <div class="app-version">v${app.version}</div>
-                            <div class="app-badges">
-                                ${app.badges.map(badge => `<span class="badge ${badge}">${getBadgeText(badge)}</span>`).join('')}
+                            <div class="app-version-row">
+                                <span class="app-version">v${app.version}</span>
+                                <div class="app-badges">
+                                    ${app.badges.map(badge => `<span class="badge ${badge}">${getBadgeText(badge)}</span>`).join('')}
+                                </div>
                             </div>
                         </div>
                     </div>
                     <div class="app-description">${app.description}</div>
                     <div class="app-card-footer">
-                        <span class="app-size">${app.size}</span>
+                        <div class="app-footer-left">
+                            <span class="app-size">${app.size}</span>
+                            ${app.price ? `<span class="app-price">$${app.price.toFixed(2)}</span>` : '<span class="app-price free">Free</span>'}
+                        </div>
                         <button class="install-btn ${app.installed ? 'installed' : ''}" onclick="event.stopPropagation(); ${app.installed ? `openApp('${app.id}')` : `installApp('${app.id}')`}">
-                            ${app.installed ? 'Open' : 'Install'}
+                            ${app.installed ? 'Open' : (app.price ? `$${app.price.toFixed(2)}` : 'Install')}
                         </button>
                     </div>
                 </div>
             `;
+        }
+        
+        // Staff pick card (large Umbrel-style)
+        function renderStaffPickCard(app) {
+            // Use the app's gradient as background
+            const gradients = {
+                'gradient-purple': 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                'gradient-blue': 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+                'gradient-orange': 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
+                'gradient-green': 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+                'gradient-red': 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                'gradient-teal': 'linear-gradient(135deg, #14b8a6 0%, #0d9488 100%)',
+                'gradient-pink': 'linear-gradient(135deg, #ec4899 0%, #db2777 100%)',
+                'gradient-yellow': 'linear-gradient(135deg, #eab308 0%, #ca8a04 100%)',
+                'gradient-indigo': 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+                'gradient-cyan': 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)'
+            };
+            const bg = gradients[app.gradient] || gradients['gradient-purple'];
+            
+            return `
+                <div class="staff-pick-card" style="background:${bg};" onclick="showAppDetail('${app.id}')">
+                    <div class="staff-pick-icon">${icons[app.icon]}</div>
+                    <div class="staff-pick-content">
+                        <div class="staff-pick-name">${app.name}</div>
+                        <div class="staff-pick-desc">${app.shortDesc || app.description.substring(0, 60) + '...'}</div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // Render staff picks (large cards)
+        function renderStaffPicks() {
+            const container = document.getElementById('staffPicks');
+            // Use featured/popular apps for staff picks
+            const apps = mockApps.filter(a => a.isStaffPick || a.isPopular).slice(0, 5);
+            container.innerHTML = apps.map(renderStaffPickCard).join('');
         }
         
         // Render popular apps (horizontal scroll)
@@ -1218,10 +1800,46 @@
         }
         
         // Show all apps grid
-        function showAllApps() {
-            showingAllApps = true;
-            document.getElementById('allAppsSection').style.display = 'block';
+        // Category names for display
+        const categoryNames = {
+            all: 'All Apps',
+            ai: 'AI',
+            media: 'Media',
+            blockchain: 'Blockchain',
+            tools: 'Tools',
+            privacy: 'Privacy',
+            games: 'Games'
+        };
+        
+        function selectCategory(element, category) {
+            document.querySelectorAll('.category-item').forEach(i => i.classList.remove('active'));
+            element.classList.add('active');
+            currentCategory = category;
+            
+            const staffSection = document.getElementById('staffPicksSection');
+            const popularSection = document.getElementById('popularSection');
+            const newSection = document.getElementById('newAppsSection');
+            const allSection = document.getElementById('allAppsSection');
+            const titleEl = document.getElementById('allAppsSectionTitle');
+            
+            if (category === 'all') {
+                // Show all sections for "All Apps"
+                staffSection.style.display = 'block';
+                popularSection.style.display = 'block';
+                newSection.style.display = 'block';
+                allSection.style.display = 'block';
+                titleEl.textContent = 'All Apps';
+            } else {
+                // Hide carousel sections, show only filtered grid
+                staffSection.style.display = 'none';
+                popularSection.style.display = 'none';
+                newSection.style.display = 'none';
+                allSection.style.display = 'block';
+                titleEl.textContent = categoryNames[category] || category;
+            }
+            
             renderAppsGrid();
+            allSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
         
         // Render apps grid
@@ -1402,10 +2020,15 @@
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button class="modal-btn secondary" onclick="closeDetailModal()">Close</button>
-                    <button class="modal-btn primary" onclick="closeDetailModal(); ${app.installed ? `openApp('${app.id}')` : `installApp('${app.id}')`}">
-                        ${app.installed ? 'Open' : 'Install'}
-                    </button>
+                    <div class="modal-footer-price">
+                        ${app.price ? `<span class="price-tag">$${app.price.toFixed(2)}</span>` : '<span class="price-tag free">Free</span>'}
+                    </div>
+                    <div class="modal-footer-actions">
+                        <button class="modal-btn secondary" onclick="closeDetailModal()">Close</button>
+                        <button class="modal-btn primary" onclick="closeDetailModal(); ${app.installed ? `openApp('${app.id}')` : `installApp('${app.id}')`}">
+                            ${app.installed ? 'Open' : (app.price ? `Buy $${app.price.toFixed(2)}` : 'Install')}
+                        </button>
+                    </div>
                 </div>
             `;
             
@@ -1453,7 +2076,10 @@
                     content.innerHTML = `
                         <div class="install-modal-icon ${app.gradient}">${icons[app.icon]}</div>
                         <div class="install-modal-title">${app.name} ${isUpdate ? 'Updated' : 'Installed'}</div>
-                        <div class="install-modal-status" style="color:#22c55e;">${icons.check} Successfully ${isUpdate ? 'updated' : 'installed'}</div>
+                        <div class="install-modal-status" style="color:#22c55e;display:flex;align-items:center;justify-content:center;gap:6px;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="#22c55e"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                            Successfully ${isUpdate ? 'updated' : 'installed'}
+                        </div>
                         <button class="modal-btn primary" onclick="closeInstallModal(); openApp('${app.id}')">Open App</button>
                     `;
                     
@@ -1461,7 +2087,7 @@
                     renderNewApps();
                     renderInstalledApps();
                     renderUpdates();
-                    if (showingAllApps) renderAppsGrid();
+                    renderAppsGrid();
                     return;
                 }
                 
@@ -1495,7 +2121,7 @@
                 renderNewApps();
                 renderInstalledApps();
                 renderUpdates();
-                if (showingAllApps) renderAppsGrid();
+                renderAppsGrid();
             }
         }
         
@@ -1544,7 +2170,12 @@
             });
         }
         
-        init();
+        // Ensure DOM is ready before initializing
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
+        }
     </script>
 </body>
 </html>

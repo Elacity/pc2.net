@@ -49,7 +49,7 @@ export function handleGetApp(req, res) {
         },
         'app-center': {
             name: 'app-center',
-            title: 'App Center',
+            title: 'dApp Centre',
             uuid: 'app-app-center',
             uid: 'app-app-center',
             icon: undefined,

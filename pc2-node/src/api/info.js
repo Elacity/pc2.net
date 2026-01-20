@@ -91,7 +91,7 @@ export function handleGetLaunchApps(req, res) {
         },
         {
             name: 'app-center',
-            title: 'App Center',
+            title: 'dApp Centre',
             uuid: 'app-app-center',
             icon: loadIconAsBase64('app-center'),
             description: 'Browse and install apps'

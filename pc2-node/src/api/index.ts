@@ -19,7 +19,9 @@ import { handleSearch } from './search.js';
 import { handleGetApp } from './apps.js';
 import { handleGetVersions, handleGetVersion, handleRestoreVersion } from './versions.js';
 import { createBackup, listBackups, downloadBackup, deleteBackup, restoreBackup } from './backup.js';
-import { handleTerminalStats, handleTerminalAdminStats, handleDestroyAllTerminals, handleTerminalStatus } from './terminal.js';
+import { handleTerminalStats, handleTerminalAdminStats, handleDestroyAllTerminals, handleTerminalStatus, handleExecCommand, handleExecScript, handleListTools } from './terminal.js';
+import { handleListApiKeys, handleCreateApiKey, handleDeleteApiKey, handleRevokeApiKey, handleGetScopes } from './apikeys.js';
+import { handleListTools as handleListAgentTools, handleGetTool, handleListCategories, handleGetOpenAPISchema } from './tools.js';
 import { createPublicRouter } from './public.js';
 import { IPFSStorage } from '../storage/ipfs.js';
 
@@ -432,6 +434,24 @@ export function setupAPI(app: Express): void {
   app.get('/api/terminal/stats', authenticate, handleTerminalStats);
   app.get('/api/terminal/admin/stats', authenticate, handleTerminalAdminStats);
   app.post('/api/terminal/destroy-all', authenticate, handleDestroyAllTerminals);
+  
+  // Terminal command execution API (for AI agents)
+  app.post('/api/terminal/exec', authenticate, handleExecCommand);
+  app.post('/api/terminal/script', authenticate, handleExecScript);
+  app.get('/api/terminal/tools', authenticate, handleListTools);
+
+  // API Keys management (for agent authentication)
+  app.get('/api/keys', authenticate, handleListApiKeys);
+  app.post('/api/keys', authenticate, handleCreateApiKey);
+  app.delete('/api/keys/:keyId', authenticate, handleDeleteApiKey);
+  app.post('/api/keys/:keyId/revoke', authenticate, handleRevokeApiKey);
+  app.get('/api/keys/scopes', handleGetScopes);  // No auth needed - just lists available scopes
+
+  // Agent Tool Registry (for AI agent discovery)
+  app.get('/api/tools', handleListAgentTools);  // Optional auth - shows scopes if authenticated
+  app.get('/api/tools/categories', handleListCategories);
+  app.get('/api/tools/openapi', handleGetOpenAPISchema);
+  app.get('/api/tools/:name', handleGetTool);
 
   // Error handling middleware (must be last)
   app.use(errorHandler);

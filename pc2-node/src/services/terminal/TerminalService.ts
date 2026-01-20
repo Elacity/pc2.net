@@ -40,6 +40,17 @@ export interface TerminalSession {
     isolationMode: IsolationMode;
 }
 
+export interface ResourceLimits {
+    /** Memory limit in MB (default: 512) */
+    memoryMB: number;
+    /** CPU shares (relative weight, 1024 = normal) */
+    cpuShares: number;
+    /** Maximum number of processes */
+    maxProcesses: number;
+    /** Maximum file descriptors */
+    maxFDs: number;
+}
+
 export interface TerminalConfig {
     /** Maximum terminals per user */
     maxTerminalsPerUser: number;
@@ -60,7 +71,18 @@ export interface TerminalConfig {
     isolationMode: IsolationMode;
     /** Allow fallback to "none" if namespace isolation unavailable */
     allowInsecureFallback: boolean;
+    /** Resource limits for terminal sessions (Linux only) */
+    resourceLimits?: Partial<ResourceLimits>;
+    /** Disable network access in namespace mode */
+    disableNetwork?: boolean;
 }
+
+const DEFAULT_RESOURCE_LIMITS: ResourceLimits = {
+    memoryMB: 512,
+    cpuShares: 512,  // Half of normal (1024)
+    maxProcesses: 100,
+    maxFDs: 1024,
+};
 
 const DEFAULT_CONFIG: TerminalConfig = {
     maxTerminalsPerUser: 5,
@@ -69,6 +91,8 @@ const DEFAULT_CONFIG: TerminalConfig = {
     enableAuditLog: true,
     isolationMode: 'none', // Default to single-user mode
     allowInsecureFallback: false,
+    resourceLimits: DEFAULT_RESOURCE_LIMITS,
+    disableNetwork: false,
 };
 
 /**
@@ -77,6 +101,20 @@ const DEFAULT_CONFIG: TerminalConfig = {
 function checkBubblewrapAvailable(): boolean {
     try {
         execSync('which bwrap', { stdio: 'pipe' });
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Check if systemd-run is available for cgroups resource limits
+ */
+function checkSystemdRunAvailable(): boolean {
+    try {
+        execSync('which systemd-run', { stdio: 'pipe' });
+        // Also check if we can use it (might need root or specific capabilities)
+        execSync('systemd-run --user --version', { stdio: 'pipe' });
         return true;
     } catch {
         return false;
@@ -97,9 +135,17 @@ export class TerminalService {
     private cleanupInterval: NodeJS.Timeout | null = null;
     private effectiveIsolationMode: IsolationMode;
     private bubblewrapAvailable: boolean = false;
+    private systemdRunAvailable: boolean = false;
+    private resourceLimits: ResourceLimits;
 
     constructor(config: Partial<TerminalConfig> = {}) {
         this.config = { ...DEFAULT_CONFIG, ...config };
+        this.resourceLimits = { ...DEFAULT_RESOURCE_LIMITS, ...config.resourceLimits };
+        
+        // Check for systemd-run availability (for cgroups)
+        if (isLinux()) {
+            this.systemdRunAvailable = checkSystemdRunAvailable();
+        }
         
         // Determine effective isolation mode
         this.effectiveIsolationMode = this.determineEffectiveIsolationMode();
@@ -116,6 +162,8 @@ export class TerminalService {
             requestedIsolationMode: this.config.isolationMode,
             effectiveIsolationMode: this.effectiveIsolationMode,
             bubblewrapAvailable: this.bubblewrapAvailable,
+            systemdRunAvailable: this.systemdRunAvailable,
+            resourceLimits: this.resourceLimits,
             platform: os.platform(),
         });
         
@@ -326,8 +374,14 @@ export class TerminalService {
         const bwrapArgs: string[] = [
             // Unshare namespaces
             '--unshare-all',
-            '--share-net', // Keep network for now (can be disabled for stricter isolation)
-            
+        ];
+        
+        // Conditionally share network (default: share, can be disabled for stricter isolation)
+        if (!this.config.disableNetwork) {
+            bwrapArgs.push('--share-net');
+        }
+        
+        bwrapArgs.push(
             // New session
             '--new-session',
             
@@ -366,8 +420,8 @@ export class TerminalService {
             
             // Set UID/GID (map to nobody-like user inside)
             '--uid', '1000',
-            '--gid', '1000',
-        ];
+            '--gid', '1000'
+        );
         
         // Add environment variables
         for (const [key, value] of Object.entries(env)) {
@@ -382,6 +436,52 @@ export class TerminalService {
         bwrapArgs.push(shell);
         
         return bwrapArgs;
+    }
+
+    /**
+     * Build systemd-run command for cgroups resource limits
+     * This wraps the bubblewrap command with resource constraints
+     */
+    private buildSystemdRunWrapper(command: string, args: string[]): { command: string; args: string[] } {
+        if (!this.systemdRunAvailable) {
+            // No systemd-run, just return original command
+            return { command, args };
+        }
+
+        const systemdArgs: string[] = [
+            '--user',           // Run in user scope (no root needed)
+            '--scope',          // Create transient scope (not service)
+            '--quiet',          // Suppress output
+            
+            // Resource limits via cgroups
+            '-p', `MemoryMax=${this.resourceLimits.memoryMB}M`,
+            '-p', `TasksMax=${this.resourceLimits.maxProcesses}`,
+            '-p', `CPUWeight=${this.resourceLimits.cpuShares}`,
+            
+            // Add ulimits
+            '-p', `LimitNOFILE=${this.resourceLimits.maxFDs}`,
+            
+            // The actual command to run
+            '--',
+            command,
+            ...args
+        ];
+
+        return { command: 'systemd-run', args: systemdArgs };
+    }
+
+    /**
+     * Get resource limits info for stats
+     */
+    getResourceLimits(): ResourceLimits {
+        return { ...this.resourceLimits };
+    }
+
+    /**
+     * Check if resource limits are enforced (systemd-run available)
+     */
+    hasResourceLimits(): boolean {
+        return this.systemdRunAvailable;
     }
 
     /**
@@ -426,12 +526,29 @@ export class TerminalService {
                 // Use bubblewrap for namespace isolation
                 const bwrapArgs = this.buildBwrapCommand(shell, userHome, env);
                 
-                logger.debug(`[TerminalService] Spawning with bwrap:`, { 
-                    args: bwrapArgs.slice(0, 20), // Log first 20 args
-                    userHome 
+                // Optionally wrap with systemd-run for resource limits
+                let spawnCmd = 'bwrap';
+                let spawnArgs = bwrapArgs;
+                
+                if (this.systemdRunAvailable) {
+                    const wrapped = this.buildSystemdRunWrapper('bwrap', bwrapArgs);
+                    spawnCmd = wrapped.command;
+                    spawnArgs = wrapped.args;
+                    
+                    logger.debug(`[TerminalService] Using systemd-run for resource limits:`, {
+                        memoryMB: this.resourceLimits.memoryMB,
+                        cpuShares: this.resourceLimits.cpuShares,
+                        maxProcesses: this.resourceLimits.maxProcesses,
+                    });
+                }
+                
+                logger.debug(`[TerminalService] Spawning with ${spawnCmd}:`, { 
+                    argsCount: spawnArgs.length,
+                    userHome,
+                    hasResourceLimits: this.systemdRunAvailable,
                 });
                 
-                pty = spawn('bwrap', bwrapArgs, {
+                pty = spawn(spawnCmd, spawnArgs, {
                     name: 'xterm-256color',
                     cols,
                     rows,
@@ -439,7 +556,7 @@ export class TerminalService {
                     env: { TERM: 'xterm-256color' }, // Minimal env, bwrap sets the rest
                 });
             } else {
-                // Direct PTY (none mode)
+                // Direct PTY (none mode) - no resource limits (single-user assumed)
                 pty = spawn(shell, [], {
                     name: 'xterm-256color',
                     cols,
@@ -751,6 +868,8 @@ export class TerminalService {
         sessionsPerUser: Record<string, number>;
         isolationMode: IsolationMode;
         isAvailable: boolean;
+        hasResourceLimits: boolean;
+        resourceLimits: ResourceLimits;
     } {
         const sessionsPerUser: Record<string, number> = {};
         
@@ -764,6 +883,8 @@ export class TerminalService {
             sessionsPerUser,
             isolationMode: this.effectiveIsolationMode,
             isAvailable: this.isAvailable(),
+            hasResourceLimits: this.systemdRunAvailable,
+            resourceLimits: this.resourceLimits,
         };
     }
 }

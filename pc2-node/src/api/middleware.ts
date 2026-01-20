@@ -9,12 +9,19 @@ import { DatabaseManager } from '../storage/database.js';
 import { Config } from '../config/loader.js';
 import { verifyOwner } from '../auth/owner.js';
 import { logger } from '../utils/logger.js';
+import { createHash } from 'crypto';
 
 export interface AuthenticatedRequest extends Request {
   user?: {
     wallet_address: string;
     smart_account_address: string | null;
     session_token: string;
+  };
+  apiKey?: {
+    key_id: string;
+    wallet_address: string;
+    scopes: string[];
+    name: string;
   };
 }
 
@@ -118,6 +125,61 @@ export function authenticate(
         referer: req.headers.referer?.substring(0, 100),
         error: e instanceof Error ? e.message : String(e)
       });
+    }
+  }
+
+  // Check for API key authentication (X-API-Key header)
+  const apiKeyHeader = req.headers['x-api-key'] as string | undefined;
+  if (apiKeyHeader && !token) {
+    // Hash the API key to compare with stored hash
+    const keyHash = createHash('sha256').update(apiKeyHeader).digest('hex');
+    const apiKeyRecord = db.getApiKeyByHash(keyHash);
+    
+    if (apiKeyRecord) {
+      // Check if key is revoked
+      if (apiKeyRecord.revoked) {
+        res.status(401).json({ error: 'API key revoked' });
+        return;
+      }
+      
+      // Check if key is expired
+      if (apiKeyRecord.expires_at && apiKeyRecord.expires_at < Date.now()) {
+        res.status(401).json({ error: 'API key expired' });
+        return;
+      }
+      
+      // Update last used timestamp
+      db.updateApiKeyLastUsed(apiKeyRecord.key_id);
+      
+      // Set user and apiKey on request
+      req.user = {
+        wallet_address: apiKeyRecord.wallet_address,
+        smart_account_address: null,
+        session_token: `apikey-${apiKeyRecord.key_id}`
+      };
+      req.apiKey = {
+        key_id: apiKeyRecord.key_id,
+        wallet_address: apiKeyRecord.wallet_address,
+        scopes: apiKeyRecord.scopes.split(','),
+        name: apiKeyRecord.name
+      };
+      
+      logger.info('[Auth Middleware] API key authenticated', {
+        keyId: apiKeyRecord.key_id,
+        name: apiKeyRecord.name,
+        walletPrefix: apiKeyRecord.wallet_address.substring(0, 10) + '...',
+        scopes: apiKeyRecord.scopes
+      });
+      
+      return next();
+    } else {
+      logger.warn('[Auth Middleware] Invalid API key', {
+        path: req.path,
+        method: req.method,
+        keyPrefix: apiKeyHeader.substring(0, 8) + '...'
+      });
+      res.status(401).json({ error: 'Invalid API key' });
+      return;
     }
   }
 

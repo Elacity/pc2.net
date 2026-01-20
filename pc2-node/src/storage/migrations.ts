@@ -29,7 +29,7 @@ function findSchemaFile(): string {
   }
   throw new Error(`Schema file not found. Tried: ${SCHEMA_FILE} and ${sourceSchema}`);
 }
-const CURRENT_VERSION = 8;
+const CURRENT_VERSION = 9;
 
 interface Migration {
   version: number;
@@ -341,6 +341,44 @@ export function runMigrations(db: Database.Database): void {
         recordMigration(db, 8);
       } catch (error: any) {
         console.error(`❌ Migration 8 error: ${error.message}`);
+        throw error;
+      }
+    }
+
+    // Migration 9: Add api_keys table for agent/programmatic access
+    if (currentVersion < 9) {
+      try {
+        console.log('📦 Running Migration 9: API keys table...');
+        
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS api_keys (
+            key_id TEXT PRIMARY KEY,
+            key_hash TEXT NOT NULL UNIQUE,
+            wallet_address TEXT NOT NULL,
+            name TEXT NOT NULL,
+            scopes TEXT NOT NULL DEFAULT 'read',
+            created_at INTEGER NOT NULL,
+            expires_at INTEGER,
+            last_used_at INTEGER,
+            revoked INTEGER DEFAULT 0,
+            FOREIGN KEY (wallet_address) REFERENCES users(wallet_address) ON DELETE CASCADE
+          )
+        `);
+        
+        db.exec(`
+          CREATE INDEX IF NOT EXISTS idx_api_keys_wallet 
+          ON api_keys(wallet_address)
+        `);
+        
+        db.exec(`
+          CREATE INDEX IF NOT EXISTS idx_api_keys_hash 
+          ON api_keys(key_hash)
+        `);
+        
+        console.log('✅ Migration 9 complete: API keys table created');
+        recordMigration(db, 9);
+      } catch (error: any) {
+        console.error(`❌ Migration 9 error: ${error.message}`);
         throw error;
       }
     }

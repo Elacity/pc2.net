@@ -745,4 +745,84 @@ export class DatabaseManager {
     
     return rows.map(row => row.app_name);
   }
+
+  // ============================================================================
+  // API Key Operations
+  // ============================================================================
+
+  /**
+   * Create a new API key
+   */
+  createApiKey(keyId: string, keyHash: string, walletAddress: string, name: string, scopes: string, expiresAt?: number): void {
+    const db = this.getDB();
+    const now = Date.now();
+    
+    db.prepare(`
+      INSERT INTO api_keys (key_id, key_hash, wallet_address, name, scopes, created_at, expires_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(keyId, keyHash, walletAddress, name, scopes, now, expiresAt || null);
+  }
+
+  /**
+   * Get API key by hash (for authentication)
+   */
+  getApiKeyByHash(keyHash: string): { key_id: string; wallet_address: string; name: string; scopes: string; expires_at: number | null; revoked: number } | null {
+    const db = this.getDB();
+    const row = db.prepare(`
+      SELECT key_id, wallet_address, name, scopes, expires_at, revoked
+      FROM api_keys
+      WHERE key_hash = ? AND revoked = 0
+    `).get(keyHash) as any;
+    
+    return row || null;
+  }
+
+  /**
+   * Update last used timestamp for API key
+   */
+  updateApiKeyLastUsed(keyId: string): void {
+    const db = this.getDB();
+    db.prepare(`
+      UPDATE api_keys SET last_used_at = ? WHERE key_id = ?
+    `).run(Date.now(), keyId);
+  }
+
+  /**
+   * List API keys for a user
+   */
+  listApiKeys(walletAddress: string): Array<{ key_id: string; name: string; scopes: string; created_at: number; expires_at: number | null; last_used_at: number | null; revoked: number }> {
+    const db = this.getDB();
+    const rows = db.prepare(`
+      SELECT key_id, name, scopes, created_at, expires_at, last_used_at, revoked
+      FROM api_keys
+      WHERE wallet_address = ?
+      ORDER BY created_at DESC
+    `).all(walletAddress) as any[];
+    
+    return rows;
+  }
+
+  /**
+   * Revoke an API key
+   */
+  revokeApiKey(keyId: string, walletAddress: string): boolean {
+    const db = this.getDB();
+    const result = db.prepare(`
+      UPDATE api_keys SET revoked = 1 WHERE key_id = ? AND wallet_address = ?
+    `).run(keyId, walletAddress);
+    
+    return result.changes > 0;
+  }
+
+  /**
+   * Delete an API key
+   */
+  deleteApiKey(keyId: string, walletAddress: string): boolean {
+    const db = this.getDB();
+    const result = db.prepare(`
+      DELETE FROM api_keys WHERE key_id = ? AND wallet_address = ?
+    `).run(keyId, walletAddress);
+    
+    return result.changes > 0;
+  }
 }

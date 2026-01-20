@@ -51,9 +51,25 @@ CREATE TABLE IF NOT EXISTS recent_apps (
   FOREIGN KEY (wallet_address) REFERENCES users(wallet_address) ON DELETE CASCADE
 );
 
+-- API Keys table: For programmatic/agent access
+CREATE TABLE IF NOT EXISTS api_keys (
+  key_id TEXT PRIMARY KEY,
+  key_hash TEXT NOT NULL UNIQUE,
+  wallet_address TEXT NOT NULL,
+  name TEXT NOT NULL,
+  scopes TEXT NOT NULL DEFAULT 'read',
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER,
+  last_used_at INTEGER,
+  revoked INTEGER DEFAULT 0,
+  FOREIGN KEY (wallet_address) REFERENCES users(wallet_address) ON DELETE CASCADE
+);
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_sessions_wallet ON sessions(wallet_address);
 CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_files_wallet ON files(wallet_address);
 CREATE INDEX IF NOT EXISTS idx_files_path ON files(path);
 CREATE INDEX IF NOT EXISTS idx_recent_apps_wallet ON recent_apps(wallet_address);
+CREATE INDEX IF NOT EXISTS idx_api_keys_wallet ON api_keys(wallet_address);
+CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash);

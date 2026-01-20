@@ -13,11 +13,11 @@
 
 ```bash
 # Complete restart sequence (ALWAYS do all steps)
-lsof -ti:4202 | xargs kill -9 2>/dev/null || true
-cd /Users/mtk/Documents/Cursor/pc2.net/pc2-node/test-fresh-install
+lsof -ti:4200 | xargs kill -9 2>/dev/null || true
+cd /Users/mtk/Documents/Cursor/pc2.net/pc2-node
 npm run build:backend
 npm run build:frontend
-PORT=4202 npm start
+npm start
 ```
 
 **Then:** User must hard refresh browser (Cmd+Shift+R / Ctrl+Shift+R)
@@ -101,6 +101,64 @@ PORT=4202 npm start
 2. **Socket.io Duplicate Connections** - GUI creates its own socket while SDK has another; consolidated to single connection
 3. **Event Deduplication** - When multiple sockets exist, same events fire twice; implemented TTL-based dedup cache
 4. **Verbose Logging Impact** - 100+ console.logs per file causes noise; use conditional debug flags
+
+---
+
+**App Icons & UI Bug Fixes - ✅ COMPLETE (2026-01-20)**
+
+**Problems Solved:**
+1. **Cube Icons in Recent Section** - App icons displayed as blue cubes instead of actual app icons
+2. **Double Dialog on Upload** - Clicking "Upload" in file picker opened two dialogs
+3. **WASM Apps Black Screen** - Calculator and File Analyzer showed blank screens
+4. **WASM Apps Close Button** - X button on WASM app windows did nothing
+
+**Root Cause Analysis:**
+
+The cube icon issue was traced through multiple layers:
+1. **Initial suspicion:** Missing icons in `/apps/:name` endpoint - Fixed, but issue persisted
+2. **Second layer:** Missing icons in `/open_item` and `/suggest_apps` - Fixed, but issue persisted  
+3. **Root cause discovered:** The Puter SDK's `puter.apps.get()` calls `/drivers/call` endpoint (not `/apps/:name`), and this endpoint had `icon: undefined` for all apps except editor
+
+**Key Discovery:** The Puter SDK uses a **drivers abstraction layer** for app lookups. When launching apps:
+```
+Frontend: puter.apps.get('camera') 
+  → SDK: POST /drivers/call {interface: 'puter-apps', method: 'read', args: {id: {name: 'camera'}}}
+  → Backend: handleDriversCall() returns app info
+  → app_info stored in window.launch_apps.recent (with or without icon)
+```
+
+This means app icons must be defined in **THREE places** for full coverage:
+1. `/apps/:name` - Direct app info endpoint
+2. `/get-launch-apps` - Start menu recommended/recent apps
+3. `/drivers/call` - Puter SDK app lookups (the missing piece!)
+
+**Solution Implemented:**
+1. ✅ **Drivers Endpoint Icons** - Added `hardcodedIcons` to `/drivers/call` handler's `appMap`
+2. ✅ **Server-Side Recent Apps** - New `recent_apps` database table for persistence across sessions
+3. ✅ **Double Dialog Fix** - Added `init_upload_for_open_dialog()` to handle uploads within file picker context
+4. ✅ **WASM Build Fix** - Updated `build-frontend.js` to copy app directories correctly
+5. ✅ **WASM IPC Fix** - Added `windowWillClose` handler to WASM app HTML files
+
+**Files Modified:**
+- `pc2-node/src/api/other.ts` - Added icons to all three `appMap` definitions in drivers handler
+- `pc2-node/src/api/info.ts` - Server-side recent apps with auth-aware retrieval
+- `pc2-node/src/api/apps.ts` - Consistent icon handling
+- `pc2-node/src/storage/database.ts` - `recordRecentApp()`, `getRecentApps()` methods
+- `pc2-node/src/storage/migrations.ts` - Migration 8 for `recent_apps` table
+- `pc2-node/src/storage/schema.sql` - `recent_apps` table definition
+- `pc2-node/scripts/build-frontend.js` - Fixed app directory copying
+- `pc2-node/wasm-apps/*/index.html` - Added `windowWillClose` IPC handlers
+- `src/gui/src/UI/UIWindow.js` - Upload button handling for open dialogs
+- `src/gui/src/helpers.js` - `init_upload_for_open_dialog()`, `upload_items_for_open_dialog()`
+
+**Key Learnings:**
+1. **Puter SDK Drivers Layer** - The SDK doesn't call REST endpoints directly; it uses a `/drivers/call` abstraction. Any endpoint that apps use via SDK must have data in the drivers handler.
+2. **Multiple Icon Sources** - Icons must be consistent across all endpoints that return app info (direct, launcher, and drivers)
+3. **IPC for Window Lifecycle** - WASM apps in iframes need explicit IPC handlers for window operations (close, minimize, etc.)
+4. **Build Artifacts vs Source** - `frontend/apps/*` are build outputs; source lives in `wasm-apps/` and `src/backend/apps/`
+
+**Architecture Insight for Future:**
+Consider centralizing app metadata in a single source of truth (e.g., `appRegistry.ts`) that all endpoints consume, rather than duplicating `appMap` definitions across handlers.
 
 ---
 
@@ -1266,7 +1324,7 @@ if (token.length === 64 && /^[0-9a-f]+$/i.test(token)) {
 
 ### Testing Command
 ```bash
-cd /Users/mtk/Documents/Cursor/pc2.net/pc2-node/test-fresh-install && PORT=4202 npm start
+cd /Users/mtk/Documents/Cursor/pc2.net/pc2-node/test-fresh-install && npm start
 ```
 
 ---
@@ -1538,7 +1596,7 @@ Key Characteristics:
 │                          │ Local (Same Origin)              │
 │                          ▼                                  │
 │  ┌──────────────────────────────────────────────────────┐  │
-│  │  Backend API (localhost:4202)                        │  │
+│  │  Backend API (localhost:4200)                        │  │
 │  │  - Express.js server                                  │  │
 │  │  - All endpoints implemented                           │  │
 │  │  - Wallet-based authentication                         │  │
@@ -1557,7 +1615,7 @@ Key Characteristics:
 │                                     └──────────────┘       │
 │                                                              │
 │  ✅ Single Process                                           │
-│  ✅ Single Port (4202)                                       │
+│  ✅ Single Port (4200)                                       │
 │  ✅ No CORS (same-origin)                                    │
 │  ✅ Self-contained                                           │
 │  ✅ Works offline                                            │
@@ -1587,7 +1645,7 @@ Key Characteristics:
 |--------|---------------|------------------------|
 | **Deployment** | Centralized cloud servers | User's hardware (Raspberry Pi, VPS, Mac) |
 | **Frontend** | Served from CDN (js.puter.com) | Built-in, served locally |
-| **Backend** | api.puter.com (shared) | localhost:4202 (per-user) |
+| **Backend** | api.puter.com (shared) | localhost:4200 (per-user) |
 | **Storage** | Puter cloud storage | Local IPFS + SQLite |
 | **Authentication** | Account-based (email/password) | Wallet-based (Particle Auth) |
 | **Internet Required** | Yes (always) | No (works offline) |
@@ -1623,7 +1681,7 @@ User Browser
     │
     │ HTTP/HTTPS (Same Origin)
     ▼
-Local Server (localhost:4202)
+Local Server (localhost:4200)
     │
     ├─→ SQLite DB (Sessions, Metadata)
     │
@@ -1673,7 +1731,7 @@ When making changes, **ALWAYS** follow this sequence:
 1. **Edit TypeScript source** (`pc2-node/test-fresh-install/src/**/*.ts`)
 2. **Compile TypeScript:**
    ```bash
-   cd pc2-node/test-fresh-install
+   cd pc2-node
    npx tsc --skipLibCheck  # Skip lib check if other files have errors
    ```
 3. **Verify compilation:**
@@ -1683,9 +1741,9 @@ When making changes, **ALWAYS** follow this sequence:
 4. **Restart server:**
    ```bash
    # Kill old process
-   lsof -ti:4202 | xargs kill -9
+   lsof -ti:4200 | xargs kill -9
    # Start new process
-   cd pc2-node/test-fresh-install && PORT=4202 npm start
+   cd pc2-node && npm start
    ```
 
 #### Frontend Changes (Source → Bundle)
@@ -1706,16 +1764,16 @@ When making changes, **ALWAYS** follow this sequence:
 1. **Edit both TypeScript and frontend source**
 2. **Compile backend:**
    ```bash
-   cd pc2-node/test-fresh-install && npx tsc --skipLibCheck
+   cd pc2-node && npx tsc --skipLibCheck
    ```
 3. **Rebuild frontend:**
    ```bash
-   node pc2-node/test-fresh-install/scripts/build-frontend.js
+   node pc2-node/scripts/build-frontend.js
    ```
 4. **Restart server:**
    ```bash
-   lsof -ti:4202 | xargs kill -9
-   cd pc2-node/test-fresh-install && PORT=4202 npm start
+   lsof -ti:4200 | xargs kill -9
+   cd pc2-node && npm start
    ```
 5. **Hard refresh browser**
 
@@ -1809,10 +1867,10 @@ When making changes, **ALWAYS** follow this sequence:
 
 **Solution:** Compile and restart:
 ```bash
-cd pc2-node/test-fresh-install
+cd pc2-node
 npx tsc --skipLibCheck
-lsof -ti:4202 | xargs kill -9
-PORT=4202 npm start
+lsof -ti:4200 | xargs kill -9
+npm start
 ```
 
 #### Scenario 2: "My frontend changes aren't showing"
@@ -1836,14 +1894,14 @@ node pc2-node/test-fresh-install/scripts/build-frontend.js
 **Solution:** Full restart:
 ```bash
 # Compile backend
-cd pc2-node/test-fresh-install && npx tsc --skipLibCheck
+cd pc2-node && npx tsc --skipLibCheck
 
 # Kill and restart server
-lsof -ti:4202 | xargs kill -9
-PORT=4202 npm start
+lsof -ti:4200 | xargs kill -9
+npm start
 
 # Rebuild frontend if you changed event handlers
-node pc2-node/test-fresh-install/scripts/build-frontend.js
+node pc2-node/scripts/build-frontend.js
 ```
 
 #### Scenario 4: "TypeScript compilation fails but I only changed one file"
@@ -2753,18 +2811,18 @@ To properly address this, consider:
 
 ```bash
 # 1. Kill all existing processes
-lsof -ti:4202 | xargs kill -9 2>/dev/null || true
+lsof -ti:4200 | xargs kill -9 2>/dev/null || true
 pkill -f "node.*pc2-node" || pkill -f "npm.*start" || true
 
 # 2. Rebuild Backend (TypeScript → JavaScript)
-cd pc2-node/test-fresh-install
+cd pc2-node
 npm run build:backend
 
 # 3. Rebuild Frontend (Source → Bundle)
 npm run build:frontend
 
 # 4. Restart Server
-PORT=4202 npm start
+npm start
 ```
 
 #### Why This Matters
@@ -2801,7 +2859,7 @@ After full restart, verify:
 ls -lh pc2-node/test-fresh-install/frontend/bundle.min.js
 
 # Check server is running
-curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:4202
+curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:4200
 # Should return: 200
 
 # Check compiled backend exists

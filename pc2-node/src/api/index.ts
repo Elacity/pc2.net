@@ -14,6 +14,7 @@ import { handleFile } from './file.js';
 import storageRouter from './storage.js';
 import aiRouter from './ai.js';
 import wasmRouter from './wasm.js';
+import resourcesRouter from './resources.js';
 import { handleSearch } from './search.js';
 import { handleGetApp } from './apps.js';
 import { handleGetVersions, handleGetVersion, handleRestoreVersion } from './versions.js';
@@ -308,6 +309,7 @@ export function setupAPI(app: Express): void {
   app.use('/api/storage', storageRouter);
   app.use('/api/ai', aiRouter);
   app.use('/api/wasm', wasmRouter);
+  app.use('/api/resources', resourcesRouter);
 
   // Search endpoint (require auth)
   app.post('/search', authenticate, handleSearch);

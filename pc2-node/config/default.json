@@ -34,5 +34,22 @@
         "apiKey": ""
       }
     }
+  },
+  "resources": {
+    "storage": {
+      "limit": "auto",
+      "reserve_free_space": "10GB"
+    },
+    "compute": {
+      "max_cpu_percent": 80,
+      "max_memory_mb": "auto",
+      "max_concurrent_wasm": 4,
+      "wasm_timeout_ms": 30000
+    },
+    "network": {
+      "max_upload_mbps": "unlimited",
+      "max_download_mbps": "unlimited",
+      "max_connections": 100
+    }
   }
 }

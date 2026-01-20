@@ -89,11 +89,6 @@ export default {
                         </div>
                         
                         <div class="settings-card" style="margin-bottom: 8px;">
-                            <strong>Node Uptime</strong>
-                            <span id="about-node-uptime" style="font-size: 13px; color: #666;">Loading...</span>
-                        </div>
-                        
-                        <div class="settings-card" style="margin-bottom: 8px;">
                             <strong>Database</strong>
                             <span id="about-database-status" style="font-size: 13px; color: #666;">Loading...</span>
                         </div>
@@ -228,18 +223,7 @@ export default {
                 if (response.ok) {
                     const health = await response.json();
                     
-                    // Format uptime
-                    const uptimeSeconds = health.uptime || 0;
-                    const days = Math.floor(uptimeSeconds / 86400);
-                    const hours = Math.floor((uptimeSeconds % 86400) / 3600);
-                    const mins = Math.floor((uptimeSeconds % 3600) / 60);
-                    let uptimeStr = '';
-                    if (days > 0) uptimeStr += `${days}d `;
-                    if (hours > 0) uptimeStr += `${hours}h `;
-                    uptimeStr += `${mins}m`;
-                    
                     $el_window.find('#about-node-version').text(health.version || '0.1.0');
-                    $el_window.find('#about-node-uptime').text(uptimeStr || '-');
                     $el_window.find('#about-database-status').html(
                         health.database === 'connected' 
                             ? '<span style="color: #16a34a;">Connected</span>' 
@@ -254,7 +238,7 @@ export default {
                 }
             } catch (error) {
                 console.error('[About] Failed to load system info:', error);
-                $el_window.find('#about-node-version, #about-node-uptime, #about-database-status, #about-ipfs-status').text('Error');
+                $el_window.find('#about-node-version, #about-database-status, #about-ipfs-status').text('Error');
             }
         } else {
             // Original Puter version info for non-PC2 mode

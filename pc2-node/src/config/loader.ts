@@ -49,6 +49,23 @@ export interface Config {
       };
     };
   };
+  resources?: {
+    storage?: {
+      limit?: string | number;           // "auto", "10GB", "100GB", "unlimited", or bytes
+      reserve_free_space?: string;        // "10GB" - space to keep free
+    };
+    compute?: {
+      max_cpu_percent?: number;           // 0-100, default 80
+      max_memory_mb?: string | number;    // "auto" or MB value
+      max_concurrent_wasm?: number;       // Max parallel WASM executions
+      wasm_timeout_ms?: number;           // WASM execution timeout
+    };
+    network?: {
+      max_upload_mbps?: string | number;  // "unlimited" or Mbps
+      max_download_mbps?: string | number;
+      max_connections?: number;
+    };
+  };
 }
 
 const DEFAULT_CONFIG_PATH = join(__dirname, '../../config/default.json');

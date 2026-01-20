@@ -74,6 +74,114 @@ export default {
                     </div>
                 </div>
                 
+                <!-- System Resources Section -->
+                <h2 style="font-size: 15px; margin: 20px 0 10px; color: #333;">System</h2>
+                
+                <!-- Visual Gauges Row -->
+                <div class="pc2-system-gauges">
+                    <div class="pc2-gauge-card" title="CPU usage is not currently tracked. Shows 0% as placeholder.">
+                        <div class="pc2-ring-gauge" id="cpu-gauge">
+                            <svg viewBox="0 0 100 100">
+                                <circle class="gauge-bg" cx="50" cy="50" r="40"/>
+                                <circle class="gauge-fill" cx="50" cy="50" r="40" 
+                                        stroke-dasharray="251.2" stroke-dashoffset="251.2"/>
+                            </svg>
+                            <div class="pc2-gauge-value" id="cpu-gauge-value">--%</div>
+                        </div>
+                        <div class="pc2-gauge-label">CPU</div>
+                    </div>
+                    
+                    <div class="pc2-gauge-card" title="System memory usage. On macOS, high usage is normal - the OS uses free RAM for caching and releases it when apps need it.">
+                        <div class="pc2-ring-gauge" id="memory-gauge">
+                            <svg viewBox="0 0 100 100">
+                                <circle class="gauge-bg" cx="50" cy="50" r="40"/>
+                                <circle class="gauge-fill" cx="50" cy="50" r="40" 
+                                        stroke-dasharray="251.2" stroke-dashoffset="251.2"/>
+                            </svg>
+                            <div class="pc2-gauge-value" id="memory-gauge-value">--%</div>
+                        </div>
+                        <div class="pc2-gauge-label">Memory</div>
+                    </div>
+                    
+                    <div class="pc2-gauge-card" title="Disk space used on the volume where PC2 data is stored. Consider freeing space if above 90%.">
+                        <div class="pc2-ring-gauge" id="disk-gauge">
+                            <svg viewBox="0 0 100 100">
+                                <circle class="gauge-bg" cx="50" cy="50" r="40"/>
+                                <circle class="gauge-fill" cx="50" cy="50" r="40" 
+                                        stroke-dasharray="251.2" stroke-dashoffset="251.2"/>
+                            </svg>
+                            <div class="pc2-gauge-value" id="disk-gauge-value">--%</div>
+                        </div>
+                        <div class="pc2-gauge-label">Disk</div>
+                    </div>
+                </div>
+                
+                <!-- System Info Card -->
+                <div class="pc2-system-info-card">
+                    <div class="pc2-system-info-row">
+                        <span class="pc2-system-info-label">Platform</span>
+                        <span class="pc2-system-info-value" id="system-platform">Loading...</span>
+                    </div>
+                    <div class="pc2-system-info-row">
+                        <span class="pc2-system-info-label">Processor</span>
+                        <span class="pc2-system-info-value" id="system-cpu-model">Loading...</span>
+                    </div>
+                    <div class="pc2-system-info-row">
+                        <span class="pc2-system-info-label">Memory</span>
+                        <span class="pc2-system-info-value" id="system-memory-total">Loading...</span>
+                    </div>
+                    <div class="pc2-system-info-row">
+                        <span class="pc2-system-info-label">Node Uptime</span>
+                        <span class="pc2-system-info-value" id="system-uptime">Loading...</span>
+                    </div>
+                </div>
+                
+                <!-- Compute Limits Section -->
+                <h2 style="font-size: 15px; margin: 20px 0 10px; color: #333;">Compute Limits</h2>
+                
+                <div class="settings-card" style="justify-content: space-between;">
+                    <strong style="flex-shrink: 0;">Max Concurrent WASM</strong>
+                    <select id="pc2-wasm-concurrent-select" style="font: inherit; font-size: 12px; padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px; width: auto; flex-grow: 0; flex-shrink: 0;">
+                        <option value="1">1 (Minimal)</option>
+                        <option value="2">2 (Low)</option>
+                        <option value="4">4 (Default)</option>
+                        <option value="8">8 (High)</option>
+                        <option value="16">16 (Maximum)</option>
+                    </select>
+                </div>
+                
+                <div class="settings-card" style="justify-content: space-between;">
+                    <strong style="flex-shrink: 0;">WASM Memory Limit</strong>
+                    <select id="pc2-wasm-memory-select" style="font: inherit; font-size: 12px; padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px; width: auto; flex-grow: 0; flex-shrink: 0;">
+                        <option value="auto">Auto-detect</option>
+                        <option value="256">256 MB</option>
+                        <option value="512">512 MB</option>
+                        <option value="1024">1 GB</option>
+                        <option value="2048">2 GB</option>
+                        <option value="4096">4 GB</option>
+                    </select>
+                </div>
+                
+                <div class="settings-card" style="justify-content: space-between;">
+                    <strong style="flex-shrink: 0;">WASM Timeout</strong>
+                    <select id="pc2-wasm-timeout-select" style="font: inherit; font-size: 12px; padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px; width: auto; flex-grow: 0; flex-shrink: 0;">
+                        <option value="10000">10 seconds</option>
+                        <option value="30000">30 seconds</option>
+                        <option value="60000">1 minute</option>
+                        <option value="120000">2 minutes</option>
+                        <option value="300000">5 minutes</option>
+                    </select>
+                </div>
+                
+                <div class="settings-card" style="justify-content: space-between;">
+                    <strong style="flex-shrink: 0;">WASM Runtime Status</strong>
+                    <span style="flex-shrink: 0;">
+                        <span id="pc2-wasm-active" style="font-size: 12px; color: #22c55e;">0 active</span>
+                        <span style="color: #d1d5db; margin: 0 6px;">|</span>
+                        <span id="pc2-wasm-queued" style="font-size: 12px; color: #6b7280;">0 queued</span>
+                    </span>
+                </div>
+                
                 <!-- Storage Section -->
                 <h2 style="font-size: 15px; margin: 20px 0 10px; color: #333;">Storage</h2>
                 
@@ -453,6 +561,165 @@ export default {
                     from { transform: rotate(0deg); }
                     to { transform: rotate(360deg); }
                 }
+                
+                /* System Resources - Ring Gauges */
+                .pc2-system-gauges {
+                    display: flex;
+                    gap: 30px;
+                    padding: 20px 15px;
+                    justify-content: center;
+                    background: #f9fafb;
+                    border-radius: 8px;
+                    margin-bottom: 15px;
+                }
+                .pc2-gauge-card {
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    gap: 8px;
+                }
+                .pc2-ring-gauge {
+                    position: relative;
+                    width: 90px;
+                    height: 90px;
+                }
+                .pc2-ring-gauge svg {
+                    width: 100%;
+                    height: 100%;
+                    transform: rotate(-90deg);
+                }
+                .pc2-ring-gauge .gauge-bg {
+                    fill: none;
+                    stroke: #e5e7eb;
+                    stroke-width: 8;
+                }
+                .pc2-ring-gauge .gauge-fill {
+                    fill: none;
+                    stroke: #22c55e;
+                    stroke-width: 8;
+                    stroke-linecap: round;
+                    transition: stroke-dashoffset 0.5s ease, stroke 0.3s ease;
+                }
+                .pc2-gauge-value {
+                    position: absolute;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    font-size: 18px;
+                    font-weight: 600;
+                    color: #1f2937;
+                }
+                .pc2-gauge-label {
+                    font-size: 13px;
+                    font-weight: 500;
+                    color: #6b7280;
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
+                }
+                
+                /* Memory Pressure Bar */
+                .pc2-pressure-container {
+                    flex-grow: 1;
+                    margin-left: 15px;
+                }
+                .pc2-pressure-bar {
+                    height: 8px;
+                    background: linear-gradient(to right, #22c55e 0%, #22c55e 50%, #eab308 50%, #eab308 80%, #dc2626 80%, #dc2626 100%);
+                    border-radius: 4px;
+                    position: relative;
+                    overflow: hidden;
+                }
+                .pc2-pressure-indicator {
+                    position: absolute;
+                    top: -2px;
+                    width: 4px;
+                    height: 12px;
+                    background: #1f2937;
+                    border-radius: 2px;
+                    transition: left 0.5s ease;
+                    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+                }
+                .pc2-pressure-label {
+                    font-size: 11px;
+                    color: #6b7280;
+                    margin-top: 4px;
+                }
+                
+                /* Storage Breakdown Bar */
+                .pc2-storage-breakdown-container {
+                    margin: 15px 0;
+                }
+                .pc2-storage-breakdown {
+                    display: flex;
+                    height: 24px;
+                    border-radius: 6px;
+                    overflow: hidden;
+                    background: #e5e7eb;
+                }
+                .pc2-storage-segment {
+                    transition: width 0.3s ease;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 10px;
+                    font-weight: 500;
+                    color: white;
+                    text-shadow: 0 1px 1px rgba(0,0,0,0.2);
+                    min-width: 0;
+                    overflow: hidden;
+                }
+                .pc2-storage-segment.private { background: #3b82f6; }
+                .pc2-storage-segment.public { background: #22c55e; }
+                .pc2-storage-segment.system { background: #6b7280; }
+                .pc2-storage-segment.free { background: #e5e7eb; color: #6b7280; text-shadow: none; }
+                .pc2-storage-legend {
+                    display: flex;
+                    gap: 16px;
+                    margin-top: 8px;
+                    flex-wrap: wrap;
+                }
+                .pc2-storage-legend-item {
+                    display: flex;
+                    align-items: center;
+                    gap: 6px;
+                    font-size: 11px;
+                    color: #6b7280;
+                }
+                .pc2-storage-legend-dot {
+                    width: 10px;
+                    height: 10px;
+                    border-radius: 2px;
+                }
+                .pc2-storage-legend-dot.private { background: #3b82f6; }
+                .pc2-storage-legend-dot.public { background: #22c55e; }
+                .pc2-storage-legend-dot.system { background: #6b7280; }
+                .pc2-storage-legend-dot.free { background: #e5e7eb; border: 1px solid #d1d5db; }
+                
+                /* System Info Card */
+                .pc2-system-info-card {
+                    background: #f9fafb;
+                    border-radius: 8px;
+                    padding: 15px;
+                    margin-bottom: 15px;
+                }
+                .pc2-system-info-row {
+                    display: flex;
+                    justify-content: space-between;
+                    padding: 8px 0;
+                    border-bottom: 1px solid #e5e7eb;
+                }
+                .pc2-system-info-row:last-child {
+                    border-bottom: none;
+                }
+                .pc2-system-info-label {
+                    font-size: 13px;
+                    color: #6b7280;
+                }
+                .pc2-system-info-value {
+                    font-size: 13px;
+                    font-weight: 500;
+                    color: #1f2937;
+                }
             </style>
         `;
     },
@@ -472,6 +739,188 @@ export default {
             const i = Math.floor(Math.log(bytes) / Math.log(k));
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
         }
+        
+        // Update ring gauge with animation
+        function updateRingGauge($el_window, gaugeId, percent) {
+            const circumference = 251.2; // 2 * PI * 40
+            const offset = circumference * (1 - Math.min(100, Math.max(0, percent)) / 100);
+            
+            // Update stroke-dashoffset for animation
+            $el_window.find(`#${gaugeId} .gauge-fill`).attr('stroke-dashoffset', offset);
+            
+            // Update value text
+            $el_window.find(`#${gaugeId}-value`).text(`${Math.round(percent)}%`);
+            
+            // Update color based on threshold (green → yellow → blue)
+            // Blue for high usage is informational, not alarming (especially for macOS memory)
+            let color;
+            if (percent < 50) {
+                color = '#22c55e'; // Green - low usage
+            } else if (percent < 80) {
+                color = '#eab308'; // Yellow - moderate usage
+            } else {
+                color = '#3b82f6'; // Blue - high usage (informational)
+            }
+            $el_window.find(`#${gaugeId} .gauge-fill`).css('stroke', color);
+        }
+        
+        // Load system resources with visual gauges
+        async function loadSystemResources() {
+            if (!isPC2Mode() || !window.api_origin) return;
+            
+            try {
+                const authToken = getAuthToken();
+                const url = new URL('/api/resources', window.api_origin);
+                const headers = { 'Content-Type': 'application/json' };
+                if (authToken) {
+                    headers['Authorization'] = `Bearer ${authToken}`;
+                }
+                
+                const response = await fetch(url.toString(), { method: 'GET', headers });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    if (data.system) {
+                        // Update ring gauges with animation
+                        // Note: CPU usage requires additional calculation - for now show 0
+                        updateRingGauge($el_window, 'cpu-gauge', 0);
+                        updateRingGauge($el_window, 'memory-gauge', data.system.memory.usedPercent || 0);
+                        updateRingGauge($el_window, 'disk-gauge', data.system.disk.usedPercent || 0);
+                        
+                        // Update system info card
+                        const platformDisplay = data.system.platform === 'darwin' ? 'macOS' : 
+                                                data.system.platform === 'win32' ? 'Windows' : 
+                                                data.system.platform === 'linux' ? 'Linux' : data.system.platform;
+                        $el_window.find('#system-platform').text(`${platformDisplay} (${data.system.hostname || 'local'})`);
+                        $el_window.find('#system-cpu-model').text(`${data.system.cpu.model.split('@')[0].trim()} • ${data.system.cpu.cores} cores`);
+                        $el_window.find('#system-memory-total').text(data.system.memory.totalFormatted || formatBytes(data.system.memory.total));
+                        $el_window.find('#system-uptime').text(data.system.uptimeFormatted || '-');
+                    }
+                    
+                    // Update compute limits selects
+                    if (data.limits && data.limits.compute) {
+                        const compute = data.limits.compute;
+                        $el_window.find('#pc2-wasm-concurrent-select').val(compute.maxConcurrentWasm || 4);
+                        $el_window.find('#pc2-wasm-memory-select').val(compute.maxMemoryMb === 'auto' ? 'auto' : compute.maxMemoryMb || 'auto');
+                        $el_window.find('#pc2-wasm-timeout-select').val(compute.wasmTimeoutMs || 30000);
+                    }
+                } else {
+                    logger.warn('[PC2Tab] Failed to load system resources:', response.status);
+                }
+            } catch (error) {
+                logger.error('[PC2Tab] Error loading system resources:', error);
+            }
+        }
+        
+        // Load WASM runtime stats
+        async function loadWasmStats() {
+            if (!isPC2Mode() || !window.api_origin) return;
+            
+            try {
+                const authToken = getAuthToken();
+                const url = new URL('/api/wasm/stats', window.api_origin);
+                const headers = { 'Content-Type': 'application/json' };
+                if (authToken) {
+                    headers['Authorization'] = `Bearer ${authToken}`;
+                }
+                
+                const response = await fetch(url.toString(), { method: 'GET', headers });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.stats) {
+                        $el_window.find('#pc2-wasm-active').text(`${data.stats.activeExecutions} active`);
+                        $el_window.find('#pc2-wasm-queued').text(`${data.stats.queueLength} queued`);
+                    }
+                }
+            } catch (error) {
+                // Silently fail - stats are not critical
+            }
+        }
+        
+        // Save compute limit
+        async function saveComputeLimit(key, value) {
+            if (!isPC2Mode() || !window.api_origin) return;
+            
+            try {
+                const authToken = getAuthToken();
+                const url = new URL('/api/resources/limits', window.api_origin);
+                const headers = { 'Content-Type': 'application/json' };
+                if (authToken) {
+                    headers['Authorization'] = `Bearer ${authToken}`;
+                }
+                
+                const body = { compute: {} };
+                body.compute[key] = value;
+                
+                const response = await fetch(url.toString(), {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify(body)
+                });
+                
+                if (response.ok) {
+                    if (window.puter?.ui?.toast) {
+                        puter.ui.toast('Compute limit updated', { type: 'success' });
+                    }
+                } else {
+                    throw new Error('Failed to save');
+                }
+            } catch (error) {
+                logger.error('[PC2Tab] Failed to save compute limit:', error);
+                if (window.puter?.ui?.toast) {
+                    puter.ui.toast('Failed to update compute limit', { type: 'error' });
+                }
+            }
+        }
+        
+        // Compute limit change handlers
+        $el_window.find('#pc2-wasm-concurrent-select').on('change', async function() {
+            const value = parseInt($(this).val(), 10);
+            $(this).prop('disabled', true);
+            await saveComputeLimit('max_concurrent_wasm', value);
+            $(this).prop('disabled', false);
+        });
+        
+        $el_window.find('#pc2-wasm-memory-select').on('change', async function() {
+            const value = $(this).val();
+            $(this).prop('disabled', true);
+            await saveComputeLimit('max_memory_mb', value === 'auto' ? 'auto' : parseInt(value, 10));
+            $(this).prop('disabled', false);
+        });
+        
+        $el_window.find('#pc2-wasm-timeout-select').on('change', async function() {
+            const value = parseInt($(this).val(), 10);
+            $(this).prop('disabled', true);
+            await saveComputeLimit('wasm_timeout_ms', value);
+            $(this).prop('disabled', false);
+        });
+        
+        // Real-time refresh interval
+        let systemResourcesInterval = null;
+        
+        function startSystemResourcesPolling() {
+            // Initial load
+            loadSystemResources();
+            loadWasmStats();
+            
+            // Poll every 5 seconds
+            systemResourcesInterval = setInterval(() => {
+                loadSystemResources();
+                loadWasmStats();
+            }, 5000);
+        }
+        
+        function stopSystemResourcesPolling() {
+            if (systemResourcesInterval) {
+                clearInterval(systemResourcesInterval);
+                systemResourcesInterval = null;
+            }
+        }
+        
+        // Store for cleanup on tab switch
+        this._stopSystemResourcesPolling = stopSystemResourcesPolling;
         
         // isPC2Mode is now defined at module level (above) for access in on_show
         
@@ -535,8 +984,13 @@ export default {
                 await Promise.all([
                     loadStorageStats(),
                     loadWallets(),
-                    loadBackups()
+                    loadBackups(),
+                    loadSystemResources(),
+                    loadWasmStats()
                 ]);
+                
+                // Start real-time polling for system resources
+                startSystemResourcesPolling();
             } else {
                 $statusDot.removeClass('connected connecting').addClass('disconnected');
                 $statusText.text(isConfigured ? 'Disconnected' : 'Not Configured');
@@ -1502,6 +1956,12 @@ export default {
             }
             // Re-init to refresh all data
             this.init($window);
+        }
+    },
+    on_hide: function() {
+        // Stop system resources polling when tab is hidden
+        if (this._stopSystemResourcesPolling) {
+            this._stopSystemResourcesPolling();
         }
     }
 };

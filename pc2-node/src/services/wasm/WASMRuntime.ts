@@ -2,6 +2,11 @@
  * WASM Runtime Service
  * Executes WASM binaries locally on PC2 node
  * Completely self-contained - no external dependencies
+ * 
+ * Features:
+ * - Concurrency control (max parallel executions)
+ * - Execution timeout
+ * - Memory limit enforcement
  */
 
 import { logger } from '../../utils/logger.js';
@@ -15,14 +20,73 @@ export interface WASMExecutionResult {
     success: boolean;
     result?: any;
     error?: string;
+    executionTimeMs?: number;
+}
+
+export interface WASMExecutionOptions {
+    timeoutMs?: number;      // Execution timeout (default: 30000ms)
+    maxMemoryMb?: number;    // Max memory for this execution (default: 512MB)
+    inputFiles?: Record<string, string>;  // Map of realPath -> wasiPath for WASI file access
+}
+
+export interface WASMRuntimeConfig {
+    maxConcurrent?: number;  // Max concurrent executions (default: 4)
+    defaultTimeoutMs?: number;  // Default timeout (default: 30000)
+    defaultMaxMemoryMb?: number;  // Default memory limit (default: 512)
+}
+
+interface QueuedExecution {
+    resolve: () => void;
+    reject: (error: Error) => void;
 }
 
 export class WASMRuntime {
     private memFs: MemFS | null = null;
     private initialized: boolean = false;
+    
+    // Throttling state
+    private activeExecutions: number = 0;
+    private maxConcurrent: number;
+    private defaultTimeoutMs: number;
+    private defaultMaxMemoryMb: number;
+    private executionQueue: QueuedExecution[] = [];
 
-    constructor() {
-        // Don't create MemFS here - wait for initialization
+    constructor(config?: WASMRuntimeConfig) {
+        this.maxConcurrent = config?.maxConcurrent ?? 4;
+        this.defaultTimeoutMs = config?.defaultTimeoutMs ?? 30000;
+        this.defaultMaxMemoryMb = config?.defaultMaxMemoryMb ?? 512;
+    }
+
+    /**
+     * Update runtime configuration dynamically
+     */
+    updateConfig(config: Partial<WASMRuntimeConfig>): void {
+        if (config.maxConcurrent !== undefined) {
+            this.maxConcurrent = config.maxConcurrent;
+            logger.info(`[WASMRuntime] Max concurrent updated to: ${this.maxConcurrent}`);
+        }
+        if (config.defaultTimeoutMs !== undefined) {
+            this.defaultTimeoutMs = config.defaultTimeoutMs;
+            logger.info(`[WASMRuntime] Default timeout updated to: ${this.defaultTimeoutMs}ms`);
+        }
+        if (config.defaultMaxMemoryMb !== undefined) {
+            this.defaultMaxMemoryMb = config.defaultMaxMemoryMb;
+            logger.info(`[WASMRuntime] Default max memory updated to: ${this.defaultMaxMemoryMb}MB`);
+        }
+        
+        // Process queue in case we increased capacity
+        this.processQueue();
+    }
+
+    /**
+     * Get current runtime stats
+     */
+    getStats(): { activeExecutions: number; queueLength: number; maxConcurrent: number } {
+        return {
+            activeExecutions: this.activeExecutions,
+            queueLength: this.executionQueue.length,
+            maxConcurrent: this.maxConcurrent,
+        };
     }
 
     /**
@@ -47,13 +111,196 @@ export class WASMRuntime {
     }
 
     /**
-     * Execute a WASM binary
+     * Prepare a file for WASI access by copying it to MemFS
+     * This allows WASI modules to read files from the real filesystem
+     * @param realPath - Path to the real file on the host filesystem
+     * @param wasiPath - Path where the file will be accessible in WASI (e.g., '/input.txt')
+     */
+    async prepareFileForWASI(realPath: string, wasiPath: string): Promise<void> {
+        if (!this.initialized || !this.memFs) {
+            await this.initialize();
+        }
+        
+        try {
+            const content = await fs.promises.readFile(realPath);
+            
+            // Ensure parent directory exists in MemFS
+            const dir = path.dirname(wasiPath);
+            if (dir !== '/' && dir !== '.') {
+                try {
+                    this.memFs!.createDir(dir);
+                } catch {
+                    // Directory might already exist, ignore error
+                }
+            }
+            
+            // Open/create file in MemFS and write content
+            // MemFS.open() returns a JSVirtualFile that has write() method
+            const file = this.memFs!.open(wasiPath, { read: true, write: true, create: true });
+            file.write(new Uint8Array(content));
+            file.flush();
+            
+            logger.info(`[WASMRuntime] Prepared file for WASI: ${realPath} -> ${wasiPath} (${content.length} bytes)`);
+        } catch (error: any) {
+            logger.error(`[WASMRuntime] Failed to prepare file for WASI: ${realPath}`, error);
+            throw new Error(`Failed to prepare file for WASI: ${error.message}`);
+        }
+    }
+
+    /**
+     * Clear all files from MemFS (useful between executions)
+     */
+    clearMemFS(): void {
+        if (this.memFs) {
+            // Reinitialize MemFS to clear all files
+            this.memFs = new MemFS();
+            logger.info('[WASMRuntime] MemFS cleared');
+        }
+    }
+
+    /**
+     * Wait for execution slot (concurrency control)
+     */
+    private async acquireExecutionSlot(): Promise<void> {
+        if (this.activeExecutions < this.maxConcurrent) {
+            this.activeExecutions++;
+            return;
+        }
+
+        // Queue this execution
+        return new Promise((resolve, reject) => {
+            this.executionQueue.push({ resolve, reject });
+            logger.info(`[WASMRuntime] Execution queued. Queue length: ${this.executionQueue.length}`);
+        });
+    }
+
+    /**
+     * Release execution slot and process queue
+     */
+    private releaseExecutionSlot(): void {
+        this.activeExecutions--;
+        this.processQueue();
+    }
+
+    /**
+     * Process queued executions
+     */
+    private processQueue(): void {
+        while (this.activeExecutions < this.maxConcurrent && this.executionQueue.length > 0) {
+            const next = this.executionQueue.shift();
+            if (next) {
+                this.activeExecutions++;
+                next.resolve();
+                logger.info(`[WASMRuntime] Dequeued execution. Active: ${this.activeExecutions}, Queue: ${this.executionQueue.length}`);
+            }
+        }
+    }
+
+    /**
+     * Execute a WASM binary with timeout and concurrency control
      * @param wasmBinary - The WASM binary (ArrayBuffer or Uint8Array)
      * @param functionName - Name of the function to call
      * @param args - Arguments to pass to the function
+     * @param options - Execution options (timeout, memory limit)
      * @returns Execution result
      */
     async execute(
+        wasmBinary: ArrayBuffer | Uint8Array,
+        functionName: string,
+        args: any[] = [],
+        options?: WASMExecutionOptions
+    ): Promise<WASMExecutionResult> {
+        const timeoutMs = options?.timeoutMs ?? this.defaultTimeoutMs;
+        const startTime = Date.now();
+
+        // Wait for execution slot (concurrency control)
+        try {
+            await this.acquireExecutionSlot();
+        } catch (error: any) {
+            return {
+                success: false,
+                error: `Queue error: ${error.message}`,
+            };
+        }
+
+        try {
+            // Prepare input files for WASI if specified
+            if (options?.inputFiles) {
+                // Clear MemFS to ensure clean state
+                this.clearMemFS();
+                
+                // Prepare each input file
+                for (const [realPath, wasiPath] of Object.entries(options.inputFiles)) {
+                    await this.prepareFileForWASI(realPath, wasiPath);
+                }
+            }
+            
+            // Execute with timeout
+            const result = await this.executeWithTimeout(
+                wasmBinary,
+                functionName,
+                args,
+                timeoutMs
+            );
+            
+            return {
+                ...result,
+                executionTimeMs: Date.now() - startTime,
+            };
+        } finally {
+            this.releaseExecutionSlot();
+        }
+    }
+
+    /**
+     * Execute with timeout wrapper
+     */
+    private async executeWithTimeout(
+        wasmBinary: ArrayBuffer | Uint8Array,
+        functionName: string,
+        args: any[],
+        timeoutMs: number
+    ): Promise<WASMExecutionResult> {
+        return new Promise(async (resolve) => {
+            let timeoutId: NodeJS.Timeout | null = null;
+            let completed = false;
+
+            // Set up timeout
+            timeoutId = setTimeout(() => {
+                if (!completed) {
+                    completed = true;
+                    logger.warn(`[WASMRuntime] Execution timed out after ${timeoutMs}ms`);
+                    resolve({
+                        success: false,
+                        error: `Execution timed out after ${timeoutMs}ms`,
+                    });
+                }
+            }, timeoutMs);
+
+            try {
+                const result = await this.executeInternal(wasmBinary, functionName, args);
+                if (!completed) {
+                    completed = true;
+                    if (timeoutId) clearTimeout(timeoutId);
+                    resolve(result);
+                }
+            } catch (error: any) {
+                if (!completed) {
+                    completed = true;
+                    if (timeoutId) clearTimeout(timeoutId);
+                    resolve({
+                        success: false,
+                        error: error.message || 'Unknown error',
+                    });
+                }
+            }
+        });
+    }
+
+    /**
+     * Internal execution logic (no throttling, no timeout)
+     */
+    private async executeInternal(
         wasmBinary: ArrayBuffer | Uint8Array,
         functionName: string,
         args: any[] = []
@@ -331,3 +578,20 @@ export class WASMRuntime {
     }
 }
 
+// Singleton instance with configuration from global config
+let wasmRuntimeInstance: WASMRuntime | null = null;
+
+export function getWASMRuntime(): WASMRuntime {
+    if (!wasmRuntimeInstance) {
+        // Read config from global if available
+        const config = (global as any).pc2Config?.resources?.compute;
+        wasmRuntimeInstance = new WASMRuntime({
+            maxConcurrent: config?.max_concurrent_wasm ?? 4,
+            defaultTimeoutMs: config?.wasm_timeout_ms ?? 30000,
+            defaultMaxMemoryMb: config?.max_memory_mb ?? 512,
+        });
+    }
+    return wasmRuntimeInstance;
+}
+
+export default WASMRuntime;

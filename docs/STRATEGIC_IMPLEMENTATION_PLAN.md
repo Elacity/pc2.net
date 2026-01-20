@@ -162,34 +162,34 @@ Consider centralizing app metadata in a single source of truth (e.g., `appRegist
 
 ---
 
-**Phase 2.6: WASM/WASMER Runtime Integration - ✅ IN PROGRESS (60% Complete)**
+**Phase 2.6: WASM/WASMER Runtime Integration - ✅ COMPLETE**
 
 **Major Features Delivered:**
 1. ✅ **WASMRuntime Service** - Implemented using `@wasmer/wasi` for executing WASM binaries on PC2 node
 2. ✅ **WASM API Endpoints** - `/api/wasm/execute-file`, `/api/wasm/execute`, `/api/wasm/list-functions`
 3. ✅ **Calculator App (WASM)** - Full-featured calculator with complete UI, runs WASM binary on backend
-4. ✅ **App Registration System** - WASM apps visible in app launcher, proper SDK injection
-5. ✅ **Dual Mode Support** - Handles both WASI and non-WASI WASM modules with automatic detection
-6. ✅ **Self-Hosted Computation** - All WASM execution happens on user's PC2 node (not in browser)
+4. ✅ **File Analyzer App (WASM)** - File analysis tool with drag-and-drop support
+5. ✅ **App Registration System** - WASM apps visible in app launcher, proper SDK injection
+6. ✅ **Dual Mode Support** - Handles both WASI and non-WASI WASM modules with automatic detection
+7. ✅ **Self-Hosted Computation** - All WASM execution happens on user's PC2 node (not in browser)
 
 **Files Created/Modified:**
-- `pc2-node/test-fresh-install/src/services/wasm/WASMRuntime.ts` - Core WASM runtime service
-- `pc2-node/test-fresh-install/src/api/wasm.ts` - WASM API endpoints
-- `pc2-node/test-fresh-install/frontend/apps/calculator/index.html` - Full calculator UI
-- `pc2-node/test-fresh-install/data/wasm-apps/calculator.wasm` - Compiled Rust WASM binary
-- `pc2-node/test-fresh-install/src/api/apps.ts` - App metadata endpoint
-- `pc2-node/test-fresh-install/src/api/info.ts` - App launcher registration
+- `pc2-node/src/services/wasm/WASMRuntime.ts` - Core WASM runtime service
+- `pc2-node/src/api/wasm.ts` - WASM API endpoints
+- `pc2-node/wasm-apps/calculator/index.html` - Calculator UI source
+- `pc2-node/wasm-apps/file-processor/index.html` - File Analyzer UI source
+- `pc2-node/src/api/apps.ts` - App metadata endpoint
+- `pc2-node/src/api/info.ts` - App launcher registration
 
-**Status:** 
-- ✅ Calculator (non-WASI) fully functional
-- ⚠️ WASI file I/O requires MemFS mapping work (File Processor app pending)
-- 📝 Environment reader app (WASI) ready for testing
+**Status:** ✅ COMPLETE
+- ✅ Calculator app fully functional
+- ✅ File Analyzer app fully functional
+- ✅ WASM apps integrated into app launcher with proper icons
 
-**Next Steps:**
-- Fix WASI file I/O (MemFS to real filesystem mapping)
-- Create more WASM demo apps
-- Document WASM app development workflow
-- Prepare for Phase 6.5 (full WASMER runtime with dDRM)
+**Future Enhancements (Phase 6.5):**
+- Full WASMER runtime with dDRM support
+- Additional WASM demo apps
+- WASM app development documentation
 
 **Phase 2.5: Backup & Restore Enhancements - ✅ COMPLETE**
 
@@ -209,15 +209,7 @@ Consider centralizing app metadata in a single source of truth (e.g., `appRegist
 
 **Status:** Phase 2.5 complete, Phase 3 at 40% (automated scheduling and verification tools remaining)
 
-**⚠️ Known Issue (2025-01-20): Terminal/Phoenix App Not Working**
-- Terminal app launches but shows black/blank screen
-- Phoenix app launches as separate windows (should run inside terminal) but windows are blank/white
-- Terminal's `main_term()` promise resolves, but terminal doesn't accept input
-- Phoenix's `puter.ui.parentApp()` may be returning `null`, causing phoenix to exit immediately
-- IPC communication between terminal and phoenix appears to be working (messages are being sent)
-- Server logs show phoenix HTML is being processed correctly with SDK injection
-- Visual debugging indicators added to phoenix HTML to track initialization status
-- **Next Steps:** Need to verify phoenix is receiving correct `parent_instance_id` in URL params and that `puter.parentInstanceID` is being set correctly by SDK
+**✅ Terminal Issue RESOLVED (2026-01-19):** The old Puter Terminal/Phoenix shell was replaced with a new **System Terminal** (Phase 7.4) that provides real PTY-based shell access. See Phase 7.4 section for details.
 
 ---
 

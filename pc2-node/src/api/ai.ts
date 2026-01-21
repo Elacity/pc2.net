@@ -67,7 +67,7 @@ router.get('/config', authenticate, async (req: AuthenticatedRequest, res: Respo
     if (currentModel && currentModel.includes(':')) {
       const parts = currentModel.split(':');
       // If first part is a provider name, remove it
-      if (parts[0] === 'ollama' || parts[0] === 'claude' || parts[0] === 'openai' || parts[0] === 'gemini') {
+      if (parts[0] === 'ollama' || parts[0] === 'claude' || parts[0] === 'openai' || parts[0] === 'gemini' || parts[0] === 'xai') {
         currentModel = parts.slice(1).join(':'); // Keep rest as model name
         logger.info('[AI API] Cleaned model name from config:', config.default_model, '->', currentModel);
       }
@@ -79,7 +79,8 @@ router.get('/config', authenticate, async (req: AuthenticatedRequest, res: Respo
         'ollama': 'deepseek-r1:1.5b',
         'claude': 'claude-sonnet-4-5-20250929',
         'openai': 'gpt-4o',
-        'gemini': 'gemini-pro'
+        'gemini': 'gemini-1.5-flash',
+        'xai': 'grok-3'
       };
       currentModel = defaultModels[defaultProvider] || null;
     }
@@ -237,7 +238,7 @@ router.post('/config', authenticate, async (req: AuthenticatedRequest, res: Resp
     const { provider, model, ollama_base_url } = req.body;
     
     // Validate provider
-    const validProviders = ['ollama', 'openai', 'claude', 'gemini'];
+    const validProviders = ['ollama', 'openai', 'claude', 'gemini', 'xai'];
     if (provider && !validProviders.includes(provider)) {
       return res.status(400).json({ 
         success: false, 
@@ -258,7 +259,8 @@ router.post('/config', authenticate, async (req: AuthenticatedRequest, res: Resp
         'ollama': 'deepseek-r1:1.5b',
         'claude': 'claude-sonnet-4-5-20250929', // Current Claude Sonnet 4.5 model
         'openai': 'gpt-4o',
-        'gemini': 'gemini-pro'
+        'gemini': 'gemini-1.5-flash',
+        'xai': 'grok-3'
       };
       cleanModel = defaultModels[provider] || null;
       logger.info(`[AI API] Provider changed to ${provider}, setting default model: ${cleanModel}`);
@@ -268,7 +270,7 @@ router.post('/config', authenticate, async (req: AuthenticatedRequest, res: Resp
     if (cleanModel && cleanModel.includes(':')) {
       const parts = cleanModel.split(':');
       // If first part is a provider name, remove it
-      if (parts[0] === 'ollama' || parts[0] === 'claude' || parts[0] === 'openai' || parts[0] === 'gemini') {
+      if (parts[0] === 'ollama' || parts[0] === 'claude' || parts[0] === 'openai' || parts[0] === 'gemini' || parts[0] === 'xai') {
         cleanModel = parts.slice(1).join(':'); // Keep rest as model name
         logger.info('[AI API] Cleaned model name:', model, '->', cleanModel);
       }
@@ -334,6 +336,11 @@ router.post('/test-key', authenticate, async (req: AuthenticatedRequest, res: Re
       if (!valid) {
         error = 'Gemini API keys should be at least 20 characters';
       }
+    } else if (provider === 'xai') {
+      valid = apiKey.startsWith('xai-') && apiKey.length > 20;
+      if (!valid) {
+        error = 'xAI API keys should start with "xai-" and be at least 20 characters';
+      }
     } else {
       return res.status(400).json({ 
         success: false, 
@@ -380,7 +387,7 @@ router.post('/api-keys', authenticate, async (req: AuthenticatedRequest, res: Re
       });
     }
 
-    const validProviders = ['openai', 'claude', 'gemini'];
+    const validProviders = ['openai', 'claude', 'gemini', 'xai'];
     if (!validProviders.includes(provider)) {
       return res.status(400).json({ 
         success: false, 

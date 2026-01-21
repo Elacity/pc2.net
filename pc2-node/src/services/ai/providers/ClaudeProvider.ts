@@ -44,7 +44,7 @@ export class ClaudeProvider {
    * Get available models
    */
   async models(): Promise<ChatModel[]> {
-    // Claude models
+    // Claude models - updated to current Anthropic model names (Jan 2025)
     return [
       {
         id: 'claude-sonnet-4-5-20250929',
@@ -58,9 +58,9 @@ export class ClaudeProvider {
         },
       },
       {
-        id: 'claude-3-opus-20240229',
-        name: 'Claude 3 Opus',
-        max_tokens: 4096,
+        id: 'claude-opus-4-20250514',
+        name: 'Claude Opus 4',
+        max_tokens: 32000,
         costs_currency: 'USD',
         costs: {
           tokens: 0,
@@ -69,9 +69,9 @@ export class ClaudeProvider {
         },
       },
       {
-        id: 'claude-3-sonnet-20240229',
-        name: 'Claude 3 Sonnet',
-        max_tokens: 4096,
+        id: 'claude-3-5-sonnet-20241022',
+        name: 'Claude 3.5 Sonnet',
+        max_tokens: 8192,
         costs_currency: 'USD',
         costs: {
           tokens: 0,
@@ -80,14 +80,14 @@ export class ClaudeProvider {
         },
       },
       {
-        id: 'claude-3-haiku-20240307',
-        name: 'Claude 3 Haiku',
-        max_tokens: 4096,
+        id: 'claude-3-5-haiku-20241022',
+        name: 'Claude 3.5 Haiku',
+        max_tokens: 8192,
         costs_currency: 'USD',
         costs: {
           tokens: 0,
-          input_token: 0.00025,
-          output_token: 0.00125,
+          input_token: 0.0008,
+          output_token: 0.004,
         },
       },
     ];

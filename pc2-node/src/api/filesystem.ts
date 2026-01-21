@@ -1274,6 +1274,12 @@ export async function handleMove(req: AuthenticatedRequest, res: Response): Prom
 
   // Handle UUID source (convert uuid-/path/to/file to /path/to/file)
   let originalFileName: string | undefined;
+  
+  // Strip ~/ prefix before UUID check (source might be ~/uuid-...)
+  if (fromPath.startsWith('~/')) {
+    fromPath = fromPath.substring(2); // Remove ~/
+  }
+  
   if (fromPath.startsWith('uuid-')) {
     // UUID format: uuid-{path-with-slashes-replaced-with-dashes}
     // Problem: Filenames can contain dashes, so we can't just replace all dashes with slashes

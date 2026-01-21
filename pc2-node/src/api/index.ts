@@ -45,11 +45,12 @@ declare global {
 }
 
 export function setupAPI(app: Express): void {
-  // Debug middleware to log all requests (temporary)
+  // Debug middleware for specific routes (enable as needed)
   app.use((req: Request, res: Response, next: NextFunction) => {
-    if (req.path === '/stat' || req.path.startsWith('/stat')) {
-      logger.info(`[Route Debug] /stat request: method=${req.method}, path=${req.path}, url=${req.url}, query=${JSON.stringify(req.query)}, body=${JSON.stringify(req.body)}`);
-    }
+    // Uncomment to debug specific routes:
+    // if (req.path === '/move') {
+    //   logger.info(`[Route Debug] ${req.method} ${req.path}: url=${req.url}`);
+    // }
     next();
   });
   

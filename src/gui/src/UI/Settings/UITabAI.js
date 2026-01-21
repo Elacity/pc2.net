@@ -51,47 +51,86 @@ export default {
                     <option value="openai">OpenAI</option>
                     <option value="claude">Claude (Anthropic)</option>
                     <option value="gemini">Gemini (Google)</option>
+                    <option value="xai">xAI (Grok)</option>
                 </select>
             </div>
             
             <!-- API Keys Section -->
             <h2 style="font-size: 15px; margin: 20px 0 10px; color: #333;">API Keys</h2>
+            <p style="font-size: 12px; color: #666; margin: 0 0 15px 0;">Configure API keys for cloud AI providers. The active provider is selected above.</p>
             
-            <div class="settings-card">
+            <div class="settings-card ai-key-card" data-provider="openai">
                 <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-                    <div>
-                        <strong>OpenAI</strong>
-                        <span id="ai-openai-status" style="font-size: 11px; color: #999; display: block; margin-top: 2px;">Not configured</span>
+                    <div style="flex: 1;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <strong>OpenAI</strong>
+                            <span class="ai-key-badge" id="ai-openai-badge" style="display: none; font-size: 10px; padding: 2px 6px; background: #10b981; color: white; border-radius: 3px;">Active</span>
+                        </div>
+                        <div id="ai-openai-key-display" style="font-size: 12px; color: #666; margin-top: 4px; font-family: monospace;">
+                            <span class="ai-key-status">No API key configured</span>
+                        </div>
                     </div>
-                    <div style="display: flex; gap: 8px; align-items: center;">
-                        <button class="button" id="ai-openai-key-btn" style="font-size: 12px; padding: 0 12px; height: 28px; line-height: 28px; vertical-align: middle;">Configure</button>
-                        <button class="button" id="ai-openai-delete-btn" style="font-size: 12px; padding: 0 12px; height: 28px; line-height: 28px; vertical-align: middle; display: none; background: #dc2626; color: white;">Delete</button>
+                    <div style="display: flex; gap: 6px; align-items: center;">
+                        <button class="button ai-key-add-btn" id="ai-openai-add-btn" style="font-size: 11px; padding: 0 10px; height: 26px; line-height: 26px; background: #3b82f6; color: white;">Add Key</button>
+                        <button class="button ai-key-update-btn" id="ai-openai-update-btn" style="font-size: 11px; padding: 0 10px; height: 26px; line-height: 26px; display: none;">Update</button>
+                        <button class="button ai-key-delete-btn" id="ai-openai-delete-btn" style="font-size: 11px; padding: 0 10px; height: 26px; line-height: 26px; display: none; background: #dc2626; color: white;">Delete</button>
                     </div>
                 </div>
             </div>
             
-            <div class="settings-card">
+            <div class="settings-card ai-key-card" data-provider="claude">
                 <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-                    <div>
-                        <strong>Claude (Anthropic)</strong>
-                        <span id="ai-claude-status" style="font-size: 11px; color: #999; display: block; margin-top: 2px;">Not configured</span>
+                    <div style="flex: 1;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <strong>Claude (Anthropic)</strong>
+                            <span class="ai-key-badge" id="ai-claude-badge" style="display: none; font-size: 10px; padding: 2px 6px; background: #10b981; color: white; border-radius: 3px;">Active</span>
+                        </div>
+                        <div id="ai-claude-key-display" style="font-size: 12px; color: #666; margin-top: 4px; font-family: monospace;">
+                            <span class="ai-key-status">No API key configured</span>
+                        </div>
                     </div>
-                    <div style="display: flex; gap: 8px; align-items: center;">
-                        <button class="button" id="ai-claude-key-btn" style="font-size: 12px; padding: 0 12px; height: 28px; line-height: 28px; vertical-align: middle;">Configure</button>
-                        <button class="button" id="ai-claude-delete-btn" style="font-size: 12px; padding: 0 12px; height: 28px; line-height: 28px; vertical-align: middle; display: none; background: #dc2626; color: white;">Delete</button>
+                    <div style="display: flex; gap: 6px; align-items: center;">
+                        <button class="button ai-key-add-btn" id="ai-claude-add-btn" style="font-size: 11px; padding: 0 10px; height: 26px; line-height: 26px; background: #3b82f6; color: white;">Add Key</button>
+                        <button class="button ai-key-update-btn" id="ai-claude-update-btn" style="font-size: 11px; padding: 0 10px; height: 26px; line-height: 26px; display: none;">Update</button>
+                        <button class="button ai-key-delete-btn" id="ai-claude-delete-btn" style="font-size: 11px; padding: 0 10px; height: 26px; line-height: 26px; display: none; background: #dc2626; color: white;">Delete</button>
                     </div>
                 </div>
             </div>
             
-            <div class="settings-card">
+            <div class="settings-card ai-key-card" data-provider="gemini">
                 <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-                    <div>
-                        <strong>Gemini (Google)</strong>
-                        <span id="ai-gemini-status" style="font-size: 11px; color: #999; display: block; margin-top: 2px;">Not configured</span>
+                    <div style="flex: 1;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <strong>Gemini (Google)</strong>
+                            <span class="ai-key-badge" id="ai-gemini-badge" style="display: none; font-size: 10px; padding: 2px 6px; background: #10b981; color: white; border-radius: 3px;">Active</span>
+                        </div>
+                        <div id="ai-gemini-key-display" style="font-size: 12px; color: #666; margin-top: 4px; font-family: monospace;">
+                            <span class="ai-key-status">No API key configured</span>
+                        </div>
                     </div>
-                    <div style="display: flex; gap: 8px; align-items: center;">
-                        <button class="button" id="ai-gemini-key-btn" style="font-size: 12px; padding: 0 12px; height: 28px; line-height: 28px; vertical-align: middle;">Configure</button>
-                        <button class="button" id="ai-gemini-delete-btn" style="font-size: 12px; padding: 0 12px; height: 28px; line-height: 28px; vertical-align: middle; display: none; background: #dc2626; color: white;">Delete</button>
+                    <div style="display: flex; gap: 6px; align-items: center;">
+                        <button class="button ai-key-add-btn" id="ai-gemini-add-btn" style="font-size: 11px; padding: 0 10px; height: 26px; line-height: 26px; background: #3b82f6; color: white;">Add Key</button>
+                        <button class="button ai-key-update-btn" id="ai-gemini-update-btn" style="font-size: 11px; padding: 0 10px; height: 26px; line-height: 26px; display: none;">Update</button>
+                        <button class="button ai-key-delete-btn" id="ai-gemini-delete-btn" style="font-size: 11px; padding: 0 10px; height: 26px; line-height: 26px; display: none; background: #dc2626; color: white;">Delete</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="settings-card ai-key-card" data-provider="xai">
+                <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                    <div style="flex: 1;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <strong>xAI (Grok)</strong>
+                            <span class="ai-key-badge" id="ai-xai-badge" style="display: none; font-size: 10px; padding: 2px 6px; background: #10b981; color: white; border-radius: 3px;">Active</span>
+                        </div>
+                        <div id="ai-xai-key-display" style="font-size: 12px; color: #666; margin-top: 4px; font-family: monospace;">
+                            <span class="ai-key-status">No API key configured</span>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 6px; align-items: center;">
+                        <button class="button ai-key-add-btn" id="ai-xai-add-btn" style="font-size: 11px; padding: 0 10px; height: 26px; line-height: 26px; background: #3b82f6; color: white;">Add Key</button>
+                        <button class="button ai-key-update-btn" id="ai-xai-update-btn" style="font-size: 11px; padding: 0 10px; height: 26px; line-height: 26px; display: none;">Update</button>
+                        <button class="button ai-key-delete-btn" id="ai-xai-delete-btn" style="font-size: 11px; padding: 0 10px; height: 26px; line-height: 26px; display: none; background: #dc2626; color: white;">Delete</button>
                     </div>
                 </div>
             </div>
@@ -196,6 +235,7 @@ export default {
                     config.default_provider === 'openai' ? 'OpenAI' :
                     config.default_provider === 'claude' ? 'Claude' :
                     config.default_provider === 'gemini' ? 'Gemini' :
+                    config.default_provider === 'xai' ? 'xAI (Grok)' :
                     config.default_provider
                 );
                 
@@ -222,10 +262,12 @@ export default {
                 // Update provider select
                 $el_window.find('#ai-provider-select').val(config.default_provider || 'ollama');
                 
-                // Update API key status
-                updateAPIKeyStatus('openai', config.api_keys?.openai);
-                updateAPIKeyStatus('claude', config.api_keys?.claude);
-                updateAPIKeyStatus('gemini', config.api_keys?.gemini);
+                // Update API key status (pass active provider for badge)
+                const activeProvider = config.default_provider || 'ollama';
+                updateAPIKeyStatus('openai', config.api_keys?.openai, activeProvider);
+                updateAPIKeyStatus('claude', config.api_keys?.claude, activeProvider);
+                updateAPIKeyStatus('gemini', config.api_keys?.gemini, activeProvider);
+                updateAPIKeyStatus('xai', config.api_keys?.xai, activeProvider);
                 
                 // Update Ollama URL
                 $el_window.find('#ai-ollama-url').val(config.ollama_base_url || 'http://localhost:11434');
@@ -246,15 +288,31 @@ export default {
         }
 
         // Update API key status display
-        function updateAPIKeyStatus(provider, maskedKey) {
-            const statusEl = $el_window.find(`#ai-${provider}-status`);
+        function updateAPIKeyStatus(provider, maskedKey, activeProvider) {
+            const keyDisplay = $el_window.find(`#ai-${provider}-key-display`);
+            const addBtn = $el_window.find(`#ai-${provider}-add-btn`);
+            const updateBtn = $el_window.find(`#ai-${provider}-update-btn`);
             const deleteBtn = $el_window.find(`#ai-${provider}-delete-btn`);
+            const badge = $el_window.find(`#ai-${provider}-badge`);
+            
+            // Show/hide active badge
+            if (activeProvider === provider) {
+                badge.show();
+            } else {
+                badge.hide();
+            }
             
             if (maskedKey && maskedKey !== '***') {
-                statusEl.text(`Configured (${maskedKey})`).css('color', '#10b981');
+                // Key is configured
+                keyDisplay.html(`<span style="color: #10b981;">Key: ${maskedKey}</span>`);
+                addBtn.hide();
+                updateBtn.show();
                 deleteBtn.show();
             } else {
-                statusEl.text('Not configured').css('color', '#999');
+                // No key configured
+                keyDisplay.html(`<span class="ai-key-status" style="color: #999;">No API key configured</span>`);
+                addBtn.show();
+                updateBtn.hide();
                 deleteBtn.hide();
             }
         }
@@ -323,7 +381,7 @@ export default {
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    z-index: 10000;
+                    z-index: 999999999;
                 ">
                     <div style="
                         background: white;
@@ -470,10 +528,11 @@ export default {
                 }
             });
             
-            // API key buttons
-            $el_window.find('#ai-openai-key-btn').on('click', () => showAPIKeyDialog('openai', 'OpenAI'));
-            $el_window.find('#ai-claude-key-btn').on('click', () => showAPIKeyDialog('claude', 'Claude'));
-            $el_window.find('#ai-gemini-key-btn').on('click', () => showAPIKeyDialog('gemini', 'Gemini'));
+            // API key buttons - Add and Update both open the same dialog
+            $el_window.find('#ai-openai-add-btn, #ai-openai-update-btn').on('click', () => showAPIKeyDialog('openai', 'OpenAI'));
+            $el_window.find('#ai-claude-add-btn, #ai-claude-update-btn').on('click', () => showAPIKeyDialog('claude', 'Claude'));
+            $el_window.find('#ai-gemini-add-btn, #ai-gemini-update-btn').on('click', () => showAPIKeyDialog('gemini', 'Gemini'));
+            $el_window.find('#ai-xai-add-btn, #ai-xai-update-btn').on('click', () => showAPIKeyDialog('xai', 'xAI (Grok)'));
             
             // Delete buttons
             $el_window.find('#ai-openai-delete-btn').on('click', async () => {
@@ -487,6 +546,10 @@ export default {
             $el_window.find('#ai-gemini-delete-btn').on('click', async () => {
                 if (!confirm('Are you sure you want to delete the Gemini API key?')) return;
                 await deleteAPIKey('gemini');
+            });
+            $el_window.find('#ai-xai-delete-btn').on('click', async () => {
+                if (!confirm('Are you sure you want to delete the xAI API key?')) return;
+                await deleteAPIKey('xai');
             });
             
             // Ollama URL save

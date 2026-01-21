@@ -1,35 +1,36 @@
 /**
- * OpenAI Provider
- * Provides integration with OpenAI's API using the official SDK
- * Migrated from raw HTTP to official openai package for better reliability
+ * xAI Provider (Grok)
+ * Provides integration with xAI's Grok API
+ * Uses the OpenAI SDK with custom baseURL since xAI API is OpenAI-compatible
  */
 
 import OpenAI from 'openai';
 import { logger } from '../../../utils/logger.js';
 import { ChatModel, ChatMessage, CompleteArguments, ChatCompletion } from './OllamaProvider.js';
 
-export class OpenAIProvider {
+export class XAIProvider {
   private client: OpenAI;
-  private defaultModel: string = 'gpt-4o';
+  private defaultModel: string = 'grok-3';
 
-  constructor(config?: { apiKey?: string; defaultModel?: string; baseURL?: string }) {
+  constructor(config?: { apiKey?: string; defaultModel?: string }) {
     if (!config?.apiKey) {
-      throw new Error('OpenAI API key is required');
+      throw new Error('xAI API key is required');
     }
+    // xAI uses OpenAI-compatible API, so we use OpenAI SDK with custom baseURL
     this.client = new OpenAI({
       apiKey: config.apiKey,
-      baseURL: config.baseURL, // Allows override for xAI compatibility
+      baseURL: 'https://api.x.ai/v1',
     });
     this.defaultModel = config.defaultModel || this.defaultModel;
-    logger.info(`[OpenAIProvider] Initialized with official SDK, model: ${this.defaultModel}`);
+    logger.info(`[XAIProvider] Initialized with OpenAI SDK (xAI baseURL), model: ${this.defaultModel}`);
   }
 
   /**
-   * Check if OpenAI API is available
+   * Check if xAI API is available
    */
   async isAvailable(): Promise<boolean> {
     try {
-      // Use SDK to list models as availability check
+      // Try to list models as availability check
       await this.client.models.list();
       return true;
     } catch (error) {
@@ -41,61 +42,50 @@ export class OpenAIProvider {
    * Get available models
    */
   async models(): Promise<ChatModel[]> {
-    // Return curated list of OpenAI models with pricing info
+    // Return curated list of xAI Grok models
     return [
       {
-        id: 'gpt-4o',
-        name: 'GPT-4o',
-        max_tokens: 16384,
+        id: 'grok-3',
+        name: 'Grok 3',
+        max_tokens: 131072,
         costs_currency: 'USD',
         costs: {
           tokens: 0,
-          input_token: 0.0025,
+          input_token: 0.003,
+          output_token: 0.015,
+        },
+      },
+      {
+        id: 'grok-3-fast',
+        name: 'Grok 3 Fast',
+        max_tokens: 131072,
+        costs_currency: 'USD',
+        costs: {
+          tokens: 0,
+          input_token: 0.005,
+          output_token: 0.025,
+        },
+      },
+      {
+        id: 'grok-2',
+        name: 'Grok 2',
+        max_tokens: 32768,
+        costs_currency: 'USD',
+        costs: {
+          tokens: 0,
+          input_token: 0.002,
           output_token: 0.01,
         },
       },
       {
-        id: 'gpt-4o-mini',
-        name: 'GPT-4o Mini',
-        max_tokens: 16384,
-        costs_currency: 'USD',
-        costs: {
-          tokens: 0,
-          input_token: 0.00015,
-          output_token: 0.0006,
-        },
-      },
-      {
-        id: 'gpt-4-turbo',
-        name: 'GPT-4 Turbo',
-        max_tokens: 128000,
-        costs_currency: 'USD',
-        costs: {
-          tokens: 0,
-          input_token: 0.01,
-          output_token: 0.03,
-        },
-      },
-      {
-        id: 'gpt-4',
-        name: 'GPT-4',
+        id: 'grok-vision-beta',
+        name: 'Grok Vision (Beta)',
         max_tokens: 8192,
         costs_currency: 'USD',
         costs: {
           tokens: 0,
-          input_token: 0.03,
-          output_token: 0.06,
-        },
-      },
-      {
-        id: 'gpt-3.5-turbo',
-        name: 'GPT-3.5 Turbo',
-        max_tokens: 16385,
-        costs_currency: 'USD',
-        costs: {
-          tokens: 0,
-          input_token: 0.0005,
-          output_token: 0.0015,
+          input_token: 0.005,
+          output_token: 0.015,
         },
       },
     ];
@@ -105,11 +95,11 @@ export class OpenAIProvider {
    * Get default model
    */
   getDefaultModel(): string {
-    return `openai:${this.defaultModel}`;
+    return `xai:${this.defaultModel}`;
   }
 
   /**
-   * Convert messages to OpenAI SDK format
+   * Convert messages to OpenAI SDK format (same as OpenAI since xAI is compatible)
    */
   private convertMessages(messages: ChatMessage[]): OpenAI.ChatCompletionMessageParam[] {
     return messages.map(msg => {
@@ -127,7 +117,7 @@ export class OpenAIProvider {
           if (c.type === 'text' && c.text) {
             content.push({ type: 'text', text: c.text });
           } else if (c.type === 'image' || c.source) {
-            // Handle images - OpenAI expects base64 data URLs
+            // Handle images - xAI expects base64 data URLs like OpenAI
             const imageData = c.source?.data || c.data || '';
             if (imageData.startsWith('data:')) {
               content.push({
@@ -165,10 +155,10 @@ export class OpenAIProvider {
   }
 
   /**
-   * Complete chat completion using official SDK
+   * Complete chat completion using OpenAI SDK with xAI endpoint
    */
   async complete(args: CompleteArguments): Promise<ChatCompletion> {
-    const model = args.model?.replace('openai:', '') || this.defaultModel;
+    const model = args.model?.replace('xai:', '') || this.defaultModel;
     const messages = this.convertMessages(args.messages);
     const temperature = args.temperature ?? 0.7;
     const maxTokens = args.max_tokens;
@@ -212,16 +202,16 @@ export class OpenAIProvider {
         } : undefined,
       };
     } catch (error: any) {
-      logger.error('[OpenAIProvider] Completion error:', error.message);
+      logger.error('[XAIProvider] Completion error:', error.message);
       throw error;
     }
   }
 
   /**
-   * Stream chat completion using official SDK
+   * Stream chat completion using OpenAI SDK with xAI endpoint
    */
   async *streamComplete(args: CompleteArguments): AsyncGenerator<ChatCompletion, void, unknown> {
-    const model = args.model?.replace('openai:', '') || this.defaultModel;
+    const model = args.model?.replace('xai:', '') || this.defaultModel;
     const messages = this.convertMessages(args.messages);
     const temperature = args.temperature ?? 0.7;
     const maxTokens = args.max_tokens;
@@ -294,7 +284,7 @@ export class OpenAIProvider {
         }
       }
     } catch (error: any) {
-      logger.error('[OpenAIProvider] Stream error:', error.message);
+      logger.error('[XAIProvider] Stream error:', error.message);
       throw error;
     }
   }

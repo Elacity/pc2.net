@@ -19,6 +19,7 @@
 
 import UIWindow from '../UIWindow.js';
 import UIContextMenu from '../UIContextMenu.js';
+import UIWindowSettings from '../Settings/UIWindowSettings.js';
 
 // Chat history storage keys (wallet-scoped for user isolation)
 const CHAT_HISTORY_KEY_PREFIX = 'pc2_ai_chat_history';
@@ -29,6 +30,523 @@ const MAX_HISTORY_MESSAGES = 100;
 // Current conversation ID
 let currentConversationId = null;
 let currentWalletAddress = null;
+
+// Current AI request controller for cancellation
+let currentAIAbortController = null;
+let currentAIRequestState = 'idle'; // 'idle' | 'connecting' | 'thinking' | 'executing' | 'generating'
+
+// Update loading state and UI
+function updateLoadingState(state, details = null) {
+    currentAIRequestState = state;
+    const $loadingIndicator = $('.ai-loading-indicator');
+    const $loadingText = $loadingIndicator.find('.ai-loading-text');
+    const $loadingDetail = $loadingIndicator.find('.ai-loading-detail');
+    
+    const stateConfig = {
+        'connecting': { text: 'Connecting...', icon: 'connect' },
+        'thinking': { text: 'Thinking...', icon: 'brain' },
+        'executing': { text: details || 'Executing tool...', icon: 'tool' },
+        'generating': { text: 'Generating response...', icon: 'write' },
+        'idle': { text: '', icon: '' }
+    };
+    
+    const config = stateConfig[state] || stateConfig.thinking;
+    $loadingText.text(config.text);
+    
+    if (details && state === 'executing') {
+        $loadingDetail.text(details).show();
+    } else {
+        $loadingDetail.hide();
+    }
+    
+    // Update loading indicator class for different animations
+    $loadingIndicator
+        .removeClass('ai-loading-connecting ai-loading-thinking ai-loading-executing ai-loading-generating')
+        .addClass(`ai-loading-${state}`);
+}
+
+// Parse thinking/reasoning tags from content (DeepSeek uses <think>...</think>)
+function parseThinkingContent(content) {
+    const thinkRegex = /<think>([\s\S]*?)<\/think>/gi;
+    let thinking = '';
+    let response = content;
+    let match;
+    
+    // Extract all thinking blocks
+    while ((match = thinkRegex.exec(content)) !== null) {
+        thinking += match[1].trim() + '\n';
+    }
+    
+    // Remove thinking blocks from response
+    response = content.replace(thinkRegex, '').trim();
+    
+    // Check for unclosed thinking tag (still streaming thinking content)
+    const unclosedThinkStart = response.lastIndexOf('<think>');
+    const unclosedThinkEnd = response.lastIndexOf('</think>');
+    
+    if (unclosedThinkStart > unclosedThinkEnd) {
+        // There's an unclosed <think> tag - content after it is still thinking
+        const partialThinking = response.substring(unclosedThinkStart + 7);
+        thinking += partialThinking;
+        response = response.substring(0, unclosedThinkStart).trim();
+    }
+    
+    return {
+        thinking: thinking.trim(),
+        response: response,
+        isThinking: unclosedThinkStart > unclosedThinkEnd
+    };
+}
+
+// SVG icons for thinking block
+const THINKING_ICONS = {
+    active: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+    complete: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>',
+    toggle: '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>'
+};
+
+// Render message with thinking block
+function renderMessageWithThinking(content, isStreaming = false) {
+    const parsed = parseThinkingContent(content);
+    let html = '';
+    
+    // Add thinking block if there's thinking content
+    if (parsed.thinking) {
+        const thinkingStatus = parsed.isThinking ? ' ai-thinking-active' : '';
+        const thinkingIcon = parsed.isThinking ? THINKING_ICONS.active : THINKING_ICONS.complete;
+        const defaultOpen = parsed.isThinking ? ' open' : '';
+        
+        html += `<div class="ai-thinking-block${thinkingStatus}">
+            <details${defaultOpen}>
+                <summary class="ai-thinking-header">
+                    <span class="ai-thinking-icon">${thinkingIcon}</span>
+                    <span class="ai-thinking-label">${parsed.isThinking ? 'Thinking...' : 'Reasoning'}</span>
+                    <span class="ai-thinking-toggle">${THINKING_ICONS.toggle}</span>
+                </summary>
+                <div class="ai-thinking-content">${renderMarkdown(parsed.thinking)}</div>
+            </details>
+        </div>`;
+    }
+    
+    // Add response content
+    if (parsed.response) {
+        html += renderMarkdown(parsed.response);
+    } else if (isStreaming && !parsed.thinking) {
+        // Still waiting for content
+        html += '';
+    }
+    
+    return html;
+}
+
+// Track active tool executions for current message
+let currentToolExecutions = [];
+
+// Track multi-step progress
+let currentProgress = {
+    currentStep: 0,
+    totalSteps: 0,
+    label: ''
+};
+
+// Reset progress tracking
+function resetProgress() {
+    currentProgress = { currentStep: 0, totalSteps: 0, label: '' };
+}
+
+// Update progress
+function updateProgress(current, total, label = '') {
+    currentProgress = { currentStep: current, totalSteps: total, label };
+}
+
+// Track total tools from backend
+let knownTotalTools = 0;
+
+// Render progress bar with collapsible tool details
+function renderProgressBar() {
+    console.log('[UIAIChat] renderProgressBar called, tools:', currentToolExecutions.length, 'knownTotal:', knownTotalTools);
+    
+    if (currentToolExecutions.length === 0) {
+        console.log('[UIAIChat] renderProgressBar returning empty - no tools');
+        return '';
+    }
+    
+    // Check if any tools are still running
+    const isRunning = currentToolExecutions.some(t => t.status === 'running' || t.status === 'pending');
+    const completedCount = currentToolExecutions.filter(t => t.status === 'success' || t.status === 'error').length;
+    const totalCount = knownTotalTools > 0 ? knownTotalTools : currentToolExecutions.length;
+    
+    // Find the currently running tool for the label
+    const runningTool = currentToolExecutions.find(t => t.status === 'running');
+    
+    console.log('[UIAIChat] renderProgressBar - isRunning:', isRunning, 'completed:', completedCount, 'total:', totalCount, 'runningTool:', runningTool?.name);
+    
+    // Calculate step text and progress
+    let stepsText, percent;
+    if (isRunning) {
+        const currentStep = completedCount + 1;
+        if (knownTotalTools > 0) {
+            // We know the total from backend - show real progress
+            stepsText = `Step ${currentStep} of ${knownTotalTools}`;
+            // Progress is based on completed tools (current step - 1 completed)
+            percent = Math.round((completedCount / knownTotalTools) * 100);
+        } else {
+            // Don't know total yet
+            stepsText = `Step ${currentStep}...`;
+            percent = 0;
+        }
+    } else {
+        stepsText = `Step ${completedCount} of ${totalCount}`;
+        percent = 100;
+    }
+    
+    // Render tool cards for details section
+    const toolCardsHtml = currentToolExecutions.length > 0 
+        ? `<div class="ai-progress-details">${currentToolExecutions.map(renderToolCard).join('')}</div>`
+        : '';
+    
+    const expandIcon = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>';
+    
+    // Get the current tool label - use the running tool we found above
+    const labelText = runningTool ? runningTool.name.replace(/_/g, ' ') : '';
+    
+    return `
+        <details class="ai-progress-container${isRunning ? ' ai-progress-running' : ''}">
+            <summary class="ai-progress-summary">
+                <div class="ai-progress-header">
+                    <div class="ai-progress-info">
+                        <span class="ai-progress-steps">${stepsText}</span>
+                        ${labelText ? `<span class="ai-progress-label">${labelText}</span>` : ''}
+                    </div>
+                    <div class="ai-progress-right">
+                        ${!isRunning ? `<span class="ai-progress-percent">${percent}%</span>` : ''}
+                        <span class="ai-progress-expand">${expandIcon}</span>
+                    </div>
+                </div>
+                <div class="ai-progress-bar">
+                    <div class="ai-progress-fill" style="width: ${percent}%"></div>
+                </div>
+            </summary>
+            ${toolCardsHtml}
+        </details>
+    `;
+}
+
+// SVG icons for tools (professional, no emojis)
+const TOOL_ICONS = {
+    folder: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>',
+    file: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
+    edit: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
+    trash: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
+    move: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/></svg>',
+    copy: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
+    list: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>',
+    search: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
+    info: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
+    tool: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>'
+};
+
+// Status icons
+const STATUS_ICONS = {
+    pending: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
+    running: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>',
+    success: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>',
+    error: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
+};
+
+// Error type icons (larger, for error cards)
+const ERROR_ICONS = {
+    network: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/><line x1="2" y1="2" x2="22" y2="22" stroke="#ef4444"/></svg>',
+    api: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/><circle cx="6" cy="6" r="1" fill="currentColor"/><circle cx="9" cy="6" r="1" fill="#ef4444"/></svg>',
+    auth: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/><line x1="12" y1="15" x2="12" y2="18"/></svg>',
+    rateLimit: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/><path d="M22 22L2 2" stroke="#ef4444"/></svg>',
+    tool: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/><line x1="5" y1="5" x2="19" y2="19" stroke="#ef4444"/></svg>',
+    model: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>',
+    unknown: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+    retry: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>'
+};
+
+// Message status icons (for user message delivery states)
+const MESSAGE_STATUS_ICONS = {
+    sending: '<svg class="ai-status-icon ai-status-sending" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="32"><animate attributeName="stroke-dashoffset" dur="1s" values="32;0" repeatCount="indefinite"/></circle></svg>',
+    sent: '<svg class="ai-status-icon ai-status-sent" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>',
+    delivered: '<svg class="ai-status-icon ai-status-delivered" width="16" height="14" viewBox="0 0 28 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/><polyline points="28 6 17 17 14 14"/></svg>',
+    error: '<svg class="ai-status-icon ai-status-error" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>'
+};
+
+// Update user message status indicator
+function updateMessageStatus(messageId, status) {
+    const $statusIndicator = $(`#${messageId} .ai-message-status`);
+    if ($statusIndicator.length) {
+        const icon = MESSAGE_STATUS_ICONS[status] || MESSAGE_STATUS_ICONS.sent;
+        $statusIndicator.html(icon);
+        $statusIndicator.attr('data-status', status);
+        $statusIndicator.attr('title', status.charAt(0).toUpperCase() + status.slice(1));
+    }
+}
+
+// Error type definitions with patterns and recovery suggestions
+const ERROR_TYPES = {
+    network: {
+        patterns: ['fetch', 'network', 'connection', 'ECONNREFUSED', 'ETIMEDOUT', 'ERR_CONNECTION', 'Failed to fetch', 'net::ERR'],
+        title: 'Network Error',
+        suggestions: [
+            'Check your internet connection',
+            'Try refreshing the page',
+            'The server might be temporarily unavailable'
+        ]
+    },
+    auth: {
+        patterns: ['401', 'unauthorized', 'authentication', 'invalid.*key', 'api.*key', 'token.*invalid', 'token.*expired'],
+        title: 'Authentication Error',
+        suggestions: [
+            'Check your API key in Settings',
+            'Your API key may have expired',
+            'Ensure your API key has the correct permissions'
+        ]
+    },
+    rateLimit: {
+        patterns: ['429', 'rate.*limit', 'too many requests', 'quota', 'exceeded', 'overloaded'],
+        title: 'Rate Limit Exceeded',
+        suggestions: [
+            'Wait a moment before trying again',
+            'Consider upgrading your API plan',
+            'Reduce the frequency of requests'
+        ]
+    },
+    model: {
+        patterns: ['model.*not.*found', 'invalid.*model', 'model.*unavailable', 'does not support', 'not.*available'],
+        title: 'Model Error',
+        suggestions: [
+            'Select a different model from the dropdown',
+            'Check if Ollama is running (for local models)',
+            'Verify your API key supports this model'
+        ]
+    },
+    tool: {
+        patterns: ['tool.*failed', 'tool.*error', 'execution.*failed', 'permission.*denied', 'file.*not.*found', 'ENOENT'],
+        title: 'Tool Execution Error',
+        suggestions: [
+            'Check if the file or folder exists',
+            'Verify you have permission to access the path',
+            'Try a different path or operation'
+        ]
+    },
+    api: {
+        patterns: ['400', '500', '502', '503', '504', 'invalid.*request', 'bad.*request', 'internal.*error', 'server.*error'],
+        title: 'API Error',
+        suggestions: [
+            'Try sending your message again',
+            'Simplify your request if it was complex',
+            'The AI service may be experiencing issues'
+        ]
+    }
+};
+
+// Classify an error into a category
+function classifyError(error) {
+    const errorStr = (error?.message || error?.error || String(error)).toLowerCase();
+    const status = error?.status;
+    
+    // Check status codes first
+    if (status === 401 || status === 403) return 'auth';
+    if (status === 429) return 'rateLimit';
+    if (status >= 500 && status < 600) return 'api';
+    
+    // Check patterns
+    for (const [type, config] of Object.entries(ERROR_TYPES)) {
+        for (const pattern of config.patterns) {
+            if (new RegExp(pattern, 'i').test(errorStr)) {
+                return type;
+            }
+        }
+    }
+    
+    return 'unknown';
+}
+
+// Get recovery suggestions for an error
+function getRecoverySuggestions(errorType) {
+    const config = ERROR_TYPES[errorType];
+    if (config) {
+        return config.suggestions;
+    }
+    return [
+        'Try sending your message again',
+        'Check the browser console for more details',
+        'Contact support if the issue persists'
+    ];
+}
+
+// Get error title for display
+function getErrorTitle(errorType) {
+    const config = ERROR_TYPES[errorType];
+    return config?.title || 'Something went wrong';
+}
+
+// Store last message for retry functionality
+let lastUserMessage = null;
+let lastAttachedFiles = [];
+
+// Render an error card with retry button and recovery suggestions
+function renderErrorCard(error, messageId) {
+    const errorType = classifyError(error);
+    const errorIcon = ERROR_ICONS[errorType] || ERROR_ICONS.unknown;
+    const errorTitle = getErrorTitle(errorType);
+    const suggestions = getRecoverySuggestions(errorType);
+    
+    // Extract error message
+    let errorMsg = 'An unexpected error occurred';
+    if (error && typeof error === 'object') {
+        errorMsg = error.message || error.error || error.toString();
+    } else if (error) {
+        errorMsg = String(error);
+    }
+    
+    // Clean up overly long error messages
+    if (errorMsg.length > 300) {
+        errorMsg = errorMsg.substring(0, 300) + '...';
+    }
+    
+    const suggestionsHtml = suggestions.map(s => 
+        `<li class="ai-error-suggestion-item">${window.html_encode(s)}</li>`
+    ).join('');
+    
+    return `
+        <div class="ai-error-card" data-error-type="${errorType}" data-message-id="${messageId}">
+            <div class="ai-error-header">
+                <span class="ai-error-icon">${errorIcon}</span>
+                <span class="ai-error-title">${errorTitle}</span>
+            </div>
+            <div class="ai-error-message">${window.html_encode(errorMsg)}</div>
+            <div class="ai-error-suggestions">
+                <div class="ai-error-suggestions-title">What you can try:</div>
+                <ul class="ai-error-suggestion-list">${suggestionsHtml}</ul>
+            </div>
+            <div class="ai-error-actions">
+                <button class="ai-error-retry-btn" data-message-id="${messageId}">
+                    ${ERROR_ICONS.retry}
+                    <span>Retry</span>
+                </button>
+                <button class="ai-error-dismiss-btn" data-message-id="${messageId}">
+                    Dismiss
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+// Get icon for tool type
+function getToolIcon(toolName) {
+    const iconMap = {
+        'create_folder': TOOL_ICONS.folder,
+        'create_file': TOOL_ICONS.file,
+        'write_file': TOOL_ICONS.edit,
+        'read_file': TOOL_ICONS.file,
+        'delete_file': TOOL_ICONS.trash,
+        'delete_folder': TOOL_ICONS.trash,
+        'move_file': TOOL_ICONS.move,
+        'move_folder': TOOL_ICONS.move,
+        'copy_file': TOOL_ICONS.copy,
+        'copy_folder': TOOL_ICONS.copy,
+        'list_directory': TOOL_ICONS.list,
+        'search_files': TOOL_ICONS.search,
+        'get_file_info': TOOL_ICONS.info,
+        'rename_file': TOOL_ICONS.edit,
+        'rename_folder': TOOL_ICONS.edit
+    };
+    return iconMap[toolName] || TOOL_ICONS.tool;
+}
+
+// Render tool execution card
+function renderToolCard(tool) {
+    const statusClass = `ai-tool-${tool.status}`;
+    const statusIcon = STATUS_ICONS[tool.status] || STATUS_ICONS.pending;
+    
+    const icon = getToolIcon(tool.name);
+    const displayName = tool.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    
+    let inputPreview = '';
+    if (tool.input) {
+        // Show a brief preview of input
+        const inputStr = typeof tool.input === 'string' ? tool.input : JSON.stringify(tool.input);
+        if (inputStr.length > 60) {
+            inputPreview = inputStr.substring(0, 60) + '...';
+        } else {
+            inputPreview = inputStr;
+        }
+    }
+    
+    let resultHtml = '';
+    if (tool.status === 'success' && tool.result) {
+        const resultStr = typeof tool.result === 'string' ? tool.result : JSON.stringify(tool.result, null, 2);
+        if (resultStr.length > 100) {
+            resultHtml = `<div class="ai-tool-result"><details><summary>Result</summary><pre>${window.html_encode(resultStr)}</pre></details></div>`;
+        } else {
+            resultHtml = `<div class="ai-tool-result">${window.html_encode(resultStr)}</div>`;
+        }
+    } else if (tool.status === 'error' && tool.error) {
+        resultHtml = `<div class="ai-tool-error">${window.html_encode(tool.error)}</div>`;
+    }
+    
+    return `
+        <div class="ai-tool-card ${statusClass}" data-tool-id="${tool.id}">
+            <div class="ai-tool-header">
+                <span class="ai-tool-icon">${icon}</span>
+                <span class="ai-tool-name">${displayName}</span>
+                <span class="ai-tool-status">${statusIcon}</span>
+            </div>
+            ${inputPreview ? `<div class="ai-tool-input">${window.html_encode(inputPreview)}</div>` : ''}
+            ${resultHtml}
+        </div>
+    `;
+}
+
+// Render all tool cards
+function renderToolCards() {
+    if (currentToolExecutions.length === 0) return '';
+    return `<div class="ai-tool-cards">${currentToolExecutions.map(renderToolCard).join('')}</div>`;
+}
+
+// Add or update a tool execution
+function trackToolExecution(toolId, name, input, status = 'pending', result = null, error = null) {
+    const existing = currentToolExecutions.find(t => t.id === toolId);
+    if (existing) {
+        existing.status = status;
+        existing.result = result;
+        existing.error = error;
+    } else {
+        currentToolExecutions.push({ id: toolId, name, input, status, result, error });
+    }
+}
+
+// Cancel current AI request
+function cancelAIRequest() {
+    if (currentAIAbortController) {
+        currentAIAbortController.abort();
+        currentAIAbortController = null;
+        currentAIRequestState = 'idle';
+        
+        // Re-enable input
+        const sendBtn = $('.btn-send-ai');
+        const chatInput = $('.ai-input');
+        sendBtn.prop('disabled', false);
+        chatInput.prop('disabled', false);
+        
+        // Update UI to show cancelled state
+        const $streamingMessage = $('.ai-chat-message-ai.ai-streaming');
+        if ($streamingMessage.length) {
+            $streamingMessage.removeClass('ai-streaming');
+            const currentContent = $streamingMessage.html();
+            if (!currentContent || currentContent.includes('ai-loading-indicator')) {
+                $streamingMessage.html('<span style="color: #9ca3af; font-style: italic;">Request cancelled</span>');
+            }
+        }
+        
+        return true;
+    }
+    return false;
+}
 
 // Refresh wallet address from window.user (called on initialization and when panel opens)
 function refreshWalletAddress() {
@@ -129,11 +647,26 @@ function renderMarkdown(text) {
     // Links [text](url)
     html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
     
-    // Restore code blocks (with proper escaping inside)
+    // Restore code blocks with enhanced wrapper (language label + copy button)
     codeBlocks.forEach(({ id, lang, code }) => {
         const escapedCode = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        const langClass = lang ? ` class="language-${lang}"` : '';
-        html = html.replace(id, `<pre><code${langClass}>${escapedCode}</code></pre>`);
+        const langClass = lang ? `language-${lang}` : '';
+        const langDisplay = lang ? lang.toUpperCase() : 'CODE';
+        const copyIcon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+        const checkIcon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>';
+        
+        html = html.replace(id, `
+            <div class="ai-code-block">
+                <div class="ai-code-header">
+                    <span class="ai-code-lang">${langDisplay}</span>
+                    <button class="ai-code-copy" title="Copy code" data-copy-icon='${copyIcon}' data-check-icon='${checkIcon}'>
+                        ${copyIcon}
+                        <span>Copy</span>
+                    </button>
+                </div>
+                <pre><code class="${langClass}">${escapedCode}</code></pre>
+            </div>
+        `);
     });
     
     // Split into paragraphs (double newline)
@@ -553,7 +1086,7 @@ async function loadAIConfigForChat() {
         if (model && model.includes(':')) {
             const parts = model.split(':');
             // If it starts with a provider name, remove it
-            if (parts[0] === 'ollama' || parts[0] === 'claude' || parts[0] === 'openai' || parts[0] === 'gemini') {
+            if (parts[0] === 'ollama' || parts[0] === 'claude' || parts[0] === 'openai' || parts[0] === 'gemini' || parts[0] === 'xai') {
                 model = parts.slice(1).join(':'); // Keep rest as model (handles models with colons like "deepseek-r1:1.5b")
             }
         }
@@ -618,18 +1151,70 @@ async function loadAIConfigForChat() {
                     // "gemini-pro" -> "Gemini Pro"
                     return model.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
                 }
+                if (provider === 'xai') {
+                    // "grok-3" -> "Grok 3", "grok-3-fast" -> "Grok 3 Fast"
+                    if (model.includes('grok-3-fast')) {
+                        return 'Grok 3 Fast';
+                    }
+                    if (model.includes('grok-3')) {
+                        return 'Grok 3';
+                    }
+                    if (model.includes('grok-2')) {
+                        return 'Grok 2';
+                    }
+                    if (model.includes('grok-vision')) {
+                        return 'Grok Vision';
+                    }
+                    return model.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                }
                 // Fallback
                 return `${provider.charAt(0).toUpperCase() + provider.slice(1)}: ${model}`;
             }
             
-            // Clear existing options and add the configured one
+            // Clear existing options and add available models
             $modelSelect.empty();
+            
+            // Always add local DeepSeek first
             $modelSelect.append(`<option value="ollama:deepseek-r1:1.5b">Local DeepSeek</option>`);
             
-            // Add the configured model option with formatted name
-            const displayName = formatModelName(provider, cleanModel);
-            false && console.log('[UIAIChat] [NEW CODE v2] formatModelName result:', displayName, 'for provider:', provider, 'model:', cleanModel);
-            $modelSelect.append(`<option value="${modelValue}">${displayName}</option>`);
+            // Add all models for each configured provider
+            if (config.api_keys?.claude) {
+                $modelSelect.append(`<option disabled>── Claude ──</option>`);
+                $modelSelect.append(`<option value="claude:claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>`);
+                $modelSelect.append(`<option value="claude:claude-opus-4-20250514">Claude Opus 4</option>`);
+                $modelSelect.append(`<option value="claude:claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>`);
+                $modelSelect.append(`<option value="claude:claude-3-5-haiku-20241022">Claude 3.5 Haiku</option>`);
+            }
+            
+            if (config.api_keys?.openai) {
+                $modelSelect.append(`<option disabled>── OpenAI ──</option>`);
+                $modelSelect.append(`<option value="openai:gpt-4o">GPT-4o</option>`);
+                $modelSelect.append(`<option value="openai:gpt-4o-mini">GPT-4o Mini</option>`);
+                $modelSelect.append(`<option value="openai:gpt-4-turbo">GPT-4 Turbo</option>`);
+                $modelSelect.append(`<option value="openai:gpt-4">GPT-4</option>`);
+                $modelSelect.append(`<option value="openai:gpt-3.5-turbo">GPT-3.5 Turbo</option>`);
+            }
+            
+            if (config.api_keys?.gemini) {
+                $modelSelect.append(`<option disabled>── Gemini ──</option>`);
+                $modelSelect.append(`<option value="gemini:gemini-2.0-flash">Gemini 2.0 Flash</option>`);
+                $modelSelect.append(`<option value="gemini:gemini-1.5-pro">Gemini 1.5 Pro</option>`);
+                $modelSelect.append(`<option value="gemini:gemini-1.5-flash">Gemini 1.5 Flash</option>`);
+                $modelSelect.append(`<option value="gemini:gemini-pro">Gemini Pro</option>`);
+            }
+            
+            if (config.api_keys?.xai) {
+                $modelSelect.append(`<option disabled>── xAI ──</option>`);
+                $modelSelect.append(`<option value="xai:grok-3">Grok 3</option>`);
+                $modelSelect.append(`<option value="xai:grok-3-fast">Grok 3 Fast</option>`);
+                $modelSelect.append(`<option value="xai:grok-2">Grok 2</option>`);
+                $modelSelect.append(`<option value="xai:grok-vision-beta">Grok Vision</option>`);
+            }
+            
+            // Add separator and "Add Model" option
+            $modelSelect.append(`<option disabled>──────────</option>`);
+            $modelSelect.append(`<option value="__add_model__">+ Add Model...</option>`);
+            
             $modelSelect.val(modelValue);
             
             false && console.log('[UIAIChat] [NEW CODE v2] Updated model selector to:', modelValue, 'display name:', displayName, '(provider:', provider, ', model:', cleanModel, ')');
@@ -774,9 +1359,20 @@ $(document).on('click', '.ai-toolbar-btn, .btn-show-ai', function () {
     }
 });
 
+// Stop button click handler - cancel current AI request
+$(document).on('click', '.ai-stop-btn', function (e) {
+    e.stopPropagation();
+    e.preventDefault();
+    cancelAIRequest();
+});
+
 // Hide AI panel (close button in header)
 $(document).on('click', '.btn-hide-ai', function (e) {
     e.stopPropagation(); // Prevent triggering toolbar button click
+    
+    // Cancel any ongoing AI request when closing panel
+    cancelAIRequest();
+    
     const $panel = $('.ai-panel');
     const $btn = $('.ai-toolbar-btn');
     // Smooth close animation
@@ -1489,9 +2085,11 @@ async function sendAIMessage() {
     $('.ai-chat-messages').append(
         `<div class="ai-chat-message ai-chat-message-user-wrapper" id="${userMessageId}" data-message-id="${userMessageId}">
             <div class="ai-chat-message-user">${messageDisplay}</div>
-            <div class="ai-message-actions">
-                <button class="ai-message-copy" title="Copy message"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
-                <button class="ai-message-edit" title="Edit message"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+            <div class="ai-message-footer">
+                <div class="ai-message-actions">
+                    <button class="ai-message-copy" title="Copy message"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+                    <button class="ai-message-edit" title="Edit message"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+                </div>
             </div>
         </div>`
     );
@@ -1505,6 +2103,10 @@ async function sendAIMessage() {
         setCurrentConversationId(newId);
     }
     addToHistory('user', messageContent, userMessageId, attachedFiles);
+    
+    // Store last message for retry functionality
+    lastUserMessage = chatInputValue;
+    lastAttachedFiles = [...attachedFiles]; // Make a copy before clearing
     
     // Clear the chat input, reset height, and clear attachments
     chatInput.val('');
@@ -1520,23 +2122,38 @@ async function sendAIMessage() {
     // Get selected model
     const selectedModel = $('.ai-model-select').val() || 'ollama:deepseek-r1:1.5b';
     
-    // Create AI message container for streaming
+    // Create AI message container for streaming with enhanced loading indicator
     const aiMessageId = 'msg-ai-' + Date.now();
     $('.ai-chat-messages').append(
         `<div class="ai-chat-message" id="${aiMessageId}">
             <div class="ai-chat-message-ai ai-streaming">
-                <div class="ai-loading-indicator">
-                    <div class="ai-loading-dots">
-                        <span></span>
-                        <span></span>
-                        <span></span>
+                <div class="ai-loading-indicator ai-loading-connecting">
+                    <div class="ai-loading-grid">
+                        <span></span><span></span><span></span>
+                        <span></span><span></span><span></span>
+                        <span></span><span></span><span></span>
                     </div>
-                    <span class="ai-loading-text">Thinking...</span>
+                    <div class="ai-loading-content">
+                        <span class="ai-loading-text">Connecting...</span>
+                        <span class="ai-loading-detail" style="display: none;"></span>
+                    </div>
+                    <button class="ai-stop-btn" title="Stop generating">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                            <rect x="4" y="4" width="16" height="16" rx="2"/>
+                        </svg>
+                    </button>
                 </div>
             </div>
         </div>`
     );
     scrollChatToBottom();
+    
+    // Set up AbortController for this request
+    currentAIAbortController = new AbortController();
+    currentToolExecutions = []; // Reset tool tracking for new message
+    knownTotalTools = 0; // Reset known total from backend
+    resetProgress(); // Reset progress tracking
+    updateLoadingState('connecting');
     
     // Get chat history for context
     const history = loadChatHistory();
@@ -1652,15 +2269,23 @@ async function sendAIMessage() {
         }
     };
     
-    // Use streaming fetch
+    // Update user message status to "sent" when request begins
+    updateMessageStatus(userMessageId, 'sent');
+    
+    // Use streaming fetch with AbortController
     fetch('/drivers/call', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
             'Authorization': authToken ? `Bearer ${authToken}` : ''
         },
-        body: JSON.stringify(requestBody)
+        body: JSON.stringify(requestBody),
+        signal: currentAIAbortController?.signal
     }).then(async (res) => {
+        // Update to thinking state once connected
+        updateLoadingState('thinking');
+        // Update user message status to "delivered" when AI is processing
+        updateMessageStatus(userMessageId, 'delivered');
         if (!res.ok) {
             let errData = {};
             try {
@@ -1710,14 +2335,28 @@ async function sendAIMessage() {
         let buffer = '';
         let fullContent = '';
         let lastChunkText = ''; // Track last chunk to detect exact duplicates
+        let chunkCounter = 0;
         
         const $aiMessage = $(`#${aiMessageId} .ai-chat-message-ai`);
         
+        console.log('[UIAIChat] Starting stream read loop...');
+        
         while (true) {
             const { done, value } = await reader.read();
-            if (done) break;
+            if (done) {
+                console.log('[UIAIChat] Stream ended, total chunks received:', chunkCounter);
+                break;
+            }
+            chunkCounter++;
             
-            buffer += decoder.decode(value, { stream: true });
+            const text = decoder.decode(value, { stream: true });
+            buffer += text;
+            
+            // Log when tool_use chunks arrive
+            if (text.includes('tool_use') || text.includes('tool_result')) {
+                console.log('[UIAIChat] Chunk #' + chunkCounter + ' contains tool data:', text.substring(0, 100));
+            }
+            
             const lines = buffer.split('\n');
             buffer = lines.pop() || '';
             
@@ -1726,6 +2365,11 @@ async function sendAIMessage() {
                 
                 try {
                     const chunk = JSON.parse(line);
+                    
+                    // Debug: log all non-text chunks
+                    if (chunk.type !== 'text') {
+                        console.log('[UIAIChat] Received chunk type:', chunk.type, chunk);
+                    }
                     
                     // Puter's format: {"type": "text", "text": "chunk content"}
                     if (chunk.type === 'text' && chunk.text) {
@@ -1737,19 +2381,61 @@ async function sendAIMessage() {
                         }
                         lastChunkText = newText;
                         fullContent += newText;
+                        
+                        // Check if we're in thinking mode (DeepSeek <think> tags)
+                        const parsed = parseThinkingContent(fullContent);
+                        if (parsed.isThinking) {
+                            updateLoadingState('thinking');
+                        } else if (parsed.response) {
+                            updateLoadingState('generating');
+                        }
+                        
                         // Remove loading indicator when first content arrives
                         $aiMessage.removeClass('ai-streaming');
-                        $aiMessage.html(renderMarkdown(fullContent));
+                        // Render with thinking block support
+                        $aiMessage.html(renderMessageWithThinking(fullContent, true));
                         scrollChatToBottom();
                     }
-                    // Handle tool_use chunks if needed (for display)
+                    // Handle tool_use chunks - display feedback cards
                     else if (chunk.type === 'tool_use') {
+                        const toolName = chunk.name || 'tool';
+                        const toolId = chunk.id || `tool-${Date.now()}`;
+                        const toolDisplayName = toolName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                        
+                        console.log('[UIAIChat] Received tool_use chunk:', chunk.name, 'step', (chunk.tool_index || 0) + 1, 'of', chunk.total_tools);
+                        
+                        // Capture total tools from backend if provided
+                        if (chunk.total_tools && chunk.total_tools > 0) {
+                            knownTotalTools = chunk.total_tools;
+                        }
+                        
+                        // Track tool execution as running FIRST (before progress update)
+                        trackToolExecution(toolId, toolName, chunk.input, 'running');
+                        
+                        // Update loading state
+                        updateLoadingState('executing', `Running: ${toolDisplayName}`);
+                        
+                        // Update progress - count running + completed tools as current step
+                        const runningAndCompleted = currentToolExecutions.filter(t => 
+                            t.status === 'running' || t.status === 'success' || t.status === 'error'
+                        ).length;
+                        // Estimate total based on running tools (will adjust as more come in)
+                        const estimatedTotal = Math.max(currentToolExecutions.length, 2);
+                        updateProgress(runningAndCompleted, estimatedTotal, toolDisplayName);
+                        
+                        // Update UI with progress bar (tool cards are inside it now)
+                        const existingContent = renderMessageWithThinking(fullContent, true);
+                        const progressHtml = renderProgressBar();
+                        console.log('[UIAIChat] Setting HTML - existingContent length:', existingContent.length, 'progressHtml length:', progressHtml.length);
+                        $aiMessage.removeClass('ai-streaming');
+                        $aiMessage.html(existingContent + progressHtml);
+                        scrollChatToBottom();
+                        
                         // Check if tool is from an app (has source metadata)
-                        const toolSource = chunk.source; // { appInstanceID: '...' } or null
+                        const toolSource = chunk.source;
                         
                         if (toolSource?.appInstanceID) {
                             // App tool - execute via IPC
-                            false && console.log('[UIAIChat] Executing app tool:', chunk.name, 'from app:', toolSource.appInstanceID);
                             try {
                                 const aiToolService = window.services?.get('ai-tool');
                                 if (aiToolService) {
@@ -1758,27 +2444,76 @@ async function sendAIMessage() {
                                         chunk.input || {},
                                         toolSource
                                     );
-                                    false && console.log('[UIAIChat] App tool execution result:', result);
-                                    // TODO: Add tool result to conversation and continue AI response
-                                    // For now, backend handles filesystem tools, app tools need result handling
+                                    trackToolExecution(toolId, toolName, chunk.input, 'success', result);
                                 } else {
-                                    console.error('[UIAIChat] AIToolService not available for app tool execution');
+                                    trackToolExecution(toolId, toolName, chunk.input, 'error', null, 'AIToolService not available');
                                 }
                             } catch (error) {
-                                console.error('[UIAIChat] App tool execution error:', error);
-                                $aiMessage.html($aiMessage.html() + `<br><span style="color: #fca5a5;">Tool execution error: ${error.message}</span>`);
+                                trackToolExecution(toolId, toolName, chunk.input, 'error', null, error.message);
                             }
-                        } else {
-                            // Filesystem tool - backend handles it
-                            false && console.log('[UIAIChat] Filesystem tool call detected:', chunk.name);
+                            // Update UI with result
+                            $aiMessage.html(renderMessageWithThinking(fullContent, true) + renderProgressBar());
+                            scrollChatToBottom();
                         }
+                        // Note: Filesystem tools are handled by backend, we'll get tool_result chunks
+                    }
+                    // Handle tool_result chunks
+                    else if (chunk.type === 'tool_result') {
+                        const toolId = chunk.tool_use_id || chunk.id;
+                        const tool = currentToolExecutions.find(t => t.id === toolId);
+                        if (tool) {
+                            if (chunk.is_error || chunk.error) {
+                                trackToolExecution(toolId, tool.name, tool.input, 'error', null, chunk.content || chunk.error);
+                            } else {
+                                trackToolExecution(toolId, tool.name, tool.input, 'success', chunk.content || chunk.result);
+                            }
+                            
+                            // Update progress
+                            const completedTools = currentToolExecutions.filter(t => t.status === 'success' || t.status === 'error').length;
+                            if (currentToolExecutions.length > 1) {
+                                updateProgress(completedTools, currentToolExecutions.length);
+                            }
+                            
+                            // Update UI with result
+                            $aiMessage.html(renderMessageWithThinking(fullContent, true) + renderProgressBar());
+                            scrollChatToBottom();
+                        }
+                        // Return to thinking state after tool completes
+                        updateLoadingState('thinking');
+                    }
+                    // Handle status chunks (new enhanced protocol)
+                    else if (chunk.type === 'status') {
+                        const status = chunk.status || 'thinking';
+                        console.log('[UIAIChat] Received status chunk:', status);
+                        updateLoadingState(status);
+                    }
+                    // Handle reasoning chunks (DeepSeek thinking, parsed on backend)
+                    else if (chunk.type === 'reasoning') {
+                        const reasoningContent = chunk.content || '';
+                        console.log('[UIAIChat] Received reasoning chunk, length:', reasoningContent.length);
+                        // Wrap in <think> tags for frontend parser compatibility
+                        fullContent += `<think>${reasoningContent}</think>`;
+                        updateLoadingState('thinking');
+                        $aiMessage.removeClass('ai-streaming');
+                        $aiMessage.html(renderMessageWithThinking(fullContent, true));
+                        scrollChatToBottom();
+                    }
+                    // Handle done chunks (stream complete with usage stats)
+                    else if (chunk.type === 'done') {
+                        console.log('[UIAIChat] Stream done, usage:', chunk.usage);
+                        // Could display token usage if desired
+                        // For now, just log it
                     }
                     // Handle errors
                     else if (chunk.type === 'error') {
                         console.error('[UIAIChat] Stream error:', chunk.message || chunk.error || chunk);
-                        const errorMsg = chunk.message || chunk.error || JSON.stringify(chunk);
-                        $aiMessage.html(`<span style="color: #fca5a5;">Error: ${errorMsg}</span>`);
-                        fullContent = errorMsg; // Set content so it doesn't show generic error
+                        const streamError = {
+                            message: chunk.message || chunk.error || JSON.stringify(chunk),
+                            status: chunk.status || 500,
+                            type: 'stream_error'
+                        };
+                        $aiMessage.html(renderErrorCard(streamError, aiMessageId));
+                        fullContent = streamError.message; // Set content so it doesn't show generic error
                     }
                     // Log any other chunk types for debugging
                     else {
@@ -1795,10 +2530,18 @@ async function sendAIMessage() {
         
         // Finalize message
         $aiMessage.removeClass('ai-streaming');
-        if (fullContent) {
-            $aiMessage.html(renderMarkdown(fullContent));
-            addToHistory('assistant', fullContent);
-            updateHistoryMenu();
+        // Update progress to 100% for final render
+        if (currentToolExecutions.length > 0) {
+            updateProgress(currentToolExecutions.length, currentToolExecutions.length);
+        }
+        if (fullContent || currentToolExecutions.length > 0) {
+            // Final render with thinking block and collapsible progress bar (contains tool cards)
+            const finalContent = renderMessageWithThinking(fullContent || '', false) + renderProgressBar();
+            $aiMessage.html(finalContent);
+            if (fullContent) {
+                addToHistory('assistant', fullContent);
+                updateHistoryMenu();
+            }
         } else if ($aiMessage.text().trim()) {
             // If we have content in the message but fullContent is empty (edge case)
             const existingContent = $aiMessage.text();
@@ -1809,10 +2552,26 @@ async function sendAIMessage() {
             $aiMessage.html('I received your message, but I\'m having trouble responding right now. Please check the console for details.');
         }
         
+        // Apply syntax highlighting to any code blocks
+        applyCodeHighlighting();
+        
         scrollChatToBottom();
     }).catch(function (error) {
         // Remove streaming indicator
         $(`#${aiMessageId} .ai-chat-message-ai`).removeClass('ai-streaming');
+        
+        // Update user message status to error
+        updateMessageStatus(userMessageId, 'error');
+        
+        // Handle abort errors (user cancelled)
+        if (error.name === 'AbortError') {
+            console.log('[UIAIChat] Request was cancelled by user');
+            // For cancelled requests, keep delivered status (not an error)
+            updateMessageStatus(userMessageId, 'delivered');
+            $(`#${aiMessageId} .ai-chat-message-ai`).html('<span style="color: #9ca3af; font-style: italic;">Request cancelled</span>');
+            scrollChatToBottom();
+            return;
+        }
         
         // Extract error message with full details
         let errorMsg = 'Failed to get AI response';
@@ -1852,11 +2611,15 @@ async function sendAIMessage() {
             stack: error?.stack?.substring(0, 200)
         });
         
-        // Show error message with better formatting
-        const errorHtml = errorMsg.split('\n').map(line => window.html_encode(line)).join('<br>');
-        $(`#${aiMessageId} .ai-chat-message-ai`).html(`<span class="ai-chat-error">Error: ${errorHtml}</span>`);
+        // Show enhanced error card with retry button and suggestions
+        const errorCard = renderErrorCard(error, aiMessageId);
+        $(`#${aiMessageId} .ai-chat-message-ai`).html(errorCard);
         scrollChatToBottom();
     }).finally(function () {
+        // Clean up AbortController and reset state
+        currentAIAbortController = null;
+        currentAIRequestState = 'idle';
+        
         // Re-enable send button and input
         sendBtn.prop('disabled', false);
         chatInput.prop('disabled', false);
@@ -1999,6 +2762,94 @@ $(document).on('click', '.ai-message-delete', function (e) {
     const filtered = history.filter(msg => msg.messageId !== messageId);
     saveChatHistory(filtered);
 });
+
+// Error retry button handler
+$(document).on('click', '.ai-error-retry-btn', function (e) {
+    e.stopPropagation();
+    const $errorCard = $(this).closest('.ai-error-card');
+    const messageId = $errorCard.data('message-id');
+    
+    // If we have a stored last message, use it to retry
+    if (lastUserMessage || lastAttachedFiles.length > 0) {
+        // Remove the AI message with error
+        $(`#${messageId}`).closest('.ai-chat-message-ai-wrapper').remove();
+        
+        // Restore the message to input and resend
+        const chatInput = $('.ai-chat-input');
+        chatInput.val(lastUserMessage || '');
+        attachedFiles = [...lastAttachedFiles];
+        updateAttachedFilesDisplay();
+        
+        // Trigger send
+        sendAIMessage();
+    } else {
+        // Fallback: just show a message that retry is not available
+        console.warn('[UIAIChat] No message to retry');
+        $errorCard.find('.ai-error-message').text('Unable to retry - original message not available. Please type your message again.');
+    }
+});
+
+// Error dismiss button handler
+$(document).on('click', '.ai-error-dismiss-btn', function (e) {
+    e.stopPropagation();
+    const $errorCard = $(this).closest('.ai-error-card');
+    const messageId = $errorCard.data('message-id');
+    
+    // Fade out and remove the AI message with error
+    const $messageWrapper = $(`#${messageId}`).closest('.ai-chat-message-ai-wrapper');
+    $messageWrapper.fadeOut(200, function() {
+        $(this).remove();
+    });
+});
+
+// Model selector change handler - open settings when "Add Model" is selected
+$(document).on('change', '.ai-model-select', function (e) {
+    const selectedValue = $(this).val();
+    if (selectedValue === '__add_model__') {
+        // Reset to first option (don't stay on "Add Model")
+        $(this).val($(this).find('option:first').val());
+        
+        // Open settings to AI tab with high z-index to appear above AI panel
+        UIWindowSettings({ 
+            tab: 'ai',
+            window_options: {
+                stay_on_top: true
+            }
+        });
+    }
+});
+
+// Code block copy button handler
+$(document).on('click', '.ai-code-copy', function (e) {
+    e.stopPropagation();
+    const $btn = $(this);
+    const $codeBlock = $btn.closest('.ai-code-block');
+    const code = $codeBlock.find('code').text();
+    
+    navigator.clipboard.writeText(code).then(() => {
+        // Visual feedback - show checkmark
+        const copyIcon = $btn.data('copy-icon');
+        const checkIcon = $btn.data('check-icon');
+        $btn.html(checkIcon + '<span>Copied</span>');
+        $btn.addClass('ai-code-copied');
+        
+        setTimeout(() => {
+            $btn.html(copyIcon + '<span>Copy</span>');
+            $btn.removeClass('ai-code-copied');
+        }, 2000);
+    }).catch(err => {
+        console.error('[UIAIChat] Failed to copy code:', err);
+    });
+});
+
+// Apply syntax highlighting to code blocks
+function applyCodeHighlighting() {
+    if (typeof hljs !== 'undefined') {
+        document.querySelectorAll('.ai-chat-message-ai pre code:not(.hljs)').forEach((block) => {
+            hljs.highlightElement(block);
+        });
+    }
+}
 
 // Menu button click handler - toggle slide-out history menu
 $(document).on('click', '.ai-menu-btn', function (e) {

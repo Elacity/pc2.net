@@ -43,6 +43,45 @@ npm start
 
 ## 📊 Current State Assessment
 
+### 🎯 Recent Progress (2026-01-21)
+
+**File Move & SDK Loading Fix - ✅ COMPLETE**
+
+**Problems Solved:**
+1. **Move Operation 404 Errors** - Dragging files in desktop returned 404 instead of moving
+2. **Multiple Server Instances** - Zombie tsx watch processes conflicting with active server
+3. **UUID Path Resolution Bug** - Source paths starting with `~/uuid-...` not parsed correctly
+
+**Root Cause Analysis:**
+
+1. **SDK Loading Issue:**
+   - `gui.js` in production mode (`gui_env === 'prod'`) loaded Puter SDK from CDN (`https://js.puter.com/v2/`)
+   - Even with `setAPIOrigin()` call, the CDN SDK didn't fully respect the local API origin for filesystem operations
+   - **Fix:** Changed to load local SDK (`/puter.js/v2`) instead of CDN
+
+2. **UUID Path Parsing Bug:**
+   - Frontend sends move source as `~/uuid--0x...wallet...--Desktop-filename.png`
+   - Backend UUID resolution checked for `fromPath.startsWith('uuid-')` BEFORE expanding `~/`
+   - Result: UUID check never matched because path started with `~/`, not `uuid-`
+   - **Fix:** Strip `~/` prefix before UUID check
+
+**Files Modified:**
+- `pc2-node/frontend/gui.js` - Line 212: Load `/puter.js/v2` instead of `https://js.puter.com/v2/`
+- `pc2-node/src/api/filesystem.ts` - Strip `~/` prefix before UUID path resolution
+- `pc2-node/src/api/index.ts` - Added POST request debug logging
+
+**Key Learnings:**
+1. **Local SDK Required** - The Puter SDK from CDN has hardcoded behaviors that may ignore `setAPIOrigin()` for some operations. Always use the local SDK copy for self-hosted deployments.
+2. **Path Prefix Order** - When processing paths with multiple formats (UUID, `~/`, `/absolute`), ensure prefix stripping happens BEFORE format detection.
+3. **Zombie Processes** - Multiple `tsx watch` instances can accumulate over development sessions. Use `pkill -f "tsx.*pc2-node"` to clean up before starting fresh.
+4. **Server Log Isolation** - When debugging 404s, first verify with `curl` whether the server works, then add logging middleware to catch incoming requests.
+
+**Prevention:**
+- Added production startup check: Kill existing tsx processes before starting
+- Consider adding server singleton lock file to prevent multiple instances
+
+---
+
 ### 🎯 Recent Progress (2026-01-20)
 
 **dApp Centre UI Overhaul - ✅ COMPLETE**

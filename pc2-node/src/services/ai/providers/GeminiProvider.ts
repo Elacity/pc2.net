@@ -1,22 +1,24 @@
 /**
  * Gemini Provider (Google)
- * Provides integration with Google's Gemini API
+ * Provides integration with Google's Gemini API using the official SDK
+ * Migrated from raw HTTP to @google/genai package for better reliability and native function calling
  */
 
+import { GoogleGenAI, type Content, type Part, type Tool } from '@google/genai';
 import { logger } from '../../../utils/logger.js';
 import { ChatModel, ChatMessage, CompleteArguments, ChatCompletion } from './OllamaProvider.js';
 
 export class GeminiProvider {
-  private apiKey: string;
-  private apiBaseUrl: string = 'https://generativelanguage.googleapis.com/v1beta';
-  private defaultModel: string = 'gemini-pro';
+  private client: GoogleGenAI;
+  private defaultModel: string = 'gemini-1.5-flash';
 
   constructor(config?: { apiKey?: string; defaultModel?: string }) {
     if (!config?.apiKey) {
       throw new Error('Gemini API key is required');
     }
-    this.apiKey = config.apiKey;
+    this.client = new GoogleGenAI({ apiKey: config.apiKey });
     this.defaultModel = config.defaultModel || this.defaultModel;
+    logger.info(`[GeminiProvider] Initialized with official SDK, model: ${this.defaultModel}`);
   }
 
   /**
@@ -24,11 +26,13 @@ export class GeminiProvider {
    */
   async isAvailable(): Promise<boolean> {
     try {
-      const response = await fetch(`${this.apiBaseUrl}/models?key=${this.apiKey}`, {
-        method: 'GET',
-        signal: AbortSignal.timeout(5000),
+      // Try a simple generation as availability check
+      const response = await this.client.models.generateContent({
+        model: this.defaultModel,
+        contents: 'test',
+        config: { maxOutputTokens: 1 },
       });
-      return response.ok;
+      return !!response;
     } catch (error) {
       return false;
     }
@@ -38,8 +42,19 @@ export class GeminiProvider {
    * Get available models
    */
   async models(): Promise<ChatModel[]> {
-    // Gemini models
+    // Return curated list of Gemini models with pricing info
     return [
+      {
+        id: 'gemini-2.0-flash',
+        name: 'Gemini 2.0 Flash',
+        max_tokens: 8192,
+        costs_currency: 'USD',
+        costs: {
+          tokens: 0,
+          input_token: 0.0001,
+          output_token: 0.0004,
+        },
+      },
       {
         id: 'gemini-1.5-pro',
         name: 'Gemini 1.5 Pro',
@@ -84,12 +99,14 @@ export class GeminiProvider {
   }
 
   /**
-   * Convert messages to Gemini format
+   * Convert messages to Gemini SDK format
    */
-  private convertMessages(messages: ChatMessage[]): any[] {
-    const parts: any[] = [];
+  private convertMessages(messages: ChatMessage[]): Content[] {
+    const contents: Content[] = [];
     
     for (const msg of messages) {
+      const parts: Part[] = [];
+      
       if (typeof msg.content === 'string') {
         parts.push({ text: msg.content });
       } else if (Array.isArray(msg.content)) {
@@ -97,14 +114,14 @@ export class GeminiProvider {
           if (c.type === 'text' && c.text) {
             parts.push({ text: c.text });
           } else if (c.type === 'image' || c.source) {
-            // Handle images - Gemini expects base64 data
+            // Handle images - Gemini expects inline_data format
             const imageData = c.source?.data || c.data || '';
             if (imageData.startsWith('data:')) {
               const [header, base64] = imageData.split(',');
               const mimeType = header.match(/data:([^;]+)/)?.[1] || 'image/png';
               parts.push({
-                inline_data: {
-                  mime_type: mimeType,
+                inlineData: {
+                  mimeType,
                   data: base64,
                 },
               });
@@ -112,153 +129,149 @@ export class GeminiProvider {
           }
         }
       }
+      
+      if (parts.length > 0) {
+        contents.push({
+          role: msg.role === 'assistant' ? 'model' : 'user',
+          parts,
+        });
+      }
     }
     
-    return parts;
+    return contents;
   }
 
   /**
-   * Complete chat completion
+   * Convert tools to Gemini SDK format (function declarations in config.tools)
+   */
+  private convertTools(tools?: any[]): Tool[] | undefined {
+    if (!tools || tools.length === 0) return undefined;
+    
+    const functionDeclarations = tools.map(tool => ({
+      name: tool.function?.name || tool.name,
+      description: tool.function?.description || tool.description,
+      parameters: tool.function?.parameters || tool.parameters || {},
+    }));
+    
+    return [{ functionDeclarations }];
+  }
+
+  /**
+   * Complete chat completion using official SDK
    */
   async complete(args: CompleteArguments): Promise<ChatCompletion> {
-    const model = args.model?.replace('gemini:', '') || this.defaultModel;
-    const parts = this.convertMessages(args.messages);
-    const temperature = args.temperature ?? 0.7;
-    const maxTokens = args.max_tokens || 4096;
-
-    const requestBody: any = {
-      contents: [{
-        parts: parts,
-      }],
-      generationConfig: {
-        temperature: temperature,
-        maxOutputTokens: maxTokens,
-      },
-    };
-
-    // Note: Gemini has function calling support but it's different from OpenAI format
-    // For now, we'll skip tools for Gemini (can be added later)
+    const modelName = args.model?.replace('gemini:', '') || this.defaultModel;
+    const contents = this.convertMessages(args.messages);
+    const tools = this.convertTools(args.tools);
 
     try {
-      const response = await fetch(`${this.apiBaseUrl}/models/${model}:generateContent?key=${this.apiKey}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      const response = await this.client.models.generateContent({
+        model: modelName,
+        contents,
+        config: {
+          temperature: args.temperature ?? 0.7,
+          maxOutputTokens: args.max_tokens || 4096,
+          tools, // tools go inside config
         },
-        body: JSON.stringify(requestBody),
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        logger.error('[GeminiProvider] API error:', response.status, errorText);
-        throw new Error(`Gemini API error: ${response.status} - ${errorText}`);
+      const text = response.text || '';
+      
+      // Check for function calls in response
+      let toolCalls: any[] | undefined;
+      const functionCalls = response.functionCalls;
+      if (functionCalls && functionCalls.length > 0) {
+        toolCalls = functionCalls.map((fc, index) => ({
+          id: `gemini-tool-${index}`,
+          type: 'function' as const,
+          function: {
+            name: fc.name,
+            arguments: JSON.stringify(fc.args || {}),
+          },
+        }));
       }
-
-      const data: any = await response.json();
-      const candidate = data.candidates?.[0];
-      const content = candidate?.content?.parts?.[0]?.text || '';
       
       return {
         message: {
           role: 'assistant',
-          content: content,
+          content: text,
+          tool_calls: toolCalls,
         },
         done: true,
-        usage: data.usageMetadata ? {
-          prompt_tokens: data.usageMetadata.promptTokenCount || 0,
-          completion_tokens: data.usageMetadata.candidatesTokenCount || 0,
-          total_tokens: data.usageMetadata.totalTokenCount || 0,
+        usage: response.usageMetadata ? {
+          prompt_tokens: response.usageMetadata.promptTokenCount || 0,
+          completion_tokens: response.usageMetadata.candidatesTokenCount || 0,
+          total_tokens: response.usageMetadata.totalTokenCount || 0,
         } : undefined,
       };
     } catch (error: any) {
-      logger.error('[GeminiProvider] Completion error:', error);
+      logger.error('[GeminiProvider] Completion error:', error.message);
       throw error;
     }
   }
 
   /**
-   * Stream chat completion
+   * Stream chat completion using official SDK
    */
   async *streamComplete(args: CompleteArguments): AsyncGenerator<ChatCompletion, void, unknown> {
-    const model = args.model?.replace('gemini:', '') || this.defaultModel;
-    const parts = this.convertMessages(args.messages);
-    const temperature = args.temperature ?? 0.7;
-    const maxTokens = args.max_tokens || 4096;
-
-    const requestBody: any = {
-      contents: [{
-        parts: parts,
-      }],
-      generationConfig: {
-        temperature: temperature,
-        maxOutputTokens: maxTokens,
-      },
-    };
+    const modelName = args.model?.replace('gemini:', '') || this.defaultModel;
+    const contents = this.convertMessages(args.messages);
+    const tools = this.convertTools(args.tools);
 
     try {
-      const response = await fetch(`${this.apiBaseUrl}/models/${model}:streamGenerateContent?key=${this.apiKey}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      const response = await this.client.models.generateContentStream({
+        model: modelName,
+        contents,
+        config: {
+          temperature: args.temperature ?? 0.7,
+          maxOutputTokens: args.max_tokens || 4096,
+          tools, // tools go inside config
         },
-        body: JSON.stringify(requestBody),
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        logger.error('[GeminiProvider] Stream API error:', response.status, errorText);
-        throw new Error(`Gemini API error: ${response.status} - ${errorText}`);
-      }
+      let toolCalls: any[] = [];
 
-      const reader = response.body?.getReader();
-      if (!reader) {
-        throw new Error('No response body reader available');
-      }
+      for await (const chunk of response) {
+        // Handle text content
+        const text = chunk.text;
+        if (text) {
+          yield {
+            message: {
+              role: 'assistant',
+              content: text,
+            },
+            done: false,
+          };
+        }
 
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          if (line.trim() && line.startsWith('{')) {
-            try {
-              const parsed = JSON.parse(line);
-              const candidate = parsed.candidates?.[0];
-              const delta = candidate?.content?.parts?.[0]?.text;
-              if (delta) {
-                yield {
-                  message: {
-                    role: 'assistant',
-                    content: delta,
-                  },
-                  done: false,
-                };
-              }
-            } catch (e) {
-              // Skip invalid JSON
-            }
+        // Handle function calls
+        const functionCalls = chunk.functionCalls;
+        if (functionCalls && functionCalls.length > 0) {
+          for (const fc of functionCalls) {
+            toolCalls.push({
+              id: `gemini-tool-${toolCalls.length}`,
+              type: 'function' as const,
+              function: {
+                name: fc.name,
+                arguments: JSON.stringify(fc.args || {}),
+              },
+            });
           }
         }
       }
 
+      // Final chunk with tool calls if any
       yield {
         message: {
           role: 'assistant',
           content: '',
+          tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
         },
         done: true,
       };
     } catch (error: any) {
-      logger.error('[GeminiProvider] Stream error:', error);
+      logger.error('[GeminiProvider] Stream error:', error.message);
       throw error;
     }
   }
 }
-

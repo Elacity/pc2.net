@@ -9,6 +9,7 @@ import { OllamaProvider, ChatModel, ChatMessage, CompleteArguments, ChatCompleti
 import { ClaudeProvider } from './providers/ClaudeProvider.js';
 import { OpenAIProvider } from './providers/OpenAIProvider.js';
 import { GeminiProvider } from './providers/GeminiProvider.js';
+import { XAIProvider } from './providers/XAIProvider.js';
 import { normalizeMessages, extractText } from './utils/Messages.js';
 import { normalizeToolsObject } from './utils/FunctionCalling.js';
 import { filesystemTools } from './tools/FilesystemTools.js';
@@ -49,7 +50,7 @@ export interface CompleteRequest {
   io?: any; // Socket.IO server instance for WebSocket events
 }
 
-type AIProvider = OllamaProvider | ClaudeProvider | OpenAIProvider | GeminiProvider;
+type AIProvider = OllamaProvider | ClaudeProvider | OpenAIProvider | GeminiProvider | XAIProvider;
 
 export class AIChatService {
   private providers: Map<string, AIProvider> = new Map();
@@ -121,6 +122,7 @@ export class AIChatService {
         hasClaude: !!apiKeys.claude,
         hasOpenAI: !!apiKeys.openai,
         hasGemini: !!apiKeys.gemini,
+        hasXAI: !!apiKeys.xai,
         currentProviders: Array.from(this.providers.keys())
       });
       
@@ -140,6 +142,12 @@ export class AIChatService {
       if (apiKeys.gemini) {
         logger.info('[AIChatService] registerUserProviders: Registering Gemini provider...');
         await this.registerGeminiProvider(apiKeys.gemini);
+      }
+      
+      // Register xAI if API key exists
+      if (apiKeys.xai) {
+        logger.info('[AIChatService] registerUserProviders: Registering xAI provider...');
+        await this.registerXAIProvider(apiKeys.xai);
       }
       
       logger.info(`[AIChatService] registerUserProviders: Complete. Registered providers: ${Array.from(this.providers.keys()).join(', ')}`);
@@ -215,6 +223,24 @@ export class AIChatService {
       }
     } catch (error: any) {
       logger.warn('[AIChatService] ⚠️  Failed to register Gemini provider:', error.message);
+    }
+  }
+
+  /**
+   * Register xAI provider (Grok models)
+   */
+  private async registerXAIProvider(apiKey: string): Promise<void> {
+    try {
+      const provider = new XAIProvider({ apiKey });
+      const isAvailable = await provider.isAvailable();
+      if (isAvailable) {
+        this.providers.set('xai', provider);
+        logger.info('[AIChatService] ✅ xAI provider registered');
+      } else {
+        logger.warn('[AIChatService] ⚠️  xAI API not available (invalid API key or network error)');
+      }
+    } catch (error: any) {
+      logger.warn('[AIChatService] ⚠️  Failed to register xAI provider:', error.message);
     }
   }
 
@@ -848,11 +874,21 @@ Examples:
         }
       }
 
-      // Add AI response and tool results to conversation
-      currentMessages.push({
-        role: 'assistant',
-        content: responseContent
-      });
+      // Add AI response to conversation (only if there's content or tool calls)
+      // OpenAI/Claude require assistant messages to have non-empty content
+      if (responseContent && responseContent.trim()) {
+        currentMessages.push({
+          role: 'assistant',
+          content: responseContent
+        });
+      } else if (toolCalls.length > 0) {
+        // If no text content but has tool calls, add a placeholder message
+        // This prevents empty content errors from Claude/OpenAI APIs
+        currentMessages.push({
+          role: 'assistant',
+          content: `Executing ${toolCalls.length} tool(s): ${toolCalls.map(t => t.name).join(', ')}`
+        });
+      }
 
       // Add tool results as user message for next iteration
       const toolResultsText = toolResults.map(tr => 
@@ -1514,9 +1550,17 @@ Example: {"tool_calls": [{"name": "write_file", "arguments": {"path": "${filePat
             const normalizedMessages = normalizeMessages(args.messages);
             
             // Add the assistant's message with filesystem tool calls to the conversation
+            // CRITICAL: Ensure content is non-empty to avoid Claude/OpenAI API 400 errors
+            // When AI only emits tool_calls without text, fullContent is empty string
+            let assistantContent = fullContent;
+            if (!assistantContent || !assistantContent.trim()) {
+              // Use placeholder message if content is empty but we have tool calls
+              assistantContent = `Executing ${filesystemToolCalls.length} tool(s): ${filesystemToolCalls.map((tc: any) => tc.function?.name).join(', ')}`;
+            }
+            
             const assistantMessage: any = {
               role: 'assistant',
-              content: fullContent,
+              content: assistantContent,
               tool_calls: filesystemToolCalls
             };
             
@@ -1545,13 +1589,34 @@ Example: {"tool_calls": [{"name": "write_file", "arguments": {"path": "${filePat
             ? mentionedDirectory.charAt(0).toUpperCase() + mentionedDirectory.slice(1)
             : null;
           
-          // Execute each filesystem tool call
+          // Execute each filesystem tool call - STREAMING each one as it starts and completes
           const toolResults: any[] = [];
-          for (const toolCall of filesystemToolCalls) {
+          const totalTools = filesystemToolCalls.length;
+          
+          for (let toolIndex = 0; toolIndex < filesystemToolCalls.length; toolIndex++) {
+            const toolCall = filesystemToolCalls[toolIndex];
+            const args = typeof toolCall.function.arguments === 'string' 
+              ? JSON.parse(toolCall.function.arguments) 
+              : toolCall.function.arguments;
+            
+            // Yield tool_use chunk BEFORE execution so frontend knows we're starting this tool
+            yield {
+              message: {
+                role: 'assistant',
+                content: '',
+              },
+              type: 'tool_use',
+              id: toolCall.id,
+              name: toolCall.function.name,
+              input: args,
+              tool_index: toolIndex,
+              total_tools: totalTools,
+            } as any;
+            
+            // Small delay to ensure chunk is flushed to client before continuing
+            await new Promise(resolve => setTimeout(resolve, 50));
+            
             try {
-              const args = typeof toolCall.function.arguments === 'string' 
-                ? JSON.parse(toolCall.function.arguments) 
-                : toolCall.function.arguments;
               
               // Normalize path if present
               if (args.path && typeof args.path === 'string') {
@@ -1629,20 +1694,60 @@ Example: {"tool_calls": [{"name": "write_file", "arguments": {"path": "${filePat
               }
               const result = await toolExecutor.executeTool(toolCall.function.name, args);
               logger.info('[AIChatService] streamComplete - Tool execution result:', JSON.stringify(result, null, 2));
+              
+              const toolResultContent = JSON.stringify(result);
               toolResults.push({
                 tool_call_id: toolCall.id,
                 role: 'tool' as const,
                 name: toolCall.function.name,
-                content: JSON.stringify(result)
+                content: toolResultContent
               });
+              
+              // Yield tool_result chunk AFTER execution so frontend knows it completed
+              yield {
+                message: {
+                  role: 'assistant',
+                  content: '',
+                },
+                type: 'tool_result',
+                tool_use_id: toolCall.id,
+                name: toolCall.function.name,
+                result: result,
+                is_error: false,
+                tool_index: toolIndex,
+                total_tools: totalTools,
+              } as any;
+              
+              // Small delay to ensure chunk is flushed to client
+              await new Promise(resolve => setTimeout(resolve, 50));
             } catch (error: any) {
               logger.error('[AIChatService] streamComplete - Tool execution error:', error);
+              
+              const errorContent = JSON.stringify({ success: false, error: error.message });
               toolResults.push({
                 tool_call_id: toolCall.id,
                 role: 'tool' as const,
                 name: toolCall.function.name,
-                content: JSON.stringify({ success: false, error: error.message })
+                content: errorContent
               });
+              
+              // Yield tool_result with error
+              yield {
+                message: {
+                  role: 'assistant',
+                  content: '',
+                },
+                type: 'tool_result',
+                tool_use_id: toolCall.id,
+                name: toolCall.function.name,
+                error: error.message,
+                is_error: true,
+                tool_index: toolIndex,
+                total_tools: totalTools,
+              } as any;
+              
+              // Small delay to ensure chunk is flushed to client
+              await new Promise(resolve => setTimeout(resolve, 50));
             }
           }
           

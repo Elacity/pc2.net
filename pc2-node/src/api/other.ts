@@ -810,6 +810,17 @@ export function handleDriversCall(req: AuthenticatedRequest, res: Response): voi
                   await (aiService as any).registerUserProviders(walletAddress);
                 }
 
+                // Emit status: thinking at the start of streaming
+                res.write(`${JSON.stringify({ type: 'status', status: 'thinking' })}\n`);
+                if (typeof (res as any).flush === 'function') {
+                  (res as any).flush();
+                }
+
+                // Track usage statistics
+                let totalTokens = 0;
+                let promptTokens = 0;
+                let completionTokens = 0;
+
                 for await (const chunk of aiService.streamComplete({
                   messages,
                   model,
@@ -821,53 +832,114 @@ export function handleDriversCall(req: AuthenticatedRequest, res: Response): voi
                   filesystem,
                   io,
                 })) {
+                  // Track usage if available
+                  if (chunk.usage) {
+                    if (chunk.usage.total_tokens) totalTokens = chunk.usage.total_tokens;
+                    if (chunk.usage.prompt_tokens) promptTokens = chunk.usage.prompt_tokens;
+                    if (chunk.usage.completion_tokens) completionTokens = chunk.usage.completion_tokens;
+                  }
+
                   // Puter's format: {"type": "text", "text": "chunk content"}\n
+                  // Also parse DeepSeek <think> tags and emit as reasoning chunks
                   const content = chunk.message?.content || '';
                   if (content) {
-                    const textChunk = JSON.stringify({
-                      type: 'text',
-                      text: content,
-                    });
-                    res.write(`${textChunk}\n`);
-                    // Force flush after each write to ensure immediate delivery
+                    // Check for DeepSeek thinking tags
+                    const thinkMatch = content.match(/<think>([\s\S]*?)(?:<\/think>|$)/);
+                    if (thinkMatch) {
+                      // Extract thinking content
+                      const thinkingContent = thinkMatch[1];
+                      const remainingContent = content.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+                      
+                      // Emit reasoning chunk
+                      if (thinkingContent) {
+                        const reasoningChunk = JSON.stringify({
+                          type: 'reasoning',
+                          content: thinkingContent,
+                        });
+                        res.write(`${reasoningChunk}\n`);
+                        if (typeof (res as any).flush === 'function') {
+                          (res as any).flush();
+                        }
+                      }
+                      
+                      // Emit remaining text if any
+                      if (remainingContent) {
+                        const textChunk = JSON.stringify({
+                          type: 'text',
+                          text: remainingContent,
+                        });
+                        res.write(`${textChunk}\n`);
+                        if (typeof (res as any).flush === 'function') {
+                          (res as any).flush();
+                        }
+                      }
+                    } else {
+                      // No thinking tags, emit as regular text
+                      const textChunk = JSON.stringify({
+                        type: 'text',
+                        text: content,
+                      });
+                      res.write(`${textChunk}\n`);
+                      if (typeof (res as any).flush === 'function') {
+                        (res as any).flush();
+                      }
+                    }
+                  }
+                  
+                  // NOTE: We no longer handle message.tool_calls here because AIChatService
+                  // now yields explicit tool_use/tool_result chunks with accurate total_tools count.
+                  // This prevents duplicate tool tracking on the frontend.
+                  
+                  // Handle explicit tool_use chunks (from our streaming tool execution)
+                  if ((chunk as any).type === 'tool_use') {
+                    const toolChunk = {
+                      type: 'tool_use',
+                      id: (chunk as any).id,
+                      name: (chunk as any).name,
+                      input: (chunk as any).input,
+                      tool_index: (chunk as any).tool_index,
+                      total_tools: (chunk as any).total_tools,
+                    };
+                    logger.info('[Drivers] Writing tool_use chunk:', toolChunk.name, 'step', (toolChunk.tool_index || 0) + 1, 'of', toolChunk.total_tools);
+                    res.write(`${JSON.stringify(toolChunk)}\n`);
                     if (typeof (res as any).flush === 'function') {
                       (res as any).flush();
                     }
                   }
                   
-                  // Handle tool calls if present
-                  if (chunk.message?.tool_calls && Array.isArray(chunk.message.tool_calls)) {
-                    for (const toolCall of chunk.message.tool_calls) {
-                      try {
-                        const args = typeof toolCall.function?.arguments === 'string'
-                          ? JSON.parse(toolCall.function.arguments)
-                          : toolCall.function?.arguments || {};
-                        
-                        // Get tool source from tool call metadata (set by AIChatService)
-                        const toolName = toolCall.function?.name;
-                        const toolSource = (toolCall as any).__source;
-                        
-                        const toolChunk: any = {
-                          type: 'tool_use',
-                          name: toolName,
-                          input: args,
-                        };
-                        
-                        // Include source metadata if available
-                        if (toolSource) {
-                          toolChunk.source = toolSource;
-                        }
-                        
-                        res.write(`${JSON.stringify(toolChunk)}\n`);
-                        if (typeof (res as any).flush === 'function') {
-                          (res as any).flush();
-                        }
-                      } catch (e) {
-                        logger.error('[Drivers] Failed to format tool call chunk:', e);
-                      }
+                  // Handle explicit tool_result chunks (from our streaming tool execution)
+                  if ((chunk as any).type === 'tool_result') {
+                    const resultChunk = {
+                      type: 'tool_result',
+                      tool_use_id: (chunk as any).tool_use_id,
+                      name: (chunk as any).name,
+                      result: (chunk as any).result,
+                      error: (chunk as any).error,
+                      is_error: (chunk as any).is_error,
+                      tool_index: (chunk as any).tool_index,
+                      total_tools: (chunk as any).total_tools,
+                    };
+                    res.write(`${JSON.stringify(resultChunk)}\n`);
+                    if (typeof (res as any).flush === 'function') {
+                      (res as any).flush();
                     }
                   }
                 }
+                
+                // Emit done chunk with usage statistics
+                const doneChunk = JSON.stringify({
+                  type: 'done',
+                  usage: {
+                    total_tokens: totalTokens,
+                    prompt_tokens: promptTokens,
+                    completion_tokens: completionTokens,
+                  }
+                });
+                res.write(`${doneChunk}\n`);
+                if (typeof (res as any).flush === 'function') {
+                  (res as any).flush();
+                }
+                
                 res.end();
               } catch (error: any) {
                 const errorMessage = error?.message || 'AI stream error';

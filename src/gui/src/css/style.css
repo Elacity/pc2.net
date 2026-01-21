@@ -642,10 +642,28 @@
     font-size: 14px;
     line-height: 1.6;
     margin-right: auto;
-    user-select: text;
-    -webkit-user-select: text;
-    -moz-user-select: text;
-    -ms-user-select: text;
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    -moz-user-select: text !important;
+    -ms-user-select: text !important;
+    cursor: text;
+}
+
+/* Ensure all child elements of AI messages are selectable */
+.ai-chat-message-ai *,
+.ai-chat-message-ai p,
+.ai-chat-message-ai span,
+.ai-chat-message-ai div,
+.ai-chat-message-ai li,
+.ai-chat-message-ai h1,
+.ai-chat-message-ai h2,
+.ai-chat-message-ai h3,
+.ai-chat-message-ai code,
+.ai-chat-message-ai pre {
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    -moz-user-select: text !important;
+    -ms-user-select: text !important;
 }
 
 /* Loading Indicator - Enhanced with 3x3 grid and stop button */

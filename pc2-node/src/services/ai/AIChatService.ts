@@ -16,6 +16,7 @@ import { filesystemTools } from './tools/FilesystemTools.js';
 import { ToolExecutor } from './tools/ToolExecutor.js';
 import { FilesystemManager } from '../../storage/filesystem.js';
 import { DatabaseManager } from '../../storage/database.js';
+import { MemoryConsolidator, ConsolidatedState } from './memory/MemoryConsolidator.js';
 
 export interface AIConfig {
   enabled?: boolean;
@@ -570,16 +571,54 @@ export class AIChatService {
     let iteration = 0;
     let currentMessages = [...messages];
 
+    // Initialize memory consolidator for context optimization
+    let memoryConsolidator: MemoryConsolidator | null = null;
+    let memoryContext = '';
+    
+    if (this.db) {
+      try {
+        memoryConsolidator = new MemoryConsolidator(this.db, walletAddress);
+        await memoryConsolidator.loadState();
+        
+        // Consolidate current messages and get memory context
+        const consolidation = await memoryConsolidator.consolidate(messages);
+        memoryContext = consolidation.memoryContext;
+        
+        if (memoryContext) {
+          logger.info('[AIChatService] Memory context loaded:', {
+            length: memoryContext.length,
+            preview: memoryContext.substring(0, 100),
+          });
+        }
+      } catch (error: any) {
+        logger.warn('[AIChatService] Failed to initialize memory consolidator:', error.message);
+        // Continue without memory - not a critical error
+      }
+    }
+
     // Add system message with tool instructions
     const toolDescriptions = tools.map(t => {
       const fn = t.function;
       return `- ${fn.name}: ${fn.description || 'No description'}`;
     }).join('\n');
 
+    // Build memory context section for system prompt
+    const memorySection = memoryContext ? `
+<CONTEXT_MEMORY>
+${memoryContext}
+</CONTEXT_MEMORY>
+
+**IMPORTANT:** Use the CONTEXT_MEMORY above to understand:
+- Recently created files/folders (refer to them in follow-up requests)
+- What actions were just performed (avoid repeating)
+- The user's current intent
+
+` : '';
+
     const systemMessage = {
       role: 'system' as const,
       content: `You are a helpful AI assistant integrated into the ElastOS personal cloud operating system.
-
+${memorySection}
 **REASONING MODE: Think and plan before acting**
 
 When the user asks you to perform a task, think through what needs to be done and explain your plan before executing. This helps the user understand what you're doing and builds trust.
@@ -847,6 +886,16 @@ Examples:
         }
         // No tool calls, return final response
         logger.info('[AIChatService] No tool calls detected, returning final response');
+        
+        // Save memory state before returning
+        if (memoryConsolidator) {
+          try {
+            await memoryConsolidator.saveState();
+          } catch (error: any) {
+            logger.warn('[AIChatService] Failed to save memory state:', error.message);
+          }
+        }
+        
         return result;
       }
 
@@ -865,6 +914,11 @@ Examples:
             result: executionResult
           });
           logger.info(`[AIChatService] Tool ${toolCall.name} executed:`, executionResult);
+          
+          // Record action in memory consolidator
+          if (memoryConsolidator) {
+            memoryConsolidator.recordAction(toolCall.name, toolCall.arguments, executionResult);
+          }
         } catch (error: any) {
           logger.error(`[AIChatService] Tool ${toolCall.name} execution failed:`, error);
           toolResults.push({
@@ -936,6 +990,16 @@ Example: {"tool_calls": [{"name": "write_file", "arguments": {"path": "${filePat
 
     // Max iterations reached, return last response
     logger.warn('[AIChatService] Max tool execution iterations reached');
+    
+    // Save memory state before returning
+    if (memoryConsolidator) {
+      try {
+        await memoryConsolidator.saveState();
+      } catch (error: any) {
+        logger.warn('[AIChatService] Failed to save memory state:', error.message);
+      }
+    }
+    
     const finalArgs = { ...completeArgs, messages: currentMessages };
     return await provider.complete(finalArgs);
   }
@@ -1549,6 +1613,17 @@ Example: {"tool_calls": [{"name": "write_file", "arguments": {"path": "${filePat
             const toolExecutor = new ToolExecutor(args.filesystem, args.walletAddress, args.io);
             const normalizedMessages = normalizeMessages(args.messages);
             
+            // Initialize memory consolidator for action recording
+            let streamMemoryConsolidator: MemoryConsolidator | null = null;
+            if (this.db && args.walletAddress) {
+              try {
+                streamMemoryConsolidator = new MemoryConsolidator(this.db, args.walletAddress);
+                await streamMemoryConsolidator.loadState();
+              } catch (error: any) {
+                logger.warn('[AIChatService] streamComplete - Failed to init memory consolidator:', error.message);
+              }
+            }
+            
             // Add the assistant's message with filesystem tool calls to the conversation
             // CRITICAL: Ensure content is non-empty to avoid Claude/OpenAI API 400 errors
             // When AI only emits tool_calls without text, fullContent is empty string
@@ -1695,6 +1770,11 @@ Example: {"tool_calls": [{"name": "write_file", "arguments": {"path": "${filePat
               const result = await toolExecutor.executeTool(toolCall.function.name, args);
               logger.info('[AIChatService] streamComplete - Tool execution result:', JSON.stringify(result, null, 2));
               
+              // Record action in memory consolidator
+              if (streamMemoryConsolidator) {
+                streamMemoryConsolidator.recordAction(toolCall.function.name, args, result);
+              }
+              
               const toolResultContent = JSON.stringify(result);
               toolResults.push({
                 tool_call_id: toolCall.id,
@@ -1790,6 +1870,16 @@ Example: {"tool_calls": [{"name": "write_file", "arguments": {"path": "${filePat
             max_tokens: args.max_tokens,
             temperature: args.temperature,
           };
+          
+          // Save memory state before streaming final response
+          if (streamMemoryConsolidator) {
+            try {
+              await streamMemoryConsolidator.saveState();
+              logger.info('[AIChatService] streamComplete - Memory state saved');
+            } catch (error: any) {
+              logger.warn('[AIChatService] streamComplete - Failed to save memory state:', error.message);
+            }
+          }
           
           // Stream the final response (AI will see tool results and context message)
           yield* provider.streamComplete(finalArgs);

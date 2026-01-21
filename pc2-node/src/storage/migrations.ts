@@ -29,7 +29,7 @@ function findSchemaFile(): string {
   }
   throw new Error(`Schema file not found. Tried: ${SCHEMA_FILE} and ${sourceSchema}`);
 }
-const CURRENT_VERSION = 11;
+const CURRENT_VERSION = 12;
 
 interface Migration {
   version: number;
@@ -473,6 +473,38 @@ export function runMigrations(db: Database.Database): void {
         recordMigration(db, 11);
       } catch (error: any) {
         console.error(`❌ Migration 11 error: ${error.message}`);
+        throw error;
+      }
+    }
+
+    // Migration 12: AI Memory State table (Context Engineering)
+    if (currentVersion < 12) {
+      try {
+        console.log('📦 Running Migration 12: AI Memory State table...');
+        
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS ai_memory_state (
+            wallet_address TEXT PRIMARY KEY,
+            consolidated_summary TEXT DEFAULT '',
+            entities_json TEXT DEFAULT '[]',
+            last_actions_json TEXT DEFAULT '[]',
+            user_intent TEXT DEFAULT '',
+            message_count INTEGER DEFAULT 0,
+            updated_at INTEGER NOT NULL,
+            FOREIGN KEY (wallet_address) REFERENCES users(wallet_address) ON DELETE CASCADE
+          )
+        `);
+        
+        // Create index for faster lookups
+        db.exec(`
+          CREATE INDEX IF NOT EXISTS idx_ai_memory_state_updated 
+          ON ai_memory_state(updated_at)
+        `);
+        
+        console.log('✅ Migration 12 complete: AI Memory State table created');
+        recordMigration(db, 12);
+      } catch (error: any) {
+        console.error(`❌ Migration 12 error: ${error.message}`);
         throw error;
       }
     }

@@ -1021,4 +1021,75 @@ export class DatabaseManager {
       success_rate: successResult.total > 0 ? (successResult.success / successResult.total) * 100 : 100,
     };
   }
+
+  // ============================================================================
+  // AI Memory State Operations (Wallet-Scoped)
+  // ============================================================================
+
+  /**
+   * Get AI memory state for a wallet
+   * Used by MemoryConsolidator for context optimization
+   */
+  getMemoryState(walletAddress: string): {
+    consolidated_summary: string;
+    entities_json: string;
+    last_actions_json: string;
+    user_intent: string;
+    message_count: number;
+    updated_at: number;
+  } | null {
+    const db = this.getDB();
+    const row = db.prepare(`
+      SELECT consolidated_summary, entities_json, last_actions_json, user_intent, message_count, updated_at
+      FROM ai_memory_state
+      WHERE wallet_address = ?
+    `).get(walletAddress) as any;
+    
+    return row || null;
+  }
+
+  /**
+   * Save AI memory state for a wallet
+   */
+  saveMemoryState(
+    walletAddress: string,
+    state: {
+      consolidated_summary: string;
+      entities_json: string;
+      last_actions_json: string;
+      user_intent: string;
+      message_count: number;
+      updated_at: number;
+    }
+  ): void {
+    const db = this.getDB();
+    
+    db.prepare(`
+      INSERT INTO ai_memory_state (wallet_address, consolidated_summary, entities_json, last_actions_json, user_intent, message_count, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(wallet_address) DO UPDATE SET
+        consolidated_summary = excluded.consolidated_summary,
+        entities_json = excluded.entities_json,
+        last_actions_json = excluded.last_actions_json,
+        user_intent = excluded.user_intent,
+        message_count = excluded.message_count,
+        updated_at = excluded.updated_at
+    `).run(
+      walletAddress,
+      state.consolidated_summary,
+      state.entities_json,
+      state.last_actions_json,
+      state.user_intent,
+      state.message_count,
+      state.updated_at
+    );
+  }
+
+  /**
+   * Clear AI memory state for a wallet (e.g., when starting new conversation)
+   */
+  clearMemoryState(walletAddress: string): void {
+    const db = this.getDB();
+    db.prepare('DELETE FROM ai_memory_state WHERE wallet_address = ?').run(walletAddress);
+  }
 }

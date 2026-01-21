@@ -10,6 +10,7 @@
     "build:backend": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx watch --exclude 'data/**' --exclude 'frontend/**' src/index.ts",
+    "dev:clean": "pkill -9 -f 'tsx.*pc2-node' 2>/dev/null; sleep 1; npm run dev",
     "dev:legacy": "tsc --watch & nodemon dist/index.js",
     "clean": "node scripts/clean.js",
     "test": "npm run build:backend && node scripts/test-system.js",

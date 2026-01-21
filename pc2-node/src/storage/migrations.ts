@@ -29,7 +29,7 @@ function findSchemaFile(): string {
   }
   throw new Error(`Schema file not found. Tried: ${SCHEMA_FILE} and ${sourceSchema}`);
 }
-const CURRENT_VERSION = 12;
+const CURRENT_VERSION = 13;
 
 interface Migration {
   version: number;
@@ -505,6 +505,43 @@ export function runMigrations(db: Database.Database): void {
         recordMigration(db, 12);
       } catch (error: any) {
         console.error(`❌ Migration 12 error: ${error.message}`);
+        throw error;
+      }
+    }
+    
+    // Migration 13: AI Conversations table (persistent chat history)
+    if (currentVersion < 13) {
+      try {
+        console.log('📦 Running Migration 13: AI Conversations table...');
+        
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS ai_conversations (
+            id TEXT PRIMARY KEY,
+            wallet_address TEXT NOT NULL,
+            title TEXT DEFAULT 'New Conversation',
+            messages_json TEXT NOT NULL DEFAULT '[]',
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            FOREIGN KEY (wallet_address) REFERENCES users(wallet_address) ON DELETE CASCADE
+          )
+        `);
+        
+        // Create index for wallet-scoped queries
+        db.exec(`
+          CREATE INDEX IF NOT EXISTS idx_ai_conversations_wallet 
+          ON ai_conversations(wallet_address)
+        `);
+        
+        // Create index for ordering by updated_at
+        db.exec(`
+          CREATE INDEX IF NOT EXISTS idx_ai_conversations_updated 
+          ON ai_conversations(wallet_address, updated_at DESC)
+        `);
+        
+        console.log('✅ Migration 13 complete: AI Conversations table created');
+        recordMigration(db, 13);
+      } catch (error: any) {
+        console.error(`❌ Migration 13 error: ${error.message}`);
         throw error;
       }
     }

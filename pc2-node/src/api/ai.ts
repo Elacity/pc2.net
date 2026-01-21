@@ -481,5 +481,283 @@ router.delete('/api-keys/:provider', authenticate, async (req: AuthenticatedRequ
   }
 });
 
+// ============================================================================
+// AI CONVERSATIONS (Persistent Chat History)
+// ============================================================================
+
+/**
+ * GET /api/ai/conversations
+ * Get all conversations for the authenticated user
+ */
+router.get('/conversations', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const walletAddress = req.user!.wallet_address;
+    const db = req.app.locals.db;
+    
+    if (!db) {
+      return res.status(500).json({ success: false, error: 'Database not available' });
+    }
+
+    const conversations = db.getConversations(walletAddress);
+    
+    // Parse messages_json for each conversation
+    const parsed = conversations.map((conv: any) => ({
+      id: conv.id,
+      title: conv.title,
+      messages: JSON.parse(conv.messages_json || '[]'),
+      created_at: conv.created_at,
+      updated_at: conv.updated_at
+    }));
+
+    res.json({
+      success: true,
+      result: parsed
+    });
+  } catch (error: any) {
+    logger.error('[AI API] Error getting conversations:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to get conversations' });
+  }
+});
+
+/**
+ * GET /api/ai/conversations/:id
+ * Get a single conversation by ID
+ */
+router.get('/conversations/:id', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const walletAddress = req.user!.wallet_address;
+    const db = req.app.locals.db;
+    const conversationId = req.params.id;
+    
+    if (!db) {
+      return res.status(500).json({ success: false, error: 'Database not available' });
+    }
+
+    const conversation = db.getConversation(walletAddress, conversationId);
+    
+    if (!conversation) {
+      return res.status(404).json({ success: false, error: 'Conversation not found' });
+    }
+
+    res.json({
+      success: true,
+      result: {
+        id: conversation.id,
+        title: conversation.title,
+        messages: JSON.parse(conversation.messages_json || '[]'),
+        created_at: conversation.created_at,
+        updated_at: conversation.updated_at
+      }
+    });
+  } catch (error: any) {
+    logger.error('[AI API] Error getting conversation:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to get conversation' });
+  }
+});
+
+/**
+ * POST /api/ai/conversations
+ * Create or update a conversation (upsert)
+ */
+router.post('/conversations', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const walletAddress = req.user!.wallet_address;
+    const db = req.app.locals.db;
+    const { id, title, messages } = req.body;
+    
+    if (!db) {
+      return res.status(500).json({ success: false, error: 'Database not available' });
+    }
+
+    if (!id) {
+      return res.status(400).json({ success: false, error: 'Conversation ID is required' });
+    }
+
+    // Check if conversation exists - if so, update it instead of creating
+    const existing = db.getConversation(walletAddress, id);
+    
+    let conversation;
+    if (existing) {
+      // Update existing conversation
+      db.updateConversation(walletAddress, id, { title, messages });
+      conversation = db.getConversation(walletAddress, id);
+      logger.info(`[AI API] Updated conversation ${id} for wallet: ${walletAddress.substring(0, 10)}...`);
+    } else {
+      // Create new conversation
+      conversation = db.createConversation(
+        walletAddress,
+        id,
+        title || 'New Conversation',
+        messages || []
+      );
+      logger.info(`[AI API] Created conversation ${id} for wallet: ${walletAddress.substring(0, 10)}...`);
+    }
+
+    res.json({
+      success: true,
+      result: {
+        id: conversation!.id,
+        title: conversation!.title,
+        messages: JSON.parse(conversation!.messages_json || '[]'),
+        created_at: conversation!.created_at,
+        updated_at: conversation!.updated_at
+      }
+    });
+  } catch (error: any) {
+    logger.error('[AI API] Error creating/updating conversation:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to create/update conversation' });
+  }
+});
+
+/**
+ * POST /api/ai/conversations/:id
+ * Update a conversation via POST (for sendBeacon compatibility)
+ */
+router.post('/conversations/:id', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const walletAddress = req.user!.wallet_address;
+    const db = req.app.locals.db;
+    const conversationId = req.params.id;
+    const { title, messages } = req.body;
+    
+    if (!db) {
+      return res.status(500).json({ success: false, error: 'Database not available' });
+    }
+
+    // Check if exists - create or update accordingly
+    const existing = db.getConversation(walletAddress, conversationId);
+    
+    if (existing) {
+      const updates: { title?: string; messages?: any[] } = {};
+      if (title !== undefined) updates.title = title;
+      if (messages !== undefined) updates.messages = messages;
+      db.updateConversation(walletAddress, conversationId, updates);
+    } else {
+      db.createConversation(walletAddress, conversationId, title || 'New Conversation', messages || []);
+    }
+    
+    const updated = db.getConversation(walletAddress, conversationId);
+    
+    logger.info(`[AI API] Upserted conversation ${conversationId} for wallet: ${walletAddress.substring(0, 10)}...`);
+
+    res.json({
+      success: true,
+      result: updated ? {
+        id: updated.id,
+        title: updated.title,
+        messages: JSON.parse(updated.messages_json || '[]'),
+        created_at: updated.created_at,
+        updated_at: updated.updated_at
+      } : null
+    });
+  } catch (error: any) {
+    logger.error('[AI API] Error upserting conversation:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to upsert conversation' });
+  }
+});
+
+/**
+ * PUT /api/ai/conversations/:id
+ * Update a conversation (title and/or messages)
+ */
+router.put('/conversations/:id', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const walletAddress = req.user!.wallet_address;
+    const db = req.app.locals.db;
+    const conversationId = req.params.id;
+    const { title, messages } = req.body;
+    
+    if (!db) {
+      return res.status(500).json({ success: false, error: 'Database not available' });
+    }
+
+    const updates: { title?: string; messages?: any[] } = {};
+    if (title !== undefined) updates.title = title;
+    if (messages !== undefined) updates.messages = messages;
+
+    const success = db.updateConversation(walletAddress, conversationId, updates);
+    
+    if (!success) {
+      return res.status(404).json({ success: false, error: 'Conversation not found' });
+    }
+
+    // Fetch updated conversation
+    const updated = db.getConversation(walletAddress, conversationId);
+
+    res.json({
+      success: true,
+      result: updated ? {
+        id: updated.id,
+        title: updated.title,
+        messages: JSON.parse(updated.messages_json || '[]'),
+        created_at: updated.created_at,
+        updated_at: updated.updated_at
+      } : null
+    });
+  } catch (error: any) {
+    logger.error('[AI API] Error updating conversation:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to update conversation' });
+  }
+});
+
+/**
+ * DELETE /api/ai/conversations/:id
+ * Delete a conversation
+ */
+router.delete('/conversations/:id', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const walletAddress = req.user!.wallet_address;
+    const db = req.app.locals.db;
+    const conversationId = req.params.id;
+    
+    if (!db) {
+      return res.status(500).json({ success: false, error: 'Database not available' });
+    }
+
+    const success = db.deleteConversation(walletAddress, conversationId);
+    
+    if (!success) {
+      return res.status(404).json({ success: false, error: 'Conversation not found' });
+    }
+
+    logger.info(`[AI API] Deleted conversation ${conversationId} for wallet: ${walletAddress.substring(0, 10)}...`);
+
+    res.json({
+      success: true,
+      result: { message: 'Conversation deleted successfully' }
+    });
+  } catch (error: any) {
+    logger.error('[AI API] Error deleting conversation:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to delete conversation' });
+  }
+});
+
+/**
+ * DELETE /api/ai/conversations
+ * Delete all conversations for the authenticated user
+ */
+router.delete('/conversations', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const walletAddress = req.user!.wallet_address;
+    const db = req.app.locals.db;
+    
+    if (!db) {
+      return res.status(500).json({ success: false, error: 'Database not available' });
+    }
+
+    const count = db.deleteAllConversations(walletAddress);
+
+    logger.info(`[AI API] Deleted ${count} conversations for wallet: ${walletAddress.substring(0, 10)}...`);
+
+    res.json({
+      success: true,
+      result: { message: `Deleted ${count} conversation(s)`, count }
+    });
+  } catch (error: any) {
+    logger.error('[AI API] Error deleting all conversations:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to delete conversations' });
+  }
+});
+
 export default router;
 

@@ -66,6 +66,15 @@ export interface AIConfig {
   updated_at: number;
 }
 
+export interface AIConversation {
+  id: string;
+  wallet_address: string;
+  title: string;
+  messages_json: string; // JSON string array of messages
+  created_at: number;
+  updated_at: number;
+}
+
 export class DatabaseManager {
   private db: Database.Database | null = null;
   private dbPath: string;
@@ -1142,5 +1151,124 @@ export class DatabaseManager {
   clearMemoryState(walletAddress: string): void {
     const db = this.getDB();
     db.prepare('DELETE FROM ai_memory_state WHERE wallet_address = ?').run(walletAddress);
+  }
+
+  // ============================================================================
+  // AI CONVERSATIONS (Persistent Chat History)
+  // ============================================================================
+
+  /**
+   * Get all conversations for a wallet (ordered by most recent first)
+   */
+  getConversations(walletAddress: string): AIConversation[] {
+    const db = this.getDB();
+    const rows = db.prepare(`
+      SELECT id, wallet_address, title, messages_json, created_at, updated_at
+      FROM ai_conversations
+      WHERE wallet_address = ?
+      ORDER BY updated_at DESC
+    `).all(walletAddress) as AIConversation[];
+    return rows;
+  }
+
+  /**
+   * Get a single conversation by ID (with wallet validation)
+   */
+  getConversation(walletAddress: string, conversationId: string): AIConversation | null {
+    const db = this.getDB();
+    const row = db.prepare(`
+      SELECT id, wallet_address, title, messages_json, created_at, updated_at
+      FROM ai_conversations
+      WHERE wallet_address = ? AND id = ?
+    `).get(walletAddress, conversationId) as AIConversation | undefined;
+    return row ?? null;
+  }
+
+  /**
+   * Create a new conversation
+   */
+  createConversation(
+    walletAddress: string,
+    conversationId: string,
+    title: string = 'New Conversation',
+    messages: any[] = []
+  ): AIConversation {
+    const db = this.getDB();
+    const now = Math.floor(Date.now() / 1000);
+    const messagesJson = JSON.stringify(messages);
+
+    db.prepare(`
+      INSERT INTO ai_conversations (id, wallet_address, title, messages_json, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(conversationId, walletAddress, title, messagesJson, now, now);
+
+    return {
+      id: conversationId,
+      wallet_address: walletAddress,
+      title,
+      messages_json: messagesJson,
+      created_at: now,
+      updated_at: now
+    };
+  }
+
+  /**
+   * Update a conversation (messages and/or title)
+   */
+  updateConversation(
+    walletAddress: string,
+    conversationId: string,
+    updates: { title?: string; messages?: any[] }
+  ): boolean {
+    const db = this.getDB();
+    const now = Math.floor(Date.now() / 1000);
+
+    // Build dynamic update query
+    const setClauses: string[] = ['updated_at = ?'];
+    const values: any[] = [now];
+
+    if (updates.title !== undefined) {
+      setClauses.push('title = ?');
+      values.push(updates.title);
+    }
+
+    if (updates.messages !== undefined) {
+      setClauses.push('messages_json = ?');
+      values.push(JSON.stringify(updates.messages));
+    }
+
+    values.push(walletAddress, conversationId);
+
+    const result = db.prepare(`
+      UPDATE ai_conversations
+      SET ${setClauses.join(', ')}
+      WHERE wallet_address = ? AND id = ?
+    `).run(...values);
+
+    return result.changes > 0;
+  }
+
+  /**
+   * Delete a conversation
+   */
+  deleteConversation(walletAddress: string, conversationId: string): boolean {
+    const db = this.getDB();
+    const result = db.prepare(`
+      DELETE FROM ai_conversations
+      WHERE wallet_address = ? AND id = ?
+    `).run(walletAddress, conversationId);
+    return result.changes > 0;
+  }
+
+  /**
+   * Delete all conversations for a wallet
+   */
+  deleteAllConversations(walletAddress: string): number {
+    const db = this.getDB();
+    const result = db.prepare(`
+      DELETE FROM ai_conversations
+      WHERE wallet_address = ?
+    `).run(walletAddress);
+    return result.changes;
   }
 }

@@ -220,6 +220,7 @@
 .ai-history-item {
     position: relative;
     padding: 12px;
+    padding-right: 36px;
     margin-bottom: 4px;
     border-radius: 6px;
     cursor: pointer;
@@ -227,6 +228,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    height: 44px;
+    box-sizing: border-box;
 }
 
 .ai-history-item:hover {
@@ -248,7 +251,11 @@
 }
 
 .ai-history-item-delete {
-    display: none;
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    opacity: 0;
     background: none;
     border: none;
     color: var(--ai-text-color);
@@ -261,7 +268,7 @@
 }
 
 .ai-history-item:hover .ai-history-item-delete {
-    display: block;
+    opacity: 0.6;
 }
 
 .ai-history-item-delete:hover {
@@ -329,30 +336,37 @@
     display: flex;
 }
 
-/* Assistant message copy button - bottom right position */
-.ai-assistant-actions {
-    position: relative;
-    top: auto;
-    right: auto;
+/* Copy button for AI responses - minimal icon only */
+.ai-copy-actions {
     display: flex;
-    justify-content: flex-end;
-    margin-top: 8px;
+    justify-content: flex-start;
+    margin-top: 12px;
+}
+
+.ai-copy-btn {
+    display: flex;
+    align-items: center;
+    padding: 4px;
+    border: none;
+    border-radius: 4px;
     background: transparent;
-    box-shadow: none;
-    padding: 0;
+    color: rgba(255, 255, 255, 0.5);
+    cursor: pointer;
+    transition: color 0.2s ease;
 }
 
-.ai-assistant-actions .ai-message-copy {
-    opacity: 0.5;
-    transition: opacity 0.2s;
+.ai-copy-btn:hover {
+    color: rgba(255, 255, 255, 0.9);
 }
 
-.ai-assistant-actions .ai-message-copy:hover {
-    opacity: 1;
+.ai-copy-btn svg {
+    width: 16px;
+    height: 16px;
+    stroke: currentColor;
 }
 
-.ai-chat-message:hover .ai-assistant-actions .ai-message-copy {
-    opacity: 0.7;
+.ai-copy-btn span {
+    display: none;
 }
 
 .ai-message-copy,
@@ -924,6 +938,7 @@
     justify-content: space-between;
     align-items: center;
     margin-bottom: 8px;
+    gap: 20px;
 }
 
 .ai-progress-info {
@@ -950,6 +965,8 @@
 
 .ai-progress-percent {
     opacity: 0.6;
+    margin-left: 12px;
+    white-space: nowrap;
 }
 
 .ai-progress-expand {

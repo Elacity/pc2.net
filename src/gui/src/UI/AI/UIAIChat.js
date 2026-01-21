@@ -686,28 +686,154 @@ function renderMarkdown(text) {
     return html;
 }
 
-// Load all conversations from localStorage (wallet-scoped)
-function loadConversations() {
+// In-memory cache of conversations (synced with backend)
+let conversationsCache = {};
+let conversationsCacheLoaded = false;
+
+// Load all conversations from backend API
+async function loadConversationsFromBackend() {
     try {
-        const key = getConversationsKey();
-        const conversations = localStorage.getItem(key);
-        if (conversations) {
-            return JSON.parse(conversations);
+        const apiOrigin = window.api_origin || window.location.origin;
+        const authToken = window.auth_token || localStorage.getItem('puter_auth_token') || localStorage.getItem('auth_token') || '';
+        
+        // Check if we have auth token - if not, use localStorage only
+        if (!authToken) {
+            console.warn('[UIAIChat] No auth token available, loading from localStorage only');
+            loadFromLocalStorage();
+            return conversationsCache;
+        }
+        
+        const response = await fetch(`${apiOrigin}/api/ai/conversations`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Failed to load conversations: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        if (data.success && Array.isArray(data.result)) {
+            // Convert array to object keyed by id
+            conversationsCache = {};
+            data.result.forEach(conv => {
+                conversationsCache[conv.id] = {
+                    id: conv.id,
+                    title: conv.title,
+                    messages: conv.messages || [],
+                    createdAt: conv.created_at * 1000,
+                    updatedAt: conv.updated_at * 1000
+                };
+            });
+            conversationsCacheLoaded = true;
+            console.log(`[UIAIChat] Loaded ${data.result.length} conversations from backend`);
         }
     } catch (e) {
-        console.error('[UIAIChat] Failed to load conversations:', e);
+        console.error('[UIAIChat] Failed to load conversations from backend:', e);
+        // Fall back to localStorage if backend fails
+        loadFromLocalStorage();
     }
-    return {};
+    return conversationsCache;
 }
 
-// Save all conversations to localStorage (wallet-scoped)
-function saveConversations(conversations) {
+// Helper to load from localStorage
+function loadFromLocalStorage() {
     try {
         const key = getConversationsKey();
-        localStorage.setItem(key, JSON.stringify(conversations));
-    } catch (e) {
-        console.error('[UIAIChat] Failed to save conversations:', e);
+        const localConvs = localStorage.getItem(key);
+        if (localConvs) {
+            conversationsCache = JSON.parse(localConvs);
+            console.log(`[UIAIChat] Loaded ${Object.keys(conversationsCache).length} conversations from localStorage fallback`);
+        }
+    } catch (le) {
+        console.error('[UIAIChat] localStorage fallback also failed:', le);
     }
+}
+
+// Get conversations (from cache, loading from backend if needed)
+function loadConversations() {
+    // Return cached data synchronously for backwards compatibility
+    // The cache is populated on init via loadConversationsFromBackend()
+    return conversationsCache;
+}
+
+// Save a single conversation to backend
+async function saveConversationToBackend(convId, conversation) {
+    try {
+        const apiOrigin = window.api_origin || window.location.origin;
+        const authToken = window.auth_token || localStorage.getItem('puter_auth_token') || localStorage.getItem('auth_token') || '';
+        
+        // Check if conversation exists in cache (update) or is new (create)
+        const exists = conversationsCache[convId] && conversationsCacheLoaded;
+        const method = exists ? 'PUT' : 'POST';
+        const url = exists 
+            ? `${apiOrigin}/api/ai/conversations/${convId}`
+            : `${apiOrigin}/api/ai/conversations`;
+        
+        const body = exists
+            ? { title: conversation.title, messages: conversation.messages }
+            : { id: convId, title: conversation.title, messages: conversation.messages };
+        
+        const response = await fetch(url, {
+            method,
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`
+            },
+            body: JSON.stringify(body)
+        });
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Failed to save conversation: ${response.status} - ${errorText}`);
+        }
+        
+        // Mark cache as loaded after first successful save
+        conversationsCacheLoaded = true;
+        console.log(`[UIAIChat] Saved conversation ${convId} to backend (${method})`);
+    } catch (e) {
+        console.error('[UIAIChat] Failed to save conversation to backend:', e);
+        // Save to localStorage as backup
+        try {
+            const key = getConversationsKey();
+            localStorage.setItem(key, JSON.stringify(conversationsCache));
+        } catch (le) {
+            console.error('[UIAIChat] localStorage backup also failed:', le);
+        }
+    }
+}
+
+// Delete a conversation from backend
+async function deleteConversationFromBackend(convId) {
+    try {
+        const apiOrigin = window.api_origin || window.location.origin;
+        const authToken = window.auth_token || localStorage.getItem('puter_auth_token') || localStorage.getItem('auth_token') || '';
+        
+        const response = await fetch(`${apiOrigin}/api/ai/conversations/${convId}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`
+            }
+        });
+        
+        if (!response.ok && response.status !== 404) {
+            throw new Error(`Failed to delete conversation: ${response.status}`);
+        }
+        
+        console.log(`[UIAIChat] Deleted conversation ${convId} from backend`);
+    } catch (e) {
+        console.error('[UIAIChat] Failed to delete conversation from backend:', e);
+    }
+}
+
+// Save all conversations (updates cache and syncs to backend)
+function saveConversations(conversations) {
+    conversationsCache = conversations;
+    // Save current conversation to backend (debounced in saveChatHistory)
 }
 
 // Get current conversation ID (wallet-scoped)
@@ -734,12 +860,32 @@ function setCurrentConversationId(id) {
 }
 
 // Clear chat history for current wallet (called on logout)
-function clearChatHistoryForCurrentWallet() {
+async function clearChatHistoryForCurrentWallet() {
     const wallet = getCurrentWalletAddress();
     if (wallet && wallet !== 'unknown_wallet') {
+        // Clear from backend
+        try {
+            const apiOrigin = window.api_origin || window.location.origin;
+            const authToken = window.auth_token || localStorage.getItem('puter_auth_token') || localStorage.getItem('auth_token') || '';
+            
+            await fetch(`${apiOrigin}/api/ai/conversations`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${authToken}`
+                }
+            });
+        } catch (e) {
+            console.error('[UIAIChat] Failed to clear conversations from backend:', e);
+        }
+        
+        // Clear local cache
+        conversationsCache = {};
+        conversationsCacheLoaded = false;
+        
+        // Clear localStorage backup
         const conversationsKey = getConversationsKey();
         const currentConvKey = getCurrentConversationKey();
-        
         localStorage.removeItem(conversationsKey);
         localStorage.removeItem(currentConvKey);
         
@@ -759,13 +905,19 @@ function loadChatHistory() {
     return conversations[convId]?.messages || [];
 }
 
+// Pending save data (for beforeunload)
+let pendingSaveConvId = null;
+let pendingSaveData = null;
+
 // Save chat history for current conversation
 function saveChatHistory(messages) {
     const convId = getCurrentConversationId();
     if (!convId) return;
     
     const conversations = loadConversations();
-    if (!conversations[convId]) {
+    const isNew = !conversations[convId];
+    
+    if (isNew) {
         conversations[convId] = {
             id: convId,
             title: getConversationTitle(messages),
@@ -780,8 +932,46 @@ function saveChatHistory(messages) {
     conversations[convId].updatedAt = Date.now();
     conversations[convId].title = getConversationTitle(messages);
     
+    // Update local cache
     saveConversations(conversations);
+    
+    // Also save to localStorage immediately as backup
+    try {
+        const key = getConversationsKey();
+        localStorage.setItem(key, JSON.stringify(conversations));
+    } catch (e) {
+        console.error('[UIAIChat] Failed to save to localStorage backup:', e);
+    }
+    
+    // Store pending save data
+    pendingSaveConvId = convId;
+    pendingSaveData = conversations[convId];
+    
+    // Save to backend immediately (no debounce - data is important!)
+    saveConversationToBackend(convId, conversations[convId]);
 }
+
+// Save pending data before page unload
+window.addEventListener('beforeunload', function() {
+    if (pendingSaveConvId && pendingSaveData) {
+        // Use sendBeacon for reliable save on page close
+        const apiOrigin = window.api_origin || window.location.origin;
+        const authToken = window.auth_token || localStorage.getItem('puter_auth_token') || localStorage.getItem('auth_token') || '';
+        
+        const body = JSON.stringify({
+            id: pendingSaveConvId,
+            title: pendingSaveData.title,
+            messages: pendingSaveData.messages
+        });
+        
+        // Try sendBeacon first (most reliable for unload)
+        if (navigator.sendBeacon) {
+            const blob = new Blob([body], { type: 'application/json' });
+            navigator.sendBeacon(`${apiOrigin}/api/ai/conversations/${pendingSaveConvId}?auth_token=${encodeURIComponent(authToken)}`, blob);
+            console.log('[UIAIChat] Sent conversation via sendBeacon on unload');
+        }
+    }
+});
 
 // Get conversation title from messages
 function getConversationTitle(messages) {
@@ -868,10 +1058,7 @@ function renderMessage(role, content, messageId, attachedFiles = null) {
         const contentText = typeof content === 'string' ? content : '';
         $('.ai-chat-messages').append(
             `<div class="ai-chat-message" id="${messageId}">
-                <div class="ai-chat-message-ai">${renderMarkdown(contentText)}</div>
-                <div class="ai-message-actions ai-assistant-actions">
-                    <button class="ai-message-copy" title="Copy response"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
-                </div>
+                <div class="ai-chat-message-ai">${renderMarkdown(contentText)}<div class="ai-copy-actions"><button class="ai-copy-btn" title="Copy response"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span>Copy</span></button></div></div>
             </div>`
         );
     }
@@ -906,6 +1093,9 @@ function deleteConversation(convId) {
     const conversations = loadConversations();
     delete conversations[convId];
     saveConversations(conversations);
+    
+    // Delete from backend
+    deleteConversationFromBackend(convId);
     
     // If deleting current conversation, start new one
     if (getCurrentConversationId() === convId) {
@@ -1049,6 +1239,65 @@ export default function UIAIChat() {
         false && console.log('[UIAIChat] AI config updated, reloading...');
         loadAIConfigForChat();
     });
+    
+    // Listen for wallet ready event to reload conversations with correct wallet address
+    window.addEventListener('particle-wallet.ready', async function(event) {
+        console.log('[UIAIChat] Wallet ready, refreshing wallet address and loading conversations...');
+        const oldWallet = currentWalletAddress;
+        refreshWalletAddress();
+        
+        // Load conversations from backend for the real wallet
+        await loadConversationsFromBackend();
+        
+        // Migrate conversations from 'unknown_wallet' if we had any
+        if (currentWalletAddress && currentWalletAddress !== 'unknown_wallet' && oldWallet === 'unknown_wallet') {
+            await migrateConversationsFromUnknownWallet();
+        }
+        
+        // Reload history menu with correct wallet
+        updateHistoryMenu();
+    });
+}
+
+// Migrate conversations from 'unknown_wallet' localStorage to the real wallet's backend
+async function migrateConversationsFromUnknownWallet() {
+    try {
+        const unknownKey = `${CONVERSATIONS_KEY_PREFIX}_unknown_wallet`;
+        const unknownConvs = localStorage.getItem(unknownKey);
+        
+        if (!unknownConvs) {
+            console.log('[UIAIChat] No conversations to migrate from unknown_wallet');
+            return;
+        }
+        
+        const unknownParsed = JSON.parse(unknownConvs);
+        const convIds = Object.keys(unknownParsed);
+        
+        if (convIds.length === 0) return;
+        
+        // Reload conversations from backend for the real wallet
+        await loadConversationsFromBackend();
+        
+        // Merge unknown conversations into backend
+        let migrated = 0;
+        for (const [convId, conv] of Object.entries(unknownParsed)) {
+            if (!conversationsCache[convId]) {
+                conversationsCache[convId] = conv;
+                await saveConversationToBackend(convId, conv);
+                migrated++;
+            }
+        }
+        
+        if (migrated > 0) {
+            console.log(`[UIAIChat] Migrated ${migrated} conversations from unknown_wallet to backend for ${currentWalletAddress}`);
+            
+            // Clear the unknown_wallet localStorage after successful migration
+            localStorage.removeItem(unknownKey);
+            localStorage.removeItem(`${CURRENT_CONVERSATION_KEY_PREFIX}_unknown_wallet`);
+        }
+    } catch (e) {
+        console.error('[UIAIChat] Failed to migrate conversations:', e);
+    }
 }
 
 // Load user's AI configuration and update model selector
@@ -2012,6 +2261,22 @@ function blobToBase64(blob) {
     });
 }
 
+// Flag to skip creating user message (used when resending edited messages)
+let skipNextUserMessage = false;
+let pendingEditedMessage = null;
+
+// Resend from an edited message (no new user bubble created)
+function resendFromEditedMessage(messageContent) {
+    // Set flag to skip user message creation
+    skipNextUserMessage = true;
+    pendingEditedMessage = messageContent;
+    
+    // Set input and trigger send
+    const chatInput = $('.ai-chat-input');
+    chatInput.val(messageContent);
+    sendAIMessage();
+}
+
 // Send AI message function with streaming support
 async function sendAIMessage() {
     const chatInput = $('.ai-chat-input');
@@ -2067,45 +2332,52 @@ async function sendAIMessage() {
             : `Please analyze these files:\n\n${fileInfo}`;
     }
     
-    // Append user message to chat history
+    // Append user message to chat history (skip if resending an edited message)
     const userMessageId = 'msg-user-' + Date.now();
-    let messageDisplay = window.html_encode(chatInputValue || '');
-    if (attachedFiles.length > 0) {
-        messageDisplay += '<div class="ai-message-files">';
-        attachedFiles.forEach(file => {
-            const fileName = file.name || file.path?.split('/').pop() || 'Unknown';
-            if (file.type?.startsWith('image/') && file.read_url) {
-                // Show image thumbnail in message
-                messageDisplay += `<div class="ai-message-file-item ai-message-file-image"><img src="${file.read_url}" alt="${window.html_encode(fileName)}" class="ai-message-file-thumbnail"><span>${window.html_encode(fileName)}</span></div>`;
-            } else {
-                const fileIcon = file.type === 'application/pdf' ? '📄' : '📎';
-                messageDisplay += `<div class="ai-message-file-item">${fileIcon} ${window.html_encode(fileName)}</div>`;
-            }
-        });
-        messageDisplay += '</div>';
+    const isResendingEdit = skipNextUserMessage;
+    
+    if (!isResendingEdit) {
+        let messageDisplay = window.html_encode(chatInputValue || '');
+        if (attachedFiles.length > 0) {
+            messageDisplay += '<div class="ai-message-files">';
+            attachedFiles.forEach(file => {
+                const fileName = file.name || file.path?.split('/').pop() || 'Unknown';
+                if (file.type?.startsWith('image/') && file.read_url) {
+                    // Show image thumbnail in message
+                    messageDisplay += `<div class="ai-message-file-item ai-message-file-image"><img src="${file.read_url}" alt="${window.html_encode(fileName)}" class="ai-message-file-thumbnail"><span>${window.html_encode(fileName)}</span></div>`;
+                } else {
+                    const fileIcon = file.type === 'application/pdf' ? '📄' : '📎';
+                    messageDisplay += `<div class="ai-message-file-item">${fileIcon} ${window.html_encode(fileName)}</div>`;
+                }
+            });
+            messageDisplay += '</div>';
+        }
+        
+        $('.ai-chat-messages').append(
+            `<div class="ai-chat-message ai-chat-message-user-wrapper" id="${userMessageId}" data-message-id="${userMessageId}">
+                <div class="ai-chat-message-user">${messageDisplay}</div>
+                <div class="ai-message-footer">
+                    <div class="ai-message-actions">
+                        <button class="ai-message-copy" title="Copy message"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+                        <button class="ai-message-edit" title="Edit message"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+                    </div>
+                </div>
+            </div>`
+        );
     }
     
-    $('.ai-chat-messages').append(
-        `<div class="ai-chat-message ai-chat-message-user-wrapper" id="${userMessageId}" data-message-id="${userMessageId}">
-            <div class="ai-chat-message-user">${messageDisplay}</div>
-            <div class="ai-message-footer">
-                <div class="ai-message-actions">
-                    <button class="ai-message-copy" title="Copy message"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
-                    <button class="ai-message-edit" title="Edit message"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
-                </div>
-            </div>
-        </div>`
-    );
     $('.ai-chat-messages').addClass('active');
     
-    // Add to history (save current conversation if needed)
-    const convId = getCurrentConversationId();
-    if (!convId) {
-        // Create new conversation if none exists
-        const newId = 'conv-' + Date.now();
-        setCurrentConversationId(newId);
+    // Add to history only if not resending an edited message
+    if (!isResendingEdit) {
+        const convId = getCurrentConversationId();
+        if (!convId) {
+            // Create new conversation if none exists
+            const newId = 'conv-' + Date.now();
+            setCurrentConversationId(newId);
+        }
+        addToHistory('user', messageContent, userMessageId, attachedFiles);
     }
-    addToHistory('user', messageContent, userMessageId, attachedFiles);
     
     // Store last message for retry functionality
     lastUserMessage = chatInputValue;
@@ -2379,9 +2651,40 @@ async function sendAIMessage() {
                         const newText = chunk.text;
                         // Skip if this is the exact same chunk as the last one (duplicate detection)
                         if (newText === lastChunkText && newText.length > 0) {
-                            console.warn('[UIAIChat] Skipping duplicate chunk:', newText.substring(0, 50));
+                            console.warn('[UIAIChat] Skipping duplicate chunk (exact match):', newText.substring(0, 50));
                             continue;
                         }
+                        
+                        // Skip if the new text is already at the end of fullContent (overlap duplication)
+                        // This catches cases where the AI sends "Hello world" then sends "Hello world" again
+                        if (fullContent.length > 0 && newText.length > 10) {
+                            // Check if fullContent ends with the start of newText
+                            const overlapCheck = Math.min(newText.length, fullContent.length);
+                            if (fullContent.endsWith(newText.substring(0, overlapCheck))) {
+                                console.warn('[UIAIChat] Skipping chunk - overlaps with existing content:', newText.substring(0, 50));
+                                continue;
+                            }
+                            // Check if fullContent already contains this exact text at the end
+                            if (fullContent.endsWith(newText)) {
+                                console.warn('[UIAIChat] Skipping chunk - already present at end:', newText.substring(0, 50));
+                                continue;
+                            }
+                        }
+                        
+                        // Skip if this chunk would create a repeated pattern
+                        // (e.g., content is "ABC" and newText would make it "ABCABC")
+                        if (fullContent.length > 20 && newText.length > 10) {
+                            const potentialNew = fullContent + newText;
+                            const halfLen = Math.floor(potentialNew.length / 2);
+                            const firstHalf = potentialNew.substring(0, halfLen);
+                            const secondHalf = potentialNew.substring(halfLen);
+                            // Check if adding this text creates duplicate pattern
+                            if (firstHalf === secondHalf) {
+                                console.warn('[UIAIChat] Skipping chunk that would create duplicate pattern:', newText.substring(0, 50));
+                                continue;
+                            }
+                        }
+                        
                         lastChunkText = newText;
                         fullContent += newText;
                         
@@ -2501,6 +2804,13 @@ async function sendAIMessage() {
                         $aiMessage.html(renderMessageWithThinking(fullContent, true));
                         scrollChatToBottom();
                     }
+                    // Handle final_response_start - clear previous content to avoid duplication
+                    else if (chunk.type === 'final_response_start') {
+                        console.log('[UIAIChat] Final response starting - clearing previous text content');
+                        // Clear the text content but keep tool executions
+                        fullContent = '';
+                        lastChunkText = '';
+                    }
                     // Handle done chunks (stream complete with usage stats)
                     else if (chunk.type === 'done') {
                         console.log('[UIAIChat] Stream done, usage:', chunk.usage);
@@ -2558,12 +2868,11 @@ async function sendAIMessage() {
         // Apply syntax highlighting to any code blocks
         applyCodeHighlighting();
         
-        // Add copy button to the message container (after streaming complete)
-        const $messageContainer = $(`#${aiMessageId}`);
-        if ($messageContainer.find('.ai-assistant-actions').length === 0) {
-            $messageContainer.append(`
-                <div class="ai-message-actions ai-assistant-actions">
-                    <button class="ai-message-copy" title="Copy response"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+        // Add copy button INSIDE the ai-chat-message-ai div (after streaming complete)
+        if ($aiMessage.find('.ai-copy-actions').length === 0) {
+            $aiMessage.append(`
+                <div class="ai-copy-actions">
+                    <button class="ai-copy-btn" title="Copy response"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span>Copy</span></button>
                 </div>
             `);
         }
@@ -2680,6 +2989,31 @@ $(document).on('click', '.ai-message-copy', function (e) {
     });
 });
 
+// Copy AI response to clipboard (new button inside message)
+$(document).on('click', '.ai-copy-btn', function (e) {
+    e.stopPropagation();
+    const $btn = $(this);
+    const $messageAi = $btn.closest('.ai-chat-message-ai');
+    
+    // Get text content, excluding the copy button itself
+    const $clone = $messageAi.clone();
+    $clone.find('.ai-copy-actions').remove();
+    const messageText = $clone.text().trim();
+    
+    if (!messageText) return;
+    
+    navigator.clipboard.writeText(messageText).then(() => {
+        // Visual feedback - show "Copied!"
+        const originalHtml = $btn.html();
+        $btn.html('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg><span>Copied!</span>');
+        setTimeout(() => {
+            $btn.html(originalHtml);
+        }, 1500);
+    }).catch(err => {
+        console.error('[UIAIChat] Failed to copy AI response:', err);
+    });
+});
+
 // Edit message
 $(document).on('click', '.ai-message-edit', function (e) {
     e.stopPropagation();
@@ -2744,14 +3078,13 @@ $(document).on('click', '.ai-message-edit', function (e) {
         const currentIndex = $allMessages.index($messageWrapper);
         $allMessages.slice(currentIndex + 1).remove();
         
-        // Clear history after this message
-        const updatedHistory = history.slice(0, messageIndex + 1);
+        // Clear history after this message and update the edited message
+        updatedHistory[messageIndex].content = editedText;
         saveChatHistory(updatedHistory);
         
-        // Resend the edited message
-        const chatInput = $('.ai-chat-input');
-        chatInput.val(editedText);
-        sendAIMessage();
+        // Resend the edited message WITHOUT creating a new user bubble
+        // We pass skipUserMessage=true to avoid duplicate
+        resendFromEditedMessage(editedText);
     });
     
     // Save on Enter (Ctrl/Cmd+Enter)
@@ -2925,7 +3258,13 @@ $(document).on('click', '.ai-history-item-delete', function (e) {
 });
 
 // Initialize history menu on load
-function initializeHistoryMenu() {
+async function initializeHistoryMenu() {
+    // Load conversations from backend first
+    await loadConversationsFromBackend();
+    
+    // Migrate any localStorage conversations to backend (one-time migration)
+    await migrateLocalStorageToBackend();
+    
     updateHistoryMenu();
     
     // Load current conversation if it exists
@@ -2938,3 +3277,56 @@ function initializeHistoryMenu() {
     }
 }
 
+// One-time migration from localStorage to backend
+async function migrateLocalStorageToBackend() {
+    try {
+        const key = getConversationsKey();
+        const localConvs = localStorage.getItem(key);
+        
+        if (!localConvs) return;
+        
+        const parsed = JSON.parse(localConvs);
+        const convIds = Object.keys(parsed);
+        
+        if (convIds.length === 0) return;
+        
+        console.log(`[UIAIChat] Found ${convIds.length} conversations in localStorage to migrate`);
+        
+        // Migrate all conversations from localStorage to backend
+        let migratedCount = 0;
+        let failedCount = 0;
+        
+        for (const convId of convIds) {
+            // Always migrate from localStorage if not already in backend
+            if (!conversationsCache[convId]) {
+                const conv = parsed[convId];
+                conversationsCache[convId] = conv;
+                
+                try {
+                    await saveConversationToBackend(convId, conv);
+                    migratedCount++;
+                } catch (saveError) {
+                    console.error(`[UIAIChat] Failed to save conversation ${convId} to backend:`, saveError);
+                    failedCount++;
+                }
+            }
+        }
+        
+        if (migratedCount > 0) {
+            console.log(`[UIAIChat] Successfully migrated ${migratedCount} conversations from localStorage to backend`);
+        }
+        
+        // Only clear localStorage if ALL migrations succeeded
+        if (failedCount === 0 && migratedCount > 0) {
+            // Keep a backup in a different key just in case
+            localStorage.setItem(`${key}_backup_${Date.now()}`, localConvs);
+            localStorage.removeItem(key);
+            console.log('[UIAIChat] Cleared localStorage after successful migration (backup saved)');
+        } else if (failedCount > 0) {
+            console.warn(`[UIAIChat] ${failedCount} conversations failed to migrate - keeping localStorage data`);
+        }
+    } catch (e) {
+        console.error('[UIAIChat] Failed to migrate localStorage to backend:', e);
+        // Don't clear localStorage on error - keep the data safe
+    }
+}

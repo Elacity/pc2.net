@@ -917,14 +917,27 @@ Examples:
                 if (path.startsWith('/Desktop/') && !path.startsWith('~/')) {
                   path = '~' + path;
                 }
+                // Standard directory names that should not be nested under Desktop
+                const STANDARD_DIRS = ['Desktop', 'Documents', 'Pictures', 'Videos', 'Music', 'Downloads', 'Public', 'Trash'];
+                
                 // Fix "~FolderName" (missing /Desktop/) -> "~/Desktop/FolderName"
+                // EXCEPTION: "~Desktop" -> "~/Desktop" (not "~/Desktop/Desktop")
                 if (path.startsWith('~') && !path.includes('/') && path.length > 1) {
                   const folderName = path.substring(1);
-                  path = `~/Desktop/${folderName}`;
+                  if (STANDARD_DIRS.includes(folderName)) {
+                    path = `~/${folderName}`;
+                  } else {
+                    path = `~/Desktop/${folderName}`;
+                  }
                 }
                 // Fix "FolderName" (no ~ at all) -> "~/Desktop/FolderName"
+                // EXCEPTION: "Desktop" -> "~/Desktop" (not "~/Desktop/Desktop")
                 if (!path.startsWith('~') && !path.startsWith('/') && !path.includes('/')) {
-                  path = `~/Desktop/${path}`;
+                  if (STANDARD_DIRS.includes(path)) {
+                    path = `~/${path}`;
+                  } else {
+                    path = `~/Desktop/${path}`;
+                  }
                 }
                 args.path = path;
               }
@@ -1261,15 +1274,28 @@ Example: {"tool_calls": [{"name": "write_file", "arguments": {"path": "${filePat
                     if (path.startsWith('/Desktop/') && !path.startsWith('~/')) {
                       path = '~' + path;
                     }
+                    
+                    // Standard directory names that should not be nested under Desktop
+                    const STANDARD_DIRS = ['Desktop', 'Documents', 'Pictures', 'Videos', 'Music', 'Downloads', 'Public', 'Trash'];
+                    
                     // Fix "~FolderName" (missing /Desktop/) -> "~/Desktop/FolderName"
-                    // Only if it's a direct folder name without any slashes after ~
+                    // EXCEPTION: "~Desktop" -> "~/Desktop" (not "~/Desktop/Desktop")
                     if (path.startsWith('~') && !path.includes('/') && path.length > 1) {
                       const folderName = path.substring(1); // Get folder name after ~
-                      path = `~/Desktop/${folderName}`;
+                      if (STANDARD_DIRS.includes(folderName)) {
+                        path = `~/${folderName}`;
+                      } else {
+                        path = `~/Desktop/${folderName}`;
+                      }
                     }
                     // Fix "FolderName" (no ~ at all) -> "~/Desktop/FolderName"
+                    // EXCEPTION: "Desktop" -> "~/Desktop" (not "~/Desktop/Desktop")
                     if (!path.startsWith('~') && !path.startsWith('/') && !path.includes('/')) {
-                      path = `~/Desktop/${path}`;
+                      if (STANDARD_DIRS.includes(path)) {
+                        path = `~/${path}`;
+                      } else {
+                        path = `~/Desktop/${path}`;
+                      }
                     }
                     
                     args.path = path;
@@ -1800,13 +1826,16 @@ Example: {"tool_calls": [{"name": "write_file", "arguments": {"path": "${filePat
                 logger.info('[AIChatService] streamComplete - Original path:', path, 'User mentioned directory:', targetDirectory);
                 
                 // If user mentioned a specific directory but path is just ~/FolderName (missing directory), fix it
+                // EXCEPTION: If folderName IS the target directory (e.g., ~/Desktop when user said "desktop"), don't double it
+                const STANDARD_DIRS_CHECK = ['Desktop', 'Documents', 'Pictures', 'Videos', 'Music', 'Downloads', 'Public', 'Trash'];
                 if (targetDirectory && path.match(/^~\/[^\/]+$/)) {
-                  // Path is like ~/555 (home-level folder, missing target directory)
                   const folderName = path.substring(2); // Remove ~/
                   // Handle "home" or "~" as special case - keep it at home level
                   if (targetDirectory.toLowerCase() === 'home' || targetDirectory === '~') {
-                    // Keep at home level, don't change
                     logger.info('[AIChatService] streamComplete - User mentioned home, keeping path at home level:', path);
+                  } else if (folderName.toLowerCase() === targetDirectory.toLowerCase() || STANDARD_DIRS_CHECK.includes(folderName)) {
+                    // folderName is already the target directory or a standard directory - don't double it
+                    logger.info('[AIChatService] streamComplete - Path already targets correct directory:', path);
                   } else {
                     path = `~/${targetDirectory}/${folderName}`;
                     logger.info('[AIChatService] streamComplete - Fixed path from home to', targetDirectory, '(user mentioned directory):', args.path, '->', path);
@@ -1826,24 +1855,20 @@ Example: {"tool_calls": [{"name": "write_file", "arguments": {"path": "${filePat
                   path = path.substring(1);
                 }
                 path = path.replace(/\/~/g, '/');
-                // If user mentioned a specific directory but path is just ~/FolderName (missing directory), fix it
-                if (targetDirectory && path.match(/^~\/[^\/]+$/)) {
-                  // Path is like ~/555 (home-level folder, missing target directory)
-                  const folderName = path.substring(2); // Remove ~/
-                  // Handle "home" or "~" as special case - keep it at home level
-                  if (targetDirectory.toLowerCase() === 'home' || targetDirectory === '~') {
-                    // Keep at home level, don't change
-                    logger.info('[AIChatService] streamComplete - User mentioned home, keeping path at home level:', path);
-                  } else {
-                    path = `~/${targetDirectory}/${folderName}`;
-                    logger.info('[AIChatService] streamComplete - Fixed path from home to', targetDirectory, '(user mentioned directory):', args.path, '->', path);
-                  }
-                }
+                // NOTE: The directory redirection logic was already applied above - don't duplicate it here
+                
+                // Standard directory names that should not be nested under Desktop
+                const STREAM_STANDARD_DIRS = ['Desktop', 'Documents', 'Pictures', 'Videos', 'Music', 'Downloads', 'Public', 'Trash'];
                 
                 if (path.startsWith('~') && !path.includes('/') && path.length > 1) {
                   const folderName = path.substring(1);
-                  path = `~/Desktop/${folderName}`;
-                  logger.info('[AIChatService] streamComplete - Fixed path from ~FolderName to:', path);
+                  if (STREAM_STANDARD_DIRS.includes(folderName)) {
+                    path = `~/${folderName}`;
+                    logger.info('[AIChatService] streamComplete - Fixed path from ~' + folderName + ' to:', path, '(standard directory)');
+                  } else {
+                    path = `~/Desktop/${folderName}`;
+                    logger.info('[AIChatService] streamComplete - Fixed path from ~FolderName to:', path);
+                  }
                 }
                 // Fix paths like "desktop/YO", "Desktop/YO", "documents/Projects", etc. (case-insensitive)
                 // Normalize to "~/Desktop/YO", "~/Documents/Projects", etc.
@@ -1857,8 +1882,13 @@ Example: {"tool_calls": [{"name": "write_file", "arguments": {"path": "${filePat
                 }
                 
                 if (!path.startsWith('~') && !path.startsWith('/') && !path.includes('/')) {
-                  path = `~/Desktop/${path}`;
-                  logger.info('[AIChatService] streamComplete - Fixed path (no prefix) to:', path);
+                  if (STREAM_STANDARD_DIRS.includes(path)) {
+                    path = `~/${path}`;
+                    logger.info('[AIChatService] streamComplete - Fixed path to:', path, '(standard directory)');
+                  } else {
+                    path = `~/Desktop/${path}`;
+                    logger.info('[AIChatService] streamComplete - Fixed path (no prefix) to:', path);
+                  }
                 }
                 args.path = path;
                 logger.info('[AIChatService] streamComplete - Normalized path:', path);
@@ -1955,10 +1985,11 @@ Example: {"tool_calls": [{"name": "write_file", "arguments": {"path": "${filePat
           }).filter(Boolean).join(', ');
           
           // Add context message that will be included in the AI's response
+          // IMPORTANT: Tell AI not to repeat itself since user already saw the streamed response
           if (toolSummary) {
             const contextMessage = {
               role: 'user' as const,
-              content: `Tool execution completed. Results: ${toolSummary}. Please confirm what was created and ALWAYS mention the exact paths in your response. When the user says "inside it", "in that folder", or similar in follow-up requests, they are referring to the most recently created folder/file. Your response will be saved to conversation history, so make sure to include the paths clearly.`
+              content: `[SYSTEM: Tool execution completed. Results: ${toolSummary}. CRITICAL: Your previous response was ALREADY shown to the user. Do NOT repeat what you already said. Just provide a brief confirmation of what was done. Do NOT say things like "I'll delete" or "I'll create" - the action is ALREADY COMPLETE. Just confirm the result briefly.]`
             };
             finalMessages.push(contextMessage);
           }
@@ -1972,7 +2003,7 @@ Example: {"tool_calls": [{"name": "write_file", "arguments": {"path": "${filePat
             temperature: args.temperature,
           };
           
-          // Save memory state before streaming final response
+          // Save memory state before completing
           if (streamMemoryConsolidator) {
             try {
               await streamMemoryConsolidator.saveState();
@@ -1982,7 +2013,14 @@ Example: {"tool_calls": [{"name": "write_file", "arguments": {"path": "${filePat
             }
           }
           
-          // Stream the final response (AI will see tool results and context message)
+          // Signal to frontend that we're starting the final response (to clear previous content)
+          yield {
+            message: { role: 'assistant', content: '' },
+            type: 'final_response_start',
+            done: false
+          } as ChatCompletion;
+          
+          // Stream the final response (AI will see tool results and provide summary)
           yield* provider.streamComplete(finalArgs);
           }
         }

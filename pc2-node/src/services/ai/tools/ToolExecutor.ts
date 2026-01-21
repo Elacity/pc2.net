@@ -71,10 +71,17 @@ export class ToolExecutor {
     // Fix "~FolderName" (missing directory) -> "~/Desktop/FolderName" (default to Desktop)
     // Only if it's a direct folder name without any slashes after ~
     // This handles cases like "~MyFolder" where user didn't specify a directory
+    // EXCEPTION: "~Desktop" -> "~/Desktop" (not "~/Desktop/Desktop")
+    const STANDARD_DIRS_EARLY = ['Desktop', 'Documents', 'Pictures', 'Videos', 'Music', 'Downloads', 'Public', 'Trash'];
     if (path.startsWith('~') && !path.includes('/') && path.length > 1) {
       const folderName = path.substring(1); // Get folder name after ~
-      path = `~/Desktop/${folderName}`;
-      logger.info(`[ToolExecutor] Fixed path from "~${folderName}" to "${path}" (defaulted to Desktop)`);
+      if (STANDARD_DIRS_EARLY.includes(folderName)) {
+        path = `~/${folderName}`;
+        logger.info(`[ToolExecutor] Fixed path from "~${folderName}" to "${path}" (standard directory)`);
+      } else {
+        path = `~/Desktop/${folderName}`;
+        logger.info(`[ToolExecutor] Fixed path from "~${folderName}" to "${path}" (defaulted to Desktop)`);
+      }
     }
     // Fix paths like "desktop/YO", "Desktop/YO", "documents/Projects", etc. (case-insensitive)
     // Normalize to "~/Desktop/YO", "~/Documents/Projects", etc.
@@ -106,9 +113,18 @@ export class ToolExecutor {
     
     // Fix "FolderName" (no ~ at all, no directory) -> "~/Desktop/FolderName" (default to Desktop)
     // This handles cases like "MyFolder" where user didn't specify a directory
+    // EXCEPTION: Standard directory names like "Desktop", "Documents" should become "~/Desktop", "~/Documents"
+    const STANDARD_DIRS = ['Desktop', 'Documents', 'Pictures', 'Videos', 'Music', 'Downloads', 'Public', 'Trash'];
     if (!path.startsWith('~') && !path.startsWith('/') && !path.includes('/')) {
-      path = `~/Desktop/${path}`;
-      logger.info(`[ToolExecutor] Fixed path to "${path}" (defaulted to Desktop)`);
+      if (STANDARD_DIRS.includes(path)) {
+        // This is a standard directory name - just add ~/
+        path = `~/${path}`;
+        logger.info(`[ToolExecutor] Fixed path to "${path}" (standard directory)`);
+      } else {
+        // This is a folder name - default to Desktop
+        path = `~/Desktop/${path}`;
+        logger.info(`[ToolExecutor] Fixed path to "${path}" (defaulted to Desktop)`);
+      }
     }
     
     // Note: Paths like ~/Pictures/X, ~/Documents/X, ~/Videos/X, etc. are already correct
@@ -224,9 +240,14 @@ export class ToolExecutor {
         }
 
         case 'list_files': {
+          // Log the original path argument for debugging
+          logger.info('[ToolExecutor] list_files called with args.path:', args.path);
+          
           const path = args.path 
             ? this.resolvePath(args.path)
             : `/${this.walletAddress}`;
+          
+          logger.info('[ToolExecutor] list_files resolved path:', path);
           this.validatePath(path);
           
           const showHidden = args.show_hidden === true;
@@ -235,6 +256,7 @@ export class ToolExecutor {
           const fileType = args.file_type || null;
           
           let files = this.filesystem.listDirectory(path, this.walletAddress);
+          logger.info('[ToolExecutor] list_files found files:', files.length);
           
           // Filter hidden files if show_hidden is false
           if (!showHidden) {

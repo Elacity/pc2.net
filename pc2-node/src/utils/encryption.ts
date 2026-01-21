@@ -9,7 +9,7 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import { logger } from './logger';
+import { logger } from './logger.js';
 
 const ALGORITHM = 'aes-256-gcm';
 const KEY_LENGTH = 32; // 256 bits

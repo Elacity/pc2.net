@@ -786,10 +786,11 @@ export function handleDriversCall(req: AuthenticatedRequest, res: Response): voi
                 // CRITICAL: filesystem must be available for tool execution
                 let filesystem = (req.app.locals.filesystem as FilesystemManager | undefined);
                 const walletAddress = req.user?.wallet_address;
+                const smartAccountAddress = req.user?.smart_account_address || undefined;
 
                 // Get WebSocket server for live updates
                 const io = (req.app.locals.io as any | undefined);
-                logger.info('[Drivers] AI streamComplete - io available:', !!io, 'filesystem:', !!filesystem, 'walletAddress:', walletAddress);
+                logger.info('[Drivers] AI streamComplete - io available:', !!io, 'filesystem:', !!filesystem, 'walletAddress:', walletAddress, 'smartAccount:', !!smartAccountAddress);
                 
                 if (!filesystem) {
                   logger.error('[Drivers] ⚠️ CRITICAL: filesystem not available in app.locals - tool execution will be disabled!');
@@ -829,6 +830,7 @@ export function handleDriversCall(req: AuthenticatedRequest, res: Response): voi
                   max_tokens,
                   temperature,
                   walletAddress,
+                  smartAccountAddress,
                   filesystem,
                   io,
                 })) {
@@ -988,6 +990,7 @@ export function handleDriversCall(req: AuthenticatedRequest, res: Response): voi
                 // Get filesystem and wallet address for tool execution
                 const filesystem = (req.app.locals.filesystem as FilesystemManager | undefined);
                 const walletAddress = req.user?.wallet_address;
+                const smartAccountAddress = req.user?.smart_account_address || undefined;
 
                 // Get WebSocket server for live updates
                 const io = (req.app.locals.io as any | undefined);
@@ -1000,6 +1003,7 @@ export function handleDriversCall(req: AuthenticatedRequest, res: Response): voi
                   max_tokens,
                   temperature,
                   walletAddress,
+                  smartAccountAddress,
                   filesystem,
                   io,
                 });

@@ -13,6 +13,8 @@ import { XAIProvider } from './providers/XAIProvider.js';
 import { normalizeMessages, extractText } from './utils/Messages.js';
 import { normalizeToolsObject } from './utils/FunctionCalling.js';
 import { filesystemTools } from './tools/FilesystemTools.js';
+import { walletTools } from './tools/WalletTools.js';
+import { settingsTools } from './tools/SettingsTools.js';
 import { ToolExecutor } from './tools/ToolExecutor.js';
 import { FilesystemManager } from '../../storage/filesystem.js';
 import { DatabaseManager } from '../../storage/database.js';
@@ -50,6 +52,7 @@ export interface CompleteRequest {
   max_tokens?: number;
   temperature?: number;
   walletAddress?: string; // For tool execution isolation
+  smartAccountAddress?: string; // Particle Smart Account address (optional)
   filesystem?: FilesystemManager; // For tool execution
   io?: any; // Socket.IO server instance for WebSocket events
 }
@@ -486,20 +489,24 @@ export class AIChatService {
       tools = normalizeToolsObject([...toolsWithSource]);
       logger.info('[AIChatService] Tools provided by frontend:', tools.length, 'with sources:', Array.from(toolSourceMap.entries()).map(([name, source]) => `${name}:${source.type}`).join(', '));
     } else if (args.filesystem && args.walletAddress) {
-      // Automatically include filesystem tools if filesystem is available
-      // This allows AI to perform filesystem operations without explicit tool request
-      logger.info('[AIChatService] Auto-including filesystem tools - filesystemTools length:', filesystemTools.length);
-      tools = normalizeToolsObject([...filesystemTools]);
+      // Automatically include all AI tools if filesystem is available
+      // This allows AI to perform filesystem, wallet, and settings operations
+      const allTools = [...filesystemTools, ...walletTools, ...settingsTools];
+      logger.info('[AIChatService] Auto-including all AI tools - filesystem:', filesystemTools.length, 'wallet:', walletTools.length, 'settings:', settingsTools.length, 'total:', allTools.length);
+      tools = normalizeToolsObject(allTools);
       
-      // Mark all filesystem tools
+      // Mark all tools by their type
       for (const tool of tools) {
         const toolName = tool.function?.name || tool.name;
         if (toolName) {
-          toolSourceMap.set(toolName, { type: 'filesystem' });
+          // Determine tool type based on which array it came from
+          const isWalletTool = walletTools.some(t => t.function.name === toolName);
+          const isSettingsTool = settingsTools.some(t => t.function.name === toolName);
+          toolSourceMap.set(toolName, { type: isWalletTool || isSettingsTool ? 'filesystem' : 'filesystem' });
         }
       }
       
-      logger.info('[AIChatService] Automatically including filesystem tools:', tools.length);
+      logger.info('[AIChatService] Automatically including all AI tools:', tools.length);
     } else {
       logger.warn('[AIChatService] No tools available - filesystem:', !!args.filesystem, 'walletAddress:', !!args.walletAddress, 'args.tools:', args.tools);
     }
@@ -547,7 +554,8 @@ export class AIChatService {
         args.filesystem!,
         args.walletAddress!,
         args.io,
-        (args as any).toolSourceMap // Pass tool source map
+        (args as any).toolSourceMap, // Pass tool source map
+        args.smartAccountAddress // Pass smart account address for wallet tools
       );
     } else {
       logger.info('[AIChatService] Tool execution disabled - filesystem:', !!args.filesystem, 'walletAddress:', !!args.walletAddress, 'tools:', tools?.length || 0);
@@ -589,9 +597,13 @@ export class AIChatService {
     filesystem: FilesystemManager,
     walletAddress: string,
     io?: any,
-    toolSourceMap?: Map<string, { type: 'filesystem' | 'app'; appInstanceID?: string }>
+    toolSourceMap?: Map<string, { type: 'filesystem' | 'app'; appInstanceID?: string }>,
+    smartAccountAddress?: string
   ): Promise<ChatCompletion> {
-    const toolExecutor = new ToolExecutor(filesystem, walletAddress, io);
+    const toolExecutor = new ToolExecutor(filesystem, walletAddress, io, {
+      db: this.db,
+      smartAccountAddress
+    });
     const MAX_TOOL_ITERATIONS = 5; // Prevent infinite loops
     let iteration = 0;
     let currentMessages = [...messages];
@@ -1561,13 +1573,14 @@ Example: {"tool_calls": [{"name": "write_file", "arguments": {"path": "${filePat
       tools = normalizeToolsObject([...toolsWithSource]);
       logger.info('[AIChatService] streamComplete - Tools provided by frontend:', tools.length, 'with sources:', Array.from(toolSourceMap.entries()).map(([name, source]) => `${name}:${source.type}`).join(', '));
     } else if (args.filesystem && args.walletAddress) {
-      // CRITICAL: Auto-inject filesystem tools when no tools provided
-      // This ensures AI always has filesystem tools available
-      logger.info('[AIChatService] streamComplete - ✅ Auto-including filesystem tools - filesystemTools length:', filesystemTools.length);
+      // CRITICAL: Auto-inject all AI tools when no tools provided
+      // This ensures AI always has filesystem, wallet, and settings tools available
+      const allTools = [...filesystemTools, ...walletTools, ...settingsTools];
+      logger.info('[AIChatService] streamComplete - ✅ Auto-including all AI tools - filesystem:', filesystemTools.length, 'wallet:', walletTools.length, 'settings:', settingsTools.length, 'total:', allTools.length);
       logger.info('[AIChatService] streamComplete - filesystem available:', !!args.filesystem, 'walletAddress:', args.walletAddress?.substring(0, 10) + '...');
-      tools = normalizeToolsObject([...filesystemTools]);
+      tools = normalizeToolsObject(allTools);
       
-      // Mark all filesystem tools
+      // Mark all tools
       for (const tool of tools) {
         const toolName = tool.function?.name || tool.name;
         if (toolName) {
@@ -1575,7 +1588,7 @@ Example: {"tool_calls": [{"name": "write_file", "arguments": {"path": "${filePat
         }
       }
       
-      logger.info('[AIChatService] streamComplete - ✅ Automatically included', tools.length, 'filesystem tools');
+      logger.info('[AIChatService] streamComplete - ✅ Automatically included', tools.length, 'AI tools');
     } else {
       logger.error('[AIChatService] streamComplete - ⚠️ CRITICAL: No tools available!');
       logger.error('[AIChatService] streamComplete - filesystem:', !!args.filesystem, 'walletAddress:', !!args.walletAddress, 'args.tools:', args.tools);
@@ -1734,10 +1747,13 @@ Example: {"tool_calls": [{"name": "write_file", "arguments": {"path": "${filePat
             }
           }
           
-          // Execute filesystem tools using ToolExecutor
+          // Execute AI tools using ToolExecutor (filesystem, wallet, settings)
           if (filesystemToolCalls.length > 0) {
-            logger.info('[AIChatService] streamComplete - Creating ToolExecutor with io:', !!args.io, 'walletAddress:', args.walletAddress);
-            const toolExecutor = new ToolExecutor(args.filesystem, args.walletAddress, args.io);
+            logger.info('[AIChatService] streamComplete - Creating ToolExecutor with io:', !!args.io, 'walletAddress:', args.walletAddress, 'hasSmartAccount:', !!args.smartAccountAddress);
+            const toolExecutor = new ToolExecutor(args.filesystem, args.walletAddress, args.io, {
+              db: this.db,
+              smartAccountAddress: args.smartAccountAddress
+            });
             const normalizedMessages = normalizeMessages(args.messages);
             
             // Initialize memory consolidator for action recording

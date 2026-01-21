@@ -4,10 +4,16 @@
  * CRITICAL: All operations are wallet-scoped for security
  */
 
+import os from 'os';
 import { FilesystemManager } from '../../../storage/filesystem.js';
+import { DatabaseManager } from '../../../storage/database.js';
 import { logger } from '../../../utils/logger.js';
 import { Server as SocketIOServer } from 'socket.io';
 import { broadcastItemAdded, broadcastItemRemoved, broadcastItemMoved, broadcastItemUpdated } from '../../../websocket/events.js';
+import { ALLOWED_SETTINGS, AllowedSettingKey } from './SettingsTools.js';
+
+// Elastos Smart Chain RPC endpoint for balance queries
+const ESC_RPC_URL = 'https://api.elastos.io/esc';
 
 export interface ToolExecutionResult {
   success: boolean;
@@ -16,15 +22,24 @@ export interface ToolExecutionResult {
 }
 
 export class ToolExecutor {
+  private db?: DatabaseManager;
+  private smartAccountAddress?: string;
+
   constructor(
     private filesystem: FilesystemManager,
     private walletAddress: string,
-    private io?: SocketIOServer
+    private io?: SocketIOServer,
+    options?: {
+      db?: DatabaseManager;
+      smartAccountAddress?: string;
+    }
   ) {
     if (!walletAddress) {
       throw new Error('ToolExecutor requires walletAddress for security isolation');
     }
-    logger.info('[ToolExecutor] Initialized with io available:', !!this.io, 'walletAddress:', this.walletAddress);
+    this.db = options?.db;
+    this.smartAccountAddress = options?.smartAccountAddress;
+    logger.info('[ToolExecutor] Initialized with io available:', !!this.io, 'walletAddress:', this.walletAddress, 'hasDb:', !!this.db, 'hasSmartAccount:', !!this.smartAccountAddress);
     if (!this.io) {
       logger.warn('[ToolExecutor] ⚠️ WebSocket server (io) not provided - live UI updates will be disabled!');
     }
@@ -924,6 +939,361 @@ export class ToolExecutor {
           }
         }
 
+        // ==================== WALLET TOOLS ====================
+        
+        case 'get_wallet_info': {
+          // Return both wallet addresses separately
+          return {
+            success: true,
+            result: {
+              core_wallet: {
+                address: this.walletAddress,
+                type: 'EOA',
+                description: 'Owner account - used for signing and identity'
+              },
+              smart_wallet: this.smartAccountAddress ? {
+                address: this.smartAccountAddress,
+                type: 'Smart Account',
+                description: 'Particle Universal Account - gas abstraction, batched transactions'
+              } : null,
+              auth_method: this.smartAccountAddress ? 'universalx' : 'wallet'
+            }
+          };
+        }
+
+        case 'get_wallet_balance': {
+          const includeTokens = args.include_tokens !== false; // Default to true
+          
+          try {
+            // Helper function to get native ELA balance via RPC
+            const getBalance = async (address: string): Promise<string> => {
+              const response = await fetch(ESC_RPC_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  jsonrpc: '2.0',
+                  method: 'eth_getBalance',
+                  params: [address.toLowerCase(), 'latest'],
+                  id: 1
+                })
+              });
+              const data = await response.json() as { result?: string; error?: any };
+              if (data.error) {
+                throw new Error(data.error.message || 'RPC error');
+              }
+              // Convert hex wei to ELA (18 decimals)
+              const weiHex = data.result || '0x0';
+              const wei = BigInt(weiHex);
+              const ela = Number(wei) / 1e18;
+              return ela.toFixed(6);
+            };
+
+            // Get Core Wallet balance
+            const coreBalance = await getBalance(this.walletAddress);
+            
+            // Get Smart Wallet balance if available
+            let smartBalance: string | null = null;
+            if (this.smartAccountAddress) {
+              smartBalance = await getBalance(this.smartAccountAddress);
+            }
+
+            // TODO: Add ERC-20 token balance queries when includeTokens is true
+            // For now, just return native ELA balances
+            const coreTokens: any[] = [];
+            const smartTokens: any[] = [];
+
+            return {
+              success: true,
+              result: {
+                core_wallet: {
+                  address: this.walletAddress,
+                  ela_balance: coreBalance,
+                  tokens: includeTokens ? coreTokens : undefined
+                },
+                smart_wallet: this.smartAccountAddress ? {
+                  address: this.smartAccountAddress,
+                  ela_balance: smartBalance,
+                  tokens: includeTokens ? smartTokens : undefined
+                } : null
+              }
+            };
+          } catch (error: any) {
+            logger.error('[ToolExecutor] get_wallet_balance failed:', error);
+            return {
+              success: false,
+              error: `Failed to get wallet balance: ${error.message}`
+            };
+          }
+        }
+
+        case 'get_system_info': {
+          try {
+            // Get system information using Node.js os module
+            const cpus = os.cpus();
+            const totalMemory = os.totalmem();
+            const freeMemory = os.freemem();
+            const usedMemory = totalMemory - freeMemory;
+            const uptimeSeconds = os.uptime();
+            
+            // Calculate uptime in human-readable format
+            const days = Math.floor(uptimeSeconds / 86400);
+            const hours = Math.floor((uptimeSeconds % 86400) / 3600);
+            const minutes = Math.floor((uptimeSeconds % 3600) / 60);
+            const uptimeFormatted = days > 0 
+              ? `${days}d ${hours}h ${minutes}m`
+              : hours > 0
+                ? `${hours}h ${minutes}m`
+                : `${minutes}m`;
+
+            // Get storage stats from database if available
+            let storageStats: any = null;
+            if (this.db) {
+              try {
+                const files = this.filesystem.listDirectory(`/${this.walletAddress}`, this.walletAddress);
+                const totalSize = files.reduce((sum: number, f: any) => sum + (f.size || 0), 0);
+                const fileCount = files.filter((f: any) => !f.is_dir).length;
+                const dirCount = files.filter((f: any) => f.is_dir).length;
+                storageStats = {
+                  total_files: fileCount,
+                  total_directories: dirCount,
+                  total_size_bytes: totalSize,
+                  total_size_formatted: this.formatBytes(totalSize)
+                };
+              } catch (e) {
+                logger.warn('[ToolExecutor] Could not get storage stats:', e);
+              }
+            }
+
+            return {
+              success: true,
+              result: {
+                system: {
+                  platform: os.platform(),
+                  arch: os.arch(),
+                  hostname: os.hostname(),
+                  node_version: process.version
+                },
+                cpu: {
+                  model: cpus[0]?.model || 'Unknown',
+                  cores: cpus.length,
+                  speed_mhz: cpus[0]?.speed || 0
+                },
+                memory: {
+                  total_bytes: totalMemory,
+                  total_formatted: this.formatBytes(totalMemory),
+                  used_bytes: usedMemory,
+                  used_formatted: this.formatBytes(usedMemory),
+                  free_bytes: freeMemory,
+                  free_formatted: this.formatBytes(freeMemory),
+                  usage_percent: ((usedMemory / totalMemory) * 100).toFixed(1) + '%'
+                },
+                uptime: {
+                  seconds: uptimeSeconds,
+                  formatted: uptimeFormatted
+                },
+                storage: storageStats
+              }
+            };
+          } catch (error: any) {
+            logger.error('[ToolExecutor] get_system_info failed:', error);
+            return {
+              success: false,
+              error: `Failed to get system info: ${error.message}`
+            };
+          }
+        }
+
+        // ==================== SETTINGS TOOLS ====================
+
+        case 'get_settings': {
+          const category = args.category || 'all';
+          
+          if (!this.db) {
+            return {
+              success: false,
+              error: 'Database not available'
+            };
+          }
+
+          try {
+            const result: any = {};
+
+            // AI Configuration
+            if (category === 'all' || category === 'ai') {
+              const aiConfig = this.db.getAIConfig(this.walletAddress);
+              result.ai = {
+                default_provider: aiConfig?.default_provider || 'ollama',
+                default_model: aiConfig?.default_model || null,
+                configured_providers: aiConfig?.api_keys 
+                  ? Object.keys(JSON.parse(aiConfig.api_keys))
+                  : []
+              };
+            }
+
+            // Personalization
+            if (category === 'all' || category === 'personalization') {
+              result.personalization = {
+                desktop_bg_url: this.db.getSetting(`${this.walletAddress}:user_preferences.desktop_bg_url`) || '/images/flint-2.jpg',
+                desktop_bg_color: this.db.getSetting(`${this.walletAddress}:user_preferences.desktop_bg_color`) || null,
+                desktop_bg_fit: this.db.getSetting(`${this.walletAddress}:user_preferences.desktop_bg_fit`) || 'cover',
+                profile_picture_url: this.db.getSetting(`${this.walletAddress}:user_preferences.profile_picture_url`) || null
+              };
+            }
+
+            // Storage (read-only)
+            if (category === 'all' || category === 'storage') {
+              try {
+                const files = this.filesystem.listDirectory(`/${this.walletAddress}`, this.walletAddress);
+                const totalSize = files.reduce((sum: number, f: any) => sum + (f.size || 0), 0);
+                result.storage = {
+                  total_files: files.filter((f: any) => !f.is_dir).length,
+                  total_directories: files.filter((f: any) => f.is_dir).length,
+                  total_size_formatted: this.formatBytes(totalSize)
+                };
+              } catch (e) {
+                result.storage = { error: 'Could not retrieve storage stats' };
+              }
+            }
+
+            // Account (read-only)
+            if (category === 'all' || category === 'account') {
+              const user = this.db.getUser(this.walletAddress);
+              result.account = {
+                wallet_address: this.walletAddress,
+                smart_account_address: this.smartAccountAddress || null,
+                created_at: user?.created_at ? new Date(user.created_at).toISOString() : null,
+                last_login: user?.last_login ? new Date(user.last_login).toISOString() : null
+              };
+            }
+
+            return {
+              success: true,
+              result
+            };
+          } catch (error: any) {
+            logger.error('[ToolExecutor] get_settings failed:', error);
+            return {
+              success: false,
+              error: `Failed to get settings: ${error.message}`
+            };
+          }
+        }
+
+        case 'update_setting': {
+          if (!args.setting_key) {
+            return { success: false, error: 'setting_key is required' };
+          }
+          if (args.value === undefined) {
+            return { success: false, error: 'value is required' };
+          }
+          if (!this.db) {
+            return { success: false, error: 'Database not available' };
+          }
+
+          const settingKey = args.setting_key as string;
+          const value = args.value as string;
+
+          // Check if setting is in whitelist
+          if (!(settingKey in ALLOWED_SETTINGS)) {
+            return {
+              success: false,
+              error: `Setting "${settingKey}" is not allowed to be modified. Allowed settings: ${Object.keys(ALLOWED_SETTINGS).join(', ')}`
+            };
+          }
+
+          const settingConfig = ALLOWED_SETTINGS[settingKey as AllowedSettingKey];
+
+          // Validate value based on type
+          if (settingConfig.type === 'enum') {
+            const allowedValues = (settingConfig as any).values as string[];
+            if (!allowedValues.includes(value)) {
+              return {
+                success: false,
+                error: `Invalid value "${value}" for ${settingKey}. Allowed values: ${allowedValues.join(', ')}`
+              };
+            }
+          } else if (settingConfig.type === 'boolean') {
+            if (value !== 'true' && value !== 'false') {
+              return {
+                success: false,
+                error: `Invalid boolean value "${value}". Use "true" or "false".`
+              };
+            }
+          }
+
+          try {
+            // Map setting key to actual storage key
+            const storageKey = this.mapSettingKeyToStorage(settingKey, this.walletAddress);
+            
+            // For AI settings, use the AI config table
+            if (settingKey.startsWith('ai.')) {
+              const aiConfig = this.db.getAIConfig(this.walletAddress);
+              const currentProvider = aiConfig?.default_provider || 'ollama';
+              const currentModel = aiConfig?.default_model || null;
+              const currentApiKeys = aiConfig?.api_keys ? JSON.parse(aiConfig.api_keys) : null;
+              
+              if (settingKey === 'ai.default_provider') {
+                this.db.setAIConfig(this.walletAddress, value, currentModel, currentApiKeys);
+              } else if (settingKey === 'ai.default_model') {
+                this.db.setAIConfig(this.walletAddress, currentProvider, value, currentApiKeys);
+              }
+            } else {
+              // For other settings, use the KV store
+              this.db.setSetting(storageKey, value);
+            }
+
+            logger.info(`[ToolExecutor] Updated setting ${settingKey} to ${value} for wallet ${this.walletAddress.substring(0, 10)}...`);
+
+            return {
+              success: true,
+              result: {
+                setting_key: settingKey,
+                new_value: value,
+                message: `Setting "${settingKey}" updated successfully`
+              }
+            };
+          } catch (error: any) {
+            logger.error('[ToolExecutor] update_setting failed:', error);
+            return {
+              success: false,
+              error: `Failed to update setting: ${error.message}`
+            };
+          }
+        }
+
+        case 'get_file_info': {
+          if (!args.path) {
+            return { success: false, error: 'path is required' };
+          }
+
+          const path = this.resolvePath(args.path);
+          this.validatePath(path);
+
+          const metadata = this.filesystem.getFileMetadata(path, this.walletAddress);
+          if (!metadata) {
+            return {
+              success: false,
+              error: `File or folder not found: ${path}`
+            };
+          }
+
+          return {
+            success: true,
+            result: {
+              path: metadata.path,
+              name: metadata.path.split('/').pop() || metadata.path,
+              size_bytes: metadata.size,
+              size_formatted: this.formatBytes(metadata.size),
+              mime_type: metadata.mime_type || null,
+              is_directory: metadata.is_dir,
+              is_public: metadata.is_public,
+              ipfs_cid: (metadata as any).ipfs_hash || null,
+              created_at: metadata.created_at ? new Date(metadata.created_at).toISOString() : null,
+              updated_at: metadata.updated_at ? new Date(metadata.updated_at).toISOString() : null
+            }
+          };
+        }
+
         default:
           throw new Error(`Unknown tool: ${toolName}`);
       }
@@ -940,6 +1310,34 @@ export class ToolExecutor {
         error: error.message || 'Tool execution failed' 
       };
     }
+  }
+
+  /**
+   * Format bytes to human-readable string
+   */
+  private formatBytes(bytes: number): string {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  }
+
+  /**
+   * Map setting key to storage key format
+   */
+  private mapSettingKeyToStorage(settingKey: string, walletAddress: string): string {
+    // Map from AI tool setting key to internal storage key
+    const mappings: Record<string, string> = {
+      'personalization.dark_mode': 'user_preferences.dark_mode',
+      'personalization.font_size': 'user_preferences.font_size',
+      'personalization.desktop_bg_url': 'user_preferences.desktop_bg_url',
+      'personalization.desktop_bg_color': 'user_preferences.desktop_bg_color',
+      'personalization.desktop_bg_fit': 'user_preferences.desktop_bg_fit'
+    };
+
+    const internalKey = mappings[settingKey] || settingKey.replace('.', '_');
+    return `${walletAddress}:${internalKey}`;
   }
 }
 

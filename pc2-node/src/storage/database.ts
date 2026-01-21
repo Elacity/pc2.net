@@ -1023,6 +1023,57 @@ export class DatabaseManager {
   }
 
   // ============================================================================
+  // File Search Operations (Wallet-Scoped)
+  // ============================================================================
+
+  /**
+   * Search files using FTS5 full-text search
+   * Returns files matching the query, scoped to the wallet
+   */
+  searchFiles(
+    walletAddress: string,
+    query: string,
+    limit: number = 10
+  ): Array<{
+    path: string;
+    content_text: string | null;
+    mime_type: string | null;
+    updated_at: number;
+  }> {
+    const db = this.getDB();
+    
+    try {
+      // Use FTS5 search with wallet scope
+      const results = db.prepare(`
+        SELECT f.path, f.content_text, f.mime_type, f.updated_at
+        FROM files f
+        JOIN files_fts fts ON f.rowid = fts.rowid
+        WHERE fts.content MATCH ?
+          AND f.wallet_address = ?
+          AND f.is_dir = 0
+        ORDER BY fts.rank
+        LIMIT ?
+      `).all(query, walletAddress, limit) as any[];
+      
+      return results;
+    } catch (error: any) {
+      // FTS might not be available or query might be invalid
+      // Fall back to LIKE search
+      const likeQuery = `%${query}%`;
+      const results = db.prepare(`
+        SELECT path, content_text, mime_type, updated_at
+        FROM files
+        WHERE wallet_address = ?
+          AND is_dir = 0
+          AND (path LIKE ? OR content_text LIKE ?)
+        LIMIT ?
+      `).all(walletAddress, likeQuery, likeQuery, limit) as any[];
+      
+      return results;
+    }
+  }
+
+  // ============================================================================
   // AI Memory State Operations (Wallet-Scoped)
   // ============================================================================
 

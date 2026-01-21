@@ -234,6 +234,11 @@ Default behavior:
 - Only use tools for explicit filesystem operations
 - Be concise but helpful
 - NEVER use emojis - use clear professional text only
+
+Code formatting:
+- When showing code, folder structures, or file contents, use proper markdown code blocks with triple backticks
+- NEVER use placeholder labels like "CODEBLOCK_1" or similar - always include the actual content
+- Example: Use \`\`\`text followed by actual content and closing \`\`\`
 </RESPONSE_GUIDELINES>`;
 }
 

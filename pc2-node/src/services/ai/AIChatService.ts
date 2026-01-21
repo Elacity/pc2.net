@@ -17,6 +17,7 @@ import { ToolExecutor } from './tools/ToolExecutor.js';
 import { FilesystemManager } from '../../storage/filesystem.js';
 import { DatabaseManager } from '../../storage/database.js';
 import { MemoryConsolidator, ConsolidatedState } from './memory/MemoryConsolidator.js';
+import { TokenBudgetManager } from './budget/TokenBudgetManager.js';
 
 export interface AIConfig {
   enabled?: boolean;
@@ -571,6 +572,9 @@ export class AIChatService {
     let iteration = 0;
     let currentMessages = [...messages];
 
+    // Initialize token budget manager for context optimization
+    const tokenBudget = new TokenBudgetManager(completeArgs.model || 'gpt-4');
+    
     // Initialize memory consolidator for context optimization
     let memoryConsolidator: MemoryConsolidator | null = null;
     let memoryContext = '';
@@ -584,10 +588,18 @@ export class AIChatService {
         const consolidation = await memoryConsolidator.consolidate(messages);
         memoryContext = consolidation.memoryContext;
         
+        // Truncate memory context if it exceeds budget
+        const memoryBudget = tokenBudget.getAvailableForComponent('memory');
+        if (tokenBudget.estimateTokens(memoryContext) > memoryBudget) {
+          memoryContext = tokenBudget.truncateToFit(memoryContext, memoryBudget);
+          logger.info('[AIChatService] Memory context truncated to fit budget');
+        }
+        
         if (memoryContext) {
+          tokenBudget.updateUsage('memory', tokenBudget.estimateTokens(memoryContext));
           logger.info('[AIChatService] Memory context loaded:', {
             length: memoryContext.length,
-            preview: memoryContext.substring(0, 100),
+            tokens: tokenBudget.estimateTokens(memoryContext),
           });
         }
       } catch (error: any) {
@@ -595,6 +607,9 @@ export class AIChatService {
         // Continue without memory - not a critical error
       }
     }
+    
+    // Track tool token usage
+    tokenBudget.updateUsage('tools', tokenBudget.estimateToolsTokens(tools));
 
     // Add system message with tool instructions
     const toolDescriptions = tools.map(t => {
@@ -774,6 +789,23 @@ Examples:
     
     // Insert system message at the beginning
     currentMessages.unshift(systemMessage);
+    
+    // Track token usage
+    tokenBudget.updateUsage('system', tokenBudget.estimateTokens(systemMessage.content));
+    tokenBudget.updateUsage('conversation', tokenBudget.estimateMessagesTokens(currentMessages.filter(m => m.role !== 'system')));
+    
+    // Log token budget summary
+    logger.info('[AIChatService] Token budget:', tokenBudget.getSummary());
+    
+    // Prune messages if approaching limit
+    if (tokenBudget.isApproachingLimit()) {
+      logger.warn('[AIChatService] Context approaching limit, pruning messages...');
+      const nonSystemMessages = currentMessages.filter(m => m.role !== 'system');
+      const prunedMessages = tokenBudget.pruneMessagesToFit(nonSystemMessages, tokenBudget.getBudget().conversation);
+      currentMessages = [systemMessage, ...prunedMessages];
+      tokenBudget.updateUsage('conversation', tokenBudget.estimateMessagesTokens(prunedMessages));
+      logger.info('[AIChatService] After pruning:', tokenBudget.getSummary());
+    }
 
     while (iteration < MAX_TOOL_ITERATIONS) {
       iteration++;

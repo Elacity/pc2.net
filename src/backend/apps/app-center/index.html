@@ -940,7 +940,7 @@
         
         <div class="content-wrapper">
             <!-- Sidebar -->
-            <div class="sidebar">
+        <div class="sidebar">
                 <div class="sidebar-title">Categories</div>
                 <div class="category-item active" data-category="all" onclick="selectCategory(this, 'all')">
                     <svg class="cat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
@@ -968,8 +968,8 @@
                 </div>
                 <div class="category-item" data-category="games" onclick="selectCategory(this, 'games')">
                     <svg class="cat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"></rect><path d="M6 12h4"></path><path d="M8 10v4"></path><circle cx="17" cy="10" r="1" fill="currentColor"></circle><circle cx="15" cy="14" r="1" fill="currentColor"></circle></svg>
-                    <span>Games</span>
-                </div>
+                <span>Games</span>
+            </div>
             </div>
             
             <!-- Main content -->
@@ -982,53 +982,53 @@
                             <div>
                                 <div style="font-size:12px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Staff Picks</div>
                                 <h3 class="section-title" style="margin-bottom:0;">Curated for you</h3>
-                            </div>
-                        </div>
+            </div>
+            </div>
                         <div class="staff-picks-scroll" id="staffPicks"></div>
-                    </div>
+            </div>
                     
                     <!-- Popular Apps Section -->
                     <div class="section" id="popularSection">
                         <div class="section-header">
                             <h3 class="section-title">Popular Apps</h3>
                             <span class="section-link" onclick="selectCategory(document.querySelector('[data-category=all]'), 'all')">View all</span>
-                        </div>
+            </div>
                         <div class="apps-scroll" id="popularApps"></div>
-                    </div>
+            </div>
                     
                     <!-- New Apps Section -->
                     <div class="section" id="newAppsSection">
                         <div class="section-header">
                             <h3 class="section-title">New Apps</h3>
                             <span class="section-link" onclick="selectCategory(document.querySelector('[data-category=all]'), 'all')">View all</span>
-                        </div>
+            </div>
                         <div class="apps-scroll" id="newApps"></div>
-                    </div>
+            </div>
                     
                     <!-- All Apps Grid -->
                     <div class="section" id="allAppsSection">
                         <div class="section-header">
                             <h3 class="section-title" id="allAppsSectionTitle">All Apps</h3>
-                        </div>
+            </div>
                         <div class="apps-grid" id="appsGrid"></div>
-                    </div>
-                </div>
+            </div>
+            </div>
                 
                 <!-- Installed tab -->
                 <div class="tab-content" id="installed-content">
                     <h3 class="section-title" style="margin-bottom:16px;">Installed Apps</h3>
                     <div class="installed-list" id="installedList"></div>
-                </div>
+        </div>
                 
                 <!-- Updates tab -->
                 <div class="tab-content" id="updates-content">
                     <h3 class="section-title" style="margin-bottom:16px;">Available Updates</h3>
                     <div class="apps-grid" id="updatesGrid"></div>
-                </div>
+            </div>
             </div>
         </div>
     </div>
-    
+
     <!-- App Detail Modal -->
     <div class="modal-overlay" id="detailModal">
         <div class="app-detail-modal" id="detailContent"></div>
@@ -1812,7 +1812,7 @@
         };
         
         function selectCategory(element, category) {
-            document.querySelectorAll('.category-item').forEach(i => i.classList.remove('active'));
+                document.querySelectorAll('.category-item').forEach(i => i.classList.remove('active'));
             element.classList.add('active');
             currentCategory = category;
             
@@ -1867,9 +1867,9 @@
                         <div class="empty-description">Try a different search or category</div>
                     </div>
                 `;
-                return;
-            }
-            
+                    return;
+                }
+                
             grid.innerHTML = apps.map(renderAppCard).join('');
         }
         
@@ -1884,7 +1884,7 @@
                         <div class="empty-icon">${icons.package}</div>
                         <div class="empty-title">No apps installed</div>
                         <div class="empty-description">Browse the Discover tab to find apps</div>
-                    </div>
+                            </div>
                 `;
                 return;
             }
@@ -1895,12 +1895,12 @@
                     <div class="installed-info">
                         <div class="installed-name">${app.name}</div>
                         <div class="installed-meta">v${app.version} - ${app.size}</div>
-                    </div>
+                            </div>
                     <div class="installed-actions">
                         <button class="action-btn open" onclick="openApp('${app.id}')">Open</button>
                         <button class="action-btn uninstall" onclick="uninstallApp('${app.id}')">Uninstall</button>
-                    </div>
-                </div>
+                        </div>
+                        </div>
             `).join('');
         }
         
@@ -1915,8 +1915,8 @@
                         <div class="empty-icon">${icons.check}</div>
                         <div class="empty-title">All apps are up to date</div>
                         <div class="empty-description">Check back later for updates</div>
-                    </div>
-                `;
+                        </div>
+                    `;
                 return;
             }
             

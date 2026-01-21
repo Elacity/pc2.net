@@ -30,6 +30,12 @@ export interface Config {
     rate_limit_window_ms: number;
     rate_limit_max_requests: number;
   };
+  boson?: {
+    enabled?: boolean;
+    gateway_url?: string;
+    public_domain?: string;
+    auto_connect?: boolean;
+  };
   ai?: {
     enabled?: boolean;
     defaultProvider?: string;

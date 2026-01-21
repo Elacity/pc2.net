@@ -29,6 +29,7 @@ import { gitRouter } from './git.js';
 import { auditRouter, auditMiddleware } from './audit.js';
 import { rateLimitMiddleware, getRateLimitStatus } from './rate-limit.js';
 import { schedulerRouter } from './scheduler.js';
+import bosonRouter from './boson.js';
 
 // Extend Express Request to include database, filesystem, config, and WebSocket
 declare global {
@@ -322,6 +323,7 @@ export function setupAPI(app: Express): void {
   app.use('/api/git', gitRouter);
   app.use('/api/audit', auditRouter);
   app.use('/api/scheduler', schedulerRouter);
+  app.use('/api/boson', bosonRouter);
   
   // Rate limit status endpoint
   app.get('/api/rate-limit/status', authenticate, (req: AuthenticatedRequest, res: Response) => {

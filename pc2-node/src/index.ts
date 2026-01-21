@@ -3,6 +3,7 @@ import { DatabaseManager, IPFSStorage, FilesystemManager, type IPFSNetworkMode }
 import { loadConfig, type Config } from './config/loader.js';
 import { logger } from './utils/logger.js';
 import { AIChatService } from './services/ai/AIChatService.js';
+import { BosonService } from './services/boson/index.js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -34,6 +35,7 @@ const IPFS_REPO_PATH = process.env.IPFS_REPO_PATH || config.storage.ipfs_repo_pa
   let ipfs: IPFSStorage | null = null;
   let filesystem: FilesystemManager | null = null;
   let aiService: AIChatService | null = null;
+  let bosonService: BosonService | null = null;
 
 async function main() {
   logger.info('Starting PC2 Node...');
@@ -105,6 +107,65 @@ async function main() {
     logger.info('ℹ️  AI service disabled in config');
   }
 
+  // Initialize Boson service (identity, connectivity)
+  const bosonConfig = (config as any).boson || {};
+  if (bosonConfig.enabled !== false) {
+    try {
+      const dataDir = dirname(DB_PATH);
+      bosonService = new BosonService({
+        dataDir,
+        gatewayUrl: bosonConfig.gateway_url || 'https://demo.ela.city',
+        publicDomain: bosonConfig.public_domain || 'ela.city',
+        localPort: PORT,
+        autoConnect: bosonConfig.auto_connect !== false,
+      });
+      
+      await bosonService.initialize();
+      
+      const status = bosonService.getStatus();
+      logger.info(`🔑 Node identity: ${status.identity.nodeId?.slice(0, 12)}...`);
+      logger.info(`   DID: ${status.identity.did}`);
+      
+      if (status.identity.isNew) {
+        const mnemonic = bosonService.getFirstRunMnemonic();
+        if (mnemonic) {
+          logger.info('');
+          logger.info('╔════════════════════════════════════════════════════════════════╗');
+          logger.info('║  🔐 IMPORTANT: Save your recovery phrase securely!             ║');
+          logger.info('╠════════════════════════════════════════════════════════════════╣');
+          logger.info('║                                                                ║');
+          const words = mnemonic.split(' ');
+          for (let i = 0; i < words.length; i += 4) {
+            const line = words.slice(i, i + 4).map((w, j) => `${(i + j + 1).toString().padStart(2)}.${w.padEnd(10)}`).join(' ');
+            logger.info(`║  ${line.padEnd(62)}║`);
+          }
+          logger.info('║                                                                ║');
+          logger.info('║  This phrase is only shown ONCE. Store it safely!              ║');
+          logger.info('╚════════════════════════════════════════════════════════════════╝');
+          logger.info('');
+          
+          // Clear mnemonic from memory after display
+          bosonService.clearMnemonic();
+        }
+      }
+      
+      if (status.username.registered) {
+        logger.info(`🌐 Public URL: ${status.username.publicUrl}`);
+      } else {
+        logger.info('💡 Register a username: POST /api/boson/register { "username": "yourname" }');
+      }
+      
+      if (status.connectivity.connected) {
+        logger.info(`✅ Connected to super node: ${status.connectivity.superNode?.address}`);
+      }
+    } catch (error) {
+      logger.error('❌ Failed to initialize Boson service:', error);
+      logger.warn('   Node identity and connectivity features will not be available');
+    }
+  } else {
+    logger.info('ℹ️  Boson service disabled in config');
+  }
+
   // Check owner status
   if (!config.owner.wallet_address) {
     logger.warn('⚠️  No owner wallet set');
@@ -118,7 +179,7 @@ async function main() {
     }
   }
 
-  const { server } = createServer({
+  const { server, app } = createServer({
     port: PORT,
     frontendPath: FRONTEND_PATH,
     isProduction: IS_PRODUCTION,
@@ -127,6 +188,11 @@ async function main() {
     config: config,
     aiService: aiService || undefined
   });
+
+  // Make Boson service available to routes
+  if (bosonService) {
+    app.locals.bosonService = bosonService;
+  }
 
   server.listen(PORT, () => {
     logger.info(`🚀 PC2 Node running on http://localhost:${PORT}`);
@@ -137,6 +203,15 @@ async function main() {
   // Graceful shutdown
   const shutdown = async () => {
     logger.info('Shutting down gracefully...');
+    
+    if (bosonService) {
+      try {
+        await bosonService.stop();
+        logger.info('✅ Boson service stopped');
+      } catch (error) {
+        logger.error('Error stopping Boson service:', error);
+      }
+    }
     
     if (ipfs) {
       try {

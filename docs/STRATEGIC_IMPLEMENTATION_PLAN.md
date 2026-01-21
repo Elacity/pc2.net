@@ -45,6 +45,101 @@ npm start
 
 ### 🎯 Recent Progress (2026-01-21)
 
+**PC2 Sovereign Node Infrastructure - Phases 1, 2 & 4 ✅ COMPLETE**
+
+Deployed complete PC2 super node infrastructure on the Elacity InterServer VPS (69.164.241.210) with working subdomain routing.
+
+**📚 Full Documentation**: See [`docs/pc2-infrastructure/`](pc2-infrastructure/README.md)
+
+**Completed Components:**
+
+| Phase | Component | Status |
+|-------|-----------|--------|
+| 1 | Boson DHT Super Node | ✅ Running on port 39001/UDP |
+| 2 | Active Proxy Service | ✅ Running on port 8090/TCP |
+| 4 | Web Gateway | ✅ Running on ports 80/443 with SSL |
+| DNS | Wildcard Configuration | ✅ *.ela.city → 69.164.241.210 |
+| SSL | Let's Encrypt Certificates | ✅ Valid for demo/test/sash.ela.city |
+| Docs | Infrastructure Documentation | ✅ Complete in docs/pc2-infrastructure/ |
+
+**Live Demo URLs:**
+- https://demo.ela.city - Demo PC2 node (shows HTML page)
+- https://test.ela.city - Test PC2 node
+- https://sash.ela.city - Registered user node
+
+**Key Accomplishments:**
+
+1. **Boson DHT Node Deployment**
+   - Built from `bosonnetwork/Boson.Core` release-v2.0.7
+   - Node ID: `J1h7RHv5iHhT43zsXxMCg7zGmZq6g4Ec2VJeCkSGry2E`
+   - Connected to existing Boson bootstrap network
+   - Runs as systemd service `pc2-boson`
+
+2. **Active Proxy Port (1,894 lines of Java ported)**
+   - Ported from `elastos/Elastos.Carrier.Java` to Boson.Core
+   - Updated package names from `elastos.carrier.*` to `io.bosonnetwork.*`
+   - Enables NAT traversal for PC2 nodes behind firewalls
+   - Port mapping range: 25000-30000/TCP
+
+3. **DNS Wildcard Configuration**
+   - GoDaddy A record: `*` → `69.164.241.210`
+   - Root domain preserved: `ela.city` → `35.205.174.216` (existing website)
+   - All subdomains route to super node for PC2 users
+
+4. **Web Gateway (Node.js)**
+   - Routes *.ela.city subdomains to registered PC2 nodes
+   - HTTPS with Let's Encrypt certificates
+   - REST API for username registration
+   - WebSocket proxy support
+   - Persistent registry (survives restarts)
+
+5. **Comprehensive Documentation**
+   - `docs/pc2-infrastructure/README.md` - Overview
+   - `docs/pc2-infrastructure/ARCHITECTURE.md` - Technical architecture
+   - `docs/pc2-infrastructure/WEB_GATEWAY.md` - Gateway API reference
+   - `docs/pc2-infrastructure/SUPERNODE_OPERATOR_GUIDE.md` - Operator guide
+   - `docs/pc2-infrastructure/DEPLOYMENT_LOG.md` - Deployment history
+
+**Infrastructure Status:**
+
+```
+Super Node: 69.164.241.210
+├── Boson DHT: 39001/UDP ✅
+├── Active Proxy: 8090/TCP ✅
+├── Web Gateway: 80/443 ✅ (Let's Encrypt SSL)
+├── Test PC2 Node: 4200 ✅
+├── Port Mapping: 25000-30000/TCP ✅
+└── Elastos Nodes: Unaffected ✅
+```
+
+**Phase 3: PC2 Client Integration ✅ COMPLETE**
+
+Implemented Boson services in the PC2 node software:
+
+| Component | Status | Description |
+|-----------|--------|-------------|
+| IdentityService | ✅ | Ed25519 keypair, DID generation, mnemonic backup |
+| UsernameService | ✅ | Username registration with Web Gateway |
+| ConnectivityService | ✅ | Super node connection, heartbeat, auto-reconnect |
+| BosonService | ✅ | Main orchestration service |
+| API Routes | ✅ | `/api/boson/*` endpoints |
+
+**Files Created:**
+- `pc2-node/src/services/boson/IdentityService.ts`
+- `pc2-node/src/services/boson/UsernameService.ts`
+- `pc2-node/src/services/boson/ConnectivityService.ts`
+- `pc2-node/src/services/boson/BosonService.ts`
+- `pc2-node/src/services/boson/index.ts`
+- `pc2-node/src/api/boson.ts`
+- `docs/pc2-infrastructure/PC2_CLIENT_INTEGRATION.md`
+
+**Remaining Phase:**
+- Phase 5: End-to-end testing with real PC2 nodes
+
+---
+
+### 🎯 Recent Progress (2026-01-21)
+
 **AI Chat UX Comprehensive Enhancement - ✅ COMPLETE**
 
 Implemented a complete 10-phase UX overhaul of the AI Chat interface, bringing it to production-quality standards with multi-provider support, real-time feedback, and professional UI polish.

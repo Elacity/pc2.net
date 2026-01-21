@@ -5116,5 +5116,62 @@ Implemented the AI Chat as a standalone windowed application, complementing the 
 
 ---
 
+## Frontend Storage Security (January 2025)
+
+### Overview
+
+Audit and improvements to frontend localStorage usage to minimize attack surface and ensure proper data lifecycle management.
+
+### localStorage Keys by Category
+
+**Authentication (Sensitive - Cleared on Logout):**
+| Key | Purpose | Cleared on Logout |
+|-----|---------|-------------------|
+| `auth_token` | Session authentication token | Yes |
+| `puter_auth_token` | Alternative auth token | Yes |
+| `user` | User profile data (JSON) | Yes |
+| `logged_in_users` | Array of logged-in accounts | Yes (set to []) |
+| `pc2_session` | Particle wallet session | Yes |
+| `pc2_config` | PC2 connection config | Yes |
+
+**User Preferences (Non-Sensitive - Persist):**
+| Key | Purpose |
+|-----|---------|
+| `pc2_dark_mode` | Dark mode toggle |
+| `pc2_font_size` | Font size preference |
+| `pc2_notify_sound` | Sound notification pref |
+| `pc2_notify_desktop` | Desktop notification pref |
+| `user_preferences` | General preferences |
+| `auto_arrange` | Desktop auto-arrange |
+
+**State Flags (Non-Sensitive):**
+| Key | Purpose |
+|-----|---------|
+| `has_visited_before` | First visit detection |
+| `pc2_explicitly_disconnected` | User disconnected wallet |
+
+### Security Decisions
+
+1. **Backend as Source of Truth**: AI conversations are stored ONLY in the backend SQLite database. Removed redundant localStorage caching to reduce data duplication and attack surface.
+
+2. **Comprehensive Logout Cleanup**: All sensitive keys are now cleared on logout including `puter_auth_token` and `pc2_explicitly_disconnected`.
+
+3. **Wallet-Scoped Data**: Any data that was previously stored with wallet address in the key has been migrated to backend storage with proper wallet isolation.
+
+4. **No API Keys in Frontend**: API keys are stored ONLY in the backend with AES-256-GCM encryption, never in localStorage.
+
+### Files Modified
+
+- `src/gui/src/UI/AI/UIAIChat.js` - Removed localStorage backup writes
+- `src/gui/src/initgui.js` - Added `puter_auth_token` and `pc2_explicitly_disconnected` to logout cleanup
+
+### Future Considerations
+
+- **HttpOnly Cookies**: Consider moving session tokens from localStorage to HttpOnly cookies for XSS protection
+- **Content Security Policy**: Add CSP headers to prevent XSS attacks that could access localStorage
+- **Token Rotation**: Implement session token rotation on sensitive operations
+
+---
+
 *This document is a living guide and will be updated as the project evolves.*
 

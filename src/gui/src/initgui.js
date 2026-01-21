@@ -1533,10 +1533,12 @@ window.initgui = async function(options){
         localStorage.removeItem('user');
         window.auth_token = null;
         localStorage.removeItem('auth_token');
+        localStorage.removeItem('puter_auth_token'); // Alternative auth token key
         
         // Clear PC2 session data
         localStorage.removeItem('pc2_session');
         localStorage.removeItem('pc2_config');
+        localStorage.removeItem('pc2_explicitly_disconnected');
         
         // Clear sessionStorage to remove any cached auth
         sessionStorage.clear();
@@ -1567,6 +1569,8 @@ window.initgui = async function(options){
         // Clear PC2 session data
         localStorage.removeItem('pc2_session');
         localStorage.removeItem('pc2_config');
+        localStorage.removeItem('pc2_explicitly_disconnected');
+        localStorage.removeItem('puter_auth_token');
         
         // Clear sessionStorage to remove any cached auth
         sessionStorage.clear();

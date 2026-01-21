@@ -797,13 +797,7 @@ async function saveConversationToBackend(convId, conversation) {
         console.log(`[UIAIChat] Saved conversation ${convId} to backend (${method})`);
     } catch (e) {
         console.error('[UIAIChat] Failed to save conversation to backend:', e);
-        // Save to localStorage as backup
-        try {
-            const key = getConversationsKey();
-            localStorage.setItem(key, JSON.stringify(conversationsCache));
-        } catch (le) {
-            console.error('[UIAIChat] localStorage backup also failed:', le);
-        }
+        // Note: Backend is source of truth, no localStorage backup needed
     }
 }
 
@@ -935,14 +929,6 @@ function saveChatHistory(messages) {
     
     // Update local cache
     saveConversations(conversations);
-    
-    // Also save to localStorage immediately as backup
-    try {
-        const key = getConversationsKey();
-        localStorage.setItem(key, JSON.stringify(conversations));
-    } catch (e) {
-        console.error('[UIAIChat] Failed to save to localStorage backup:', e);
-    }
     
     // Store pending save data
     pendingSaveConvId = convId;

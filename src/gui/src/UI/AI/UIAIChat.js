@@ -20,6 +20,7 @@
 import UIWindow from '../UIWindow.js';
 import UIContextMenu from '../UIContextMenu.js';
 import UIWindowSettings from '../Settings/UIWindowSettings.js';
+import UIWindowAIChat from '../UIWindowAIChat.js';
 
 // Chat history storage keys (wallet-scoped for user isolation)
 const CHAT_HISTORY_KEY_PREFIX = 'pc2_ai_chat_history';
@@ -1182,7 +1183,8 @@ export default function UIAIChat() {
     h += `<div class="ai-panel">`;
         h += `<div class="ai-panel-header">`;
             h += `<button class="ai-menu-btn" title="Menu" style="background: none; border: none; padding: 2px; cursor: pointer; color: #666; margin-right: auto;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>`;
-            h += `<button class="ai-new-chat-btn" title="New Chat" style="background: none; border: none; padding: 2px; cursor: pointer; color: #666; margin-right: 6px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></button>`;
+            h += `<button class="ai-open-window-btn" title="Open in Window" style="background: none; border: none; padding: 2px; cursor: pointer; color: #666; margin-right: 6px; display: flex; align-items: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></button>`;
+            h += `<button class="ai-new-chat-btn" title="New Chat" style="background: none; border: none; padding: 2px; cursor: pointer; color: #666; margin-right: 6px; display: flex; align-items: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></button>`;
             h += `<button class="btn-hide-ai" title="Close" style="background: none; border: none; padding: 2px; cursor: pointer; color: #666; margin-right: 8px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>`;
         h += `</div>`;
         h += `<div class="ai-history-menu">`;
@@ -3329,4 +3331,160 @@ async function migrateLocalStorageToBackend() {
         console.error('[UIAIChat] Failed to migrate localStorage to backend:', e);
         // Don't clear localStorage on error - keep the data safe
     }
+}
+
+// Open in Window button handler - opens AI Chat as a standalone window
+$(document).on('click', '.ai-open-window-btn', async function (e) {
+    e.stopPropagation();
+    
+    // Open the AI Chat window (statically imported to ensure jQuery plugins are available)
+    await UIWindowAIChat();
+    
+    // Optionally close the sidebar when opening window
+    const $panel = $('.ai-panel');
+    const $btn = $('.ai-toolbar-btn');
+    $panel.removeClass('ai-panel-open');
+    $btn.removeClass('active');
+});
+
+/**
+ * Initialize AI Chat in a window context
+ * Called by UIWindowAIChat to set up the windowed version
+ * @param {HTMLElement} container - The container element for the AI chat
+ */
+export function initAIChatWindow(container) {
+    const $container = $(container);
+    const $panel = $container.find('.ai-window-panel');
+    
+    // Initialize wallet address
+    refreshWalletAddress();
+    
+    // Setup auto-resize for textarea in this container
+    $container.on('input', '.ai-chat-input', function() {
+        this.style.height = 'auto';
+        this.style.height = Math.min(this.scrollHeight, 200) + 'px';
+    });
+    
+    // Load user's AI config and update model selector in this window
+    loadAIConfigForChat();
+    
+    // Initialize history menu for this window
+    (async () => {
+        await loadConversationsFromBackend();
+        updateHistoryMenuInContainer($container);
+        
+        // Load current conversation if it exists
+        const currentId = getCurrentConversationId();
+        if (currentId) {
+            const conversations = loadConversations();
+            if (conversations[currentId]) {
+                loadConversationInContainer(currentId, $container);
+            }
+        }
+    })();
+    
+    // Mark as window context
+    $container.attr('data-context', 'window');
+    
+    console.log('[UIAIChat] Initialized AI Chat in window context');
+}
+
+// Helper: Update history menu in a specific container
+function updateHistoryMenuInContainer($container) {
+    const $historyList = $container.find('.ai-history-list');
+    if ($historyList.length === 0) return;
+    
+    const conversations = loadConversations();
+    const currentId = getCurrentConversationId();
+    
+    $historyList.empty();
+    
+    // Sort by last updated (most recent first)
+    const sortedConvs = Object.entries(conversations)
+        .sort((a, b) => (b[1].lastUpdated || 0) - (a[1].lastUpdated || 0));
+    
+    if (sortedConvs.length === 0) {
+        $historyList.html('<div class="ai-history-empty">No conversations yet</div>');
+        return;
+    }
+    
+    for (const [convId, conv] of sortedConvs) {
+        const isActive = convId === currentId;
+        const title = conv.title || 'New Chat';
+        const truncatedTitle = title.length > 30 ? title.substring(0, 30) + '...' : title;
+        
+        const itemHtml = `
+            <div class="ai-history-item ${isActive ? 'active' : ''}" data-conv-id="${convId}">
+                <span class="ai-history-item-title">${window.html_encode(truncatedTitle)}</span>
+                <button class="ai-history-item-delete" data-conv-id="${convId}" title="Delete">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+        `;
+        $historyList.append(itemHtml);
+    }
+}
+
+// Helper: Load conversation in a specific container
+function loadConversationInContainer(convId, $container) {
+    const conversations = loadConversations();
+    const conv = conversations[convId];
+    if (!conv) return;
+    
+    currentConversationId = convId;
+    saveCurrentConversationId(convId);
+    
+    // Clear messages in this container
+    const $messages = $container.find('.ai-chat-messages');
+    $messages.empty();
+    
+    // Render messages
+    if (conv.messages && conv.messages.length > 0) {
+        for (const msg of conv.messages) {
+            if (msg.role === 'user') {
+                const attachedFilesHtml = msg.attachedFiles && msg.attachedFiles.length > 0
+                    ? `<div class="ai-message-attachments">${msg.attachedFiles.map(f => 
+                        `<span class="ai-message-attachment">${window.html_encode(f.name || f.path?.split('/').pop() || 'file')}</span>`
+                      ).join('')}</div>`
+                    : '';
+                
+                $messages.append(`
+                    <div class="ai-chat-message-user-wrapper" data-message-id="${msg.messageId || 'msg-' + Date.now()}">
+                        <div class="ai-chat-message-user">${window.html_encode(typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content))}</div>
+                        ${attachedFilesHtml}
+                        <div class="ai-message-actions">
+                            <button class="ai-message-copy" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+                            <button class="ai-message-edit" title="Edit"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+                            <button class="ai-message-delete" title="Delete"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+                        </div>
+                    </div>
+                `);
+            } else if (msg.role === 'assistant') {
+                const renderedContent = renderMessageWithThinking(msg.content);
+                $messages.append(`
+                    <div class="ai-chat-message-ai-wrapper">
+                        <div class="ai-chat-message ai-chat-message-ai" id="${msg.messageId || 'ai-msg-' + Date.now()}">${renderedContent}
+                            <div class="ai-copy-actions">
+                                <button class="ai-copy-btn" title="Copy response">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `);
+            }
+        }
+    }
+    
+    // Scroll to bottom
+    $messages.scrollTop($messages[0]?.scrollHeight || 0);
+    
+    // Update history menu to show active item
+    updateHistoryMenuInContainer($container);
 }

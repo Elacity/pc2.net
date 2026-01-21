@@ -555,6 +555,8 @@ async function UIWindow(options) {
     const el_window_head_title = document.querySelector(`#window-${win_id} > .window-head .window-head-title`);
     const el_window_head_icon = document.querySelector(`#window-${win_id} > .window-head .window-head-icon`);
     const el_window_head_scale_btn = document.querySelector(`#window-${win_id} > .window-head > .window-scale-btn`);
+    const el_window_head_close_btn = document.querySelector(`#window-${win_id} > .window-head > .window-close-btn`);
+    const el_window_head_minimize_btn = document.querySelector(`#window-${win_id} > .window-head > .window-minimize-btn`);
     const el_window_navbar_back_btn = document.querySelector(`#window-${win_id} .window-navbar-btn-back`);
     const el_window_navbar_forward_btn = document.querySelector(`#window-${win_id} .window-navbar-btn-forward`);
     const el_window_navbar_up_btn = document.querySelector(`#window-${win_id} .window-navbar-btn-up`);
@@ -651,7 +653,17 @@ async function UIWindow(options) {
     }
     // focus on this window and deactivate other windows
     if ( options.is_visible ) {
-        $(el_window).focusWindow();
+        // Safety check for focusWindow plugin availability (timing issue with dynamic imports)
+        if (typeof $(el_window).focusWindow === 'function') {
+            $(el_window).focusWindow();
+        } else {
+            // Fallback: defer focus until plugin is available
+            setTimeout(() => {
+                if (typeof $(el_window).focusWindow === 'function') {
+                    $(el_window).focusWindow();
+                }
+            }, 100);
+        }
     }
     
     // If window was created maximized, ensure it covers full viewport
@@ -1807,18 +1819,22 @@ async function UIWindow(options) {
     // --------------------------------------------------------
     // Close button
     // --------------------------------------------------------
-    $(`#window-${win_id} > .window-head > .window-close-btn`).click(function () {
-        $(el_window).close({
-            shrink_to_target: options.on_close_shrink_to_target
+    if (el_window_head_close_btn) {
+        $(el_window_head_close_btn).click(function () {
+            $(el_window).close({
+                shrink_to_target: options.on_close_shrink_to_target
+            });
         });
-    })
+    }
 
     // --------------------------------------------------------
     // Minimize button
     // --------------------------------------------------------
-    $(`#window-${win_id} > .window-head > .window-minimize-btn`).click(function () {
-        $(el_window).hideWindow();
-    })
+    if (el_window_head_minimize_btn) {
+        $(el_window_head_minimize_btn).click(function () {
+            $(el_window).hideWindow();
+        });
+    }
 
     // --------------------------------------------------------
     // Draggable

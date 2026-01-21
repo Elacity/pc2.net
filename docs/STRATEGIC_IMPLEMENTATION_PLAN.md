@@ -5073,5 +5073,48 @@ Tests all tool categories, rate limiting, audit logging, and scheduler functiona
 
 ---
 
+## AI Chat Windowed Application (January 2025)
+
+### Overview
+
+Implemented the AI Chat as a standalone windowed application, complementing the existing sidebar version. Users can now open AI Chat in a dedicated window for multitasking while maintaining full state synchronization with the sidebar.
+
+### Implementation Details
+
+**Architecture:**
+- `UIWindowAIChat.js` - Window wrapper component that creates a UIWindow with the AI chat content
+- Shares state with sidebar via backend conversation storage (no duplicate state)
+- Registered in Start menu via `info.ts` with dedicated icon
+- Launched via `launch_app.js` special case handling
+
+**Key Files Created/Modified:**
+- `src/gui/src/UI/UIWindowAIChat.js` - New window wrapper component
+- `src/gui/src/UI/AI/UIAIChat.js` - Added "Open in Window" button, exported `initAIChatWindow()`
+- `src/gui/src/helpers/launch_app.js` - Added ai-chat app handling
+- `pc2-node/src/api/info.ts` - Registered app in Start menu with icon
+- `src/gui/src/css/style.css` - Window-specific styles
+
+### Key Learnings
+
+1. **Static vs Dynamic Imports with jQuery Plugins**: When using webpack code-splitting, dynamically imported modules (`await import(...)`) create separate chunks with isolated JavaScript contexts. jQuery plugins like `$.fn.close`, `$.fn.hideWindow`, and `$.fn.focusWindow` defined in the main bundle are NOT available to dynamically imported chunks. **Solution**: Use static imports for modules that need access to jQuery plugins.
+
+2. **UIWindow Button Handlers**: The maximize (scale) button in UIWindow uses a pre-fetched element reference via `document.querySelector`, while close/minimize originally used inline jQuery selectors. For consistency and reliability, all window action buttons should use pre-fetched element references.
+
+3. **Window Options for body_content**: When using `body_content` instead of `iframe_url` in UIWindow, ensure you include all necessary options: `has_head: true`, `is_resizable: true`, `is_draggable: true`, `is_visible: true`, etc. Missing options can cause unexpected behavior.
+
+4. **PC2-Exclusive Apps**: Apps like `ai-chat`, `explorer`, and `system-terminal` need special handling in `launch_app.js` to bypass the remote app info fetch. Add them to the early conditional check to prevent 404 errors.
+
+5. **Button Alignment in Headers**: Use `display: flex; align-items: center;` on header buttons to ensure consistent vertical alignment, especially when buttons have different icon sizes.
+
+6. **Browser Caching During Development**: Frontend changes may not appear due to aggressive browser caching. Always do hard refresh (Cmd+Shift+R) after rebuilding, and consider restarting the server to ensure fresh bundles are served.
+
+### UI/UX Decisions
+
+- **External Link Icon**: The "Open in Window" button uses an external link icon (arrow pointing out of a box) to indicate it opens a separate window
+- **Window Dimensions**: Default 500x700px with min 400x500px - optimized for chat interface
+- **State Synchronization**: Both sidebar and window versions share the same backend conversation storage, ensuring seamless continuity
+
+---
+
 *This document is a living guide and will be updated as the project evolves.*
 

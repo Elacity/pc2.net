@@ -21,6 +21,7 @@ import path from '../lib/path.js';
 import { PROCESS_IPC_ATTACHED, PROCESS_RUNNING, PortalProcess, PseudoProcess } from '../definitions.js';
 import UIWindow from '../UI/UIWindow.js';
 import UIWindowSystemTerminal from '../UI/UIWindowSystemTerminal.js';
+import UIWindowAIChat from '../UI/UIWindowAIChat.js';
 
 /**
  * Launches an app.
@@ -48,9 +49,9 @@ const launch_app = async (options) => {
     // If the app object is not provided, get it from the server
     let app_info;
 
-    // explorer is a special case
-    if ( options.name === 'explorer' ) {
-        app_info = [];
+    // Special cases: PC2-exclusive apps that don't need remote app info
+    if ( options.name === 'explorer' || options.name === 'system-terminal' || options.name === 'ai-chat' ) {
+        app_info = { name: options.name, title: options.name };
     }
     else if ( options.app_obj )
     {
@@ -268,6 +269,27 @@ const launch_app = async (options) => {
 
         // Open the System Terminal window
         el_win = await UIWindowSystemTerminal({
+            ...window_options,
+        });
+    }
+    //------------------------------------
+    // AI Chat (PC2-exclusive)
+    //------------------------------------
+    else if ( options.name === 'ai-chat' ) {
+        process = new PseudoProcess({
+            uuid,
+            name: 'ai-chat',
+            parent: options.parent_instance_id,
+            meta: {
+                launch_options: options,
+                app_info: app_info,
+            },
+        });
+        const svc_process = globalThis.services.get('process');
+        svc_process.register(process);
+
+        // Open the AI Chat window (statically imported to ensure jQuery plugins are available)
+        el_win = await UIWindowAIChat({
             ...window_options,
         });
     }

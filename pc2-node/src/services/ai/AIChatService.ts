@@ -645,10 +645,11 @@ export class AIChatService {
     const providerType = this.getProviderType(completeArgs.model || this.defaultProvider);
 
     // Initialize cognitive toolkit for complex task reasoning
+    // Uses minimal verbosity to avoid text repetition in responses
     const cognitiveToolkit = new CognitiveToolkit({
-      enabledTools: ['UNDERSTAND', 'PLAN', 'VERIFY'],
-      verbosity: 2,
-      complexityThreshold: 3,
+      enabledTools: ['PLAN', 'VERIFY'],  // Skip UNDERSTAND to reduce repetition
+      verbosity: 1,  // Minimal prompts
+      complexityThreshold: 5,  // Only for truly complex multi-step tasks
     });
     
     // Get the last user message for cognitive analysis

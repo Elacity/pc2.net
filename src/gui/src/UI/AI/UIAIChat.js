@@ -869,6 +869,9 @@ function renderMessage(role, content, messageId, attachedFiles = null) {
         $('.ai-chat-messages').append(
             `<div class="ai-chat-message" id="${messageId}">
                 <div class="ai-chat-message-ai">${renderMarkdown(contentText)}</div>
+                <div class="ai-message-actions ai-assistant-actions">
+                    <button class="ai-message-copy" title="Copy response"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+                </div>
             </div>`
         );
     }
@@ -2635,15 +2638,28 @@ function scrollChatToBottom() {
     }
 }
 
-// Copy message to clipboard
+// Copy message to clipboard (works for both user and assistant messages)
 $(document).on('click', '.ai-message-copy', function (e) {
     e.stopPropagation();
-    const $messageWrapper = $(this).closest('.ai-chat-message-user-wrapper');
-    const messageText = $messageWrapper.find('.ai-chat-message-user').text();
+    const $btn = $(this);
+    let messageText = '';
+    
+    // Check if this is a user message or assistant message
+    const $userWrapper = $btn.closest('.ai-chat-message-user-wrapper');
+    const $assistantWrapper = $btn.closest('.ai-chat-message');
+    
+    if ($userWrapper.length) {
+        // User message
+        messageText = $userWrapper.find('.ai-chat-message-user').text();
+    } else if ($assistantWrapper.length) {
+        // Assistant message - get text content only (strips HTML)
+        messageText = $assistantWrapper.find('.ai-chat-message-ai').text();
+    }
+    
+    if (!messageText) return;
     
     navigator.clipboard.writeText(messageText).then(() => {
-        // Visual feedback
-        const $btn = $(this);
+        // Visual feedback - show checkmark
         const originalHtml = $btn.html();
         $btn.html('<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>');
         setTimeout(() => {

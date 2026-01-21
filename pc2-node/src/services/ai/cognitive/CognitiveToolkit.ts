@@ -59,9 +59,9 @@ export interface CognitiveResult {
 }
 
 const DEFAULT_CONFIG: CognitiveToolConfig = {
-  enabledTools: ['UNDERSTAND', 'PLAN', 'VERIFY'],
-  verbosity: 2,
-  complexityThreshold: 3,
+  enabledTools: ['PLAN', 'VERIFY'],  // Reduced - UNDERSTAND was causing repetition
+  verbosity: 1,  // Minimal verbosity to reduce repetition
+  complexityThreshold: 4,  // Higher threshold - only activate for truly complex tasks
 };
 
 /**

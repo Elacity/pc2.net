@@ -18,6 +18,7 @@ import { FilesystemManager } from '../../storage/filesystem.js';
 import { DatabaseManager } from '../../storage/database.js';
 import { MemoryConsolidator, ConsolidatedState } from './memory/MemoryConsolidator.js';
 import { TokenBudgetManager } from './budget/TokenBudgetManager.js';
+import { buildSystemPrompt, buildMinimalSystemPrompt } from './prompts/SystemPromptBuilder.js';
 
 export interface AIConfig {
   enabled?: boolean;
@@ -339,6 +340,28 @@ export class AIChatService {
   }
 
   /**
+   * Get provider type from model string
+   */
+  private getProviderType(model: string): 'claude' | 'openai' | 'gemini' | 'ollama' | 'xai' {
+    const lowerModel = model.toLowerCase();
+    
+    if (lowerModel.includes('claude') || lowerModel.startsWith('claude:')) {
+      return 'claude';
+    }
+    if (lowerModel.includes('gpt') || lowerModel.startsWith('openai:')) {
+      return 'openai';
+    }
+    if (lowerModel.includes('gemini') || lowerModel.startsWith('gemini:')) {
+      return 'gemini';
+    }
+    if (lowerModel.includes('grok') || lowerModel.startsWith('xai:')) {
+      return 'xai';
+    }
+    // Default to ollama for local models
+    return 'ollama';
+  }
+
+  /**
    * Check if messages contain images
    */
   private hasImages(messages: ChatMessage[]): boolean {
@@ -617,23 +640,40 @@ export class AIChatService {
       return `- ${fn.name}: ${fn.description || 'No description'}`;
     }).join('\n');
 
-    // Build memory context section for system prompt
-    const memorySection = memoryContext ? `
-<CONTEXT_MEMORY>
-${memoryContext}
-</CONTEXT_MEMORY>
+    // Determine provider type for prompt optimization
+    const providerType = this.getProviderType(completeArgs.model || this.defaultProvider);
 
-**IMPORTANT:** Use the CONTEXT_MEMORY above to understand:
-- Recently created files/folders (refer to them in follow-up requests)
-- What actions were just performed (avoid repeating)
-- The user's current intent
-
-` : '';
+    // Build symbolic system prompt using structured delimiters
+    // Use minimal prompt if approaching token limits, otherwise use full prompt
+    const useMinimalPrompt = tokenBudget.isApproachingLimit();
+    
+    const systemPromptContent = useMinimalPrompt
+      ? buildMinimalSystemPrompt({
+          memoryContext,
+          toolDescriptions,
+          modelType: providerType,
+        })
+      : buildSystemPrompt({
+          memoryContext,
+          toolDescriptions,
+          verboseReasoning: true,
+          modelType: providerType,
+        });
+    
+    logger.info('[AIChatService] System prompt built:', {
+      mode: useMinimalPrompt ? 'minimal' : 'full',
+      length: systemPromptContent.length,
+      estimatedTokens: tokenBudget.estimateTokens(systemPromptContent),
+    });
 
     const systemMessage = {
       role: 'system' as const,
-      content: `You are a helpful AI assistant integrated into the ElastOS personal cloud operating system.
-${memorySection}
+      content: systemPromptContent,
+    };
+    
+    // Legacy system prompt content moved to SystemPromptBuilder.ts
+    // Keeping this comment for reference during migration
+    /* LEGACY PROMPT START
 **REASONING MODE: Think and plan before acting**
 
 When the user asks you to perform a task, think through what needs to be done and explain your plan before executing. This helps the user understand what you're doing and builds trust.
@@ -767,8 +807,8 @@ Examples:
 5. If tool results show "success: false" or an error, report the actual error to the user
 6. Only use information that is explicitly provided in the tool execution results
 
-**CRITICAL: Default to answering with text. Only use tools when the user explicitly requests filesystem operations.**`
-    };
+**CRITICAL: Default to answering with text. Only use tools when the user explicitly requests filesystem operations.**
+    LEGACY PROMPT END */
 
     // Clean conversation history: Remove old assistant messages with malformed tool calls
     // This prevents the model from repeating incorrect patterns

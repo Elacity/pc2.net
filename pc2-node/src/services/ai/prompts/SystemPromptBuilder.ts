@@ -74,7 +74,18 @@ You are a helpful AI assistant integrated into the ElastOS Personal Cloud (PC2) 
 Your purpose is to help users manage their files, answer questions, and complete tasks.
 You have access to the user's filesystem and can create, read, modify, and organize files.
 
-IMPORTANT: Never use emojis in your responses. Use clear, professional text only.
+CRITICAL OUTPUT RULES:
+1. NEVER repeat yourself - each statement appears ONCE only
+2. NEVER say "I'll do X" multiple times - state your action once, then do it
+3. NEVER duplicate paragraphs or sentences
+4. NEVER use emojis
+5. Be direct and concise
+
+BAD EXAMPLE (never do this):
+"I'll create a folder. I'll create a folder called sun. Perfect! I've created the folder sun."
+
+GOOD EXAMPLE:
+"Created folder: ~/Pictures/sun"
 </ROLE>`;
 }
 
@@ -262,8 +273,8 @@ export function estimateSystemPromptTokens(config: SystemPromptConfig): number {
 export function buildMinimalSystemPrompt(config: SystemPromptConfig = {}): string {
   const sections: string[] = [];
   
-  // Compact role
-  sections.push('<ROLE>AI assistant for ElastOS PC2. Manage files and answer questions. Never use emojis.</ROLE>');
+  // Compact role with anti-repetition
+  sections.push('<ROLE>AI assistant for ElastOS PC2. Manage files and answer questions. Never use emojis. NEVER repeat yourself - say each thing only once. Be direct and concise.</ROLE>');
   
   // Memory context (if available)
   if (config.memoryContext) {

@@ -19,6 +19,7 @@ import { DatabaseManager } from '../../storage/database.js';
 import { MemoryConsolidator, ConsolidatedState } from './memory/MemoryConsolidator.js';
 import { TokenBudgetManager } from './budget/TokenBudgetManager.js';
 import { buildSystemPrompt, buildMinimalSystemPrompt } from './prompts/SystemPromptBuilder.js';
+import { CognitiveToolkit } from './cognitive/CognitiveToolkit.js';
 
 export interface AIConfig {
   enabled?: boolean;
@@ -643,11 +644,31 @@ export class AIChatService {
     // Determine provider type for prompt optimization
     const providerType = this.getProviderType(completeArgs.model || this.defaultProvider);
 
+    // Initialize cognitive toolkit for complex task reasoning
+    const cognitiveToolkit = new CognitiveToolkit({
+      enabledTools: ['UNDERSTAND', 'PLAN', 'VERIFY'],
+      verbosity: 2,
+      complexityThreshold: 3,
+    });
+    
+    // Get the last user message for cognitive analysis
+    const lastUserMessage = messages.filter(m => m.role === 'user').pop();
+    const userMessageText = typeof lastUserMessage?.content === 'string' 
+      ? lastUserMessage.content 
+      : '';
+    
+    // Build cognitive prompt injection if task is complex
+    const cognitivePrompt = cognitiveToolkit.buildCognitivePrompt({
+      userMessage: userMessageText,
+      memoryContext,
+      availableTools: tools.map(t => t.function?.name).filter(Boolean),
+    });
+
     // Build symbolic system prompt using structured delimiters
     // Use minimal prompt if approaching token limits, otherwise use full prompt
     const useMinimalPrompt = tokenBudget.isApproachingLimit();
     
-    const systemPromptContent = useMinimalPrompt
+    let systemPromptContent = useMinimalPrompt
       ? buildMinimalSystemPrompt({
           memoryContext,
           toolDescriptions,
@@ -660,8 +681,15 @@ export class AIChatService {
           modelType: providerType,
         });
     
+    // Inject cognitive framework for complex tasks
+    if (cognitivePrompt && !useMinimalPrompt) {
+      systemPromptContent = `${systemPromptContent}\n\n${cognitivePrompt}`;
+      logger.info('[AIChatService] Cognitive tools injected for complex task');
+    }
+    
     logger.info('[AIChatService] System prompt built:', {
       mode: useMinimalPrompt ? 'minimal' : 'full',
+      hasCognitive: !!cognitivePrompt,
       length: systemPromptContent.length,
       estimatedTokens: tokenBudget.estimateTokens(systemPromptContent),
     });

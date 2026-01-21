@@ -8,6 +8,7 @@ import Database from 'better-sqlite3';
 import { existsSync, mkdirSync } from 'fs';
 import { dirname } from 'path';
 import { runMigrations } from './migrations.js';
+import { encryptApiKeys, decryptApiKeys } from '../utils/encryption.js';
 
 export interface User {
   wallet_address: string;
@@ -621,13 +622,36 @@ export class DatabaseManager {
   // ============================================================================
 
   /**
-   * Get AI configuration for a wallet
+   * Get AI configuration for a wallet (raw, without decryption - for internal use)
    */
-  getAIConfig(walletAddress: string): AIConfig | null {
+  getAIConfigRaw(walletAddress: string): AIConfig | null {
     const db = this.getDB();
     const row = db.prepare('SELECT * FROM ai_config WHERE wallet_address = ?')
       .get(walletAddress) as AIConfig | undefined;
     return row ?? null;
+  }
+
+  /**
+   * Get AI configuration for a wallet with decrypted API keys
+   */
+  getAIConfig(walletAddress: string): AIConfig | null {
+    const config = this.getAIConfigRaw(walletAddress);
+    if (!config) {
+      return null;
+    }
+    
+    // Decrypt API keys if present
+    if (config.api_keys) {
+      try {
+        const encryptedKeys = JSON.parse(config.api_keys);
+        const decryptedKeys = decryptApiKeys(encryptedKeys);
+        config.api_keys = JSON.stringify(decryptedKeys);
+      } catch (e) {
+        // If parsing/decryption fails, return as-is (legacy data)
+      }
+    }
+    
+    return config;
   }
 
   /**
@@ -642,7 +666,9 @@ export class DatabaseManager {
   ): void {
     const db = this.getDB();
     const now = Math.floor(Date.now() / 1000);
-    const apiKeysJson = apiKeys ? JSON.stringify(apiKeys) : null;
+    // Encrypt API keys before storing
+    const encryptedKeys = apiKeys ? encryptApiKeys(apiKeys) : null;
+    const apiKeysJson = encryptedKeys ? JSON.stringify(encryptedKeys) : null;
 
     db.prepare(`
       INSERT INTO ai_config (wallet_address, default_provider, default_model, api_keys, ollama_base_url, updated_at)
@@ -661,9 +687,9 @@ export class DatabaseManager {
    */
   updateAIAPIKeys(walletAddress: string, apiKeys: Record<string, string>): void {
     const db = this.getDB();
-    const existing = this.getAIConfig(walletAddress);
+    const existing = this.getAIConfigRaw(walletAddress);
     
-    // Merge with existing keys
+    // Merge with existing encrypted keys
     let mergedKeys: Record<string, string> = {};
     if (existing?.api_keys) {
       try {
@@ -673,8 +699,9 @@ export class DatabaseManager {
       }
     }
     
-    // Merge new keys
-    Object.assign(mergedKeys, apiKeys);
+    // Encrypt new keys and merge
+    const encryptedNewKeys = encryptApiKeys(apiKeys);
+    Object.assign(mergedKeys, encryptedNewKeys);
     
     // Update config
     const now = Math.floor(Date.now() / 1000);
@@ -699,13 +726,14 @@ export class DatabaseManager {
    */
   deleteAIAPIKey(walletAddress: string, provider: string): void {
     const db = this.getDB();
-    const existing = this.getAIConfig(walletAddress);
+    const existing = this.getAIConfigRaw(walletAddress);
     
     if (!existing?.api_keys) {
       return; // No keys to delete
     }
     
     try {
+      // Work with encrypted keys directly
       const keys = JSON.parse(existing.api_keys);
       delete keys[provider];
       

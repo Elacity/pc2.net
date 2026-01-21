@@ -411,18 +411,15 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
       path.join(projectRoot, 'src/backend/apps', appPath),
       path.join(process.cwd(), 'src/backend/apps', appPath),
       path.join(process.cwd(), '../../src/backend/apps', appPath),
-      path.join('/Users/mtk/Documents/Cursor/pc2.net/src/backend/apps', appPath), // Fallback absolute path
       // Terminal app special paths (if it's the terminal app)
       // Try dist/ first (built version), then assets/ (source)
       ...(isTerminal && terminalRelativePath ? [
         path.join(projectRoot, 'src/terminal/dist', terminalRelativePath),
         path.join(process.cwd(), 'src/terminal/dist', terminalRelativePath),
         path.join(process.cwd(), '../../src/terminal/dist', terminalRelativePath),
-        path.join('/Users/mtk/Documents/Cursor/pc2.net/src/terminal/dist', terminalRelativePath), // Fallback absolute path
         path.join(projectRoot, 'src/terminal/assets', terminalRelativePath),
         path.join(process.cwd(), 'src/terminal/assets', terminalRelativePath),
         path.join(process.cwd(), '../../src/terminal/assets', terminalRelativePath),
-        path.join('/Users/mtk/Documents/Cursor/pc2.net/src/terminal/assets', terminalRelativePath) // Fallback absolute path
       ] : []),
       // Phoenix app special paths (if it's the phoenix app)
       // Try dist/ first (built version), then assets/ (source)
@@ -430,11 +427,9 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
         path.join(projectRoot, 'src/phoenix/dist', phoenixRelativePath),
         path.join(process.cwd(), 'src/phoenix/dist', phoenixRelativePath),
         path.join(process.cwd(), '../../src/phoenix/dist', phoenixRelativePath),
-        path.join('/Users/mtk/Documents/Cursor/pc2.net/src/phoenix/dist', phoenixRelativePath), // Fallback absolute path
         path.join(projectRoot, 'src/phoenix/assets', phoenixRelativePath),
         path.join(process.cwd(), 'src/phoenix/assets', phoenixRelativePath),
         path.join(process.cwd(), '../../src/phoenix/assets', phoenixRelativePath),
-        path.join('/Users/mtk/Documents/Cursor/pc2.net/src/phoenix/assets', phoenixRelativePath) // Fallback absolute path
       ] : [])
     ];
     
@@ -764,28 +759,23 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
         path.join(projectRoot, 'src/terminal/dist', terminalRelativePath),
         path.join(process.cwd(), 'src/terminal/dist', terminalRelativePath),
         path.join(process.cwd(), '../../src/terminal/dist', terminalRelativePath),
-        path.join('/Users/mtk/Documents/Cursor/pc2.net/src/terminal/dist', terminalRelativePath),
         path.join(projectRoot, 'src/terminal/assets', terminalRelativePath),
         path.join(process.cwd(), 'src/terminal/assets', terminalRelativePath),
         path.join(process.cwd(), '../../src/terminal/assets', terminalRelativePath),
-        path.join('/Users/mtk/Documents/Cursor/pc2.net/src/terminal/assets', terminalRelativePath)
       ] : []),
       // Phoenix app special paths
       ...(isPhoenix && phoenixRelativePath ? [
         path.join(projectRoot, 'src/phoenix/dist', phoenixRelativePath),
         path.join(process.cwd(), 'src/phoenix/dist', phoenixRelativePath),
         path.join(process.cwd(), '../../src/phoenix/dist', phoenixRelativePath),
-        path.join('/Users/mtk/Documents/Cursor/pc2.net/src/phoenix/dist', phoenixRelativePath),
         path.join(projectRoot, 'src/phoenix/assets', phoenixRelativePath),
         path.join(process.cwd(), 'src/phoenix/assets', phoenixRelativePath),
         path.join(process.cwd(), '../../src/phoenix/assets', phoenixRelativePath),
-        path.join('/Users/mtk/Documents/Cursor/pc2.net/src/phoenix/assets', phoenixRelativePath)
       ] : []),
       // Standard app paths (fallback)
       path.join(projectRoot, 'src/backend/apps', appPath),
       path.join(process.cwd(), 'src/backend/apps', appPath),
       path.join(process.cwd(), '../../src/backend/apps', appPath),
-      path.join('/Users/mtk/Documents/Cursor/pc2.net/src/backend/apps', appPath)
     ];
     
     for (const possiblePath of possiblePaths) {

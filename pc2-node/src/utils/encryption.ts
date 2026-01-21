@@ -1,0 +1,212 @@
+/**
+ * API Key Encryption Utility
+ * 
+ * Uses AES-256-GCM to encrypt sensitive data like API keys.
+ * The encryption key is stored locally in data/encryption.key
+ * and is unique to each PC2 installation.
+ */
+
+import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
+import { logger } from './logger';
+
+const ALGORITHM = 'aes-256-gcm';
+const KEY_LENGTH = 32; // 256 bits
+const IV_LENGTH = 16;  // 128 bits for GCM
+const AUTH_TAG_LENGTH = 16;
+
+// Path to the encryption key file
+const getKeyPath = (): string => {
+  const dataDir = process.env.DATA_DIR || path.join(process.cwd(), 'data');
+  return path.join(dataDir, 'encryption.key');
+};
+
+// Master key cache
+let masterKey: Buffer | null = null;
+
+/**
+ * Get or generate the master encryption key.
+ * The key is stored in data/encryption.key and is unique to each installation.
+ */
+export function getMasterKey(): Buffer {
+  if (masterKey) {
+    return masterKey;
+  }
+
+  const keyPath = getKeyPath();
+
+  try {
+    // Try to read existing key
+    if (fs.existsSync(keyPath)) {
+      const keyHex = fs.readFileSync(keyPath, 'utf8').trim();
+      masterKey = Buffer.from(keyHex, 'hex');
+      
+      if (masterKey.length !== KEY_LENGTH) {
+        logger.warn('[Encryption] Invalid key length, regenerating...');
+        masterKey = null;
+      } else {
+        logger.info('[Encryption] Loaded master encryption key');
+        return masterKey;
+      }
+    }
+
+    // Generate new key
+    logger.info('[Encryption] Generating new master encryption key...');
+    masterKey = crypto.randomBytes(KEY_LENGTH);
+    
+    // Ensure data directory exists
+    const dataDir = path.dirname(keyPath);
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    
+    // Save key with restricted permissions
+    fs.writeFileSync(keyPath, masterKey.toString('hex'), { mode: 0o600 });
+    logger.info('[Encryption] Master encryption key saved');
+    
+    return masterKey;
+  } catch (error: any) {
+    logger.error('[Encryption] Failed to get master key:', error.message);
+    // Return a fallback key derived from machine info (less secure but functional)
+    const fallbackSeed = `pc2-fallback-${process.env.USER || 'default'}-${process.cwd()}`;
+    masterKey = crypto.createHash('sha256').update(fallbackSeed).digest();
+    return masterKey;
+  }
+}
+
+/**
+ * Encrypt a string using AES-256-GCM.
+ * Returns a base64-encoded string containing IV + ciphertext + auth tag.
+ */
+export function encrypt(plaintext: string): string {
+  if (!plaintext) {
+    return '';
+  }
+
+  try {
+    const key = getMasterKey();
+    const iv = crypto.randomBytes(IV_LENGTH);
+    
+    const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
+    
+    let encrypted = cipher.update(plaintext, 'utf8');
+    encrypted = Buffer.concat([encrypted, cipher.final()]);
+    
+    const authTag = cipher.getAuthTag();
+    
+    // Combine: IV (16 bytes) + ciphertext + authTag (16 bytes)
+    const combined = Buffer.concat([iv, encrypted, authTag]);
+    
+    return combined.toString('base64');
+  } catch (error: any) {
+    logger.error('[Encryption] Encrypt failed:', error.message);
+    throw new Error('Encryption failed');
+  }
+}
+
+/**
+ * Decrypt a base64-encoded encrypted string.
+ * Expects format: IV (16 bytes) + ciphertext + auth tag (16 bytes)
+ */
+export function decrypt(encryptedBase64: string): string {
+  if (!encryptedBase64) {
+    return '';
+  }
+
+  try {
+    const key = getMasterKey();
+    const combined = Buffer.from(encryptedBase64, 'base64');
+    
+    // Minimum length: IV (16) + 1 byte data + authTag (16) = 33
+    if (combined.length < IV_LENGTH + AUTH_TAG_LENGTH + 1) {
+      throw new Error('Invalid encrypted data length');
+    }
+    
+    // Extract components
+    const iv = combined.subarray(0, IV_LENGTH);
+    const authTag = combined.subarray(combined.length - AUTH_TAG_LENGTH);
+    const ciphertext = combined.subarray(IV_LENGTH, combined.length - AUTH_TAG_LENGTH);
+    
+    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+    decipher.setAuthTag(authTag);
+    
+    let decrypted = decipher.update(ciphertext);
+    decrypted = Buffer.concat([decrypted, decipher.final()]);
+    
+    return decrypted.toString('utf8');
+  } catch (error: any) {
+    logger.error('[Encryption] Decrypt failed:', error.message);
+    throw new Error('Decryption failed - data may be corrupted or key changed');
+  }
+}
+
+/**
+ * Check if a string appears to be encrypted (base64 with minimum length).
+ * This helps handle migration from unencrypted to encrypted data.
+ */
+export function isEncrypted(data: string): boolean {
+  if (!data || data.length < 44) { // Minimum base64 length for our format
+    return false;
+  }
+  
+  // Check if it's valid base64
+  const base64Regex = /^[A-Za-z0-9+/]+=*$/;
+  if (!base64Regex.test(data)) {
+    return false;
+  }
+  
+  // Try to decode and check length
+  try {
+    const decoded = Buffer.from(data, 'base64');
+    return decoded.length >= IV_LENGTH + AUTH_TAG_LENGTH + 1;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Encrypt API keys object.
+ * Takes { "openai": "sk-xxx", "claude": "sk-ant-xxx" } and encrypts each value.
+ */
+export function encryptApiKeys(apiKeys: Record<string, string>): Record<string, string> {
+  const encrypted: Record<string, string> = {};
+  
+  for (const [provider, key] of Object.entries(apiKeys)) {
+    if (key && typeof key === 'string') {
+      encrypted[provider] = encrypt(key);
+    }
+  }
+  
+  return encrypted;
+}
+
+/**
+ * Decrypt API keys object.
+ * Handles both encrypted and unencrypted values (for migration).
+ */
+export function decryptApiKeys(apiKeys: Record<string, string>): Record<string, string> {
+  const decrypted: Record<string, string> = {};
+  
+  for (const [provider, value] of Object.entries(apiKeys)) {
+    if (!value || typeof value !== 'string') {
+      continue;
+    }
+    
+    // Check if already encrypted
+    if (isEncrypted(value)) {
+      try {
+        decrypted[provider] = decrypt(value);
+      } catch {
+        // Decryption failed - value might be plain text that looks like base64
+        // Return as-is for backward compatibility
+        decrypted[provider] = value;
+      }
+    } else {
+      // Plain text (legacy) - return as-is
+      decrypted[provider] = value;
+    }
+  }
+  
+  return decrypted;
+}

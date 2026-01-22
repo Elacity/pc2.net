@@ -158,24 +158,19 @@ const CONFIG = {
 
 ## SSL Certificates
 
-The gateway uses Let's Encrypt certificates located at:
-- `/etc/letsencrypt/live/demo.ela.city/fullchain.pem`
-- `/etc/letsencrypt/live/demo.ela.city/privkey.pem`
+The gateway uses a **wildcard Let's Encrypt certificate** for all `*.ela.city` subdomains:
 
-**Renewal**: Certbot automatically renews certificates.
+**Certificate Location:**
+- `/etc/nginx/ssl/wildcard/ela.city.crt` (full chain)
+- `/etc/nginx/ssl/wildcard/ela.city.key` (private key)
 
-**Current Coverage**:
-- demo.ela.city
-- test.ela.city
-- sash.ela.city
+**Renewal**: acme.sh automatically renews certificates via cron.
 
-**Adding New Subdomains**:
-```bash
-sudo certbot certonly --standalone -d newuser.ela.city \
-  --non-interactive --agree-tos --email admin@ela.city
-```
+**Coverage**: ALL `*.ela.city` subdomains are covered automatically!
 
-Or use a wildcard certificate with DNS validation.
+**No manual certificate expansion needed for new users.**
+
+See [SSL_CERTIFICATES.md](SSL_CERTIFICATES.md) for full details on certificate management.
 
 ## Systemd Service
 
@@ -272,7 +267,7 @@ server.on("upgrade", (req, socket, head) => {
 
 ## Security Considerations
 
-1. **HTTPS Only**: Production should redirect HTTP to HTTPS
+1. **HTTPS Only**: ✅ HTTP automatically redirects to HTTPS (301)
 2. **Rate Limiting**: Consider adding rate limiting for registration API
 3. **Authentication**: Future: Require DID signature for registration
 4. **Validation**: Validate endpoint URLs before registration

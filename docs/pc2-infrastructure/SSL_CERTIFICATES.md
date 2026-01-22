@@ -2,156 +2,210 @@
 
 > How SSL certificates are managed for PC2 infrastructure
 
-## Current Setup (MVP v1.0.0)
+## Current Setup (Wildcard Certificate) ✅
 
-### Certificate Type
+### Certificate Details
 - **Provider**: Let's Encrypt
-- **Challenge**: HTTP-01 (per-domain)
-- **Location**: `/etc/letsencrypt/live/demo.ela.city/`
+- **Challenge**: DNS-01 (via GoDaddy API)
+- **Tool**: acme.sh
+- **Scope**: `*.ela.city` + `ela.city` (wildcard)
+- **Location**: `/etc/nginx/ssl/wildcard/`
 
-### Currently Covered Domains
-- demo.ela.city
-- test.ela.city
-- sash.ela.city
-- testlocal.ela.city
-
-### Adding New Subdomains
-
-When a new username is registered, the SSL certificate must be expanded:
-
-```bash
-# 1. Stop the Web Gateway temporarily
-sudo systemctl stop pc2-gateway
-
-# 2. Expand certificate with new domain
-sudo certbot certonly --standalone --expand \
-  -d demo.ela.city \
-  -d test.ela.city \
-  -d sash.ela.city \
-  -d testlocal.ela.city \
-  -d newuser.ela.city
-
-# 3. Restart Web Gateway
-sudo systemctl start pc2-gateway
+### Certificate Files
+```
+/etc/nginx/ssl/wildcard/
+├── ela.city.crt    # Full chain certificate
+└── ela.city.key    # Private key
 ```
 
-### Automatic Renewal
+### Coverage
+**ALL** `*.ela.city` subdomains are automatically covered:
+- ✅ demo.ela.city
+- ✅ test.ela.city
+- ✅ test7.ela.city
+- ✅ sash.ela.city
+- ✅ yourname.ela.city (any subdomain!)
 
-Certbot auto-renews certificates. Check renewal status:
+**No manual certificate expansion needed for new users!**
+
+### Verification
 
 ```bash
-sudo certbot certificates
-sudo certbot renew --dry-run
+# Check certificate details
+echo | openssl s_client -connect test7.ela.city:443 -servername test7.ela.city 2>/dev/null | openssl x509 -noout -subject -issuer
+
+# Expected output:
+subject=CN=*.ela.city
+issuer=C=US, O=Let's Encrypt, CN=E7
 ```
 
 ---
 
-## Future: Wildcard Certificate (v1.1.0)
+## Automatic Renewal
 
-### Requirements
-- Cloudflare API access
-- DNS-01 challenge (proves domain ownership via DNS TXT record)
+The certificate auto-renews via acme.sh cron job. To check or force renewal:
 
-### Setup with Cloudflare
+```bash
+# Check certificate expiry
+/root/.acme.sh/acme.sh --list
 
-1. **Install Cloudflare plugin**
-   ```bash
-   sudo apt install python3-certbot-dns-cloudflare
-   ```
+# Force renewal (if needed)
+export GD_Key='<godaddy_api_key>'
+export GD_Secret='<godaddy_api_secret>'
+/root/.acme.sh/acme.sh --renew -d '*.ela.city' -d 'ela.city' --force
 
-2. **Create API credentials file**
-   ```bash
-   sudo mkdir -p /root/.secrets/certbot
-   sudo nano /root/.secrets/certbot/cloudflare.ini
-   ```
-   
-   Contents:
-   ```ini
-   dns_cloudflare_api_token = YOUR_API_TOKEN
-   ```
-   
-   ```bash
-   sudo chmod 600 /root/.secrets/certbot/cloudflare.ini
-   ```
+# Reinstall to Nginx location
+/root/.acme.sh/acme.sh --install-cert -d '*.ela.city' \
+  --key-file /etc/nginx/ssl/wildcard/ela.city.key \
+  --fullchain-file /etc/nginx/ssl/wildcard/ela.city.crt
 
-3. **Request wildcard certificate**
-   ```bash
-   sudo certbot certonly \
-     --dns-cloudflare \
-     --dns-cloudflare-credentials /root/.secrets/certbot/cloudflare.ini \
-     -d "*.ela.city" \
-     -d "ela.city"
-   ```
-
-4. **Update Web Gateway to use wildcard cert**
-   ```javascript
-   const HTTPS_OPTIONS = {
-     key: readFileSync('/etc/letsencrypt/live/ela.city/privkey.pem'),
-     cert: readFileSync('/etc/letsencrypt/live/ela.city/fullchain.pem'),
-   };
-   ```
-
-### Benefits of Wildcard
-- No certificate expansion needed for new users
-- Automatic coverage of all subdomains
-- Simpler operations
+# Restart Web Gateway
+systemctl restart pc2-gateway
+```
 
 ---
 
-## Cloudflare API Token
+## How It Was Set Up
 
-To create a Cloudflare API token:
+### 1. Install acme.sh
 
-1. Go to https://dash.cloudflare.com/profile/api-tokens
-2. Create Token → Custom Token
-3. Permissions:
-   - Zone → DNS → Edit
-   - Zone → Zone → Read
-4. Zone Resources: Include → Specific zone → ela.city
-5. Create Token and save securely
+```bash
+curl https://get.acme.sh | sh -s email=admin@ela.city
+```
+
+### 2. Set Default CA to Let's Encrypt
+
+```bash
+/root/.acme.sh/acme.sh --set-default-ca --server letsencrypt
+```
+
+### 3. Issue Wildcard Certificate with GoDaddy DNS
+
+```bash
+export GD_Key='<godaddy_api_key>'
+export GD_Secret='<godaddy_api_secret>'
+
+/root/.acme.sh/acme.sh --issue \
+  -d '*.ela.city' \
+  -d 'ela.city' \
+  --dns dns_gd
+```
+
+### 4. Install Certificate
+
+```bash
+mkdir -p /etc/nginx/ssl/wildcard
+
+/root/.acme.sh/acme.sh --install-cert -d '*.ela.city' \
+  --key-file /etc/nginx/ssl/wildcard/ela.city.key \
+  --fullchain-file /etc/nginx/ssl/wildcard/ela.city.crt
+```
+
+### 5. Update Web Gateway SSL Config
+
+Updated `/root/pc2/web-gateway/index.js` to load from wildcard location:
+
+```javascript
+const sslDir = "/etc/nginx/ssl/wildcard";
+// ...
+key: fs.readFileSync(path.join(sslDir, "ela.city.key")),
+cert: fs.readFileSync(path.join(sslDir, "ela.city.crt")),
+```
+
+---
+
+## GoDaddy API Credentials
+
+The DNS is managed by GoDaddy. API credentials are stored in acme.sh config.
+
+### To Get New API Credentials
+
+1. Go to https://developer.godaddy.com/keys
+2. Select "Production" environment
+3. Create new API Key
+4. Save Key and Secret securely
+
+### Credential Location
+
+acme.sh stores credentials in: `~/.acme.sh/account.conf`
+
+---
+
+## HTTP to HTTPS Redirect
+
+The Web Gateway automatically redirects HTTP to HTTPS:
+
+```javascript
+function handleHttpRedirect(req, res) {
+  const host = req.headers.host || 'ela.city';
+  const redirectUrl = 'https://' + host + req.url;
+  res.writeHead(301, { 'Location': redirectUrl });
+  res.end();
+}
+```
+
+Test:
+```bash
+curl -sI http://test7.ela.city/
+# HTTP/1.1 301 Moved Permanently
+# Location: https://test7.ela.city/
+```
 
 ---
 
 ## Troubleshooting
 
-### Certificate Verification Failed
+### Certificate Not Loading
+
 ```bash
-# Check if port 80 is open
-sudo ufw status
-sudo ufw allow 80/tcp
+# Check certificate files exist
+ls -la /etc/nginx/ssl/wildcard/
 
-# Check if another process is using port 80
-sudo ss -tlnp | grep :80
-```
-
-### Certificate Not Found
-```bash
-# List all certificates
-sudo certbot certificates
-
-# Check certificate files
-ls -la /etc/letsencrypt/live/
+# Check file permissions
+sudo chmod 644 /etc/nginx/ssl/wildcard/ela.city.crt
+sudo chmod 600 /etc/nginx/ssl/wildcard/ela.city.key
 ```
 
 ### Web Gateway Won't Start
+
 ```bash
 # Check logs
 sudo journalctl -u pc2-gateway -f
 
-# Verify certificate permissions
-sudo ls -la /etc/letsencrypt/live/demo.ela.city/
+# Check if certificate is valid
+openssl x509 -in /etc/nginx/ssl/wildcard/ela.city.crt -noout -dates
+```
+
+### Browser Shows "Not Secure"
+
+1. **Clear browser cache** - Old self-signed cert may be cached
+2. **Try incognito window** - Bypasses cache
+3. **Hard refresh** - Cmd+Shift+R (Mac) or Ctrl+Shift+R (Windows)
+
+### Renewal Failed
+
+```bash
+# Check acme.sh logs
+cat ~/.acme.sh/acme.sh.log
+
+# Verify GoDaddy credentials
+export GD_Key='<key>'
+export GD_Secret='<secret>'
+/root/.acme.sh/acme.sh --renew -d '*.ela.city' --debug
 ```
 
 ---
 
 ## Current Status
 
-| Domain | SSL Status | Certificate |
-|--------|------------|-------------|
-| demo.ela.city | ✅ Valid | demo.ela.city |
-| test.ela.city | ✅ Valid | demo.ela.city |
-| sash.ela.city | ✅ Valid | demo.ela.city |
-| testlocal.ela.city | ✅ Valid | demo.ela.city |
+| Item | Status |
+|------|--------|
+| Wildcard Certificate | ✅ Active (`*.ela.city`) |
+| Issuer | Let's Encrypt E7 |
+| Valid From | Jan 22, 2026 |
+| Valid Until | Apr 22, 2026 |
+| Auto-Renewal | ✅ Configured (acme.sh cron) |
+| HTTP→HTTPS Redirect | ✅ Enabled |
 
 ---
 

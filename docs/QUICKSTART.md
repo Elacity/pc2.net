@@ -119,6 +119,7 @@ docker compose up -d
 - Linode: $12/month
 - Hetzner: €4.51/month (Europe)
 - Vultr: $12/month
+- Contabo: €5.99/month (great value)
 
 ### Setup
 
@@ -144,7 +145,24 @@ pm2 save
 pm2 startup
 ```
 
-### Configure Domain (Optional)
+### Configure HTTPS
+
+#### Option A: *.ela.city Subdomain (Easiest - Recommended!)
+
+Get instant HTTPS without any certificate setup:
+
+```bash
+# Register your node with the Super Node
+curl -X POST https://cloud.ela.city/api/gateway/register \
+  -H "Content-Type: application/json" \
+  -d '{"subdomain": "yourname", "endpoint": "http://YOUR_SERVER_IP:4200"}'
+```
+
+Now access your node at: **https://yourname.ela.city** ✅
+
+The Super Node handles SSL automatically with a wildcard certificate.
+
+#### Option B: Custom Domain (Manual SSL)
 
 ```bash
 # Install Caddy for HTTPS

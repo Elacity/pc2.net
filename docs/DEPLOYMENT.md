@@ -98,7 +98,39 @@ docker run -d \
   elastos/pc2-node
 ```
 
-### Step 4: Set Up HTTPS (Nginx Reverse Proxy)
+### Step 4: Set Up HTTPS
+
+You have two options for HTTPS:
+
+#### Option A: Use *.ela.city Subdomain (Recommended - Zero Config)
+
+The easiest approach is to use a subdomain under `ela.city`. The Super Node provides a **wildcard SSL certificate** for all `*.ela.city` subdomains.
+
+1. **Choose a subdomain** (e.g., `mynode.ela.city`)
+
+2. **Register with the Super Node:**
+   ```bash
+   curl -X POST https://cloud.ela.city/api/gateway/register \
+     -H "Content-Type: application/json" \
+     -d '{"subdomain": "mynode", "endpoint": "http://YOUR_SERVER_IP:4200"}'
+   ```
+
+3. **Access your node:**
+   - `https://mynode.ela.city` - Valid HTTPS, no configuration needed!
+
+**How it works:**
+```
+User → https://mynode.ela.city → Super Node (SSL termination) → Your PC2 Node
+```
+
+The Super Node:
+- Handles SSL with Let's Encrypt wildcard certificate
+- Routes traffic to your node
+- Provides automatic HTTP→HTTPS redirect
+
+#### Option B: Custom Domain (Manual SSL Setup)
+
+If you want to use your own domain:
 
 ```bash
 # Install Nginx and Certbot
@@ -133,6 +165,8 @@ nginx -t && systemctl reload nginx
 # Get SSL certificate
 certbot --nginx -d your-domain.com
 ```
+
+**Important:** The `X-Forwarded-Proto $scheme` header is critical for preventing mixed content errors.
 
 ---
 
@@ -272,3 +306,94 @@ docker run ... --security-opt seccomp=unconfined --cap-add SYS_ADMIN ...
 - 2GB RAM
 - 20GB SSD
 - Linux (Ubuntu 22.04+ recommended)
+
+---
+
+## Super Node Architecture
+
+The PC2 network uses a Super Node architecture for easy deployment:
+
+```
+                    ┌─────────────────────────────────────┐
+                    │  Super Node (69.164.241.210)        │
+                    │  ├── Web Gateway                    │
+                    │  │   └── Wildcard SSL: *.ela.city   │
+                    │  └── User Registry                  │
+                    └─────────────────────────────────────┘
+                                    │
+              ┌─────────────────────┼─────────────────────┐
+              │                     │                     │
+              ▼                     ▼                     ▼
+    ┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐
+    │ alice.ela.city  │   │ bob.ela.city    │   │ test7.ela.city  │
+    │ (User Node 1)   │   │ (User Node 2)   │   │ (User Node 3)   │
+    └─────────────────┘   └─────────────────┘   └─────────────────┘
+```
+
+### Key Features
+
+| Feature | Description |
+|---------|-------------|
+| **Wildcard SSL** | All `*.ela.city` subdomains have valid HTTPS |
+| **Zero Config** | No Nginx/Certbot setup needed on user nodes |
+| **NAT Traversal** | Supports nodes behind firewalls via Active Proxy |
+| **Auto Discovery** | Register once, accessible immediately |
+
+### Super Node Endpoints
+
+| Endpoint | Purpose |
+|----------|---------|
+| `https://cloud.ela.city` | Main Super Node access |
+| `https://*.ela.city` | Routes to registered user nodes |
+
+### Registration API
+
+```bash
+# Register your node
+curl -X POST https://cloud.ela.city/api/gateway/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "subdomain": "yourname",
+    "endpoint": "http://YOUR_IP:4200"
+  }'
+
+# Check registration
+curl https://cloud.ela.city/api/gateway/status/yourname
+```
+
+---
+
+## Local AI Setup (Optional)
+
+PC2 includes integrated local AI support using Ollama and DeepSeek models.
+
+### Quick Setup
+
+1. Open PC2 in browser
+2. Go to **Settings → AI**
+3. Select model size from dropdown (1.5B to 32B)
+4. Click **Install & Download**
+5. Wait for installation to complete
+
+### Model Sizes
+
+| Model | Size | RAM Required | Use Case |
+|-------|------|--------------|----------|
+| DeepSeek R1 1.5B | ~1GB | 4GB | Quick responses |
+| DeepSeek R1 7B | ~4.5GB | 8GB | Balanced (default) |
+| DeepSeek R1 8B | ~5GB | 10GB | Better quality |
+| DeepSeek R1 14B | ~9GB | 16GB | High quality |
+| DeepSeek R1 32B | ~20GB | 32GB | Best quality |
+
+### Manual Installation
+
+```bash
+# Install Ollama
+curl -fsSL https://ollama.com/install.sh | sh
+
+# Pull DeepSeek model
+ollama pull deepseek-r1:7b
+
+# Verify
+ollama list
+```

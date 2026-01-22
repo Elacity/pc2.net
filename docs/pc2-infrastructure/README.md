@@ -90,7 +90,9 @@ This documentation covers the PC2 (Personal Cloud Computer) infrastructure that 
 ### Live URLs
 - https://demo.ela.city - Demo PC2 node
 - https://test.ela.city - Test PC2 node
+- https://test7.ela.city - Test7 PC2 node (Contabo)
 - https://sash.ela.city - Sash's node
+- https://*.ela.city - Any registered subdomain (wildcard SSL)
 
 ### API Endpoints
 - `POST /api/register` - Register a username
@@ -106,7 +108,9 @@ This documentation covers the PC2 (Personal Cloud Computer) infrastructure that 
 | Active Proxy | 8090/TCP | ✅ Running |
 | Web Gateway | 80, 443/TCP | ✅ Running |
 | DNS Wildcard | *.ela.city | ✅ Configured |
-| SSL Certificates | Let's Encrypt | ✅ Valid |
+| SSL Wildcard | *.ela.city | ✅ Let's Encrypt (auto-renew) |
+| HTTP→HTTPS Redirect | 80→443 | ✅ Enabled |
+| Registered Users | - | 14 nodes |
 
 ## Phases
 
@@ -138,7 +142,7 @@ This documentation covers the PC2 (Personal Cloud Computer) infrastructure that 
 |------------|------------|
 | Local registry only | DHT registry in Sprint 6 |
 | No rate limiting | Security hardening in v1.1.0 |
-| Manual SSL expansion | Automate in v1.1.0 |
+| ~~Manual SSL expansion~~ | ✅ **RESOLVED**: Wildcard SSL implemented |
 | WebSocket via proxy:// | Not yet supported |
 
 ## Infrastructure Details
@@ -206,12 +210,19 @@ This documentation covers the PC2 (Personal Cloud Computer) infrastructure that 
 - Failed node tracking with automatic retry
 - Manual `failover()` method for force switching
 
+### Completed (January 2026)
+
+1. ✅ **Wildcard SSL Certificate** - `*.ela.city` via acme.sh + GoDaddy DNS-01
+2. ✅ **HTTP→HTTPS Redirect** - Automatic redirect on port 80
+3. ✅ **Local AI Setup UX** - Single-button Ollama + DeepSeek installation
+4. ✅ **Mixed Content Fix** - `getBaseUrl()` for reverse proxy compatibility
+
 ### Next Steps (v1.1.0)
 
 1. Deploy and test DHT HTTP API service
 2. Integrate Web Gateway with DHT API
 3. Add more super nodes for production failover
-4. Wildcard SSL via Cloudflare DNS-01
+4. Rate limiting and security hardening
 
 ---
 

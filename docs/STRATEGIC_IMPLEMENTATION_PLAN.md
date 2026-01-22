@@ -5458,5 +5458,236 @@ curl -H "X-Forwarded-Proto: https" https://your-server/apps/calculator
 
 ---
 
+## Wildcard SSL Certificate for *.ela.city (January 2025)
+
+### Overview
+
+Implemented automatic SSL certificate provisioning for all PC2 nodes using a wildcard Let's Encrypt certificate. Any subdomain `*.ela.city` now has valid HTTPS without manual certificate setup per user.
+
+### Architecture
+
+```
+User Browser
+    │
+    │ https://test7.ela.city
+    ▼
+┌─────────────────────────────────────┐
+│  Super Node (69.164.241.210)        │
+│  ├── PC2 Web Gateway (Node.js)      │
+│  │   └── Wildcard SSL: *.ela.city   │
+│  └── Routes to PC2 user nodes       │
+└─────────────────────────────────────┘
+    │
+    │ http://38.242.211.112:4200
+    ▼
+┌─────────────────────────────────────┐
+│  User's PC2 Node (Contabo)          │
+│  └── Local PC2 instance             │
+└─────────────────────────────────────┘
+```
+
+### Implementation Details
+
+**Certificate Provisioning:**
+
+1. **Tool**: `acme.sh` with Let's Encrypt CA
+2. **Challenge Type**: DNS-01 (via GoDaddy API)
+3. **Certificate Scope**: `*.ela.city` + `ela.city` (wildcard + apex)
+4. **Auto-Renewal**: acme.sh cron job handles renewal before expiration
+
+**Certificate Location on Super Node:**
+```
+/etc/nginx/ssl/wildcard/
+├── ela.city.crt    # Full chain certificate
+└── ela.city.key    # Private key
+```
+
+**Web Gateway SSL Configuration:**
+
+Updated `/root/pc2/web-gateway/ssl-config.js`:
+```javascript
+export function getSSLCerts() {
+  const wildcardPath = "/etc/nginx/ssl/wildcard";
+  try {
+    return {
+      key: fs.readFileSync(wildcardPath + "/ela.city.key"),
+      cert: fs.readFileSync(wildcardPath + "/ela.city.crt"),
+    };
+  } catch (err) {
+    // Fallback chain...
+  }
+}
+```
+
+**HTTP to HTTPS Redirect:**
+
+Added automatic redirect handler in Web Gateway:
+```javascript
+function handleHttpRedirect(req, res) {
+  const host = req.headers.host || 'ela.city';
+  const redirectUrl = 'https://' + host + req.url;
+  res.writeHead(301, { 'Location': redirectUrl });
+  res.end();
+}
+```
+
+### Files Modified on Super Node
+
+| File | Changes |
+|------|---------|
+| `/root/pc2/web-gateway/index.js` | Updated SSL paths to use wildcard cert, added HTTP→HTTPS redirect |
+| `/root/pc2/web-gateway/ssl-config.js` | Updated to load wildcard cert from `/etc/nginx/ssl/wildcard/` |
+
+### Verification
+
+```bash
+# Check certificate details
+echo | openssl s_client -connect test7.ela.city:443 -servername test7.ela.city 2>/dev/null | openssl x509 -noout -subject -issuer
+
+# Expected output:
+subject=CN=*.ela.city
+issuer=C=US, O=Let's Encrypt, CN=E7
+
+# Check HTTP redirect
+curl -sI http://test7.ela.city/
+# HTTP/1.1 301 Moved Permanently
+# Location: https://test7.ela.city/
+```
+
+### Certificate Renewal
+
+The certificate renews automatically via acme.sh cron. Manual renewal if needed:
+
+```bash
+# On Super Node (69.164.241.210)
+export GD_Key='<godaddy_key>'
+export GD_Secret='<godaddy_secret>'
+/root/.acme.sh/acme.sh --renew -d '*.ela.city' -d 'ela.city' --force
+systemctl restart pc2-gateway
+```
+
+### User Experience
+
+| Before | After |
+|--------|-------|
+| Users see "Not Secure" warning | Valid HTTPS with lock icon 🔒 |
+| Each user needed manual cert setup | Zero configuration required |
+| Self-signed certs caused browser warnings | Let's Encrypt trusted by all browsers |
+
+### Benefits for New Users
+
+1. **Zero Setup**: Pick a subdomain, register, get instant HTTPS
+2. **No Port Forwarding Required for SSL**: Super Node handles SSL termination
+3. **Professional Appearance**: No scary browser warnings
+4. **SEO Friendly**: HTTPS is a ranking factor
+
+---
+
+## Local AI Setup UX Improvements (January 2025)
+
+### Overview
+
+Simplified the local AI (Ollama + DeepSeek) setup from a multi-step process to a single-click experience with model size selection.
+
+### Before vs After
+
+**Before:**
+- Two separate buttons: "Install Ollama" and "Download Model"
+- User had to understand the dependency order
+- No model size options
+- Confusing status messages
+
+**After:**
+- Single "Local AI Setup" section with model dropdown
+- One-click "Install & Download" button
+- Automatic detection of existing installations
+- Clear progress feedback with dynamic timeouts
+
+### Implementation
+
+**Model Selection Options:**
+| Model | Size | Use Case |
+|-------|------|----------|
+| `deepseek-r1:1.5b` | ~1GB | Fast responses, lower resource usage |
+| `deepseek-r1:7b` | ~4.5GB | Balanced performance (default) |
+| `deepseek-r1:8b` | ~5GB | Better quality |
+| `deepseek-r1:14b` | ~9GB | High quality |
+| `deepseek-r1:32b` | ~20GB | Best quality, requires significant resources |
+
+**UI Flow:**
+1. Settings → AI tab
+2. Check current Ollama/model status automatically
+3. Select desired model size from dropdown
+4. Click "Install & Download"
+5. Progress: "Installing Ollama..." → "Downloading model..." → "Ready!"
+
+**Key Code Changes:**
+
+`src/gui/src/UI/Settings/UITabAI.js`:
+```javascript
+// Model selection dropdown
+<select id="ai-model-select">
+  <option value="deepseek-r1:1.5b">DeepSeek R1 1.5B (~1GB)</option>
+  <option value="deepseek-r1:7b" selected>DeepSeek R1 7B (~4.5GB)</option>
+  <option value="deepseek-r1:8b">DeepSeek R1 8B (~5GB)</option>
+  <option value="deepseek-r1:14b">DeepSeek R1 14B (~9GB)</option>
+  <option value="deepseek-r1:32b">DeepSeek R1 32B (~20GB)</option>
+</select>
+
+// Dynamic timeout based on model size
+const timeouts = {
+  'deepseek-r1:1.5b': 120000,
+  'deepseek-r1:7b': 300000,
+  'deepseek-r1:8b': 360000,
+  'deepseek-r1:14b': 600000,
+  'deepseek-r1:32b': 1200000,
+};
+```
+
+### Files Modified
+
+| File | Changes |
+|------|---------|
+| `src/gui/src/UI/Settings/UITabAI.js` | Replaced two buttons with model selector + single setup button |
+
+### User Experience
+
+1. **Detection**: Automatically checks if Ollama is installed and which model is downloaded
+2. **Progress**: Real-time status updates during installation
+3. **Error Handling**: Clear error messages if installation fails
+4. **Idempotent**: Safe to click multiple times - skips already-completed steps
+
+---
+
+## Current Production Status (January 2025)
+
+### Super Node (69.164.241.210)
+
+| Component | Status |
+|-----------|--------|
+| PC2 Web Gateway | ✅ Running |
+| Wildcard SSL (*.ela.city) | ✅ Active, auto-renews |
+| HTTP→HTTPS Redirect | ✅ Enabled |
+| User Registry | ✅ 14 users registered |
+| Active Proxy Support | ✅ For NAT traversal |
+
+### Test Node (test7.ela.city → 38.242.211.112)
+
+| Feature | Status |
+|---------|--------|
+| Valid HTTPS | ✅ via Super Node wildcard cert |
+| All Apps | ✅ Working (no mixed content) |
+| WASM Apps | ✅ Calculator, File Processor working |
+| Particle Auth | ✅ Working |
+| AI Chat | ✅ Working |
+| Local AI Setup | ✅ Available in Settings |
+
+### Known Issues
+
+1. **Browser Cache**: Users may need to hard-refresh (Cmd+Shift+R) or use incognito to see new certificate
+2. **File Move Operations**: Some edge cases in file move may still have issues (tracked separately)
+
+---
+
 *This document is a living guide and will be updated as the project evolves.*
 

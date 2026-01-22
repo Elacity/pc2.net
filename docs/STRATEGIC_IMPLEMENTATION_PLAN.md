@@ -49,6 +49,12 @@ npm start
 
 Deployed complete PC2 super node infrastructure on the Elacity InterServer VPS (69.164.241.210) with working subdomain routing.
 
+**Secondary Node Deployed (2026-01-22):**
+- Contabo VPS (38.242.211.112) configured as secondary super node
+- Node.js 20.20.0 + Docker installed
+- PC2 node running as systemd service
+- Enables failover testing between two data centers
+
 **📚 Full Documentation**: See [`docs/pc2-infrastructure/`](pc2-infrastructure/README.md)
 
 **Completed Components:**

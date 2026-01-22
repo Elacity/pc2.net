@@ -1,0 +1,56 @@
+{
+  "name": "@bosonnetwork/activeproxy-client",
+  "version": "1.0.0",
+  "description": "TypeScript client for Boson Active Proxy - NAT traversal for decentralized applications | Boson 活跃代理 TypeScript 客户端 - 去中心化应用的 NAT 穿透",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "README.zh-CN.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "keywords": [
+    "boson",
+    "elastos",
+    "carrier",
+    "active-proxy",
+    "nat-traversal",
+    "p2p",
+    "decentralized",
+    "dht",
+    "去中心化",
+    "NAT穿透"
+  ],
+  "author": "PC2/Elacity Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/elastos/pc2.net.git",
+    "directory": "packages/boson-activeproxy-ts"
+  },
+  "homepage": "https://github.com/elastos/pc2.net/tree/main/packages/boson-activeproxy-ts",
+  "bugs": {
+    "url": "https://github.com/elastos/pc2.net/issues"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  },
+  "peerDependencies": {}
+}

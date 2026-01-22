@@ -228,7 +228,10 @@ const ParticleNetworkProvider: React.FC<React.PropsWithChildren<ParticleNetworkC
       }
       
       // Call Puter's backend to authenticate
-      const response = await fetch(`${import.meta.env.VITE_PUTER_API_URL}/auth/particle`, {
+      // Use runtime API origin (injected by PC2 node) or fallback to build-time env
+      const apiOrigin = (window as any).PUTER_API_ORIGIN || import.meta.env.VITE_PUTER_API_URL || window.location.origin;
+      console.log('[Particle Auth]: Auth callback using API origin:', apiOrigin);
+      const response = await fetch(`${apiOrigin}/auth/particle`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

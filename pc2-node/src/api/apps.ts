@@ -7,6 +7,30 @@
 import { Request, Response } from 'express';
 import { logger } from '../utils/logger.js';
 
+/**
+ * Get the base URL for the request, respecting reverse proxy headers.
+ * When behind Nginx or other reverse proxies, req.protocol may be 'http'
+ * even when the original request was HTTPS.
+ */
+function getBaseUrl(req: Request): string {
+  const host = req.get('host') || 'localhost';
+  
+  // Check x-forwarded-proto header (set by reverse proxies like Nginx)
+  const forwardedProto = req.headers['x-forwarded-proto'];
+  if (forwardedProto === 'https') {
+    return `https://${host}`;
+  }
+  
+  // Check origin header (contains original protocol)
+  const origin = req.headers.origin;
+  if (origin && typeof origin === 'string' && origin.startsWith('https://')) {
+    return `https://${host}`;
+  }
+  
+  // Fallback to req.protocol
+  return `${req.protocol}://${host}`;
+}
+
 // Hardcoded base64 icons - must match info.ts for consistency
 const hardcodedIcons: Record<string, string> = {
   'editor': 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImVkZ3JhZCIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiM2MzY2RjEiLz48c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiM0RjQ2RTUiLz48L2xpbmVhckdyYWRpZW50PjxjbGlwUGF0aCBpZD0icm91bmRlZCI+PHJlY3Qgd2lkdGg9IjQ4IiBoZWlnaHQ9IjQ4IiByeD0iMTAiLz48L2NsaXBQYXRoPjwvZGVmcz48ZyBjbGlwLXBhdGg9InVybCgjcm91bmRlZCkiPjxyZWN0IHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCIgZmlsbD0idXJsKCNlZGdyYWQpIi8+PHJlY3QgeD0iMTIiIHk9IjgiIHdpZHRoPSIyNCIgaGVpZ2h0PSIzMiIgcng9IjIiIGZpbGw9IiNmZmYiLz48cmVjdCB4PSIxNiIgeT0iMTQiIHdpZHRoPSIxNiIgaGVpZ2h0PSIyIiBmaWxsPSIjYzdkMmZlIi8+PHJlY3QgeD0iMTYiIHk9IjIwIiB3aWR0aD0iMTYiIGhlaWdodD0iMiIgZmlsbD0iI2M3ZDJmZSIvPjxyZWN0IHg9IjE2IiB5PSIyNiIgd2lkdGg9IjEyIiBoZWlnaHQ9IjIiIGZpbGw9IiNjN2QyZmUiLz48cmVjdCB4PSIxNiIgeT0iMzIiIHdpZHRoPSI4IiBoZWlnaHQ9IjIiIGZpbGw9IiNjN2QyZmUiLz48L2c+PC9zdmc+',
@@ -30,7 +54,7 @@ const hardcodedIcons: Record<string, string> = {
  */
 export function handleGetApp(req: Request, res: Response): void {
   const appName = req.params.name;
-  const baseUrl = req.protocol + '://' + req.get('host');
+  const baseUrl = getBaseUrl(req);
   
   logger.info(`[apps.ts] Getting app info for: ${appName}`);
   

@@ -30,6 +30,8 @@ import { auditRouter, auditMiddleware } from './audit.js';
 import { rateLimitMiddleware, getRateLimitStatus } from './rate-limit.js';
 import { schedulerRouter } from './scheduler.js';
 import bosonRouter from './boson.js';
+import setupRouter from './setup.js';
+import updateRouter from './update.js';
 
 // Extend Express Request to include database, filesystem, config, and WebSocket
 declare global {
@@ -324,6 +326,8 @@ export function setupAPI(app: Express): void {
   app.use('/api/audit', auditRouter);
   app.use('/api/scheduler', schedulerRouter);
   app.use('/api/boson', bosonRouter);
+  app.use('/api/setup', setupRouter);
+  app.use('/api/update', updateRouter);
   
   // Rate limit status endpoint
   app.get('/api/rate-limit/status', authenticate, (req: AuthenticatedRequest, res: Response) => {

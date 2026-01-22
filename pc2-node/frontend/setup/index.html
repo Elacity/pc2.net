@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PC2 Setup - Personal Cloud Computer</title>
+  <link rel="icon" href="/favicon.ico">
+  <style>
+    :root {
+      --bg-primary: #0a0a0f;
+      --bg-secondary: #14141f;
+      --bg-card: #1a1a2e;
+      --text-primary: #ffffff;
+      --text-secondary: #a0a0b0;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --success: #22c55e;
+      --error: #ef4444;
+      --warning: #f59e0b;
+      --border: #2a2a3e;
+    }
+    
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    
+    .setup-container {
+      width: 100%;
+      max-width: 480px;
+    }
+    
+    .setup-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 40px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    }
+    
+    .logo {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    
+    .logo img {
+      height: 48px;
+      margin-bottom: 16px;
+    }
+    
+    .logo h1 {
+      font-size: 24px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    
+    .logo p {
+      color: var(--text-secondary);
+      font-size: 14px;
+    }
+    
+    .step {
+      display: none;
+    }
+    
+    .step.active {
+      display: block;
+    }
+    
+    .step-header {
+      margin-bottom: 24px;
+    }
+    
+    .step-header h2 {
+      font-size: 20px;
+      margin-bottom: 8px;
+    }
+    
+    .step-header p {
+      color: var(--text-secondary);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    
+    .form-group {
+      margin-bottom: 20px;
+    }
+    
+    .form-group label {
+      display: block;
+      font-size: 14px;
+      font-weight: 500;
+      margin-bottom: 8px;
+      color: var(--text-secondary);
+    }
+    
+    .input-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    
+    .input-wrapper input {
+      width: 100%;
+      padding: 12px 16px;
+      padding-right: 100px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-primary);
+      font-size: 16px;
+      transition: border-color 0.2s;
+    }
+    
+    .input-wrapper input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    
+    .input-suffix {
+      position: absolute;
+      right: 16px;
+      color: var(--text-secondary);
+      font-size: 14px;
+    }
+    
+    .input-status {
+      margin-top: 8px;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    
+    .input-status.checking {
+      color: var(--text-secondary);
+    }
+    
+    .input-status.available {
+      color: var(--success);
+    }
+    
+    .input-status.taken {
+      color: var(--error);
+    }
+    
+    .input-status.error {
+      color: var(--error);
+    }
+    
+    .btn {
+      width: 100%;
+      padding: 14px 24px;
+      font-size: 16px;
+      font-weight: 500;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .btn-primary {
+      background: var(--accent);
+      color: white;
+    }
+    
+    .btn-primary:hover:not(:disabled) {
+      background: var(--accent-hover);
+    }
+    
+    .btn-primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    .btn-secondary {
+      background: transparent;
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+      margin-top: 12px;
+    }
+    
+    .btn-secondary:hover {
+      background: var(--bg-secondary);
+    }
+    
+    .mnemonic-box {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    
+    .mnemonic-words {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    
+    .mnemonic-word {
+      background: var(--bg-primary);
+      padding: 8px;
+      border-radius: 4px;
+      font-size: 13px;
+      text-align: center;
+    }
+    
+    .mnemonic-word span.num {
+      color: var(--text-secondary);
+      font-size: 11px;
+      margin-right: 4px;
+    }
+    
+    .warning-box {
+      background: rgba(245, 158, 11, 0.1);
+      border: 1px solid var(--warning);
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 20px;
+    }
+    
+    .warning-box h4 {
+      color: var(--warning);
+      font-size: 14px;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .warning-box p {
+      color: var(--text-secondary);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    
+    .checkbox-group {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    
+    .checkbox-group input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      margin-top: 2px;
+      accent-color: var(--accent);
+    }
+    
+    .checkbox-group label {
+      font-size: 14px;
+      color: var(--text-secondary);
+      cursor: pointer;
+    }
+    
+    .success-icon {
+      width: 80px;
+      height: 80px;
+      background: var(--success);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 24px;
+    }
+    
+    .success-icon svg {
+      width: 40px;
+      height: 40px;
+      color: white;
+    }
+    
+    .info-box {
+      background: var(--bg-secondary);
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 20px;
+    }
+    
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    
+    .info-row:last-child {
+      border-bottom: none;
+    }
+    
+    .info-row .label {
+      color: var(--text-secondary);
+      font-size: 13px;
+    }
+    
+    .info-row .value {
+      font-size: 14px;
+      font-family: monospace;
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    
+    .info-row .value a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+    
+    .info-row .value a:hover {
+      text-decoration: underline;
+    }
+    
+    .progress-dots {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 24px;
+    }
+    
+    .progress-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--border);
+    }
+    
+    .progress-dot.active {
+      background: var(--accent);
+    }
+    
+    .progress-dot.completed {
+      background: var(--success);
+    }
+    
+    .loading-spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid var(--text-secondary);
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    .copy-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      padding: 8px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.2s;
+    }
+    
+    .copy-btn:hover {
+      background: var(--bg-primary);
+      color: var(--text-primary);
+    }
+  </style>
+</head>
+<body>
+  <div class="setup-container">
+    <div class="setup-card">
+      <div class="logo">
+        <img src="/images/elastos-logo.webp" alt="PC2">
+        <h1>PC2 Setup</h1>
+        <p>Personal Cloud Computer</p>
+      </div>
+      
+      <!-- Step 1: Welcome -->
+      <div id="step-welcome" class="step active">
+        <div class="step-header">
+          <h2>Welcome to PC2</h2>
+          <p>Your personal, sovereign cloud computer. Let's set up your node in a few simple steps.</p>
+        </div>
+        <button class="btn btn-primary" onclick="goToStep('username')">Get Started</button>
+      </div>
+      
+      <!-- Step 2: Username -->
+      <div id="step-username" class="step">
+        <div class="step-header">
+          <h2>Choose Your Username</h2>
+          <p>This will be your public address for accessing your PC2 node from anywhere.</p>
+        </div>
+        <div class="form-group">
+          <label>Username</label>
+          <div class="input-wrapper">
+            <input 
+              type="text" 
+              id="username-input" 
+              placeholder="yourname"
+              autocomplete="off"
+              autocapitalize="off"
+              oninput="checkUsername()"
+            >
+            <span class="input-suffix">.ela.city</span>
+          </div>
+          <div id="username-status" class="input-status"></div>
+        </div>
+        <button id="btn-continue" class="btn btn-primary" disabled onclick="registerUsername()">Continue</button>
+        <button class="btn btn-secondary" onclick="goToStep('welcome')">Back</button>
+      </div>
+      
+      <!-- Step 3: Mnemonic -->
+      <div id="step-mnemonic" class="step">
+        <div class="step-header">
+          <h2>Backup Your Recovery Phrase</h2>
+          <p>Write down these 24 words in order. This is the only way to recover your node identity.</p>
+        </div>
+        <div class="mnemonic-box">
+          <div id="mnemonic-words" class="mnemonic-words"></div>
+          <button class="copy-btn" onclick="copyMnemonic()">Copy to Clipboard</button>
+        </div>
+        <div class="warning-box">
+          <h4>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+            </svg>
+            Important
+          </h4>
+          <p>Store this phrase securely. Anyone with these words can control your node. Never share it online.</p>
+        </div>
+        <div class="checkbox-group">
+          <input type="checkbox" id="mnemonic-confirm" onchange="updateConfirmButton()">
+          <label for="mnemonic-confirm">I have written down and securely stored my recovery phrase</label>
+        </div>
+        <button id="btn-confirm" class="btn btn-primary" disabled onclick="confirmMnemonic()">Continue</button>
+      </div>
+      
+      <!-- Step 4: Complete -->
+      <div id="step-complete" class="step">
+        <div class="success-icon">
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+          </svg>
+        </div>
+        <div class="step-header" style="text-align: center;">
+          <h2>Setup Complete!</h2>
+          <p>Your PC2 node is now running and accessible from anywhere.</p>
+        </div>
+        <div class="info-box">
+          <div class="info-row">
+            <span class="label">Your URL</span>
+            <span class="value"><a id="public-url" href="#" target="_blank"></a></span>
+          </div>
+          <div class="info-row">
+            <span class="label">Node ID</span>
+            <span class="value" id="node-id"></span>
+          </div>
+          <div class="info-row">
+            <span class="label">DID</span>
+            <span class="value" id="node-did"></span>
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="openDesktop()">Open Desktop</button>
+      </div>
+      
+      <div class="progress-dots" id="progress-dots">
+        <div class="progress-dot active" data-step="welcome"></div>
+        <div class="progress-dot" data-step="username"></div>
+        <div class="progress-dot" data-step="mnemonic"></div>
+        <div class="progress-dot" data-step="complete"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // State
+    let currentStep = 'welcome';
+    let username = '';
+    let mnemonic = '';
+    let nodeId = '';
+    let did = '';
+    let publicUrl = '';
+    let checkTimeout = null;
+    
+    // Initialize
+    document.addEventListener('DOMContentLoaded', async () => {
+      try {
+        const response = await fetch('/api/setup/status');
+        const status = await response.json();
+        
+        if (status.setupComplete) {
+          // Already set up, redirect to main app
+          window.location.href = '/';
+          return;
+        }
+        
+        // Go to appropriate step
+        if (status.step && status.step !== 'welcome') {
+          goToStep(status.step);
+        }
+      } catch (error) {
+        console.error('Failed to check setup status:', error);
+      }
+    });
+    
+    function goToStep(step) {
+      // Hide all steps
+      document.querySelectorAll('.step').forEach(el => el.classList.remove('active'));
+      
+      // Show target step
+      document.getElementById(`step-${step}`).classList.add('active');
+      
+      // Update progress dots
+      const steps = ['welcome', 'username', 'mnemonic', 'complete'];
+      const stepIndex = steps.indexOf(step);
+      
+      document.querySelectorAll('.progress-dot').forEach((dot, i) => {
+        dot.classList.remove('active', 'completed');
+        if (i < stepIndex) {
+          dot.classList.add('completed');
+        } else if (i === stepIndex) {
+          dot.classList.add('active');
+        }
+      });
+      
+      currentStep = step;
+      
+      // Focus username input if on that step
+      if (step === 'username') {
+        setTimeout(() => document.getElementById('username-input').focus(), 100);
+      }
+    }
+    
+    async function checkUsername() {
+      const input = document.getElementById('username-input');
+      const status = document.getElementById('username-status');
+      const btn = document.getElementById('btn-continue');
+      
+      username = input.value.toLowerCase().trim();
+      
+      // Clear previous timeout
+      if (checkTimeout) clearTimeout(checkTimeout);
+      
+      if (!username) {
+        status.textContent = '';
+        status.className = 'input-status';
+        btn.disabled = true;
+        return;
+      }
+      
+      // Validate format
+      if (!/^[a-z][a-z0-9-]{2,19}$/.test(username)) {
+        status.textContent = 'Username must be 3-20 chars, start with a letter, only a-z, 0-9, and -';
+        status.className = 'input-status error';
+        btn.disabled = true;
+        return;
+      }
+      
+      // Show checking status
+      status.innerHTML = '<span class="loading-spinner"></span> Checking availability...';
+      status.className = 'input-status checking';
+      btn.disabled = true;
+      
+      // Debounce API call
+      checkTimeout = setTimeout(async () => {
+        try {
+          const response = await fetch('/api/setup/check-username', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username })
+          });
+          
+          const result = await response.json();
+          
+          if (result.available) {
+            status.textContent = `✓ ${username}.ela.city is available!`;
+            status.className = 'input-status available';
+            btn.disabled = false;
+          } else {
+            status.textContent = result.error || `✗ ${username}.ela.city is already taken`;
+            status.className = 'input-status taken';
+            btn.disabled = true;
+          }
+        } catch (error) {
+          status.textContent = 'Failed to check availability';
+          status.className = 'input-status error';
+          btn.disabled = true;
+        }
+      }, 500);
+    }
+    
+    async function registerUsername() {
+      const btn = document.getElementById('btn-continue');
+      btn.disabled = true;
+      btn.textContent = 'Setting up...';
+      
+      try {
+        const response = await fetch('/api/setup/complete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, acknowledgedMnemonic: false })
+        });
+        
+        const result = await response.json();
+        
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to register username');
+        }
+        
+        // Store response data
+        nodeId = result.nodeId;
+        did = result.did;
+        publicUrl = result.publicUrl;
+        mnemonic = result.mnemonic;
+        
+        // Show mnemonic step if available
+        if (mnemonic) {
+          displayMnemonic();
+          goToStep('mnemonic');
+        } else {
+          showComplete();
+        }
+      } catch (error) {
+        alert('Error: ' + error.message);
+        btn.disabled = false;
+        btn.textContent = 'Continue';
+      }
+    }
+    
+    function displayMnemonic() {
+      const container = document.getElementById('mnemonic-words');
+      const words = mnemonic.split(' ');
+      
+      container.innerHTML = words.map((word, i) => 
+        `<div class="mnemonic-word"><span class="num">${i + 1}.</span>${word}</div>`
+      ).join('');
+    }
+    
+    function copyMnemonic() {
+      navigator.clipboard.writeText(mnemonic);
+      const btn = event.target;
+      btn.textContent = 'Copied!';
+      setTimeout(() => btn.textContent = 'Copy to Clipboard', 2000);
+    }
+    
+    function updateConfirmButton() {
+      const checkbox = document.getElementById('mnemonic-confirm');
+      const btn = document.getElementById('btn-confirm');
+      btn.disabled = !checkbox.checked;
+    }
+    
+    async function confirmMnemonic() {
+      const btn = document.getElementById('btn-confirm');
+      btn.disabled = true;
+      btn.textContent = 'Completing setup...';
+      
+      try {
+        const response = await fetch('/api/setup/acknowledge-mnemonic', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        
+        const result = await response.json();
+        
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to complete setup');
+        }
+        
+        showComplete();
+      } catch (error) {
+        alert('Error: ' + error.message);
+        btn.disabled = false;
+        btn.textContent = 'Continue';
+      }
+    }
+    
+    function showComplete() {
+      document.getElementById('public-url').textContent = publicUrl;
+      document.getElementById('public-url').href = publicUrl;
+      document.getElementById('node-id').textContent = nodeId ? nodeId.substring(0, 16) + '...' : 'N/A';
+      document.getElementById('node-did').textContent = did ? did.substring(0, 20) + '...' : 'N/A';
+      
+      goToStep('complete');
+    }
+    
+    function openDesktop() {
+      window.location.href = '/';
+    }
+  </script>
+</body>
+</html>

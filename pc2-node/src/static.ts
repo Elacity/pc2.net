@@ -7,6 +7,10 @@ import { dirname } from 'path';
 import https from 'https';
 import { isAPIRoute, isStaticAsset } from './utils/routes.js';
 
+// Data directory from environment or default
+const DATA_DIR = process.env.PC2_DATA_DIR || './data';
+const SETUP_COMPLETE_FILE = path.join(DATA_DIR, 'setup-complete');
+
 // ES module equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -1042,6 +1046,43 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
     next();
   });
   */
+
+  // Setup redirect middleware
+  // Redirect to /setup if setup is not complete and not already on setup/api routes
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    // Skip API routes, setup routes, and static assets
+    if (
+      req.path.startsWith('/api/') ||
+      req.path.startsWith('/setup') ||
+      req.path.startsWith('/health') ||
+      req.path.startsWith('/version') ||
+      isStaticAsset(req.path)
+    ) {
+      return next();
+    }
+    
+    // Check if setup is complete
+    if (!existsSync(SETUP_COMPLETE_FILE)) {
+      // Check if boson is enabled and username is not set
+      const bosonService = req.app.locals.bosonService;
+      const hasUsername = bosonService?.getUsernameService()?.hasUsername() || false;
+      
+      if (!hasUsername) {
+        // Redirect to setup wizard
+        console.log(`[Setup] Redirecting ${req.path} to /setup (setup not complete)`);
+        return res.redirect('/setup');
+      }
+    }
+    
+    next();
+  });
+  
+  // Serve setup wizard
+  app.use('/setup', express.static(path.join(frontendPath, 'setup'), {
+    setHeaders: (res: Response) => {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    }
+  }));
 
   // SPA fallback: serve index.html for all non-API GET requests
   // This must come AFTER static file serving and API routes

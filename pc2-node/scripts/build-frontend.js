@@ -21,6 +21,10 @@ const FRONTEND_DIST = join(GUI_DIR, 'dist');
 // Target is pc2-node/frontend (relative to script location)
 const TARGET_DIR = join(__dirname, '..', 'frontend');
 
+// Particle Auth paths - CRITICAL: Must sync after build to prevent stale bundles!
+const PARTICLE_AUTH_SOURCE = join(PROJECT_ROOT, 'packages/particle-auth/dist');
+const PARTICLE_AUTH_TARGET = join(PROJECT_ROOT, 'src/particle-auth');
+
 async function main() {
   console.log('🔨 Building frontend...');
   console.log(`   GUI directory: ${GUI_DIR}`);
@@ -436,6 +440,26 @@ async function main() {
 </html>`;
       writeFileSync(indexHtmlPath, HTML_TEMPLATE, 'utf8');
       console.log(`   ✅ Created: ${indexHtmlPath}`);
+    }
+
+    // CRITICAL: Sync particle-auth build to src/particle-auth
+    // The server checks multiple paths and src/particle-auth is found FIRST
+    // If we don't sync, stale bundles will be served causing debugging nightmares
+    if (existsSync(PARTICLE_AUTH_SOURCE)) {
+      console.log('\n📦 Syncing particle-auth build...');
+      
+      // Remove old particle-auth directory
+      if (existsSync(PARTICLE_AUTH_TARGET)) {
+        rmSync(PARTICLE_AUTH_TARGET, { recursive: true, force: true });
+        console.log('   🗑️  Removed old particle-auth');
+      }
+      
+      // Copy fresh build
+      cpSync(PARTICLE_AUTH_SOURCE, PARTICLE_AUTH_TARGET, { recursive: true });
+      console.log(`   ✅ Synced particle-auth: ${PARTICLE_AUTH_SOURCE} → ${PARTICLE_AUTH_TARGET}`);
+    } else {
+      console.warn(`\n⚠️  particle-auth dist not found: ${PARTICLE_AUTH_SOURCE}`);
+      console.warn('   Run: cd packages/particle-auth && npm run build');
     }
 
     console.log('\n✅ Frontend build complete!');

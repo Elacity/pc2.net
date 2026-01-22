@@ -73,8 +73,46 @@ export default {
             h += '</div>';
         }
         
-        // Login History (PC2 mode)
+        // PC2 Mode sections
         if (isPC2Mode) {
+            // ACCESS CONTROL SECTION (First - most important for security)
+            h += '<h2 style="font-size: 14px; margin: 25px 0 10px; color: #333;">Access Control</h2>';
+            h += '<p style="color: #666; margin-bottom: 15px; font-size: 12px;">Manage who can access your PC2 node.</p>';
+            
+            // Owner info
+            h += '<div class="settings-card">';
+            h += '<div style="flex: 1;">';
+            h += '<strong style="display:block;">Node Owner</strong>';
+            h += '<span id="owner-wallet" style="display:block; margin-top:5px; font-size: 12px; color: #666; font-family: monospace;">Loading...</span>';
+            h += '</div>';
+            h += '</div>';
+
+            // Add wallet - with proper height
+            h += '<div class="settings-card" style="flex-direction: column; align-items: stretch; height: auto !important; overflow: visible !important;">';
+            h += '<strong style="display:block; margin-bottom: 10px;">Add Wallet</strong>';
+            h += '<div style="display: flex; gap: 8px; align-items: center; flex-wrap: nowrap;">';
+            h += '<input type="text" id="add-wallet-address" placeholder="0x..." style="flex: 1; padding: 8px 10px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 12px; min-width: 100px;">';
+            h += '<select id="add-wallet-role" style="padding: 8px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px; width: 90px; flex-shrink: 0;">';
+            h += '<option value="member">Member</option>';
+            h += '<option value="admin">Admin</option>';
+            h += '</select>';
+            h += '<button id="btn-add-wallet" class="button" style="white-space: nowrap; flex-shrink: 0;">Add</button>';
+            h += '</div>';
+            h += '<div id="add-wallet-status" style="margin-top: 6px; font-size: 11px; min-height: 16px;"></div>';
+            h += '</div>';
+
+            // Allowed wallets list
+            h += '<div class="settings-card" style="flex-direction: column; align-items: stretch; height: auto !important; overflow: visible !important;">';
+            h += '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">';
+            h += '<strong>Allowed Wallets</strong>';
+            h += '<button id="btn-refresh-wallets" class="button" style="font-size: 11px; padding: 6px 12px; line-height: 1;">Refresh</button>';
+            h += '</div>';
+            h += '<div id="allowed-wallets-list" style="min-height: 40px;">';
+            h += '<div style="text-align: center; padding: 10px; color: #999; font-size: 12px;">Loading...</div>';
+            h += '</div>';
+            h += '</div>';
+
+            // Login History
             h += '<h2 style="font-size: 14px; margin: 25px 0 10px; color: #333;">Login History</h2>';
             h += '<div id="security-login-history" class="settings-card" style="flex-direction: column; align-items: stretch; height: auto !important; overflow: visible !important; min-height: 60px;">';
             h += '<div style="text-align: center; padding: 20px; color: #999;">Loading...</div>';
@@ -844,6 +882,100 @@ Please fetch the OpenAPI schema first to see all available tools and their param
             
             // Initial load
             loadApiKeys();
+            
+            // ACCESS CONTROL INIT
+            
+            // Load owner info
+            async function loadOwnerInfo() {
+                try {
+                    const response = await fetch(`${apiOrigin}/api/access/status`, { credentials: 'include' });
+                    const data = await response.json();
+                    const ownerEl = $el_window.find('#owner-wallet');
+                    if (data.ownerWallet) {
+                        const short = data.ownerWallet.substring(0, 10) + '...' + data.ownerWallet.substring(data.ownerWallet.length - 6);
+                        ownerEl.text(short).attr('title', data.ownerWallet);
+                    } else {
+                        ownerEl.text('Not set (first login will claim)').css('color', '#f59e0b');
+                    }
+                } catch (error) {
+                    $el_window.find('#owner-wallet').text('Error loading');
+                }
+            }
+            
+            // Load allowed wallets
+            async function loadAllowedWallets() {
+                const listEl = $el_window.find('#allowed-wallets-list');
+                listEl.html('<div style="text-align: center; padding: 10px; color: #999; font-size: 12px;">Loading...</div>');
+                try {
+                    const response = await fetch(`${apiOrigin}/api/access/list`, { credentials: 'include' });
+                    const data = await response.json();
+                    if (!data.success) {
+                        listEl.html(`<div style="color: #ef4444; padding: 10px; font-size: 12px;">${data.error || 'Failed to load'}</div>`);
+                        return;
+                    }
+                    const wallets = data.wallets || [];
+                    if (wallets.length === 0) {
+                        listEl.html('<div style="text-align: center; padding: 10px; color: #999; font-size: 12px;">No additional wallets added.</div>');
+                        return;
+                    }
+                    let html = '';
+                    for (const entry of wallets) {
+                        const shortWallet = entry.wallet.substring(0, 10) + '...' + entry.wallet.substring(entry.wallet.length - 4);
+                        const roleColor = entry.role === 'admin' ? '#3b82f6' : '#22c55e';
+                        html += `<div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #eee; font-size: 12px;">
+                            <div><span style="font-family: monospace;" title="${entry.wallet}">${shortWallet}</span>
+                            <span style="margin-left: 6px; padding: 1px 6px; background: ${roleColor}15; color: ${roleColor}; border-radius: 3px; font-size: 10px;">${entry.role}</span></div>
+                            <button class="button btn-remove-wallet" data-wallet="${entry.wallet}" style="font-size: 10px; padding: 3px 8px; color: #dc2626; border-color: #fca5a5;">Remove</button>
+                        </div>`;
+                    }
+                    listEl.html(html);
+                    listEl.find('.btn-remove-wallet').on('click', async function() {
+                        const wallet = $(this).data('wallet');
+                        if (!confirm('Remove this wallet?')) return;
+                        const resp = await fetch(`${apiOrigin}/api/access/remove`, {
+                            method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+                            credentials: 'include', body: JSON.stringify({ wallet })
+                        });
+                        const result = await resp.json();
+                        if (result.success) loadAllowedWallets();
+                        else alert(result.error || 'Failed');
+                    });
+                } catch (error) {
+                    listEl.html('<div style="color: #ef4444; padding: 10px; font-size: 12px;">Error loading</div>');
+                }
+            }
+            
+            // Add wallet handler
+            $el_window.find('#btn-add-wallet').on('click', async function() {
+                const wallet = $el_window.find('#add-wallet-address').val().trim().toLowerCase();
+                const role = $el_window.find('#add-wallet-role').val();
+                const statusEl = $el_window.find('#add-wallet-status');
+                const btn = $(this);
+                if (!wallet) { statusEl.html('<span style="color: #ef4444;">Enter wallet address</span>'); return; }
+                if (!/^0x[a-f0-9]{40}$/i.test(wallet)) { statusEl.html('<span style="color: #ef4444;">Invalid format</span>'); return; }
+                btn.prop('disabled', true).text('Adding...');
+                try {
+                    const resp = await fetch(`${apiOrigin}/api/access/add`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include', body: JSON.stringify({ wallet, role })
+                    });
+                    const result = await resp.json();
+                    if (result.success) {
+                        statusEl.html('<span style="color: #22c55e;">Added!</span>');
+                        $el_window.find('#add-wallet-address').val('');
+                        loadAllowedWallets();
+                        setTimeout(() => statusEl.html(''), 2000);
+                    } else {
+                        statusEl.html(`<span style="color: #ef4444;">${result.error}</span>`);
+                    }
+                } catch (e) { statusEl.html('<span style="color: #ef4444;">Error</span>'); }
+                btn.prop('disabled', false).text('Add');
+            });
+            
+            $el_window.find('#btn-refresh-wallets').on('click', () => loadAllowedWallets());
+            
+            loadOwnerInfo();
+            loadAllowedWallets();
         }
     },
 };

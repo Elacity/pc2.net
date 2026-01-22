@@ -6,8 +6,9 @@
  */
 
 import { Router, Request, Response } from 'express';
-import { existsSync, writeFileSync, mkdirSync } from 'fs';
+import { existsSync, writeFileSync, readFileSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
+import bcrypt from 'bcrypt';
 import { logger } from '../utils/logger.js';
 
 const router = Router();
@@ -15,6 +16,38 @@ const router = Router();
 // Data directory from environment or default
 const DATA_DIR = process.env.PC2_DATA_DIR || './data';
 const SETUP_COMPLETE_FILE = join(DATA_DIR, 'setup-complete');
+const NODE_CONFIG_FILE = join(DATA_DIR, 'node-config.json');
+
+// Node config interface
+interface NodeConfig {
+  antiSnipePasswordHash?: string;
+  ownerWallet?: string | null;
+  createdAt?: string;
+}
+
+// Helper to read node config
+function getNodeConfig(): NodeConfig {
+  try {
+    if (existsSync(NODE_CONFIG_FILE)) {
+      return JSON.parse(readFileSync(NODE_CONFIG_FILE, 'utf-8'));
+    }
+  } catch (e) {
+    logger.error('[Setup] Failed to read node config:', e);
+  }
+  return {};
+}
+
+// Helper to save node config
+function saveNodeConfig(config: NodeConfig): void {
+  const configDir = dirname(NODE_CONFIG_FILE);
+  if (!existsSync(configDir)) {
+    mkdirSync(configDir, { recursive: true });
+  }
+  writeFileSync(NODE_CONFIG_FILE, JSON.stringify(config, null, 2));
+}
+
+// Export for use by other modules
+export { getNodeConfig, saveNodeConfig, NODE_CONFIG_FILE };
 
 /**
  * Check if setup is needed
@@ -129,15 +162,19 @@ router.post('/check-username', async (req: Request, res: Response) => {
  * Register username and complete setup
  * POST /api/setup/complete
  * 
- * Simplified flow: just register username and mark complete.
- * Mnemonic will be encrypted on first login, not during setup.
+ * Accepts username and anti-snipe password.
+ * Password is hashed and stored; will be deleted after first wallet login.
  */
 router.post('/complete', async (req: Request, res: Response) => {
   try {
-    const { username } = req.body;
+    const { username, password } = req.body;
     
     if (!username || typeof username !== 'string') {
       return res.status(400).json({ success: false, error: 'Username is required' });
+    }
+    
+    if (!password || typeof password !== 'string' || password.length < 6) {
+      return res.status(400).json({ success: false, error: 'Password must be at least 6 characters' });
     }
     
     const bosonService = req.app.locals.bosonService;
@@ -157,6 +194,18 @@ router.post('/complete', async (req: Request, res: Response) => {
     const nodeId = bosonService.getNodeId();
     const did = bosonService.getDID();
     const publicUrl = result.publicUrl;
+    
+    // Hash the anti-snipe password
+    const passwordHash = await bcrypt.hash(password, 12);
+    
+    // Save node config with password hash (owner not yet set)
+    saveNodeConfig({
+      antiSnipePasswordHash: passwordHash,
+      ownerWallet: null,
+      createdAt: new Date().toISOString(),
+    });
+    
+    logger.info(`[Setup] Anti-snipe password set for node`);
     
     // Ensure data directory exists
     const setupDir = dirname(SETUP_COMPLETE_FILE);

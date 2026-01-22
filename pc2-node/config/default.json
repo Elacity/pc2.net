@@ -18,7 +18,7 @@
   },
   "boson": {
     "enabled": true,
-    "gateway_url": "http://69.164.241.210",
+    "gateway_url": "https://69.164.241.210",
     "public_domain": "ela.city",
     "auto_connect": true,
     "privacy_mode": false

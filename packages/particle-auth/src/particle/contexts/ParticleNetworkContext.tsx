@@ -14,6 +14,9 @@ import {
 } from '@particle-network/universal-account-sdk';
 import { Web3Provider } from '../provider/web3-provider';
 
+// BUILD VERSION MARKER - this confirms we're running the latest bundle
+console.log('[Particle Auth Context]: BUILD v2025.01.22.1830 loaded');
+
 // Smart Account Info interface for UniversalX
 interface SmartAccountInfo {
   ownerAddress: string;
@@ -246,11 +249,24 @@ const ParticleNetworkProvider: React.FC<React.PropsWithChildren<ParticleNetworkC
       const data = await response.json();
       
       // Determine if we're running in an iframe (embedded by UIWindowParticleLogin)
-      const isInIframe = window !== window.parent;
+      // Use multiple detection methods as some browsers/contexts may behave differently
+      let isInIframe = false;
+      try {
+        isInIframe = window !== window.parent || window.self !== window.top;
+      } catch (e) {
+        // Cross-origin iframe - we're definitely in an iframe
+        isInIframe = true;
+      }
+      
+      console.log('[Particle Auth]: isInIframe detection:', isInIframe, 
+        'window !== parent:', window !== window.parent,
+        'self !== top:', window.self !== window.top);
+      
       // Use parent.postMessage when in iframe, otherwise self
       const messageTarget = isInIframe ? window.parent : window;
       
       if (data.success) {
+        console.log('[Particle Auth]: Auth SUCCESS, posting to:', isInIframe ? 'parent' : 'self');
         messageTarget.postMessage({
           type: 'particle-auth.success',
           payload: {
@@ -262,14 +278,38 @@ const ParticleNetworkProvider: React.FC<React.PropsWithChildren<ParticleNetworkC
           }
         }, '*');
         
-        // Only redirect if NOT in iframe (standalone mode)
-        // When in iframe, UIWindowParticleLogin handles the redirect via message handler
+        // NEVER redirect when in iframe - let parent handle it via message
+        // Only redirect in standalone mode (when particle-auth is opened directly in a tab)
         if (!isInIframe && import.meta.env.VITE_DEV_SANDBOX !== 'true') {
-          // Redirect back to main app
+          console.log('[Particle Auth]: Standalone mode, redirecting to main app');
           window.location.href = `/?auth_token=${data.token}`;
+        } else {
+          console.log('[Particle Auth]: In iframe, NOT redirecting (parent handles it)');
         }
       } else {
-        console.error('Authentication failed:', data.message);
+        console.error('Authentication failed:', data.error, data.message);
+        
+        // Handle access denied - redirect to access-denied page
+        if (data.error === 'access_denied') {
+          console.log('[Particle Auth]: Access denied, redirecting to access-denied page');
+          const deniedUrl = `/access-denied?wallet=${encodeURIComponent(data.wallet || eoaAddress)}`;
+          
+          if (!isInIframe) {
+            window.location.href = deniedUrl;
+          } else {
+            // Tell parent to redirect
+            messageTarget.postMessage({
+              type: 'particle-auth.access-denied',
+              payload: {
+                wallet: data.wallet || eoaAddress,
+                message: data.message,
+                redirectUrl: deniedUrl,
+              }
+            }, '*');
+          }
+          return;
+        }
+        
         messageTarget.postMessage({
           type: 'particle-auth.error',
           payload: {
@@ -292,8 +332,15 @@ const ParticleNetworkProvider: React.FC<React.PropsWithChildren<ParticleNetworkC
   }, [eoaAddress, chainId, smartAccountInfo]);
 
   // Trigger auth when active AND smart account info is loaded (or after timeout)
+  // CRITICAL: Do NOT trigger auth in wallet mode - wallet iframe is for data operations only
   React.useEffect(() => {
     if (!active) return;
+    
+    // Skip auth callback in wallet mode - only the login iframe should do this
+    if (isWalletMode) {
+      console.log('[Particle Auth Wallet Mode]: Skipping auth callback (wallet mode)');
+      return;
+    }
     
     // Wait for Smart Account info to load, but don't wait forever
     const timeoutId = setTimeout(() => {
@@ -301,7 +348,7 @@ const ParticleNetworkProvider: React.FC<React.PropsWithChildren<ParticleNetworkC
     }, smartAccountInfo?.smartAccountAddress ? 0 : 2000); // Wait 2s for Smart Account, or send immediately if available
     
     return () => clearTimeout(timeoutId);
-  }, [active, smartAccountInfo, handleParticleAuthSuccess]);
+  }, [active, smartAccountInfo, handleParticleAuthSuccess, isWalletMode]);
 
   React.useEffect(() => {
     // Initialize timeout ID as undefined

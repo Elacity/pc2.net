@@ -265,6 +265,7 @@ const en = {
         search: 'Search',
         seconds: 'seconds',
         security: "Security",
+        access_control: "Access Control",
         select: "Select",
         selected: 'selected',
         select_color: 'Select color…',

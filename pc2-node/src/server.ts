@@ -1,6 +1,7 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
 import { Server } from 'http';
 import path from 'path';
+import cookieParser from 'cookie-parser';
 import { setupStaticServing } from './static.js';
 import { setupAPI } from './api/index.js';
 import { setupWebSocket, setGlobalIO } from './websocket/server.js';

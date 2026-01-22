@@ -1,4 +1,5 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
+import cookieParser from 'cookie-parser';
 import multer from 'multer';
 import { DatabaseManager, FilesystemManager } from '../storage/index.js';
 import { Config } from '../config/loader.js';
@@ -32,6 +33,7 @@ import { schedulerRouter } from './scheduler.js';
 import bosonRouter from './boson.js';
 import setupRouter from './setup.js';
 import updateRouter from './update.js';
+import accessControlRouter from './access-control.js';
 
 // Extend Express Request to include database, filesystem, config, and WebSocket
 declare global {
@@ -59,6 +61,9 @@ export function setupAPI(app: Express): void {
   
   // CORS middleware (applied to all routes)
   app.use(corsMiddleware);
+  
+  // Cookie parser (required for anti-snipe session cookies)
+  app.use(cookieParser());
 
   // Health check endpoint (no auth required)
   // Available at both /health and /api/health for Docker compatibility
@@ -328,6 +333,7 @@ export function setupAPI(app: Express): void {
   app.use('/api/boson', bosonRouter);
   app.use('/api/setup', setupRouter);
   app.use('/api/update', updateRouter);
+  app.use('/api/access', accessControlRouter);
   
   // Rate limit status endpoint
   app.get('/api/rate-limit/status', authenticate, (req: AuthenticatedRequest, res: Response) => {

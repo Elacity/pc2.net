@@ -47,7 +47,7 @@ export class BosonService {
 
   constructor(config: BosonConfig) {
     this.config = {
-      gatewayUrl: 'https://ela.city',
+      gatewayUrl: 'https://69.164.241.210',
       localPort: 4200,
       autoConnect: true,
       ...config,

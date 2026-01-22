@@ -178,6 +178,7 @@
       background: var(--accent);
       color: #000;
       font-weight: 600;
+      border: 1px solid transparent;
     }
     
     .btn-primary:hover:not(:disabled) {
@@ -194,7 +195,6 @@
       background: transparent;
       color: var(--text-secondary);
       border: 1px solid var(--border);
-      margin-top: 12px;
     }
     
     .btn-secondary:hover {
@@ -452,8 +452,50 @@
           </div>
           <div id="username-status" class="input-status"></div>
         </div>
-        <button id="btn-continue" class="btn btn-primary" disabled onclick="registerUsername()">Continue</button>
-        <button class="btn btn-secondary" onclick="goToStep('welcome')">Back</button>
+        
+        <!-- Anti-Snipe Protection -->
+        <div class="form-group" style="margin-top: -8px;">
+          <div class="step-header" style="margin-bottom: 8px;">
+            <h3 style="font-size: 16px; margin: 0;">Anti-Snipe Protection</h3>
+            <p style="font-size: 13px; color: var(--text-secondary); margin-top: 4px;">
+              One-time password to protect your node until you claim ownership with your wallet.
+            </p>
+          </div>
+          <div class="input-wrapper" style="position: relative;">
+            <input 
+              type="password" 
+              id="setup-password" 
+              placeholder="Create password (min 6 characters)"
+              autocomplete="new-password"
+              oninput="checkPassword()"
+              style="padding-right: 44px;"
+            >
+            <button 
+              type="button" 
+              onclick="togglePasswordVisibility()" 
+              style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; padding: 4px; color: var(--text-secondary);"
+              title="Show/hide password"
+            >
+              <svg id="eye-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+              <svg id="eye-off-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: none;">
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                <line x1="1" y1="1" x2="23" y2="23"></line>
+              </svg>
+            </button>
+          </div>
+          <div id="password-status" class="input-status"></div>
+          <p style="font-size: 11px; color: var(--text-secondary); margin-top: 8px;">
+            This password is encrypted locally and automatically deleted after your first wallet login.
+          </p>
+        </div>
+        
+        <div style="display: flex; gap: 12px;">
+          <button class="btn btn-secondary" style="flex: 1;" onclick="goToStep('welcome')">Back</button>
+          <button id="btn-continue" class="btn btn-primary" style="flex: 1;" disabled onclick="registerUsername()">Continue</button>
+        </div>
       </div>
       
       <!-- Step 3: Complete -->
@@ -590,10 +632,60 @@
       }
     }
     
+    // Track validation state
+    let usernameValid = false;
+    let passwordValid = false;
+    
+    function updateContinueButton() {
+      const btn = document.getElementById('btn-continue');
+      btn.disabled = !(usernameValid && passwordValid);
+    }
+    
+    function checkPassword() {
+      const password = document.getElementById('setup-password').value;
+      const status = document.getElementById('password-status');
+      
+      if (!password) {
+        status.textContent = '';
+        status.className = 'input-status';
+        passwordValid = false;
+        updateContinueButton();
+        return;
+      }
+      
+      if (password.length < 6) {
+        status.textContent = 'Password must be at least 6 characters';
+        status.className = 'input-status error';
+        passwordValid = false;
+        updateContinueButton();
+        return;
+      }
+      
+      status.textContent = '✓ Password set';
+      status.className = 'input-status available';
+      passwordValid = true;
+      updateContinueButton();
+    }
+    
+    function togglePasswordVisibility() {
+      const input = document.getElementById('setup-password');
+      const eyeIcon = document.getElementById('eye-icon');
+      const eyeOffIcon = document.getElementById('eye-off-icon');
+      
+      if (input.type === 'password') {
+        input.type = 'text';
+        eyeIcon.style.display = 'none';
+        eyeOffIcon.style.display = 'block';
+      } else {
+        input.type = 'password';
+        eyeIcon.style.display = 'block';
+        eyeOffIcon.style.display = 'none';
+      }
+    }
+    
     async function checkUsername() {
       const input = document.getElementById('username-input');
       const status = document.getElementById('username-status');
-      const btn = document.getElementById('btn-continue');
       
       username = input.value.toLowerCase().trim();
       
@@ -603,7 +695,8 @@
       if (!username) {
         status.textContent = '';
         status.className = 'input-status';
-        btn.disabled = true;
+        usernameValid = false;
+        updateContinueButton();
         return;
       }
       
@@ -611,14 +704,16 @@
       if (!/^[a-z][a-z0-9-]{2,19}$/.test(username)) {
         status.textContent = 'Username must be 3-20 chars, start with a letter, only a-z, 0-9, and -';
         status.className = 'input-status error';
-        btn.disabled = true;
+        usernameValid = false;
+        updateContinueButton();
         return;
       }
       
       // Show checking status
       status.innerHTML = '<span class="loading-spinner"></span> Checking availability...';
       status.className = 'input-status checking';
-      btn.disabled = true;
+      usernameValid = false;
+      updateContinueButton();
       
       // Debounce API call
       checkTimeout = setTimeout(async () => {
@@ -634,22 +729,26 @@
           if (result.available) {
             status.textContent = `✓ ${username}.ela.city is available!`;
             status.className = 'input-status available';
-            btn.disabled = false;
+            usernameValid = true;
           } else {
             status.textContent = result.error || `✗ ${username}.ela.city is already taken`;
             status.className = 'input-status taken';
-            btn.disabled = true;
+            usernameValid = false;
           }
+          updateContinueButton();
         } catch (error) {
           status.textContent = 'Failed to check availability';
           status.className = 'input-status error';
-          btn.disabled = true;
+          usernameValid = false;
+          updateContinueButton();
         }
       }, 500);
     }
     
     async function registerUsername() {
       const btn = document.getElementById('btn-continue');
+      const password = document.getElementById('setup-password').value;
+      
       btn.disabled = true;
       btn.textContent = 'Setting up...';
       
@@ -657,7 +756,7 @@
         const response = await fetch('/api/setup/complete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username })
+          body: JSON.stringify({ username, password })
         });
         
         const result = await response.json();

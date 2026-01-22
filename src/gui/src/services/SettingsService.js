@@ -21,6 +21,7 @@ import { Service } from '../definitions.js';
 import AboutTab from '../UI/Settings/UITabAbout.js';
 import AccountTab from '../UI/Settings/UITabAccount.js';
 import SecurityTab from '../UI/Settings/UITabSecurity.js';
+// AccessControlTab moved into SecurityTab
 import PersonalizationTab from '../UI/Settings/UITabPersonalization.js';
 import LanguageTag from '../UI/Settings/UITabLanguage.js';
 import PC2Tab from '../UI/Settings/UITabPC2.js';

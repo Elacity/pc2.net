@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PC2 - Access Required</title>
+  <link rel="icon" href="/favicon.ico">
+  <style>
+    :root {
+      /* Particle-style dark theme - matching login UI */
+      --bg-primary: #0c0c0e;
+      --bg-secondary: #1c1d22;
+      --bg-card: #1c1d22;
+      --text-primary: #ffffff;
+      --text-secondary: #888888;
+      --accent: #F0B90B;
+      --accent-hover: #d4a50a;
+      --success: #22c55e;
+      --error: #ef4444;
+      --warning: #f59e0b;
+      --border: #2a2b30;
+    }
+    
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    
+    .setup-container {
+      width: 100%;
+      max-width: 480px;
+    }
+    
+    .setup-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 40px;
+      box-shadow: 0 25px 80px rgba(0, 0, 0, 0.6);
+      width: 480px;
+      max-width: 90vw;
+    }
+    
+    .logo {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+    
+    .logo img {
+      height: 48px;
+    }
+    
+    .step-header {
+      margin-bottom: 24px;
+      text-align: center;
+    }
+    
+    .step-header h2 {
+      font-size: 20px;
+      margin-bottom: 8px;
+    }
+    
+    .step-header p {
+      color: var(--text-secondary);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    
+    .warning-box {
+      background: rgba(245, 158, 11, 0.1);
+      border: 1px solid var(--warning);
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 24px;
+    }
+    
+    .warning-box p {
+      color: var(--text-secondary);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    
+    .form-group {
+      margin-bottom: 20px;
+    }
+    
+    .form-group label {
+      display: block;
+      font-size: 14px;
+      font-weight: 500;
+      margin-bottom: 8px;
+      color: var(--text-secondary);
+    }
+    
+    .input-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    
+    .input-wrapper input {
+      width: 100%;
+      padding: 14px 16px;
+      padding-right: 44px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: var(--text-primary);
+      font-size: 16px;
+      transition: all 0.2s;
+    }
+    
+    .input-wrapper input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(240, 185, 11, 0.15);
+    }
+    
+    .toggle-password {
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 4px;
+      color: var(--text-secondary);
+    }
+    
+    .toggle-password:hover {
+      color: var(--text-primary);
+    }
+    
+    .error-message {
+      color: var(--error);
+      font-size: 13px;
+      margin-top: 8px;
+      display: none;
+    }
+    
+    .error-message.show {
+      display: block;
+    }
+    
+    .btn {
+      width: 100%;
+      padding: 14px 24px;
+      font-size: 16px;
+      font-weight: 600;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .btn-primary {
+      background: var(--accent);
+      color: #000;
+      font-weight: 600;
+      border: 1px solid transparent;
+    }
+    
+    .btn-primary:hover:not(:disabled) {
+      background: var(--accent-hover);
+      transform: translateY(-1px);
+    }
+    
+    .btn-primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    .loading-spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(0, 0, 0, 0.3);
+      border-top-color: #000;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    /* Elacity Labs branding - matches Particle login */
+    .presented-by {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: rgba(0, 0, 0, 0.5);
+      border-radius: 8px;
+      backdrop-filter: blur(8px);
+      text-decoration: none;
+      cursor: pointer;
+      transition: background 0.2s ease, transform 0.2s ease;
+      z-index: 1000;
+    }
+    
+    .presented-by:hover {
+      background: rgba(0, 0, 0, 0.7);
+      transform: translateY(-2px);
+    }
+    
+    .presented-by span {
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 12px;
+      font-weight: 400;
+    }
+    
+    .presented-by:hover span {
+      color: rgba(255, 255, 255, 0.9);
+    }
+    
+    .presented-by img {
+      height: 16px;
+      width: auto;
+      opacity: 0.9;
+    }
+    
+    .presented-by:hover img {
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+  <div class="setup-container">
+    <div class="setup-card">
+      <div class="logo">
+        <img src="/images/elastos-logo.webp" alt="Elastos">
+      </div>
+      
+      <div class="step-header">
+        <h2>Access Required</h2>
+        <p>Enter the password to access this node</p>
+      </div>
+      
+      <div class="warning-box">
+        <p>This password was set by the node owner during setup. It protects the node until ownership is claimed with a wallet.</p>
+      </div>
+      
+      <form id="access-form" onsubmit="verifyPassword(event)">
+        <div class="form-group">
+          <label for="password">Password</label>
+          <div class="input-wrapper">
+            <input 
+              type="password" 
+              id="password" 
+              placeholder="Enter password"
+              autocomplete="current-password"
+              required
+            >
+            <button 
+              type="button" 
+              onclick="togglePasswordVisibility()" 
+              class="toggle-password"
+              title="Show/hide password"
+            >
+              <svg id="eye-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+              <svg id="eye-off-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: none;">
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                <line x1="1" y1="1" x2="23" y2="23"></line>
+              </svg>
+            </button>
+          </div>
+          <div id="error-message" class="error-message"></div>
+        </div>
+        
+        <button type="submit" id="submit-btn" class="btn btn-primary">
+          <span id="btn-text">Continue</span>
+        </button>
+      </form>
+    </div>
+  </div>
+  
+  <script>
+    function togglePasswordVisibility() {
+      const input = document.getElementById('password');
+      const eyeIcon = document.getElementById('eye-icon');
+      const eyeOffIcon = document.getElementById('eye-off-icon');
+      
+      if (input.type === 'password') {
+        input.type = 'text';
+        eyeIcon.style.display = 'none';
+        eyeOffIcon.style.display = 'block';
+      } else {
+        input.type = 'password';
+        eyeIcon.style.display = 'block';
+        eyeOffIcon.style.display = 'none';
+      }
+    }
+    
+    async function verifyPassword(event) {
+      event.preventDefault();
+      
+      const password = document.getElementById('password').value;
+      const errorEl = document.getElementById('error-message');
+      const btn = document.getElementById('submit-btn');
+      const btnText = document.getElementById('btn-text');
+      
+      if (!password) {
+        errorEl.textContent = 'Please enter a password';
+        errorEl.classList.add('show');
+        return;
+      }
+      
+      // Show loading state
+      btn.disabled = true;
+      btnText.innerHTML = '<span class="loading-spinner"></span>Verifying...';
+      errorEl.classList.remove('show');
+      
+      try {
+        const response = await fetch('/api/access/verify-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password }),
+          credentials: 'include' // Include cookies
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          // Redirect to main app
+          window.location.href = '/';
+        } else {
+          errorEl.textContent = result.error || 'Invalid password';
+          errorEl.classList.add('show');
+          btn.disabled = false;
+          btnText.textContent = 'Continue';
+        }
+      } catch (error) {
+        errorEl.textContent = 'Failed to verify password. Please try again.';
+        errorEl.classList.add('show');
+        btn.disabled = false;
+        btnText.textContent = 'Continue';
+      }
+    }
+    
+    // Focus password input on load
+    document.getElementById('password').focus();
+  </script>
+  
+  <!-- Elacity Labs branding -->
+  <a href="https://elacitylabs.com" target="_blank" rel="noopener noreferrer" class="presented-by">
+    <span>Presented by</span>
+    <img src="/images/elacity-labs-logo.svg" alt="Elacity Labs" onerror="this.style.display='none'">
+  </a>
+</body>
+</html>

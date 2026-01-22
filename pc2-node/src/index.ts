@@ -114,7 +114,7 @@ async function main() {
       const dataDir = dirname(DB_PATH);
       bosonService = new BosonService({
         dataDir,
-        gatewayUrl: bosonConfig.gateway_url || 'https://demo.ela.city',
+        gatewayUrl: bosonConfig.gateway_url || 'https://69.164.241.210',
         publicDomain: bosonConfig.public_domain || 'ela.city',
         localPort: PORT,
         autoConnect: bosonConfig.auto_connect !== false,

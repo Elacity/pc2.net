@@ -1250,13 +1250,13 @@ function initEdgeHoverTrigger() {
     // Remove existing trigger if any
     $('#sidebar-edge-trigger').remove();
     
-    // Create invisible edge trigger zone
+    // Create invisible edge trigger zone - wider for easier activation
     const edgeTrigger = $(`
         <div id="sidebar-edge-trigger" style="
             position: fixed;
             top: 0;
             right: 0;
-            width: 8px;
+            width: 20px;
             height: 100vh;
             z-index: 9990;
             cursor: e-resize;
@@ -1268,16 +1268,16 @@ function initEdgeHoverTrigger() {
     
     edgeTrigger.on('mouseenter', function() {
         // Don't trigger if sidebar is already open or user not logged in
-        if (sidebarInstance || !window.user?.wallet_address) return;
+        if (sidebarInstance || !(window.user?.wallet_address || window.user?.smart_account_address)) return;
         
         isHovering = true;
         
-        // Small delay to prevent accidental triggers
+        // Short delay for responsive feel while preventing accidental triggers
         hoverTimeout = setTimeout(() => {
             if (isHovering && !sidebarInstance) {
                 UIAccountSidebar();
             }
-        }, 150);
+        }, 50);
     });
     
     edgeTrigger.on('mouseleave', function() {

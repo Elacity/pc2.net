@@ -1,4 +1,5 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
+import cookieParser from 'cookie-parser';
 import path from 'path';
 import { existsSync, readFileSync, statSync } from 'fs';
 import fs from 'fs';
@@ -6,6 +7,8 @@ import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import https from 'https';
 import { isAPIRoute, isStaticAsset } from './utils/routes.js';
+import { verifyAntiSnipeSession } from './api/access-control.js';
+import { getNodeConfig } from './api/setup.js';
 
 // Data directory from environment or default
 const DATA_DIR = process.env.PC2_DATA_DIR || './data';
@@ -56,6 +59,9 @@ export interface StaticOptions {
  */
 export function setupStaticServing(app: Express, options: StaticOptions): void {
   const { frontendPath, isProduction } = options;
+
+  // Cookie parser (required for anti-snipe session cookies)
+  app.use(cookieParser());
 
   // Verify frontend directory exists
   if (!existsSync(frontendPath)) {
@@ -204,6 +210,22 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
         // Redirect to setup wizard
         console.log(`[Setup] Redirecting ${req.path} to /setup (needs username setup)`);
         return res.redirect('/setup');
+      }
+    }
+    
+    // Anti-snipe gate: Check if owner is set, if not require password
+    const nodeConfig = getNodeConfig();
+    if (!nodeConfig.ownerWallet && nodeConfig.antiSnipePasswordHash) {
+      // Skip access-gate route to prevent redirect loop
+      if (req.path.startsWith('/access-gate')) {
+        return next();
+      }
+      
+      // Check for valid session cookie
+      const sessionToken = req.cookies?.antiSnipeSession;
+      if (!sessionToken || !verifyAntiSnipeSession(sessionToken)) {
+        console.log(`[AntiSnipe] Redirecting ${req.path} to /access-gate (password required)`);
+        return res.redirect('/access-gate');
       }
     }
     
@@ -1111,6 +1133,20 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
 
   // Serve setup wizard (redirect middleware is registered earlier in the file)
   app.use('/setup', express.static(path.join(frontendPath, 'setup'), {
+    setHeaders: (res: Response) => {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    }
+  }));
+
+  // Serve access gate page (anti-snipe password entry)
+  app.use('/access-gate', express.static(path.join(frontendPath, 'access-gate'), {
+    setHeaders: (res: Response) => {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    }
+  }));
+
+  // Serve access denied page (unauthorized wallet)
+  app.use('/access-denied', express.static(path.join(frontendPath, 'access-denied'), {
     setHeaders: (res: Response) => {
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     }

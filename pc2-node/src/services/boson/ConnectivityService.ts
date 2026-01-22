@@ -47,7 +47,7 @@ const DEFAULT_SUPER_NODES: SuperNode[] = [
     address: '69.164.241.210',
     port: 39001,
     proxyPort: 8090,
-    gatewayUrl: 'http://69.164.241.210',
+    gatewayUrl: 'https://69.164.241.210',
   },
   // Contabo VPS - secondary node for failover
   {
@@ -55,7 +55,7 @@ const DEFAULT_SUPER_NODES: SuperNode[] = [
     address: '38.242.211.112',
     port: 39001,
     proxyPort: 8090,
-    gatewayUrl: 'http://38.242.211.112',
+    gatewayUrl: 'https://38.242.211.112',
   },
 ];
 

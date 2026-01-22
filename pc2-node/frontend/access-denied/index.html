@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PC2 - Access Denied</title>
+  <link rel="icon" href="/favicon.ico">
+  <style>
+    :root {
+      --bg-primary: #0c0c0e;
+      --bg-secondary: #1c1d22;
+      --bg-card: #1c1d22;
+      --text-primary: #ffffff;
+      --text-secondary: #888888;
+      --accent: #F0B90B;
+      --accent-hover: #d4a50a;
+      --error: #ef4444;
+      --warning: #f59e0b;
+      --border: #2a2b30;
+    }
+    
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    
+    .container {
+      width: 100%;
+      max-width: 480px;
+    }
+    
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 40px;
+      box-shadow: 0 25px 80px rgba(0, 0, 0, 0.6);
+      text-align: center;
+    }
+    
+    .icon-container {
+      width: 72px;
+      height: 72px;
+      margin: 0 auto 24px;
+      background: rgba(239, 68, 68, 0.15);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .icon-container svg {
+      width: 36px;
+      height: 36px;
+      color: var(--error);
+    }
+    
+    h1 {
+      font-size: 24px;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+    
+    .message {
+      color: var(--text-secondary);
+      font-size: 15px;
+      line-height: 1.6;
+      margin-bottom: 24px;
+    }
+    
+    .wallet-box {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 24px;
+    }
+    
+    .wallet-label {
+      font-size: 12px;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+    
+    .wallet-address {
+      font-family: 'Monaco', 'Menlo', monospace;
+      font-size: 13px;
+      color: var(--text-primary);
+      word-break: break-all;
+    }
+    
+    .info-box {
+      background: rgba(245, 158, 11, 0.1);
+      border: 1px solid var(--warning);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 24px;
+      text-align: left;
+    }
+    
+    .info-box h3 {
+      font-size: 14px;
+      color: var(--warning);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .info-box p {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+    
+    .info-box ol {
+      margin: 12px 0 0 20px;
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.8;
+    }
+    
+    .btn {
+      display: inline-block;
+      padding: 14px 32px;
+      font-size: 16px;
+      font-weight: 600;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-decoration: none;
+    }
+    
+    .btn-primary {
+      background: var(--accent);
+      color: #000;
+    }
+    
+    .btn-primary:hover {
+      background: var(--accent-hover);
+      transform: translateY(-1px);
+    }
+    
+    .btn-secondary {
+      background: transparent;
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+      margin-left: 12px;
+    }
+    
+    .btn-secondary:hover {
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+    }
+    
+    .buttons {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    
+    .copy-btn {
+      background: none;
+      border: none;
+      color: var(--accent);
+      font-size: 12px;
+      cursor: pointer;
+      padding: 4px 8px;
+      margin-top: 8px;
+    }
+    
+    .copy-btn:hover {
+      text-decoration: underline;
+    }
+    
+    /* Elacity Labs branding */
+    .presented-by {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: rgba(0, 0, 0, 0.5);
+      border-radius: 8px;
+      backdrop-filter: blur(8px);
+      text-decoration: none;
+      cursor: pointer;
+      transition: background 0.2s ease, transform 0.2s ease;
+      z-index: 1000;
+    }
+    
+    .presented-by:hover {
+      background: rgba(0, 0, 0, 0.7);
+      transform: translateY(-2px);
+    }
+    
+    .presented-by span {
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 12px;
+    }
+    
+    .presented-by img {
+      height: 16px;
+      width: auto;
+      opacity: 0.9;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="icon-container">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="15" y1="9" x2="9" y2="15"></line>
+          <line x1="9" y1="9" x2="15" y2="15"></line>
+        </svg>
+      </div>
+      
+      <h1>Access Denied</h1>
+      
+      <p class="message">
+        Your wallet is not authorized to access this PC2 node. 
+        The node owner must add your wallet address to the access list.
+      </p>
+      
+      <div class="wallet-box">
+        <div class="wallet-label">Your Wallet Address</div>
+        <div class="wallet-address" id="wallet-address">Loading...</div>
+        <button class="copy-btn" onclick="copyWallet()">Copy to clipboard</button>
+      </div>
+      
+      <div class="info-box">
+        <h3>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="16" x2="12" y2="12"></line>
+            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+          </svg>
+          How to get access
+        </h3>
+        <p>To access this node, ask the owner to:</p>
+        <ol>
+          <li>Open <strong>Settings → Access Control</strong></li>
+          <li>Click <strong>Add Wallet</strong></li>
+          <li>Paste your wallet address above</li>
+          <li>Select a role (Member or Admin)</li>
+        </ol>
+      </div>
+      
+      <div class="buttons">
+        <a href="/" class="btn btn-primary">Try Again</a>
+        <button class="btn btn-secondary" onclick="copyWallet()">Copy Wallet</button>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    // Get wallet from URL params
+    const params = new URLSearchParams(window.location.search);
+    const wallet = params.get('wallet') || 'Unknown';
+    
+    document.getElementById('wallet-address').textContent = wallet;
+    
+    function copyWallet() {
+      navigator.clipboard.writeText(wallet).then(() => {
+        const btn = event.target;
+        const originalText = btn.textContent;
+        btn.textContent = 'Copied!';
+        setTimeout(() => {
+          btn.textContent = originalText;
+        }, 2000);
+      });
+    }
+  </script>
+  
+  <a href="https://elacitylabs.com" target="_blank" rel="noopener noreferrer" class="presented-by">
+    <span>Presented by</span>
+    <img src="/images/elacity-labs-logo.svg" alt="Elacity Labs" onerror="this.style.display='none'">
+  </a>
+</body>
+</html>

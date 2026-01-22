@@ -26,6 +26,33 @@ npm start
 
 ---
 
+## ⚠️ CRITICAL: Particle Auth Build Sync
+
+**When rebuilding `packages/particle-auth`, you MUST sync to `src/particle-auth`:**
+
+```bash
+# After making changes to packages/particle-auth:
+cd /Users/mtk/Documents/Cursor/pc2.net/packages/particle-auth
+npm run build
+
+# CRITICAL: Sync the build to src/particle-auth (server serves from here!)
+rm -rf /Users/mtk/Documents/Cursor/pc2.net/src/particle-auth
+cp -r /Users/mtk/Documents/Cursor/pc2.net/packages/particle-auth/dist /Users/mtk/Documents/Cursor/pc2.net/src/particle-auth
+
+# Then restart server
+cd /Users/mtk/Documents/Cursor/pc2.net/pc2-node
+npm start
+```
+
+**Why?** The server checks multiple paths for particle-auth files (`pc2-node/src/static.ts`). If `src/particle-auth/` exists, it's served FIRST. Failing to sync after rebuild will serve stale bundles!
+
+**Symptoms of stale bundle:**
+- Debug logs don't appear in console
+- Code changes don't take effect
+- Browser shows old bundle hash (check Network tab → index-*.js filename)
+
+---
+
 ## 🎯 Vision Statement
 
 **"Puter runs ON the PC2 node itself - a self-contained software package that users install on their hardware (Raspberry Pi, VPS, Mac, etc.), accessible via a unique URL, with wallet-based decentralized identity."**

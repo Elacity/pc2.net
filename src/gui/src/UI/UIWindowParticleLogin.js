@@ -131,6 +131,15 @@ async function UIWindowParticleLogin(options = {}) {
                     });
                 }
             }
+            
+            // Handle access denied - redirect to access-denied page
+            if (type === 'particle-auth.access-denied') {
+                console.log('[Particle Auth]: Access denied for wallet:', payload?.wallet);
+                // Close the login window
+                $(el_window).close();
+                // Redirect to access denied page
+                window.location.href = payload?.redirectUrl || `/access-denied?wallet=${encodeURIComponent(payload?.wallet || '')}`;
+            }
         };
         
         window.addEventListener('message', messageHandler);

@@ -1622,14 +1622,16 @@ $(document).on('click', '.btn-hide-ai', function (e) {
 
 // Send message
 $(document).on('click', '.btn-send-ai', function () {
-    sendAIMessage();
+    const $container = $(this).closest('.ai-window-panel, .ai-chat-panel');
+    sendAIMessage($container);
 });
 
 // Send message on Enter key (Shift+Enter for new line)
 $(document).on('keydown', '.ai-chat-input', function (e) {
     if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        sendAIMessage();
+        const $container = $(this).closest('.ai-window-panel, .ai-chat-panel');
+        sendAIMessage($container);
     }
 });
 
@@ -2266,8 +2268,10 @@ function resendFromEditedMessage(messageContent) {
 }
 
 // Send AI message function with streaming support
-async function sendAIMessage() {
-    const chatInput = $('.ai-chat-input');
+async function sendAIMessage($container) {
+    // Use container-scoped selectors if provided, otherwise fall back to global
+    const $scope = $container && $container.length ? $container : $(document);
+    const chatInput = $scope.find('.ai-chat-input').length ? $scope.find('.ai-chat-input') : $('.ai-chat-input');
     const chatInputValue = chatInput.val().trim();
     
     if (!chatInputValue && attachedFiles.length === 0) {
@@ -2341,7 +2345,8 @@ async function sendAIMessage() {
         messageDisplay += '</div>';
     }
     
-    $('.ai-chat-messages').append(
+    const $messages = $scope.find('.ai-chat-messages').length ? $scope.find('.ai-chat-messages') : $('.ai-chat-messages');
+    $messages.append(
         `<div class="ai-chat-message ai-chat-message-user-wrapper" id="${userMessageId}" data-message-id="${userMessageId}">
             <div class="ai-chat-message-user">${messageDisplay}</div>
                 <div class="ai-message-footer">
@@ -2354,7 +2359,8 @@ async function sendAIMessage() {
     );
     }
     
-    $('.ai-chat-messages').addClass('active');
+    const $messagesContainer = $scope.find('.ai-chat-messages').length ? $scope.find('.ai-chat-messages') : $('.ai-chat-messages');
+    $messagesContainer.addClass('active');
     
     // Add to history only if not resending an edited message
     if (!isResendingEdit) {
@@ -2378,16 +2384,17 @@ async function sendAIMessage() {
     updateAttachedFilesDisplay();
     
     // Disable send button and input while processing
-    const sendBtn = $('.btn-send-ai');
+    const sendBtn = $scope.find('.btn-send-ai').length ? $scope.find('.btn-send-ai') : $('.btn-send-ai');
     sendBtn.prop('disabled', true);
     chatInput.prop('disabled', true);
     
     // Get selected model
-    const selectedModel = $('.ai-model-select').val() || 'ollama:deepseek-r1:1.5b';
+    const $modelSelect = $scope.find('.ai-model-select').length ? $scope.find('.ai-model-select') : $('.ai-model-select');
+    const selectedModel = $modelSelect.val() || 'ollama:deepseek-r1:1.5b';
     
     // Create AI message container for streaming with enhanced loading indicator
     const aiMessageId = 'msg-ai-' + Date.now();
-    $('.ai-chat-messages').append(
+    $messagesContainer.append(
         `<div class="ai-chat-message" id="${aiMessageId}">
             <div class="ai-chat-message-ai ai-streaming">
                 <div class="ai-loading-indicator ai-loading-connecting">

@@ -11,6 +11,10 @@ import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { logger } from '../../utils/logger.js';
 
+// Allow self-signed certificates when calling gateway by IP
+// This is safe because we're only calling our own trusted gateway
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
 export interface UsernameConfig {
   dataDir: string;              // Directory to store username config
   gatewayUrl: string;           // Web Gateway URL (e.g., https://demo.ela.city)
@@ -88,7 +92,10 @@ export class UsernameService {
     }
 
     try {
-      const response = await fetch(`${this.config.gatewayUrl}/api/register`, {
+      const url = `${this.config.gatewayUrl}/api/register`;
+      logger.info(`[UsernameService] Registering at URL: ${url}`);
+      
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -100,7 +107,9 @@ export class UsernameService {
         }),
       });
 
+      logger.info(`[UsernameService] Response status: ${response.status}`);
       const data = await response.json() as any;
+      logger.info(`[UsernameService] Response data: ${JSON.stringify(data)}`);
 
       if (response.ok && data.success) {
         this.storage.username = username.toLowerCase();

@@ -13,6 +13,7 @@ import { AuthenticatedRequest } from './middleware.js';
 import { FilesystemManager } from '../storage/filesystem.js';
 import { logger } from '../utils/logger.js';
 import crypto from 'crypto';
+import { getNodeConfig, saveNodeConfig } from './setup.js';
 
 /**
  * Authenticate with Particle Auth
@@ -61,14 +62,60 @@ export async function handleParticleAuth(req: Request, res: Response): Promise<v
     // Normalize wallet address
     const normalizedWallet = wallet_address.toLowerCase();
 
-    // MULTI-USER MODE: Allow any wallet to create an account
-    // No owner restriction - each wallet gets its own isolated account
-    // Files are already isolated per wallet_address in the database
+    // ACCESS CONTROL: Check if this wallet is allowed to access this node
+    const nodeConfig = getNodeConfig();
     
-    logger.info('🔐 User authentication', {
-      wallet: normalizedWallet.substring(0, 10) + '...',
-      mode: 'multi-user' // All wallets can create accounts
-    });
+    // If owner is set, verify this wallet is authorized
+    if (nodeConfig.ownerWallet) {
+      const isOwner = nodeConfig.ownerWallet === normalizedWallet;
+      const allowedWallets = nodeConfig.allowedWallets || [];
+      const isAllowed = allowedWallets.some((w: { wallet: string }) => w.wallet === normalizedWallet);
+      
+      if (!isOwner && !isAllowed) {
+        logger.warn('🚫 Access denied for wallet', {
+          wallet: normalizedWallet.substring(0, 10) + '...',
+          owner: nodeConfig.ownerWallet.substring(0, 10) + '...',
+          reason: 'Not owner or in allowed list'
+        });
+        
+        res.status(403).json({
+          error: 'access_denied',
+          message: 'You are not authorized to access this node. The node owner must add your wallet address to the access list.',
+          wallet: normalizedWallet
+        });
+        return;
+      }
+      
+      logger.info('🔐 User authorized', {
+        wallet: normalizedWallet.substring(0, 10) + '...',
+        role: isOwner ? 'owner' : 'member'
+      });
+    } else {
+      // No owner set yet - this wallet will claim ownership
+      logger.info('🔐 No owner set - first wallet will claim', {
+        wallet: normalizedWallet.substring(0, 10) + '...'
+      });
+      
+      // CLAIM OWNERSHIP IMMEDIATELY: First wallet to login becomes owner
+      // This must happen BEFORE session checks to ensure it always runs
+      try {
+        logger.info(`🔐 Claiming ownership with EOA: ${normalizedWallet}`, {
+          eoaAddress: normalizedWallet,
+          smartAccountAddress: smart_account_address || 'none',
+          note: 'Using EOA as owner, not smart account'
+        });
+        
+        // Set owner (EOA) and DELETE the anti-snipe password
+        const updatedConfig = { ...nodeConfig };
+        updatedConfig.ownerWallet = normalizedWallet; // EOA address
+        delete updatedConfig.antiSnipePasswordHash; // PERMANENTLY DELETE
+        
+        saveNodeConfig(updatedConfig);
+        logger.info(`✅ Ownership claimed by EOA ${normalizedWallet}, anti-snipe password deleted`);
+      } catch (ownershipError) {
+        logger.error('Failed to claim ownership:', ownershipError instanceof Error ? ownershipError.message : 'Unknown');
+      }
+    }
 
     // Create or get user
     db.createOrUpdateUser(normalizedWallet, smart_account_address || null);

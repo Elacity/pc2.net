@@ -580,14 +580,25 @@ window.initgui = async function(options){
             try{
                 whoami = await puter.os.user({query: 'icon_size=64'});
             }catch(e){
+                console.warn('[initgui]: whoami call failed:', e.message || e);
                 if(e.status === 401){
                     bad_session_logout();
                     return;
                 }
+                // For other errors, try to proceed with cached user data
+                if (window.user) {
+                    console.log('[initgui]: Using cached user data from localStorage');
+                    whoami = window.user;
+                }
             }
         }
-        // update local user data
-        if(whoami){
+        // update local user data - proceed even with cached data
+        if(whoami || window.user){
+            // Use cached user if whoami failed
+            if (!whoami && window.user) {
+                whoami = window.user;
+                console.log('[initgui]: Proceeding with cached user data');
+            }
             // is email confirmation required?
             if(whoami.requires_email_confirmation){
                 let is_verified;
@@ -617,15 +628,40 @@ window.initgui = async function(options){
                 window.desktop_loaded = true; // Mark as loaded
                 INITGUI_DEBUG && console.log('[initgui]: Loading desktop for path:', window.desktop_path);
                 await window.get_auto_arrange_data()
-                puter.fs.stat(window.desktop_path, async function(desktop_fsentry){
-                    INITGUI_DEBUG && console.log('[initgui]: puter.fs.stat callback, calling UIDesktop');
+                
+                // Use Promise-based stat with proper error handling
+                try {
+                    const desktop_fsentry = await new Promise((resolve, reject) => {
+                        const timeoutId = setTimeout(() => {
+                            reject(new Error('Desktop stat timeout after 10s'));
+                        }, 10000);
+                        
+                        puter.fs.stat(window.desktop_path, (result) => {
+                            clearTimeout(timeoutId);
+                            if (result) {
+                                resolve(result);
+                            } else {
+                                // If no result, still proceed with empty fsentry
+                                resolve(null);
+                            }
+                        });
+                    });
+                    
+                    INITGUI_DEBUG && console.log('[initgui]: puter.fs.stat success, calling UIDesktop');
                     // Mark initialization as complete when desktop loads
                     window.initgui_in_progress = false;
                     window.initgui_completed = true;
                     UIDesktop({desktop_fsentry: desktop_fsentry});
                     // Initialize keyboard shortcuts
                     initKeyboardShortcuts();
-                })
+                } catch (statError) {
+                    console.warn('[initgui]: Desktop stat failed, loading desktop anyway:', statError.message);
+                    // Still load desktop even if stat fails - better than grey screen
+                    window.initgui_in_progress = false;
+                    window.initgui_completed = true;
+                    UIDesktop({desktop_fsentry: null});
+                    initKeyboardShortcuts();
+                }
             }
             // -------------------------------------------------------------------------------------
             // If embedded in a popup, send the token to the opener and close the popup
@@ -1066,9 +1102,26 @@ window.initgui = async function(options){
         if(!window.embedded_in_popup){
             window.desktop_loaded = true; // Mark as loaded to prevent duplicates
             await window.get_auto_arrange_data();
-            puter.fs.stat(window.desktop_path, function (desktop_fsentry) {
+            
+            // Use Promise-based stat with proper error handling
+            try {
+                const desktop_fsentry = await new Promise((resolve, reject) => {
+                    const timeoutId = setTimeout(() => {
+                        reject(new Error('Desktop stat timeout'));
+                    }, 10000);
+                    
+                    puter.fs.stat(window.desktop_path, (result) => {
+                        clearTimeout(timeoutId);
+                        resolve(result || null);
+                    });
+                });
+                
                 UIDesktop({ desktop_fsentry: desktop_fsentry });
-            })
+            } catch (statError) {
+                console.warn('[initgui]: Login event - desktop stat failed:', statError.message);
+                // Still load desktop even if stat fails
+                UIDesktop({ desktop_fsentry: null });
+            }
         }
         // -------------------------------------------------------------------------------------
         // If embedded in a popup, send the 'ready' event to referrer and close the popup

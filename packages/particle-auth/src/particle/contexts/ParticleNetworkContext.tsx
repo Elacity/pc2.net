@@ -229,7 +229,11 @@ const ParticleNetworkProvider: React.FC<React.PropsWithChildren<ParticleNetworkC
       
       // Call Puter's backend to authenticate
       // Use runtime API origin (injected by PC2 node) or fallback to build-time env
-      const apiOrigin = (window as any).PUTER_API_ORIGIN || import.meta.env.VITE_PUTER_API_URL || window.location.origin;
+      // CRITICAL: Ensure HTTPS protocol when page is served over HTTPS to avoid mixed content
+      let apiOrigin = (window as any).PUTER_API_ORIGIN || import.meta.env.VITE_PUTER_API_URL || window.location.origin;
+      if (window.location.protocol === 'https:' && apiOrigin.startsWith('http://')) {
+        apiOrigin = apiOrigin.replace('http://', 'https://');
+      }
       console.log('[Particle Auth]: Auth callback using API origin:', apiOrigin);
       const response = await fetch(`${apiOrigin}/auth/particle`, {
         method: 'POST',
@@ -241,8 +245,13 @@ const ParticleNetworkProvider: React.FC<React.PropsWithChildren<ParticleNetworkC
       
       const data = await response.json();
       
+      // Determine if we're running in an iframe (embedded by UIWindowParticleLogin)
+      const isInIframe = window !== window.parent;
+      // Use parent.postMessage when in iframe, otherwise self
+      const messageTarget = isInIframe ? window.parent : window;
+      
       if (data.success) {
-        window.postMessage({
+        messageTarget.postMessage({
           type: 'particle-auth.success',
           payload: {
             address: eoaAddress,
@@ -252,13 +261,16 @@ const ParticleNetworkProvider: React.FC<React.PropsWithChildren<ParticleNetworkC
             user: data.user,
           }
         }, '*');
-        if (import.meta.env.VITE_DEV_SANDBOX !== 'true') {
+        
+        // Only redirect if NOT in iframe (standalone mode)
+        // When in iframe, UIWindowParticleLogin handles the redirect via message handler
+        if (!isInIframe && import.meta.env.VITE_DEV_SANDBOX !== 'true') {
           // Redirect back to main app
           window.location.href = `/?auth_token=${data.token}`;
         }
       } else {
         console.error('Authentication failed:', data.message);
-        window.postMessage({
+        messageTarget.postMessage({
           type: 'particle-auth.error',
           payload: {
             message: `failed to authenticate: ${data.message}`,
@@ -267,7 +279,10 @@ const ParticleNetworkProvider: React.FC<React.PropsWithChildren<ParticleNetworkC
       }
     } catch (error) {
       console.error('Authentication error:', error);
-      window.postMessage({
+      // Use parent.postMessage when in iframe
+      const isInIframe = window !== window.parent;
+      const messageTarget = isInIframe ? window.parent : window;
+      messageTarget.postMessage({
         type: 'particle-auth.error',
         payload: {
           message: `authentication error: ${error}`,

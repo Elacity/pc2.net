@@ -23,6 +23,10 @@ export interface ServerOptions {
 export function createServer(options: ServerOptions): { app: Express; server: Server } {
   const app = express();
   
+  // Trust proxy headers (X-Forwarded-Proto, X-Forwarded-For) when behind reverse proxies
+  // This ensures req.protocol returns 'https' when accessed via Tailscale, nginx, etc.
+  app.set('trust proxy', true);
+  
   // Middleware
   // Handle text/plain;actually=json content type (used by Puter SDK)
   // Parse it as JSON by using express.text() first, then manually parsing in a follow-up middleware

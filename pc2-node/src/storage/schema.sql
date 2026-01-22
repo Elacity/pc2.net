@@ -1,5 +1,6 @@
 -- PC2 Node Database Schema
 -- SQLite database for persistent storage
+-- Version 13: Full schema with all migrations applied
 
 -- Users table: Wallet-based user accounts
 CREATE TABLE IF NOT EXISTS users (
@@ -27,6 +28,7 @@ CREATE TABLE IF NOT EXISTS files (
   size INTEGER DEFAULT 0,
   mime_type TEXT,
   thumbnail TEXT,
+  content_text TEXT,
   is_dir INTEGER DEFAULT 0,
   is_public INTEGER DEFAULT 0,
   created_at INTEGER NOT NULL,
@@ -35,11 +37,61 @@ CREATE TABLE IF NOT EXISTS files (
   FOREIGN KEY (wallet_address) REFERENCES users(wallet_address) ON DELETE CASCADE
 );
 
+-- File versions table: Track file version history
+CREATE TABLE IF NOT EXISTS file_versions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  file_path TEXT NOT NULL,
+  wallet_address TEXT NOT NULL,
+  version_number INTEGER NOT NULL,
+  ipfs_hash TEXT NOT NULL,
+  size INTEGER NOT NULL,
+  mime_type TEXT,
+  created_at INTEGER NOT NULL,
+  created_by TEXT,
+  comment TEXT,
+  FOREIGN KEY (wallet_address) REFERENCES users(wallet_address),
+  UNIQUE(file_path, wallet_address, version_number)
+);
+
 -- Settings table: Node configuration and settings
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL,
   updated_at INTEGER NOT NULL
+);
+
+-- AI Config table: Wallet-scoped AI configuration
+CREATE TABLE IF NOT EXISTS ai_config (
+  wallet_address TEXT PRIMARY KEY,
+  default_provider TEXT DEFAULT 'ollama',
+  default_model TEXT,
+  api_keys TEXT,
+  ollama_base_url TEXT DEFAULT 'http://localhost:11434',
+  updated_at INTEGER DEFAULT (strftime('%s', 'now')),
+  FOREIGN KEY (wallet_address) REFERENCES users(wallet_address)
+);
+
+-- AI Memory State table: Context engineering for persistent AI memory
+CREATE TABLE IF NOT EXISTS ai_memory_state (
+  wallet_address TEXT PRIMARY KEY,
+  consolidated_summary TEXT DEFAULT '',
+  entities_json TEXT DEFAULT '[]',
+  last_actions_json TEXT DEFAULT '[]',
+  user_intent TEXT DEFAULT '',
+  message_count INTEGER DEFAULT 0,
+  updated_at INTEGER NOT NULL DEFAULT 0,
+  FOREIGN KEY (wallet_address) REFERENCES users(wallet_address) ON DELETE CASCADE
+);
+
+-- AI Conversations table: Persistent chat history
+CREATE TABLE IF NOT EXISTS ai_conversations (
+  id TEXT PRIMARY KEY,
+  wallet_address TEXT NOT NULL,
+  title TEXT DEFAULT 'New Conversation',
+  messages_json TEXT NOT NULL DEFAULT '[]',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  FOREIGN KEY (wallet_address) REFERENCES users(wallet_address) ON DELETE CASCADE
 );
 
 -- Recent apps table: Track recently launched apps per user
@@ -106,11 +158,27 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   FOREIGN KEY (wallet_address) REFERENCES users(wallet_address) ON DELETE CASCADE
 );
 
+-- FTS5 Full-Text Search for files
+CREATE VIRTUAL TABLE IF NOT EXISTS files_fts USING fts5(
+  path,
+  name,
+  content,
+  mime_type,
+  content='files',
+  content_rowid='rowid'
+);
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_sessions_wallet ON sessions(wallet_address);
 CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_files_wallet ON files(wallet_address);
 CREATE INDEX IF NOT EXISTS idx_files_path ON files(path);
+CREATE INDEX IF NOT EXISTS idx_file_versions_path ON file_versions(file_path, wallet_address);
+CREATE INDEX IF NOT EXISTS idx_file_versions_created ON file_versions(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ai_config_wallet ON ai_config(wallet_address);
+CREATE INDEX IF NOT EXISTS idx_ai_memory_state_updated ON ai_memory_state(updated_at);
+CREATE INDEX IF NOT EXISTS idx_ai_conversations_wallet ON ai_conversations(wallet_address);
+CREATE INDEX IF NOT EXISTS idx_ai_conversations_updated ON ai_conversations(wallet_address, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_recent_apps_wallet ON recent_apps(wallet_address);
 CREATE INDEX IF NOT EXISTS idx_api_keys_wallet ON api_keys(wallet_address);
 CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash);
@@ -119,3 +187,22 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at DESC)
 CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
 CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_wallet ON scheduled_tasks(wallet_address);
 CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_next_run ON scheduled_tasks(next_run_at);
+
+-- Triggers for FTS synchronization
+CREATE TRIGGER IF NOT EXISTS files_fts_insert AFTER INSERT ON files BEGIN
+  INSERT INTO files_fts(rowid, path, name, content, mime_type)
+  VALUES (new.rowid, new.path, new.path, COALESCE(new.content_text, ''), COALESCE(new.mime_type, ''));
+END;
+
+CREATE TRIGGER IF NOT EXISTS files_fts_delete AFTER DELETE ON files BEGIN
+  DELETE FROM files_fts WHERE rowid = old.rowid;
+END;
+
+CREATE TRIGGER IF NOT EXISTS files_fts_update AFTER UPDATE ON files BEGIN
+  UPDATE files_fts SET
+    path = new.path,
+    name = new.path,
+    content = COALESCE(new.content_text, ''),
+    mime_type = COALESCE(new.mime_type, '')
+  WHERE rowid = new.rowid;
+END;

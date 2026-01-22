@@ -363,6 +363,55 @@ curl https://cloud.ela.city/api/gateway/status/yourname
 
 ---
 
+## Updating Your Node
+
+PC2 includes a macOS-style auto-update system that makes keeping your node current effortless.
+
+### Auto-Update (Recommended)
+
+1. **Automatic Check**: Your node checks for updates every 6 hours
+2. **Toast Notification**: When an update is available, you'll see a notification
+3. **One-Click Install**: Click "Update Now" to start the update
+4. **Progress UI**: Watch the progress: Downloading → Installing → Building → Restarting
+5. **Auto-Refresh**: The page refreshes automatically when complete
+
+You can also check for updates manually in **Settings → About**.
+
+### Manual Update
+
+If you prefer manual updates:
+
+```bash
+# SSH into your server
+ssh root@your-server
+
+# Navigate to PC2 directory
+cd /path/to/pc2.net
+
+# Pull latest code
+git pull origin main
+
+# Rebuild
+cd pc2-node
+npm install
+npm run build
+
+# Restart service
+systemctl restart pc2-node
+```
+
+### Update API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/update/version` | GET | Get current version |
+| `/api/update/status` | GET | Check for available updates |
+| `/api/update/check` | POST | Trigger update check |
+| `/api/update/install` | POST | Start auto-update (owner only) |
+| `/api/update/progress` | GET | Get update progress |
+
+---
+
 ## Local AI Setup (Optional)
 
 PC2 includes integrated local AI support using Ollama and DeepSeek models.

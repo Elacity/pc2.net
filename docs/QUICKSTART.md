@@ -288,6 +288,20 @@ npm start
 
 ---
 
+## 🔄 Keeping Your Node Updated
+
+PC2 includes a macOS-style auto-update system:
+
+1. **Automatic Check** - Your node checks for updates every 6 hours
+2. **Toast Notification** - When an update is available, you'll see a notification
+3. **One-Click Install** - Click "Update Now" to start the update
+4. **Progress UI** - Watch the progress: Downloading → Installing → Building → Restarting
+5. **Auto-Refresh** - The page refreshes automatically when the update is complete
+
+You can also check for updates manually in **Settings → About**.
+
+---
+
 ## 🎯 Next Steps
 
 After installation:
@@ -297,6 +311,7 @@ After installation:
 3. **Try the WASM Calculator** - See private computation in action
 4. **Check AI Chat** - If you have Ollama running locally
 5. **Backup your data** - Go to Settings → PC2 → Create Backup
+6. **Check for updates** - Go to Settings → About to see version info
 
 ---
 

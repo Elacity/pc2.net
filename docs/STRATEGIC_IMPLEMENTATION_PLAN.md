@@ -201,10 +201,25 @@ Significant progress on the unified MVP plan. The first four sprints are complet
    - Wallet-based encryption for recovery phrase
    - Manual mnemonic entry for late encryption
 
-3. **Update System (Sprint 4)**
-   - UpdateService for periodic version checking
-   - API endpoints: /api/update/status, /check, /version
-   - Frontend notification banner (macOS style)
+3. **Update System (Sprint 4) - Enhanced with Auto-Update (2026-01-22)**
+   - UpdateService for periodic version checking (6-hour intervals)
+   - GitHub releases API integration (`checkGitHubReleases()`)
+   - **Auto-Update Feature (macOS-style)**:
+     - `performUpdate()` - Executes git pull, npm install, npm build, restart
+     - Progress tracking with real-time status updates
+     - Automatic server restart via systemctl or process exit
+   - API endpoints:
+     - `GET /api/update/status` - Version info and update availability
+     - `POST /api/update/check` - Trigger version check
+     - `GET /api/update/version` - Get current version
+     - `POST /api/update/install` - **NEW: Trigger auto-update**
+     - `GET /api/update/progress` - **NEW: Get update progress**
+     - `POST /api/update/check-github` - **NEW: Check GitHub releases**
+   - Frontend components:
+     - `UIUpdateModal.js` - Toast notification + modal with progress UI
+     - Settings > About banner when update available
+     - Auto-reconnect loop after server restart
+     - Page auto-refresh when update complete
 
 4. **API Endpoints Added**
    - `GET /api/setup/status` - Check setup state

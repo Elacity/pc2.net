@@ -348,13 +348,15 @@
 - **Apps**: `/apps/:name`, `/get-launch-apps` - App metadata
 - **Backup/Restore**: `/api/backup/*` - Data backup system
 - **AI**: `/api/ai/*` - AI chat with multiple providers
+- **Updates**: `/api/update/*` - Auto-update system (version check, install, progress)
 
 #### 2.2 Services Layer (`src/services/`)
 - **WASMRuntime**: Executes WASM binaries on node
-- **AIService**: Multi-provider AI chat (Ollama, OpenAI, Claude, Gemini)
+- **AIService**: Multi-provider AI chat (Ollama, OpenAI, Claude, Gemini, xAI)
 - **StorageService**: IPFS integration for distributed storage
 - **AuthService**: Wallet authentication via Particle Auth
 - **BackupService**: Automated backup/restore system
+- **UpdateService**: Auto-update system with GitHub releases integration
 
 #### 2.3 Static File Serving (`src/static.ts`)
 - Serves frontend bundle
@@ -539,6 +541,13 @@ User → Frontend (type message)
    - ✅ One-click web UI restore
    - ✅ Backup status indicators
    - ✅ Comprehensive help system
+
+5. **Auto-Update System**
+   - ✅ macOS-style update notifications
+   - ✅ One-click update installation
+   - ✅ Progress UI (download, build, restart)
+   - ✅ Auto-reconnect after restart
+   - ✅ Settings > About update banner
 
 ### 🚧 In Progress
 

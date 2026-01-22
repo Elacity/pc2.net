@@ -89,8 +89,10 @@ Download the pre-built image, flash to SD card, and boot.
 
 ### Advanced Capabilities
 - ✅ **WASM Execution** - Run WebAssembly binaries directly on your node (not in browser!)
-- ✅ **AI Chat Integration** - Local AI via Ollama, or cloud providers (OpenAI, Claude)
+- ✅ **AI Chat Integration** - Local AI via Ollama, or cloud providers (OpenAI, Claude, Gemini, xAI)
 - ✅ **Backup & Restore** - One-click backup to external storage, restore to any node
+- ✅ **Auto-Update System** - macOS-style one-click updates with progress UI
+- ✅ **Access Control** - Wallet-based permissions for multi-user nodes
 - ✅ **Extension System** - Add custom functionality via Puter-compatible extensions
 
 ---
@@ -202,22 +204,29 @@ Configuration is stored in `volatile/config/config.json`:
 - App ecosystem (viewer, editor, player)
 - Backup & restore system
 
-### 🚧 Phase 2.6: WASM Integration (60% Complete)
-- ✅ WASM runtime service
-- ✅ Calculator demo app (runs on YOUR node!)
-- 🔄 WASI file I/O support
-- 🔄 More demo apps
+### ✅ Phase 2.6: WASM Integration (Complete)
+- WASM runtime service
+- Calculator demo app (runs on YOUR node!)
+- File processor demo app
+- WASI file I/O support
 
-### 📋 Phase 3: Packaging (Planned)
-- Docker image
-- Raspberry Pi image
-- macOS installer
-- Setup wizard
+### ✅ Phase 3: Packaging & Distribution (Complete)
+- Docker image with multi-platform builds
+- First-run setup wizard
+- Node identity generation (DID)
+- Auto-update system (macOS-style)
 
-### 📋 Phase 4: Network & Security (Planned)
-- SSL/TLS auto-configuration
-- Dynamic DNS support
-- Security hardening
+### ✅ Phase 4: Network & Security (Complete)
+- NAT traversal via Boson Active Proxy
+- Super Node infrastructure
+- Web gateway with wildcard SSL (*.ela.city)
+- Access control (wallet-based permissions)
+
+### 🚧 Phase 5: Production Hardening (In Progress)
+- End-to-end testing
+- DHT-based username registry
+- Super node failover
+- Performance optimization
 
 ### 📋 Phase 6: dDRM & Marketplace (Future)
 - Decentralized Digital Rights Management

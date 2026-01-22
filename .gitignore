@@ -30,7 +30,7 @@ dist/
 # Local Netlify folder
 .netlify
 src/emulator/release/
-src/particle-auth
+# src/particle-auth is included for self-contained package
 
 # PC2 Node User Data (should never be in git - each user's node has its own data)
 pc2-node/test-fresh-install/data/*.db

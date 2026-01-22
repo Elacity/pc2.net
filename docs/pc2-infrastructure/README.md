@@ -152,7 +152,7 @@ This documentation covers the PC2 (Personal Cloud Computer) infrastructure that 
 - **Wildcard**: `*.ela.city` → 69.164.241.210
 - **Root**: `ela.city` → 35.205.174.216 (existing website)
 
-## MVP Progress (v1.0.0)
+## MVP Progress (v1.0.0) - ALL COMPLETE
 
 | Sprint | Focus | Status |
 |--------|-------|--------|
@@ -161,7 +161,7 @@ This documentation covers the PC2 (Personal Cloud Computer) infrastructure that 
 | Sprint 3 | First-run setup wizard | ✅ Complete |
 | Sprint 4 | Update system | ✅ Complete |
 | Sprint 5 | NAT traversal via Active Proxy | ✅ Complete |
-| Sprint 6 | End-to-end testing, CI/CD | ⏳ Next |
+| Sprint 6 | Testing, CI/CD, DHT registry, Failover | ✅ Complete |
 
 ### Sprint 3-4 Highlights (Recently Completed)
 
@@ -189,12 +189,29 @@ This documentation covers the PC2 (Personal Cloud Computer) infrastructure that 
 - `ConnectivityService` - Updated for proxy:// endpoints
 - Web Gateway deployed with Active Proxy relay support
 
-### Next Steps (Sprint 6)
+### Sprint 6 Highlights (Just Completed)
 
-1. **End-to-end testing** - Full flow verification
-2. **GitHub Actions CI/CD** - Automated Docker builds
-3. **DHT username registry** - Decentralized resolution
-4. **Super node failover** - Automatic reconnection
+**Testing & CI/CD:**
+- E2E testing of setup wizard, identity, and connectivity
+- GitHub Actions workflow for PC2 node Docker builds
+- Multi-platform support: linux/amd64, linux/arm64
+
+**DHT Registry:**
+- Created `boson-http-api` Java service for DHT operations
+- REST API endpoints for username registration/lookup
+- Enables decentralized username resolution
+
+**Super Node Failover:**
+- Round-robin failover between super nodes
+- Failed node tracking with automatic retry
+- Manual `failover()` method for force switching
+
+### Next Steps (v1.1.0)
+
+1. Deploy and test DHT HTTP API service
+2. Integrate Web Gateway with DHT API
+3. Add more super nodes for production failover
+4. Wildcard SSL via Cloudflare DNS-01
 
 ---
 

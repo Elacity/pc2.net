@@ -34,8 +34,28 @@ export default {
                 <div style="flex-grow:1; display: flex; align-items: center; justify-content: flex-end; gap: 10px;">
                     <span class="ai-status-dot" id="ai-status-dot"></span>
                     <span id="ai-status-text" style="font-size: 13px;">Loading...</span>
-                    <button class="button" id="ai-setup-local-btn" style="font-size: 11px; padding: 0 12px; height: 26px; line-height: 26px; background: #10b981; color: white; display: none;">
-                        Setup Local AI (~1.6GB)
+                </div>
+            </div>
+            
+            <!-- Local AI Setup -->
+            <div id="ai-local-setup-section" class="settings-card" style="display: none; flex-direction: column; align-items: stretch; gap: 12px; background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%); border: 1px solid #86efac;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <strong style="color: #166534;">Setup Local AI</strong>
+                        <p style="font-size: 12px; color: #15803d; margin: 4px 0 0 0;">Run AI privately on your machine - no cloud, no API keys needed</p>
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <label style="font-size: 13px; color: #166534; white-space: nowrap;">Model Size:</label>
+                    <select id="ai-model-select" style="flex: 1; max-width: 280px; padding: 6px 10px; border: 1px solid #86efac; border-radius: 4px; font-size: 13px;">
+                        <option value="deepseek-r1:1.5b" data-size="1.1">DeepSeek R1 1.5B (1.1GB) - Fast, any machine</option>
+                        <option value="deepseek-r1:7b" data-size="4.7">DeepSeek R1 7B (4.7GB) - Better quality, 8GB RAM</option>
+                        <option value="deepseek-r1:8b" data-size="4.9">DeepSeek R1 8B (4.9GB) - Good balance</option>
+                        <option value="deepseek-r1:14b" data-size="9">DeepSeek R1 14B (9GB) - High quality, 16GB RAM</option>
+                        <option value="deepseek-r1:32b" data-size="20">DeepSeek R1 32B (20GB) - Very high quality, 32GB RAM</option>
+                    </select>
+                    <button class="button" id="ai-setup-local-btn" style="font-size: 12px; padding: 0 16px; height: 32px; line-height: 32px; background: #10b981; color: white; white-space: nowrap;">
+                        Install & Download
                     </button>
                 </div>
             </div>
@@ -672,31 +692,47 @@ export default {
                 }
                 
                 const status = data.result;
+                const setupSection = $el_window.find('#ai-local-setup-section');
                 const setupBtn = $el_window.find('#ai-setup-local-btn');
                 
-                // Single button logic: Show if Ollama not installed OR model not downloaded
-                if (!status.installed) {
-                    setupBtn.text('Setup Local AI (~1.6GB)').show();
-                } else if (!status.hasDeepseek) {
-                    setupBtn.text('Download DeepSeek (~1.1GB)').show();
+                // Show setup section if Ollama not installed OR model not downloaded
+                if (!status.installed || !status.hasDeepseek) {
+                    setupSection.show();
+                    
+                    // Update button text based on status
+                    if (!status.installed) {
+                        setupBtn.text('Install Ollama & Download Model');
+                    } else {
+                        setupBtn.text('Download Model');
+                    }
                 } else {
-                    // Everything is ready - hide the button
-                    setupBtn.hide();
+                    // Everything is ready - hide the setup section
+                    setupSection.hide();
                 }
                 
                 return status;
             } catch (error) {
                 console.error('[AI Settings] Error checking Ollama status:', error);
+                // Show setup section on error so user can try to install
+                $el_window.find('#ai-local-setup-section').show();
                 return null;
             }
         }
 
-        // Setup Local AI - single button that installs Ollama + DeepSeek
+        // Setup Local AI - single button that installs Ollama + selected model
         async function setupLocalAI() {
             const progressDiv = $el_window.find('#ai-install-progress');
             const statusText = $el_window.find('#ai-install-status');
             const messageText = $el_window.find('#ai-install-message');
             const setupBtn = $el_window.find('#ai-setup-local-btn');
+            const setupSection = $el_window.find('#ai-local-setup-section');
+            
+            // Get selected model
+            const modelSelect = $el_window.find('#ai-model-select');
+            const selectedModel = modelSelect.val();
+            const selectedOption = modelSelect.find('option:selected');
+            const modelSize = selectedOption.data('size') || '1.1';
+            const modelName = selectedOption.text().split(' - ')[0]; // e.g., "DeepSeek R1 7B (4.7GB)"
             
             try {
                 // Check current status first
@@ -705,6 +741,7 @@ export default {
                 // Show progress
                 progressDiv.show();
                 setupBtn.prop('disabled', true);
+                modelSelect.prop('disabled', true);
                 
                 const apiOrigin = getAPIOrigin();
                 const authToken = getAuthToken();
@@ -733,7 +770,6 @@ export default {
                     }
                     
                     // Wait for Ollama to be installed
-                    statusText.text('Step 1/2: Installing Ollama...');
                     messageText.text('Waiting for Ollama installation to complete...');
                     
                     let ollamaInstalled = false;
@@ -752,15 +788,15 @@ export default {
                     }
                 }
                 
-                // Step 2: Download DeepSeek model
-                statusText.text('Step 2/2: Downloading DeepSeek...');
-                messageText.text('Downloading DeepSeek R1 model (~1.1GB). This may take several minutes.');
+                // Step 2: Download selected model
+                statusText.text('Step 2/2: Downloading Model...');
+                messageText.text(`Downloading ${modelName} (~${modelSize}GB). This may take several minutes.`);
                 
                 const pullUrl = new URL('/api/ai/install-ollama', apiOrigin);
                 const pullResponse = await fetch(pullUrl.toString(), {
                     method: 'POST',
                     headers,
-                    body: JSON.stringify({ action: 'pull-model', model: 'deepseek-r1:1.5b' })
+                    body: JSON.stringify({ action: 'pull-model', model: selectedModel })
                 });
                 
                 const pullData = await pullResponse.json();
@@ -768,29 +804,51 @@ export default {
                     throw new Error(pullData.error || 'Failed to download model');
                 }
                 
-                // Wait for model to be downloaded
+                // Wait for model to be downloaded (longer timeout for larger models)
+                const maxPolls = Math.max(60, Math.ceil(parseFloat(modelSize) * 10)); // More time for larger models
                 let modelReady = false;
-                for (let i = 0; i < 60; i++) {
+                for (let i = 0; i < maxPolls; i++) {
                     await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds
-                    const status = await checkOllamaStatus();
-                    messageText.text(`Downloading model... (${i + 1}/60)`);
-                    if (status?.hasDeepseek) {
-                        modelReady = true;
-                        break;
+                    
+                    // Check if model exists by calling ollama-status
+                    const statusUrl = new URL('/api/ai/ollama-status', apiOrigin);
+                    const statusResponse = await fetch(statusUrl.toString(), { method: 'GET', headers });
+                    const statusData = await statusResponse.json();
+                    
+                    if (statusData.success && statusData.result.models) {
+                        // Check if selected model is in the list
+                        const modelBase = selectedModel.split(':')[0]; // e.g., "deepseek-r1"
+                        if (statusData.result.models.some(m => m.includes(modelBase))) {
+                            modelReady = true;
+                            break;
+                        }
                     }
+                    
+                    messageText.text(`Downloading ${modelName}... (${i + 1}/${maxPolls})`);
                 }
                 
                 if (modelReady) {
                     statusText.text('Setup Complete!');
-                    messageText.text('Local AI is now ready. You can start using the AI Assistant.');
+                    messageText.text(`${modelName} is now ready. You can start using the AI Assistant.`);
+                    
+                    // Update the default model in config
+                    const configUrl = new URL('/api/ai/config', apiOrigin);
+                    await fetch(configUrl.toString(), {
+                        method: 'POST',
+                        headers,
+                        body: JSON.stringify({ model: selectedModel })
+                    });
+                    
                     setTimeout(() => {
                         progressDiv.hide();
-                        setupBtn.hide();
+                        setupSection.hide();
                         loadAIConfig();
                     }, 3000);
                 } else {
                     statusText.text('Download in Progress...');
                     messageText.text('Model download is still in progress. Please check back in a few minutes.');
+                    setupBtn.prop('disabled', false);
+                    modelSelect.prop('disabled', false);
                 }
                 
             } catch (error) {
@@ -798,6 +856,7 @@ export default {
                 statusText.text('Setup Failed');
                 messageText.text(error.message || 'An error occurred during setup.');
                 setupBtn.prop('disabled', false);
+                modelSelect.prop('disabled', false);
             }
         }
 

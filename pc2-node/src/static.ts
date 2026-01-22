@@ -148,6 +148,44 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
     maxAge: isProduction ? 31536000 : 0 // 1 year in production, 0 in dev
   });
   
+  // IMPORTANT: Setup redirect MUST come BEFORE static file serving
+  // This ensures fresh nodes show the setup wizard instead of serving index.html
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    // Only check for GET requests to prevent redirects on API calls
+    if (req.method !== 'GET') {
+      return next();
+    }
+    
+    // Skip API routes, setup routes, static assets, and health checks
+    if (
+      req.path.startsWith('/api/') ||
+      req.path.startsWith('/setup') ||
+      req.path.startsWith('/health') ||
+      req.path.startsWith('/version') ||
+      req.path.startsWith('/particle-auth') ||
+      req.path.startsWith('/auth/') ||
+      req.path.startsWith('/socket.io') ||
+      isStaticAsset(req.path)
+    ) {
+      return next();
+    }
+    
+    // Check if setup is complete
+    if (!existsSync(SETUP_COMPLETE_FILE)) {
+      // Check if boson is enabled and username is not set
+      const bosonService = req.app.locals.bosonService;
+      const hasUsername = bosonService?.getUsernameService()?.hasUsername() || false;
+      
+      if (!hasUsername) {
+        // Redirect to setup wizard
+        console.log(`[Setup] Redirecting ${req.path} to /setup (setup not complete, no username)`);
+        return res.redirect('/setup');
+      }
+    }
+    
+    next();
+  });
+
   // IMPORTANT: Register /apps/* route BEFORE the static middleware wrapper
   // Express checks app.get() routes before app.use() middleware, but only if registered first
   // The route handler function (appsRouteHandler) is defined later (around line 374) as a function declaration
@@ -1047,37 +1085,7 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
   });
   */
 
-  // Setup redirect middleware
-  // Redirect to /setup if setup is not complete and not already on setup/api routes
-  app.use((req: Request, res: Response, next: NextFunction) => {
-    // Skip API routes, setup routes, and static assets
-    if (
-      req.path.startsWith('/api/') ||
-      req.path.startsWith('/setup') ||
-      req.path.startsWith('/health') ||
-      req.path.startsWith('/version') ||
-      isStaticAsset(req.path)
-    ) {
-      return next();
-    }
-    
-    // Check if setup is complete
-    if (!existsSync(SETUP_COMPLETE_FILE)) {
-      // Check if boson is enabled and username is not set
-      const bosonService = req.app.locals.bosonService;
-      const hasUsername = bosonService?.getUsernameService()?.hasUsername() || false;
-      
-      if (!hasUsername) {
-        // Redirect to setup wizard
-        console.log(`[Setup] Redirecting ${req.path} to /setup (setup not complete)`);
-        return res.redirect('/setup');
-      }
-    }
-    
-    next();
-  });
-  
-  // Serve setup wizard
+  // Serve setup wizard (redirect middleware is registered earlier in the file)
   app.use('/setup', express.static(path.join(frontendPath, 'setup'), {
     setHeaders: (res: Response) => {
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');

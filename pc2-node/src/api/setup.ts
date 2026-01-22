@@ -18,11 +18,19 @@ const DATA_DIR = process.env.PC2_DATA_DIR || './data';
 const SETUP_COMPLETE_FILE = join(DATA_DIR, 'setup-complete');
 const NODE_CONFIG_FILE = join(DATA_DIR, 'node-config.json');
 
+// Allowed wallet entry
+interface AllowedWalletEntry {
+  wallet: string;
+  role: 'admin' | 'member';
+  addedAt: string;
+}
+
 // Node config interface
 interface NodeConfig {
   antiSnipePasswordHash?: string;
   ownerWallet?: string | null;
   createdAt?: string;
+  allowedWallets?: AllowedWalletEntry[];
 }
 
 // Helper to read node config

@@ -23,6 +23,7 @@ interface AllowedWalletEntry {
   wallet: string;
   role: 'admin' | 'member';
   addedAt: string;
+  updatedAt?: string;
 }
 
 // Node config interface

@@ -31,6 +31,33 @@ const hardcodedIcons: Record<string, string> = {
 };
 
 /**
+ * Get the base URL for the request, respecting reverse proxy headers.
+ * When behind Nginx or other reverse proxies, req.protocol may be 'http'
+ * even when the original request was HTTPS. This function checks:
+ * 1. X-Forwarded-Proto header (set by reverse proxies)
+ * 2. Origin header (contains original protocol)
+ * 3. Fallback to req.protocol
+ */
+function getBaseUrl(req: Request): string {
+  const host = req.get('host') || 'localhost';
+  
+  // Check x-forwarded-proto header (set by reverse proxies like Nginx)
+  const forwardedProto = req.headers['x-forwarded-proto'];
+  if (forwardedProto === 'https') {
+    return `https://${host}`;
+  }
+  
+  // Check origin header (contains original protocol)
+  const origin = req.headers.origin;
+  if (origin && typeof origin === 'string' && origin.startsWith('https://')) {
+    return `https://${host}`;
+  }
+  
+  // Fallback to req.protocol
+  return `${req.protocol}://${host}`;
+}
+
+/**
  * Sign files for app access
  * POST /sign
  */
@@ -304,7 +331,7 @@ export function handleDriversCall(req: AuthenticatedRequest, res: Response): voi
     const appNameFromQuery = req.query.name || req.query.app || req.query.id;
     if (appNameFromQuery) {
       logger.info(`[Drivers] Found app name in query params: ${appNameFromQuery}, treating as puter-apps request`);
-      const baseUrl = req.protocol + '://' + req.get('host');
+      const baseUrl = getBaseUrl(req);
       const appMap: Record<string, any> = {
         'editor': { name: 'editor', title: 'Text Editor', uuid: 'app-editor', uid: 'app-editor', icon: hardcodedIcons['editor'], index_url: `${baseUrl}/apps/editor/index.html` },
         'viewer': { name: 'viewer', title: 'Image Viewer', uuid: 'app-viewer', uid: 'app-viewer', icon: hardcodedIcons['viewer'], index_url: `${baseUrl}/apps/viewer/index.html` },
@@ -400,7 +427,7 @@ export function handleDriversCall(req: AuthenticatedRequest, res: Response): voi
       if (!appName && body.args?.id && typeof body.args.id === 'object' && body.args.id.name) {
         appName = body.args.id.name;
       }
-      const baseUrl = req.protocol + '://' + req.get('host');
+      const baseUrl = getBaseUrl(req);
       
       logger.info(`[Drivers] puter-apps request: method=${method}, appName=${appName}, args=`, JSON.stringify(body.args || {}));
       
@@ -1112,7 +1139,7 @@ export function handleDriversCall(req: AuthenticatedRequest, res: Response): voi
         });
         return;
       }
-      const baseUrl = req.protocol + '://' + req.get('host');
+      const baseUrl = getBaseUrl(req);
       
       logger.info(`[Drivers] puter-apps (driver format): method=${method}, appName=${appName}`);
       
@@ -1335,7 +1362,7 @@ export async function handleOpenItem(req: AuthenticatedRequest, res: Response): 
   // Determine app based on file type (matching mock server logic)
   const fileName = metadata.path.split('/').pop() || '';
   const fsname = fileName.toLowerCase();
-  const baseUrl = req.protocol + '://' + req.get('host');
+  const baseUrl = getBaseUrl(req);
   
   let appUid: string;
   let appName: string;
@@ -1500,7 +1527,7 @@ export async function handleSuggestApps(req: AuthenticatedRequest, res: Response
   // Determine app based on file type (same logic as /open_item)
   const fileName = metadata.path.split('/').pop() || '';
   const fsname = fileName.toLowerCase();
-  const baseUrl = req.protocol + '://' + req.get('host');
+  const baseUrl = getBaseUrl(req);
   
   let appUid: string;
   let appName: string;

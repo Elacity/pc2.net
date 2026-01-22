@@ -21,15 +21,21 @@ export default {
             <!-- Current Status -->
             <div class="settings-card">
                 <strong>Current Provider</strong>
-                <div style="flex-grow:1; text-align: right;">
+                <div style="flex-grow:1; display: flex; align-items: center; justify-content: flex-end; gap: 10px;">
                     <span id="ai-current-provider" style="font-size: 13px;">Loading...</span>
+                    <button class="button ai-install-btn" id="ai-install-ollama-btn" style="font-size: 11px; padding: 0 10px; height: 26px; line-height: 26px; background: #10b981; color: white; display: none;">
+                        Install Ollama (~500MB)
+                    </button>
                 </div>
             </div>
             
             <div class="settings-card">
                 <strong>Current Model</strong>
-                <div style="flex-grow:1; text-align: right;">
+                <div style="flex-grow:1; display: flex; align-items: center; justify-content: flex-end; gap: 10px;">
                     <span id="ai-current-model" style="font-size: 13px;">Loading...</span>
+                    <button class="button ai-install-btn" id="ai-pull-model-btn" style="font-size: 11px; padding: 0 10px; height: 26px; line-height: 26px; background: #3b82f6; color: white; display: none;">
+                        Download Model (~1.1GB)
+                    </button>
                 </div>
             </div>
             
@@ -38,6 +44,17 @@ export default {
                 <div style="flex-grow:1; text-align: right; display: flex; align-items: center; justify-content: flex-end; gap: 6px;">
                     <span class="ai-status-dot" id="ai-status-dot"></span>
                     <span id="ai-status-text" style="font-size: 13px;">Loading...</span>
+                </div>
+            </div>
+            
+            <!-- Installation Progress -->
+            <div id="ai-install-progress" class="settings-card" style="display: none; background: #f0f9ff; border-left: 3px solid #3b82f6;">
+                <div style="width: 100%;">
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                        <span class="ai-spinner"></span>
+                        <strong id="ai-install-status">Installing...</strong>
+                    </div>
+                    <p id="ai-install-message" style="font-size: 12px; color: #666; margin: 0;"></p>
                 </div>
             </div>
             
@@ -172,6 +189,22 @@ export default {
                 }
                 .ai-status-dot.no-models {
                     background: #f59e0b;
+                }
+                .ai-install-btn:disabled {
+                    opacity: 0.6;
+                    cursor: not-allowed;
+                }
+                .ai-spinner {
+                    width: 14px;
+                    height: 14px;
+                    border: 2px solid #e5e7eb;
+                    border-top-color: #3b82f6;
+                    border-radius: 50%;
+                    animation: ai-spin 0.8s linear infinite;
+                    display: inline-block;
+                }
+                @keyframes ai-spin {
+                    to { transform: rotate(360deg); }
                 }
             </style>
         `;
@@ -617,15 +650,182 @@ export default {
             }
         }
 
+        // Check Ollama installation status
+        async function checkOllamaStatus() {
+            try {
+                const apiOrigin = getAPIOrigin();
+                const url = new URL('/api/ai/ollama-status', apiOrigin);
+                const authToken = getAuthToken();
+                
+                const headers = {
+                    'Content-Type': 'application/json'
+                };
+                if (authToken) {
+                    headers['Authorization'] = `Bearer ${authToken}`;
+                }
+                
+                const response = await fetch(url.toString(), {
+                    method: 'GET',
+                    headers
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Failed to check Ollama status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                if (!data.success) {
+                    throw new Error(data.error || 'Failed to check Ollama status');
+                }
+                
+                const status = data.result;
+                const installOllamaBtn = $el_window.find('#ai-install-ollama-btn');
+                const pullModelBtn = $el_window.find('#ai-pull-model-btn');
+                
+                // Show/hide install Ollama button
+                if (!status.installed) {
+                    installOllamaBtn.show();
+                    pullModelBtn.hide();
+                } else {
+                    installOllamaBtn.hide();
+                    
+                    // Show/hide pull model button (only if Ollama is installed but no DeepSeek model)
+                    if (!status.hasDeepseek && status.running) {
+                        pullModelBtn.show();
+                    } else if (status.hasDeepseek) {
+                        pullModelBtn.hide();
+                    } else if (!status.running) {
+                        // Ollama installed but not running
+                        pullModelBtn.text('Start Ollama & Download (~1.1GB)').show();
+                    }
+                }
+                
+                return status;
+            } catch (error) {
+                console.error('[AI Settings] Error checking Ollama status:', error);
+                return null;
+            }
+        }
+
+        // Install Ollama or pull model
+        async function installOllama(action, model) {
+            const progressDiv = $el_window.find('#ai-install-progress');
+            const statusText = $el_window.find('#ai-install-status');
+            const messageText = $el_window.find('#ai-install-message');
+            const installBtn = $el_window.find('#ai-install-ollama-btn');
+            const pullBtn = $el_window.find('#ai-pull-model-btn');
+            
+            try {
+                // Show progress
+                progressDiv.show();
+                installBtn.prop('disabled', true);
+                pullBtn.prop('disabled', true);
+                
+                if (action === 'install-ollama') {
+                    statusText.text('Installing Ollama...');
+                    messageText.text('Downloading and installing Ollama. This may take a few minutes.');
+                } else {
+                    statusText.text('Downloading Model...');
+                    messageText.text(`Downloading ${model || 'deepseek-r1:1.5b'}. This may take several minutes.`);
+                }
+                
+                const apiOrigin = getAPIOrigin();
+                const url = new URL('/api/ai/install-ollama', apiOrigin);
+                const authToken = getAuthToken();
+                
+                const headers = {
+                    'Content-Type': 'application/json'
+                };
+                if (authToken) {
+                    headers['Authorization'] = `Bearer ${authToken}`;
+                }
+                
+                const response = await fetch(url.toString(), {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify({ action, model: model || 'deepseek-r1:1.5b' })
+                });
+                
+                const data = await response.json();
+                
+                if (!data.success) {
+                    throw new Error(data.error || 'Installation failed');
+                }
+                
+                // Update UI with result
+                if (data.result.alreadyInstalled) {
+                    statusText.text('Already Installed');
+                    messageText.text(data.result.message);
+                    setTimeout(() => {
+                        progressDiv.hide();
+                        checkOllamaStatus();
+                        loadAIConfig();
+                    }, 2000);
+                } else {
+                    statusText.text('Installation Started');
+                    messageText.text(data.result.message + ' Checking status in 10 seconds...');
+                    
+                    // Poll for status
+                    let pollCount = 0;
+                    const pollInterval = setInterval(async () => {
+                        pollCount++;
+                        const status = await checkOllamaStatus();
+                        
+                        if (action === 'install-ollama' && status?.installed) {
+                            clearInterval(pollInterval);
+                            statusText.text('Ollama Installed!');
+                            messageText.text('Ollama is now installed. You can now download a model.');
+                            setTimeout(() => {
+                                progressDiv.hide();
+                                loadAIConfig();
+                            }, 2000);
+                        } else if (action === 'pull-model' && status?.hasDeepseek) {
+                            clearInterval(pollInterval);
+                            statusText.text('Model Downloaded!');
+                            messageText.text('DeepSeek R1 is now ready to use.');
+                            setTimeout(() => {
+                                progressDiv.hide();
+                                loadAIConfig();
+                            }, 2000);
+                        } else if (pollCount >= 30) {
+                            // Timeout after 5 minutes
+                            clearInterval(pollInterval);
+                            statusText.text('Still Installing...');
+                            messageText.text('Installation is taking longer than expected. Please refresh the page to check status.');
+                        } else {
+                            messageText.text(`Installation in progress... (checking ${pollCount}/30)`);
+                        }
+                    }, 10000); // Check every 10 seconds
+                }
+                
+            } catch (error) {
+                console.error('[AI Settings] Installation error:', error);
+                statusText.text('Installation Failed');
+                messageText.text(error.message || 'An error occurred during installation.');
+                installBtn.prop('disabled', false);
+                pullBtn.prop('disabled', false);
+            }
+        }
+
+        // Setup install button handlers
+        $el_window.find('#ai-install-ollama-btn').on('click', () => {
+            installOllama('install-ollama');
+        });
+        
+        $el_window.find('#ai-pull-model-btn').on('click', () => {
+            installOllama('pull-model', 'deepseek-r1:1.5b');
+        });
+
         // Initialize
         setupEventHandlers();
         await loadAIConfig();
+        await checkOllamaStatus();
     },
     on_show: async function($content) {
         // Refresh config when tab is shown
         const $el_window = $content.closest('.window-settings');
         if ($el_window.length) {
-            // Re-run init to refresh data
+            // Re-run init to refresh data (includes Ollama status check)
             await this.init($el_window);
         }
     }

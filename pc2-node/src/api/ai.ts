@@ -759,5 +759,178 @@ router.delete('/conversations', authenticate, async (req: AuthenticatedRequest, 
   }
 });
 
+/**
+ * GET /api/ai/ollama-status
+ * Check if Ollama is installed and running, and what models are available
+ */
+router.get('/ollama-status', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { exec } = await import('child_process');
+    const { promisify } = await import('util');
+    const execAsync = promisify(exec);
+    
+    let installed = false;
+    let running = false;
+    let models: string[] = [];
+    let version = '';
+    
+    // Check if Ollama is installed
+    try {
+      const { stdout } = await execAsync('which ollama || where ollama 2>/dev/null');
+      installed = stdout.trim().length > 0;
+    } catch {
+      // Not installed
+      installed = false;
+    }
+    
+    if (installed) {
+      // Check version
+      try {
+        const { stdout } = await execAsync('ollama --version');
+        version = stdout.trim();
+      } catch {
+        version = 'unknown';
+      }
+      
+      // Check if running and get models
+      try {
+        const { stdout } = await execAsync('ollama list 2>/dev/null');
+        running = true;
+        // Parse model list (format: NAME ID SIZE MODIFIED)
+        const lines = stdout.trim().split('\n').slice(1); // Skip header
+        models = lines.map(line => line.split(/\s+/)[0]).filter(Boolean);
+      } catch {
+        running = false;
+      }
+    }
+    
+    res.json({
+      success: true,
+      result: {
+        installed,
+        running,
+        version,
+        models,
+        hasDeepseek: models.some(m => m.includes('deepseek'))
+      }
+    });
+  } catch (error: any) {
+    logger.error('[AI API] Error checking Ollama status:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to check Ollama status' });
+  }
+});
+
+/**
+ * POST /api/ai/install-ollama
+ * Install Ollama and optionally pull a model
+ * This runs the installation in the background and returns immediately
+ */
+router.post('/install-ollama', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { exec, spawn } = await import('child_process');
+    const { promisify } = await import('util');
+    const execAsync = promisify(exec);
+    
+    const { action, model } = req.body;
+    // action: 'install-ollama' | 'pull-model' | 'install-all'
+    // model: optional model name (default: deepseek-r1:1.5b)
+    
+    const targetModel = model || 'deepseek-r1:1.5b';
+    
+    // Check current status
+    let ollamaInstalled = false;
+    try {
+      const { stdout } = await execAsync('which ollama || where ollama 2>/dev/null');
+      ollamaInstalled = stdout.trim().length > 0;
+    } catch {
+      ollamaInstalled = false;
+    }
+    
+    if (action === 'install-ollama' || (action === 'install-all' && !ollamaInstalled)) {
+      if (ollamaInstalled) {
+        return res.json({
+          success: true,
+          result: { message: 'Ollama is already installed', alreadyInstalled: true }
+        });
+      }
+      
+      // Install Ollama - this will run in background
+      logger.info('[AI API] Starting Ollama installation...');
+      
+      // Run installation script
+      const installProcess = spawn('sh', ['-c', 'curl -fsSL https://ollama.com/install.sh | sh'], {
+        detached: true,
+        stdio: 'ignore'
+      });
+      installProcess.unref();
+      
+      return res.json({
+        success: true,
+        result: { 
+          message: 'Ollama installation started. This may take a few minutes. Please refresh the page to check status.',
+          installing: true
+        }
+      });
+    }
+    
+    if (action === 'pull-model' || action === 'install-all') {
+      if (!ollamaInstalled) {
+        return res.status(400).json({
+          success: false,
+          error: 'Ollama must be installed first'
+        });
+      }
+      
+      // Check if model already exists
+      try {
+        const { stdout } = await execAsync('ollama list 2>/dev/null');
+        if (stdout.includes(targetModel.split(':')[0])) {
+          return res.json({
+            success: true,
+            result: { message: `Model ${targetModel} is already installed`, alreadyInstalled: true }
+          });
+        }
+      } catch {
+        // Ollama might not be running, try to start it
+        const startProcess = spawn('ollama', ['serve'], {
+          detached: true,
+          stdio: 'ignore'
+        });
+        startProcess.unref();
+        
+        // Wait a moment for Ollama to start
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+      
+      // Pull the model in background
+      logger.info(`[AI API] Starting model pull: ${targetModel}...`);
+      
+      const pullProcess = spawn('ollama', ['pull', targetModel], {
+        detached: true,
+        stdio: 'ignore'
+      });
+      pullProcess.unref();
+      
+      return res.json({
+        success: true,
+        result: { 
+          message: `Downloading ${targetModel}. This may take several minutes depending on your connection. Please refresh to check status.`,
+          pulling: true,
+          model: targetModel
+        }
+      });
+    }
+    
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid action. Use: install-ollama, pull-model, or install-all'
+    });
+    
+  } catch (error: any) {
+    logger.error('[AI API] Error in Ollama installation:', error);
+    res.status(500).json({ success: false, error: error.message || 'Installation failed' });
+  }
+});
+
 export default router;
 

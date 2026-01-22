@@ -80,6 +80,41 @@ export default {
                             Your data, your control, powered by decentralized identity.
                         </p>
                         
+                        <!-- Update Banner (shown when update is available) -->
+                        <div id="update-banner" style="display: none; margin: 20px 0;">
+                            <div style="
+                                background: linear-gradient(135deg, #4a90d9 0%, #357abd 100%);
+                                color: white;
+                                padding: 16px 20px;
+                                border-radius: 10px;
+                                display: flex;
+                                align-items: center;
+                                justify-content: space-between;
+                                gap: 12px;
+                                cursor: pointer;
+                            " onclick="window.showUpdateModal && window.showUpdateModal(window.latestVersionInfo)">
+                                <div style="display: flex; align-items: center; gap: 12px;">
+                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                        <polyline points="7 10 12 15 17 10"/>
+                                        <line x1="12" y1="15" x2="12" y2="3"/>
+                                    </svg>
+                                    <div>
+                                        <div style="font-weight: 600; font-size: 14px;">Update Available</div>
+                                        <div id="update-banner-version" style="font-size: 12px; opacity: 0.9;">New version ready</div>
+                                    </div>
+                                </div>
+                                <div style="
+                                    background: white;
+                                    color: #357abd;
+                                    padding: 8px 16px;
+                                    border-radius: 6px;
+                                    font-size: 12px;
+                                    font-weight: 600;
+                                ">Install Now</div>
+                            </div>
+                        </div>
+                        
                         <!-- System Information -->
                         <h2 style="font-size: 14px; margin: 25px 0 10px; color: #333; border-bottom: 1px solid #eee; padding-bottom: 8px;">System Information</h2>
                         
@@ -239,6 +274,26 @@ export default {
             } catch (error) {
                 console.error('[About] Failed to load system info:', error);
                 $el_window.find('#about-node-version, #about-database-status, #about-ipfs-status').text('Error');
+            }
+            
+            // Check for updates and show banner if available
+            try {
+                const updateResponse = await fetch(`${window.api_origin || ''}/api/update/status`, {
+                    headers: { 'Authorization': `Bearer ${puter.authToken}` }
+                });
+                if (updateResponse.ok) {
+                    const updateData = await updateResponse.json();
+                    window.latestVersionInfo = updateData;
+                    
+                    if (updateData.updateAvailable) {
+                        $el_window.find('#update-banner').show();
+                        $el_window.find('#update-banner-version').text(
+                            `Version ${updateData.latestVersion} is ready to install`
+                        );
+                    }
+                }
+            } catch (error) {
+                console.log('[About] Could not check for updates:', error);
             }
         } else {
             // Original Puter version info for non-PC2 mode

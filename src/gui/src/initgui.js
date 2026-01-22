@@ -60,6 +60,7 @@ import { DebugService } from './services/DebugService.js';
 import { AIToolService } from './services/AIToolService.js';
 import { privacy_aware_path } from './util/desktop.js';
 import initKeyboardShortcuts from './helpers/keyboard_shortcuts.js';
+import './UI/UIUpdateModal.js'; // Update notification system
 
 // DEBUG: Add global message listener to see ALL messages before xd-incoming filtering
 // Also try to directly call ipc_listener if xd-incoming is filtering it out
@@ -654,6 +655,8 @@ window.initgui = async function(options){
                     UIDesktop({desktop_fsentry: desktop_fsentry});
                     // Initialize keyboard shortcuts
                     initKeyboardShortcuts();
+                    // Check for updates after desktop loads (30 second delay)
+                    setTimeout(() => window.checkForUpdates?.(), 30000);
                 } catch (statError) {
                     console.warn('[initgui]: Desktop stat failed, loading desktop anyway:', statError.message);
                     // Still load desktop even if stat fails - better than grey screen
@@ -1117,10 +1120,14 @@ window.initgui = async function(options){
                 });
                 
                 UIDesktop({ desktop_fsentry: desktop_fsentry });
+                // Check for updates after login (30 second delay)
+                setTimeout(() => window.checkForUpdates?.(), 30000);
             } catch (statError) {
                 console.warn('[initgui]: Login event - desktop stat failed:', statError.message);
                 // Still load desktop even if stat fails
                 UIDesktop({ desktop_fsentry: null });
+                // Check for updates after login (30 second delay)
+                setTimeout(() => window.checkForUpdates?.(), 30000);
             }
         }
         // -------------------------------------------------------------------------------------

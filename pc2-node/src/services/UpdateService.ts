@@ -2,12 +2,16 @@
  * Update Service
  * 
  * Checks for updates to the PC2 node software and notifies the user.
- * Follows macOS-style user-initiated updates (notify, don't auto-install).
+ * Supports macOS-style auto-updates: user clicks update, system downloads/builds/restarts.
  */
 
 import { readFileSync, existsSync } from 'fs';
 import path from 'path';
+import { exec, execSync } from 'child_process';
+import { promisify } from 'util';
 import { logger } from '../utils/logger.js';
+
+const execAsync = promisify(exec);
 
 export interface VersionInfo {
   version: string;
@@ -32,14 +36,18 @@ export interface UpdateCheckResult {
 
 export interface UpdateServiceConfig {
   checkUrl?: string;
+  githubRepo?: string;
   checkInterval?: number; // milliseconds
   enabled?: boolean;
+  projectRoot?: string;
 }
 
 const DEFAULT_CONFIG: Required<UpdateServiceConfig> = {
   checkUrl: 'https://ela.city/api/pc2/version',
-  checkInterval: 24 * 60 * 60 * 1000, // 24 hours
+  githubRepo: 'Elacity/pc2.net',
+  checkInterval: 6 * 60 * 60 * 1000, // 6 hours
   enabled: true,
+  projectRoot: process.cwd(),
 };
 
 export class UpdateService {
@@ -48,12 +56,28 @@ export class UpdateService {
   private latestVersion: VersionInfo | null = null;
   private lastCheck: Date | null = null;
   private checkTimer: NodeJS.Timeout | null = null;
+  private isUpdating: boolean = false;
+  private updateProgress: string = '';
 
   constructor(config: UpdateServiceConfig = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.currentVersion = this.loadCurrentVersion();
     
     logger.info(`[UpdateService] Initialized with version ${this.currentVersion}`);
+  }
+
+  /**
+   * Check if an update is currently in progress
+   */
+  getIsUpdating(): boolean {
+    return this.isUpdating;
+  }
+
+  /**
+   * Get current update progress message
+   */
+  getUpdateProgress(): string {
+    return this.updateProgress;
   }
 
   /**
@@ -245,6 +269,125 @@ export class UpdateService {
   }
 
   /**
+   * Check GitHub releases for latest version
+   */
+  async checkGitHubReleases(): Promise<UpdateCheckResult> {
+    try {
+      logger.info('[UpdateService] Checking GitHub releases...');
+      
+      const response = await fetch(
+        `https://api.github.com/repos/${this.config.githubRepo}/releases/latest`,
+        {
+          headers: {
+            'User-Agent': `PC2-Node/${this.currentVersion}`,
+            'Accept': 'application/vnd.github.v3+json',
+          },
+          signal: AbortSignal.timeout(10000),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`GitHub API error: ${response.status}`);
+      }
+
+      const release = await response.json();
+      const latestVersion = release.tag_name?.replace(/^v/, '') || '0.0.0';
+      
+      this.latestVersion = {
+        version: latestVersion,
+        releaseDate: release.published_at,
+        releaseNotes: release.body || '',
+        downloadUrl: release.html_url,
+      };
+      this.lastCheck = new Date();
+
+      const updateAvailable = this.compareVersions(this.currentVersion, latestVersion) < 0;
+
+      if (updateAvailable) {
+        logger.info(`[UpdateService] Update available from GitHub: ${this.currentVersion} → ${latestVersion}`);
+      }
+
+      return {
+        updateAvailable,
+        currentVersion: this.currentVersion,
+        latestVersion,
+        releaseDate: release.published_at,
+        releaseNotes: release.body || '',
+        downloadUrl: release.html_url,
+      };
+    } catch (error) {
+      logger.error('[UpdateService] GitHub release check failed:', error);
+      return {
+        updateAvailable: false,
+        currentVersion: this.currentVersion,
+        latestVersion: this.currentVersion,
+      };
+    }
+  }
+
+  /**
+   * Perform the actual update: git pull, npm install, npm build, restart
+   */
+  async performUpdate(): Promise<{ success: boolean; message: string }> {
+    if (this.isUpdating) {
+      return { success: false, message: 'Update already in progress' };
+    }
+
+    this.isUpdating = true;
+    this.updateProgress = 'Starting update...';
+
+    try {
+      // Find project root (go up from pc2-node to root)
+      const projectRoot = path.resolve(this.config.projectRoot, '..');
+      const pc2NodeDir = this.config.projectRoot;
+
+      logger.info(`[UpdateService] Starting update in ${projectRoot}`);
+
+      // Step 1: Git pull
+      this.updateProgress = 'Downloading latest code...';
+      logger.info('[UpdateService] Running git pull...');
+      await execAsync('git pull origin main', { cwd: projectRoot });
+      logger.info('[UpdateService] Git pull complete');
+
+      // Step 2: npm install (in case of new dependencies)
+      this.updateProgress = 'Installing dependencies...';
+      logger.info('[UpdateService] Running npm install...');
+      await execAsync('npm install', { cwd: pc2NodeDir });
+      logger.info('[UpdateService] npm install complete');
+
+      // Step 3: Build
+      this.updateProgress = 'Building application...';
+      logger.info('[UpdateService] Running npm build...');
+      await execAsync('npm run build', { cwd: pc2NodeDir });
+      logger.info('[UpdateService] Build complete');
+
+      // Step 4: Schedule restart
+      this.updateProgress = 'Restarting server...';
+      logger.info('[UpdateService] Update complete, scheduling restart...');
+
+      // Return success before restarting
+      setTimeout(() => {
+        try {
+          // Try systemctl first (Linux with systemd)
+          execSync('systemctl restart pc2-node', { stdio: 'ignore' });
+        } catch {
+          // Fallback: exit and let process manager restart
+          logger.info('[UpdateService] Exiting for restart...');
+          process.exit(0);
+        }
+      }, 1000);
+
+      return { success: true, message: 'Update complete, server is restarting...' };
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('[UpdateService] Update failed:', error);
+      this.isUpdating = false;
+      this.updateProgress = '';
+      return { success: false, message: `Update failed: ${errorMessage}` };
+    }
+  }
+
+  /**
    * Get update status for API response
    */
   getStatus(): {
@@ -255,6 +398,8 @@ export class UpdateService {
     releaseNotes: string | null;
     downloadUrl: string | null;
     dockerImage: string | null;
+    isUpdating: boolean;
+    updateProgress: string;
   } {
     const updateAvailable = this.latestVersion 
       ? this.compareVersions(this.currentVersion, this.latestVersion.version) < 0
@@ -268,6 +413,8 @@ export class UpdateService {
       releaseNotes: this.latestVersion?.releaseNotes || null,
       downloadUrl: this.latestVersion?.downloadUrl || null,
       dockerImage: this.latestVersion?.dockerImage || null,
+      isUpdating: this.isUpdating,
+      updateProgress: this.updateProgress,
     };
   }
 }

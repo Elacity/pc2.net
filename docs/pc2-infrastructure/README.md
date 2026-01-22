@@ -114,7 +114,7 @@ This documentation covers the PC2 (Personal Cloud Computer) infrastructure that 
 - [x] **Phase 2**: Active Proxy porting and deployment
 - [x] **Phase 3**: PC2 client integration (identity, connectivity)
 - [x] **Phase 4**: Web Gateway with subdomain routing
-- [x] **Phase 5**: End-to-end testing (completed)
+- [x] **Phase 5**: NAT traversal implementation (completed)
 
 ## Phase 5 Testing Results
 
@@ -125,16 +125,21 @@ This documentation covers the PC2 (Personal Cloud Computer) infrastructure that 
 | Username lookup | ✅ Pass | `/api/lookup/{username}` works |
 | HTTPS routing | ✅ Pass | SSL certificates valid |
 | Wildcard DNS | ✅ Pass | `*.ela.city` resolves correctly |
-| HTTP proxying | ✅ Pass | Requests forwarded to nodes |
+| HTTP proxying (direct) | ✅ Pass | Requests forwarded to nodes |
 | WebSocket proxying | ✅ Pass | Upgrade headers handled |
+| Active Proxy port | ✅ Pass | Port 8090 listening |
+| ProxyProtocol encoding | ✅ Pass | Compiles without errors |
+| ActiveProxyClient | ✅ Pass | Compiles without errors |
+| Web Gateway proxy:// | ✅ Pass | Deployed and running |
 
 ### Known Limitations (MVP)
 
 | Limitation | Resolution |
 |------------|------------|
-| Local registry only | DHT registry in Sprint 5 |
+| Local registry only | DHT registry in Sprint 6 |
 | No rate limiting | Security hardening in v1.1.0 |
-| Manual SSL expansion | Automate in Sprint 1 |
+| Manual SSL expansion | Automate in v1.1.0 |
+| WebSocket via proxy:// | Not yet supported |
 
 ## Infrastructure Details
 
@@ -155,8 +160,8 @@ This documentation covers the PC2 (Personal Cloud Computer) infrastructure that 
 | Sprint 2 | Docker packaging | ✅ Complete |
 | Sprint 3 | First-run setup wizard | ✅ Complete |
 | Sprint 4 | Update system | ✅ Complete |
-| Sprint 5 | NAT traversal, DHT registry, failover | ⏳ Next |
-| Sprint 6 | End-to-end testing, CI/CD | ⏳ Pending |
+| Sprint 5 | NAT traversal via Active Proxy | ✅ Complete |
+| Sprint 6 | End-to-end testing, CI/CD | ⏳ Next |
 
 ### Sprint 3-4 Highlights (Recently Completed)
 
@@ -176,13 +181,20 @@ This documentation covers the PC2 (Personal Cloud Computer) infrastructure that 
 - Update API endpoints
 - Frontend notification banner
 
-### Next Steps (Sprint 5)
+### Sprint 5 Highlights (Just Completed)
 
-1. **ActiveProxyClient.ts** - NAT traversal client
-2. **ProxyProtocol.ts** - Binary protocol for relay
-3. **Web Gateway update** - Support proxy:// endpoints
-4. **DHT username registry** - Decentralized resolution
-5. **Super node failover** - Automatic reconnection
+**NAT Traversal Implementation:**
+- `ProxyProtocol.ts` - Binary packet encoder/decoder
+- `ActiveProxyClient.ts` - TCP client for Active Proxy
+- `ConnectivityService` - Updated for proxy:// endpoints
+- Web Gateway deployed with Active Proxy relay support
+
+### Next Steps (Sprint 6)
+
+1. **End-to-end testing** - Full flow verification
+2. **GitHub Actions CI/CD** - Automated Docker builds
+3. **DHT username registry** - Decentralized resolution
+4. **Super node failover** - Automatic reconnection
 
 ---
 

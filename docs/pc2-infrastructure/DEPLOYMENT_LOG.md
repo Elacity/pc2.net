@@ -342,16 +342,68 @@ curl -s https://sash.ela.city?status
 
 ---
 
-## Next: MVP v1.0.0 Sprints
+## MVP Sprint 5: NAT Traversal Implementation
 
-Infrastructure is ready. Now proceeding with:
+**Completed**: 2026-01-22
 
-1. **Sprint 1**: NetworkDetector, SSL automation, documentation
-2. **Sprint 2**: Docker packaging
-3. **Sprint 3**: Setup wizard
-4. **Sprint 4**: Update system
-5. **Sprint 5**: NAT traversal, DHT registry, privacy mode
-6. **Sprint 6**: Testing, CI/CD
+### Components Implemented
+
+| Component | File | Description |
+|-----------|------|-------------|
+| ProxyProtocol | `pc2-node/src/services/boson/ProxyProtocol.ts` | Binary packet encoder/decoder |
+| ActiveProxyClient | `pc2-node/src/services/boson/ActiveProxyClient.ts` | TCP client for Active Proxy |
+| ConnectivityService | Updated | Proxy endpoint support |
+| Web Gateway | `deploy/web-gateway/index.js` | ActiveProxySession class |
+
+### Protocol Details
+
+- Packet framing: 4-byte length + 1-byte type + payload
+- Packet types: AUTH, ATTACH, PING/PONG, CONNECT, DATA, DISCONNECT
+- State machine: DISCONNECTED → CONNECTING → AUTHENTICATING → CONNECTED
+- Reconnection: Exponential backoff with max 10 attempts
+
+### Deployment Actions
+
+1. **Updated Web Gateway on VPS**
+   ```bash
+   scp deploy/web-gateway/*.* root@69.164.241.210:/root/pc2/web-gateway/
+   ssh root@69.164.241.210 "cd /root/pc2/web-gateway && npm install && systemctl restart pc2-gateway"
+   ```
+
+2. **Verified Services**
+   - Active Proxy: Port 8090 listening ✅
+   - Web Gateway: Health check passes ✅
+
+### Test Results
+
+| Test | Result |
+|------|--------|
+| ProxyProtocol compilation | ✅ Pass |
+| ActiveProxyClient compilation | ✅ Pass |
+| Active Proxy port connectivity | ✅ Pass |
+| Web Gateway health | ✅ Pass |
+
+---
+
+## MVP Progress Summary
+
+| Sprint | Focus | Status |
+|--------|-------|--------|
+| Sprint 1 | Infrastructure (docs, IP detection, SSL) | ✅ Complete |
+| Sprint 2 | Docker packaging | ✅ Complete |
+| Sprint 3 | First-run setup wizard | ✅ Complete |
+| Sprint 4 | Update system | ✅ Complete |
+| Sprint 5 | NAT traversal via Active Proxy | ✅ Complete |
+| Sprint 6 | End-to-end testing, CI/CD | ⏳ Next |
+
+---
+
+## Next: Sprint 6
+
+1. End-to-end testing with real NAT scenarios
+2. GitHub Actions CI/CD for Docker builds
+3. DHT username registry
+4. Super node failover
 
 ---
 

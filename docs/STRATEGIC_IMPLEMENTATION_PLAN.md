@@ -150,8 +150,8 @@ Significant progress on the unified MVP plan. The first four sprints are complet
 | Sprint 2 | Docker packaging (Dockerfile, compose, install script) | ✅ Complete |
 | Sprint 3 | First-run setup wizard (UI, API, redirect) | ✅ Complete |
 | Sprint 4 | Update system (service, API, notifications) | ✅ Complete |
-| Sprint 5 | NAT traversal, DHT registry, failover | ⏳ Next |
-| Sprint 6 | End-to-end testing, CI/CD | ⏳ Pending |
+| Sprint 5 | NAT traversal via Active Proxy | ✅ Complete |
+| Sprint 6 | End-to-end testing, CI/CD | ⏳ Next |
 
 **Key Deliverables:**
 
@@ -180,10 +180,16 @@ Significant progress on the unified MVP plan. The first four sprints are complet
    - `POST /api/boson/encrypt-mnemonic` - Encrypt user-provided mnemonic
    - `GET /api/boson/needs-securing` - Check mnemonic encryption status
 
-**Next: Sprint 5 (NAT Traversal)**
-- ActiveProxyClient.ts - Connect to super node
-- ProxyProtocol.ts - Binary packet encoding
-- Web Gateway update for proxy:// endpoints
+**Sprint 5 Completed (NAT Traversal):**
+- `ProxyProtocol.ts` - Binary packet encoder/decoder
+- `ActiveProxyClient.ts` - TCP client for Active Proxy
+- `ConnectivityService` - Updated for proxy:// endpoints
+- Web Gateway deployed with Active Proxy relay support
+- VPS: Port 8090 listening, gateway running
+
+**Next: Sprint 6 (Testing & CI/CD)**
+- End-to-end testing with real NAT scenarios
+- GitHub Actions for Docker builds
 - DHT-based username registry
 - Super node failover logic
 

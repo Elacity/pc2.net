@@ -7,6 +7,7 @@
  */
 
 import net from 'net';
+import crypto from 'crypto';
 import { EventEmitter } from 'events';
 import { logger } from '../../utils/logger.js';
 import {
@@ -295,7 +296,6 @@ export class ActiveProxyClient extends EventEmitter {
     // return sodium.crypto_sign_detached(data, this.config.privateKey);
     
     // Placeholder: hash the data with private key
-    const crypto = require('crypto');
     const hash = crypto.createHash('sha512');
     hash.update(data);
     hash.update(this.config.privateKey);
@@ -309,11 +309,19 @@ export class ActiveProxyClient extends EventEmitter {
    * Handle incoming data from socket
    */
   private handleData(data: Buffer): void {
-    this.packetBuffer.append(data);
-    
-    let packet: Packet | null;
-    while ((packet = this.packetBuffer.extractPacket()) !== null) {
-      this.handlePacket(packet);
+    try {
+      this.packetBuffer.append(data);
+      
+      let packet: Packet | null;
+      while ((packet = this.packetBuffer.extractPacket()) !== null) {
+        this.handlePacket(packet);
+      }
+    } catch (error) {
+      // Log the raw data for debugging protocol mismatches
+      const preview = data.slice(0, 100).toString('hex');
+      logger.error(`[ActiveProxy] Protocol error: ${error}. Data preview: ${preview}`);
+      this.emit('error', error instanceof Error ? error : new Error(String(error)));
+      this.handleDisconnect('Protocol error');
     }
   }
 

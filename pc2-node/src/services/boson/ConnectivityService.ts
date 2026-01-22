@@ -12,7 +12,7 @@ import { logger } from '../../utils/logger.js';
 import { UsernameService } from './UsernameService.js';
 import { NetworkDetector, type NATType } from './NetworkDetector.js';
 import { ActiveProxyClient, ConnectionState, type ProxyConnection } from './ActiveProxyClient.js';
-import { createServer, type Server, type Socket } from 'net';
+import net, { type Server, type Socket } from 'net';
 import { request as httpRequest } from 'http';
 
 export interface SuperNode {
@@ -138,7 +138,13 @@ export class ConnectivityService {
 
     // Attempt initial connection
     if (needsProxy && this.publicKey && this.privateKey && this.nodeId) {
-      await this.connectViaActiveProxy();
+      try {
+        await this.connectViaActiveProxy();
+      } catch (error) {
+        logger.warn(`⚠️ Active Proxy connection failed: ${error}. Node will run in local-only mode.`);
+        // Fall back to direct connection attempt
+        await this.connect();
+      }
     } else {
       await this.connect();
     }
@@ -242,7 +248,7 @@ export class ConnectivityService {
     logger.info(`🔌 New proxied connection ${conn.connectionId} from ${conn.sourceAddress}:${conn.sourcePort}`);
 
     // Create a local socket to the PC2 node
-    const localSocket = new (require('net').Socket)();
+    const localSocket = new net.Socket();
     
     localSocket.connect(this.config.localPort, '127.0.0.1', () => {
       logger.debug(`[Proxy] Connected to local server for connection ${conn.connectionId}`);

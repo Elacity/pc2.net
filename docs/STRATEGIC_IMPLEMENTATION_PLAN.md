@@ -5408,6 +5408,7 @@ function getBaseUrl(req: Request): string {
 | `pc2-node/src/api/other.ts` | Added `getBaseUrl()`, replaced 5 occurrences of `baseUrl` construction |
 | `pc2-node/src/api/info.ts` | Added `getBaseUrl()`, replaced 1 occurrence in `/get-launch-apps` |
 | `pc2-node/src/api/apps.ts` | Added `getBaseUrl()`, replaced 1 occurrence in `/apps/:name` handler |
+| `pc2-node/src/static.ts` | Added `getBaseUrl()`, fixed Particle Auth API origin injection |
 
 ### Nginx Configuration Required
 
@@ -5453,6 +5454,7 @@ curl -H "X-Forwarded-Proto: https" https://your-server/apps/calculator
 
 - `f9f655eb`: Added `getBaseUrl()` to `other.ts` and `info.ts`
 - `8b667463`: Added `getBaseUrl()` to `apps.ts` for WASM apps
+- `9b22e5d8`: Added `getBaseUrl()` to `static.ts` for Particle Auth
 
 ---
 

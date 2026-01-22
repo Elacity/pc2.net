@@ -15,6 +15,7 @@
 
 import { logger } from '../../utils/logger.js';
 import { UsernameService } from './UsernameService.js';
+import { NetworkDetector, type NATType } from './NetworkDetector.js';
 
 export interface SuperNode {
   id: string;
@@ -29,6 +30,7 @@ export interface ConnectivityConfig {
   reconnectIntervalMs: number;
   heartbeatIntervalMs: number;
   localPort: number;
+  privacyMode: boolean; // When true, always use Active Proxy even with public IP
 }
 
 export interface ConnectionStatus {
@@ -59,6 +61,7 @@ export class ConnectivityService {
   private usernameService: UsernameService | null = null;
   private nodeId: string | null = null;
   private isRunning: boolean = false;
+  private networkDetector: NetworkDetector;
 
   constructor(config?: Partial<ConnectivityConfig>) {
     this.config = {
@@ -66,7 +69,10 @@ export class ConnectivityService {
       reconnectIntervalMs: config?.reconnectIntervalMs || 30000,
       heartbeatIntervalMs: config?.heartbeatIntervalMs || 60000,
       localPort: config?.localPort || 4200,
+      privacyMode: config?.privacyMode || false,
     };
+    
+    this.networkDetector = new NetworkDetector();
 
     this.status = {
       connected: false,
@@ -104,11 +110,39 @@ export class ConnectivityService {
     this.isRunning = true;
     logger.info('🌐 Starting connectivity service...');
 
+    // Detect network configuration
+    const networkInfo = await this.networkDetector.detect();
+    
+    if (this.config.privacyMode) {
+      logger.info('🔒 Privacy mode enabled - will use Active Proxy');
+      this.status.natType = 'relay';
+    } else if (networkInfo.hasPublicIP) {
+      logger.info(`📡 Direct public IP detected: ${networkInfo.publicIP}`);
+      this.status.natType = 'direct';
+    } else {
+      logger.info(`🔀 Behind NAT (${networkInfo.natType}) - will use Active Proxy`);
+      this.status.natType = networkInfo.natType === 'direct' ? 'direct' : 'relay';
+    }
+
     // Attempt initial connection
     await this.connect();
 
     // Start heartbeat
     this.startHeartbeat();
+  }
+  
+  /**
+   * Get network detector for external access
+   */
+  getNetworkDetector(): NetworkDetector {
+    return this.networkDetector;
+  }
+  
+  /**
+   * Check if privacy mode is enabled
+   */
+  isPrivacyMode(): boolean {
+    return this.config.privacyMode;
   }
 
   /**
@@ -191,11 +225,27 @@ export class ConnectivityService {
   private async registerWithGateway(superNode: SuperNode): Promise<void> {
     if (!this.usernameService) return;
 
-    // For now, use local endpoint
-    // In production with NAT traversal, this would be the proxy endpoint
-    const localEndpoint = `http://127.0.0.1:${this.config.localPort}`;
+    let endpoint: string;
     
-    const result = await this.usernameService.updateEndpoint(localEndpoint);
+    if (this.status.natType === 'direct' && !this.config.privacyMode) {
+      // Direct mode: Use public IP
+      const networkInfo = await this.networkDetector.detect();
+      if (networkInfo.publicIP) {
+        endpoint = `http://${networkInfo.publicIP}:${this.config.localPort}`;
+        logger.info(`📡 Direct mode: registering public IP endpoint`);
+      } else {
+        // Fallback to localhost
+        endpoint = `http://127.0.0.1:${this.config.localPort}`;
+        logger.warn('Could not detect public IP, using localhost');
+      }
+    } else {
+      // NAT/Privacy mode: Use local endpoint (will be proxied via Active Proxy)
+      // In full implementation, this would be: proxy://${superNode.address}:${superNode.proxyPort}/${sessionId}
+      endpoint = `http://127.0.0.1:${this.config.localPort}`;
+      logger.info(`🔒 Privacy/NAT mode: using proxied endpoint`);
+    }
+    
+    const result = await this.usernameService.updateEndpoint(endpoint);
     
     if (result.success) {
       this.status.publicEndpoint = this.usernameService.getPublicUrl();

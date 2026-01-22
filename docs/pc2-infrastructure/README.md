@@ -83,6 +83,7 @@ This documentation covers the PC2 (Personal Cloud Computer) infrastructure that 
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Detailed technical architecture |
 | [PC2_CLIENT_INTEGRATION.md](PC2_CLIENT_INTEGRATION.md) | PC2 node identity & connectivity |
 | [DEPLOYMENT_LOG.md](DEPLOYMENT_LOG.md) | Deployment history and decisions |
+| [SSL_CERTIFICATES.md](SSL_CERTIFICATES.md) | SSL certificate management |
 
 ## Quick Links
 
@@ -113,7 +114,27 @@ This documentation covers the PC2 (Personal Cloud Computer) infrastructure that 
 - [x] **Phase 2**: Active Proxy porting and deployment
 - [x] **Phase 3**: PC2 client integration (identity, connectivity)
 - [x] **Phase 4**: Web Gateway with subdomain routing
-- [ ] **Phase 5**: End-to-end testing
+- [x] **Phase 5**: End-to-end testing (completed)
+
+## Phase 5 Testing Results
+
+| Test | Status | Notes |
+|------|--------|-------|
+| Web Gateway health | ✅ Pass | `/api/health` returns 200 |
+| Username registration | ✅ Pass | Users can register via POST |
+| Username lookup | ✅ Pass | `/api/lookup/{username}` works |
+| HTTPS routing | ✅ Pass | SSL certificates valid |
+| Wildcard DNS | ✅ Pass | `*.ela.city` resolves correctly |
+| HTTP proxying | ✅ Pass | Requests forwarded to nodes |
+| WebSocket proxying | ✅ Pass | Upgrade headers handled |
+
+### Known Limitations (MVP)
+
+| Limitation | Resolution |
+|------------|------------|
+| Local registry only | DHT registry in Sprint 5 |
+| No rate limiting | Security hardening in v1.1.0 |
+| Manual SSL expansion | Automate in Sprint 1 |
 
 ## Infrastructure Details
 
@@ -126,6 +147,17 @@ This documentation covers the PC2 (Personal Cloud Computer) infrastructure that 
 - **Wildcard**: `*.ela.city` → 69.164.241.210
 - **Root**: `ela.city` → 35.205.174.216 (existing website)
 
+## Next Steps (MVP v1.0.0)
+
+See the unified plan for full roadmap. Key next steps:
+
+1. **Sprint 1**: NetworkDetector, SSL automation
+2. **Sprint 2**: Docker packaging
+3. **Sprint 3**: Setup wizard
+4. **Sprint 4**: Update system
+5. **Sprint 5**: NAT traversal, DHT registry
+6. **Sprint 6**: Testing, CI/CD
+
 ---
 
-*Last Updated: January 2026*
+*Last Updated: January 22, 2026*

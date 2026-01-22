@@ -1,17 +1,22 @@
 # PC2 Node - Personal Cloud Computer
-# Self-contained Docker image with all dependencies
+# Self-contained Docker image for sovereign personal computing
 #
-# Build: docker build -t elastos/pc2-node .
-# Run:   docker run -d -p 4200:4200 -v pc2-data:/app/data elastos/pc2-node
+# Quick Start:
+#   curl -fsSL https://ela.city/install.sh | bash
 #
-# For HTTPS with Let's Encrypt:
-#   docker run -d -p 443:443 -p 80:80 \
-#     -e HTTPS_ENABLED=true \
-#     -e DOMAIN=your-domain.com \
-#     -e LETSENCRYPT_EMAIL=you@email.com \
+# Manual Build:
+#   docker build -t ghcr.io/elacity/pc2-node:latest -f pc2-node/Dockerfile .
+#
+# Manual Run:
+#   docker run -d --name pc2 \
+#     -p 4200:4200 \
 #     -v pc2-data:/app/data \
-#     -v pc2-certs:/app/certs \
-#     elastos/pc2-node
+#     -e PC2_USERNAME=yourname \
+#     ghcr.io/elacity/pc2-node:latest
+#
+# Your node will be accessible at: https://yourname.ela.city
+#
+# Version: 1.0.0
 
 FROM node:20-alpine AS builder
 
@@ -76,6 +81,12 @@ ENV PORT=4200
 ENV PC2_DATA_DIR=/app/data
 ENV PC2_ISOLATION_MODE=namespace
 ENV HTTPS_ENABLED=false
+ENV PC2_VERSION=1.0.0
+
+# Boson connectivity (super node gateway)
+ENV BOSON_GATEWAY_URL=https://demo.ela.city
+ENV BOSON_PUBLIC_DOMAIN=ela.city
+ENV BOSON_PRIVACY_MODE=false
 
 # Expose ports
 # 4200: HTTP/HTTPS

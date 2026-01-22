@@ -15,3 +15,6 @@ export type { UsernameConfig, UsernameInfo } from './UsernameService.js';
 
 export { ConnectivityService } from './ConnectivityService.js';
 export type { SuperNode, ConnectivityConfig, ConnectionStatus } from './ConnectivityService.js';
+
+export { NetworkDetector } from './NetworkDetector.js';
+export type { NetworkInfo, NetworkDetectorConfig, NATType } from './NetworkDetector.js';

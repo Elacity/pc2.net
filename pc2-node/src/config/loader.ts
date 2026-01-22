@@ -35,6 +35,7 @@ export interface Config {
     gateway_url?: string;
     public_domain?: string;
     auto_connect?: boolean;
+    privacy_mode?: boolean;
   };
   ai?: {
     enabled?: boolean;

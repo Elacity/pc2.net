@@ -20,7 +20,8 @@
     "enabled": true,
     "gateway_url": "https://demo.ela.city",
     "public_domain": "ela.city",
-    "auto_connect": true
+    "auto_connect": true,
+    "privacy_mode": false
   },
   "ai": {
     "enabled": true,

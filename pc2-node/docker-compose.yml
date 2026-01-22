@@ -1,25 +1,27 @@
 # PC2 Node - Docker Compose Configuration
+# Sovereign Personal Cloud Computer
 #
 # Quick Start:
-#   docker-compose up -d
+#   PC2_USERNAME=yourname docker-compose up -d
+#   # Your node: https://yourname.ela.city
 #
-# With HTTPS (Let's Encrypt):
-#   DOMAIN=your-domain.com LETSENCRYPT_EMAIL=you@email.com docker-compose up -d
+# With Privacy Mode (hide IP):
+#   PC2_USERNAME=yourname BOSON_PRIVACY_MODE=true docker-compose up -d
 #
 # View logs:
 #   docker-compose logs -f
 #
 # Stop:
 #   docker-compose down
-
-version: '3.8'
+#
+# Version: 1.0.0
 
 services:
   pc2-node:
     build:
       context: ..
       dockerfile: pc2-node/Dockerfile
-    image: elastos/pc2-node:latest
+    image: ghcr.io/elacity/pc2-node:latest
     container_name: pc2-node
     restart: unless-stopped
     
@@ -35,6 +37,14 @@ services:
       - PORT=4200
       - PC2_DATA_DIR=/app/data
       - PC2_ISOLATION_MODE=namespace
+      - PC2_VERSION=1.0.0
+      # Username for yourname.ela.city
+      - PC2_USERNAME=${PC2_USERNAME:-}
+      # Boson connectivity
+      - BOSON_GATEWAY_URL=${BOSON_GATEWAY_URL:-https://demo.ela.city}
+      - BOSON_PUBLIC_DOMAIN=${BOSON_PUBLIC_DOMAIN:-ela.city}
+      - BOSON_PRIVACY_MODE=${BOSON_PRIVACY_MODE:-false}
+      # Optional HTTPS
       - HTTPS_ENABLED=${HTTPS_ENABLED:-false}
       - DOMAIN=${DOMAIN:-}
       - LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL:-}

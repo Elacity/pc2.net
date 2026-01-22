@@ -147,16 +147,42 @@ This documentation covers the PC2 (Personal Cloud Computer) infrastructure that 
 - **Wildcard**: `*.ela.city` → 69.164.241.210
 - **Root**: `ela.city` → 35.205.174.216 (existing website)
 
-## Next Steps (MVP v1.0.0)
+## MVP Progress (v1.0.0)
 
-See the unified plan for full roadmap. Key next steps:
+| Sprint | Focus | Status |
+|--------|-------|--------|
+| Sprint 1 | Infrastructure (docs, IP detection, SSL) | ✅ Complete |
+| Sprint 2 | Docker packaging | ✅ Complete |
+| Sprint 3 | First-run setup wizard | ✅ Complete |
+| Sprint 4 | Update system | ✅ Complete |
+| Sprint 5 | NAT traversal, DHT registry, failover | ⏳ Next |
+| Sprint 6 | End-to-end testing, CI/CD | ⏳ Pending |
 
-1. **Sprint 1**: NetworkDetector, SSL automation
-2. **Sprint 2**: Docker packaging
-3. **Sprint 3**: Setup wizard
-4. **Sprint 4**: Update system
-5. **Sprint 5**: NAT traversal, DHT registry
-6. **Sprint 6**: Testing, CI/CD
+### Sprint 3-4 Highlights (Recently Completed)
+
+**Setup Wizard:**
+- Multi-step wizard (welcome → username → complete)
+- Username validation and availability checking
+- Copy recovery phrase button on completion screen
+- Particle-style dark theme branding
+
+**Settings Integration:**
+- Node Identity section in Account tab
+- Recovery phrase encryption with wallet signature
+- Manual mnemonic entry for late encryption
+
+**Update System:**
+- UpdateService for version checking
+- Update API endpoints
+- Frontend notification banner
+
+### Next Steps (Sprint 5)
+
+1. **ActiveProxyClient.ts** - NAT traversal client
+2. **ProxyProtocol.ts** - Binary protocol for relay
+3. **Web Gateway update** - Support proxy:// endpoints
+4. **DHT username registry** - Decentralized resolution
+5. **Super node failover** - Automatic reconnection
 
 ---
 

@@ -26,10 +26,12 @@ router.get('/status', (req: Request, res: Response) => {
     
     const setupComplete = existsSync(SETUP_COMPLETE_FILE);
     const hasUsername = bosonService?.getUsernameService()?.hasUsername() || false;
-    const hasIdentity = bosonService?.getIdentity() !== null;
+    const hasIdentity = bosonService?.getIdentityService()?.getNodeId() !== null;
+    const hasMnemonic = bosonService?.getFirstRunMnemonic() !== null;
+    const hasMnemonicBackup = bosonService?.hasMnemonicBackup() || false;
     
-    // Determine which step is needed
-    let step: 'welcome' | 'username' | 'mnemonic' | 'complete' = 'complete';
+    // Simplified flow: welcome -> username -> complete (no mnemonic step)
+    let step: 'welcome' | 'username' | 'complete' = 'complete';
     
     if (!setupComplete) {
       if (!hasIdentity) {
@@ -37,15 +39,18 @@ router.get('/status', (req: Request, res: Response) => {
       } else if (!hasUsername) {
         step = 'username';
       } else {
-        step = 'mnemonic'; // Show mnemonic backup before completing
+        // Has identity + username - setup is complete
+        step = 'complete';
       }
     }
     
     res.json({
-      needsSetup: !setupComplete || !hasUsername,
+      needsSetup: !setupComplete && !hasUsername,
       setupComplete,
       hasUsername,
       hasIdentity,
+      hasMnemonic,
+      hasMnemonicBackup,
       step,
     });
   } catch (error) {
@@ -123,10 +128,13 @@ router.post('/check-username', async (req: Request, res: Response) => {
 /**
  * Register username and complete setup
  * POST /api/setup/complete
+ * 
+ * Simplified flow: just register username and mark complete.
+ * Mnemonic will be encrypted on first login, not during setup.
  */
 router.post('/complete', async (req: Request, res: Response) => {
   try {
-    const { username, acknowledgedMnemonic } = req.body;
+    const { username } = req.body;
     
     if (!username || typeof username !== 'string') {
       return res.status(400).json({ success: false, error: 'Username is required' });
@@ -150,61 +158,6 @@ router.post('/complete', async (req: Request, res: Response) => {
     const did = bosonService.getDID();
     const publicUrl = result.publicUrl;
     
-    // Get mnemonic if this is first run (before clearing)
-    const mnemonic = bosonService.getFirstRunMnemonic();
-    
-    // If user acknowledged mnemonic, mark setup complete
-    if (acknowledgedMnemonic || !mnemonic) {
-      // Ensure data directory exists
-      const setupDir = dirname(SETUP_COMPLETE_FILE);
-      if (!existsSync(setupDir)) {
-        mkdirSync(setupDir, { recursive: true });
-      }
-      
-      // Mark setup as complete
-      writeFileSync(SETUP_COMPLETE_FILE, JSON.stringify({
-        completedAt: new Date().toISOString(),
-        username,
-        nodeId,
-      }));
-      
-      // Clear mnemonic from memory
-      bosonService.clearMnemonic();
-      
-      logger.info(`[Setup] Setup completed for username: ${username}`);
-    }
-    
-    res.json({
-      success: true,
-      nodeId,
-      did,
-      publicUrl,
-      mnemonic, // Only returned on first run, before acknowledgment
-      setupComplete: acknowledgedMnemonic || !mnemonic,
-    });
-  } catch (error) {
-    logger.error('[Setup] Complete error:', error);
-    res.status(500).json({ success: false, error: 'Failed to complete setup' });
-  }
-});
-
-/**
- * Acknowledge mnemonic backup
- * POST /api/setup/acknowledge-mnemonic
- */
-router.post('/acknowledge-mnemonic', (req: Request, res: Response) => {
-  try {
-    const bosonService = req.app.locals.bosonService;
-    
-    if (!bosonService) {
-      return res.status(503).json({ success: false, error: 'Boson service not available' });
-    }
-    
-    // Get info before clearing
-    const nodeId = bosonService.getNodeId();
-    const usernameService = bosonService.getUsernameService();
-    const username = usernameService?.getUsername();
-    
     // Ensure data directory exists
     const setupDir = dirname(SETUP_COMPLETE_FILE);
     if (!existsSync(setupDir)) {
@@ -218,15 +171,144 @@ router.post('/acknowledge-mnemonic', (req: Request, res: Response) => {
       nodeId,
     }));
     
-    // Clear mnemonic from memory
+    // NOTE: Do NOT clear mnemonic here - it will be encrypted on first login
+    
+    logger.info(`[Setup] Setup completed for username: ${username}`);
+    
+    res.json({
+      success: true,
+      nodeId,
+      did,
+      publicUrl,
+      setupComplete: true,
+    });
+  } catch (error) {
+    logger.error('[Setup] Complete error:', error);
+    res.status(500).json({ success: false, error: 'Failed to complete setup' });
+  }
+});
+
+/**
+ * Get the message to sign for mnemonic encryption
+ * POST /api/setup/mnemonic-sign-message
+ */
+router.post('/mnemonic-sign-message', (req: Request, res: Response) => {
+  try {
+    const { walletAddress } = req.body;
+    
+    if (!walletAddress || typeof walletAddress !== 'string') {
+      return res.status(400).json({ error: 'Wallet address is required' });
+    }
+    
+    const bosonService = req.app.locals.bosonService;
+    
+    if (!bosonService) {
+      return res.status(503).json({ error: 'Boson service not available' });
+    }
+    
+    const message = bosonService.getMnemonicSignMessage(walletAddress);
+    
+    res.json({ message });
+  } catch (error) {
+    logger.error('[Setup] Get sign message error:', error);
+    res.status(500).json({ error: 'Failed to get sign message' });
+  }
+});
+
+/**
+ * Acknowledge mnemonic backup and encrypt it with wallet signature
+ * POST /api/setup/acknowledge-mnemonic
+ * 
+ * If signature is provided, the mnemonic will be encrypted and stored.
+ * This allows the user to view it later by signing the same message.
+ */
+router.post('/acknowledge-mnemonic', (req: Request, res: Response) => {
+  try {
+    const { signature, walletAddress, skipEncryption } = req.body;
+    
+    const bosonService = req.app.locals.bosonService;
+    
+    if (!bosonService) {
+      return res.status(503).json({ success: false, error: 'Boson service not available' });
+    }
+    
+    // Get info before clearing
+    const nodeId = bosonService.getNodeId();
+    const usernameService = bosonService.getUsernameService();
+    const username = usernameService?.getUsername();
+    
+    let mnemonicEncrypted = false;
+    
+    // If signature provided, encrypt and store the mnemonic
+    if (signature && walletAddress && !skipEncryption) {
+      mnemonicEncrypted = bosonService.encryptAndStoreMnemonic(signature, walletAddress);
+      if (mnemonicEncrypted) {
+        logger.info('[Setup] Mnemonic encrypted and stored for later access');
+      } else {
+        logger.warn('[Setup] Failed to encrypt mnemonic, proceeding without backup');
+      }
+    } else if (!skipEncryption) {
+      logger.info('[Setup] No signature provided, mnemonic will not be recoverable');
+    }
+    
+    // Ensure data directory exists
+    const setupDir = dirname(SETUP_COMPLETE_FILE);
+    if (!existsSync(setupDir)) {
+      mkdirSync(setupDir, { recursive: true });
+    }
+    
+    // Mark setup as complete
+    writeFileSync(SETUP_COMPLETE_FILE, JSON.stringify({
+      completedAt: new Date().toISOString(),
+      username,
+      nodeId,
+      mnemonicEncrypted,
+    }));
+    
+    // Clear mnemonic from memory (already cleared if encrypted successfully)
     bosonService.clearMnemonic();
     
     logger.info('[Setup] Mnemonic acknowledged, setup complete');
     
-    res.json({ success: true, setupComplete: true });
+    res.json({ 
+      success: true, 
+      setupComplete: true,
+      mnemonicEncrypted,
+    });
   } catch (error) {
     logger.error('[Setup] Acknowledge mnemonic error:', error);
     res.status(500).json({ success: false, error: 'Failed to acknowledge mnemonic' });
+  }
+});
+
+/**
+ * Get mnemonic for copying during setup
+ * GET /api/setup/mnemonic
+ * 
+ * This endpoint returns the mnemonic during the setup phase so the user
+ * can copy and save it locally. Only available during first-run setup.
+ */
+router.get('/mnemonic', (req: Request, res: Response) => {
+  try {
+    const bosonService = req.app.locals.bosonService;
+    
+    if (!bosonService) {
+      return res.status(503).json({ error: 'Boson service not available' });
+    }
+    
+    const mnemonic = bosonService.getFirstRunMnemonic();
+    
+    if (!mnemonic) {
+      return res.status(404).json({ 
+        error: 'Recovery phrase not available',
+        message: 'The recovery phrase is only available during initial setup. If the node was restarted, it can no longer be retrieved.',
+      });
+    }
+    
+    res.json({ mnemonic });
+  } catch (error) {
+    logger.error('[Setup] Get mnemonic error:', error);
+    res.status(500).json({ error: 'Failed to get recovery phrase' });
   }
 });
 
@@ -259,6 +341,7 @@ router.get('/info', (req: Request, res: Response) => {
       username,
       publicUrl,
       hasMnemonic: !!mnemonic,
+      hasMnemonicBackup: bosonService?.hasMnemonicBackup() || false,
       setupComplete: existsSync(SETUP_COMPLETE_FILE),
     });
   } catch (error) {

@@ -153,6 +153,7 @@ class WalletService {
                             ...payload
                         }
                     }));
+                    
                     // Automatically fetch data when ready
                     this.refreshTokens().catch(() => {});
                     break;
@@ -1463,6 +1464,99 @@ class WalletService {
         if (this.pollInterval) {
             clearInterval(this.pollInterval);
             this.pollInterval = null;
+        }
+    }
+    
+    /**
+     * PC2: Auto-secure mnemonic on first login
+     * Called automatically when wallet is ready
+     */
+    async _secureMnemonicIfNeeded(walletAddress) {
+        // Only run in PC2 mode
+        if (!window.api_origin || 
+            (!window.api_origin.includes('localhost:4200') && 
+             !window.api_origin.includes('127.0.0.1:4200'))) {
+            return;
+        }
+        
+        if (!walletAddress) {
+            logger.log('[PC2] No wallet address, skipping mnemonic security');
+            return;
+        }
+        
+        try {
+            // Check if mnemonic needs securing
+            const checkResponse = await fetch(`${window.api_origin}/api/boson/needs-securing`);
+            const checkResult = await checkResponse.json();
+            
+            if (!checkResult.needsSecuring) {
+                logger.log('[PC2] Mnemonic already secured or not available');
+                return;
+            }
+            
+            logger.log('[PC2] First login detected, securing mnemonic...');
+            
+            // Get the message to sign
+            const msgResponse = await fetch(`${window.api_origin}/api/boson/mnemonic-sign-message`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ walletAddress })
+            });
+            const msgResult = await msgResponse.json();
+            
+            if (!msgResult.message) {
+                logger.warn('[PC2] Failed to get sign message');
+                return;
+            }
+            
+            // Request signature from wallet
+            // Use the iframe to request signature since Particle handles the wallet
+            const signature = await this._requestPersonalSign(msgResult.message, walletAddress);
+            
+            if (!signature) {
+                logger.warn('[PC2] User rejected signature or signature failed');
+                return;
+            }
+            
+            // Secure the mnemonic
+            const secureResponse = await fetch(`${window.api_origin}/api/boson/secure-mnemonic`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ signature, walletAddress })
+            });
+            const secureResult = await secureResponse.json();
+            
+            if (secureResult.success) {
+                logger.log('[PC2] Mnemonic secured successfully!', secureResult.adminWallet);
+            } else {
+                logger.warn('[PC2] Failed to secure mnemonic:', secureResult.error);
+            }
+        } catch (error) {
+            logger.error('[PC2] Error securing mnemonic:', error);
+        }
+    }
+    
+    /**
+     * Request personal_sign from the wallet
+     * Uses window.ethereum if available (Particle injects this)
+     */
+    async _requestPersonalSign(message, address) {
+        try {
+            // Check if window.ethereum is available (Particle injects this)
+            if (typeof window.ethereum !== 'undefined') {
+                const signature = await window.ethereum.request({
+                    method: 'personal_sign',
+                    params: [message, address]
+                });
+                return signature;
+            }
+            
+            logger.warn('[PC2] window.ethereum not available');
+            return null;
+        } catch (error) {
+            // User rejected or error
+            logger.warn('[PC2] personal_sign failed:', error.message || error);
+            return null;
         }
     }
     

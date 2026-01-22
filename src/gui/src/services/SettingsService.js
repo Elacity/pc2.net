@@ -33,6 +33,7 @@ export class SettingsService extends Service {
     #tabs = [];
     async _init () {
         // Account first, then Security, Personal Cloud (PC2), etc.
+        // Note: Identity data is now integrated into Account tab
         ;[
             AccountTab,
             SecurityTab,

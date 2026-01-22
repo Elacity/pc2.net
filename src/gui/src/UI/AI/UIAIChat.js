@@ -2325,46 +2325,46 @@ async function sendAIMessage() {
     const isResendingEdit = skipNextUserMessage;
     
     if (!isResendingEdit) {
-        let messageDisplay = window.html_encode(chatInputValue || '');
-        if (attachedFiles.length > 0) {
-            messageDisplay += '<div class="ai-message-files">';
-            attachedFiles.forEach(file => {
-                const fileName = file.name || file.path?.split('/').pop() || 'Unknown';
-                if (file.type?.startsWith('image/') && file.read_url) {
-                    // Show image thumbnail in message
-                    messageDisplay += `<div class="ai-message-file-item ai-message-file-image"><img src="${file.read_url}" alt="${window.html_encode(fileName)}" class="ai-message-file-thumbnail"><span>${window.html_encode(fileName)}</span></div>`;
-                } else {
-                    const fileIcon = file.type === 'application/pdf' ? '📄' : '📎';
-                    messageDisplay += `<div class="ai-message-file-item">${fileIcon} ${window.html_encode(fileName)}</div>`;
-                }
-            });
-            messageDisplay += '</div>';
-        }
-        
-        $('.ai-chat-messages').append(
-            `<div class="ai-chat-message ai-chat-message-user-wrapper" id="${userMessageId}" data-message-id="${userMessageId}">
-                <div class="ai-chat-message-user">${messageDisplay}</div>
+    let messageDisplay = window.html_encode(chatInputValue || '');
+    if (attachedFiles.length > 0) {
+        messageDisplay += '<div class="ai-message-files">';
+        attachedFiles.forEach(file => {
+            const fileName = file.name || file.path?.split('/').pop() || 'Unknown';
+            if (file.type?.startsWith('image/') && file.read_url) {
+                // Show image thumbnail in message
+                messageDisplay += `<div class="ai-message-file-item ai-message-file-image"><img src="${file.read_url}" alt="${window.html_encode(fileName)}" class="ai-message-file-thumbnail"><span>${window.html_encode(fileName)}</span></div>`;
+            } else {
+                const fileIcon = file.type === 'application/pdf' ? '📄' : '📎';
+                messageDisplay += `<div class="ai-message-file-item">${fileIcon} ${window.html_encode(fileName)}</div>`;
+            }
+        });
+        messageDisplay += '</div>';
+    }
+    
+    $('.ai-chat-messages').append(
+        `<div class="ai-chat-message ai-chat-message-user-wrapper" id="${userMessageId}" data-message-id="${userMessageId}">
+            <div class="ai-chat-message-user">${messageDisplay}</div>
                 <div class="ai-message-footer">
-                    <div class="ai-message-actions">
-                        <button class="ai-message-copy" title="Copy message"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
-                        <button class="ai-message-edit" title="Edit message"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+            <div class="ai-message-actions">
+                <button class="ai-message-copy" title="Copy message"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+                <button class="ai-message-edit" title="Edit message"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
                     </div>
-                </div>
-            </div>`
-        );
+            </div>
+        </div>`
+    );
     }
     
     $('.ai-chat-messages').addClass('active');
     
     // Add to history only if not resending an edited message
     if (!isResendingEdit) {
-        const convId = getCurrentConversationId();
-        if (!convId) {
-            // Create new conversation if none exists
-            const newId = 'conv-' + Date.now();
-            setCurrentConversationId(newId);
-        }
-        addToHistory('user', messageContent, userMessageId, attachedFiles);
+    const convId = getCurrentConversationId();
+    if (!convId) {
+        // Create new conversation if none exists
+        const newId = 'conv-' + Date.now();
+        setCurrentConversationId(newId);
+    }
+    addToHistory('user', messageContent, userMessageId, attachedFiles);
     }
     
     // Store last message for retry functionality
@@ -2758,7 +2758,7 @@ async function sendAIMessage() {
                         if (tool) {
                             if (chunk.is_error || chunk.error) {
                                 trackToolExecution(toolId, tool.name, tool.input, 'error', null, chunk.content || chunk.error);
-                            } else {
+                        } else {
                                 trackToolExecution(toolId, tool.name, tool.input, 'success', chunk.content || chunk.result);
                             }
                             
@@ -2839,9 +2839,9 @@ async function sendAIMessage() {
             // Final render with thinking block and collapsible progress bar (contains tool cards)
             const finalContent = renderMessageWithThinking(fullContent || '', false) + renderProgressBar();
             $aiMessage.html(finalContent);
-            if (fullContent) {
-                addToHistory('assistant', fullContent);
-                updateHistoryMenu();
+        if (fullContent) {
+            addToHistory('assistant', fullContent);
+            updateHistoryMenu();
             }
         } else if ($aiMessage.text().trim()) {
             // If we have content in the message but fullContent is empty (edge case)

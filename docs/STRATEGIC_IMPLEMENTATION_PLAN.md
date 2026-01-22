@@ -138,6 +138,57 @@ Implemented Boson services in the PC2 node software:
 
 ---
 
+### 🎯 Recent Progress (2026-01-22)
+
+**MVP v1.0.0 Progress - Sprints 1-4 ✅ COMPLETE**
+
+Significant progress on the unified MVP plan. The first four sprints are complete, establishing the core infrastructure for packaging and distribution.
+
+| Sprint | Focus | Status |
+|--------|-------|--------|
+| Sprint 1 | Infrastructure (docs, IP detection, SSL) | ✅ Complete |
+| Sprint 2 | Docker packaging (Dockerfile, compose, install script) | ✅ Complete |
+| Sprint 3 | First-run setup wizard (UI, API, redirect) | ✅ Complete |
+| Sprint 4 | Update system (service, API, notifications) | ✅ Complete |
+| Sprint 5 | NAT traversal, DHT registry, failover | ⏳ Next |
+| Sprint 6 | End-to-end testing, CI/CD | ⏳ Pending |
+
+**Key Deliverables:**
+
+1. **Setup Wizard (Sprint 3)**
+   - Multi-step wizard: Welcome → Username → Complete
+   - Particle-style dark theme matching login UI
+   - Copy recovery phrase button on completion screen
+   - Username validation and real-time availability checking
+   - Warning icon and messaging for mnemonic backup
+
+2. **Settings Integration**
+   - Node Identity section merged into Account tab
+   - Node ID, DID, Public URL, Recovery Phrase in one card
+   - Wallet-based encryption for recovery phrase
+   - Manual mnemonic entry for late encryption
+
+3. **Update System (Sprint 4)**
+   - UpdateService for periodic version checking
+   - API endpoints: /api/update/status, /check, /version
+   - Frontend notification banner (macOS style)
+
+4. **API Endpoints Added**
+   - `GET /api/setup/status` - Check setup state
+   - `POST /api/setup/complete` - Complete setup with username
+   - `GET /api/setup/mnemonic` - Get mnemonic for copying
+   - `POST /api/boson/encrypt-mnemonic` - Encrypt user-provided mnemonic
+   - `GET /api/boson/needs-securing` - Check mnemonic encryption status
+
+**Next: Sprint 5 (NAT Traversal)**
+- ActiveProxyClient.ts - Connect to super node
+- ProxyProtocol.ts - Binary packet encoding
+- Web Gateway update for proxy:// endpoints
+- DHT-based username registry
+- Super node failover logic
+
+---
+
 ### 🎯 Recent Progress (2026-01-21)
 
 **AI Chat UX Comprehensive Enhancement - ✅ COMPLETE**

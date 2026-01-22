@@ -128,6 +128,27 @@ async function main() {
       }
     }
 
+    // Copy static assets (setup wizard, update notifier, etc.)
+    const STATIC_ASSETS_SOURCE = join(__dirname, '..', 'static-assets');
+    if (existsSync(STATIC_ASSETS_SOURCE)) {
+      console.log('\n📦 Copying static assets...');
+      const staticAssets = readdirSync(STATIC_ASSETS_SOURCE, { withFileTypes: true });
+      for (const asset of staticAssets) {
+        const assetSource = join(STATIC_ASSETS_SOURCE, asset.name);
+        const assetTarget = join(TARGET_DIR, asset.name);
+        if (asset.isDirectory()) {
+          if (!existsSync(assetTarget)) {
+            mkdirSync(assetTarget, { recursive: true });
+          }
+          cpSync(assetSource, assetTarget, { recursive: true });
+          console.log(`   ✅ Directory copied: ${asset.name}`);
+        } else {
+          cpSync(assetSource, assetTarget);
+          console.log(`   ✅ File copied: ${asset.name}`);
+        }
+      }
+    }
+
     // Restore .gitkeep if it existed
     if (hasGitkeep) {
       writeFileSync(gitkeepPath, '');

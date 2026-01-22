@@ -144,8 +144,8 @@ async function main() {
           logger.info('╚════════════════════════════════════════════════════════════════╝');
           logger.info('');
           
-          // Clear mnemonic from memory after display
-          bosonService.clearMnemonic();
+          // Don't clear mnemonic here - let setup wizard clear it when user acknowledges
+          // The mnemonic will be cleared via /api/setup/acknowledge-mnemonic
         }
       }
       

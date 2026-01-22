@@ -1121,7 +1121,7 @@
 
 .ai-tool-success .ai-tool-status {
     color: #34d399;
-    opacity: 1;
+        opacity: 1;
 }
 
 .ai-tool-error .ai-tool-status {

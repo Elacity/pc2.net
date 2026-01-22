@@ -12,6 +12,12 @@ import { generateKeyPairSync, createHash, randomBytes } from 'crypto';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { logger } from '../../utils/logger.js';
+import { 
+  EncryptedMnemonic, 
+  encryptMnemonicWithSignature, 
+  decryptMnemonicWithSignature,
+  getMnemonicSignMessage 
+} from '../../utils/encryption.js';
 
 // BIP39 English wordlist (2048 words)
 // Using a simplified subset for demonstration - in production use a full BIP39 library
@@ -90,7 +96,9 @@ export interface NodeIdentity {
   did: string;              // did:boson:{nodeId}
   publicKey: string;        // Hex encoded public key
   privateKey: string;       // Hex encoded private key (encrypted in storage)
-  mnemonic?: string;        // 24-word recovery phrase (only shown on first run)
+  mnemonic?: string;        // 24-word recovery phrase (only in memory on first run)
+  encryptedMnemonic?: EncryptedMnemonic;  // Encrypted mnemonic (stored on disk)
+  adminWalletAddress?: string;  // First wallet to login becomes admin
   createdAt: string;        // ISO timestamp
 }
 
@@ -238,7 +246,7 @@ export class IdentityService {
     const content = readFileSync(this.identityPath, 'utf8');
     const data = JSON.parse(content);
     
-    // Don't include mnemonic from file (only shown on first run)
+    // Keep encryptedMnemonic if present, but not plaintext mnemonic
     const { mnemonic, ...identity } = data;
     return identity as NodeIdentity;
   }
@@ -310,5 +318,199 @@ export class IdentityService {
       did: this.identity.did,
       createdAt: this.identity.createdAt
     };
+  }
+
+  /**
+   * Check if mnemonic has been encrypted and stored
+   */
+  hasMnemonicBackup(): boolean {
+    return !!this.identity?.encryptedMnemonic;
+  }
+
+  /**
+   * Encrypt and store the mnemonic using wallet signature.
+   * Call this after user confirms they've saved the mnemonic.
+   * @param signature - Wallet signature for encryption
+   * @param walletAddress - Wallet address used for signing
+   * @returns true if successful
+   */
+  encryptAndStoreMnemonic(signature: string, walletAddress: string): boolean {
+    if (!this.identity) {
+      logger.error('[IdentityService] No identity loaded');
+      return false;
+    }
+
+    if (!this.identity.mnemonic) {
+      logger.warn('[IdentityService] No mnemonic available to encrypt');
+      return false;
+    }
+
+    try {
+      // Encrypt mnemonic with wallet signature
+      const encrypted = encryptMnemonicWithSignature(
+        this.identity.mnemonic,
+        signature,
+        walletAddress
+      );
+
+      // Store encrypted mnemonic in identity
+      this.identity.encryptedMnemonic = encrypted;
+
+      // Clear plaintext mnemonic from memory
+      delete this.identity.mnemonic;
+
+      // Save identity with encrypted mnemonic
+      this.saveIdentityWithEncryptedMnemonic();
+
+      logger.info('[IdentityService] Mnemonic encrypted and stored securely');
+      return true;
+    } catch (error: any) {
+      logger.error('[IdentityService] Failed to encrypt mnemonic:', error.message);
+      return false;
+    }
+  }
+
+  /**
+   * Encrypt and store a user-provided mnemonic directly.
+   * Used when the mnemonic is not in memory (e.g., after node restart).
+   * @param mnemonic - The 24-word mnemonic phrase
+   * @param signature - Wallet signature for encryption
+   * @param walletAddress - Wallet address used for signing
+   * @returns true if successful
+   */
+  encryptAndStoreMnemonicDirect(mnemonic: string, signature: string, walletAddress: string): boolean {
+    if (!this.identity) {
+      logger.error('[IdentityService] No identity loaded');
+      return false;
+    }
+
+    try {
+      // Encrypt mnemonic with wallet signature
+      const encrypted = encryptMnemonicWithSignature(
+        mnemonic,
+        signature,
+        walletAddress
+      );
+
+      // Store encrypted mnemonic in identity
+      this.identity.encryptedMnemonic = encrypted;
+
+      // Save identity with encrypted mnemonic
+      this.saveIdentityWithEncryptedMnemonic();
+
+      logger.info('[IdentityService] User-provided mnemonic encrypted and stored securely');
+      return true;
+    } catch (error: any) {
+      logger.error('[IdentityService] Failed to encrypt user-provided mnemonic:', error.message);
+      return false;
+    }
+  }
+
+  /**
+   * Decrypt mnemonic using wallet signature.
+   * User must sign the same message to decrypt.
+   * @param signature - Wallet signature for decryption
+   * @returns decrypted mnemonic or null
+   */
+  decryptMnemonic(signature: string): string | null {
+    if (!this.identity?.encryptedMnemonic) {
+      logger.warn('[IdentityService] No encrypted mnemonic found');
+      return null;
+    }
+
+    try {
+      const mnemonic = decryptMnemonicWithSignature(
+        this.identity.encryptedMnemonic,
+        signature
+      );
+      
+      logger.info('[IdentityService] Mnemonic decrypted successfully');
+      return mnemonic;
+    } catch (error: any) {
+      logger.error('[IdentityService] Failed to decrypt mnemonic:', error.message);
+      return null;
+    }
+  }
+
+  /**
+   * Get the message that should be signed for mnemonic encryption/decryption
+   * @param walletAddress - Wallet address to include in message
+   */
+  getMnemonicSignMessage(walletAddress: string): string {
+    return getMnemonicSignMessage(walletAddress);
+  }
+
+  /**
+   * Save identity with encrypted mnemonic (but without plaintext)
+   */
+  private saveIdentityWithEncryptedMnemonic(): void {
+    if (!this.identity) return;
+    
+    // Store identity with encrypted mnemonic but without plaintext
+    const { mnemonic, ...identityToStore } = this.identity;
+    
+    writeFileSync(
+      this.identityPath,
+      JSON.stringify(identityToStore, null, 2),
+      { mode: 0o600 }
+    );
+    
+    logger.info(`💾 Identity saved with encrypted mnemonic to ${this.identityPath}`);
+  }
+
+  /**
+   * Clear plaintext mnemonic from memory (call after encrypting or if user declines backup)
+   */
+  clearMnemonic(): void {
+    if (this.identity?.mnemonic) {
+      delete this.identity.mnemonic;
+      logger.info('[IdentityService] Plaintext mnemonic cleared from memory');
+    }
+  }
+
+  /**
+   * Get admin wallet address
+   */
+  getAdminWalletAddress(): string | null {
+    return this.identity?.adminWalletAddress || null;
+  }
+
+  /**
+   * Check if an address is the admin wallet
+   */
+  isAdminWallet(address: string): boolean {
+    if (!this.identity?.adminWalletAddress) {
+      return false;
+    }
+    return this.identity.adminWalletAddress.toLowerCase() === address.toLowerCase();
+  }
+
+  /**
+   * Set admin wallet address (only if not already set)
+   * Returns true if set successfully, false if already set
+   */
+  setAdminWallet(address: string): boolean {
+    if (!this.identity) {
+      logger.error('[IdentityService] No identity loaded');
+      return false;
+    }
+
+    if (this.identity.adminWalletAddress) {
+      logger.warn('[IdentityService] Admin wallet already set');
+      return false;
+    }
+
+    this.identity.adminWalletAddress = address.toLowerCase();
+    this.saveIdentityWithEncryptedMnemonic();
+    
+    logger.info(`[IdentityService] Admin wallet set: ${address.substring(0, 10)}...`);
+    return true;
+  }
+
+  /**
+   * Check if admin wallet has been set
+   */
+  hasAdminWallet(): boolean {
+    return !!this.identity?.adminWalletAddress;
   }
 }

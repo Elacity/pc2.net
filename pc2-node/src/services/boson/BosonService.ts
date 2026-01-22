@@ -228,4 +228,85 @@ export class BosonService {
   getConnectivityService(): ConnectivityService {
     return this.connectivityService;
   }
+
+  /**
+   * Encrypt and store the mnemonic using wallet signature.
+   * This secures the mnemonic so user can view it later.
+   * @param signature - Wallet signature for encryption
+   * @param walletAddress - Wallet address used for signing
+   * @returns true if successful
+   */
+  encryptAndStoreMnemonic(signature: string, walletAddress: string): boolean {
+    // First, ensure the identity service has the mnemonic
+    // If firstRunMnemonic is set, we need to temporarily set it on identity
+    if (this.firstRunMnemonic && !this.identityService.getMnemonic()) {
+      // This is a workaround - in production, handle this more cleanly
+      const identity = this.identityService.getIdentity();
+      if (identity) {
+        (identity as any).mnemonic = this.firstRunMnemonic;
+      }
+    }
+
+    const success = this.identityService.encryptAndStoreMnemonic(signature, walletAddress);
+    
+    if (success) {
+      // Clear our copy too
+      this.firstRunMnemonic = null;
+    }
+    
+    return success;
+  }
+
+  /**
+   * Decrypt mnemonic using wallet signature.
+   * User must sign the same message to decrypt.
+   * @param signature - Wallet signature for decryption
+   * @returns decrypted mnemonic or null
+   */
+  decryptMnemonic(signature: string): string | null {
+    return this.identityService.decryptMnemonic(signature);
+  }
+
+  /**
+   * Get the message that should be signed for mnemonic operations
+   * @param walletAddress - Wallet address to include in message
+   */
+  getMnemonicSignMessage(walletAddress: string): string {
+    return this.identityService.getMnemonicSignMessage(walletAddress);
+  }
+
+  /**
+   * Check if mnemonic has been encrypted and stored
+   */
+  hasMnemonicBackup(): boolean {
+    return this.identityService.hasMnemonicBackup();
+  }
+
+  /**
+   * Get admin wallet address
+   */
+  getAdminWalletAddress(): string | null {
+    return this.identityService.getAdminWalletAddress();
+  }
+
+  /**
+   * Check if an address is the admin wallet
+   */
+  isAdminWallet(address: string): boolean {
+    return this.identityService.isAdminWallet(address);
+  }
+
+  /**
+   * Set admin wallet address (first login becomes admin)
+   */
+  setAdminWallet(address: string): boolean {
+    return this.identityService.setAdminWallet(address);
+  }
+
+  /**
+   * Check if admin wallet has been set
+   */
+  hasAdminWallet(): boolean {
+    return this.identityService.hasAdminWallet();
+  }
 }

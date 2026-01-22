@@ -8,9 +8,9 @@ Welcome to PC2 (Personal Cloud 2), the sovereign self-hosted cloud platform buil
 
 # Report bugs
 
-Before reporting a bug, please check our [the issues on our GitHub repository](https://github.com/HeyPuter/puter/issues) to see if the bug has already been reported. If it has, you can add a comment to the existing issue with any additional information you have.
+Before reporting a bug, please check [the issues on our GitHub repository](https://github.com/elastos/pc2.net/issues) to see if the bug has already been reported. If it has, you can add a comment to the existing issue with any additional information you have.
 
-If you find a new bug in Puter, please [open an issue on our GitHub repository](https://github.com/HeyPuter/puter/issues/new). We'll do our best to address the issue as soon as possible. When reporting a bug, please include as much information as possible, including:
+If you find a new bug in PC2, please [open an issue on our GitHub repository](https://github.com/elastos/pc2.net/issues/new). We'll do our best to address the issue as soon as possible. When reporting a bug, please include as much information as possible, including:
 
 - A clear and descriptive title
 - A description of the issue
@@ -19,7 +19,7 @@ If you find a new bug in Puter, please [open an issue on our GitHub repository](
 - Actual behavior
 - Screenshots, if applicable
 - Your host operating system and browser
-- Your Puter version, location, ...
+- Your PC2 version and deployment type (local, Docker, VPS)
 
 Please open a separate issue for each bug you find.
 
@@ -29,7 +29,7 @@ Maintainers will apply the appropriate labels to your issue.
 
 # Suggest new features
 
-If you have an idea for a new feature in Puter, please open a new discussion thread on our [GitHub repository](https://github.com/HeyPuter/puter/discussions) to discuss your idea with the community. We'll do our best to respond to your suggestion as soon as possible.
+If you have an idea for a new feature in PC2, please open a new discussion thread on our [GitHub repository](https://github.com/elastos/pc2.net/discussions) to discuss your idea with the community. We'll do our best to respond to your suggestion as soon as possible.
 
 When suggesting a new feature, please include as much information as possible, including:
 
@@ -43,7 +43,7 @@ When suggesting a new feature, please include as much information as possible, i
 
 # Contribute code
 
-If you'd like to contribute code to Puter, you need to fork the project and submit a pull request. If this is your first time contributing to an open-source project, we recommend reading this short guide by GitHub on [how to contribute to a project](https://docs.github.com/en/get-started/exploring-projects-on-github/contributing-to-a-project).
+If you'd like to contribute code to PC2, you need to fork the project and submit a pull request. If this is your first time contributing to an open-source project, we recommend reading this short guide by GitHub on [how to contribute to a project](https://docs.github.com/en/get-started/exploring-projects-on-github/contributing-to-a-project).
 
 We'll review your pull request and work with you to get your changes merged into the project.
 
@@ -92,7 +92,7 @@ are no functional changes and then simply skim though the code and see if it "lo
 
 ## Your first code contribution
 
-We maintain a list of issues that are good for first-time contributors. You can find these issues by searching for the [`good first issue`](https://github.com/HeyPuter/puter/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) label in our [GitHub repository](https://github.com/HeyPuter/puter). These issues are designed to be relatively easy to fix, and we're happy to help you get started. Pick an issue that interests you, and leave a comment on the issue to let us know you're working on it.
+We maintain a list of issues that are good for first-time contributors. You can find these issues by searching for the [`good first issue`](https://github.com/elastos/pc2.net/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) label in our [GitHub repository](https://github.com/elastos/pc2.net). These issues are designed to be relatively easy to fix, and we're happy to help you get started. Pick an issue that interests you, and leave a comment on the issue to let us know you're working on it.
 
 ## Documentation for Contributors
 
@@ -156,9 +156,12 @@ Like many open source projects, we require contributors to sign a Contribution L
 
 # Getting Help
 
-If you have any questions about Puter, please feel free to reach out to us through the following channels:
+If you have any questions about PC2, please feel free to reach out to us through the following channels:
 
-- [Discord](https://discord.com/invite/PQcx7Teh8u)
-- [Reddit](https://www.reddit.com/r/Puter/)
-- [Twitter](https://twitter.com/HeyPuter)
-- [Email](mailto:support@puter.com)
+- [GitHub Issues](https://github.com/elastos/pc2.net/issues)
+- [Elastos Discord](https://discord.gg/elastos)
+- [Elastos Telegram](https://t.me/elastosgroup)
+
+For questions about the upstream Puter project:
+- [Puter Discord](https://discord.com/invite/PQcx7Teh8u)
+- [Puter GitHub](https://github.com/HeyPuter/puter)

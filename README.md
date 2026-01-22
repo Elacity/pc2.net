@@ -255,6 +255,7 @@ git push origin feature/your-feature
 - [PC2 Narrative](./docs/PC2_NARRATIVE.md)
 - [Deployment Guide](./docs/DEPLOYMENT.md)
 - [Quick Start](./docs/QUICKSTART.md)
+- [Infrastructure Docs](./docs/pc2-infrastructure/)
 
 ---
 

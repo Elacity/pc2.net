@@ -178,7 +178,7 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
       
       if (!hasUsername) {
         // Redirect to setup wizard
-        console.log(`[Setup] Redirecting ${req.path} to /setup (setup not complete, no username)`);
+        console.log(`[Setup] Redirecting ${req.path} to /setup (needs username setup)`);
         return res.redirect('/setup');
       }
     }

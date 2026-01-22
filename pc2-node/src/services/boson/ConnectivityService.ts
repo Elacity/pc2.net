@@ -40,15 +40,23 @@ export interface ConnectionStatus {
   natType: 'direct' | 'upnp' | 'relay' | 'unknown';
 }
 
-// Default super nodes
+// Default super nodes - multiple nodes for failover
 const DEFAULT_SUPER_NODES: SuperNode[] = [
   {
     id: 'J1h7RHv5iHhT43zsXxMCg7zGmZq6g4Ec2VJeCkSGry2E',
     address: '69.164.241.210',
     port: 39001,
     proxyPort: 8090,
-    gatewayUrl: 'https://demo.ela.city',
+    gatewayUrl: 'http://69.164.241.210',
   },
+  // Future super nodes can be added here for failover
+  // {
+  //   id: 'SECOND_NODE_ID',
+  //   address: 'second.supernode.ip',
+  //   port: 39001,
+  //   proxyPort: 8090,
+  //   gatewayUrl: 'http://second.supernode.ip',
+  // },
 ];
 
 export class ConnectivityService {
@@ -63,6 +71,8 @@ export class ConnectivityService {
   private isRunning: boolean = false;
   private networkDetector: NetworkDetector;
   private activeProxyClient: ActiveProxyClient | null = null;
+  private currentSuperNodeIndex: number = 0;
+  private failedSuperNodes: Set<string> = new Set();
   private proxyConnections: Map<number, Socket> = new Map();
 
   constructor(config?: Partial<ConnectivityConfig>) {
@@ -362,12 +372,24 @@ export class ConnectivityService {
   }
 
   /**
-   * Connect to a super node
+   * Connect to a super node with failover support
    */
   private async connect(): Promise<boolean> {
-    for (const superNode of this.config.superNodes) {
+    const superNodes = this.config.superNodes;
+    const totalNodes = superNodes.length;
+    
+    // Try each super node starting from current index
+    for (let i = 0; i < totalNodes; i++) {
+      const index = (this.currentSuperNodeIndex + i) % totalNodes;
+      const superNode = superNodes[index];
+      
+      // Skip recently failed nodes (unless we've tried all)
+      if (this.failedSuperNodes.has(superNode.id) && this.failedSuperNodes.size < totalNodes) {
+        continue;
+      }
+      
       try {
-        logger.info(`🔗 Attempting connection to super node: ${superNode.address}`);
+        logger.info(`🔗 Attempting connection to super node ${index + 1}/${totalNodes}: ${superNode.address}`);
 
         // Check if super node gateway is reachable
         const healthCheck = await this.checkGatewayHealth(superNode);
@@ -376,7 +398,11 @@ export class ConnectivityService {
           this.status.connected = true;
           this.status.superNode = superNode;
           this.status.connectedAt = new Date().toISOString();
-          this.status.natType = 'direct'; // Simplified - assume direct for now
+          this.status.natType = 'direct';
+          this.currentSuperNodeIndex = index;
+          
+          // Clear this node from failed list on success
+          this.failedSuperNodes.delete(superNode.id);
 
           // Register with gateway if username service is available
           if (this.usernameService && this.usernameService.hasUsername()) {
@@ -385,15 +411,55 @@ export class ConnectivityService {
 
           logger.info(`✅ Connected to super node: ${superNode.address}`);
           return true;
+        } else {
+          this.markSuperNodeFailed(superNode);
         }
       } catch (error) {
         logger.warn(`Failed to connect to ${superNode.address}: ${error}`);
+        this.markSuperNodeFailed(superNode);
       }
     }
 
     logger.warn('⚠️ Could not connect to any super node');
     this.scheduleReconnect();
     return false;
+  }
+
+  /**
+   * Mark a super node as failed and move to next
+   */
+  private markSuperNodeFailed(superNode: SuperNode): void {
+    this.failedSuperNodes.add(superNode.id);
+    this.currentSuperNodeIndex = (this.currentSuperNodeIndex + 1) % this.config.superNodes.length;
+    
+    // Clear failed nodes periodically (every 5 minutes worth of failures)
+    if (this.failedSuperNodes.size >= this.config.superNodes.length) {
+      setTimeout(() => {
+        this.failedSuperNodes.clear();
+        logger.info('🔄 Cleared failed super node list for retry');
+      }, 300000); // 5 minutes
+    }
+  }
+
+  /**
+   * Force failover to next super node
+   */
+  async failover(): Promise<boolean> {
+    logger.info('🔄 Initiating failover to next super node...');
+    
+    if (this.status.superNode) {
+      this.markSuperNodeFailed(this.status.superNode);
+    }
+    
+    this.status.connected = false;
+    
+    // Stop current Active Proxy client
+    if (this.activeProxyClient) {
+      await this.activeProxyClient.disconnect();
+      this.activeProxyClient = null;
+    }
+    
+    return await this.connect();
   }
 
   /**

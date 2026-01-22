@@ -277,10 +277,56 @@ server.on("upgrade", (req, socket, head) => {
 3. **Authentication**: Future: Require DID signature for registration
 4. **Validation**: Validate endpoint URLs before registration
 
+## Active Proxy Support (Sprint 5)
+
+The gateway now supports `proxy://` endpoints for NAT traversal:
+
+### Endpoint Formats
+
+| Format | Description |
+|--------|-------------|
+| `http://ip:port` | Direct HTTP proxy (VPS/public IP) |
+| `proxy://host:port/sessionId` | Relay via Active Proxy (NAT) |
+
+### How proxy:// Works
+
+```
+1. PC2 Node (behind NAT) connects to Active Proxy
+                    │
+                    ▼
+2. Active Proxy assigns session ID
+                    │
+                    ▼
+3. PC2 Node registers: proxy://supernode:8090/sessionId
+                    │
+                    ▼
+4. Browser requests https://alice.ela.city
+                    │
+                    ▼
+5. Web Gateway looks up "alice" → proxy://...
+                    │
+                    ▼
+6. Gateway ATTACHes to Active Proxy session
+                    │
+                    ▼
+7. Gateway sends HTTP request through tunnel
+                    │
+                    ▼
+8. Active Proxy relays to PC2 Node
+                    │
+                    ▼
+9. Response flows back through tunnel
+```
+
+### Limitations
+
+- WebSocket proxying via Active Proxy not yet supported
+- Request body proxying requires buffering (in progress)
+
 ## Future Enhancements
 
-1. **DHT Integration**: Store registrations in Boson DHT
-2. **Active Proxy Integration**: Route through Active Proxy for NAT traversal
+1. **DHT Integration**: Store registrations in Boson DHT (in progress)
+2. **WebSocket via Active Proxy**: Full WebSocket support through tunnel
 3. **Health Checks**: Periodically verify registered endpoints are alive
 4. **Analytics**: Track request counts per user
 5. **Caching**: Cache DNS lookups and node info
@@ -288,3 +334,5 @@ server.on("upgrade", (req, socket, head) => {
 ---
 
 *Location: `/root/pc2/web-gateway/` on super node*
+
+*Updated Version: `deploy/web-gateway/` (local) - supports proxy:// endpoints*

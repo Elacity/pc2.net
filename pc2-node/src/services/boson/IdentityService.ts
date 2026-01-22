@@ -321,6 +321,18 @@ export class IdentityService {
   }
 
   /**
+   * Get cryptographic keys as Buffers for Active Proxy authentication
+   */
+  getKeypair(): { publicKey: Buffer; privateKey: Buffer } | null {
+    if (!this.identity) return null;
+    
+    return {
+      publicKey: Buffer.from(this.identity.publicKey, 'hex'),
+      privateKey: Buffer.from(this.identity.privateKey, 'hex'),
+    };
+  }
+
+  /**
    * Check if mnemonic has been encrypted and stored
    */
   hasMnemonicBackup(): boolean {

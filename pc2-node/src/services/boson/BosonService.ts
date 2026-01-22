@@ -96,9 +96,15 @@ export class BosonService {
     // 2. Initialize username service with node ID
     this.usernameService.setNodeId(nodeId);
 
-    // 3. Initialize connectivity with node ID
+    // 3. Initialize connectivity with node ID and keys
     this.connectivityService.setNodeId(nodeId);
     this.connectivityService.setUsernameService(this.usernameService);
+    
+    // Pass cryptographic keys for Active Proxy authentication
+    const keypair = this.identityService.getKeypair();
+    if (keypair) {
+      this.connectivityService.setNodeKeys(keypair.publicKey, keypair.privateKey);
+    }
 
     // 4. Auto-connect if enabled
     if (this.config.autoConnect) {

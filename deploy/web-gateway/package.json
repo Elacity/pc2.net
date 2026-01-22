@@ -1,0 +1,16 @@
+{
+  "name": "pc2-web-gateway",
+  "version": "1.0.0",
+  "description": "PC2 Web Gateway - Routes *.ela.city subdomains to PC2 nodes",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "http-proxy": "^1.18.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

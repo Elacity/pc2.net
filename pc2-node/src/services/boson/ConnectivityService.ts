@@ -2,20 +2,18 @@
  * Connectivity Service
  * 
  * Manages connection to super nodes for NAT traversal.
- * - Connects to Active Proxy on super nodes
- * - Maintains persistent connection
+ * - Connects to Active Proxy on super nodes when behind NAT
+ * - Maintains persistent connection for relay
  * - Handles reconnection on failure
- * 
- * Note: Full Active Proxy protocol implementation is complex.
- * This is a simplified version that:
- * 1. Uses direct HTTP for super nodes (when behind NAT, requires Active Proxy)
- * 2. Registers endpoint with Web Gateway
- * 3. Provides status monitoring
+ * - Supports direct mode for VPS/public IP deployments
  */
 
 import { logger } from '../../utils/logger.js';
 import { UsernameService } from './UsernameService.js';
 import { NetworkDetector, type NATType } from './NetworkDetector.js';
+import { ActiveProxyClient, ConnectionState, type ProxyConnection } from './ActiveProxyClient.js';
+import { createServer, type Server, type Socket } from 'net';
+import { request as httpRequest } from 'http';
 
 export interface SuperNode {
   id: string;
@@ -60,8 +58,12 @@ export class ConnectivityService {
   private reconnectTimer: NodeJS.Timeout | null = null;
   private usernameService: UsernameService | null = null;
   private nodeId: string | null = null;
+  private publicKey: Buffer | null = null;
+  private privateKey: Buffer | null = null;
   private isRunning: boolean = false;
   private networkDetector: NetworkDetector;
+  private activeProxyClient: ActiveProxyClient | null = null;
+  private proxyConnections: Map<number, Socket> = new Map();
 
   constructor(config?: Partial<ConnectivityConfig>) {
     this.config = {
@@ -82,6 +84,14 @@ export class ConnectivityService {
       publicEndpoint: null,
       natType: 'unknown',
     };
+  }
+
+  /**
+   * Set node identity keys for Active Proxy authentication
+   */
+  setNodeKeys(publicKey: Buffer, privateKey: Buffer): void {
+    this.publicKey = publicKey;
+    this.privateKey = privateKey;
   }
 
   /**
@@ -113,6 +123,8 @@ export class ConnectivityService {
     // Detect network configuration
     const networkInfo = await this.networkDetector.detect();
     
+    const needsProxy = this.config.privacyMode || !networkInfo.hasPublicIP;
+    
     if (this.config.privacyMode) {
       logger.info('🔒 Privacy mode enabled - will use Active Proxy');
       this.status.natType = 'relay';
@@ -121,14 +133,180 @@ export class ConnectivityService {
       this.status.natType = 'direct';
     } else {
       logger.info(`🔀 Behind NAT (${networkInfo.natType}) - will use Active Proxy`);
-      this.status.natType = networkInfo.natType === 'direct' ? 'direct' : 'relay';
+      this.status.natType = 'relay';
     }
 
     // Attempt initial connection
-    await this.connect();
+    if (needsProxy && this.publicKey && this.privateKey && this.nodeId) {
+      await this.connectViaActiveProxy();
+    } else {
+      await this.connect();
+    }
 
     // Start heartbeat
     this.startHeartbeat();
+  }
+
+  /**
+   * Connect via Active Proxy for NAT traversal
+   */
+  private async connectViaActiveProxy(): Promise<boolean> {
+    for (const superNode of this.config.superNodes) {
+      try {
+        logger.info(`🔗 Connecting to Active Proxy at ${superNode.address}:${superNode.proxyPort}...`);
+
+        this.activeProxyClient = new ActiveProxyClient({
+          host: superNode.address,
+          port: superNode.proxyPort,
+          nodeId: this.nodeId!,
+          publicKey: this.publicKey!,
+          privateKey: this.privateKey!,
+          localPort: this.config.localPort,
+          keepaliveIntervalMs: 30000,
+          reconnectIntervalMs: this.config.reconnectIntervalMs,
+          maxReconnectAttempts: 10,
+        });
+
+        // Set up event handlers
+        this.activeProxyClient.on('connected', (sessionId: string, allocatedPort: number) => {
+          this.status.connected = true;
+          this.status.superNode = superNode;
+          this.status.connectedAt = new Date().toISOString();
+          
+          logger.info(`✅ Active Proxy connected! Session: ${sessionId}, Port: ${allocatedPort}`);
+          
+          // Register proxy endpoint with gateway
+          this.registerProxyEndpoint(superNode, sessionId);
+        });
+
+        this.activeProxyClient.on('disconnected', (reason: string) => {
+          logger.warn(`⚠️ Active Proxy disconnected: ${reason}`);
+          this.status.connected = false;
+        });
+
+        this.activeProxyClient.on('error', (error: Error) => {
+          logger.error(`❌ Active Proxy error: ${error.message}`);
+        });
+
+        this.activeProxyClient.on('connection', (conn: ProxyConnection) => {
+          this.handleProxyConnection(conn);
+        });
+
+        this.activeProxyClient.on('data', (connectionId: number, data: Buffer) => {
+          this.handleProxyData(connectionId, data);
+        });
+
+        this.activeProxyClient.on('connectionClosed', (connectionId: number) => {
+          this.handleProxyConnectionClosed(connectionId);
+        });
+
+        // Connect
+        await this.activeProxyClient.connect();
+        return true;
+      } catch (error) {
+        logger.warn(`Failed to connect via Active Proxy to ${superNode.address}: ${error}`);
+      }
+    }
+
+    logger.warn('⚠️ Could not connect via Active Proxy to any super node');
+    this.scheduleReconnect();
+    return false;
+  }
+
+  /**
+   * Register proxy endpoint with the gateway
+   */
+  private async registerProxyEndpoint(superNode: SuperNode, sessionId: string): Promise<void> {
+    if (!this.usernameService || !this.usernameService.hasUsername()) {
+      logger.warn('No username registered, skipping proxy endpoint registration');
+      return;
+    }
+
+    // Format: proxy://host:port/sessionId
+    const endpoint = `proxy://${superNode.address}:${superNode.proxyPort}/${sessionId}`;
+    
+    const result = await this.usernameService.updateEndpoint(endpoint);
+    
+    if (result.success) {
+      this.status.publicEndpoint = this.usernameService.getPublicUrl();
+      logger.info(`📍 Registered proxy endpoint: ${this.status.publicEndpoint}`);
+    } else {
+      logger.warn(`Failed to register proxy endpoint: ${result.error}`);
+    }
+  }
+
+  /**
+   * Handle new proxied connection
+   */
+  private handleProxyConnection(conn: ProxyConnection): void {
+    logger.info(`🔌 New proxied connection ${conn.connectionId} from ${conn.sourceAddress}:${conn.sourcePort}`);
+
+    // Create a local socket to the PC2 node
+    const localSocket = new (require('net').Socket)();
+    
+    localSocket.connect(this.config.localPort, '127.0.0.1', () => {
+      logger.debug(`[Proxy] Connected to local server for connection ${conn.connectionId}`);
+      this.proxyConnections.set(conn.connectionId, localSocket);
+    });
+
+    localSocket.on('data', (data: Buffer) => {
+      // Send response back through the proxy
+      if (this.activeProxyClient) {
+        this.activeProxyClient.sendData(conn.connectionId, data);
+      }
+    });
+
+    localSocket.on('error', (error: Error) => {
+      logger.error(`[Proxy] Local socket error for ${conn.connectionId}: ${error.message}`);
+      this.proxyConnections.delete(conn.connectionId);
+      if (this.activeProxyClient) {
+        this.activeProxyClient.closeConnection(conn.connectionId);
+      }
+    });
+
+    localSocket.on('close', () => {
+      logger.debug(`[Proxy] Local socket closed for connection ${conn.connectionId}`);
+      this.proxyConnections.delete(conn.connectionId);
+      if (this.activeProxyClient) {
+        this.activeProxyClient.closeConnection(conn.connectionId);
+      }
+    });
+  }
+
+  /**
+   * Handle incoming data from proxy
+   */
+  private handleProxyData(connectionId: number, data: Buffer): void {
+    const localSocket = this.proxyConnections.get(connectionId);
+    
+    if (localSocket) {
+      try {
+        localSocket.write(data);
+      } catch (error) {
+        logger.error(`[Proxy] Failed to write data to local socket: ${error}`);
+      }
+    } else {
+      logger.warn(`[Proxy] No local socket for connection ${connectionId}`);
+    }
+  }
+
+  /**
+   * Handle proxy connection closed
+   */
+  private handleProxyConnectionClosed(connectionId: number): void {
+    const localSocket = this.proxyConnections.get(connectionId);
+    
+    if (localSocket) {
+      localSocket.destroy();
+      this.proxyConnections.delete(connectionId);
+    }
+  }
+
+  /**
+   * Get Active Proxy client (for testing/debugging)
+   */
+  getActiveProxyClient(): ActiveProxyClient | null {
+    return this.activeProxyClient;
   }
   
   /**
@@ -160,6 +338,18 @@ export class ConnectivityService {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
+
+    // Stop Active Proxy client
+    if (this.activeProxyClient) {
+      await this.activeProxyClient.disconnect();
+      this.activeProxyClient = null;
+    }
+
+    // Close all proxy connections
+    for (const [connectionId, socket] of this.proxyConnections) {
+      socket.destroy();
+    }
+    this.proxyConnections.clear();
 
     this.status.connected = false;
     logger.info('🔌 Connectivity service stopped');

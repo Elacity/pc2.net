@@ -18,3 +18,21 @@ export type { SuperNode, ConnectivityConfig, ConnectionStatus } from './Connecti
 
 export { NetworkDetector } from './NetworkDetector.js';
 export type { NetworkInfo, NetworkDetectorConfig, NATType } from './NetworkDetector.js';
+
+export { ActiveProxyClient, ConnectionState } from './ActiveProxyClient.js';
+export type { ActiveProxyConfig, ProxyConnection, ActiveProxyEvents } from './ActiveProxyClient.js';
+
+export {
+  PacketType,
+  PacketBuffer,
+  encodePacket,
+  decodePacket,
+  encodeAuthPayload,
+  decodeAuthAckPayload,
+  decodeConnectPayload,
+  encodeDataPayload,
+  decodeDataPayload,
+  encodeDisconnectPayload,
+  getPacketTypeName,
+} from './ProxyProtocol.js';
+export type { Packet, AuthPayload, AuthAckPayload, ConnectPayload, DataPayload } from './ProxyProtocol.js';

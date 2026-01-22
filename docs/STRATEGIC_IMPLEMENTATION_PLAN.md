@@ -5353,5 +5353,108 @@ Audit and improvements to frontend localStorage usage to minimize attack surface
 
 ---
 
+## HTTPS Reverse Proxy Mixed Content Fix (January 2025)
+
+### Problem
+
+When PC2 Node runs behind an HTTPS-terminating reverse proxy (like Nginx), applications showed blank white screens due to **Mixed Content** browser blocking. The browser refused to load `http://` iframes on an `https://` page.
+
+**Console Error:**
+```
+Mixed Content: The page at 'https://38.242.211.112/' was loaded over HTTPS, 
+but requested an insecure frame 'http://38.242.211.112/apps/calculator/index.html...'. 
+This request has been blocked; the content must be served over HTTPS.
+```
+
+### Root Cause
+
+The backend used `req.protocol` to construct app URLs:
+```typescript
+const baseUrl = req.protocol + '://' + req.get('host');
+// Returns: http://38.242.211.112 (WRONG behind Nginx!)
+```
+
+When Nginx terminates HTTPS and proxies to the backend over HTTP, `req.protocol` returns `'http'` even though the original client request was HTTPS.
+
+### Solution
+
+Created a `getBaseUrl()` utility function that checks reverse proxy headers:
+
+```typescript
+function getBaseUrl(req: Request): string {
+  const host = req.get('host') || 'localhost';
+  
+  // Check x-forwarded-proto header (set by Nginx)
+  const forwardedProto = req.headers['x-forwarded-proto'];
+  if (forwardedProto === 'https') {
+    return `https://${host}`;
+  }
+  
+  // Check origin header (contains original protocol)
+  const origin = req.headers.origin;
+  if (origin && typeof origin === 'string' && origin.startsWith('https://')) {
+    return `https://${host}`;
+  }
+  
+  // Fallback to req.protocol for direct connections
+  return `${req.protocol}://${host}`;
+}
+```
+
+### Files Modified
+
+| File | Changes |
+|------|---------|
+| `pc2-node/src/api/other.ts` | Added `getBaseUrl()`, replaced 5 occurrences of `baseUrl` construction |
+| `pc2-node/src/api/info.ts` | Added `getBaseUrl()`, replaced 1 occurrence in `/get-launch-apps` |
+| `pc2-node/src/api/apps.ts` | Added `getBaseUrl()`, replaced 1 occurrence in `/apps/:name` handler |
+
+### Nginx Configuration Required
+
+The Nginx reverse proxy must forward the original protocol:
+
+```nginx
+location / {
+    proxy_pass http://localhost:4200;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;  # CRITICAL!
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+}
+```
+
+### Verification
+
+After the fix, the `/apps/calculator` endpoint returns HTTPS URLs when accessed via HTTPS:
+
+```bash
+curl -H "X-Forwarded-Proto: https" https://your-server/apps/calculator
+# Returns: {"index_url":"https://your-server/apps/calculator/index.html"...}
+```
+
+### Apps Fixed
+
+| App | Status |
+|-----|--------|
+| dApp Centre | ✅ Working |
+| Solitaire | ✅ Working |
+| Camera | ✅ Working |
+| All built-in apps | ✅ Working |
+| Calculator (WASM) | ✅ Working |
+| File Processor (WASM) | ✅ Working |
+
+### Deployment Notes
+
+1. **Contabo VPS (38.242.211.112)**: Successfully deployed and tested
+2. **test7.ela.city**: Domain alias pointing to same server
+3. **"Not Secure" Warning**: This is normal for IP addresses (no CA issues certs for IPs) and self-signed certificates. Traffic is still encrypted.
+
+### Commits
+
+- `f9f655eb`: Added `getBaseUrl()` to `other.ts` and `info.ts`
+- `8b667463`: Added `getBaseUrl()` to `apps.ts` for WASM apps
+
+---
+
 *This document is a living guide and will be updated as the project evolves.*
 

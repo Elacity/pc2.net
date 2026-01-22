@@ -650,9 +650,9 @@ curl -X POST http://localhost:4202/api/wasm/execute-file \
 ## 📚 Documentation References
 
 - **Strategic Implementation Plan**: `docs/STRATEGIC_IMPLEMENTATION_PLAN.md`
-- **WASM Showcase**: `docs/WASMER_SIMPLE_SHOWCASE.md`
-- **AI Roadmap**: `docs/AI_AGENT_MASTERY_ROADMAP.md`
-- **Backup System**: `docs/PHASE3_BACKUP_RESTORE_REQUIREMENTS.md`
+- **Deployment Guide**: `docs/DEPLOYMENT.md`
+- **Quick Start**: `docs/QUICKSTART.md`
+- **Infrastructure Docs**: `docs/pc2-infrastructure/`
 
 ---
 

@@ -1,6 +1,8 @@
-# Contributing to Puter
+# Contributing to PC2
 
-Welcome to Puter, the open-source distributed internet operating system. We're excited to have you contribute to our project, whether you're reporting bugs, suggesting new features, or contributing code. This guide will help you get started with contributing to Puter in different ways.
+Welcome to PC2 (Personal Cloud 2), the sovereign self-hosted cloud platform built on Puter. We're excited to have you contribute to our project, whether you're reporting bugs, suggesting new features, or contributing code. This guide will help you get started with contributing to PC2 in different ways.
+
+> **Note:** PC2 is built on [Puter](https://github.com/HeyPuter/puter). Many of these contribution guidelines are inherited from the upstream project.
 
 <br>
 

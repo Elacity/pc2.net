@@ -60,7 +60,7 @@ npm start
 
 **→ Open your browser at `http://localhost:4202`**
 
-### Docker (Coming Soon)
+### Docker
 
 ```bash
 docker run -p 4202:4202 ghcr.io/elacity/pc2:latest
@@ -253,8 +253,8 @@ git push origin feature/your-feature
 - [Strategic Implementation Plan](./docs/STRATEGIC_IMPLEMENTATION_PLAN.md)
 - [Architecture Overview](./docs/PC2_ARCHITECTURE_OVERVIEW.md)
 - [PC2 Narrative](./docs/PC2_NARRATIVE.md)
-- [Backup Strategy](./docs/PC2_NODE_BACKUP_STRATEGY.md)
-- [Particle Auth Setup](./SETUP_PARTICLE_AUTH.md)
+- [Deployment Guide](./docs/DEPLOYMENT.md)
+- [Quick Start](./docs/QUICKSTART.md)
 
 ---
 

@@ -151,7 +151,7 @@ Significant progress on the unified MVP plan. The first four sprints are complet
 | Sprint 3 | First-run setup wizard (UI, API, redirect) | ✅ Complete |
 | Sprint 4 | Update system (service, API, notifications) | ✅ Complete |
 | Sprint 5 | NAT traversal via Active Proxy | ✅ Complete |
-| Sprint 6 | End-to-end testing, CI/CD | ⏳ Next |
+| Sprint 6 | Testing, CI/CD, DHT Registry, Failover | ✅ Complete |
 
 **Key Deliverables:**
 
@@ -187,11 +187,33 @@ Significant progress on the unified MVP plan. The first four sprints are complet
 - Web Gateway deployed with Active Proxy relay support
 - VPS: Port 8090 listening, gateway running
 
-**Next: Sprint 6 (Testing & CI/CD)**
-- End-to-end testing with real NAT scenarios
-- GitHub Actions for Docker builds
-- DHT-based username registry
-- Super node failover logic
+**Sprint 6 Completed (2026-01-22) - MVP v1.0.0 COMPLETE**
+
+1. **End-to-End Testing** ✅
+   - Setup wizard flow verified
+   - Identity generation and storage tested
+   - Connectivity service NAT detection confirmed
+   - Active Proxy client protocol implementation
+
+2. **GitHub Actions CI/CD** ✅
+   - `.github/workflows/pc2-node-docker.yml` created
+   - Multi-platform builds: linux/amd64, linux/arm64
+   - Triggers on push to main and feature branches
+   - Docker Hub publishing with proper tagging
+
+3. **DHT-Based Username Registry** ✅
+   - Created `boson-http-api` Java service
+   - REST API endpoints: `/api/username/:name`, `/api/username` (register)
+   - DHT find/store endpoints: `/api/dht/find/:id`, `/api/dht/store`
+   - Integrates with Boson Node for decentralized storage
+
+4. **Super Node Failover** ✅
+   - Round-robin failover between super nodes
+   - Failed node tracking with automatic retry after 5 minutes
+   - `failover()` method for manual failover trigger
+   - Support for multiple super nodes in configuration
+
+**MVP v1.0.0 Status: ALL SPRINTS COMPLETE**
 
 ---
 

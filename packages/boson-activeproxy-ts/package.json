@@ -15,7 +15,7 @@
   "files": [
     "dist",
     "README.md",
-    "README.zh-CN.md"
+    "CONTRIBUTIONS.md"
   ],
   "scripts": {
     "build": "tsc",

@@ -14,33 +14,9 @@ import path from 'path';
 import { existsSync, readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { getBaseUrl } from '../utils/urlUtils.js';
 
-/**
- * Get the base URL for the request, respecting reverse proxy headers.
- * When behind Nginx or other reverse proxies, req.protocol may be 'http'
- * even when the original request was HTTPS. This function checks:
- * 1. X-Forwarded-Proto header (set by reverse proxies)
- * 2. Origin header (contains original protocol)
- * 3. Fallback to req.protocol
- */
-function getBaseUrl(req: Request): string {
-  const host = req.get('host') || 'localhost';
-  
-  // Check x-forwarded-proto header (set by reverse proxies like Nginx)
-  const forwardedProto = req.headers['x-forwarded-proto'];
-  if (forwardedProto === 'https') {
-    return `https://${host}`;
-  }
-  
-  // Check origin header (contains original protocol)
-  const origin = req.headers.origin;
-  if (origin && typeof origin === 'string' && origin.startsWith('https://')) {
-    return `https://${host}`;
-  }
-  
-  // Fallback to req.protocol
-  return `${req.protocol}://${host}`;
-}
+// getBaseUrl is imported from ../utils/urlUtils.js - handles Active Proxy correctly
 
 /**
  * Get API info
@@ -66,7 +42,8 @@ export function handleAPIInfo(req: Request, res: Response): void {
  */
 export function handleGetLaunchApps(req: Request, res: Response): void {
   const iconSize = parseInt(req.query.icon_size as string) || 64;
-  const baseUrl = getBaseUrl(req);
+  const bosonService = req.app?.locals?.bosonService;
+  const baseUrl = getBaseUrl(req, bosonService);
   const db = (req.app.locals.db as any);
   
   // Helper function to load SVG icon as base64

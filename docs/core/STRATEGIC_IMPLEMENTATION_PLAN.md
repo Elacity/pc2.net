@@ -72,6 +72,35 @@ npm start
 
 ### 🎯 Recent Progress (2026-01-23)
 
+**Active Proxy URL Resolution Fix - ✅ COMPLETE**
+
+Fixed critical issue where apps failed to load when accessed via custom domain (test7.ela.city) through the Active Proxy, while direct IP access worked.
+
+**Problem:** When requests route through the Active Proxy (supernode), the `Host` header contains the internal `IP:port` (e.g., `38.242.211.112:4200`) instead of the public domain. This caused incorrect API origins and app URLs.
+
+**Solution:** Created shared `getBaseUrl()` utility with Boson service fallback:
+
+| File | Change |
+|------|--------|
+| `pc2-node/src/utils/urlUtils.ts` | NEW: Shared utility that detects IP:port pattern and falls back to `bosonService.getPublicUrl()` |
+| `pc2-node/src/static.ts` | Uses shared `getBaseUrl(req, bosonService)` for API origin injection |
+| `pc2-node/src/api/apps.ts` | Uses shared `getBaseUrl(req, bosonService)` for app index_url |
+| `pc2-node/src/api/other.ts` | Updated 5 places to use shared utility |
+| `pc2-node/src/api/info.ts` | Updated to use shared utility |
+
+**WebSocket Protocol Fix:**
+- Fixed `wss://` to `ws://` downgrade bug in WebSocket interceptor
+- Changed regex from `replace(/^https?/, 'ws')` to `replace(/^https/, 'wss').replace(/^http/, 'ws')`
+- Files: `pc2-node/frontend/index.html`, `pc2-node/scripts/build-frontend.js`
+
+**Documentation Reorganization:**
+- Created `docs/core/` folder for essential documentation
+- Created `docs/core/plans/` folder for roadmaps and plans
+- Added comprehensive `docs/README.md` index
+- Moved strategic docs to `docs/core/`
+
+---
+
 **PC2 Documentation Portal - ✅ COMPLETE**
 
 Published comprehensive PC2 documentation to the ElacityLabsWeb portal (https://github.com/Elacity/ElacityLabsWeb).

@@ -3106,6 +3106,7 @@ span.header-sort-icon img {
 
 .window-cover-page.window-login, .window-cover-page.window-signup, .window-cover-page.window-particle-login {
     height: 100vh !important;
+    height: 100dvh !important; /* Dynamic viewport height for mobile Safari */
     width: 100%;
     top: 0 !important;
     left: 0 !important;

@@ -37,6 +37,7 @@ export interface UserInfo {
   desktop_bg_color: string | null;
   desktop_bg_fit: string;
   profile_picture_url?: string | null;
+  display_name?: string;
   token: string;
   auth_type: 'wallet' | 'universalx';
 }

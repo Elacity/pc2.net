@@ -143,3 +143,35 @@ h1 {
 .presented-by:hover img {
   opacity: 1;
 }
+
+/* Mobile: center branding at top */
+@media (max-width: 768px) {
+  .presented-by {
+    bottom: auto;
+    top: 12px;
+    right: 50%;
+    transform: translateX(50%);
+    padding: 10px 20px;
+    white-space: nowrap;
+  }
+  
+  .presented-by span {
+    font-size: 12px;
+  }
+  
+  .presented-by img {
+    height: 16px;
+  }
+  
+  .presented-by:hover {
+    transform: translateX(50%) translateY(2px);
+  }
+  
+  /* Move Particle modal higher on mobile */
+  [class*="particle-connect-modal"],
+  [class*="pcm-modal"],
+  [data-testid="particle-connect-modal"] {
+    align-items: flex-start !important;
+    padding-top: 60px !important;
+  }
+}

@@ -1,1 +1,0 @@
-{"version":3,"file":"thumbnail.d.ts","sourceRoot":"","sources":["../../src/storage/thumbnail.ts"],"names":[],"mappings":"AAAA;;;;;GAKG;AA2CH;;GAEG;AACH,wBAAgB,kBAAkB,CAAC,QAAQ,EAAE,MAAM,GAAG,IAAI,GAAG,SAAS,GAAG,OAAO,CAO/E;AAED;;;;GAIG;AACH,wBAAsB,iBAAiB,CACrC,WAAW,EAAE,MAAM,GAAG,UAAU,EAChC,QAAQ,EAAE,MAAM,EAChB,QAAQ,EAAE,MAAM,GACf,OAAO,CAAC,MAAM,GAAG,IAAI,CAAC,CAiOxB"}

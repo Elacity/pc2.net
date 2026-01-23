@@ -265,6 +265,9 @@ export function handleWhoami(req: AuthenticatedRequest, res: Response): void {
   
   // Get profile picture path from KV store
   const profilePictureUrl = db.getSetting(`${walletAddress}:user_preferences.profile_picture_url`) || null;
+  
+  // Get display name (per-wallet) - walletAddress is already lowercase
+  const displayName = db.getSetting(`user_${walletAddress}_display_name`) || '';
 
   const userInfo: UserInfo = {
     id: 1,
@@ -280,6 +283,7 @@ export function handleWhoami(req: AuthenticatedRequest, res: Response): void {
     desktop_bg_color: desktopBgColor,
     desktop_bg_fit: desktopBgFit,
     profile_picture_url: profilePictureUrl,
+    display_name: displayName,
     token: req.user.session_token,
     auth_type: (req.user.smart_account_address || session.smart_account_address) ? 'universalx' : 'wallet'
   };

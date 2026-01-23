@@ -57,3 +57,25 @@ div[class*="Modal"] > div:last-child,
 button[class*="leaayh"] {
   margin-bottom: 16px !important;
 }
+
+/* Mobile: position modal higher */
+@media (max-width: 768px) {
+  #__particle_custom_selector_id {
+    align-items: flex-start;
+    padding-top: 50px;
+    height: 100dvh;
+  }
+  
+  /* Target the modal overlay/container */
+  [class*="Overlay"],
+  [class*="overlay"] {
+    align-items: flex-start !important;
+    padding-top: 50px !important;
+  }
+  
+  /* Target modal itself to ensure it starts from top */
+  [class*="Modal"],
+  [class*="modal"] {
+    margin-top: 0 !important;
+  }
+}

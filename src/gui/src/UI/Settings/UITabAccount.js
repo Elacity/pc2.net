@@ -170,6 +170,7 @@ export default {
                                 h += `<span id="account-recovery-status" style="font-size: 12px; color: #666;">Checking...</span>`;
                             h += `</div>`;
                             h += `<button id="view-recovery-btn" class="button" style="display: none;">View</button>`;
+                            h += `<button id="open-encrypt-modal-btn" class="button" style="display: none;">Encrypt</button>`;
                         h += `</div>`;
                         
                         // Mnemonic display area (hidden by default)
@@ -181,21 +182,11 @@ export default {
                             h += `</div>`;
                         h += `</div>`;
                         
-                        // No backup warning - with manual entry option
+                        // No backup warning (no button here anymore - button is in header)
                         h += `<div id="no-recovery-message" style="display: none; margin-top: 12px;">`;
-                            h += `<div style="padding: 12px; background: #fef3c7; border-radius: 6px; font-size: 13px; color: #92400e; margin-bottom: 12px;">`;
+                            h += `<div style="padding: 12px; background: #fef3c7; border-radius: 6px; font-size: 13px; color: #92400e;">`;
                                 h += `<strong>No encrypted backup available.</strong><br>`;
-                                h += `<span style="font-size: 12px;">If you saved it during setup, you can enter it below to encrypt and backup.</span>`;
-                            h += `</div>`;
-                            h += `<div id="manual-encrypt-section" style="padding: 12px; background: rgba(59, 130, 246, 0.1); border-radius: 6px;">`;
-                                h += `<div style="margin-bottom: 12px;">`;
-                                    h += `<strong style="display: block; color: #3b82f6; margin-bottom: 8px;">Encrypt Your Recovery Phrase</strong>`;
-                                    h += `<textarea id="manual-mnemonic-input" placeholder="Enter your 24-word recovery phrase..." style="width: 100%; height: 80px; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-family: monospace; font-size: 12px; resize: none; box-sizing: border-box;"></textarea>`;
-                                h += `</div>`;
-                                h += `<div style="display: flex; justify-content: space-between; align-items: center;">`;
-                                    h += `<span id="manual-encrypt-status" style="font-size: 12px; color: #666;"></span>`;
-                                    h += `<button id="manual-encrypt-btn" class="button" style="background: #3b82f6; color: white;">Encrypt & Save</button>`;
-                                h += `</div>`;
+                                h += `<span style="font-size: 12px;">If you saved it during setup, click Encrypt to backup securely.</span>`;
                             h += `</div>`;
                         h += `</div>`;
                         
@@ -285,15 +276,22 @@ export default {
                     window.user.display_name = displayName;
                     // Update the display name shown below profile picture
                     $el_window.find('#profile-display-name').html(displayName || '<span style="color: #999; font-weight: 400;">Set your display name</span>');
-                    puter.ui.toast('Display name saved', { type: 'success' });
+                    // Update localStorage cache
+                    try {
+                        localStorage.setItem('pc2_whoami_cache', JSON.stringify(window.user));
+                    } catch (e) {}
+                    // Show brief success feedback on button
+                    btn.text('Saved!');
+                    setTimeout(() => btn.text('Save'), 1500);
                 } else {
                     throw new Error('Failed to save');
                 }
             } catch (error) {
                 console.error('[Account] Failed to save display name:', error);
-                puter.ui.toast('Failed to save display name', { type: 'error' });
+                btn.text('Error');
+                setTimeout(() => btn.text('Save'), 1500);
             } finally {
-                btn.prop('disabled', false).text('Save');
+                btn.prop('disabled', false);
             }
         });
         
@@ -386,6 +384,7 @@ export default {
                     if (data.hasMnemonicBackup) {
                         $el_window.find('#account-recovery-status').text('Encrypted backup available');
                         $el_window.find('#view-recovery-btn').show();
+                        $el_window.find('#open-encrypt-modal-btn').hide();
                         $el_window.find('#no-recovery-message').hide();
                         $el_window.find('#encrypt-now-section').hide();
                     } else {
@@ -396,11 +395,13 @@ export default {
                         if (needsResult.hasMnemonicInMemory) {
                             $el_window.find('#account-recovery-status').text('Not yet encrypted');
                             $el_window.find('#view-recovery-btn').hide();
+                            $el_window.find('#open-encrypt-modal-btn').hide();
                             $el_window.find('#no-recovery-message').hide();
                             $el_window.find('#encrypt-now-section').show();
                         } else {
                             $el_window.find('#account-recovery-status').text('No encrypted backup');
                             $el_window.find('#view-recovery-btn').hide();
+                            $el_window.find('#open-encrypt-modal-btn').show();
                             $el_window.find('#no-recovery-message').show();
                             $el_window.find('#encrypt-now-section').hide();
                         }
@@ -596,6 +597,7 @@ export default {
                 $el_window.find('#encrypt-now-section').hide();
                 $el_window.find('#account-recovery-status').text('Encrypted backup available');
                 $el_window.find('#view-recovery-btn').show();
+                $el_window.find('#open-encrypt-modal-btn').hide();
                 
             } catch (error) {
                 console.error('[Account] Encrypt error:', error);
@@ -604,87 +606,130 @@ export default {
             }
         });
         
-        // Manual encrypt button handler (for when mnemonic is not in memory)
-        $el_window.find('#manual-encrypt-btn').on('click', async function() {
-            const $btn = $(this);
-            const $status = $el_window.find('#manual-encrypt-status');
-            const $input = $el_window.find('#manual-mnemonic-input');
+        // Open encrypt modal button handler
+        $el_window.find('#open-encrypt-modal-btn').on('click', function() {
+            // Create modal overlay
+            const modalHtml = `
+                <div id="encrypt-modal-overlay" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 9999;">
+                    <div style="background: white; border-radius: 8px; padding: 24px; max-width: 450px; width: 90%; box-shadow: 0 4px 20px rgba(0,0,0,0.15);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                            <h3 style="margin: 0; font-size: 16px; color: #333;">Encrypt Your Recovery Phrase</h3>
+                            <button id="close-encrypt-modal" style="background: none; border: none; font-size: 20px; cursor: pointer; color: #666; padding: 0; line-height: 1;">&times;</button>
+                        </div>
+                        <p style="font-size: 13px; color: #666; margin-bottom: 16px;">Enter your 24-word recovery phrase to encrypt and backup securely.</p>
+                        <textarea id="modal-mnemonic-input" placeholder="Enter your 24-word recovery phrase..." style="width: 100%; height: 100px; padding: 12px; border: 1px solid #d1d5db; border-radius: 6px; font-family: monospace; font-size: 12px; resize: none; box-sizing: border-box; margin-bottom: 12px;"></textarea>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span id="modal-encrypt-status" style="font-size: 12px; color: #666;"></span>
+                            <div style="display: flex; gap: 8px;">
+                                <button id="cancel-encrypt-modal" class="button">Cancel</button>
+                                <button id="confirm-encrypt-btn" class="button button-primary">Encrypt & Save</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
             
-            const mnemonic = $input.val().trim().toLowerCase();
+            $('body').append(modalHtml);
             
-            // Validate mnemonic format (24 words)
-            const words = mnemonic.split(/\s+/);
-            if (words.length !== 24) {
-                $status.text('Please enter all 24 words').css('color', '#ef4444');
-                return;
-            }
+            // Focus the textarea
+            $('#modal-mnemonic-input').focus();
             
-            $btn.prop('disabled', true).text('Connecting...');
-            $status.text('').css('color', '#666');
+            // Close modal handlers
+            $('#close-encrypt-modal, #cancel-encrypt-modal, #encrypt-modal-overlay').on('click', function(e) {
+                if (e.target === this) {
+                    $('#encrypt-modal-overlay').remove();
+                }
+            });
             
-            try {
-                if (typeof window.ethereum === 'undefined') {
-                    throw new Error('No wallet detected. Please install MetaMask or another Web3 wallet.');
+            // Prevent clicks inside modal from closing it
+            $('#encrypt-modal-overlay > div').on('click', function(e) {
+                e.stopPropagation();
+            });
+            
+            // Encrypt button handler
+            $('#confirm-encrypt-btn').on('click', async function() {
+                const $btn = $(this);
+                const $status = $('#modal-encrypt-status');
+                const $input = $('#modal-mnemonic-input');
+                
+                const mnemonic = $input.val().trim().toLowerCase();
+                
+                // Validate mnemonic format (24 words)
+                const words = mnemonic.split(/\s+/);
+                if (words.length !== 24) {
+                    $status.text('Please enter all 24 words').css('color', '#ef4444');
+                    return;
                 }
                 
-                const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-                const walletAddress = accounts[0];
+                $btn.prop('disabled', true).text('Connecting...');
+                $status.text('').css('color', '#666');
                 
-                if (!walletAddress) {
-                    throw new Error('No wallet account found');
+                try {
+                    if (typeof window.ethereum === 'undefined') {
+                        throw new Error('No wallet detected. Please install MetaMask or another Web3 wallet.');
+                    }
+                    
+                    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    const walletAddress = accounts[0];
+                    
+                    if (!walletAddress) {
+                        throw new Error('No wallet account found');
+                    }
+                    
+                    $btn.text('Sign to encrypt...');
+                    $status.text('Please sign the message in your wallet');
+                    
+                    const msgResponse = await fetch(new URL('/api/boson/mnemonic-sign-message', window.api_origin).toString(), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ walletAddress })
+                    });
+                    
+                    const msgResult = await msgResponse.json();
+                    if (!msgResult.message) {
+                        throw new Error('Failed to get sign message');
+                    }
+                    
+                    const signature = await window.ethereum.request({
+                        method: 'personal_sign',
+                        params: [msgResult.message, walletAddress]
+                    });
+                    
+                    $btn.text('Encrypting...');
+                    $status.text('Encrypting your recovery phrase...');
+                    
+                    // Use a new endpoint that accepts the mnemonic directly
+                    const secureResponse = await fetch(new URL('/api/boson/encrypt-mnemonic', window.api_origin).toString(), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ mnemonic, signature, walletAddress })
+                    });
+                    
+                    const secureResult = await secureResponse.json();
+                    
+                    if (!secureResponse.ok || !secureResult.success) {
+                        throw new Error(secureResult.error || 'Encryption failed');
+                    }
+                    
+                    // Success - update UI
+                    $status.text('Recovery phrase encrypted successfully!').css('color', '#22c55e');
+                    $input.val(''); // Clear the input for security
+                    
+                    // Close modal and update settings UI after delay
+                    setTimeout(() => {
+                        $('#encrypt-modal-overlay').remove();
+                        $el_window.find('#no-recovery-message').hide();
+                        $el_window.find('#account-recovery-status').text('Encrypted backup available');
+                        $el_window.find('#view-recovery-btn').show();
+                        $el_window.find('#open-encrypt-modal-btn').hide();
+                    }, 1500);
+                    
+                } catch (error) {
+                    console.error('[Account] Manual encrypt error:', error);
+                    $status.text('Error: ' + error.message).css('color', '#ef4444');
+                    $btn.prop('disabled', false).text('Encrypt & Save');
                 }
-                
-                $btn.text('Sign to encrypt...');
-                $status.text('Please sign the message in your wallet');
-                
-                const msgResponse = await fetch(new URL('/api/boson/mnemonic-sign-message', window.api_origin).toString(), {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ walletAddress })
-                });
-                
-                const msgResult = await msgResponse.json();
-                if (!msgResult.message) {
-                    throw new Error('Failed to get sign message');
-                }
-                
-                const signature = await window.ethereum.request({
-                    method: 'personal_sign',
-                    params: [msgResult.message, walletAddress]
-                });
-                
-                $btn.text('Encrypting...');
-                $status.text('Encrypting your recovery phrase...');
-                
-                // Use a new endpoint that accepts the mnemonic directly
-                const secureResponse = await fetch(new URL('/api/boson/encrypt-mnemonic', window.api_origin).toString(), {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ mnemonic, signature, walletAddress })
-                });
-                
-                const secureResult = await secureResponse.json();
-                
-                if (!secureResponse.ok || !secureResult.success) {
-                    throw new Error(secureResult.error || 'Encryption failed');
-                }
-                
-                // Success - update UI
-                $status.text('Recovery phrase encrypted successfully!').css('color', '#22c55e');
-                $input.val(''); // Clear the input for security
-                
-                // Hide the no-backup message and show view button
-                setTimeout(() => {
-                    $el_window.find('#no-recovery-message').hide();
-                    $el_window.find('#account-recovery-status').text('Encrypted backup available');
-                    $el_window.find('#view-recovery-btn').show();
-                }, 1500);
-                
-            } catch (error) {
-                console.error('[Account] Manual encrypt error:', error);
-                $status.text('Error: ' + error.message).css('color', '#ef4444');
-                $btn.prop('disabled', false).text('Encrypt & Save');
-            }
+            });
         });
         
         // Load node identity data

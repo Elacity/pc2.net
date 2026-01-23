@@ -4,6 +4,12 @@ node_modules/
 # Build output
 dist/
 
+# Compiled TypeScript in src/ (source is .ts, compiled goes to dist/)
+src/**/*.js
+src/**/*.js.map
+src/**/*.d.ts
+src/**/*.d.ts.map
+
 # Environment variables
 .env
 .env.local

@@ -9,48 +9,11 @@ import https from 'https';
 import { isAPIRoute, isStaticAsset } from './utils/routes.js';
 import { verifyAntiSnipeSession } from './api/access-control.js';
 import { getNodeConfig } from './api/setup.js';
+import { getBaseUrl } from './utils/urlUtils.js';
 
 // Data directory from environment or default
 const DATA_DIR = process.env.PC2_DATA_DIR || './data';
 const SETUP_COMPLETE_FILE = path.join(DATA_DIR, 'setup-complete');
-
-/**
- * Get the base URL for the request, respecting reverse proxy headers.
- * When behind Nginx or other reverse proxies, req.protocol may be 'http'
- * even when the original request was HTTPS.
- * 
- * When accessed via Boson Active Proxy, the Host header may contain the internal
- * IP:port. In this case, we use the Boson service's registered public URL.
- */
-function getBaseUrl(req: Request): string {
-  const host = req.get('host') || 'localhost';
-  
-  // If host contains an IP address with port (e.g., "38.242.211.112:4200"),
-  // it's likely coming through Active Proxy without proper Host header.
-  // In this case, try to use the Boson service's public URL.
-  const isIpWithPort = /^\d+\.\d+\.\d+\.\d+:\d+$/.test(host);
-  if (isIpWithPort && req.app?.locals?.bosonService) {
-    const publicUrl = req.app.locals.bosonService.getPublicUrl?.();
-    if (publicUrl) {
-      return publicUrl;
-    }
-  }
-  
-  // Check x-forwarded-proto header (set by reverse proxies like Nginx)
-  const forwardedProto = req.headers['x-forwarded-proto'];
-  if (forwardedProto === 'https') {
-    return `https://${host}`;
-  }
-  
-  // Check origin header (contains original protocol)
-  const origin = req.headers.origin;
-  if (origin && typeof origin === 'string' && origin.startsWith('https://')) {
-    return `https://${host}`;
-  }
-  
-  // Fallback to req.protocol
-  return `${req.protocol}://${host}`;
-}
 
 // ES module equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -366,14 +329,16 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
       }
         
       // Extract API origin from URL params, respecting reverse proxy headers
+      // Get bosonService from app.locals for public URL resolution via Active Proxy
+      const bosonService = req.app?.locals?.bosonService;
       let apiOrigin: string;
       try {
-        const fullUrl = getBaseUrl(req) + req.originalUrl;
+        const fullUrl = getBaseUrl(req, bosonService) + req.originalUrl;
         const url = new URL(fullUrl);
-        apiOrigin = url.searchParams.get('api_origin') || getBaseUrl(req);
+        apiOrigin = url.searchParams.get('api_origin') || getBaseUrl(req, bosonService);
       } catch (urlError) {
         console.error(`[Particle Auth]: ❌ Error parsing URL:`, urlError);
-        apiOrigin = getBaseUrl(req);
+        apiOrigin = getBaseUrl(req, bosonService);
       }
       
       // Inject API origin script (same as mock server)

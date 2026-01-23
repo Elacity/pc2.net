@@ -6,30 +6,7 @@
 
 import { Request, Response } from 'express';
 import { logger } from '../utils/logger.js';
-
-/**
- * Get the base URL for the request, respecting reverse proxy headers.
- * When behind Nginx or other reverse proxies, req.protocol may be 'http'
- * even when the original request was HTTPS.
- */
-function getBaseUrl(req: Request): string {
-  const host = req.get('host') || 'localhost';
-  
-  // Check x-forwarded-proto header (set by reverse proxies like Nginx)
-  const forwardedProto = req.headers['x-forwarded-proto'];
-  if (forwardedProto === 'https') {
-    return `https://${host}`;
-  }
-  
-  // Check origin header (contains original protocol)
-  const origin = req.headers.origin;
-  if (origin && typeof origin === 'string' && origin.startsWith('https://')) {
-    return `https://${host}`;
-  }
-  
-  // Fallback to req.protocol
-  return `${req.protocol}://${host}`;
-}
+import { getBaseUrl } from '../utils/urlUtils.js';
 
 // Hardcoded base64 icons - must match info.ts for consistency
 const hardcodedIcons: Record<string, string> = {
@@ -54,7 +31,9 @@ const hardcodedIcons: Record<string, string> = {
  */
 export function handleGetApp(req: Request, res: Response): void {
   const appName = req.params.name;
-  const baseUrl = getBaseUrl(req);
+  // Get bosonService from app.locals for public URL resolution via Active Proxy
+  const bosonService = req.app?.locals?.bosonService;
+  const baseUrl = getBaseUrl(req, bosonService);
   
   logger.info(`[apps.ts] Getting app info for: ${appName}`);
   

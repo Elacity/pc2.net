@@ -525,7 +525,9 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
         // This applies to all apps (terminal, phoenix, player, viewer, pdf, editor, etc.)
         if (ext === '.html') {
           console.log(`[static.ts] 📄 Processing HTML file: ${normalizedPath}, isPhoenix: ${isPhoenix}, isTerminal: ${isTerminal}, isCalculator: ${isCalculator}`);
-          const baseUrl = req.protocol + '://' + req.get('host');
+          // Use getBaseUrl to correctly handle Active Proxy (which may not preserve Host header)
+          const bosonService = req.app?.locals?.bosonService;
+          const baseUrl = getBaseUrl(req, bosonService);
           const sdkUrl = `${baseUrl}/puter.js/v2`;
           let htmlContent = readFileSync(normalizedPath, 'utf8');
           // Replace any hardcoded SDK URL with the local server's SDK URL
@@ -872,7 +874,9 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
         
         // Special handling for app HTML files - inject correct SDK URL
         if (ext === '.html') {
-          const baseUrl = req.protocol + '://' + req.get('host');
+          // Use getBaseUrl to correctly handle Active Proxy (which may not preserve Host header)
+          const bosonService = req.app?.locals?.bosonService;
+          const baseUrl = getBaseUrl(req, bosonService);
           const sdkUrl = `${baseUrl}/puter.js/v2`;
           let htmlContent = readFileSync(normalizedPath, 'utf8');
           // Replace any hardcoded SDK URL with the local server's SDK URL

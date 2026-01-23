@@ -18,9 +18,23 @@ const SETUP_COMPLETE_FILE = path.join(DATA_DIR, 'setup-complete');
  * Get the base URL for the request, respecting reverse proxy headers.
  * When behind Nginx or other reverse proxies, req.protocol may be 'http'
  * even when the original request was HTTPS.
+ * 
+ * When accessed via Boson Active Proxy, the Host header may contain the internal
+ * IP:port. In this case, we use the Boson service's registered public URL.
  */
 function getBaseUrl(req: Request): string {
   const host = req.get('host') || 'localhost';
+  
+  // If host contains an IP address with port (e.g., "38.242.211.112:4200"),
+  // it's likely coming through Active Proxy without proper Host header.
+  // In this case, try to use the Boson service's public URL.
+  const isIpWithPort = /^\d+\.\d+\.\d+\.\d+:\d+$/.test(host);
+  if (isIpWithPort && req.app?.locals?.bosonService) {
+    const publicUrl = req.app.locals.bosonService.getPublicUrl?.();
+    if (publicUrl) {
+      return publicUrl;
+    }
+  }
   
   // Check x-forwarded-proto header (set by reverse proxies like Nginx)
   const forwardedProto = req.headers['x-forwarded-proto'];

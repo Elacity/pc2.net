@@ -4,6 +4,14 @@
 
 ---
 
+## Start Here
+
+| Document | Description |
+|----------|-------------|
+| [Agent Handover](core/AGENT_HANDOVER.md) | **START HERE** - Complete context for AI agents and new developers |
+
+---
+
 ## Core Documentation
 
 Essential reading for understanding PC2's vision, architecture, and strategy.

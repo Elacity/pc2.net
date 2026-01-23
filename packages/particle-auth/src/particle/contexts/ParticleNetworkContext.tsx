@@ -583,6 +583,23 @@ const ParticleNetworkProvider: React.FC<React.PropsWithChildren<ParticleNetworkC
     };
   }, [active, universalAccount]);
 
+  // Send updated smart account info to parent when it becomes available
+  // This runs separately from the ready message to ensure parent gets the smart account
+  React.useEffect(() => {
+    if (!active || !smartAccountInfo?.smartAccountAddress) return;
+    
+    console.log('[Particle Auth]: Smart Account loaded, notifying parent:', smartAccountInfo.smartAccountAddress);
+    window.parent.postMessage({
+      type: 'particle-wallet.ready',
+      payload: { 
+        ready: true,
+        address: eoaAddress,
+        smartAccountAddress: smartAccountInfo.smartAccountAddress,
+        solanaSmartAccountAddress: smartAccountInfo.solanaSmartAccountAddress,
+      },
+    }, '*');
+  }, [active, smartAccountInfo, eoaAddress]);
+
   // Determine the active account - prefer Smart Account if available
   const account = smartAccountInfo?.smartAccountAddress || eoaAddress;
 

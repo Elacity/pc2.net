@@ -33,7 +33,7 @@ export interface UserInfo {
   email_confirmed: boolean;
   is_temp: boolean;
   taskbar_items: any[];
-  desktop_bg_url: string;
+  desktop_bg_url: string | null;
   desktop_bg_color: string | null;
   desktop_bg_fit: string;
   profile_picture_url?: string | null;

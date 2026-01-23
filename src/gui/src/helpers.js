@@ -38,6 +38,42 @@ window.is_auth = ()=>{
         return true;
 }
 
+/**
+ * Get user-specific localStorage key for profile picture cache
+ * Ensures each user's profile picture is isolated from others
+ */
+window.getProfilePictureCacheKey = function(keySuffix) {
+    const walletAddress = window.user?.wallet_address || window.user?.username || 'unknown';
+    // Normalize wallet address to lowercase for consistency
+    const normalizedWallet = walletAddress.toLowerCase();
+    return `pc2_profile_picture_${keySuffix}_${normalizedWallet}`;
+}
+
+/**
+ * Clear profile picture cache for a specific user (or all users if walletAddress is null)
+ * Called when a new user logs in to prevent showing previous user's profile picture
+ */
+window.clearProfilePictureCache = function(walletAddress) {
+    if (walletAddress) {
+        // Clear specific user's cache
+        const normalizedWallet = walletAddress.toLowerCase();
+        localStorage.removeItem(`pc2_profile_picture_cid_${normalizedWallet}`);
+        localStorage.removeItem(`pc2_profile_picture_signed_url_${normalizedWallet}`);
+        console.log('[clearProfilePictureCache] Cleared cache for user:', normalizedWallet);
+    } else {
+        // Clear all users' cache (fallback - should rarely be needed)
+        const keysToRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && (key.startsWith('pc2_profile_picture_cid_') || key.startsWith('pc2_profile_picture_signed_url_'))) {
+                keysToRemove.push(key);
+            }
+        }
+        keysToRemove.forEach(key => localStorage.removeItem(key));
+        console.log('[clearProfilePictureCache] Cleared all profile picture cache');
+    }
+}
+
 window.suggest_apps_for_fsentry = async (options)=>{
     let res = await $.ajax({
         url: window.api_origin + "/suggest_apps",
@@ -479,6 +515,23 @@ window.update_auth_data = async (auth_token, user)=>{
         delete storable_user.taskbar_items;
         return storable_user;
     };
+
+    // Check if wallet address changed (new user logged in)
+    const previousWalletAddress = window.user?.wallet_address;
+    const newWalletAddress = user.wallet_address;
+    
+    // If wallet address changed, clear the previous user's profile picture cache
+    if (previousWalletAddress && newWalletAddress && previousWalletAddress !== newWalletAddress) {
+        console.log('[update_auth_data] Wallet address changed, clearing previous user cache:', previousWalletAddress);
+        window.clearProfilePictureCache(previousWalletAddress);
+    }
+    
+    // Cache whoami data for loading screen (user-specific)
+    try {
+        localStorage.setItem('pc2_whoami_cache', JSON.stringify(user));
+    } catch (e) {
+        console.warn('[update_auth_data] Failed to cache whoami data:', e);
+    }
 
     // update this session's user data
     window.user = user;
@@ -1851,9 +1904,9 @@ window.refresh_desktop_background = async function() {
         // If bg_url is null or the default wallpaper, use it directly (no signing needed)
         // Always use 'cover' fit for default wallpapers, regardless of saved fit
         if (!bg_url || bg_url === '/images/wallpaper-elastos.jpg' || bg_url === '/images/flint-2.jpg') {
-            false && console.log('[refresh_desktop_background] Using default wallpaper:', bg_url || '/images/wallpaper-elastos.jpg');
+            false && console.log('[refresh_desktop_background] Using default wallpaper:', bg_url);
             window.set_desktop_background({
-                url: bg_url || '/images/wallpaper-elastos.jpg',
+                url: bg_url,
                 fit: 'cover', // Always use 'cover' for default wallpapers
                 color: window.user.desktop_bg_color,
             });
@@ -1891,13 +1944,13 @@ window.refresh_desktop_background = async function() {
                     false && console.log('[refresh_desktop_background] Got signed URL:', bg_url);
                 } else {
                     false && console.warn('[refresh_desktop_background] Sign response missing read_url:', signed);
-                    // Fall back to default if signing fails
-                    bg_url = '/images/wallpaper-elastos.jpg';
+                    // Fall back to null if signing fails
+                    bg_url = null;
                 }
             } catch (err) {
                 false && console.warn('[refresh_desktop_background] Failed to sign background URL:', err);
-                // Fall back to default if signing fails
-                bg_url = '/images/wallpaper-elastos.jpg';
+                // Fall back to null if signing fails
+                bg_url = null;
             }
         }
         
@@ -1908,9 +1961,9 @@ window.refresh_desktop_background = async function() {
             color: window.user.desktop_bg_color,
         });
     } else {
-        // Default Elastos wallpaper
+        // No background set - use transparent/none
         window.set_desktop_background({
-            url: '/images/wallpaper-elastos.jpg',
+            url: null,
             fit: 'cover',
         });
     }
@@ -3131,13 +3184,21 @@ window.get_profile_picture = async function(username){
  * and generates a fresh signed URL for display
  */
 window.refresh_profile_picture = async function() {
+    // Default profile picture path (served from static assets)
+    const DEFAULT_PROFILE_PICTURE = '/images/elastos-icon-default.svg';
+    
+    // If no profile picture URL is set, use default
     if (!window.user || !window.user.profile_picture_url) {
-        false && console.log('[refresh_profile_picture] No profile picture URL set');
+        console.log('[refresh_profile_picture] No profile picture URL set, using default');
+        const defaultUrl = window.location.origin + DEFAULT_PROFILE_PICTURE;
+        $('.profile-picture').css('background-image', `url("${defaultUrl}")`);
+        $('.profile-image').css('background-image', `url("${defaultUrl}")`);
+        $('.profile-image').addClass('profile-image-has-picture');
         return;
     }
     
     const pic_url = window.user.profile_picture_url;
-    false && console.log('[refresh_profile_picture] Loading profile picture:', pic_url);
+    console.log('[refresh_profile_picture] Loading profile picture:', pic_url);
     
     // Check if it's a local file path (starts with / or ~, not already a signed URL or HTTP URL)
     const isLocalFile = pic_url && 
@@ -3154,45 +3215,142 @@ window.refresh_profile_picture = async function() {
                 filePath = filePath.replace('~', `/${window.user?.username || window.user?.wallet_address || ''}`);
             }
             
-            false && console.log('[refresh_profile_picture] Signing path:', filePath);
-            const signed = await puter.fs.sign(undefined, { path: filePath, action: 'read' });
-            false && console.log('[refresh_profile_picture] Sign response:', signed);
+            console.log('[refresh_profile_picture] Signing path:', filePath);
             
-            // Handle different response structures
+            // First, check localStorage for cached signed URL or CID (user-specific)
             let signed_url = null;
-            if (signed && signed.items) {
-                const items = Array.isArray(signed.items) ? signed.items : [signed.items];
-                if (items.length > 0 && items[0].read_url) {
-                    signed_url = items[0].read_url;
+            const cachedSignedUrl = localStorage.getItem(window.getProfilePictureCacheKey('signed_url'));
+            const cachedCid = localStorage.getItem(window.getProfilePictureCacheKey('cid'));
+            
+            if (cachedSignedUrl && cachedSignedUrl.startsWith('http')) {
+                console.log('[refresh_profile_picture] Using cached signed URL from localStorage');
+                signed_url = cachedSignedUrl;
+            } else if (cachedCid) {
+                console.log('[refresh_profile_picture] Using cached IPFS CID from localStorage:', cachedCid);
+                signed_url = `/ipfs/${cachedCid}`;
+            }
+            
+            // Try to get fresh signed URL if we don't have one
+            if (!signed_url) {
+                // First check if file exists via stat (with timeout)
+                let fileExists = false;
+                let ipfsHash = null;
+                try {
+                    const stat = await Promise.race([
+                        new Promise((resolve, reject) => {
+                            puter.fs.stat(filePath, (result) => {
+                                if (result) {
+                                    resolve(result);
+                                } else {
+                                    reject(new Error('File not found'));
+                                }
+                            });
+                        }),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('Stat timeout')), 5000))
+                    ]);
+                    fileExists = true;
+                    ipfsHash = stat.ipfs_hash;
+                    if (ipfsHash) {
+                        localStorage.setItem(window.getProfilePictureCacheKey('cid'), ipfsHash);
+                    }
+                    console.log('[refresh_profile_picture] File exists, IPFS hash:', ipfsHash);
+                } catch (statErr) {
+                    console.warn('[refresh_profile_picture] File stat failed (file may not exist):', statErr);
                 }
-            } else if (signed && signed.signatures) {
-                const items = Array.isArray(signed.signatures) ? signed.signatures : [signed.signatures];
-                if (items.length > 0 && items[0].read_url) {
-                    signed_url = items[0].read_url;
+                
+                // Try to sign the file (with timeout)
+                try {
+                    const signed = await Promise.race([
+                        puter.fs.sign(undefined, { path: filePath, action: 'read' }),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('Sign timeout')), 10000))
+                    ]);
+                    console.log('[refresh_profile_picture] Sign response:', signed);
+                    console.log('[refresh_profile_picture] Sign response structure:', {
+                        hasItems: !!signed?.items,
+                        itemsType: signed?.items ? (Array.isArray(signed.items) ? 'array' : typeof signed.items) : 'none',
+                        itemsKeys: signed?.items && typeof signed.items === 'object' ? Object.keys(signed.items) : [],
+                        itemsValue: signed?.items,
+                        hasSignatures: !!signed?.signatures,
+                        hasReadUrl: !!signed?.read_url
+                    });
+                    
+                    // Handle different response structures
+                    if (signed && signed.items) {
+                        // items can be an array or a single object
+                        if (Array.isArray(signed.items)) {
+                            if (signed.items.length > 0 && signed.items[0].read_url) {
+                                signed_url = signed.items[0].read_url;
+                            }
+                        } else if (typeof signed.items === 'object' && Object.keys(signed.items).length > 0) {
+                            // items is a single object with properties
+                            if (signed.items.read_url) {
+                                signed_url = signed.items.read_url;
+                            } else if (signed.items.url) {
+                                signed_url = signed.items.url;
+                            }
+                        } else {
+                            console.warn('[refresh_profile_picture] items is empty object, file may not exist in backend');
+                        }
+                    } else if (signed && signed.signatures) {
+                        const items = Array.isArray(signed.signatures) ? signed.signatures : [signed.signatures];
+                        if (items.length > 0 && items[0].read_url) {
+                            signed_url = items[0].read_url;
+                        }
+                    } else if (signed && signed.read_url) {
+                        signed_url = signed.read_url;
+                    }
+                    
+                    // Cache the signed URL if we got one (user-specific)
+                    if (signed_url && signed_url.startsWith('http')) {
+                        localStorage.setItem(window.getProfilePictureCacheKey('signed_url'), signed_url);
+                    }
+                } catch (signErr) {
+                    console.warn('[refresh_profile_picture] Sign failed:', signErr);
                 }
-            } else if (signed && signed.read_url) {
-                signed_url = signed.read_url;
+                
+                // Fallback: Use IPFS CID if available and sign failed
+                if (!signed_url && ipfsHash) {
+                    console.log('[refresh_profile_picture] Using IPFS CID as fallback:', ipfsHash);
+                    signed_url = `/ipfs/${ipfsHash}`;
+                } else if (!signed_url && cachedCid) {
+                    console.log('[refresh_profile_picture] Using cached IPFS CID as final fallback:', cachedCid);
+                    signed_url = `/ipfs/${cachedCid}`;
+                }
             }
             
             if (signed_url) {
-                false && console.log('[refresh_profile_picture] Got signed URL:', signed_url);
+                console.log('[refresh_profile_picture] Got signed URL:', signed_url);
                 // Update profile picture display
                 $('.profile-picture').css('background-image', `url("${signed_url}")`);
                 $('.profile-image').css('background-image', `url("${signed_url}")`);
                 $('.profile-image').addClass('profile-image-has-picture');
-                false && console.log('[refresh_profile_picture] Profile picture set with signed URL');
+                // Cache signed URL for loading screen on next refresh (user-specific)
+                try { localStorage.setItem(window.getProfilePictureCacheKey('signed_url'), signed_url); } catch (e) {}
+                console.log('[refresh_profile_picture] Profile picture set with signed URL');
             } else {
-                console.warn('[refresh_profile_picture] Sign response missing read_url:', signed);
+                console.warn('[refresh_profile_picture] Sign response missing read_url, using default image');
+                // Fallback to default image if signing fails
+                const defaultUrl = window.location.origin + DEFAULT_PROFILE_PICTURE;
+                $('.profile-picture').css('background-image', `url("${defaultUrl}")`);
+                $('.profile-image').css('background-image', `url("${defaultUrl}")`);
+                $('.profile-image').addClass('profile-image-has-picture');
             }
         } catch (err) {
-            console.warn('[refresh_profile_picture] Failed to sign profile picture URL:', err);
+            console.warn('[refresh_profile_picture] Failed to sign profile picture URL, using default image:', err);
+            // Fallback to default image on error
+            const defaultUrl = window.location.origin + DEFAULT_PROFILE_PICTURE;
+            $('.profile-picture').css('background-image', `url("${defaultUrl}")`);
+            $('.profile-image').css('background-image', `url("${defaultUrl}")`);
+            $('.profile-image').addClass('profile-image-has-picture');
         }
     } else if (pic_url) {
         // Already a URL (signed URL or HTTP), use it directly
-        false && console.log('[refresh_profile_picture] Using existing URL:', pic_url);
+        console.log('[refresh_profile_picture] Using existing URL:', pic_url);
         $('.profile-picture').css('background-image', `url("${pic_url}")`);
         $('.profile-image').css('background-image', `url("${pic_url}")`);
         $('.profile-image').addClass('profile-image-has-picture');
+        // Cache URL for loading screen on next refresh (user-specific)
+        try { localStorage.setItem(window.getProfilePictureCacheKey('signed_url'), pic_url); } catch (e) {}
     }
 }
 

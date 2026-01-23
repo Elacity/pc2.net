@@ -227,6 +227,14 @@ export class DatabaseManager {
   }
 
   /**
+   * Update session smart account address
+   */
+  updateSessionSmartAccount(token: string, smartAccountAddress: string): void {
+    const db = this.getDB();
+    db.prepare('UPDATE sessions SET smart_account_address = ? WHERE token = ?').run(smartAccountAddress, token);
+  }
+
+  /**
    * Delete session
    */
   deleteSession(token: string): void {

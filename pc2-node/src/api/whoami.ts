@@ -240,7 +240,8 @@ export function handleWhoami(req: AuthenticatedRequest, res: Response): void {
 
   // Build user info response (Puter API format)
   // CRITICAL: Ensure wallet_address is never null/undefined
-  const walletAddress = req.user.wallet_address || session.wallet_address;
+  // Normalize to lowercase for consistent KV store lookups
+  const walletAddress = (req.user.wallet_address || session.wallet_address)?.toLowerCase();
   if (!walletAddress) {
     logger.error('[Whoami] Wallet address is null/undefined', {
       hasReqUser: !!req.user,
@@ -257,6 +258,7 @@ export function handleWhoami(req: AuthenticatedRequest, res: Response): void {
   }
 
   // Get desktop background settings from KV store
+  // Default to flint-2.jpg if not set (original default)
   const desktopBgUrl = db.getSetting(`${walletAddress}:user_preferences.desktop_bg_url`) || '/images/flint-2.jpg';
   const desktopBgColor = db.getSetting(`${walletAddress}:user_preferences.desktop_bg_color`) || null;
   const desktopBgFit = db.getSetting(`${walletAddress}:user_preferences.desktop_bg_fit`) || 'cover';
@@ -284,7 +286,9 @@ export function handleWhoami(req: AuthenticatedRequest, res: Response): void {
 
   logger.info('[Whoami] Returning user info', {
     walletAddress,
-    hasToken: !!req.user.session_token
+    hasToken: !!req.user.session_token,
+    profile_picture_url: profilePictureUrl,
+    desktop_bg_url: desktopBgUrl
   });
 
   res.json(userInfo);

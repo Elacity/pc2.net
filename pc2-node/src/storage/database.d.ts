@@ -99,6 +99,10 @@ export declare class DatabaseManager {
      */
     getAllActiveSessions(): Session[];
     /**
+     * Update session smart account address
+     */
+    updateSessionSmartAccount(token: string, smartAccountAddress: string): void;
+    /**
      * Delete session
      */
     deleteSession(token: string): void;

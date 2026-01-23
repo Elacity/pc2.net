@@ -132,6 +132,40 @@ class WalletService {
                 case 'particle-wallet.ready':
                     logger.log('Particle wallet ready signal received', payload);
                     this._iframeReady = true;
+                    // Store Smart Account address if provided (UniversalX EVM)
+                    // Also update backend session if smart account wasn't set during login
+                    if (payload?.smartAccountAddress && window.user) {
+                        const oldSmartAccount = window.user.smart_account_address;
+                        window.user.smart_account_address = payload.smartAccountAddress;
+                        logger.log('Stored Smart Account:', payload.smartAccountAddress);
+                        
+                        // If smart account is new (wasn't set during login), update backend session
+                        if (!oldSmartAccount && payload.smartAccountAddress && window.user.wallet_address) {
+                            logger.log('Smart Account received after login, updating backend session...');
+                            // Re-auth to update the session with smart account
+                            fetch(`${window.api_origin}/auth/particle`, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${window.auth_token}`
+                                },
+                                body: JSON.stringify({
+                                    address: window.user.wallet_address,
+                                    smartAccountAddress: payload.smartAccountAddress
+                                })
+                            }).then(res => res.json()).then(data => {
+                                if (data.success) {
+                                    logger.log('Backend session updated with Smart Account');
+                                    // Update localStorage cache
+                                    try {
+                                        localStorage.setItem('pc2_whoami_cache', JSON.stringify(window.user));
+                                    } catch (e) {}
+                                }
+                            }).catch(err => {
+                                logger.warn('Failed to update backend session with Smart Account:', err);
+                            });
+                        }
+                    }
                     // Store Solana address if provided
                     if (payload?.solanaSmartAccountAddress && window.user) {
                         window.user.solana_smart_account_address = payload.solanaSmartAccountAddress;

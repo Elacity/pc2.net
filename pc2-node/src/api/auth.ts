@@ -124,13 +124,23 @@ export async function handleParticleAuth(req: Request, res: Response): Promise<v
     // Check for existing valid session
     const existingSession = db.getSessionByWallet(normalizedWallet);
     if (existingSession && existingSession.expires_at > Date.now()) {
+      // Update smart account if provided and different from stored value
+      if (smart_account_address && smart_account_address !== existingSession.smart_account_address) {
+        logger.info('🔄 Updating session smart account', {
+          wallet: normalizedWallet.substring(0, 10) + '...',
+          oldSmartAccount: existingSession.smart_account_address?.substring(0, 10) || 'none',
+          newSmartAccount: smart_account_address.substring(0, 10) + '...'
+        });
+        db.updateSessionSmartAccount(existingSession.token, smart_account_address);
+      }
+      
       logger.info('✅ Returning existing session', {
         wallet: normalizedWallet.substring(0, 10) + '...',
         tokenPrefix: existingSession.token.substring(0, 8) + '...',
         expiresAt: new Date(existingSession.expires_at).toISOString()
       });
-      // Return existing session
-      const userInfo = buildUserInfo(normalizedWallet, smart_account_address, existingSession.token, config);
+      // Return existing session (with potentially updated smart account)
+      const userInfo = buildUserInfo(normalizedWallet, smart_account_address || existingSession.smart_account_address, existingSession.token, config);
       const response: AuthResponse = {
         success: true,
         token: existingSession.token,

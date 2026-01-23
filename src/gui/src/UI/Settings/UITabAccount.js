@@ -34,8 +34,10 @@ export default {
         // h += `<h1>${i18n('account')}</h1>`;
 
         // profile picture
-        // Use profile_picture_url from whoami response if available, otherwise fall back to profile.picture or default icon
-        const profilePicUrl = window.user?.profile_picture_url || window.user?.profile?.picture || window.icons['profile.svg'];
+        // Don't use profile_picture_url directly as it's a file path, not a URL
+        // Use default Elastos icon initially, refresh_profile_picture will update with signed URL
+        const DEFAULT_PROFILE_PICTURE = window.location.origin + '/images/elastos-icon-default.svg';
+        const profilePicUrl = window.user?.profile?.picture || DEFAULT_PROFILE_PICTURE;
         const displayName = window.user?.display_name || '';
         
         h += `<div style="overflow: hidden; display: flex; margin-bottom: 20px; flex-direction: column; align-items: center;">`;
@@ -188,7 +190,7 @@ export default {
                             h += `<div id="manual-encrypt-section" style="padding: 12px; background: rgba(59, 130, 246, 0.1); border-radius: 6px;">`;
                                 h += `<div style="margin-bottom: 12px;">`;
                                     h += `<strong style="display: block; color: #3b82f6; margin-bottom: 8px;">Encrypt Your Recovery Phrase</strong>`;
-                                    h += `<textarea id="manual-mnemonic-input" placeholder="Enter your 24-word recovery phrase..." style="width: 100%; height: 80px; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-family: monospace; font-size: 12px; resize: none;"></textarea>`;
+                                    h += `<textarea id="manual-mnemonic-input" placeholder="Enter your 24-word recovery phrase..." style="width: 100%; height: 80px; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-family: monospace; font-size: 12px; resize: none; box-sizing: border-box;"></textarea>`;
                                 h += `</div>`;
                                 h += `<div style="display: flex; justify-content: space-between; align-items: center;">`;
                                     h += `<span id="manual-encrypt-status" style="font-size: 12px; color: #666;"></span>`;
@@ -800,7 +802,20 @@ export default {
                     // Handle different response structures
                     let items = null;
                     if (signed && signed.items) {
-                        items = Array.isArray(signed.items) ? signed.items : [signed.items];
+                        // items can be an array or a single object
+                        if (Array.isArray(signed.items)) {
+                            items = signed.items;
+                        } else {
+                            // items is a single object - check for read_url directly
+                            if (signed.items.read_url) {
+                                signed_url = signed.items.read_url;
+                            } else if (signed.items.url) {
+                                signed_url = signed.items.url;
+                            } else {
+                                // wrap in array for processing below
+                                items = [signed.items];
+                            }
+                        }
                     } else if (signed && signed.signatures) {
                         items = Array.isArray(signed.signatures) ? signed.signatures : [signed.signatures];
                     } else if (signed && Array.isArray(signed)) {
@@ -809,7 +824,7 @@ export default {
                         signed_url = signed.read_url;
                     }
                     
-                    if (items && items.length > 0) {
+                    if (!signed_url && items && items.length > 0) {
                         const firstItem = items[0];
                         if (firstItem.read_url) {
                             signed_url = firstItem.read_url;
@@ -835,7 +850,10 @@ export default {
                 const userRoot = window.user?.username || window.user?.wallet_address || '';
                 const publicFolder = `/${userRoot}/Public`;
                 const fileName = profile_pic_path.split('/').pop();
-                const publicPath = `${publicFolder}/profile-picture-${Date.now()}-${fileName}`;
+                // Use a single timestamp for consistency between file path and saved setting
+                const timestamp = Date.now();
+                const targetFileName = `profile-picture-${timestamp}-${fileName}`;
+                const publicPath = `${publicFolder}/${targetFileName}`;
                 
                 // Expand ~ in source path if needed
                 let sourcePath = profile_pic_path;
@@ -852,7 +870,6 @@ export default {
                     }
                     
                     // Copy to Public folder
-                    const targetFileName = `profile-picture-${Date.now()}-${fileName}`;
                     const copyResult = await puter.fs.copy(sourcePath, publicFolder, {
                         newName: targetFileName,
                         overwrite: true
@@ -862,6 +879,59 @@ export default {
                     let savedPath = publicPath;
                     if (copyResult && copyResult[0] && copyResult[0].copied && copyResult[0].copied.path) {
                         savedPath = copyResult[0].copied.path;
+                    }
+                    
+                    // Cache the signed URL immediately (from the original file selection) - user-specific
+                    if (signed_url && signed_url.startsWith('http')) {
+                        localStorage.setItem(window.getProfilePictureCacheKey('signed_url'), signed_url);
+                        console.log('[UITabAccount] Cached signed URL:', signed_url);
+                    }
+                    
+                    // Get the IPFS CID for the profile picture (for loading screen)
+                    // Also try to sign the copied file to get a fresh signed URL
+                    try {
+                        const stat = await new Promise((resolve, reject) => {
+                            puter.fs.stat(savedPath, (result) => result ? resolve(result) : reject(new Error('stat failed')));
+                        });
+                        if (stat && stat.ipfs_hash) {
+                            localStorage.setItem(window.getProfilePictureCacheKey('cid'), stat.ipfs_hash);
+                            console.log('[UITabAccount] Cached profile picture CID:', stat.ipfs_hash);
+                        }
+                        
+                        // Try to sign the copied file to get a fresh signed URL for the Public folder file
+                        try {
+                            const publicSigned = await puter.fs.sign(undefined, { path: savedPath, action: 'read' });
+                            let publicSignedUrl = null;
+                            
+                            if (publicSigned && publicSigned.items) {
+                                if (Array.isArray(publicSigned.items) && publicSigned.items.length > 0) {
+                                    publicSignedUrl = publicSigned.items[0].read_url || publicSigned.items[0].url;
+                                } else if (publicSigned.items.read_url) {
+                                    publicSignedUrl = publicSigned.items.read_url;
+                                } else if (publicSigned.items.url) {
+                                    publicSignedUrl = publicSigned.items.url;
+                                }
+                            } else if (publicSigned && publicSigned.signatures) {
+                                const items = Array.isArray(publicSigned.signatures) ? publicSigned.signatures : [publicSigned.signatures];
+                                if (items.length > 0) {
+                                    publicSignedUrl = items[0].read_url || items[0].url;
+                                }
+                            } else if (publicSigned && publicSigned.read_url) {
+                                publicSignedUrl = publicSigned.read_url;
+                            }
+                            
+                            if (publicSignedUrl && publicSignedUrl.startsWith('http')) {
+                                localStorage.setItem(window.getProfilePictureCacheKey('signed_url'), publicSignedUrl);
+                                console.log('[UITabAccount] Cached signed URL for Public folder file:', publicSignedUrl);
+                                // Update display with the new signed URL
+                                $el_window.find('.profile-picture').css('background-image', `url("${publicSignedUrl}")`);
+                                $('.profile-image').css('background-image', `url("${publicSignedUrl}")`);
+                            }
+                        } catch (signErr) {
+                            console.warn('[UITabAccount] Could not sign Public folder file:', signErr);
+                        }
+                    } catch (statErr) {
+                        console.warn('[UITabAccount] Could not get IPFS CID for profile picture:', statErr);
                     }
                     
                     // Save the public path to backend
@@ -879,6 +949,10 @@ export default {
                         success: function(response) {
                             if (window.user) {
                                 window.user.profile_picture_url = savedPath;
+                                // Update whoami cache for loading screen
+                                try {
+                                    localStorage.setItem('pc2_whoami_cache', JSON.stringify(window.user));
+                                } catch (e) {}
                             }
                             if (typeof puter?.ui?.toast === 'function') {
                                 puter.ui.toast('Profile picture saved', { type: 'success' });

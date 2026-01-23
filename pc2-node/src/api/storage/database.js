@@ -131,6 +131,13 @@ export class DatabaseManager {
         return rows;
     }
     /**
+     * Update session smart account address
+     */
+    updateSessionSmartAccount(token, smartAccountAddress) {
+        const db = this.getDB();
+        db.prepare('UPDATE sessions SET smart_account_address = ? WHERE token = ?').run(smartAccountAddress, token);
+    }
+    /**
      * Delete session
      */
     deleteSession(token) {

@@ -576,6 +576,9 @@ window.initgui = async function(options){
     // -------------------------------------------------------------------------------------
     if(window.is_auth()){
         INITGUI_DEBUG && console.log('[initgui]: User is authed, proceeding with desktop initialization');
+        // Update loading screen
+        if (window.updateLoadingStatus) window.updateLoadingStatus('Authenticating...', 30);
+        
         // try to get user data using /whoami, only if that data is missing
         if(!whoami){
             try{
@@ -595,6 +598,9 @@ window.initgui = async function(options){
         }
         // update local user data - proceed even with cached data
         if(whoami || window.user){
+            // Update loading screen
+            if (window.updateLoadingStatus) window.updateLoadingStatus('Loading profile...', 50);
+            
             // Use cached user if whoami failed
             if (!whoami && window.user) {
                 whoami = window.user;
@@ -628,6 +634,10 @@ window.initgui = async function(options){
                 
                 window.desktop_loaded = true; // Mark as loaded
                 INITGUI_DEBUG && console.log('[initgui]: Loading desktop for path:', window.desktop_path);
+                
+                // Update loading screen
+                if (window.updateLoadingStatus) window.updateLoadingStatus('Preparing desktop...', 70);
+                
                 await window.get_auto_arrange_data()
                 
                 // Use Promise-based stat with proper error handling
@@ -649,12 +659,22 @@ window.initgui = async function(options){
                     });
                     
                     INITGUI_DEBUG && console.log('[initgui]: puter.fs.stat success, calling UIDesktop');
+                    // Update loading screen
+                    if (window.updateLoadingStatus) window.updateLoadingStatus('Loading desktop...', 90);
+                    
                     // Mark initialization as complete when desktop loads
                     window.initgui_in_progress = false;
                     window.initgui_completed = true;
                     UIDesktop({desktop_fsentry: desktop_fsentry});
                     // Initialize keyboard shortcuts
                     initKeyboardShortcuts();
+                    
+                    // Hide loading screen after a brief delay to ensure desktop is visible
+                    setTimeout(() => {
+                        if (window.updateLoadingStatus) window.updateLoadingStatus('Welcome!', 100);
+                        setTimeout(() => { if (window.hideLoadingScreen) window.hideLoadingScreen(); }, 200);
+                    }, 100);
+                    
                     // Check for updates after desktop loads (30 second delay)
                     setTimeout(() => window.checkForUpdates?.(), 30000);
                 } catch (statError) {
@@ -664,6 +684,9 @@ window.initgui = async function(options){
                     window.initgui_completed = true;
                     UIDesktop({desktop_fsentry: null});
                     initKeyboardShortcuts();
+                    
+                    // Hide loading screen even on error
+                    setTimeout(() => { if (window.hideLoadingScreen) window.hideLoadingScreen(); }, 300);
                 }
             }
             // -------------------------------------------------------------------------------------
@@ -977,6 +1000,9 @@ window.initgui = async function(options){
     
     if(!window.is_auth()){
         INITGUI_DEBUG && console.log('[initgui]: ❌ User is NOT authenticated');
+        // Hide loading screen before showing login
+        if (window.hideLoadingScreen) window.hideLoadingScreen();
+        
         // PC2: Always show Particle login directly (skip Puter session list)
         // This ensures users see Particle Auth instead of Puter's standard login UI
         INITGUI_DEBUG && console.log('[initgui]: Showing Particle login (PC2 mode - skipping session list)...');

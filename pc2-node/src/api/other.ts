@@ -81,11 +81,27 @@ export function handleSign(req: AuthenticatedRequest, res: Response): void {
         continue;
       }
 
-      const metadata = filesystem.getFileMetadata(filePath, req.user.wallet_address);
+      // Normalize wallet address to lowercase for consistent lookups
+      const normalizedWallet = req.user.wallet_address.toLowerCase();
+      
+      // Also normalize the file path to use lowercase wallet address
+      const normalizedFilePath = filePath.replace(/\/0x[a-fA-F0-9]{40}/gi, (match) => match.toLowerCase());
+      
+      let metadata = filesystem.getFileMetadata(normalizedFilePath, normalizedWallet);
+      let effectiveFilePath = normalizedFilePath;
+      
       if (!metadata) {
-        // Skip if file not found (don't add empty signature)
-        continue;
+        // Try original path as fallback
+        metadata = filesystem.getFileMetadata(filePath, normalizedWallet);
+        effectiveFilePath = filePath;
+        if (!metadata) {
+          logger.warn('[Sign] File not found:', { filePath, normalizedFilePath, wallet: normalizedWallet.slice(0, 10) + '...' });
+          continue;
+        }
       }
+      
+      // Use effectiveFilePath for the rest of the logic
+      filePath = effectiveFilePath;
 
       // Generate signature (simplified - in production, use proper signing)
       const expires = Math.ceil(Date.now() / 1000) + 999999999; // Very long expiry
@@ -1940,7 +1956,8 @@ export function handleSetDesktopBg(req: AuthenticatedRequest, res: Response): vo
   }
 
   try {
-    const walletAddress = req.user.wallet_address;
+    // Normalize wallet address to lowercase for consistent KV store keys
+    const walletAddress = req.user.wallet_address.toLowerCase();
 
     // Save desktop background settings to KV store
     if (body.url !== undefined) {
@@ -1994,12 +2011,17 @@ export function handleSetProfilePicture(req: AuthenticatedRequest, res: Response
   }
 
   try {
-    const walletAddress = req.user.wallet_address;
+    // Normalize wallet address to lowercase for consistent KV store keys
+    const walletAddress = req.user.wallet_address.toLowerCase();
 
     // Save profile picture path to KV store
     if (body.url !== undefined) {
       const kvKey = `${walletAddress}:user_preferences.profile_picture_url`;
       db.setSetting(kvKey, body.url);
+      logger.info('[SetProfilePicture] Saving profile picture to KV store', {
+        kvKey,
+        url: body.url
+      });
     }
 
     logger.info('[SetProfilePicture] Profile picture saved', {

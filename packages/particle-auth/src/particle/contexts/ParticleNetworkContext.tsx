@@ -75,14 +75,27 @@ const ParticleNetworkProvider: React.FC<React.PropsWithChildren<ParticleNetworkC
   const [primaryAssets, setPrimaryAssets] = React.useState<IAssetsResponse | undefined>();
 
   // Wallet mode detection: check URL params for address passed from parent
-  const { isWalletMode, urlEoaAddress, urlSmartAddress } = React.useMemo(() => {
+  const { isWalletMode, urlEoaAddress, urlSmartAddress, shouldLogout } = React.useMemo(() => {
     const params = new URLSearchParams(window.location.search);
     return {
       isWalletMode: params.get('mode') === 'wallet',
       urlEoaAddress: params.get('address') || undefined,
       urlSmartAddress: params.get('smartAddress') || undefined,
+      shouldLogout: params.get('logout') === 'true',
     };
   }, []);
+
+  // Handle logout request from access-denied page
+  React.useEffect(() => {
+    if (shouldLogout && connectedEoaAddress) {
+      console.log('[Particle Auth]: Logout requested, disconnecting wallet...');
+      disconnect({ connector });
+      // Clean URL by removing logout param
+      const url = new URL(window.location.href);
+      url.searchParams.delete('logout');
+      window.history.replaceState({}, '', url.toString());
+    }
+  }, [shouldLogout, connectedEoaAddress, disconnect, connector]);
 
   // In wallet mode, we prefer the connected address (from restored session) 
   // but fall back to URL address if session isn't restored yet
@@ -336,6 +349,12 @@ const ParticleNetworkProvider: React.FC<React.PropsWithChildren<ParticleNetworkC
   React.useEffect(() => {
     if (!active) return;
     
+    // Skip auth if logout was requested - let logout effect handle disconnect first
+    if (shouldLogout) {
+      console.log('[Particle Auth]: Skipping auth (logout requested)');
+      return;
+    }
+    
     // Skip auth callback in wallet mode - only the login iframe should do this
     if (isWalletMode) {
       console.log('[Particle Auth Wallet Mode]: Skipping auth callback (wallet mode)');
@@ -348,7 +367,7 @@ const ParticleNetworkProvider: React.FC<React.PropsWithChildren<ParticleNetworkC
     }, smartAccountInfo?.smartAccountAddress ? 0 : 2000); // Wait 2s for Smart Account, or send immediately if available
     
     return () => clearTimeout(timeoutId);
-  }, [active, smartAccountInfo, handleParticleAuthSuccess, isWalletMode]);
+  }, [active, smartAccountInfo, handleParticleAuthSuccess, isWalletMode, shouldLogout]);
 
   React.useEffect(() => {
     // Initialize timeout ID as undefined

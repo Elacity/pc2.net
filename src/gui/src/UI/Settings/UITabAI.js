@@ -38,25 +38,23 @@ export default {
             </div>
             
             <!-- Local AI Setup -->
-            <div id="ai-local-setup-section" class="settings-card" style="display: none; flex-direction: column; align-items: stretch; gap: 12px; background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%); border: 1px solid #86efac;">
+            <div id="ai-local-setup-section" class="settings-card" style="display: none; flex-direction: column; align-items: stretch; gap: 12px; background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%); border: 1px solid #86efac; overflow: visible; min-height: auto;">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <div>
                         <strong style="color: #166534;">Setup Local AI</strong>
                         <p style="font-size: 12px; color: #15803d; margin: 4px 0 0 0;">Run AI privately on your machine - no cloud, no API keys needed</p>
                     </div>
                 </div>
-                <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding-bottom: 4px;">
                     <label style="font-size: 13px; color: #166534; white-space: nowrap;">Model Size:</label>
-                    <select id="ai-model-select" style="flex: 1; max-width: 280px; padding: 6px 10px; border: 1px solid #86efac; border-radius: 4px; font-size: 13px;">
+                    <select id="ai-model-select" style="flex: 1; max-width: 280px; padding: 6px 10px; border: 1px solid #86efac; border-radius: 4px; font-size: 13px; height: 32px; box-sizing: border-box;">
                         <option value="deepseek-r1:1.5b" data-size="1.1">DeepSeek R1 1.5B (1.1GB) - Fast, any machine</option>
                         <option value="deepseek-r1:7b" data-size="4.7">DeepSeek R1 7B (4.7GB) - Better quality, 8GB RAM</option>
                         <option value="deepseek-r1:8b" data-size="4.9">DeepSeek R1 8B (4.9GB) - Good balance</option>
                         <option value="deepseek-r1:14b" data-size="9">DeepSeek R1 14B (9GB) - High quality, 16GB RAM</option>
                         <option value="deepseek-r1:32b" data-size="20">DeepSeek R1 32B (20GB) - Very high quality, 32GB RAM</option>
                     </select>
-                    <button class="button" id="ai-setup-local-btn" style="font-size: 12px; padding: 0 16px; height: 32px; line-height: 32px; background: #10b981; color: white; white-space: nowrap;">
-                        Install & Download
-                    </button>
+                    <button class="button" id="ai-setup-local-btn" style="font-size: 12px; padding: 0 16px; height: 32px; line-height: 32px; background: #10b981; color: white; white-space: nowrap;">Install & Download</button>
                 </div>
             </div>
             

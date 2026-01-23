@@ -10,6 +10,7 @@ import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import { logger } from '../utils/logger.js';
 import { getNodeConfig, saveNodeConfig } from './setup.js';
+import { AuthenticatedRequest } from './middleware.js';
 
 const router = Router();
 
@@ -314,9 +315,27 @@ router.get('/list', (req: Request, res: Response) => {
  * 
  * Body: { wallet: string, role: 'admin' | 'member' }
  */
-router.post('/add', (req: Request, res: Response) => {
+router.post('/add', (req: AuthenticatedRequest, res: Response) => {
   try {
     const { wallet, role } = req.body;
+    
+    // Check if user is authenticated
+    if (!req.user?.wallet_address) {
+      return res.status(401).json({ success: false, error: 'You must be logged in to add wallets' });
+    }
+    
+    const config = getNodeConfig();
+    const userWallet = req.user.wallet_address.toLowerCase();
+    
+    // Check if user is owner or admin
+    const isOwner = config.ownerWallet === userWallet;
+    const isAdmin = config.allowedWallets?.some((w: { wallet: string; role: string }) => 
+      w.wallet === userWallet && w.role === 'admin'
+    );
+    
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ success: false, error: 'Only the owner or admins can add wallets' });
+    }
     
     if (!wallet || typeof wallet !== 'string') {
       return res.status(400).json({ success: false, error: 'Wallet address is required' });
@@ -333,8 +352,6 @@ router.post('/add', (req: Request, res: Response) => {
     if (!['admin', 'member'].includes(role)) {
       return res.status(400).json({ success: false, error: 'Role must be admin or member' });
     }
-    
-    const config = getNodeConfig();
     
     // Cannot add owner wallet again
     if (config.ownerWallet === normalizedWallet) {
@@ -378,8 +395,26 @@ router.post('/add', (req: Request, res: Response) => {
  * 
  * Body: { wallet: string }
  */
-router.delete('/remove', (req: Request, res: Response) => {
+router.delete('/remove', (req: AuthenticatedRequest, res: Response) => {
   try {
+    // Check if user is authenticated
+    if (!req.user?.wallet_address) {
+      return res.status(401).json({ success: false, error: 'You must be logged in to remove wallets' });
+    }
+    
+    const config = getNodeConfig();
+    const userWallet = req.user.wallet_address.toLowerCase();
+    
+    // Check if user is owner or admin
+    const isOwner = config.ownerWallet === userWallet;
+    const isAdmin = config.allowedWallets?.some((w: { wallet: string; role: string }) => 
+      w.wallet === userWallet && w.role === 'admin'
+    );
+    
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ success: false, error: 'Only the owner or admins can remove wallets' });
+    }
+    
     const { wallet } = req.body;
     
     if (!wallet || typeof wallet !== 'string') {
@@ -387,7 +422,6 @@ router.delete('/remove', (req: Request, res: Response) => {
     }
     
     const normalizedWallet = wallet.toLowerCase();
-    const config = getNodeConfig();
     
     // Cannot remove owner
     if (config.ownerWallet === normalizedWallet) {

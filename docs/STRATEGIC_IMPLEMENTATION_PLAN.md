@@ -1,7 +1,7 @@
 # Strategic Implementation Plan: Sash + Anders Vision
 ## Puter-on-PC2 Architecture
 
-**Date:** 2025-01-11 (Started) | 2026-01-22 (Current)  
+**Date:** 2025-01-11 (Started) | 2026-01-23 (Current)  
 **Branch:** `main` (MVP Complete)  
 **Status:** ✅ **MVP v1.0.0 COMPLETE** - Production Infrastructure Deployed
 
@@ -69,6 +69,33 @@ npm start
 ---
 
 ## 📊 Current State Assessment
+
+### 🎯 Recent Progress (2026-01-23)
+
+**PC2 Documentation Portal - ✅ COMPLETE**
+
+Published comprehensive PC2 documentation to the ElacityLabsWeb portal (https://github.com/Elacity/ElacityLabsWeb).
+
+**Documentation Created (27 MDX pages):**
+
+| Section | Pages | Content |
+|---------|-------|---------|
+| Core | 4 | Overview, Why PC2, Features, Architecture |
+| Getting Started | 5 | Quick Start, VPS, Docker, Source, Raspberry Pi |
+| User Guides | 6 | First Login, Files, AI Chat, Backup, Updates, Access Control |
+| Infrastructure | 4 | Network Overview, Boson, NAT Traversal, Super Node Guide |
+| Reference | 3 | API, Configuration, Troubleshooting |
+
+**Key Features of Documentation:**
+- Nextra components (Callout, Steps, Tabs) for better UX
+- ASCII architecture diagrams
+- Cross-linked navigation between all pages
+- Code examples with syntax highlighting
+- Complete API reference
+
+**Commit:** `44005f64a` - "Add comprehensive Personal Cloud Computer documentation"
+
+---
 
 ### 🎯 Recent Progress (2026-01-21)
 
@@ -1704,7 +1731,7 @@ cd /Users/mtk/Documents/Cursor/pc2.net/pc2-node/test-fresh-install && npm start
    - Test session persistence in various scenarios
    - Test with multiple users
 
-### Phase 3: Packaging & Deployment - Not Started
+### Phase 3: Packaging & Deployment - 60% Complete
 
 #### 🛡️ CRITICAL: Backup & Restore System (User Safety & Data Protection)
 
@@ -1797,13 +1824,15 @@ cd /Users/mtk/Documents/Cursor/pc2.net/pc2-node/test-fresh-install && npm start
 
 ---
 
-1. **Docker Package** (2-3 hours)
-   - Create Dockerfile
-   - Multi-stage build
-   - Health checks
+1. **Docker Package** ✅ **COMPLETE**
+   - ✅ Dockerfile created (`pc2-node/Dockerfile`)
+   - ✅ docker-compose.yml created
+   - ✅ Multi-stage build with bubblewrap bundled
+   - ✅ Health checks configured
+   - ✅ GitHub Actions CI/CD for multi-platform builds
 
-2. **Debian Package** (1 day)
-   - Create .deb package for Raspberry Pi
+2. **Debian Package** ⏳ **REMAINING**
+   - Create .deb package for Raspberry Pi / personal Linux hardware
    - Systemd service
    - Auto-start on boot
 
@@ -1819,29 +1848,31 @@ cd /Users/mtk/Documents/Cursor/pc2.net/pc2-node/test-fresh-install && npm start
    - SSL certificate setup
    - **Backup setup guidance** (recommend creating first backup)
 
-### Phase 4: Network & Security - Not Started
+### Phase 4: Network & Security - 70% Complete
 
-1. **SSL/TLS Support** (2-3 days)
-   - Auto SSL certificate (Let's Encrypt)
-   - Auto-renewal
-   - HTTP → HTTPS redirect
+1. **SSL/TLS Support** ✅ **COMPLETE**
+   - ✅ Let's Encrypt wildcard certificate (*.ela.city)
+   - ✅ Auto-renewal via Caddy/certbot
+   - ✅ HTTPS via Web Gateway
 
-2. **Dynamic DNS** (1-2 days)
-   - Support dynamic DNS services
-   - DuckDNS, No-IP, custom domain
+2. **Boson Network Integration** ✅ **COMPLETE**
+   - ✅ Boson DHT Super Node (port 39001/UDP)
+   - ✅ Active Proxy Service (port 8090/TCP)
+   - ✅ Node Identity (Ed25519 keypair, DID)
+   - ✅ Username Registry via DHT
+   - ✅ NAT traversal protocol implementation
 
-3. **Firewall Configuration** (1-2 days)
-   - Auto-configure firewall
-   - UPnP port forwarding
-   - Security hardening
+3. **Access Control** ✅ **COMPLETE**
+   - ✅ Wallet-based authentication
+   - ✅ Role-based permissions (Owner, Admin, Member)
+   - ✅ Multi-user support
 
-4. **Security Hardening** (2-3 days)
-   - Rate limiting
-   - Input validation
-   - CSRF protection
-   - Security headers
+4. **Remaining Items** ⏳
+   - ⏳ End-to-end NAT traversal testing (home hardware → Active Proxy → *.ela.city)
+   - ⏳ UPnP port forwarding (auto-detect)
+   - ⏳ Rate limiting / DDoS protection
 
-### Phase 5: Testing & Documentation - Not Started
+### Phase 5: Testing & Documentation - 50% Complete
 
 1. **Integration Testing** (1 week)
    - End-to-end tests
@@ -1866,22 +1897,33 @@ cd /Users/mtk/Documents/Cursor/pc2.net/pc2-node/test-fresh-install && npm start
 
 - **Phase 1:** ✅ 100% Complete
 - **Phase 2:** ✅ 100% Complete (core functionality working, real-time file operations fully working)
-- **Phase 2.5:** ✅ 95% Complete
-  - ✅ Backup/Restore Core: 100% (functionality complete)
-  - ⚠️ Backup/Restore Polish: 30% (UI polish, documentation, testing needed)
 - **Phase 2.5:** ✅ 100% Complete (One-click restore, UI polish, help documentation)
-- **Phase 3:** ⚠️ 40% Complete (Major UI/documentation done, automated scheduling and verification tools remaining)
-  - ⚠️ Backup/Restore Documentation & Polish: 30% (user-facing docs, UI polish, testing)
-  - ❌ Packaging: 0% (Docker, Debian, macOS)
-  - ❌ Setup Wizard: 0%
-- **Phase 4:** ❌ 0% Complete
-- **Phase 5:** ❌ 0% Complete
+- **Phase 3:** ⚠️ 60% Complete (Packaging & Deployment)
+  - ✅ Docker packaging: Complete (`pc2-node/Dockerfile`, `docker-compose.yml`)
+  - ✅ VPS deployment: Complete (Contabo 38.242.211.112 running)
+  - ✅ Setup Wizard: Complete (Sprint 3)
+  - ✅ Auto-Update System: Complete (Sprint 4)
+  - ⏳ Debian/Raspberry Pi package: Remaining
+  - ⏳ macOS package: Remaining
+  - ⏳ End-to-end NAT traversal testing: Remaining (home hardware → Active Proxy → *.ela.city)
+- **Phase 4:** ⚠️ 70% Complete (Network & Security)
+  - ✅ Boson DHT integration: Complete
+  - ✅ Active Proxy service: Complete (port 8090)
+  - ✅ SSL/HTTPS: Complete (Let's Encrypt wildcard)
+  - ✅ Access Control system: Complete
+  - ⏳ Real-world NAT traversal testing: Remaining
+- **Phase 5:** ⚠️ 50% Complete (Testing & Documentation)
+  - ✅ ElacityLabsWeb PC2 docs: Complete (27 pages published)
+  - ✅ Internal architecture docs: Complete
+  - ⏳ End-to-end testing suite: Remaining
 
-**Overall Progress:** ~45% of total project complete
+**Overall Progress:** ~75% of total project complete
 
-**Estimated Time Remaining:** 4-5 weeks for full completion
-
-**Critical Path:** Phase 3 Backup/Restore polish is **mandatory** for user trust and should be prioritized alongside packaging.
+**Remaining Work:**
+1. Debian/Raspberry Pi package for home hardware deployment
+2. macOS package
+3. End-to-end NAT traversal testing with real home hardware
+4. Comprehensive E2E test suite
 
 ---
 
@@ -4643,18 +4685,19 @@ for (const capsule of capsules) {
 
 | Task | Status | Notes |
 |------|--------|-------|
-| **HTTPS Documentation** | 🔲 Todo | nginx/Caddy/Cloudflare setup guides |
-| **Production Build Script** | 🔲 Todo | `npm run build:production` |
-| **Docker Containerization** | 🔲 Todo | Dockerfile, docker-compose, arm64 support |
+| **HTTPS Documentation** | ✅ Complete | `docs/DEPLOYMENT.md` + ElacityLabsWeb VPS guide |
+| **Production Build Script** | ✅ Complete | `npm run build` (frontend + backend) |
+| **Docker Containerization** | ✅ Complete | `pc2-node/Dockerfile`, `docker-compose.yml`, arm64 support |
 | **Logout Flow** | 🔲 Todo | Clean Particle session clearing |
 | **Error Handling** | 🔲 Todo | Network/wallet connection errors |
 | **Mobile Testing** | 🔲 Todo | Login modal on mobile browsers |
 
 **Deliverables:**
-- `docs/DEPLOYMENT_GUIDE.md` - Complete deployment instructions
-- `pc2-node/Dockerfile` - Container definition
-- `pc2-node/docker-compose.yml` - Easy deployment
-- `npm run build:production` - Single build command
+- ✅ `docs/DEPLOYMENT.md` - Complete deployment instructions
+- ✅ `pc2-node/Dockerfile` - Container definition (multi-stage, bubblewrap bundled)
+- ✅ `pc2-node/docker-compose.yml` - Easy deployment with security caps
+- ✅ `npm run build` - Build command (frontend + backend)
+- ✅ GitHub Actions CI/CD - Multi-platform Docker builds
 
 ### 7.2 Decentralized Network Access (Future Phase)
 
@@ -5329,6 +5372,21 @@ Implemented the AI Chat as a standalone windowed application, complementing the 
 5. **Button Alignment in Headers**: Use `display: flex; align-items: center;` on header buttons to ensure consistent vertical alignment, especially when buttons have different icon sizes.
 
 6. **Browser Caching During Development**: Frontend changes may not appear due to aggressive browser caching. Always do hard refresh (Cmd+Shift+R) after rebuilding, and consider restarting the server to ensure fresh bundles are served.
+
+7. **Button Text Vertical Centering**: When creating buttons, NEVER use vertical padding (`padding: 4px 10px`) as this can cause text to appear offset from center. Instead, use explicit height and line-height matching:
+   ```html
+   <!-- ❌ WRONG - text may not be vertically centered -->
+   <button style="padding: 4px 10px;">Remove</button>
+   
+   <!-- ✅ CORRECT - explicit height with matching line-height -->
+   <button style="padding: 0 10px; height: 24px; line-height: 24px;">Remove</button>
+   ```
+
+8. **Container Overflow for Dynamic Content**: When creating containers (cards, sections) that hold dynamic content like dropdowns or buttons, ensure overflow is visible and min-height is auto:
+   ```html
+   <!-- ✅ Prevents content clipping -->
+   <div class="settings-card" style="overflow: visible; min-height: auto;">
+   ```
 
 ### UI/UX Decisions
 

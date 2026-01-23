@@ -139,9 +139,7 @@ export default {
                                 <span style="font-family: monospace; font-size: 13px;" title="${entry.wallet}">${shortWallet}</span>
                                 <span style="padding: 2px 8px; background: ${roleColor}15; color: ${roleColor}; border-radius: 4px; font-size: 11px; font-weight: 500;">${roleLabel}</span>
                             </div>
-                            <button class="button btn-remove-wallet" data-wallet="${entry.wallet}" style="font-size: 11px; padding: 4px 10px; color: #ef4444; border-color: #ef4444;">
-                                Remove
-                            </button>
+                            <button class="button btn-remove-wallet" data-wallet="${entry.wallet}" style="font-size: 11px; padding: 0 10px; height: 24px; line-height: 24px; color: #ef4444; border-color: #ef4444;">Remove</button>
                         </div>
                     `;
                 }

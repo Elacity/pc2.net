@@ -33,26 +33,91 @@ export default {
     icon: 'cloud.svg',
     html: () => {
         return `
-            <h1>Personal Cloud</h1>
+            <style>
+                .pc2-section { margin-bottom: 16px; }
+                .pc2-section-title {
+                    font-size: 11px;
+                    font-weight: 700;
+                    color: #000;
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
+                    margin-bottom: 8px;
+                    padding-left: 2px;
+                }
+                .pc2-card {
+                    background: #f9f9f9;
+                    border-radius: 8px;
+                    padding: 10px 12px;
+                    margin-bottom: 6px;
+                }
+                .pc2-group {
+                    background: #f9f9f9;
+                    border-radius: 8px;
+                    border: 1px solid #d0d0d0;
+                    overflow: hidden;
+                }
+                .pc2-group-row {
+                    padding: 10px 12px;
+                    border-bottom: 1px solid #e5e5e5;
+                }
+                .pc2-group-row:last-child {
+                    border-bottom: none;
+                }
+                .pc2-card-row {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                }
+                .pc2-card-label {
+                    font-size: 13px;
+                    font-weight: 500;
+                    color: #333;
+                }
+                .pc2-card-value {
+                    font-size: 12px;
+                    color: #666;
+                }
+                .pc2-btn {
+                    font-size: 12px;
+                    padding: 5px 12px;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    line-height: 1.2;
+                    height: auto;
+                    margin: 0;
+                }
+                .pc2-select {
+                    font-size: 11px;
+                    padding: 4px 8px;
+                    border: 1px solid #ddd;
+                    border-radius: 4px;
+                    background: #fff;
+                    width: auto;
+                    flex-shrink: 0;
+                }
+            </style>
             
             <!-- Connection Status -->
-            <div class="settings-card">
-                <strong>Connection</strong>
-                <div style="flex-grow:1; text-align: right; display: flex; align-items: center; justify-content: flex-end; gap: 6px;">
-                    <span class="pc2-status-dot" id="pc2-status-dot"></span>
-                    <span id="pc2-status-text" style="font-size: 13px;">Not Connected</span>
+            <div class="pc2-section">
+                <div class="pc2-section-title">Connection</div>
+                <div class="pc2-group">
+                    <div class="pc2-group-row">
+                        <div class="pc2-card-row">
+                            <span class="pc2-card-label">Status</span>
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                                <span class="pc2-status-dot" id="pc2-status-dot"></span>
+                                <span id="pc2-status-text" class="pc2-card-value">Not Connected</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
             
             <!-- Not Connected State -->
             <div id="pc2-not-connected" style="display: none;">
-                <div class="pc2-connect-card">
-                    <p>
-                        Connect to your Personal Cloud node to store files on your own hardware using decentralized identity.
-                    </p>
-                    <button class="button pc2-btn-primary" id="pc2-connect-btn">
-                        Connect to PC2
-                    </button>
+                <div class="pc2-card" style="text-align: center; padding: 16px;">
+                    <p style="margin: 0 0 12px; font-size: 12px; color: #666;">Connect to your Personal Cloud node to store files on your own hardware.</p>
+                    <button class="button pc2-btn pc2-btn-primary" id="pc2-connect-btn">Connect to PC2</button>
                 </div>
             </div>
             
@@ -60,25 +125,31 @@ export default {
             <div id="pc2-connected" style="display: none;">
                 
                 <!-- Node Info -->
-                <div class="settings-card">
-                    <strong>Node</strong>
-                    <div style="flex-grow:1; text-align: right;">
-                        <span id="pc2-node-name" style="font-size: 13px;">-</span>
-                    </div>
-                </div>
-                
-                <div class="settings-card">
-                    <strong>Your Wallet</strong>
-                    <div style="flex-grow:1; text-align: right;">
-                        <span id="pc2-wallet" style="font-size: 12px; font-family: monospace;">-</span>
+                <div class="pc2-section">
+                    <div class="pc2-section-title">Node Info</div>
+                    <div class="pc2-group">
+                        <div class="pc2-group-row">
+                            <div class="pc2-card-row">
+                                <span class="pc2-card-label">Node</span>
+                                <span id="pc2-node-name" class="pc2-card-value">-</span>
+                            </div>
+                        </div>
+                        <div class="pc2-group-row">
+                            <div class="pc2-card-row">
+                                <span class="pc2-card-label">Your Wallet</span>
+                                <span id="pc2-wallet" class="pc2-card-value" style="font-family: monospace;">-</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 
                 <!-- System Resources Section -->
-                <h2 style="font-size: 15px; margin: 20px 0 10px; color: #333;">System</h2>
+                <div class="pc2-section" style="margin-top: 16px;">
+                <div class="pc2-section-title">System</div>
+                <div class="pc2-group">
                 
                 <!-- Visual Gauges Row -->
-                <div class="pc2-system-gauges">
+                <div class="pc2-system-gauges" style="border-bottom: 1px solid #e5e5e5;">
                     <div class="pc2-gauge-card" title="CPU usage is not currently tracked. Shows 0% as placeholder.">
                         <div class="pc2-ring-gauge" id="cpu-gauge">
                             <svg viewBox="0 0 100 100">
@@ -117,110 +188,81 @@ export default {
                 </div>
                 
                 <!-- System Info Card -->
-                <div class="pc2-system-info-card">
-                    <div class="pc2-system-info-row">
-                        <span class="pc2-system-info-label">Platform</span>
-                        <span class="pc2-system-info-value" id="system-platform">Loading...</span>
+                <div style="padding: 0;">
+                    <div class="pc2-group-row" style="display: flex; justify-content: space-between;">
+                        <span class="pc2-card-label">Platform</span>
+                        <span class="pc2-card-value" id="system-platform">Loading...</span>
                     </div>
-                    <div class="pc2-system-info-row">
-                        <span class="pc2-system-info-label">Processor</span>
-                        <span class="pc2-system-info-value" id="system-cpu-model">Loading...</span>
+                    <div class="pc2-group-row" style="display: flex; justify-content: space-between;">
+                        <span class="pc2-card-label">Processor</span>
+                        <span class="pc2-card-value" id="system-cpu-model">Loading...</span>
                     </div>
-                    <div class="pc2-system-info-row">
-                        <span class="pc2-system-info-label">Memory</span>
-                        <span class="pc2-system-info-value" id="system-memory-total">Loading...</span>
+                    <div class="pc2-group-row" style="display: flex; justify-content: space-between;">
+                        <span class="pc2-card-label">Memory</span>
+                        <span class="pc2-card-value" id="system-memory-total">Loading...</span>
                     </div>
-                    <div class="pc2-system-info-row">
-                        <span class="pc2-system-info-label">Node Uptime</span>
-                        <span class="pc2-system-info-value" id="system-uptime">Loading...</span>
+                    <div class="pc2-group-row" style="display: flex; justify-content: space-between;">
+                        <span class="pc2-card-label">Node Uptime</span>
+                        <span class="pc2-card-value" id="system-uptime">Loading...</span>
                     </div>
+                </div>
+                </div>
+                
                 </div>
                 
                 <!-- Compute Limits Section -->
-                <h2 style="font-size: 15px; margin: 20px 0 10px; color: #333;">Compute Limits</h2>
+                <div class="pc2-section">
+                <div class="pc2-section-title">Compute Limits</div>
+                <div class="pc2-group">
                 
-                <div class="settings-card" style="justify-content: space-between;">
-                    <strong style="flex-shrink: 0;">Max Concurrent WASM</strong>
-                    <select id="pc2-wasm-concurrent-select" style="font: inherit; font-size: 12px; padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px; width: auto; flex-grow: 0; flex-shrink: 0;">
-                        <option value="1">1 (Minimal)</option>
-                        <option value="2">2 (Low)</option>
-                        <option value="4">4 (Default)</option>
-                        <option value="8">8 (High)</option>
-                        <option value="16">16 (Maximum)</option>
-                    </select>
+                <div class="pc2-group-row"><div class="pc2-card-row"><span class="pc2-card-label">Max Concurrent</span><select id="pc2-wasm-concurrent-select" class="pc2-select"><option value="1">1</option><option value="2">2</option><option value="4">4</option><option value="8">8</option><option value="16">16</option></select></div></div>
+                
+                <div class="pc2-group-row"><div class="pc2-card-row"><span class="pc2-card-label">Memory Limit</span><select id="pc2-wasm-memory-select" class="pc2-select"><option value="auto">Auto</option><option value="256">256 MB</option><option value="512">512 MB</option><option value="1024">1 GB</option><option value="2048">2 GB</option></select></div></div>
+                
+                <div class="pc2-group-row"><div class="pc2-card-row"><span class="pc2-card-label">Timeout</span><select id="pc2-wasm-timeout-select" class="pc2-select"><option value="10000">10s</option><option value="30000">30s</option><option value="60000">1m</option><option value="120000">2m</option><option value="300000">5m</option></select></div></div>
+                
+                <div class="pc2-group-row"><div class="pc2-card-row"><span class="pc2-card-label">Runtime</span><span class="pc2-card-value"><span id="pc2-wasm-active" style="color: #22c55e;">0 active</span> | <span id="pc2-wasm-queued">0 queued</span></span></div></div>
+                
                 </div>
-                
-                <div class="settings-card" style="justify-content: space-between;">
-                    <strong style="flex-shrink: 0;">WASM Memory Limit</strong>
-                    <select id="pc2-wasm-memory-select" style="font: inherit; font-size: 12px; padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px; width: auto; flex-grow: 0; flex-shrink: 0;">
-                        <option value="auto">Auto-detect</option>
-                        <option value="256">256 MB</option>
-                        <option value="512">512 MB</option>
-                        <option value="1024">1 GB</option>
-                        <option value="2048">2 GB</option>
-                        <option value="4096">4 GB</option>
-                    </select>
-                </div>
-                
-                <div class="settings-card" style="justify-content: space-between;">
-                    <strong style="flex-shrink: 0;">WASM Timeout</strong>
-                    <select id="pc2-wasm-timeout-select" style="font: inherit; font-size: 12px; padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px; width: auto; flex-grow: 0; flex-shrink: 0;">
-                        <option value="10000">10 seconds</option>
-                        <option value="30000">30 seconds</option>
-                        <option value="60000">1 minute</option>
-                        <option value="120000">2 minutes</option>
-                        <option value="300000">5 minutes</option>
-                    </select>
-                </div>
-                
-                <div class="settings-card" style="justify-content: space-between;">
-                    <strong style="flex-shrink: 0;">WASM Runtime Status</strong>
-                    <span style="flex-shrink: 0;">
-                        <span id="pc2-wasm-active" style="font-size: 12px; color: #22c55e;">0 active</span>
-                        <span style="color: #d1d5db; margin: 0 6px;">|</span>
-                        <span id="pc2-wasm-queued" style="font-size: 12px; color: #6b7280;">0 queued</span>
-                    </span>
                 </div>
                 
                 <!-- Storage Section -->
-                <h2 style="font-size: 15px; margin: 20px 0 10px; color: #333;">Storage</h2>
+                <div class="pc2-section">
+                <div class="pc2-section-title">Storage</div>
+                <div class="pc2-group">
                 
-                <div class="settings-card">
-                    <strong>Used</strong>
-                    <div style="flex-grow:1; text-align: right;">
-                        <span id="pc2-storage-used" style="font-size: 13px;">-</span>
-                        <span style="color: #999; font-size: 12px;"> of </span>
-                        <span id="pc2-storage-limit" style="font-size: 13px;">-</span>
+                <div class="pc2-group-row">
+                    <div class="pc2-card-row">
+                        <span class="pc2-card-label">Used</span>
+                        <span class="pc2-card-value"><span id="pc2-storage-used">-</span> / <span id="pc2-storage-limit">-</span></span>
                     </div>
-                </div>
-                
-                <div id="pc2-storage-bar-wrapper" style="padding: 0 15px; margin-bottom: 15px;">
-                    <div style="background: #e5e7eb; border-radius: 4px; height: 8px; overflow: hidden;">
+                    <div style="background: #e5e7eb; border-radius: 3px; height: 5px; overflow: hidden; margin-top: 6px;">
                         <div id="pc2-storage-bar" style="background: #3b82f6; height: 100%; width: 0%; transition: width 0.3s;"></div>
                     </div>
                 </div>
                 
-                <div class="settings-card">
-                    <strong>Files Stored</strong>
-                    <div style="flex-grow:1; text-align: right;">
-                        <span id="pc2-files-count" style="font-size: 13px;">-</span>
+                <div class="pc2-group-row">
+                    <div class="pc2-card-row">
+                        <span class="pc2-card-label">Files</span>
+                        <span id="pc2-files-count" class="pc2-card-value">-</span>
                     </div>
                 </div>
                 
-                <div class="settings-card">
-                    <strong>Encrypted Files</strong>
-                    <div style="flex-grow:1; text-align: right;">
-                        <span id="pc2-encrypted-count" style="font-size: 13px;">-</span>
+                <div class="pc2-group-row">
+                    <div class="pc2-card-row">
+                        <span class="pc2-card-label">Encrypted</span>
+                        <span id="pc2-encrypted-count" class="pc2-card-value">-</span>
                     </div>
+                </div>
+                
+                </div>
                 </div>
                 
                 <!-- Backup & Restore Section -->
-                <div style="display: flex; align-items: center; gap: 8px; margin: 20px 0 10px;">
-                    <h2 style="font-size: 15px; margin: 0; color: #333;">Backup & Restore</h2>
-                    <span id="pc2-backup-help" style="cursor: pointer; font-size: 12px; color: #6b7280; text-decoration: underline; text-decoration-style: dotted; display: inline-flex; align-items: center; gap: 4px;" title="Click for backup help">
-                        ${window.icons && window.icons['question.svg'] ? `<img src="${window.icons['question.svg']}" style="width: 14px; height: 14px; vertical-align: middle;">` : ''}
-                        Help
-                    </span>
+                <div class="pc2-section">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                    <span class="pc2-section-title" style="margin-bottom: 0;">Backup & Restore</span>
+                    <span id="pc2-backup-help" style="cursor: pointer; font-size: 10px; color: #6b7280; text-decoration: underline;" title="Click for backup help">Help</span>
                 </div>
                 
                 <div class="pc2-backup-card">
@@ -264,88 +306,65 @@ export default {
                     </div>
                 </div>
                 
-                <!-- Restore from Backup Section -->
-                <div class="pc2-backup-card" style="margin-top: 30px;">
-                    <div class="pc2-backup-header">
-                        <strong>Restore from Backup</strong>
-                    </div>
-                    
-                    <div style="margin: 15px 0;">
-                        <p style="margin: 0 0 12px; font-size: 13px; color: #4b5563; line-height: 1.5;">
-                            Upload a backup file to restore your PC2 node data. This will replace all current data with the backup.
-                        </p>
-                        
-                        <div id="pc2-restore-upload-area" style="border: 2px dashed #d1d5db; border-radius: 8px; padding: 30px; text-align: center; background: #f9fafb; cursor: pointer; transition: all 0.2s;" 
-                             onmouseover="this.style.borderColor='#3b82f6'; this.style.background='#eff6ff';" 
-                             onmouseout="this.style.borderColor='#d1d5db'; this.style.background='#f9fafb';">
+                <!-- Restore Section -->
+                <div class="pc2-section" style="margin-top: 12px;">
+                <div class="pc2-section-title">Restore</div>
+                <div class="pc2-group">
+                    <div class="pc2-group-row">
+                        <p style="margin: 0 0 8px; font-size: 11px; color: #666;">Upload a backup file (.tar.gz) to restore your node data.</p>
+                        <div id="pc2-restore-upload-area" style="border: 1px dashed #ccc; border-radius: 6px; padding: 16px; text-align: center; background: #fafafa; cursor: pointer;">
                             <input type="file" id="pc2-restore-file-input" accept=".tar.gz" style="display: none;">
-                            <div style="margin-bottom: 8px;">
-                                ${window.icons && window.icons['cloud.svg'] ? `<img src="${window.icons['cloud.svg']}" style="width: 32px; height: 32px; opacity: 0.6; margin-bottom: 8px;">` : '📁'}
-                            </div>
-                            <div style="font-size: 14px; color: #374151; margin-bottom: 4px;">
-                                <strong>Click to select backup file</strong> or drag and drop
-                            </div>
-                            <div style="font-size: 12px; color: #6b7280;">
-                                Backup files must be .tar.gz format
-                            </div>
+                            <div style="font-size: 12px; color: #666;"><strong>Click to select</strong> or drag & drop</div>
                         </div>
-                        
-                        <div id="pc2-restore-file-info" style="display: none; margin-top: 12px; padding: 12px; background: #f0f9ff; border-radius: 6px; border-left: 3px solid #3b82f6;">
+                        <div id="pc2-restore-file-info" style="display: none; margin-top: 8px; padding: 8px; background: #f0f9ff; border-radius: 4px;">
                             <div style="display: flex; align-items: center; justify-content: space-between;">
-                                <div>
-                                    <div style="font-size: 13px; font-weight: 500; color: #1e40af; margin-bottom: 4px;" id="pc2-restore-filename"></div>
-                                    <div style="font-size: 11px; color: #6b7280;" id="pc2-restore-filesize"></div>
-                                </div>
-                                <button id="pc2-restore-clear-btn" style="background: none; border: none; color: #6b7280; cursor: pointer; font-size: 18px; padding: 0 8px;" title="Clear selection">×</button>
+                                <div><span id="pc2-restore-filename" style="font-size: 11px; font-weight: 500; color: #1e40af;"></span> <span id="pc2-restore-filesize" style="font-size: 10px; color: #666;"></span></div>
+                                <button id="pc2-restore-clear-btn" style="background: none; border: none; color: #999; cursor: pointer; font-size: 14px;">×</button>
                             </div>
                         </div>
-                        
-                        <button id="pc2-restore-btn" class="button pc2-btn-primary" style="width: 100%; margin-top: 12px; display: none;" disabled>
-                            <span id="pc2-restore-btn-text">Start Restore</span>
-                        </button>
-                        
-                        <div id="pc2-restore-progress" style="display: none; margin-top: 12px;">
-                            <div style="background: #e5e7eb; border-radius: 4px; height: 8px; overflow: hidden;">
-                                <div id="pc2-restore-progress-bar" style="background: #3b82f6; height: 100%; width: 0%; transition: width 0.3s;"></div>
-                            </div>
-                            <div id="pc2-restore-progress-text" style="font-size: 12px; color: #6b7280; margin-top: 6px; text-align: center;">Uploading...</div>
+                        <button id="pc2-restore-btn" class="button pc2-btn pc2-btn-primary" style="width: 100%; margin-top: 8px; display: none;" disabled><span id="pc2-restore-btn-text">Start Restore</span></button>
+                        <div id="pc2-restore-progress" style="display: none; margin-top: 8px;">
+                            <div style="background: #e5e7eb; border-radius: 3px; height: 5px; overflow: hidden;"><div id="pc2-restore-progress-bar" style="background: #3b82f6; height: 100%; width: 0%;"></div></div>
+                            <div id="pc2-restore-progress-text" style="font-size: 10px; color: #666; margin-top: 4px; text-align: center;">Uploading...</div>
                         </div>
-                        
-                        <div id="pc2-restore-status" style="display: none; margin-top: 12px; padding: 12px; border-radius: 6px; font-size: 13px;"></div>
+                        <div id="pc2-restore-status" style="display: none; margin-top: 8px; padding: 8px; border-radius: 4px; font-size: 11px;"></div>
                     </div>
+                </div>
+                </div>
+                
                 </div>
                 
                 <!-- Access Control Section -->
-                <h2 style="font-size: 15px; margin: 20px 0 10px; color: #333;">Access Control</h2>
-                
-                <div class="pc2-access-control-card">
-                    <div class="pc2-access-header">
-                        <strong>Trusted Wallets</strong>
-                        <button class="button" id="pc2-invite-btn">
-                            <span style="margin-right: 4px;">+</span> Invite
-                        </button>
-                    </div>
-                    
-                    <!-- Inline invite form (hidden by default) -->
-                    <div id="pc2-invite-form" class="pc2-invite-form">
-                        <div style="margin-bottom: 8px; font-size: 13px; color: #374151;">Enter wallet address to invite:</div>
-                        <div style="display: flex; gap: 8px;">
-                            <input type="text" id="pc2-invite-input" placeholder="0x..." />
-                            <button class="button pc2-btn-primary" id="pc2-invite-confirm">Add</button>
-                            <button class="button" id="pc2-invite-cancel">Cancel</button>
+                <div class="pc2-section">
+                <div class="pc2-section-title">Access Control</div>
+                <div class="pc2-group">
+                    <div class="pc2-group-row">
+                        <div class="pc2-card-row" style="margin-bottom: 8px;">
+                            <span class="pc2-card-label">Trusted Wallets</span>
+                            <button class="button pc2-btn" id="pc2-invite-btn" style="font-size: 10px; padding: 3px 8px;">+ Invite</button>
                         </div>
-                        <div id="pc2-invite-error" class="pc2-error-text"></div>
+                        <div id="pc2-invite-form" style="display: none; padding: 8px; background: #f3f4f6; border-radius: 4px; margin-bottom: 8px;">
+                            <div style="display: flex; gap: 6px;">
+                                <input type="text" id="pc2-invite-input" placeholder="0x..." style="flex: 1; padding: 6px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 11px; font-family: monospace;">
+                                <button class="button pc2-btn pc2-btn-primary" id="pc2-invite-confirm" style="font-size: 10px; padding: 4px 8px;">Add</button>
+                                <button class="button pc2-btn" id="pc2-invite-cancel" style="font-size: 10px; padding: 4px 8px;">×</button>
+                            </div>
+                            <div id="pc2-invite-error" style="font-size: 10px; color: #dc2626; margin-top: 4px;"></div>
+                        </div>
+                        <div id="pc2-wallets-list" style="font-size: 12px;">Loading...</div>
                     </div>
-                    
-                    <div id="pc2-wallets-list">
-                        <span style="color: #888; font-size: 13px;">Loading...</span>
-                    </div>
+                </div>
                 </div>
                 
                 <!-- Actions -->
-                <div style="display: flex; gap: 10px; margin-top: 20px; padding: 0 15px 30px;">
-                    <button class="button" id="pc2-disconnect-btn">Disconnect</button>
-                    <button class="button" id="pc2-forget-btn" style="background: #fee2e2; color: #dc2626; border-color: #fecaca;">Forget Node</button>
+                <div class="pc2-section">
+                <div class="pc2-section-title">Actions</div>
+                <div class="pc2-group">
+                    <div class="pc2-group-row" style="display: flex; gap: 6px;">
+                        <button class="button pc2-btn" id="pc2-disconnect-btn" style="font-size: 11px;">Disconnect</button>
+                        <button class="button pc2-btn" id="pc2-forget-btn" style="font-size: 11px; background: #fee2e2; color: #dc2626; border-color: #fecaca;">Forget</button>
+                    </div>
+                </div>
                 </div>
             </div>
             
@@ -565,23 +584,23 @@ export default {
                 /* System Resources - Ring Gauges */
                 .pc2-system-gauges {
                     display: flex;
-                    gap: 30px;
-                    padding: 20px 15px;
+                    gap: 20px;
+                    padding: 12px;
                     justify-content: center;
-                    background: #f9fafb;
+                    background: #f9f9f9;
                     border-radius: 8px;
-                    margin-bottom: 15px;
+                    margin-bottom: 10px;
                 }
                 .pc2-gauge-card {
                     display: flex;
                     flex-direction: column;
                     align-items: center;
-                    gap: 8px;
+                    gap: 4px;
                 }
                 .pc2-ring-gauge {
                     position: relative;
-                    width: 90px;
-                    height: 90px;
+                    width: 70px;
+                    height: 70px;
                 }
                 .pc2-ring-gauge svg {
                     width: 100%;
@@ -605,16 +624,16 @@ export default {
                     top: 50%;
                     left: 50%;
                     transform: translate(-50%, -50%);
-                    font-size: 18px;
+                    font-size: 14px;
                     font-weight: 600;
                     color: #1f2937;
                 }
                 .pc2-gauge-label {
-                    font-size: 13px;
+                    font-size: 11px;
                     font-weight: 500;
                     color: #6b7280;
                     text-transform: uppercase;
-                    letter-spacing: 0.5px;
+                    letter-spacing: 0.3px;
                 }
                 
                 /* Memory Pressure Bar */
@@ -697,26 +716,26 @@ export default {
                 
                 /* System Info Card */
                 .pc2-system-info-card {
-                    background: #f9fafb;
+                    background: #f9f9f9;
                     border-radius: 8px;
-                    padding: 15px;
-                    margin-bottom: 15px;
+                    padding: 10px 12px;
+                    margin-bottom: 10px;
                 }
                 .pc2-system-info-row {
                     display: flex;
                     justify-content: space-between;
-                    padding: 8px 0;
+                    padding: 5px 0;
                     border-bottom: 1px solid #e5e7eb;
                 }
                 .pc2-system-info-row:last-child {
                     border-bottom: none;
                 }
                 .pc2-system-info-label {
-                    font-size: 13px;
+                    font-size: 12px;
                     color: #6b7280;
                 }
                 .pc2-system-info-value {
-                    font-size: 13px;
+                    font-size: 12px;
                     font-weight: 500;
                     color: #1f2937;
                 }

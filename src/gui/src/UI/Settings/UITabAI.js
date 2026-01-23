@@ -16,171 +16,82 @@ export default {
     icon: 'magnifier-outline.svg',
     html: () => {
         return `
-            <h1>AI Assistant</h1>
+            <style>
+                .ai-section { margin-bottom: 14px; }
+                .ai-section-title { font-size: 11px; font-weight: 700; color: #000; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; padding-left: 2px; }
+                .ai-card { background: #f9f9f9; border-radius: 8px; padding: 10px 12px; margin-bottom: 6px; }
+                .ai-card-row { display: flex; justify-content: space-between; align-items: center; }
+                .ai-card-label { font-size: 13px; font-weight: 500; color: #333; }
+                .ai-card-value { font-size: 12px; color: #666; }
+                .ai-select { font-size: 11px; padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; background: #fff; width: auto; }
+                .ai-btn { font-size: 11px; padding: 4px 10px; border-radius: 4px; cursor: pointer; line-height: 1.2; height: auto; }
+                .ai-group { background: #f9f9f9; border-radius: 8px; border: 1px solid #d0d0d0; overflow: hidden; }
+                .ai-group-row { padding: 10px 12px; border-bottom: 1px solid #e5e5e5; }
+                .ai-group-row:last-child { border-bottom: none; }
+            </style>
             
-            <!-- Current Status -->
-            <div class="settings-card">
-                <strong>Current Provider</strong>
-                <span id="ai-current-provider" style="font-size: 13px;">Loading...</span>
-            </div>
-            
-            <div class="settings-card">
-                <strong>Current Model</strong>
-                <span id="ai-current-model" style="font-size: 13px;">Loading...</span>
-            </div>
-            
-            <div class="settings-card">
-                <strong>Status</strong>
-                <div style="flex-grow:1; display: flex; align-items: center; justify-content: flex-end; gap: 10px;">
-                    <span class="ai-status-dot" id="ai-status-dot"></span>
-                    <span id="ai-status-text" style="font-size: 13px;">Loading...</span>
+            <!-- Status -->
+            <div class="ai-section">
+                <div class="ai-section-title">Status</div>
+                <div class="ai-group">
+                    <div class="ai-group-row"><div class="ai-card-row"><span class="ai-card-label">Provider</span><span id="ai-current-provider" class="ai-card-value">Loading...</span></div></div>
+                    <div class="ai-group-row"><div class="ai-card-row"><span class="ai-card-label">Model</span><span id="ai-current-model" class="ai-card-value">Loading...</span></div></div>
+                    <div class="ai-group-row"><div class="ai-card-row"><span class="ai-card-label">Status</span><div style="display: flex; align-items: center; gap: 6px;"><span class="ai-status-dot" id="ai-status-dot"></span><span id="ai-status-text" class="ai-card-value">Loading...</span></div></div></div>
                 </div>
             </div>
             
             <!-- Local AI Setup -->
-            <div id="ai-local-setup-section" class="settings-card" style="display: none; flex-direction: column; align-items: stretch; gap: 12px; background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%); border: 1px solid #86efac; overflow: visible; min-height: auto;">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-                        <strong style="color: #166534;">Setup Local AI</strong>
-                        <p style="font-size: 12px; color: #15803d; margin: 4px 0 0 0;">Run AI privately on your machine - no cloud, no API keys needed</p>
-                    </div>
-                </div>
-                <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding-bottom: 4px;">
-                    <label style="font-size: 13px; color: #166534; white-space: nowrap;">Model Size:</label>
-                    <select id="ai-model-select" style="flex: 1; max-width: 280px; padding: 6px 10px; border: 1px solid #86efac; border-radius: 4px; font-size: 13px; height: 32px; box-sizing: border-box;">
-                        <option value="deepseek-r1:1.5b" data-size="1.1">DeepSeek R1 1.5B (1.1GB) - Fast, any machine</option>
-                        <option value="deepseek-r1:7b" data-size="4.7">DeepSeek R1 7B (4.7GB) - Better quality, 8GB RAM</option>
-                        <option value="deepseek-r1:8b" data-size="4.9">DeepSeek R1 8B (4.9GB) - Good balance</option>
-                        <option value="deepseek-r1:14b" data-size="9">DeepSeek R1 14B (9GB) - High quality, 16GB RAM</option>
-                        <option value="deepseek-r1:32b" data-size="20">DeepSeek R1 32B (20GB) - Very high quality, 32GB RAM</option>
+            <div id="ai-local-setup-section" class="ai-card" style="display: none; background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%); border: 1px solid #86efac;">
+                <div style="margin-bottom: 8px;"><strong style="color: #166534; font-size: 12px;">Setup Local AI</strong><span style="font-size: 10px; color: #15803d; margin-left: 8px;">No cloud, no API keys</span></div>
+                <div style="display: flex; align-items: center; gap: 6px;">
+                    <select id="ai-model-select" class="ai-select" style="flex: 1; border-color: #86efac;">
+                        <option value="deepseek-r1:1.5b" data-size="1.1">1.5B (1.1GB)</option>
+                        <option value="deepseek-r1:7b" data-size="4.7">7B (4.7GB)</option>
+                        <option value="deepseek-r1:8b" data-size="4.9">8B (4.9GB)</option>
+                        <option value="deepseek-r1:14b" data-size="9">14B (9GB)</option>
                     </select>
-                    <button class="button" id="ai-setup-local-btn" style="font-size: 12px; padding: 0 16px; height: 32px; line-height: 32px; background: #10b981; color: white; white-space: nowrap;">Install & Download</button>
+                    <button class="button ai-btn" id="ai-setup-local-btn" style="background: #10b981; color: white;">Install</button>
                 </div>
             </div>
             
             <!-- Installation Progress -->
-            <div id="ai-install-progress" class="settings-card" style="display: none; background: #f0f9ff; border-left: 3px solid #3b82f6;">
-                <div style="width: 100%;">
-                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
-                        <span class="ai-spinner"></span>
-                        <strong id="ai-install-status">Installing...</strong>
-                    </div>
-                    <p id="ai-install-message" style="font-size: 12px; color: #666; margin: 0;"></p>
+            <div id="ai-install-progress" class="ai-card" style="display: none; background: #f0f9ff; border-left: 3px solid #3b82f6;">
+                <div style="display: flex; align-items: center; gap: 6px;"><span class="ai-spinner"></span><strong id="ai-install-status" style="font-size: 12px;">Installing...</strong></div>
+                <p id="ai-install-message" style="font-size: 10px; color: #666; margin: 4px 0 0;"></p>
+            </div>
+            
+            <!-- Provider -->
+            <div class="ai-section">
+                <div class="ai-section-title">Provider</div>
+                <div class="ai-group">
+                    <div class="ai-group-row"><div class="ai-card-row"><span class="ai-card-label">Default</span><select id="ai-provider-select" class="ai-select"><option value="ollama">Ollama</option><option value="openai">OpenAI</option><option value="claude">Claude</option><option value="gemini">Gemini</option><option value="xai">xAI</option></select></div></div>
                 </div>
             </div>
             
-            <!-- Provider Selection -->
-            <h2 style="font-size: 15px; margin: 20px 0 10px; color: #333;">Provider</h2>
-            
-            <div class="settings-card">
-                <strong>Default Provider</strong>
-                <select id="ai-provider-select" style="margin-left: 10px; max-width: 300px;">
-                    <option value="ollama">Ollama (Local)</option>
-                    <option value="openai">OpenAI</option>
-                    <option value="claude">Claude (Anthropic)</option>
-                    <option value="gemini">Gemini (Google)</option>
-                    <option value="xai">xAI (Grok)</option>
-                </select>
-            </div>
-            
-            <!-- API Keys Section -->
-            <h2 style="font-size: 15px; margin: 20px 0 10px; color: #333;">API Keys</h2>
-            <p style="font-size: 12px; color: #666; margin: 0 0 15px 0;">Configure API keys for cloud AI providers. The active provider is selected above.</p>
-            
-            <div class="settings-card ai-key-card" data-provider="openai">
-                <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-                    <div style="flex: 1;">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <strong>OpenAI</strong>
-                            <span class="ai-key-badge" id="ai-openai-badge" style="display: none; font-size: 10px; padding: 2px 6px; background: #10b981; color: white; border-radius: 3px;">Active</span>
-                        </div>
-                        <div id="ai-openai-key-display" style="font-size: 12px; color: #666; margin-top: 4px; font-family: monospace;">
-                            <span class="ai-key-status">No API key configured</span>
-                        </div>
-                    </div>
-                    <div style="display: flex; gap: 6px; align-items: center;">
-                        <button class="button ai-key-add-btn" id="ai-openai-add-btn" style="font-size: 11px; padding: 0 10px; height: 26px; line-height: 26px; background: #3b82f6; color: white;">Add Key</button>
-                        <button class="button ai-key-update-btn" id="ai-openai-update-btn" style="font-size: 11px; padding: 0 10px; height: 26px; line-height: 26px; display: none;">Update</button>
-                        <button class="button ai-key-delete-btn" id="ai-openai-delete-btn" style="font-size: 11px; padding: 0 10px; height: 26px; line-height: 26px; display: none; background: #dc2626; color: white;">Delete</button>
-                    </div>
+            <!-- API Keys -->
+            <div class="ai-section">
+                <div class="ai-section-title">API Keys</div>
+                <div class="ai-group">
+                    <div class="ai-group-row ai-key-card" data-provider="openai"><div class="ai-card-row"><div><span class="ai-card-label">OpenAI</span><span class="ai-key-badge" id="ai-openai-badge" style="display: none; font-size: 9px; padding: 1px 4px; background: #10b981; color: white; border-radius: 2px; margin-left: 4px;">Active</span><div id="ai-openai-key-display" style="font-size: 10px; color: #666; font-family: monospace; margin-top: 2px;"><span class="ai-key-status">Not configured</span></div></div><div style="display: flex; gap: 4px;"><button class="button ai-btn ai-key-add-btn" id="ai-openai-add-btn" style="background: #3b82f6; color: white;">Add</button><button class="button ai-btn ai-key-update-btn" id="ai-openai-update-btn" style="display: none;">Edit</button><button class="button ai-btn ai-key-delete-btn" id="ai-openai-delete-btn" style="display: none; background: #dc2626; color: white;">×</button></div></div></div>
+                    <div class="ai-group-row ai-key-card" data-provider="claude"><div class="ai-card-row"><div><span class="ai-card-label">Claude</span><span class="ai-key-badge" id="ai-claude-badge" style="display: none; font-size: 9px; padding: 1px 4px; background: #10b981; color: white; border-radius: 2px; margin-left: 4px;">Active</span><div id="ai-claude-key-display" style="font-size: 10px; color: #666; font-family: monospace; margin-top: 2px;"><span class="ai-key-status">Not configured</span></div></div><div style="display: flex; gap: 4px;"><button class="button ai-btn ai-key-add-btn" id="ai-claude-add-btn" style="background: #3b82f6; color: white;">Add</button><button class="button ai-btn ai-key-update-btn" id="ai-claude-update-btn" style="display: none;">Edit</button><button class="button ai-btn ai-key-delete-btn" id="ai-claude-delete-btn" style="display: none; background: #dc2626; color: white;">×</button></div></div></div>
+                    <div class="ai-group-row ai-key-card" data-provider="gemini"><div class="ai-card-row"><div><span class="ai-card-label">Gemini</span><span class="ai-key-badge" id="ai-gemini-badge" style="display: none; font-size: 9px; padding: 1px 4px; background: #10b981; color: white; border-radius: 2px; margin-left: 4px;">Active</span><div id="ai-gemini-key-display" style="font-size: 10px; color: #666; font-family: monospace; margin-top: 2px;"><span class="ai-key-status">Not configured</span></div></div><div style="display: flex; gap: 4px;"><button class="button ai-btn ai-key-add-btn" id="ai-gemini-add-btn" style="background: #3b82f6; color: white;">Add</button><button class="button ai-btn ai-key-update-btn" id="ai-gemini-update-btn" style="display: none;">Edit</button><button class="button ai-btn ai-key-delete-btn" id="ai-gemini-delete-btn" style="display: none; background: #dc2626; color: white;">×</button></div></div></div>
+                    <div class="ai-group-row ai-key-card" data-provider="xai"><div class="ai-card-row"><div><span class="ai-card-label">xAI</span><span class="ai-key-badge" id="ai-xai-badge" style="display: none; font-size: 9px; padding: 1px 4px; background: #10b981; color: white; border-radius: 2px; margin-left: 4px;">Active</span><div id="ai-xai-key-display" style="font-size: 10px; color: #666; font-family: monospace; margin-top: 2px;"><span class="ai-key-status">Not configured</span></div></div><div style="display: flex; gap: 4px;"><button class="button ai-btn ai-key-add-btn" id="ai-xai-add-btn" style="background: #3b82f6; color: white;">Add</button><button class="button ai-btn ai-key-update-btn" id="ai-xai-update-btn" style="display: none;">Edit</button><button class="button ai-btn ai-key-delete-btn" id="ai-xai-delete-btn" style="display: none; background: #dc2626; color: white;">×</button></div></div></div>
                 </div>
             </div>
             
-            <div class="settings-card ai-key-card" data-provider="claude">
-                <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-                    <div style="flex: 1;">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <strong>Claude (Anthropic)</strong>
-                            <span class="ai-key-badge" id="ai-claude-badge" style="display: none; font-size: 10px; padding: 2px 6px; background: #10b981; color: white; border-radius: 3px;">Active</span>
-                        </div>
-                        <div id="ai-claude-key-display" style="font-size: 12px; color: #666; margin-top: 4px; font-family: monospace;">
-                            <span class="ai-key-status">No API key configured</span>
-                        </div>
-                    </div>
-                    <div style="display: flex; gap: 6px; align-items: center;">
-                        <button class="button ai-key-add-btn" id="ai-claude-add-btn" style="font-size: 11px; padding: 0 10px; height: 26px; line-height: 26px; background: #3b82f6; color: white;">Add Key</button>
-                        <button class="button ai-key-update-btn" id="ai-claude-update-btn" style="font-size: 11px; padding: 0 10px; height: 26px; line-height: 26px; display: none;">Update</button>
-                        <button class="button ai-key-delete-btn" id="ai-claude-delete-btn" style="font-size: 11px; padding: 0 10px; height: 26px; line-height: 26px; display: none; background: #dc2626; color: white;">Delete</button>
-                    </div>
+            <!-- Model Info -->
+            <div class="ai-section">
+                <div class="ai-section-title">Capabilities</div>
+                <div class="ai-group">
+                    <div class="ai-group-row"><div id="ai-capabilities" style="font-size: 11px; color: #666;">Loading...</div></div>
                 </div>
             </div>
             
-            <div class="settings-card ai-key-card" data-provider="gemini">
-                <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-                    <div style="flex: 1;">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <strong>Gemini (Google)</strong>
-                            <span class="ai-key-badge" id="ai-gemini-badge" style="display: none; font-size: 10px; padding: 2px 6px; background: #10b981; color: white; border-radius: 3px;">Active</span>
-                        </div>
-                        <div id="ai-gemini-key-display" style="font-size: 12px; color: #666; margin-top: 4px; font-family: monospace;">
-                            <span class="ai-key-status">No API key configured</span>
-                        </div>
-                    </div>
-                    <div style="display: flex; gap: 6px; align-items: center;">
-                        <button class="button ai-key-add-btn" id="ai-gemini-add-btn" style="font-size: 11px; padding: 0 10px; height: 26px; line-height: 26px; background: #3b82f6; color: white;">Add Key</button>
-                        <button class="button ai-key-update-btn" id="ai-gemini-update-btn" style="font-size: 11px; padding: 0 10px; height: 26px; line-height: 26px; display: none;">Update</button>
-                        <button class="button ai-key-delete-btn" id="ai-gemini-delete-btn" style="font-size: 11px; padding: 0 10px; height: 26px; line-height: 26px; display: none; background: #dc2626; color: white;">Delete</button>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="settings-card ai-key-card" data-provider="xai">
-                <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-                    <div style="flex: 1;">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <strong>xAI (Grok)</strong>
-                            <span class="ai-key-badge" id="ai-xai-badge" style="display: none; font-size: 10px; padding: 2px 6px; background: #10b981; color: white; border-radius: 3px;">Active</span>
-                        </div>
-                        <div id="ai-xai-key-display" style="font-size: 12px; color: #666; margin-top: 4px; font-family: monospace;">
-                            <span class="ai-key-status">No API key configured</span>
-                        </div>
-                    </div>
-                    <div style="display: flex; gap: 6px; align-items: center;">
-                        <button class="button ai-key-add-btn" id="ai-xai-add-btn" style="font-size: 11px; padding: 0 10px; height: 26px; line-height: 26px; background: #3b82f6; color: white;">Add Key</button>
-                        <button class="button ai-key-update-btn" id="ai-xai-update-btn" style="font-size: 11px; padding: 0 10px; height: 26px; line-height: 26px; display: none;">Update</button>
-                        <button class="button ai-key-delete-btn" id="ai-xai-delete-btn" style="font-size: 11px; padding: 0 10px; height: 26px; line-height: 26px; display: none; background: #dc2626; color: white;">Delete</button>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Model Information -->
-            <h2 style="font-size: 15px; margin: 20px 0 10px; color: #333;">Model Information</h2>
-            
-            <div class="settings-card" style="flex-direction: column; align-items: flex-start;">
-                <strong style="margin-bottom: 8px;">Capabilities</strong>
-                <div id="ai-capabilities" style="font-size: 13px; color: #666;">
-                    Loading...
-                </div>
-            </div>
-            
-            <!-- Advanced Settings -->
-            <h2 style="font-size: 15px; margin: 20px 0 10px; color: #333;">Advanced</h2>
-            
-            <div class="settings-card">
-                <strong>Ollama Base URL</strong>
-                <div style="flex-grow: 1; display: flex; align-items: center; gap: 8px; justify-content: flex-end;">
-                    <input type="text" id="ai-ollama-url" value="http://localhost:11434" style="max-width: 300px; padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; height: 28px; line-height: 28px; box-sizing: border-box;">
-                    <button class="button" id="ai-ollama-url-save" style="font-size: 12px; padding: 0 12px; height: 28px; line-height: 28px; vertical-align: middle;">Save</button>
+            <!-- Advanced -->
+            <div class="ai-section">
+                <div class="ai-section-title">Advanced</div>
+                <div class="ai-group">
+                    <div class="ai-group-row"><div class="ai-card-row"><span class="ai-card-label">Ollama URL</span><div style="display: flex; align-items: center; gap: 4px;"><input type="text" id="ai-ollama-url" value="http://localhost:11434" style="width: 140px; padding: 4px 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 10px;"><button class="button ai-btn" id="ai-ollama-url-save">Save</button></div></div></div>
                 </div>
             </div>
             
@@ -450,8 +361,8 @@ export default {
                         ">
                         <div id="ai-key-error" style="color: #dc2626; font-size: 12px; margin-bottom: 16px; display: none;"></div>
                         <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 0;">
-                            <button class="button ai-key-cancel" style="padding: 6px 16px; margin: 0; border: none; cursor: pointer; font-size: 14px; line-height: 1.4; vertical-align: middle; display: inline-flex; align-items: center; justify-content: center;">Cancel</button>
-                            <button class="button ai-key-test" style="padding: 6px 16px; margin: 0; border: none; cursor: pointer; font-size: 14px; line-height: 1.4; vertical-align: middle; display: inline-flex; align-items: center; justify-content: center; background: #3b82f6; color: white;">Test & Save</button>
+                            <button class="button ai-key-cancel" style="height: 28px; line-height: 28px; padding: 0 12px;">Cancel</button>
+                            <button class="button ai-key-test" style="height: 28px; line-height: 28px; padding: 0 12px; background: #3b82f6; color: white;">Test & Save</button>
                         </div>
                     </div>
                 </div>

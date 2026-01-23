@@ -45,7 +45,7 @@ export interface UpdateServiceConfig {
 const DEFAULT_CONFIG: Required<UpdateServiceConfig> = {
   checkUrl: 'https://ela.city/api/pc2/version',
   githubRepo: 'Elacity/pc2.net',
-  checkInterval: 6 * 60 * 60 * 1000, // 6 hours
+  checkInterval: 3 * 60 * 60 * 1000, // 3 hours
   enabled: true,
   projectRoot: process.cwd(),
 };
@@ -134,7 +134,7 @@ export class UpdateService {
   }
 
   /**
-   * Check for updates
+   * Check for updates (uses GitHub releases as primary source)
    */
   async checkForUpdates(): Promise<UpdateCheckResult> {
     if (!this.config.enabled) {
@@ -145,52 +145,8 @@ export class UpdateService {
       };
     }
 
-    try {
-      logger.info('[UpdateService] Checking for updates...');
-      
-      const response = await fetch(this.config.checkUrl, {
-        headers: {
-          'User-Agent': `PC2-Node/${this.currentVersion}`,
-          'Accept': 'application/json',
-        },
-        signal: AbortSignal.timeout(10000), // 10 second timeout
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const versionInfo: VersionInfo = await response.json();
-      this.latestVersion = versionInfo;
-      this.lastCheck = new Date();
-
-      const updateAvailable = this.compareVersions(this.currentVersion, versionInfo.version) < 0;
-
-      if (updateAvailable) {
-        logger.info(`[UpdateService] Update available: ${this.currentVersion} → ${versionInfo.version}`);
-      } else {
-        logger.info(`[UpdateService] Already up to date (${this.currentVersion})`);
-      }
-
-      return {
-        updateAvailable,
-        currentVersion: this.currentVersion,
-        latestVersion: versionInfo.version,
-        releaseDate: versionInfo.releaseDate,
-        releaseNotes: versionInfo.releaseNotes,
-        downloadUrl: versionInfo.downloadUrl,
-        dockerImage: versionInfo.dockerImage,
-      };
-    } catch (error) {
-      logger.error('[UpdateService] Failed to check for updates:', error);
-      
-      // Return current state without update
-      return {
-        updateAvailable: false,
-        currentVersion: this.currentVersion,
-        latestVersion: this.latestVersion?.version || this.currentVersion,
-      };
-    }
+    // Use GitHub releases as primary source (no separate version API needed)
+    return this.checkGitHubReleases();
   }
 
   /**

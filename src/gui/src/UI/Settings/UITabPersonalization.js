@@ -33,125 +33,53 @@ export default {
         const fontSize = localStorage.getItem('pc2_font_size') || 'medium';
         
         return `
-            <h1>${i18n('personalization')}</h1>
+            <style>
+                .pers-section { margin-bottom: 14px; }
+                .pers-section-title { font-size: 11px; font-weight: 700; color: #000; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; padding-left: 2px; }
+                .pers-card { background: #f9f9f9; border-radius: 8px; padding: 10px 12px; margin-bottom: 6px; }
+                .pers-card-row { display: flex; justify-content: space-between; align-items: center; }
+                .pers-card-label { font-size: 13px; font-weight: 500; color: #333; }
+                .pers-card-sublabel { font-size: 10px; color: #999; }
+                .pers-select { font-size: 11px; padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; background: #fff; width: auto; }
+                .pers-btn { font-size: 11px; padding: 4px 10px; border-radius: 4px; cursor: pointer; line-height: 1.2; height: auto; }
+                .pers-group { background: #f9f9f9; border-radius: 8px; border: 1px solid #d0d0d0; overflow: hidden; }
+                .pers-group-row { padding: 10px 12px; border-bottom: 1px solid #e5e5e5; }
+                .pers-group-row:last-child { border-bottom: none; }
+                .toggle-switch { position: relative; display: inline-block; width: 36px; height: 20px; }
+                .toggle-switch input { opacity: 0; width: 0; height: 0; }
+                .toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: 0.3s; border-radius: 20px; }
+                .toggle-slider:before { position: absolute; content: ""; height: 14px; width: 14px; left: 3px; bottom: 3px; background-color: white; transition: 0.3s; border-radius: 50%; }
+                input:checked + .toggle-slider { background-color: #3b82f6; }
+                input:checked + .toggle-slider:before { transform: translateX(16px); }
+            </style>
             
             <!-- Appearance -->
-            <h2 style="font-size: 14px; margin: 0 0 10px; color: #333;">Appearance</h2>
-            
-            <div class="settings-card">
-                <strong>${i18n('background')}</strong>
-                <div style="flex-grow:1;">
-                    <button class="button change-background" style="float:right;">${i18n('change')}</button>
-                </div>
-            </div>
-            <div class="settings-card">
-                <strong>${i18n('ui_colors')}</strong>
-                <div style="flex-grow:1;">
-                    <button class="button change-ui-colors" style="float:right;">${i18n('change')}</button>
-                </div>
-            </div>
-            <div class="settings-card">
-                <div>
-                    <strong style="display: block;">Dark Mode</strong>
-                    <span style="font-size: 12px; color: #666;">Reduce eye strain in low light</span>
-                </div>
-                <div style="flex-grow:1; text-align: right;">
-                    <label class="toggle-switch">
-                        <input type="checkbox" id="dark-mode-toggle" ${darkMode ? 'checked' : ''}>
-                        <span class="toggle-slider"></span>
-                    </label>
+            <div class="pers-section">
+                <div class="pers-section-title">Appearance</div>
+                <div class="pers-group">
+                    <div class="pers-group-row"><div class="pers-card-row"><span class="pers-card-label">${i18n('background')}</span><button class="button pers-btn change-background">${i18n('change')}</button></div></div>
+                    <div class="pers-group-row"><div class="pers-card-row"><span class="pers-card-label">${i18n('ui_colors')}</span><button class="button pers-btn change-ui-colors">${i18n('change')}</button></div></div>
+                    <div class="pers-group-row"><div class="pers-card-row"><div><span class="pers-card-label">Dark Mode</span><div class="pers-card-sublabel">Reduce eye strain</div></div><label class="toggle-switch"><input type="checkbox" id="dark-mode-toggle" ${darkMode ? 'checked' : ''}><span class="toggle-slider"></span></label></div></div>
                 </div>
             </div>
             
             <!-- Display -->
-            <h2 style="font-size: 14px; margin: 20px 0 10px; color: #333;">Display</h2>
-            
-            <div class="settings-card">
-                <strong style="flex-grow:1;">${i18n('clock_visibility')}</strong>
-                <select class="change-clock-visible" style="margin-left: 10px; max-width: 200px;">
-                    <option value="auto">${i18n('clock_visible_auto')}</option>
-                    <option value="hide">${i18n('clock_visible_hide')}</option>
-                    <option value="show">${i18n('clock_visible_show')}</option>
-                </select>
-            </div>
-            <div class="settings-card">
-                <strong style="flex-grow:1;">Font Size</strong>
-                <select id="font-size-select" style="margin-left: 10px; max-width: 200px;">
-                    <option value="small" ${fontSize === 'small' ? 'selected' : ''}>Small</option>
-                    <option value="medium" ${fontSize === 'medium' ? 'selected' : ''}>Medium (Default)</option>
-                    <option value="large" ${fontSize === 'large' ? 'selected' : ''}>Large</option>
-                </select>
+            <div class="pers-section">
+                <div class="pers-section-title">Display</div>
+                <div class="pers-group">
+                    <div class="pers-group-row"><div class="pers-card-row"><span class="pers-card-label">${i18n('clock_visibility')}</span><select class="pers-select change-clock-visible"><option value="auto">${i18n('clock_visible_auto')}</option><option value="hide">${i18n('clock_visible_hide')}</option><option value="show">${i18n('clock_visible_show')}</option></select></div></div>
+                    <div class="pers-group-row"><div class="pers-card-row"><span class="pers-card-label">Font Size</span><select id="font-size-select" class="pers-select"><option value="small" ${fontSize === 'small' ? 'selected' : ''}>Small</option><option value="medium" ${fontSize === 'medium' ? 'selected' : ''}>Medium</option><option value="large" ${fontSize === 'large' ? 'selected' : ''}>Large</option></select></div></div>
+                </div>
             </div>
             
             <!-- Notifications -->
-            <h2 style="font-size: 14px; margin: 20px 0 10px; color: #333;">Notifications</h2>
-            
-            <div class="settings-card">
-                <div>
-                    <strong style="display: block;">Sound Notifications</strong>
-                    <span style="font-size: 12px; color: #666;">Play sound for alerts</span>
-                </div>
-                <div style="flex-grow:1; text-align: right;">
-                    <label class="toggle-switch">
-                        <input type="checkbox" id="notify-sound-toggle" ${notifySound ? 'checked' : ''}>
-                        <span class="toggle-slider"></span>
-                    </label>
+            <div class="pers-section">
+                <div class="pers-section-title">Notifications</div>
+                <div class="pers-group">
+                    <div class="pers-group-row"><div class="pers-card-row"><div><span class="pers-card-label">Sound</span><div class="pers-card-sublabel">Play sound for alerts</div></div><label class="toggle-switch"><input type="checkbox" id="notify-sound-toggle" ${notifySound ? 'checked' : ''}><span class="toggle-slider"></span></label></div></div>
+                    <div class="pers-group-row"><div class="pers-card-row"><div><span class="pers-card-label">Desktop</span><div class="pers-card-sublabel">System notifications</div></div><label class="toggle-switch"><input type="checkbox" id="notify-desktop-toggle" ${notifyDesktop ? 'checked' : ''}><span class="toggle-slider"></span></label></div></div>
                 </div>
             </div>
-            <div class="settings-card">
-                <div>
-                    <strong style="display: block;">Desktop Notifications</strong>
-                    <span style="font-size: 12px; color: #666;">Show system notifications</span>
-                </div>
-                <div style="flex-grow:1; text-align: right;">
-                    <label class="toggle-switch">
-                        <input type="checkbox" id="notify-desktop-toggle" ${notifyDesktop ? 'checked' : ''}>
-                        <span class="toggle-slider"></span>
-                    </label>
-                </div>
-            </div>
-            
-            <style>
-                .toggle-switch {
-                    position: relative;
-                    display: inline-block;
-                    width: 44px;
-                    height: 24px;
-                }
-                .toggle-switch input {
-                    opacity: 0;
-                    width: 0;
-                    height: 0;
-                }
-                .toggle-slider {
-                    position: absolute;
-                    cursor: pointer;
-                    top: 0;
-                    left: 0;
-                    right: 0;
-                    bottom: 0;
-                    background-color: #ccc;
-                    transition: 0.3s;
-                    border-radius: 24px;
-                }
-                .toggle-slider:before {
-                    position: absolute;
-                    content: "";
-                    height: 18px;
-                    width: 18px;
-                    left: 3px;
-                    bottom: 3px;
-                    background-color: white;
-                    transition: 0.3s;
-                    border-radius: 50%;
-                }
-                input:checked + .toggle-slider {
-                    background-color: #3b82f6;
-                }
-                input:checked + .toggle-slider:before {
-                    transform: translateX(20px);
-                }
-            </style>
             `;
     },
     init: ($el_window) => {

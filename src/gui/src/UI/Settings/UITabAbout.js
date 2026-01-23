@@ -17,10 +17,10 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-// About - Updated for PC2 Personal Cloud
+// System - Updated for PC2 Personal Cloud
 export default {
-    id: 'about',
-    title_i18n_key: 'about',
+    id: 'system',
+    title_i18n_key: 'system',
     icon: 'info-outline.svg',
     html: () => {
         // Check if we're in PC2 mode
@@ -35,139 +35,92 @@ export default {
         if (isPC2Mode) {
             return `
                 <style>
-                    /* Override default centering - content starts at top and scrolls */
-                    .settings-content[data-settings="about"] .about-container {
-                        height: auto !important;
-                        min-height: 100%;
-                        display: block !important;
-                        align-items: flex-start !important;
-                        justify-content: flex-start !important;
-                        overflow-y: auto;
-                        overflow-x: hidden;
-                        padding: 20px;
-                        box-sizing: border-box;
-                    }
-                    .settings-content[data-settings="about"] .about {
-                        text-align: center;
-                        max-width: 500px;
-                        margin: 0 auto;
-                        padding: 0;
-                    }
+                    .sys-section { margin-bottom: 14px; }
+                    .sys-section-title { font-size: 11px; font-weight: 700; color: #000; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; padding-left: 2px; }
+                    .sys-card { background: #f9f9f9; border-radius: 8px; padding: 10px 12px; margin-bottom: 6px; }
+                    .sys-card-row { display: flex; justify-content: space-between; align-items: center; }
+                    .sys-card-label { font-size: 13px; font-weight: 500; color: #333; }
+                    .sys-card-value { font-size: 12px; color: #666; }
+                    .sys-group { background: #f9f9f9; border-radius: 8px; border: 1px solid #d0d0d0; overflow: hidden; }
+                    .sys-group-row { padding: 10px 12px; border-bottom: 1px solid #e5e5e5; }
+                    .sys-group-row:last-child { border-bottom: none; }
+                    .status-ok { color: #16a34a !important; }
+                    .status-error { color: #dc2626 !important; }
+                    .check-updates-btn { background: #3b82f6; color: white; border: none; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 11px; display: inline-flex; align-items: center; gap: 6px; }
+                    .check-updates-btn:disabled { opacity: 0.6; }
+                    .check-updates-btn svg { width: 12px; height: 12px; }
                 </style>
-                <div class="about-container">
-                    <div class="about">
-                        <div style="text-align: center; margin-bottom: 20px;">
-                            <svg width="80" height="80" viewBox="0 0 1080 1080" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-bottom: 10px;">
-                                <rect width="1080" height="1080" rx="200" fill="#141414"/>
-                                <path d="M793.209 532.947L732.073 496.935L706.111 481.861C696.061 475.998 684.336 475.998 674.286 481.861L555.363 550.534C545.314 556.396 533.589 556.396 523.539 550.534L405.454 481.861C395.404 475.998 383.679 475.998 373.629 481.861L347.667 496.935L286.531 532.947C265.594 545.509 265.594 575.658 286.531 587.383L390.379 647.682L525.214 725.567C535.264 731.43 546.989 731.43 557.038 725.567L691.873 647.682L795.722 587.383C814.984 575.658 814.984 545.509 793.209 532.947Z" fill="url(#paint0_about)"/>
-                                <path d="M793.218 406.483L705.283 355.397C695.233 349.534 683.508 349.534 673.458 355.397L554.535 424.07C544.486 429.933 532.761 429.933 522.711 424.07L403.788 355.397C393.738 349.534 382.014 349.534 371.964 355.397L285.703 406.483C264.766 419.045 264.766 449.195 285.703 460.919L347.677 496.931L389.551 521.218L524.386 599.104C534.436 604.966 546.16 604.966 556.21 599.104L691.045 521.218L732.92 496.931L794.893 460.919C814.993 449.195 814.993 419.045 793.218 406.483Z" fill="url(#paint1_about)"/>
-                                <defs>
-                                    <linearGradient id="paint0_about" x1="539.755" y1="730.757" x2="539.755" y2="477.963" gradientUnits="userSpaceOnUse">
-                                        <stop stop-color="#F6921A"/><stop offset="1" stop-color="#B04200"/>
-                                    </linearGradient>
-                                    <linearGradient id="paint1_about" x1="539.75" y1="447.142" x2="539.75" y2="604.378" gradientUnits="userSpaceOnUse">
-                                        <stop stop-color="#FFEEDC"/><stop offset="1" stop-color="#FFC382"/>
-                                    </linearGradient>
-                                </defs>
-                            </svg>
-                            <h1 style="margin: 0; font-size: 24px; font-weight: 600;">ElastOS Personal Cloud</h1>
-                            <p style="color: #666; margin: 5px 0 0;">Your Sovereign Cloud Computer</p>
-                        </div>
-                        
-                        <p class="description" style="text-align: center; color: #555; line-height: 1.6;">
-                            One of millions of self-hosted personal clouds running on your own hardware, 
-                            interconnected above blockchain governance to form the World Computer. 
-                            Your data, your control, powered by decentralized identity.
-                        </p>
-                        
-                        <!-- Update Banner (shown when update is available) -->
-                        <div id="update-banner" style="display: none; margin: 20px 0;">
-                            <div style="
-                                background: linear-gradient(135deg, #4a90d9 0%, #357abd 100%);
-                                color: white;
-                                padding: 16px 20px;
-                                border-radius: 10px;
-                                display: flex;
-                                align-items: center;
-                                justify-content: space-between;
-                                gap: 12px;
-                                cursor: pointer;
-                            " onclick="window.showUpdateModal && window.showUpdateModal(window.latestVersionInfo)">
-                                <div style="display: flex; align-items: center; gap: 12px;">
-                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                                        <polyline points="7 10 12 15 17 10"/>
-                                        <line x1="12" y1="15" x2="12" y2="3"/>
-                                    </svg>
-                                    <div>
-                                        <div style="font-weight: 600; font-size: 14px;">Update Available</div>
-                                        <div id="update-banner-version" style="font-size: 12px; opacity: 0.9;">New version ready</div>
-                                    </div>
-                                </div>
-                                <div style="
-                                    background: white;
-                                    color: #357abd;
-                                    padding: 8px 16px;
-                                    border-radius: 6px;
-                                    font-size: 12px;
-                                    font-weight: 600;
-                                ">Install Now</div>
-                            </div>
-                        </div>
-                        
-                        <!-- System Information -->
-                        <h2 style="font-size: 14px; margin: 25px 0 10px; color: #333; border-bottom: 1px solid #eee; padding-bottom: 8px;">System Information</h2>
-                        
-                        <div class="settings-card" style="margin-bottom: 8px;">
-                            <strong>Node Version</strong>
-                            <span id="about-node-version" style="font-size: 13px; color: #666;">Loading...</span>
-                        </div>
-                        
-                        <div class="settings-card" style="margin-bottom: 8px;">
-                            <strong>Database</strong>
-                            <span id="about-database-status" style="font-size: 13px; color: #666;">Loading...</span>
-                        </div>
-                        
-                        <div class="settings-card" style="margin-bottom: 8px;">
-                            <strong>IPFS</strong>
-                            <span id="about-ipfs-status" style="font-size: 13px; color: #666;">Loading...</span>
-                        </div>
-                        
-                        <div class="settings-card" style="margin-bottom: 8px;">
-                            <strong>Gateway URL</strong>
-                            <span id="about-gateway-url" style="font-size: 12px; font-family: monospace; color: #666;">Loading...</span>
-                        </div>
-                        
-                        <!-- Links -->
-                        <h2 style="font-size: 14px; margin: 25px 0 10px; color: #333; border-bottom: 1px solid #eee; padding-bottom: 8px;">Resources</h2>
-                        
-                        <p class="links" style="text-align: center;">
-                            <a href="https://elastos.info" target="_blank">ElastOS</a>
-                            <span style="color: #CCC;">•</span>
-                            <a href="https://github.com/elastos" target="_blank">GitHub</a>
-                            <span style="color: #CCC;">•</span>
-                            <a href="https://discord.gg/elastos" target="_blank">Discord</a>
-                            <span style="color: #CCC;">•</span>
-                            <a href="#" class="show-credits">${i18n('credits')}</a>
-                        </p>
+                
+                <!-- Header -->
+                <div style="text-align: center; margin-bottom: 16px;">
+                    <svg width="60" height="60" viewBox="0 0 1080 1080" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-bottom: 8px;">
+                        <rect width="1080" height="1080" rx="200" fill="#141414"/>
+                        <path d="M793.209 532.947L732.073 496.935L706.111 481.861C696.061 475.998 684.336 475.998 674.286 481.861L555.363 550.534C545.314 556.396 533.589 556.396 523.539 550.534L405.454 481.861C395.404 475.998 383.679 475.998 373.629 481.861L347.667 496.935L286.531 532.947C265.594 545.509 265.594 575.658 286.531 587.383L390.379 647.682L525.214 725.567C535.264 731.43 546.989 731.43 557.038 725.567L691.873 647.682L795.722 587.383C814.984 575.658 814.984 545.509 793.209 532.947Z" fill="url(#paint0_system)"/>
+                        <path d="M793.218 406.483L705.283 355.397C695.233 349.534 683.508 349.534 673.458 355.397L554.535 424.07C544.486 429.933 532.761 429.933 522.711 424.07L403.788 355.397C393.738 349.534 382.014 349.534 371.964 355.397L285.703 406.483C264.766 419.045 264.766 449.195 285.703 460.919L347.677 496.931L389.551 521.218L524.386 599.104C534.436 604.966 546.16 604.966 556.21 599.104L691.045 521.218L732.92 496.931L794.893 460.919C814.993 449.195 814.993 419.045 793.218 406.483Z" fill="url(#paint1_system)"/>
+                        <defs><linearGradient id="paint0_system" x1="539.755" y1="730.757" x2="539.755" y2="477.963" gradientUnits="userSpaceOnUse"><stop stop-color="#F6921A"/><stop offset="1" stop-color="#B04200"/></linearGradient><linearGradient id="paint1_system" x1="539.75" y1="447.142" x2="539.75" y2="604.378" gradientUnits="userSpaceOnUse"><stop stop-color="#FFEEDC"/><stop offset="1" stop-color="#FFC382"/></linearGradient></defs>
+                    </svg>
+                    <h1 style="margin: 0; font-size: 18px; font-weight: 600;">ElastOS Personal Cloud</h1>
+                    <p style="color: #666; margin: 4px 0 0; font-size: 12px;">Your Sovereign Cloud Computer</p>
+                </div>
+                
+                <!-- Update Banner -->
+                <div id="update-banner" style="display: none; margin-bottom: 12px;">
+                    <div style="background: linear-gradient(135deg, #4a90d9 0%, #357abd 100%); color: white; padding: 12px 14px; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; cursor: pointer;" onclick="window.showUpdateModal && window.showUpdateModal(window.latestVersionInfo)">
+                        <div><div style="font-weight: 600; font-size: 12px;">Update Available</div><div id="update-banner-version" style="font-size: 10px; opacity: 0.9;">New version</div></div>
+                        <div style="background: white; color: #357abd; padding: 5px 10px; border-radius: 4px; font-size: 10px; font-weight: 600;">Install</div>
                     </div>
-                    
-                    <dialog class="credits">
-                        <div class="credit-content">
-                            <p style="margin: 0; font-size: 18px; text-align: center;">Open Source Credits</p>
-                            <div style="max-height: 300px; overflow-y: scroll;">
-                                <ul style="padding-left: 25px; padding-top:15px;">
-                                    <li>Puter - Base desktop environment</li>
-                                    <li>Helia - IPFS implementation</li>
-                                    <li>libp2p - P2P networking</li>
-                                    <li>better-sqlite3 - Database</li>
-                                    <li>Express.js - HTTP server</li>
-                                    <li>Particle Network - Wallet authentication</li>
-                                </ul>
-                            </div>
-                        </div>
-                    </dialog>
-                </div>`;
+                </div>
+                
+                <!-- Check Updates -->
+                <div style="text-align: center; margin-bottom: 16px;">
+                    <button id="check-updates-btn" class="check-updates-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-3-6.7"/><polyline points="21 3 21 9 15 9"/></svg><span>Check for Updates</span></button>
+                    <div id="update-check-status" style="margin-top: 6px; font-size: 10px; color: #666;"></div>
+                </div>
+                
+                <!-- Version -->
+                <div class="sys-section">
+                    <div class="sys-section-title">Version</div>
+                    <div class="sys-group">
+                        <div class="sys-group-row"><div class="sys-card-row"><span class="sys-card-label">Current</span><span id="system-current-version" class="sys-card-value">-</span></div></div>
+                        <div class="sys-group-row"><div class="sys-card-row"><span class="sys-card-label">Latest</span><span id="system-latest-version" class="sys-card-value">-</span></div></div>
+                        <div class="sys-group-row"><div class="sys-card-row"><span class="sys-card-label">Last Check</span><span id="system-last-check" class="sys-card-value">Never</span></div></div>
+                    </div>
+                </div>
+                
+                <!-- Status -->
+                <div class="sys-section">
+                    <div class="sys-section-title">Status</div>
+                    <div class="sys-group">
+                        <div class="sys-group-row"><div class="sys-card-row"><span class="sys-card-label">Database</span><span id="system-database-status" class="sys-card-value">-</span></div></div>
+                        <div class="sys-group-row"><div class="sys-card-row"><span class="sys-card-label">IPFS</span><span id="system-ipfs-status" class="sys-card-value">-</span></div></div>
+                        <div class="sys-group-row"><div class="sys-card-row"><span class="sys-card-label">Node ID</span><span id="system-node-id" class="sys-card-value" style="font-family: monospace; font-size: 10px;">-</span></div></div>
+                    </div>
+                </div>
+                
+                <!-- Network -->
+                <div class="sys-section">
+                    <div class="sys-section-title">Network</div>
+                    <div class="sys-group">
+                        <div class="sys-group-row"><div class="sys-card-row"><span class="sys-card-label">API</span><span id="system-api-url" class="sys-card-value" style="font-family: monospace; font-size: 10px;">-</span></div></div>
+                        <div class="sys-group-row"><div class="sys-card-row"><span class="sys-card-label">Gateway</span><span id="system-gateway-url" class="sys-card-value" style="font-family: monospace; font-size: 10px;">-</span></div></div>
+                    </div>
+                </div>
+                
+                <!-- Desktop -->
+                <div class="sys-section">
+                    <div class="sys-section-title">Desktop</div>
+                    <div class="sys-group">
+                        <div class="sys-group-row"><div class="sys-card-row"><span class="sys-card-label">Environment</span><span class="sys-card-value">PC2 Desktop</span></div></div>
+                        <div class="sys-group-row"><div class="sys-card-row"><span class="sys-card-label">Mode</span><span id="system-desktop-mode" class="sys-card-value">Personal Cloud</span></div></div>
+                    </div>
+                </div>
+                
+                <!-- Links -->
+                <div style="text-align: center; font-size: 11px; margin-top: 16px;">
+                    <a href="https://elastos.info" target="_blank">ElastOS</a> · <a href="https://github.com/Elacity/pc2.net" target="_blank">GitHub</a> · <a href="https://discord.gg/elastos" target="_blank">Discord</a> · <a href="#" class="show-credits">Credits</a>
+                </div>
+                
+                <dialog class="credits"><div class="credit-content" style="padding: 16px;"><p style="margin: 0 0 10px; font-size: 14px; text-align: center;">Open Source Credits</p><ul style="padding-left: 20px; font-size: 12px; line-height: 1.8;"><li>Puter - Desktop environment</li><li>Helia - IPFS</li><li>libp2p - P2P networking</li><li>Express.js - HTTP server</li></ul></div></dialog>`;
         }
         
         // Original Puter About for non-PC2 mode
@@ -251,50 +204,120 @@ export default {
         );
         
         if (isPC2Mode) {
+            const apiOrigin = window.api_origin || window.location.origin;
+            
             // Load system info from health endpoint
             try {
-                const apiOrigin = window.api_origin || window.location.origin;
                 const response = await fetch(`${apiOrigin}/health`);
                 if (response.ok) {
                     const health = await response.json();
                     
-                    $el_window.find('#about-node-version').text(health.version || '0.1.0');
-                    $el_window.find('#about-database-status').html(
+                    $el_window.find('#system-current-version').text(health.version || '0.1.0');
+                    $el_window.find('#system-database-status').html(
                         health.database === 'connected' 
-                            ? '<span style="color: #16a34a;">Connected</span>' 
-                            : '<span style="color: #dc2626;">Disconnected</span>'
+                            ? '<span class="status-ok">Connected</span>' 
+                            : '<span class="status-error">Disconnected</span>'
                     );
-                    $el_window.find('#about-ipfs-status').html(
+                    $el_window.find('#system-ipfs-status').html(
                         health.ipfs === 'available' 
-                            ? '<span style="color: #16a34a;">Available</span>' 
-                            : '<span style="color: #dc2626;">Unavailable</span>'
+                            ? '<span class="status-ok">Available</span>' 
+                            : '<span class="status-error">Unavailable</span>'
                     );
-                    $el_window.find('#about-gateway-url').text(`${apiOrigin}/ipfs/`);
+                    $el_window.find('#system-node-id').text(health.nodeId ? health.nodeId.substring(0, 20) + '...' : 'N/A');
+                    $el_window.find('#system-api-url').text(apiOrigin);
+                    $el_window.find('#system-gateway-url').text(`${apiOrigin}/ipfs/`);
                 }
             } catch (error) {
-                console.error('[About] Failed to load system info:', error);
-                $el_window.find('#about-node-version, #about-database-status, #about-ipfs-status').text('Error');
+                console.error('[System] Failed to load system info:', error);
+                $el_window.find('#system-current-version').text('Error');
+                $el_window.find('#system-database-status, #system-ipfs-status').html('<span class="status-error">Error</span>');
             }
             
             // Check for updates and show banner if available
-            try {
-                const updateResponse = await fetch(`${window.api_origin || ''}/api/update/status`, {
-                    headers: { 'Authorization': `Bearer ${puter.authToken}` }
-                });
-                if (updateResponse.ok) {
-                    const updateData = await updateResponse.json();
-                    window.latestVersionInfo = updateData;
-                    
-                    if (updateData.updateAvailable) {
-                        $el_window.find('#update-banner').show();
-                        $el_window.find('#update-banner-version').text(
-                            `Version ${updateData.latestVersion} is ready to install`
-                        );
+            const checkAndDisplayUpdate = async () => {
+                try {
+                    const updateResponse = await fetch(`${apiOrigin}/api/update/status`, {
+                        headers: { 'Authorization': `Bearer ${puter.authToken}` }
+                    });
+                    if (updateResponse.ok) {
+                        const updateData = await updateResponse.json();
+                        window.latestVersionInfo = updateData;
+                        
+                        // Update version info
+                        if (updateData.currentVersion) {
+                            $el_window.find('#system-current-version').text(updateData.currentVersion);
+                        }
+                        if (updateData.latestVersion) {
+                            $el_window.find('#system-latest-version').html(
+                                updateData.updateAvailable 
+                                    ? `<span class="status-ok">${updateData.latestVersion}</span> (new!)`
+                                    : updateData.latestVersion
+                            );
+                        }
+                        if (updateData.lastCheck) {
+                            const lastCheck = new Date(updateData.lastCheck);
+                            $el_window.find('#system-last-check').text(lastCheck.toLocaleString());
+                        }
+                        
+                        if (updateData.updateAvailable) {
+                            $el_window.find('#update-banner').show();
+                            $el_window.find('#update-banner-version').text(
+                                `Version ${updateData.latestVersion} is ready to install`
+                            );
+                        } else {
+                            $el_window.find('#update-banner').hide();
+                        }
+                        
+                        return updateData;
                     }
+                } catch (error) {
+                    console.log('[System] Could not check for updates:', error);
                 }
-            } catch (error) {
-                console.log('[About] Could not check for updates:', error);
-            }
+                return null;
+            };
+            
+            // Initial check
+            await checkAndDisplayUpdate();
+            
+            // Check for Updates button handler
+            $el_window.find('#check-updates-btn').on('click', async function() {
+                const $btn = $(this);
+                const $status = $el_window.find('#update-check-status');
+                
+                $btn.prop('disabled', true);
+                $btn.find('span').text('Checking...');
+                $status.text('');
+                
+                try {
+                    // Trigger a fresh check
+                    const response = await fetch(`${apiOrigin}/api/update/check`, {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${puter.authToken}` }
+                    });
+                    
+                    if (response.ok) {
+                        const result = await response.json();
+                        window.latestVersionInfo = result;
+                        
+                        // Update display
+                        await checkAndDisplayUpdate();
+                        
+                        if (result.updateAvailable) {
+                            $status.html('<span class="status-ok">Update available! Click the banner above to install.</span>');
+                        } else {
+                            $status.html('<span style="color: #666;">You\'re up to date!</span>');
+                        }
+                    } else {
+                        $status.html('<span class="status-error">Failed to check for updates</span>');
+                    }
+                } catch (error) {
+                    console.error('[System] Check failed:', error);
+                    $status.html('<span class="status-error">Network error</span>');
+                } finally {
+                    $btn.prop('disabled', false);
+                    $btn.find('span').text('Check for Updates');
+                }
+            });
         } else {
             // Original Puter version info for non-PC2 mode
             puter.os.version()

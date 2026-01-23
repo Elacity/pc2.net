@@ -6047,13 +6047,13 @@ fieldset[name=number-code] {
 .settings-sidebar-item {
     cursor: pointer;
     border-radius: 4px;
-    padding: 10px;
-    margin-bottom: 15px;
+    padding: 8px 10px;
+    margin-bottom: 4px;
     background-repeat: no-repeat;
     background-position: 10px center;
-    background-size: 25px;
-    padding-left: 45px;
-    font-size: 15px;
+    background-size: 22px;
+    padding-left: 42px;
+    font-size: 14px;
 }
 
 .settings-sidebar-item:hover {
@@ -6081,7 +6081,8 @@ fieldset[name=number-code] {
     margin: auto;
 }
 
-.settings-content[data-settings="about"] {
+.settings-content[data-settings="about"],
+.settings-content[data-settings="system"] {
     height: 100%;
 }
 
@@ -6106,13 +6107,15 @@ fieldset[name=number-code] {
     flex-direction: column;
 }
 
-.settings-content[data-settings="about"] a {
+.settings-content[data-settings="about"] a,
+.settings-content[data-settings="system"] a {
     color: #1663d4;
     text-decoration: none;
     font-size: 12px;
 }
 
-.settings-content[data-settings="about"] a:hover {
+.settings-content[data-settings="about"] a:hover,
+.settings-content[data-settings="system"] a:hover {
     text-decoration: underline;
 }
 

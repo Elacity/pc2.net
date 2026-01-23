@@ -13,304 +13,106 @@ export default {
     icon: 'cube-outline.svg',
     html: () => {
         return `
-            <h1>Storage</h1>
+            <style>
+                .storage-section { margin-bottom: 14px; }
+                .storage-section-title { font-size: 11px; font-weight: 700; color: #000; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; padding-left: 2px; }
+                .storage-card { background: #f9f9f9; border-radius: 8px; padding: 10px 12px; margin-bottom: 6px; }
+                .storage-card-row { display: flex; justify-content: space-between; align-items: center; }
+                .storage-card-label { font-size: 13px; font-weight: 500; color: #333; display: flex; align-items: center; gap: 4px; }
+                .storage-card-value { font-size: 12px; color: #666; }
+                .storage-select { font-size: 11px; padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; background: #fff; width: auto; }
+                .storage-btn { font-size: 11px; padding: 4px 10px; border-radius: 4px; cursor: pointer; line-height: 1.2; height: auto; }
+                .storage-group { background: #f9f9f9; border-radius: 8px; border: 1px solid #d0d0d0; overflow: hidden; }
+                .storage-group-row { padding: 10px 12px; border-bottom: 1px solid #e5e5e5; }
+                .storage-group-row:last-child { border-bottom: none; }
+            </style>
             
             <!-- Storage Quota -->
-            <div class="settings-card" style="flex-direction: column; align-items: stretch; gap: 8px;">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <strong>Storage Used</strong>
-                    <span id="storage-quota-text" style="font-size: 13px;">Loading...</span>
-                </div>
-                <div style="height: 8px; background: #e5e7eb; border-radius: 4px; overflow: hidden;">
-                    <div id="storage-quota-bar" style="height: 100%; background: #3b82f6; width: 0%; transition: width 0.3s;"></div>
-                </div>
-                <div style="display: flex; justify-content: space-between; font-size: 11px; color: #999;">
-                    <span id="storage-used-label">0 B used</span>
-                    <span id="storage-limit-label">Unlimited</span>
-                </div>
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px; padding-top: 8px; border-top: 1px solid #e5e7eb;">
-                    <span style="font-size: 12px; color: #666;">Adjust Limit:</span>
-                    <select id="storage-limit-select" style="font-size: 12px; padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px;">
-                        <option value="auto">Auto-detect</option>
-                        <option value="10GB">10 GB</option>
-                        <option value="25GB">25 GB</option>
-                        <option value="50GB">50 GB</option>
-                        <option value="100GB">100 GB</option>
-                        <option value="250GB">250 GB</option>
-                        <option value="500GB">500 GB</option>
-                        <option value="unlimited">Unlimited</option>
-                    </select>
+            <div class="storage-section">
+                <div class="storage-section-title">Usage</div>
+                <div class="storage-group">
+                    <div class="storage-group-row">
+                        <div class="storage-card-row"><span class="storage-card-label">Used</span><span id="storage-quota-text" class="storage-card-value">Loading...</span></div>
+                        <div style="height: 5px; background: #e5e7eb; border-radius: 3px; overflow: hidden; margin: 6px 0;">
+                            <div id="storage-quota-bar" style="height: 100%; background: #3b82f6; width: 0%; transition: width 0.3s;"></div>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; font-size: 10px; color: #999;">
+                            <span id="storage-used-label">0 B</span><span id="storage-limit-label">Unlimited</span>
+                        </div>
+                    </div>
+                    <div class="storage-group-row"><div class="storage-card-row"><span class="storage-card-label">Limit</span><select id="storage-limit-select" class="storage-select"><option value="auto">Auto</option><option value="10GB">10 GB</option><option value="25GB">25 GB</option><option value="50GB">50 GB</option><option value="100GB">100 GB</option><option value="unlimited">Unlimited</option></select></div></div>
+                    <div class="storage-group-row"><div class="storage-card-row"><span class="storage-card-label">Files</span><span id="storage-files-count" class="storage-card-value">-</span></div></div>
+                    <div class="storage-group-row"><div class="storage-card-row"><span class="storage-card-label">IPFS</span><span class="storage-card-value"><span id="storage-ipfs-count">-</span> with CID</span></div></div>
                 </div>
             </div>
             
-            <div class="settings-card">
-                <strong>Files Stored</strong>
-                <div style="flex-grow:1; text-align: right;">
-                    <span id="storage-files-count" style="font-size: 13px;">Loading...</span>
+            <!-- IPFS Network -->
+            <div class="storage-section">
+                <div class="storage-section-title">IPFS Network</div>
+                <div class="storage-group">
+                    <div class="storage-group-row"><div class="storage-card-row"><span class="storage-card-label">Mode <span class="tooltip-icon" title="Private/Public/Hybrid">?</span></span><span id="ipfs-network-mode" style="font-size: 11px; padding: 2px 6px; border-radius: 10px; background: #e2e3e5;">-</span></div></div>
+                    <div class="storage-group-row"><div class="storage-card-row"><span class="storage-card-label">Node ID <span class="tooltip-icon" title="Your IPFS network identifier">?</span></span><div style="display: flex; align-items: center; gap: 4px;"><code id="ipfs-node-id" style="font-size: 10px; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">-</code><button id="copy-node-id-btn" class="copy-icon-btn" style="padding: 2px 4px; border: 1px solid #ccc; border-radius: 3px; background: #fff; display: none; cursor: pointer;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></div></div></div>
+                    <div class="storage-group-row" id="ipfs-peers-card" style="display: none;"><div class="storage-card-row"><span class="storage-card-label">Peers</span><span id="ipfs-connected-peers" class="storage-card-value">0</span></div></div>
+                    <div class="storage-group-row"><div class="storage-card-row"><span class="storage-card-label">Gateway</span><div style="display: flex; align-items: center; gap: 4px;"><a id="ipfs-gateway-url" href="#" target="_blank" style="font-size: 10px; color: #0066cc;">-</a><button id="copy-gateway-btn" class="copy-icon-btn" style="padding: 2px 4px; border: 1px solid #ccc; border-radius: 3px; background: #fff; display: none; cursor: pointer;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></div></div></div>
+                    <div class="storage-group-row"><div class="storage-card-row"><span class="storage-card-label">Public Files</span><div style="display: flex; align-items: center; gap: 6px;"><span id="ipfs-public-files" class="storage-card-value">-</span><button id="export-public-files-btn" class="button storage-btn" style="display: none;">Export</button></div></div></div>
+                    <div class="storage-group-row"><div class="storage-card-row"><span class="storage-card-label">Pin Remote</span><button id="pin-remote-cid-btn" class="button storage-btn">Pin CID</button></div></div>
                 </div>
             </div>
             
-            <!-- IPFS CID Statistics -->
-            <div class="settings-card">
-                <strong>IPFS Storage</strong>
-                <div style="flex-grow:1; text-align: right;">
-                    <span id="storage-ipfs-count" style="font-size: 13px;">Loading...</span>
-                    <span style="color: #999; font-size: 12px;"> files with CID</span>
-                </div>
+            <!-- Visibility -->
+            <div class="storage-section">
+                <div class="storage-section-title">By Visibility</div>
+                <div class="storage-group" id="storage-by-visibility-list"><div style="text-align: center; padding: 10px; color: #999; font-size: 12px;">Loading...</div></div>
             </div>
             
-            <!-- IPFS Network Info -->
-            <h2 style="font-size: 15px; margin: 20px 0 10px; color: #333;">IPFS Network</h2>
-            
-            <div class="settings-card">
-                <strong class="tooltip-label">Network Mode <span class="tooltip-icon" title="Private: Only you can access files. Public: Files in Public folder are accessible globally. Hybrid: Both modes active.">?</span></strong>
-                <div style="flex-grow:1; text-align: right;">
-                    <span id="ipfs-network-mode" class="ipfs-mode-badge" style="font-size: 12px; padding: 2px 8px; border-radius: 12px; background: #e2e3e5; color: #383d41;">Loading...</span>
-                </div>
-            </div>
-            
-            <div class="settings-card">
-                <strong class="tooltip-label">Node ID <span class="tooltip-icon" title="Your unique identifier on the IPFS network. Other nodes use this to find and connect to you.">?</span></strong>
-                <div style="flex-grow:1; text-align: right; display: flex; align-items: center; justify-content: flex-end; gap: 8px;">
-                    <code id="ipfs-node-id" style="font-size: 11px; word-break: break-all; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Loading...</code>
-                    <button id="copy-node-id-btn" class="copy-icon-btn" style="padding: 4px 6px; cursor: pointer; border: 1px solid #ccc; border-radius: 3px; background: #fff; display: none;" title="Copy Node ID">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                    </button>
-                </div>
-            </div>
-            
-            <div class="settings-card" id="ipfs-peers-card" style="display: none;">
-                <strong class="tooltip-label">Connected Peers <span class="tooltip-icon" title="Number of other IPFS nodes currently connected to your node. More peers = better content availability.">?</span></strong>
-                <div style="flex-grow:1; text-align: right;">
-                    <span id="ipfs-connected-peers" style="font-size: 13px;">0</span>
-                </div>
-            </div>
-            
-            <div class="settings-card">
-                <strong class="tooltip-label">Public Gateway <span class="tooltip-icon" title="HTTP URL where your public files can be accessed. Share this URL followed by a CID to give access to specific files.">?</span></strong>
-                <div style="flex-grow:1; text-align: right; display: flex; align-items: center; justify-content: flex-end; gap: 8px;">
-                    <a id="ipfs-gateway-url" href="#" target="_blank" style="font-size: 11px; color: #0066cc; text-decoration: none;">Loading...</a>
-                    <button id="copy-gateway-btn" class="copy-icon-btn" style="padding: 4px 6px; cursor: pointer; border: 1px solid #ccc; border-radius: 3px; background: #fff; display: none;" title="Copy Gateway URL">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                    </button>
-                </div>
-            </div>
-            
-            <div class="settings-card">
-                <strong class="tooltip-label">Public Files <span class="tooltip-icon" title="Files in your Public folder that are accessible via the IPFS gateway.">?</span></strong>
-                <div style="flex-grow:1; text-align: right; display: flex; align-items: center; justify-content: flex-end; gap: 8px;">
-                    <span id="ipfs-public-files" style="font-size: 13px;">Loading...</span>
-                    <button id="export-public-files-btn" class="button" style="font-size: 11px; padding: 0 10px; height: 24px; line-height: 24px; display: none;" title="Export list of public CIDs">Export</button>
-                </div>
-            </div>
-            
-            <!-- Pin Remote CID -->
-            <div class="settings-card">
-                <strong class="tooltip-label">Pin Remote Content <span class="tooltip-icon" title="Pin content from the IPFS network to your node. Enter a CID to fetch and store the content locally.">?</span></strong>
-                <div style="flex-grow:1; text-align: right;">
-                    <button id="pin-remote-cid-btn" class="button" style="font-size: 12px; padding: 0 12px; height: 28px; line-height: 28px;">Pin CID</button>
-                </div>
-            </div>
-            
-            <!-- Storage by Visibility -->
-            <h2 style="font-size: 15px; margin: 20px 0 10px; color: #333;">Storage by Visibility</h2>
-            
-            <div id="storage-by-visibility-list">
-                <div class="loading" style="text-align: center; padding: 20px; color: #999;">Loading...</div>
-            </div>
-            
-            <!-- Storage by Type -->
-            <h2 style="font-size: 15px; margin: 20px 0 10px; color: #333;">Storage by Type</h2>
-            
-            <div id="storage-by-type-list">
-                <div class="loading" style="text-align: center; padding: 20px; color: #999;">Loading...</div>
+            <!-- By Type -->
+            <div class="storage-section">
+                <div class="storage-section-title">By Type</div>
+                <div class="storage-group" id="storage-by-type-list"><div style="text-align: center; padding: 10px; color: #999; font-size: 12px;">Loading...</div></div>
             </div>
             
             <!-- Largest Files -->
-            <h2 style="font-size: 15px; margin: 20px 0 10px; color: #333;">Largest Files</h2>
-            
-            <div class="settings-card" style="height: auto !important; min-height: 400px; flex-direction: column; align-items: flex-start; padding: 15px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; width: 100%;">
-                    <strong>Top 10 Largest</strong>
-                    <button class="button" id="refresh-storage" style="font-size: 12px; padding: 0 12px; height: 28px; line-height: 28px; vertical-align: middle;">Refresh</button>
+            <div class="storage-section">
+                <div class="storage-section-title" style="display: flex; justify-content: space-between; align-items: center;">
+                    <span>Largest Files</span>
+                    <button class="button storage-btn" id="refresh-storage">Refresh</button>
                 </div>
-                <div id="largest-files-list" style="width: 100%; min-height: 400px; max-height: 1000px; overflow-y: auto;">
-                    <div class="loading" style="text-align: center; padding: 20px; color: #999;">Loading...</div>
+                <div class="storage-group" style="max-height: 300px; overflow-y: auto; padding: 8px;">
+                    <div id="largest-files-list"><div style="text-align: center; padding: 10px; color: #999; font-size: 12px;">Loading...</div></div>
                 </div>
             </div>
             
             <!-- Unused Files -->
-            <h2 style="font-size: 15px; margin: 20px 0 10px; color: #333;">Unused Files</h2>
-            
-            <div class="settings-card" style="height: auto !important; min-height: 400px; flex-direction: column; align-items: flex-start; padding: 15px;">
-                <div style="margin-bottom: 12px; width: 100%;">
-                    <strong>Files Not Accessed in 30 Days</strong>
-                    <span style="color: #999; font-size: 12px; display: block; margin-top: 4px;">Potential cleanup candidates</span>
-                </div>
-                <div id="unused-files-list" style="width: 100%; min-height: 400px; max-height: 1000px; overflow-y: auto;">
-                    <div class="loading" style="text-align: center; padding: 20px; color: #999;">Loading...</div>
+            <div class="storage-section">
+                <div class="storage-section-title">Unused (30+ days)</div>
+                <div class="storage-group" style="max-height: 300px; overflow-y: auto; padding: 8px;">
+                    <div id="unused-files-list"><div style="text-align: center; padding: 10px; color: #999; font-size: 12px;">Loading...</div></div>
                 </div>
             </div>
             
             <style>
-                /* Tooltip styles */
-                .tooltip-label {
-                    display: flex;
-                    align-items: center;
-                    gap: 6px;
-                }
-                .tooltip-icon {
-                    display: inline-flex;
-                    align-items: center;
-                    justify-content: center;
-                    width: 16px;
-                    height: 16px;
-                    border-radius: 50%;
-                    background: #e5e7eb;
-                    color: #666;
-                    font-size: 11px;
-                    font-weight: bold;
-                    cursor: help;
-                }
-                /* JavaScript-based tooltip popup */
-                .storage-tooltip-popup {
-                    position: fixed;
-                    background: #333;
-                    color: white;
-                    padding: 8px 12px;
-                    border-radius: 6px;
-                    font-size: 12px;
-                    font-weight: normal;
-                    max-width: 250px;
-                    z-index: 999999;
-                    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-                    pointer-events: none;
-                }
-                /* Visibility badges */
-                .visibility-badge {
-                    display: inline-flex;
-                    align-items: center;
-                    gap: 4px;
-                    padding: 2px 8px;
-                    border-radius: 12px;
-                    font-size: 11px;
-                    font-weight: 500;
-                }
-                .visibility-badge.public {
-                    background: #d4edda;
-                    color: #155724;
-                }
-                .visibility-badge.private {
-                    background: #e2e3e5;
-                    color: #383d41;
-                }
-                
-                .storage-type-item {
-                    display: flex;
-                    align-items: center;
-                    padding: 12px 15px;
-                    border: 1px solid #e5e7eb;
-                    border-radius: 6px;
-                    margin-bottom: 8px;
-                    background: #fff;
-                    gap: 12px;
-                }
-                .storage-type-label {
-                    display: flex;
-                    align-items: center;
-                    gap: 8px;
-                    flex-shrink: 0;
-                    width: 80px;
-                }
-                .storage-type-name {
-                    font-weight: 500;
-                    text-transform: capitalize;
-                }
-                .storage-type-bar {
-                    flex: 1;
-                    height: 8px;
-                    background: #e5e7eb;
-                    border-radius: 4px;
-                    overflow: hidden;
-                }
-                .storage-type-bar-fill {
-                    height: 100%;
-                    background: #3b82f6;
-                    transition: width 0.3s;
-                }
-                .storage-type-value {
-                    font-size: 13px;
-                    color: #666;
-                    width: 120px;
-                    text-align: right;
-                    flex-shrink: 0;
-                }
-                .storage-file-item {
-                    display: flex;
-                    align-items: center;
-                    gap: 12px;
-                    padding: 10px 0;
-                    border-bottom: 1px solid #e5e7eb;
-                    cursor: pointer;
-                    transition: background 0.2s;
-                }
-                .storage-file-item:hover {
-                    background: #f9fafb;
-                    margin: 0 -15px;
-                    padding-left: 15px;
-                    padding-right: 15px;
-                }
-                .storage-file-item:last-child {
-                    border-bottom: none;
-                }
-                .storage-file-icon {
-                    width: 32px;
-                    height: 32px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    background: #f3f4f6;
-                    border-radius: 4px;
-                    flex-shrink: 0;
-                }
-                .storage-file-details {
-                    flex: 1;
-                    min-width: 0;
-                }
-                .storage-file-name {
-                    font-weight: 500;
-                    font-size: 13px;
-                    margin-bottom: 4px;
-                    overflow: hidden;
-                    text-overflow: ellipsis;
-                    white-space: nowrap;
-                }
-                .storage-file-meta {
-                    font-size: 11px;
-                    color: #999;
-                    display: flex;
-                    gap: 8px;
-                    flex-wrap: wrap;
-                }
-                .storage-file-cid {
-                    font-family: monospace;
-                    font-size: 10px;
-                    color: #667eea;
-                    background: #f0f4ff;
-                    padding: 2px 6px;
-                    border-radius: 3px;
-                }
-                .storage-file-size {
-                    font-weight: 600;
-                    color: #3b82f6;
-                    font-size: 12px;
-                    min-width: 70px;
-                    text-align: right;
-                }
-                .loading {
-                    color: #999;
-                    font-size: 13px;
-                }
+                .tooltip-icon { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 50%; background: #e5e7eb; color: #666; font-size: 9px; font-weight: bold; cursor: help; }
+                .storage-tooltip-popup { position: fixed; background: #333; color: white; padding: 6px 10px; border-radius: 4px; font-size: 11px; max-width: 200px; z-index: 999999; }
+                .visibility-badge { display: inline-flex; align-items: center; gap: 3px; padding: 2px 6px; border-radius: 10px; font-size: 10px; font-weight: 500; }
+                .visibility-badge.public { background: #d4edda; color: #155724; }
+                .visibility-badge.private { background: #e2e3e5; color: #383d41; }
+                .storage-type-item { display: flex; align-items: center; padding: 10px 12px; background: transparent; border-bottom: 1px solid #e5e5e5; gap: 8px; }
+                .storage-type-item:last-child { border-bottom: none; }
+                .storage-type-label { display: flex; align-items: center; gap: 4px; flex-shrink: 0; width: 70px; }
+                .storage-type-name { font-weight: 500; font-size: 11px; text-transform: capitalize; }
+                .storage-type-bar { flex: 1; height: 5px; background: #e5e7eb; border-radius: 3px; overflow: hidden; }
+                .storage-type-bar-fill { height: 100%; background: #3b82f6; }
+                .storage-type-value { font-size: 10px; color: #666; width: 90px; text-align: right; flex-shrink: 0; }
+                .storage-file-item { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #eee; cursor: pointer; }
+                .storage-file-item:hover { background: #f5f5f5; }
+                .storage-file-item:last-child { border-bottom: none; }
+                .storage-file-icon { width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+                .storage-file-icon img { width: 24px; height: 24px; }
+                .storage-file-details { flex: 1; min-width: 0; }
+                .storage-file-name { font-weight: 500; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+                .storage-file-meta { font-size: 9px; color: #999; display: flex; gap: 6px; }
+                .storage-file-cid { font-family: monospace; font-size: 8px; color: #667eea; background: #f0f4ff; padding: 1px 4px; border-radius: 2px; }
+                .storage-file-size { font-weight: 600; color: #3b82f6; font-size: 10px; min-width: 50px; text-align: right; }
             </style>
         `;
     },

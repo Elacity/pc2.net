@@ -24,6 +24,7 @@ const en = {
     code: "en",
     dictionary: {
         about: "About",
+        system: "System",
         account: "Account",
         account_password: "Verify Account Password",
         access_granted_to: "Access Granted To",

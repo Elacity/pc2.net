@@ -83,6 +83,14 @@ export const CHAIN_INFO = {
         chainType: 'evm',
         color: '#F6921A',
     },
+    22: {
+        name: 'Elastos Identity Chain',
+        shortName: 'EID',
+        icon: 'https://static.particle.network/token-list/elastos/native.png',
+        explorer: 'https://eid.elastos.io',
+        chainType: 'evm',
+        color: '#F6921A',
+    },
 };
 
 /**

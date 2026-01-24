@@ -85,72 +85,59 @@ function initElastosIdentity($el_window) {
  * Show the DID Tether QR modal
  */
 async function showDIDTetherModal($el_window) {
-    // Create modal HTML
-    const modalHtml = `
-        <div id="did-tether-modal" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 10000; display: flex; align-items: center; justify-content: center;">
-            <div style="background: #1f2020; border-radius: 12px; padding: 24px; max-width: 400px; width: 90%; color: #fff; text-align: center;">
-                <h3 style="margin: 0 0 16px; font-size: 18px; font-weight: 600;">Link Elastos DID</h3>
-                <p style="color: #9ca3af; font-size: 14px; margin-bottom: 20px;">Scan with Essentials Wallet</p>
-                
-                <div id="did-qr-container" style="background: #fff; padding: 20px; border-radius: 8px; display: inline-block; margin-bottom: 20px;">
-                    <div id="did-qr-code" style="width: 200px; height: 200px; display: flex; align-items: center; justify-content: center; color: #666;">
-                        Generating QR code...
+    // Use UIWindow pattern for consistency
+    const { default: UIWindow } = await import('../UIWindow.js');
+    
+    const h = `
+        <div style="padding: 20px; text-align: center;">
+            <p style="color: #666; font-size: 13px; margin-bottom: 20px;">Scan with Essentials Wallet to link your Elastos DID</p>
+            
+            <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; display: inline-block; margin-bottom: 20px; border: 1px solid #e0e0e0;">
+                <div style="width: 180px; height: 180px; display: flex; align-items: center; justify-content: center; color: #999;">
+                    <div style="text-align: center;">
+                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#999" stroke-width="1.5" style="margin-bottom: 8px;">
+                            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                        </svg>
+                        <div style="font-size: 11px;">Coming Soon</div>
                     </div>
                 </div>
-                
-                <div style="text-align: left; font-size: 13px; color: #9ca3af; margin-bottom: 20px;">
-                    <div style="margin-bottom: 8px;">1. Open Essentials wallet</div>
-                    <div style="margin-bottom: 8px;">2. Scan this QR code</div>
-                    <div>3. Approve the connection</div>
-                </div>
-                
-                <div id="did-tether-status" style="font-size: 13px; color: #F6921A; margin-bottom: 16px;">
-                    ⏳ Waiting for signature...
-                </div>
-                
-                <button id="did-tether-cancel" style="background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #fff; padding: 10px 24px; border-radius: 6px; cursor: pointer;">
-                    Cancel
-                </button>
+            </div>
+            
+            <div style="text-align: left; font-size: 12px; color: #666; margin-bottom: 16px; padding: 12px; background: #f9f9f9; border-radius: 6px;">
+                <div style="margin-bottom: 6px;">1. Open Essentials wallet</div>
+                <div style="margin-bottom: 6px;">2. Scan this QR code</div>
+                <div>3. Approve the connection</div>
+            </div>
+            
+            <div style="font-size: 12px; color: #999;">
+                Backend integration pending
             </div>
         </div>
     `;
     
-    $('body').append(modalHtml);
-    
-    // Generate QR code (placeholder - in production this would call backend)
-    try {
-        // TODO: Call backend to generate JWT and return QR URL
-        // For now, show a placeholder message
-        const qrContainer = document.getElementById('did-qr-code');
-        qrContainer.innerHTML = `
-            <div style="text-align: center; padding: 20px;">
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#F6921A" stroke-width="1.5" style="margin-bottom: 12px;">
-                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-                </svg>
-                <div style="font-size: 12px; color: #666;">
-                    DID Tethering<br/>Coming Soon
-                </div>
-            </div>
-        `;
-        
-        $('#did-tether-status').text('Backend integration pending');
-        
-    } catch (error) {
-        console.error('DID tether error:', error);
-        $('#did-tether-status').text('Error generating QR code').css('color', '#ef4444');
-    }
-    
-    // Cancel button
-    $('#did-tether-cancel').on('click', function() {
-        $('#did-tether-modal').remove();
-    });
-    
-    // Close on backdrop click
-    $('#did-tether-modal').on('click', function(e) {
-        if (e.target === this) {
-            $(this).remove();
-        }
+    UIWindow({
+        title: 'Tether Elastos DID',
+        icon: null,
+        uid: null,
+        is_dir: false,
+        body_content: h,
+        has_head: true,
+        selectable_body: false,
+        allow_context_menu: false,
+        is_resizable: false,
+        is_droppable: false,
+        init_center: true,
+        allow_native_ctxmenu: true,
+        allow_user_select: true,
+        window_class: 'window-settings',
+        width: 340,
+        height: 'auto',
+        dominant: true,
+        show_in_taskbar: false,
+        draggable_body: false,
+        onAppend: function(el_window) {},
+        window_css: { height: 'auto' },
     });
 }
 
@@ -466,10 +453,7 @@ export default {
                                 h += `<li>Verifiable credentials (coming soon)</li>`;
                             h += `</ul>`;
                         h += `</div>`;
-                        h += `<button id="tether-did-btn" class="button" style="background: linear-gradient(135deg, #F6921A, #B04200); color: white; border: none; padding: 10px 16px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 8px;">`;
-                            h += `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>`;
-                            h += `Tether Elastos DID`;
-                        h += `</button>`;
+                        h += `<button id="tether-did-btn" class="button account-btn">Tether DID</button>`;
                     h += `</div>`;
                     
                     // Tethered state (hidden by default)

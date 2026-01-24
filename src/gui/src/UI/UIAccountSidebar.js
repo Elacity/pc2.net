@@ -483,9 +483,14 @@ async function UIAccountSidebar(options = {}) {
                 border-radius: 8px;
                 box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
                 z-index: 100;
-                max-height: 300px;
+                max-height: 450px;
                 overflow-y: auto;
                 display: none;
+            }
+            @media (min-width: 769px) {
+                .network-dropdown-menu {
+                    max-height: 550px;
+                }
             }
             .network-dropdown-menu.open {
                 display: block;
@@ -630,19 +635,22 @@ async function UIAccountSidebar(options = {}) {
                             </div>
                         `).join('')}
                         <div class="network-dropdown-divider"></div>
-                        <div class="network-dropdown-label">DID Required</div>
+                        <div class="network-dropdown-label" style="display: flex; align-items: center; justify-content: space-between;">
+                            <span>DID Required</span>
+                            <button class="link-did-btn" style="font-size: 10px; padding: 2px 8px; background: rgba(246,146,26,0.15); border: 1px solid rgba(246,146,26,0.3); color: #F6921A; border-radius: 4px; cursor: pointer;">Link DID</button>
+                        </div>
                         <div class="network-dropdown-item locked" data-chain-id="mainchain" title="Tether your Elastos DID to view Mainchain ELA">
                             <img src="https://static.particle.network/token-list/elastos/native.png" class="network-icon" onerror="this.style.display='none'" />
                             <span>ELA Mainchain</span>
                             ${lockIcon}
                         </div>
                         <div class="network-dropdown-item locked" data-chain-id="btc" title="Tether your Elastos DID to view Bitcoin">
-                            <img src="/images/tokens/BTC.svg" class="network-icon" onerror="this.style.display='none'" />
+                            <img src="https://static.particle.network/token-list/bitcoin/native.png" class="network-icon" onerror="this.style.display='none'" />
                             <span>Bitcoin</span>
                             ${lockIcon}
                         </div>
                         <div class="network-dropdown-item locked" data-chain-id="tron" title="Tether your Elastos DID to view Tron">
-                            <img src="/images/tokens/TRX.png" class="network-icon" onerror="this.style.display='none'" />
+                            <img src="https://static.particle.network/token-list/tron/native.png" class="network-icon" onerror="this.style.display='none'" />
                             <span>Tron</span>
                             ${lockIcon}
                         </div>
@@ -850,6 +858,24 @@ async function UIAccountSidebar(options = {}) {
         if (!$(e.target).closest('.network-dropdown-container').length) {
             $sidebar.find('#network-dropdown-menu').removeClass('open');
             $sidebar.find('#network-dropdown-btn').removeClass('open');
+        }
+    });
+    
+    // Link DID button - opens Settings > Account
+    $sidebar.on('click', '.link-did-btn', function(e) {
+        e.stopPropagation();
+        
+        // Close sidebar and dropdown
+        $sidebar.find('#network-dropdown-menu').removeClass('open');
+        $sidebar.find('#network-dropdown-btn').removeClass('open');
+        closeSidebar();
+        
+        // Open settings window to Account tab
+        if (window.UIWindowSettings) {
+            window.UIWindowSettings({ active_tab: 'account' });
+        } else {
+            // Fallback: trigger settings open
+            $(document).trigger('open-settings', ['account']);
         }
     });
     

@@ -26,6 +26,7 @@ import {
     estimateGas,
     ELASTOS_CHAIN_CONFIG 
 } from '../helpers/ethereum-provider.js';
+import { CHAIN_INFO } from '../helpers/particle-constants.js';
 
 // Import type definitions for JSDoc
 /** @typedef {import('../types/wallet.js').Token} Token */
@@ -59,6 +60,7 @@ class WalletService {
         // EOA network RPC URLs
         this.EOA_RPC_URLS = {
             20: 'https://api.elastos.io/eth',          // Elastos Smart Chain
+            22: 'https://api.elastos.io/eid',          // Elastos Identity Chain
             1: 'https://eth.llamarpc.com',              // Ethereum
             8453: 'https://mainnet.base.org',           // Base
             137: 'https://polygon-rpc.com',             // Polygon
@@ -71,6 +73,7 @@ class WalletService {
         // Native token symbols per chain
         this.EOA_NATIVE_TOKENS = {
             20: { symbol: 'ELA', name: 'Elastos', decimals: 18 },
+            22: { symbol: 'ELA', name: 'Elastos', decimals: 18 },
             1: { symbol: 'ETH', name: 'Ethereum', decimals: 18 },
             8453: { symbol: 'ETH', name: 'Ethereum', decimals: 18 },
             137: { symbol: 'POL', name: 'Polygon', decimals: 18 },
@@ -168,11 +171,9 @@ class WalletService {
      * @returns {Array} List of available networks with chain info
      */
     getAvailableEOANetworks() {
-        const { CHAIN_INFO } = require('../helpers/particle-constants.js');
-        
         return Object.keys(this.EOA_RPC_URLS).map(chainId => ({
             chainId: parseInt(chainId),
-            ...CHAIN_INFO[chainId],
+            ...(CHAIN_INFO[chainId] || { name: `Chain ${chainId}` }),
             isSelected: parseInt(chainId) === this.selectedEOAChainId,
         }));
     }
@@ -966,7 +967,6 @@ class WalletService {
         this.eoaData.isLoading = true;
         this._notifyListeners();
         
-        const { CHAIN_INFO } = require('../helpers/particle-constants.js');
         const chainInfo = CHAIN_INFO[chainId] || { name: `Chain ${chainId}` };
         
         logger.log(`Fetching ${nativeToken.symbol} balance for EOA on ${chainInfo.name}:`, address);

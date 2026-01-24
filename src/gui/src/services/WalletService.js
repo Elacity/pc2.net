@@ -50,8 +50,39 @@ const logger = createLogger('WalletService');
  */
 class WalletService {
     constructor() {
-        // Wallet mode: 'universal' (Smart Account + multi-chain) or 'elastos' (EOA + ELA)
+        // Wallet mode: 'universal' (Smart Account + multi-chain) or 'elastos' (EOA + multi-network)
         this.walletMode = 'universal';
+        
+        // Selected EOA network chain ID (default: Elastos Smart Chain)
+        this.selectedEOAChainId = 20;
+        
+        // EOA network RPC URLs
+        this.EOA_RPC_URLS = {
+            20: 'https://api.elastos.io/eth',          // Elastos Smart Chain
+            1: 'https://eth.llamarpc.com',              // Ethereum
+            8453: 'https://mainnet.base.org',           // Base
+            137: 'https://polygon-rpc.com',             // Polygon
+            56: 'https://bsc-dataseed.binance.org',     // BNB Chain
+            42161: 'https://arb1.arbitrum.io/rpc',      // Arbitrum
+            10: 'https://mainnet.optimism.io',          // Optimism
+            43114: 'https://api.avax.network/ext/bc/C/rpc', // Avalanche
+        };
+        
+        // Native token symbols per chain
+        this.EOA_NATIVE_TOKENS = {
+            20: { symbol: 'ELA', name: 'Elastos', decimals: 18 },
+            1: { symbol: 'ETH', name: 'Ethereum', decimals: 18 },
+            8453: { symbol: 'ETH', name: 'Ethereum', decimals: 18 },
+            137: { symbol: 'POL', name: 'Polygon', decimals: 18 },
+            56: { symbol: 'BNB', name: 'BNB', decimals: 18 },
+            42161: { symbol: 'ETH', name: 'Ethereum', decimals: 18 },
+            10: { symbol: 'ETH', name: 'Ethereum', decimals: 18 },
+            43114: { symbol: 'AVAX', name: 'Avalanche', decimals: 18 },
+        };
+        
+        // DID tethering data (for non-EVM chains)
+        this.tetheredDID = null;
+        this.tetheredWallets = null; // { elaMainchain, btc, tron }
         
         // Universal Account wallet data
         this.walletData = {
@@ -63,8 +94,8 @@ class WalletService {
             error: null,
         };
         
-        // Elastos wallet data (separate cache)
-        this.elastosData = {
+        // EOA wallet data (separate cache, per-network)
+        this.eoaData = {
             tokens: [],
             transactions: [],
             totalBalance: 0,
@@ -72,6 +103,9 @@ class WalletService {
             isLoading: false,
             error: null,
         };
+        
+        // Legacy alias for backwards compatibility
+        this.elastosData = this.eoaData;
         
         this.listeners = new Set();
         this.pollInterval = null;
@@ -81,6 +115,90 @@ class WalletService {
         
         // Initialize message listener
         this._initMessageListener();
+    }
+    
+    /**
+     * Get selected EOA chain ID
+     * @returns {number}
+     */
+    getSelectedEOAChainId() {
+        return this.selectedEOAChainId;
+    }
+    
+    /**
+     * Set EOA network and refresh data
+     * @param {number} chainId - Chain ID to switch to
+     */
+    async setEOANetwork(chainId) {
+        if (!this.EOA_RPC_URLS[chainId]) {
+            logger.error('Unsupported chain ID:', chainId);
+            return;
+        }
+        
+        const previousChainId = this.selectedEOAChainId;
+        this.selectedEOAChainId = chainId;
+        
+        logger.log('EOA network changed from', previousChainId, 'to', chainId);
+        
+        // Clear cached data for new network
+        this.eoaData = {
+            tokens: [],
+            transactions: [],
+            totalBalance: 0,
+            lastUpdated: null,
+            isLoading: true,
+            error: null,
+        };
+        this.elastosData = this.eoaData;
+        
+        // Notify listeners of network change
+        this._notifyListeners();
+        
+        // Fetch data for new network
+        if (this.walletMode === 'elastos') {
+            await Promise.all([
+                this.refreshTokens(),
+                this.refreshTransactions(),
+            ]);
+        }
+    }
+    
+    /**
+     * Get available EOA networks
+     * @returns {Array} List of available networks with chain info
+     */
+    getAvailableEOANetworks() {
+        const { CHAIN_INFO } = require('../helpers/particle-constants.js');
+        
+        return Object.keys(this.EOA_RPC_URLS).map(chainId => ({
+            chainId: parseInt(chainId),
+            ...CHAIN_INFO[chainId],
+            isSelected: parseInt(chainId) === this.selectedEOAChainId,
+        }));
+    }
+    
+    /**
+     * Check if DID is tethered
+     * @returns {boolean}
+     */
+    isDIDTethered() {
+        return !!this.tetheredDID;
+    }
+    
+    /**
+     * Get tethered DID info
+     * @returns {Object|null}
+     */
+    getTetheredDID() {
+        return this.tetheredDID;
+    }
+    
+    /**
+     * Get tethered wallets (non-EVM addresses from Essentials)
+     * @returns {Object|null} { elaMainchain, btc, tron }
+     */
+    getTetheredWallets() {
+        return this.tetheredWallets;
     }
     
     /**
@@ -608,15 +726,18 @@ class WalletService {
         
         logger.log('Notifying', this.listeners.size, 'listeners with data:', {
             mode: this.walletMode,
+            chainId: this.selectedEOAChainId,
             totalBalance: data.totalBalance,
             tokensCount: data.tokens?.length,
         });
         
-        // Add mode to the data for UI awareness
+        // Add mode and chain info to the data for UI awareness
         const dataWithMode = {
             ...data,
             mode: this.walletMode,
             address: this.getAddress(),
+            selectedEOAChainId: this.selectedEOAChainId,
+            isDIDTethered: this.isDIDTethered(),
         };
         
         this.listeners.forEach(callback => {
@@ -695,7 +816,7 @@ class WalletService {
      */
     getData() {
         if (this.walletMode === 'elastos') {
-            return this.elastosData;
+            return this.eoaData;
         }
         return this.walletData;
     }
@@ -827,22 +948,31 @@ class WalletService {
     }
     
     /**
-     * Fetch ELA balance for Elastos mode
+     * Fetch tokens for EOA mode on selected network
      */
     async _fetchElastosTokens() {
-        const address = this.getEOAAddress(); // Always use EOA for Elastos
+        const address = this.getEOAAddress(); // Always use EOA for this mode
         if (!address) return { tokens: [], totalBalance: 0 };
         
-        this.elastosData.isLoading = true;
+        const chainId = this.selectedEOAChainId;
+        const rpcUrl = this.EOA_RPC_URLS[chainId];
+        const nativeToken = this.EOA_NATIVE_TOKENS[chainId];
+        
+        if (!rpcUrl || !nativeToken) {
+            logger.error('Invalid chain configuration for chainId:', chainId);
+            return { tokens: [], totalBalance: 0 };
+        }
+        
+        this.eoaData.isLoading = true;
         this._notifyListeners();
         
-        logger.log('Fetching Elastos ELA for EOA:', address);
+        const { CHAIN_INFO } = require('../helpers/particle-constants.js');
+        const chainInfo = CHAIN_INFO[chainId] || { name: `Chain ${chainId}` };
+        
+        logger.log(`Fetching ${nativeToken.symbol} balance for EOA on ${chainInfo.name}:`, address);
         
         try {
-            // Elastos Mainnet RPC
-            const rpcUrl = 'https://api.elastos.io/eth';
-            
-            // Fetch native ELA balance
+            // Fetch native token balance
             const response = await fetch(rpcUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -859,41 +989,66 @@ class WalletService {
             
             if (!data.error && data.result) {
                 const balanceWei = BigInt(data.result || '0');
-                const balanceEla = Number(balanceWei) / 1e18;
+                const balance = Number(balanceWei) / Math.pow(10, nativeToken.decimals);
                 
-                // Get ELA price (approximate)
-                const elaPrice = await this._getTokenPrice('ELA');
+                // Get token price
+                const price = await this._getTokenPrice(nativeToken.symbol);
                 
                 tokens.push({
-                    symbol: 'ELA',
-                    name: 'Elastos',
+                    symbol: nativeToken.symbol,
+                    name: nativeToken.name,
                     address: null, // Native token
-                    balance: balanceEla.toFixed(6),
-                    decimals: 18,
-                    chainId: 20, // Elastos ESC chain ID
-                    network: 'Elastos',
-                    usdValue: balanceEla * elaPrice,
-                    price: elaPrice,
-                    icon: null, // Will use default
+                    balance: balance.toFixed(6),
+                    decimals: nativeToken.decimals,
+                    chainId: chainId,
+                    network: chainInfo.name,
+                    usdValue: balance * price,
+                    price: price,
+                    icon: chainInfo.icon || null,
                 });
             }
             
-            // Update Elastos data
-            this.elastosData.tokens = tokens;
-            this.elastosData.totalBalance = this._calculateTotalBalance(tokens);
-            this.elastosData.lastUpdated = Date.now();
-            this.elastosData.isLoading = false;
-            this.elastosData.error = null;
+            // Also fetch common stablecoins for this network
+            const stablecoins = this._getStablecoinAddresses(chainId);
+            for (const stable of stablecoins) {
+                try {
+                    const stableBalance = await this._getERC20Balance(rpcUrl, address, stable.address, stable.decimals);
+                    if (stableBalance > 0.01) {
+                        tokens.push({
+                            symbol: stable.symbol,
+                            name: stable.name,
+                            address: stable.address,
+                            balance: stableBalance.toFixed(stable.decimals > 6 ? 6 : 2),
+                            decimals: stable.decimals,
+                            chainId: chainId,
+                            network: chainInfo.name,
+                            usdValue: stableBalance, // Stablecoins ~$1
+                            price: 1,
+                        });
+                    }
+                } catch (e) {
+                    // Ignore individual token errors
+                }
+            }
+            
+            // Update EOA data
+            this.eoaData.tokens = tokens;
+            this.eoaData.totalBalance = this._calculateTotalBalance(tokens);
+            this.eoaData.lastUpdated = Date.now();
+            this.eoaData.isLoading = false;
+            this.eoaData.error = null;
+            this.elastosData = this.eoaData; // Keep alias in sync
             
             this._notifyListeners();
-            $(document).trigger('wallet:data:updated', [this.elastosData]);
+            $(document).trigger('wallet:data:updated', [this.eoaData]);
             
-            logger.log('Elastos ELA balance:', tokens);
-            return { tokens, totalBalance: this.elastosData.totalBalance };
+            logger.log(`${chainInfo.name} balance:`, tokens);
+            return { tokens, totalBalance: this.eoaData.totalBalance };
         } catch (error) {
-            logger.error('Elastos fetch error:', error);
-            this.elastosData.isLoading = false;
-            this.elastosData.error = error.message;
+            logger.error(`${chainInfo.name} fetch error:`, error);
+            this.eoaData.isLoading = false;
+            this.eoaData.error = error.message;
+            this.elastosData = this.eoaData;
             this._notifyListeners();
             throw error;
         }

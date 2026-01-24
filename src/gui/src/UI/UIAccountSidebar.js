@@ -437,6 +437,103 @@ async function UIAccountSidebar(options = {}) {
             .mode-label {
                 font-size: 12px;
             }
+            /* Network dropdown styles */
+            .network-dropdown-container {
+                position: relative;
+                flex: 1;
+            }
+            .network-dropdown-btn {
+                width: 100%;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 8px;
+                padding: 10px 12px;
+                border: 1px solid rgba(255, 255, 255, 0.15);
+                border-radius: 8px;
+                background: transparent;
+                color: #9ca3af;
+                font-size: 13px;
+                font-weight: 500;
+                cursor: pointer;
+                transition: all 0.2s ease;
+            }
+            .network-dropdown-btn:hover {
+                border-color: rgba(255, 255, 255, 0.3);
+                color: #fff;
+            }
+            .network-dropdown-btn.active {
+                background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(34, 197, 94, 0.2));
+                border-color: rgba(34, 197, 94, 0.5);
+                color: #fff;
+            }
+            .network-dropdown-btn .dropdown-arrow {
+                transition: transform 0.2s ease;
+            }
+            .network-dropdown-btn.open .dropdown-arrow {
+                transform: rotate(180deg);
+            }
+            .network-dropdown-menu {
+                position: absolute;
+                top: calc(100% + 4px);
+                left: 0;
+                right: 0;
+                background: #2a2a2a;
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 8px;
+                box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+                z-index: 100;
+                max-height: 300px;
+                overflow-y: auto;
+                display: none;
+            }
+            .network-dropdown-menu.open {
+                display: block;
+            }
+            .network-dropdown-item {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                padding: 10px 12px;
+                cursor: pointer;
+                transition: background 0.15s ease;
+                color: #e5e7eb;
+                font-size: 13px;
+            }
+            .network-dropdown-item:hover {
+                background: rgba(255, 255, 255, 0.1);
+            }
+            .network-dropdown-item.selected {
+                background: rgba(34, 197, 94, 0.15);
+            }
+            .network-dropdown-item .network-icon {
+                width: 20px;
+                height: 20px;
+                border-radius: 50%;
+            }
+            .network-dropdown-item .check-icon {
+                margin-left: auto;
+                color: #22c55e;
+            }
+            .network-dropdown-divider {
+                height: 1px;
+                background: rgba(255, 255, 255, 0.1);
+                margin: 4px 0;
+            }
+            .network-dropdown-label {
+                padding: 6px 12px;
+                font-size: 10px;
+                color: #6b7280;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+            .network-dropdown-item.locked {
+                opacity: 0.5;
+                cursor: not-allowed;
+            }
+            .network-dropdown-item.locked:hover {
+                background: transparent;
+            }
             @media (max-width: 768px) {
                 .account-sidebar {
                     width: 100%;
@@ -459,11 +556,19 @@ async function UIAccountSidebar(options = {}) {
     // Elastos logo - same size as Universal icon (cropped viewBox)
     const elastosIcon = `<svg width="18" height="18" viewBox="230 330 620 420" fill="none"><path d="M793 533l-61-36-26-15c-10-6-22-6-32 0l-119 69c-10 6-22 6-32 0l-118-69c-10-6-22-6-32 0l-26 15-61 36c-21 13-21 43 0 55l104 60 135 78c10 6 22 6 32 0l135-78 104-60c19-12 19-42-2-55z" fill="url(#ela1)"/><path d="M793 406l-88-51c-10-6-22-6-32 0l-119 69c-10 6-22 6-32 0l-119-69c-10-6-22-6-32 0l-86 51c-21 13-21 43 0 55l62 36 42 24 135 78c10 6 22 6 32 0l135-78 42-24 62-36c20-12 20-42-2-55z" fill="url(#ela2)"/><defs><linearGradient id="ela1" x1="540" y1="731" x2="540" y2="478" gradientUnits="userSpaceOnUse"><stop stop-color="#F6921A"/><stop offset="1" stop-color="#B04200"/></linearGradient><linearGradient id="ela2" x1="540" y1="447" x2="540" y2="604" gradientUnits="userSpaceOnUse"><stop stop-color="#FFEEDC"/><stop offset="1" stop-color="#FFC382"/></linearGradient></defs></svg>`;
     
-    // Get current mode
+    // Get current mode and network
     const currentMode = walletService.getMode();
+    const selectedChainId = walletService.getSelectedEOAChainId();
+    const availableNetworks = walletService.getAvailableEOANetworks();
+    const currentNetwork = availableNetworks.find(n => n.chainId === selectedChainId) || availableNetworks[0];
     const displayAddress = currentMode === 'elastos' 
         ? (window.user?.wallet_address || address) 
         : address;
+    
+    // Dropdown arrow icon
+    const dropdownArrowIcon = `<svg class="dropdown-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>`;
+    const checkIcon = `<svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+    const lockIcon = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>`;
     
     // Build sidebar HTML
     const h = `
@@ -508,10 +613,41 @@ async function UIAccountSidebar(options = {}) {
                     <span class="mode-icon" aria-hidden="true">${universalIcon}</span>
                     <span class="mode-label">Universal</span>
                 </button>
-                <button class="mode-btn elastos ${currentMode === 'elastos' ? 'active' : ''}" data-mode="elastos" role="button" aria-pressed="${currentMode === 'elastos'}" aria-label="Switch to Elastos EOA mode for ELA tokens">
-                    <span class="mode-icon" aria-hidden="true">${elastosIcon}</span>
-                    <span class="mode-label">Elastos</span>
-                </button>
+                <div class="network-dropdown-container">
+                    <button class="network-dropdown-btn ${currentMode === 'elastos' ? 'active' : ''}" id="network-dropdown-btn" role="button" aria-haspopup="listbox" aria-expanded="false">
+                        <span style="display:flex;align-items:center;gap:8px;">
+                            <img src="${currentNetwork?.icon || ''}" class="network-icon" style="width:18px;height:18px;border-radius:50%;" onerror="this.style.display='none'" />
+                            <span class="network-name">${currentNetwork?.shortName || currentNetwork?.name || 'Select Network'}</span>
+                        </span>
+                        ${dropdownArrowIcon}
+                    </button>
+                    <div class="network-dropdown-menu" id="network-dropdown-menu" role="listbox">
+                        ${availableNetworks.map(network => `
+                            <div class="network-dropdown-item ${network.isSelected ? 'selected' : ''}" data-chain-id="${network.chainId}" role="option" aria-selected="${network.isSelected}">
+                                <img src="${network.icon || ''}" class="network-icon" onerror="this.style.display='none'" />
+                                <span>${network.name}</span>
+                                ${network.isSelected ? checkIcon : ''}
+                            </div>
+                        `).join('')}
+                        <div class="network-dropdown-divider"></div>
+                        <div class="network-dropdown-label">DID Required</div>
+                        <div class="network-dropdown-item locked" data-chain-id="mainchain" title="Tether your Elastos DID to view Mainchain ELA">
+                            <img src="https://static.particle.network/token-list/elastos/native.png" class="network-icon" onerror="this.style.display='none'" />
+                            <span>ELA Mainchain</span>
+                            ${lockIcon}
+                        </div>
+                        <div class="network-dropdown-item locked" data-chain-id="btc" title="Tether your Elastos DID to view Bitcoin">
+                            <img src="/images/tokens/BTC.svg" class="network-icon" onerror="this.style.display='none'" />
+                            <span>Bitcoin</span>
+                            ${lockIcon}
+                        </div>
+                        <div class="network-dropdown-item locked" data-chain-id="tron" title="Tether your Elastos DID to view Tron">
+                            <img src="/images/tokens/TRX.png" class="network-icon" onerror="this.style.display='none'" />
+                            <span>Tron</span>
+                            ${lockIcon}
+                        </div>
+                    </div>
+                </div>
             </div>
             
             <!-- Action Buttons -->
@@ -602,16 +738,16 @@ async function UIAccountSidebar(options = {}) {
         });
     });
     
-    // Mode toggle buttons
-    $sidebar.on('click', '.mode-btn', async function() {
-        const mode = $(this).data('mode');
+    // Universal mode button
+    $sidebar.on('click', '.mode-btn[data-mode="universal"]', async function() {
         const currentMode = walletService.getMode();
         
-        if (mode === currentMode) return;
+        if (currentMode === 'universal') return;
         
         // Update button states
         $sidebar.find('.mode-btn').removeClass('active');
         $(this).addClass('active');
+        $sidebar.find('.network-dropdown-btn').removeClass('active');
         
         // Show loading state
         $sidebar.find('.balance-amount').text('...');
@@ -619,7 +755,7 @@ async function UIAccountSidebar(options = {}) {
         
         // Switch mode in wallet service
         try {
-            await walletService.setMode(mode);
+            await walletService.setMode('universal');
             
             // Update address display
             const newAddress = walletService.getAddress();
@@ -630,7 +766,90 @@ async function UIAccountSidebar(options = {}) {
             // Update Solana address visibility based on mode
             updateSolanaAddressDisplay();
         } catch (error) {
-            logger.error(' Mode switch error:', error);
+            logger.error('Mode switch error:', error);
+        }
+    });
+    
+    // Network dropdown toggle
+    $sidebar.on('click', '#network-dropdown-btn', function(e) {
+        e.stopPropagation();
+        const $btn = $(this);
+        const $menu = $sidebar.find('#network-dropdown-menu');
+        const isOpen = $menu.hasClass('open');
+        
+        if (isOpen) {
+            $menu.removeClass('open');
+            $btn.removeClass('open');
+        } else {
+            $menu.addClass('open');
+            $btn.addClass('open');
+            
+            // If not in EOA mode, switch to it
+            if (walletService.getMode() !== 'elastos') {
+                // Update button states
+                $sidebar.find('.mode-btn[data-mode="universal"]').removeClass('active');
+                $btn.addClass('active');
+                walletService.setMode('elastos');
+            }
+        }
+    });
+    
+    // Network dropdown item selection
+    $sidebar.on('click', '.network-dropdown-item:not(.locked)', async function() {
+        const chainId = parseInt($(this).data('chain-id'));
+        if (isNaN(chainId)) return;
+        
+        const $menu = $sidebar.find('#network-dropdown-menu');
+        const $btn = $sidebar.find('#network-dropdown-btn');
+        
+        // Close dropdown
+        $menu.removeClass('open');
+        $btn.removeClass('open');
+        
+        // Update selection visual
+        $menu.find('.network-dropdown-item').removeClass('selected');
+        $(this).addClass('selected');
+        
+        // Update button text and icon
+        const networkName = $(this).find('span').text();
+        const networkIcon = $(this).find('.network-icon').attr('src');
+        $btn.find('.network-name').text(networkName);
+        $btn.find('.network-icon').attr('src', networkIcon).show();
+        $btn.addClass('active');
+        
+        // Show loading state
+        $sidebar.find('.balance-amount').text('...');
+        $sidebar.find('.tokens-list').html('<div class="empty-state"><p>Loading...</p></div>');
+        
+        // Switch network in wallet service
+        try {
+            // Ensure we're in EOA mode
+            if (walletService.getMode() !== 'elastos') {
+                $sidebar.find('.mode-btn[data-mode="universal"]').removeClass('active');
+                await walletService.setMode('elastos');
+            }
+            
+            // Switch to selected network
+            await walletService.setEOANetwork(chainId);
+            
+            // Update address display (EOA address)
+            const newAddress = walletService.getEOAAddress();
+            $sidebar.find('.account-address').attr('data-address', newAddress);
+            $sidebar.find('.address-text').text(truncateAddress(newAddress));
+            $sidebar.find('.account-avatar').html(getAvatarContent(newAddress));
+            
+            // Hide Solana address in EOA mode
+            updateSolanaAddressDisplay();
+        } catch (error) {
+            logger.error('Network switch error:', error);
+        }
+    });
+    
+    // Close dropdown when clicking outside
+    $(document).on('click.networkDropdown', function(e) {
+        if (!$(e.target).closest('.network-dropdown-container').length) {
+            $sidebar.find('#network-dropdown-menu').removeClass('open');
+            $sidebar.find('#network-dropdown-btn').removeClass('open');
         }
     });
     
@@ -872,8 +1091,9 @@ async function UIAccountSidebar(options = {}) {
     
     // Subscribe to wallet data updates - store for cleanup
     walletUnsubscribe = walletService.subscribe((data) => {
-        logger.log(' Received wallet update:', {
+        logger.log('Received wallet update:', {
             mode: data.mode,
+            chainId: data.selectedEOAChainId,
             totalBalance: data.totalBalance,
             tokensCount: data.tokens?.length,
             sidebarExists: !!sidebarInstance,
@@ -883,18 +1103,36 @@ async function UIAccountSidebar(options = {}) {
         if (!sidebarInstance) return;
         
         // Update mode buttons
-        $sidebar.find('.mode-btn').removeClass('active');
-        $sidebar.find(`.mode-btn[data-mode="${data.mode}"]`).addClass('active');
+        if (data.mode === 'universal') {
+            $sidebar.find('.mode-btn[data-mode="universal"]').addClass('active');
+            $sidebar.find('.network-dropdown-btn').removeClass('active');
+        } else {
+            $sidebar.find('.mode-btn[data-mode="universal"]').removeClass('active');
+            $sidebar.find('.network-dropdown-btn').addClass('active');
+            
+            // Update network dropdown selection
+            const chainId = data.selectedEOAChainId;
+            const $menu = $sidebar.find('#network-dropdown-menu');
+            $menu.find('.network-dropdown-item').removeClass('selected');
+            $menu.find(`.network-dropdown-item[data-chain-id="${chainId}"]`).addClass('selected');
+            
+            // Update button text with selected network
+            const selectedNetwork = walletService.getAvailableEOANetworks().find(n => n.chainId === chainId);
+            if (selectedNetwork) {
+                $sidebar.find('.network-dropdown-btn .network-name').text(selectedNetwork.shortName || selectedNetwork.name);
+                $sidebar.find('.network-dropdown-btn .network-icon').attr('src', selectedNetwork.icon || '').show();
+            }
+        }
         
-        // Update balance - show ELA amount for Elastos mode, USD for Universal
+        // Update balance - show native token amount for EOA mode, USD for Universal
         let formattedBalance;
         if (data.mode === 'elastos' && data.tokens?.length > 0) {
-            const elaToken = data.tokens.find(t => t.symbol === 'ELA');
-            formattedBalance = elaToken ? `${parseFloat(elaToken.balance).toFixed(4)} ELA` : '0 ELA';
+            const nativeToken = data.tokens[0]; // First token is always native
+            formattedBalance = nativeToken ? `${parseFloat(nativeToken.balance).toFixed(4)} ${nativeToken.symbol}` : '0';
         } else {
             formattedBalance = formatUSD(data.totalBalance);
         }
-        logger.log(' Setting balance to:', formattedBalance);
+        logger.log('Setting balance to:', formattedBalance);
         $sidebar.find('.balance-amount').text(formattedBalance);
         
         // Update address display
@@ -959,6 +1197,7 @@ function closeSidebar() {
     // Clean up document-level handlers immediately
     $(document).off('.accountSidebar');
     $(document).off('keydown.accountSidebar');
+    $(document).off('click.networkDropdown');
     
     // Stop wallet polling immediately
     walletService.stopPolling();

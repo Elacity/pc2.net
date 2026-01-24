@@ -61,6 +61,7 @@ export default {
                     </svg>
                     <h1 style="margin: 0; font-size: 18px; font-weight: 600;">ElastOS Personal Cloud</h1>
                     <p style="color: #666; margin: 4px 0 0; font-size: 12px;">Your Sovereign Cloud Computer</p>
+                    <p style="color: #666; margin: 8px 0 0; font-size: 11px; line-height: 1.5; max-width: 500px; margin-left: auto; margin-right: auto;">One of millions of self-hosted personal clouds running on your own hardware, interconnected above blockchain governance to form the World Computer. Your data, your control, powered by decentralized identity.</p>
                 </div>
                 
                 <!-- Update Banner -->

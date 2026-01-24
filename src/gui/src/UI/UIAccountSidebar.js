@@ -645,7 +645,7 @@ async function UIAccountSidebar(options = {}) {
                             ${lockIcon}
                         </div>
                         <div class="network-dropdown-item locked" data-chain-id="btc" title="Tether your Elastos DID to view Bitcoin">
-                            <img src="https://static.particle.network/token-list/bitcoin/native.png" class="network-icon" onerror="this.style.display='none'" />
+                            <img src="https://cryptologos.cc/logos/bitcoin-btc-logo.png" class="network-icon" onerror="this.style.display='none'" />
                             <span>Bitcoin</span>
                             ${lockIcon}
                         </div>
@@ -870,13 +870,12 @@ async function UIAccountSidebar(options = {}) {
         $sidebar.find('#network-dropdown-btn').removeClass('open');
         closeSidebar();
         
-        // Open settings window to Account tab
-        if (window.UIWindowSettings) {
-            window.UIWindowSettings({ active_tab: 'account' });
-        } else {
-            // Fallback: trigger settings open
-            $(document).trigger('open-settings', ['account']);
-        }
+        // Open settings window to Account tab using dynamic import
+        import('./Settings/UIWindowSettings.js').then(({ default: UIWindowSettings }) => {
+            UIWindowSettings({ tab: 'account' });
+        }).catch((err) => {
+            logger.error('Failed to open settings:', err);
+        });
     });
     
     // Close button

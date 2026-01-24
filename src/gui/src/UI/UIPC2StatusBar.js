@@ -115,13 +115,13 @@ function initPC2StatusBar() {
 
         items.push({
             html: `<span style="color: #fff;">Personal Cloud</span>`,
-            icon: `<svg style="width:16px; height:16px; color: #fff;" viewBox="0 0 24 24" fill="currentColor"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/></svg>`,
+            icon: `<svg style="width:16px; height:16px; vertical-align:middle; color:#fff;" viewBox="0 0 24 24" fill="#fff"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/></svg>`,
             disabled: true
         });
 
         items.push({
             html: `<span style="color: #fff;">${effectiveStatusText}</span>`,
-            icon: `<div style="width: 8px; height: 8px; border-radius: 50%; background: ${dotColor}; margin: 4px;"></div>`,
+            icon: `<span style="display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; vertical-align:middle;"><span style="width:8px; height:8px; border-radius:50%; background:${dotColor};"></span></span>`,
             disabled: true
         });
 
@@ -129,6 +129,7 @@ function initPC2StatusBar() {
             const nodeName = session.nodeName || (isPC2Mode ? 'This PC2 Node' : 'PC2 Node');
             items.push({
                 html: `<span style="color: #fff;">Node: ${nodeName}</span>`,
+                icon: `<svg style="width:16px; height:16px; vertical-align:middle;" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>`,
                 disabled: true
             });
         }

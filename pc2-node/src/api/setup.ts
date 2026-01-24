@@ -26,12 +26,29 @@ interface AllowedWalletEntry {
   updatedAt?: string;
 }
 
+// Tethered DID entry
+interface TetheredDIDEntry {
+  did: string;
+  tetheredAt: string;
+  wallets?: {
+    elaMainchain?: string;
+    btc?: string;
+    tron?: string;
+  };
+}
+
 // Node config interface
 interface NodeConfig {
   antiSnipePasswordHash?: string;
   ownerWallet?: string | null;
   createdAt?: string;
   allowedWallets?: AllowedWalletEntry[];
+  // Tethered DIDs keyed by wallet address (lowercase)
+  tetheredDIDs?: Record<string, TetheredDIDEntry>;
+  // Public URL for callbacks (optional)
+  publicUrl?: string;
+  // Node DID for signing (optional, future use)
+  nodeDID?: string;
 }
 
 // Helper to read node config

@@ -7,6 +7,36 @@
 
 ---
 
+## 🛑 CRITICAL: ONLY RUN pc2-node - NEVER RUN MAIN PUTER
+
+**THIS IS THE MOST IMPORTANT RULE IN THIS CODEBASE:**
+
+| DO THIS | NEVER DO THIS |
+|---------|---------------|
+| `cd pc2-node && npm run dev` | `npm run dev` (from root) |
+| `cd pc2-node && npm start` | `npm start` (from root) |
+| Server: `http://localhost:4200` | Server: `http://puter.localhost:xxxx` |
+
+**The main Puter codebase (root `package.json`, `src/backend/`, `src/gui/`) is REFERENCE CODE ONLY.**
+
+- **pc2-node/** = The standalone PC2 personal cloud node - THIS IS WHAT WE RUN
+- **Main Puter** = Uses subdomains (`puter.localhost`), requires complex config - NEVER RUN THIS
+
+**If you see:**
+- "Subdomain not found" → You're running the WRONG server (main Puter)
+- `http://puter.localhost:41xx` → You're running the WRONG server
+- `http_port: "auto"` in config → This is main Puter config, NOT pc2-node
+
+**Correct development workflow:**
+```bash
+cd /Users/mtk/Documents/Cursor/pc2.net/pc2-node
+npm run dev          # Development with hot reload
+# OR
+npm start            # Production mode
+```
+
+---
+
 ## 🚀 Quick Start: Full System Restart
 
 **When user requests "restart everything" or "get latest build":**

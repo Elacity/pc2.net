@@ -123,8 +123,8 @@ class PC2ConnectionService {
                     this.session = sessionData.session;
                     logger.log('[PC2]: Loaded valid session, expires in', Math.round((maxAge - sessionAge) / (24 * 60 * 60 * 1000)), 'days');
                     
-                    // 🚀 EARLY REDIRECTION: Redirect API calls immediately if we have valid session
-                    // This prevents SDK initialization from calling api.puter.com endpoints
+                    // 🚀 EARLY API ORIGIN: Set API origin immediately if we have valid session
+                    // PC2 is self-hosted: all API calls go to same origin (no external services)
                     if (this.config?.nodeUrl && this.session?.token) {
                         const nodeUrl = this.config.nodeUrl.replace(/\/+$/, '');
                         
@@ -827,9 +827,8 @@ class PC2ConnectionService {
             puter.setAuthToken(sessionToken);
             logger.log('[PC2]: Puter SDK now pointing to your PC2:', normalizedUrl);
             
-            // Force socket.io to reconnect to the new origin
-            // Puter SDK's socket.io might have already connected to api.puter.com
-            // We need to disconnect and let it reconnect to the PC2 node
+            // Force socket.io to reconnect to the correct origin
+            // Ensure SDK socket.io is connected to the self-hosted PC2 node
             try {
                 // Check if Puter SDK has a socket.io instance we can access
                 if (puter.io && puter.io.connected) {

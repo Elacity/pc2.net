@@ -38,8 +38,8 @@ const PC2_DEBUG = false;
  * It also handles loading different resources depending on the environment (development or production).
  *
  * @param {Object} options - Configuration options to initialize the GUI.
- * @param {string} [options.gui_origin='https://puter.com'] - The origin URL for the GUI.
- * @param {string} [options.api_origin='https://api.puter.com'] - The origin URL for the API.
+ * @param {string} [options.gui_origin] - The origin URL for the GUI (defaults to window.location.origin).
+ * @param {string} [options.api_origin] - The origin URL for the API (defaults to same origin - PC2 is self-hosted).
  * @param {number} [options.max_item_name_length=500] - Maximum allowed length for an item name.
  * @param {boolean} [options.require_email_verification_to_publish_website=true] - Flag to decide whether email verification is required to publish a website.
  * @param {boolean} [options.disable_temp_users=false] - Flag to disable auto-generated temporary users.
@@ -73,7 +73,7 @@ window.gui = async (options) => {
     window.hosting_domain = options.hosting_domain ?? 'puter.site';
     
     // 🚀 Check for PC2 node connection BEFORE setting api_origin
-    // This ensures PC2 node URL is used instead of api.puter.com
+    // PC2 is self-hosted: API origin is always same as GUI origin (no external services)
     let pc2ApiOrigin = null;
     try {
         const savedConfig = localStorage.getItem('pc2_config');
@@ -130,8 +130,9 @@ window.gui = async (options) => {
         }
         
         // Only set default if we don't already have a same-origin API set
+        // PC2: ALWAYS use same-origin (self-hosted) - NEVER fallback to external services
         if (!currentApiOrigin || currentApiOrigin !== currentOrigin) {
-            window.api_origin = pc2ApiOrigin || options.api_origin || 'https://api.puter.com';
+            window.api_origin = pc2ApiOrigin || currentOrigin || window.location.origin;
             PC2_DEBUG && console.log('[PC2]: Final window.api_origin set to:', window.api_origin);
         } else {
             PC2_DEBUG && console.log('[PC2]: ✅ Preserving same-origin API:', currentApiOrigin);
@@ -181,7 +182,7 @@ window.gui = async (options) => {
     window.co_isolation_enabled = options.co_isolation_enabled;
 
     // 🚀 Ensure window.api_origin is set and protected BEFORE SDK loads
-    // This prevents SDK from using default api.puter.com during initialization
+    // PC2 is self-hosted: SDK must use same-origin API (no external services)
     PC2_DEBUG && console.log('[PC2]: Pre-SDK load - window.api_origin:', window.api_origin);
     
     // DEV: Load the initgui.js file if we are in development mode

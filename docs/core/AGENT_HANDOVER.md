@@ -14,6 +14,25 @@
 
 ---
 
+## 🛑 CRITICAL: ONLY RUN pc2-node - NEVER RUN MAIN PUTER
+
+**THIS IS THE MOST IMPORTANT RULE:**
+
+```bash
+# CORRECT - Always run from pc2-node directory
+cd pc2-node && npm run dev    # Development
+cd pc2-node && npm start      # Production
+```
+
+**NEVER run `npm run dev` or `npm start` from the repository root!**
+
+- **`pc2-node/`** = The standalone PC2 server on port 4200 - **RUN THIS**
+- **Main Puter** (`src/backend/`, `src/gui/`) = Reference code only - **NEVER RUN**
+
+If you see "Subdomain not found" or `puter.localhost`, you ran the wrong server.
+
+---
+
 ## Project Vision (From Rong, Elastos Founder)
 
 Three WebSpaces being built:

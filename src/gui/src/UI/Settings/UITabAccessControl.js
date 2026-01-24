@@ -40,19 +40,22 @@ export default {
 
         // Description
         h += `<p style="color: #666; margin-bottom: 20px; font-size: 13px;">
-            Manage who can access your PC2 node. Only wallets in this list can log in.
+            Manage who can access your PC2 node. Each wallet address becomes a separate account with its own files and settings.
         </p>`;
 
         // Owner info card
         h += `<div class="settings-card">`;
         h += `<div style="flex: 1;">`;
-        h += `<strong style="display:block;">Node Owner</strong>`;
+        h += `<strong style="display:block;">Node Owner (Admin)</strong>`;
         h += `<span id="owner-wallet" style="display:block; margin-top:5px; font-size: 12px; color: #666; font-family: monospace;">Loading...</span>`;
         h += `</div>`;
         h += `</div>`;
 
-        // Add wallet card
-        h += `<h2 style="font-size: 14px; margin: 25px 0 10px; color: #333;">Add Wallet</h2>`;
+        // Add wallet account card
+        h += `<div style="display: flex; align-items: center; gap: 8px; margin: 25px 0 10px;">`;
+        h += `<h2 style="font-size: 14px; color: #333; margin: 0;">Add Wallet Account</h2>`;
+        h += `<span class="tooltip-trigger" style="cursor: help; color: #9ca3af; font-size: 14px;" title="This wallet address will be able to create an account on this PC2 node with its own files, settings, and data.">ⓘ</span>`;
+        h += `</div>`;
         h += `<div class="settings-card" style="flex-direction: column; align-items: stretch;">`;
         h += `<div style="display: flex; gap: 10px; align-items: center;">`;
         h += `<input type="text" id="add-wallet-address" placeholder="0x..." style="flex: 1; padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; font-family: monospace; font-size: 13px;">`;
@@ -62,12 +65,13 @@ export default {
         h += `</select>`;
         h += `<button id="btn-add-wallet" class="button button-primary">Add</button>`;
         h += `</div>`;
+        h += `<p style="font-size: 11px; color: #9ca3af; margin: 8px 0 0 0;">Each wallet creates a separate account with isolated storage and settings.</p>`;
         h += `<div id="add-wallet-status" style="margin-top: 8px; font-size: 12px; min-height: 18px;"></div>`;
         h += `</div>`;
 
-        // Allowed wallets section
+        // Accounts on this node section
         h += `<div style="display: flex; justify-content: space-between; align-items: center; margin: 25px 0 10px;">`;
-        h += `<h2 style="font-size: 14px; color: #333; margin: 0;">Allowed Wallets</h2>`;
+        h += `<h2 style="font-size: 14px; color: #333; margin: 0;">Accounts on this PC2 Node</h2>`;
         h += `<button id="btn-refresh-wallets" class="button" style="font-size: 12px; padding: 4px 12px;">Refresh</button>`;
         h += `</div>`;
         
@@ -79,11 +83,13 @@ export default {
     },
     init: ($el_window) => {
         const apiOrigin = window.api_origin || '';
+        const authToken = puter.authToken;
         
         // Load owner info
         async function loadOwnerInfo() {
             try {
                 const response = await fetch(`${apiOrigin}/api/access/status`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` },
                     credentials: 'include'
                 });
                 const data = await response.json();
@@ -110,6 +116,7 @@ export default {
             
             try {
                 const response = await fetch(`${apiOrigin}/api/access/list`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` },
                     credentials: 'include'
                 });
                 const data = await response.json();
@@ -154,7 +161,10 @@ export default {
                     try {
                         const response = await fetch(`${apiOrigin}/api/access/remove`, {
                             method: 'DELETE',
-                            headers: { 'Content-Type': 'application/json' },
+                            headers: { 
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${authToken}`
+                            },
                             credentials: 'include',
                             body: JSON.stringify({ wallet })
                         });
@@ -204,7 +214,10 @@ export default {
             try {
                 const response = await fetch(`${apiOrigin}/api/access/add`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
                     credentials: 'include',
                     body: JSON.stringify({ wallet, role })
                 });

@@ -222,8 +222,8 @@ window.initgui = async function(options){
     INITGUI_DEBUG && console.log('[initgui]: ✅ Running in top window, starting initialization...');
     
     window.initgui_in_progress = true;
-    // 🚀 Initialize PC2ConnectionService EARLY to redirect API calls before SDK initializes
-    // This prevents SDK from calling api.puter.com or constructing api.puter.localhost URLs
+    // 🚀 Initialize PC2ConnectionService EARLY to set API origin before SDK initializes
+    // PC2 is self-hosted: all API calls go to same origin (no external services)
     try {
         const { getPC2Service } = await import('./services/PC2ConnectionService.js');
         getPC2Service(); // Initialize singleton - this will set window.api_origin if session exists

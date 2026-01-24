@@ -170,9 +170,12 @@ export default {
             h += `<span id="owner-wallet" style="font-size: 11px; font-family: monospace; color: #666;">Loading...</span>`;
             h += `</div></div>`;
 
-            // Add wallet
+            // Add wallet account
             h += `<div class="security-group-row">`;
-            h += `<div class="security-card-label" style="margin-bottom: 8px;">Add Wallet</div>`;
+            h += `<div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">`;
+            h += `<span class="security-card-label">Add Wallet Account</span>`;
+            h += `<span style="cursor: help; color: #9ca3af; font-size: 12px;" title="This wallet will be able to create an account on this PC2 node with its own files and settings.">ⓘ</span>`;
+            h += `</div>`;
             h += `<div style="display: flex; gap: 6px; align-items: center;">`;
             h += `<input type="text" id="add-wallet-address" class="security-input" placeholder="0x..." style="flex: 1; font-family: monospace;">`;
             h += `<select id="add-wallet-role" class="security-input" style="width: 80px;"><option value="member">Member</option><option value="admin">Admin</option></select>`;
@@ -181,10 +184,10 @@ export default {
             h += `<div id="add-wallet-status" style="margin-top: 4px; font-size: 10px; min-height: 14px;"></div>`;
             h += `</div>`;
 
-            // Allowed wallets list
+            // Accounts on this node
             h += `<div class="security-group-row">`;
             h += `<div class="security-card-row" style="margin-bottom: 8px;">`;
-            h += `<span class="security-card-label">Allowed Wallets</span>`;
+            h += `<span class="security-card-label">Accounts on this Node</span>`;
             h += `<button id="btn-refresh-wallets" class="button security-btn" style="font-size: 10px; padding: 3px 8px;">Refresh</button>`;
             h += `</div>`;
             h += `<div id="allowed-wallets-list" style="min-height: 30px; font-size: 12px;">Loading...</div>`;
@@ -475,7 +478,10 @@ Capabilities: files, terminal, git, http, scheduler`;
             // Access Control
             async function loadOwnerInfo() {
                 try {
-                    const resp = await fetch(`${apiOrigin}/api/access/status`, { credentials: 'include' });
+                    const resp = await fetch(`${apiOrigin}/api/access/status`, { 
+                        headers: { 'Authorization': `Bearer ${authToken}` },
+                        credentials: 'include' 
+                    });
                     const data = await resp.json();
                     const ownerEl = $el_window.find('#owner-wallet');
                     if (data.ownerWallet) {
@@ -493,7 +499,10 @@ Capabilities: files, terminal, git, http, scheduler`;
                 const listEl = $el_window.find('#allowed-wallets-list');
                 listEl.html('Loading...');
                 try {
-                    const resp = await fetch(`${apiOrigin}/api/access/list`, { credentials: 'include' });
+                    const resp = await fetch(`${apiOrigin}/api/access/list`, { 
+                        headers: { 'Authorization': `Bearer ${authToken}` },
+                        credentials: 'include' 
+                    });
                     const data = await resp.json();
                     if (!data.success) { listEl.html('Failed'); return; }
                     const wallets = data.wallets || [];
@@ -511,7 +520,15 @@ Capabilities: files, terminal, git, http, scheduler`;
                     listEl.html(h);
                     listEl.find('.btn-remove-wallet').on('click', async function() {
                         if (!confirm('Remove?')) return;
-                        await fetch(`${apiOrigin}/api/access/remove`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ wallet: $(this).data('wallet') }) });
+                        await fetch(`${apiOrigin}/api/access/remove`, { 
+                            method: 'DELETE', 
+                            headers: { 
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${authToken}`
+                            }, 
+                            credentials: 'include', 
+                            body: JSON.stringify({ wallet: $(this).data('wallet') }) 
+                        });
                         loadAllowedWallets();
                     });
                 } catch (e) { listEl.html('Error'); }
@@ -524,7 +541,15 @@ Capabilities: files, terminal, git, http, scheduler`;
                 if (!wallet || !/^0x[a-f0-9]{40}$/i.test(wallet)) { statusEl.html('<span style="color: #ef4444;">Invalid</span>'); return; }
                 $(this).prop('disabled', true).text('...');
                 try {
-                    const resp = await fetch(`${apiOrigin}/api/access/add`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ wallet, role }) });
+                    const resp = await fetch(`${apiOrigin}/api/access/add`, { 
+                        method: 'POST', 
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${authToken}`
+                        }, 
+                        credentials: 'include', 
+                        body: JSON.stringify({ wallet, role }) 
+                    });
                     const result = await resp.json();
                     if (result.success) { statusEl.html('<span style="color: #22c55e;">Added!</span>'); $el_window.find('#add-wallet-address').val(''); loadAllowedWallets(); }
                     else statusEl.html(`<span style="color: #ef4444;">${result.error}</span>`);

@@ -206,8 +206,8 @@ async function UIWindowParticleLogin(options = {}) {
                 apiOrigin = 'http://127.0.0.1:4200';
                 console.log('[Particle Auth]: 🚀 Local dev detected, forcing mock PC2 server:', apiOrigin);
             } else {
-                // Production: use window.api_origin or default
-                apiOrigin = window.api_origin || 'https://api.puter.com';
+                // Production: use window.api_origin or same-origin (PC2 is self-hosted, no external services)
+                apiOrigin = window.api_origin || window.location.origin;
                 console.log('[Particle Auth]: Using API origin:', apiOrigin);
             }
             console.log('[Particle Auth]: Calling auth endpoint:', `${apiOrigin}/auth/particle`);

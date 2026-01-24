@@ -9,7 +9,25 @@ import express, { Request, Response, Router } from 'express';
 import { authenticate, AuthenticatedRequest } from './middleware.js';
 import { logger } from '../utils/logger.js';
 import crypto from 'crypto';
+import os from 'os';
 import { getNodeConfig, saveNodeConfig } from './setup.js';
+
+/**
+ * Get the local network IP address for callbacks
+ * This is needed for local development when mobile devices need to reach the PC2 node
+ */
+function getLocalNetworkIP(): string | null {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name] || []) {
+      // Skip internal/loopback and non-IPv4
+      if (iface.family === 'IPv4' && !iface.internal) {
+        return iface.address;
+      }
+    }
+  }
+  return null;
+}
 
 const router: Router = express.Router();
 
@@ -58,25 +76,53 @@ export async function handleTetherRequest(req: AuthenticatedRequest, res: Respon
       expiresAt
     });
 
-    // Build the credaccess URL for Essentials
-    // Format: https://did.web3essentials.io/credaccess/?claims=...
+    // Build credaccess URL for Essentials with EMPTY credentials
+    // This only asks for DID authentication, no actual credentials required
     const nodeConfig = getNodeConfig();
-    const callbackUrl = `${nodeConfig.publicUrl || req.protocol + '://' + req.get('host')}/api/did/callback`;
     
-    // Minimal credential request - just asking for DID authentication
-    const claims = {
-      iss: nodeConfig.nodeDID || 'did:boson:pc2-node',
+    // Determine callback URL - needs to be reachable from Essentials mobile app
+    let callbackUrl: string;
+    if (nodeConfig.publicUrl) {
+      // Production: use configured public URL
+      callbackUrl = `${nodeConfig.publicUrl}/api/did/callback`;
+    } else {
+      // Development: use local network IP so phone can reach us
+      const host = req.get('host') || 'localhost:4200';
+      const isLocalhost = host.includes('localhost') || host.includes('127.0.0.1');
+      
+      if (isLocalhost) {
+        const localIP = getLocalNetworkIP();
+        const port = host.split(':')[1] || '4200';
+        if (localIP) {
+          callbackUrl = `http://${localIP}:${port}/api/did/callback`;
+          logger.info('[DID] Using local network IP for callback:', callbackUrl);
+        } else {
+          // Fallback - will only work if phone is on same machine (unlikely)
+          callbackUrl = `http://localhost:${port}/api/did/callback`;
+          logger.warn('[DID] Could not detect local IP, callback may not work from mobile');
+        }
+      } else {
+        // Already using a reachable host (maybe behind proxy)
+        callbackUrl = `${req.protocol}://${host}/api/did/callback`;
+      }
+    }
+    
+    // Credential access request with EMPTY claims - just proves DID ownership
+    // Format matches Elastos Essentials SDK expectations
+    const credAccessRequest = {
+      // The request itself - empty claims means just DID auth
+      claims: [],
+      // Nonce for replay protection
       nonce: nonce,
-      claims: {
-        // Request basic DID authentication
-        credentials: []
-      },
-      callbackurl: callbackUrl
+      // Where to POST the result
+      callbackurl: callbackUrl,
+      // Optional: human-readable reason
+      reason: 'Link your Elastos DID to your PC2 personal cloud'
     };
 
-    // Base64 encode for URL
-    const claimsBase64 = Buffer.from(JSON.stringify(claims)).toString('base64url');
-    const qrUrl = `https://did.web3essentials.io/credaccess/?claims=${claimsBase64}`;
+    // Base64 encode for URL (use standard base64, not base64url)
+    const requestBase64 = Buffer.from(JSON.stringify(credAccessRequest)).toString('base64');
+    const qrUrl = `https://did.web3essentials.io/credaccess?request=${encodeURIComponent(requestBase64)}`;
 
     logger.info('[DID] Tether request created', {
       wallet: walletAddress.substring(0, 10) + '...',
@@ -140,19 +186,77 @@ export async function handleTetherStatus(req: AuthenticatedRequest, res: Respons
 /**
  * DID callback from Essentials
  * Essentials posts the signed DID response here
+ * Handles both didsign JWT response and credaccess presentation
  * POST /api/did/callback
  */
 export async function handleDIDCallback(req: Request, res: Response): Promise<void> {
   try {
-    const { presentation, nonce } = req.body;
+    // didsign returns: { jwt: "..." } or { signedData: "..." }
+    // credaccess returns: { presentation: "...", nonce: "..." }
+    const { jwt, signedData, presentation } = req.body;
 
     logger.info('[DID] Callback received', {
+      hasJwt: !!jwt,
+      hasSignedData: !!signedData,
       hasPresentation: !!presentation,
-      hasNonce: !!nonce,
       bodyKeys: Object.keys(req.body || {})
     });
 
+    // Parse the response to extract DID and nonce
+    let did: string | null = null;
+    let nonce: string | null = null;
+    let wallets: {
+      elaMainchain?: string;
+      btc?: string;
+      tron?: string;
+    } = {};
+
+    try {
+      // Handle didsign JWT response
+      const jwtToken = jwt || signedData || presentation;
+      
+      if (typeof jwtToken === 'string' && jwtToken.includes('.')) {
+        // JWT format - decode the payload
+        const parts = jwtToken.split('.');
+        if (parts.length === 3) {
+          const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString());
+          did = payload.iss || payload.sub;
+          nonce = payload.nonce || payload.jti;
+          
+          // Try to extract wallet addresses from JWT claims
+          if (payload.elaMainchainAddress) wallets.elaMainchain = payload.elaMainchainAddress;
+          if (payload.btcAddress) wallets.btc = payload.btcAddress;
+          if (payload.tronAddress) wallets.tron = payload.tronAddress;
+          
+          logger.info('[DID] Parsed JWT', {
+            did: did?.substring(0, 30) + '...',
+            nonceFromJwt: nonce?.substring(0, 16) + '...',
+            hasWallets: Object.keys(wallets).length > 0
+          });
+        }
+      } else if (typeof jwtToken === 'object') {
+        // JSON-LD format or object response
+        did = jwtToken?.holder || jwtToken?.iss || jwtToken?.sub;
+        nonce = jwtToken?.nonce;
+        
+        if (jwtToken?.credentialSubject) {
+          wallets.elaMainchain = jwtToken.credentialSubject.elaMainchainAddress;
+          wallets.btc = jwtToken.credentialSubject.btcAddress;
+          wallets.tron = jwtToken.credentialSubject.tronAddress;
+        }
+      }
+
+      // Also check for nonce in request body directly
+      if (!nonce && req.body.nonce) {
+        nonce = req.body.nonce;
+      }
+
+    } catch (parseError) {
+      logger.error('[DID] Failed to parse response:', parseError);
+    }
+
     if (!nonce) {
+      logger.warn('[DID] Missing nonce in callback');
       res.status(400).json({ error: 'Missing nonce' });
       return;
     }
@@ -161,6 +265,7 @@ export async function handleDIDCallback(req: Request, res: Response): Promise<vo
     const pendingRequest = pendingTetherRequests.get(nonce);
     
     if (!pendingRequest) {
+      logger.warn('[DID] Invalid or expired nonce:', nonce.substring(0, 16) + '...');
       res.status(400).json({ error: 'Invalid or expired nonce' });
       return;
     }
@@ -171,45 +276,8 @@ export async function handleDIDCallback(req: Request, res: Response): Promise<vo
       return;
     }
 
-    // Parse the presentation to extract DID
-    let did: string | null = null;
-    let wallets: {
-      elaMainchain?: string;
-      btc?: string;
-      tron?: string;
-    } = {};
-
-    try {
-      // The presentation contains a JWT or JSON-LD verifiable presentation
-      // For now, we'll extract the DID from the holder field
-      if (typeof presentation === 'string') {
-        // JWT format - decode the payload
-        const parts = presentation.split('.');
-        if (parts.length === 3) {
-          const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString());
-          did = payload.iss || payload.holder || payload.sub;
-        }
-      } else if (presentation?.holder) {
-        // JSON-LD format
-        did = presentation.holder;
-      } else if (presentation?.iss) {
-        did = presentation.iss;
-      }
-
-      // Extract additional wallet addresses if provided in the presentation
-      // Essentials may include these in credentialSubject or custom claims
-      if (presentation?.credentialSubject) {
-        wallets.elaMainchain = presentation.credentialSubject.elaMainchainAddress;
-        wallets.btc = presentation.credentialSubject.btcAddress;
-        wallets.tron = presentation.credentialSubject.tronAddress;
-      }
-
-    } catch (parseError) {
-      logger.error('[DID] Failed to parse presentation:', parseError);
-    }
-
     if (!did) {
-      res.status(400).json({ error: 'Could not extract DID from presentation' });
+      res.status(400).json({ error: 'Could not extract DID from response' });
       return;
     }
 

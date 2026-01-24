@@ -4,6 +4,14 @@
 
 ---
 
+## 🛑 CRITICAL: Run pc2-node, NOT main Puter
+
+The repository contains two servers:
+- **`pc2-node/`** = The PC2 standalone server - **USE THIS**
+- **Main Puter** (root) = Reference code only - **NEVER RUN**
+
+---
+
 ## 🚀 Option 1: From Source (Developers)
 
 ### Prerequisites
@@ -18,22 +26,26 @@
 git clone https://github.com/Elacity/pc2.net
 cd pc2.net
 
-# 2. Install dependencies
+# 2. Install pc2-node dependencies
+cd pc2-node
 npm install
 
-# 3. Initialize submodules (for Particle Auth)
-git submodule update --init --recursive
-
-# 4. Build Particle Auth (optional, for wallet login)
-npm run build:particle-auth
-
-# 5. Start the server
+# 3. Build and start
+npm run build:backend
+npm run build:frontend
 npm start
+```
+
+### Development Mode (with hot reload)
+
+```bash
+cd pc2-node
+npm run dev
 ```
 
 ### Access
 
-Open your browser to: **http://localhost:4202**
+Open your browser to: **http://localhost:4200**
 
 You should see the PC2 desktop. Click "Connect Wallet" to login!
 

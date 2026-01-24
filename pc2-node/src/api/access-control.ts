@@ -10,7 +10,8 @@ import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import { logger } from '../utils/logger.js';
 import { getNodeConfig, saveNodeConfig } from './setup.js';
-import { AuthenticatedRequest } from './middleware.js';
+import { authenticate, AuthenticatedRequest } from './middleware.js';
+import { DatabaseManager } from '../storage/database.js';
 
 const router = Router();
 
@@ -292,16 +293,36 @@ router.get('/check', (req: Request, res: Response) => {
  * GET /api/access/list
  * 
  * Requires owner or admin authentication.
+ * Returns wallet addresses with profile pictures if available.
  */
-router.get('/list', (req: Request, res: Response) => {
+router.get('/list', authenticate, (req: AuthenticatedRequest, res: Response) => {
   try {
     const config = getNodeConfig();
+    const db = req.app.locals.db as DatabaseManager | undefined;
     
-    // Return owner info and allowed wallets
+    // Enrich wallets with profile picture URLs
+    const wallets = (config.allowedWallets || []).map((w: { wallet: string; role: string }) => {
+      let profilePicture = null;
+      if (db) {
+        profilePicture = db.getSetting(`${w.wallet}:user_preferences.profile_picture_url`) || null;
+      }
+      return {
+        ...w,
+        profilePicture,
+      };
+    });
+    
+    // Get owner's profile picture too
+    let ownerProfilePicture = null;
+    if (config.ownerWallet && db) {
+      ownerProfilePicture = db.getSetting(`${config.ownerWallet}:user_preferences.profile_picture_url`) || null;
+    }
+    
     res.json({
       success: true,
       ownerWallet: config.ownerWallet || null,
-      wallets: config.allowedWallets || [],
+      ownerProfilePicture,
+      wallets,
     });
   } catch (error) {
     logger.error('[AccessControl] List wallets error:', error);
@@ -315,7 +336,7 @@ router.get('/list', (req: Request, res: Response) => {
  * 
  * Body: { wallet: string, role: 'admin' | 'member' }
  */
-router.post('/add', (req: AuthenticatedRequest, res: Response) => {
+router.post('/add', authenticate, (req: AuthenticatedRequest, res: Response) => {
   try {
     const { wallet, role } = req.body;
     
@@ -395,7 +416,7 @@ router.post('/add', (req: AuthenticatedRequest, res: Response) => {
  * 
  * Body: { wallet: string }
  */
-router.delete('/remove', (req: AuthenticatedRequest, res: Response) => {
+router.delete('/remove', authenticate, (req: AuthenticatedRequest, res: Response) => {
   try {
     // Check if user is authenticated
     if (!req.user?.wallet_address) {

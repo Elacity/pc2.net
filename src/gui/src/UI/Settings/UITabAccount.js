@@ -529,13 +529,14 @@ export default {
                 // DID Status row
                 h += `<div class="account-group-row" id="elastos-did-row">`;
                     h += `<div id="elastos-did-not-tethered" style="display: block;">`;
-                        h += `<div class="account-card-row" style="margin-bottom: 12px;">`;
+                        h += `<div class="account-card-row">`;
                             h += `<div>`;
                                 h += `<span class="account-card-label">Elastos DID</span>`;
                                 h += `<div class="account-card-sublabel" style="color: #9ca3af;">Not linked</div>`;
                             h += `</div>`;
+                            h += `<button id="tether-did-btn" class="button account-btn">Tether DID</button>`;
                         h += `</div>`;
-                        h += `<div style="font-size: 12px; color: #6b7280; margin-bottom: 12px;">`;
+                        h += `<div style="font-size: 12px; color: #6b7280; margin-top: 8px;">`;
                             h += `Link your Elastos DID to unlock:`;
                             h += `<ul style="margin: 8px 0 0 16px; padding: 0;">`;
                                 h += `<li>View Mainchain ELA, Bitcoin, and Tron balances</li>`;
@@ -543,32 +544,31 @@ export default {
                                 h += `<li>Verifiable credentials (coming soon)</li>`;
                             h += `</ul>`;
                         h += `</div>`;
-                        h += `<button id="tether-did-btn" class="button account-btn">Tether DID</button>`;
                     h += `</div>`;
                     
                     // Tethered state (hidden by default)
                     h += `<div id="elastos-did-tethered" style="display: none;">`;
-                        h += `<div class="account-card-row" style="margin-bottom: 12px;">`;
+                        h += `<div class="account-card-row">`;
                             h += `<div style="flex: 1; min-width: 0;">`;
                                 h += `<span class="account-card-label" style="color: #22c55e;">✓ DID Tethered</span>`;
                                 h += `<div id="elastos-did-value" class="account-card-value" style="margin-top: 4px;">did:elastos:...</div>`;
+                                h += `<div style="font-size: 12px; color: #6b7280; margin-top: 8px;">`;
+                                    h += `<strong>Connected Wallets:</strong>`;
+                                    h += `<div id="elastos-connected-wallets" style="margin-top: 8px; font-family: monospace; font-size: 11px;">`;
+                                        h += `<div style="margin-bottom: 4px;">• ESC: <span id="elastos-esc-addr">Loading...</span></div>`;
+                                        h += `<div style="margin-bottom: 4px;">• Mainchain: <span id="elastos-mainchain-addr">Loading...</span></div>`;
+                                        h += `<div style="margin-bottom: 4px;">• Bitcoin: <span id="elastos-btc-addr">Loading...</span></div>`;
+                                        h += `<div>• Tron: <span id="elastos-tron-addr">Loading...</span></div>`;
+                                    h += `</div>`;
+                                h += `</div>`;
                             h += `</div>`;
-                            h += `<span class="copy-btn copy-did-btn" title="Copy DID">`;
-                                h += `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
-                            h += `</span>`;
-                        h += `</div>`;
-                        
-                        h += `<div style="font-size: 12px; color: #6b7280; margin-bottom: 12px;">`;
-                            h += `<strong>Connected Wallets:</strong>`;
-                            h += `<div id="elastos-connected-wallets" style="margin-top: 8px; font-family: monospace; font-size: 11px;">`;
-                                h += `<div style="margin-bottom: 4px;">• ESC: <span id="elastos-esc-addr">Loading...</span></div>`;
-                                h += `<div style="margin-bottom: 4px;">• Mainchain: <span id="elastos-mainchain-addr">Loading...</span></div>`;
-                                h += `<div style="margin-bottom: 4px;">• Bitcoin: <span id="elastos-btc-addr">Loading...</span></div>`;
-                                h += `<div>• Tron: <span id="elastos-tron-addr">Loading...</span></div>`;
+                            h += `<div style="display: flex; gap: 6px; align-items: flex-start;">`;
+                                h += `<span class="copy-btn copy-did-btn" title="Copy DID">`;
+                                    h += `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
+                                h += `</span>`;
+                                h += `<button id="untether-did-btn" class="button account-btn" style="color: #dc2626;">Untether</button>`;
                             h += `</div>`;
                         h += `</div>`;
-                        
-                        h += `<button id="untether-did-btn" class="button account-btn" style="color: #dc2626;">Untether DID</button>`;
                     h += `</div>`;
                 h += `</div>`;
                 

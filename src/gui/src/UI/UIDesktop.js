@@ -2550,6 +2550,55 @@ $(document).on('click', '.user-options-menu-btn', async function (e) {
 
     let items = [];
     let parent_element = this;
+    
+    // Check if we're in PC2 mode
+    const isPC2Mode = window.api_origin && (
+        window.api_origin.includes('127.0.0.1:4200') || 
+        window.api_origin.includes('localhost:4200') ||
+        window.api_origin.includes('127.0.0.1:4202') ||
+        window.api_origin.includes('localhost:4202') ||
+        window.location.origin === window.api_origin
+    );
+    
+    // Fetch allowed wallets for account switcher (PC2 mode only)
+    let otherAccounts = [];
+    if (isPC2Mode && window.user && window.user.wallet_address) {
+        try {
+            const authToken = puter.authToken || window.auth_token;
+            const response = await fetch(`${window.api_origin}/api/access/list`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${authToken}`
+                },
+                credentials: 'include'
+            });
+            if (response.ok) {
+                const data = await response.json();
+                const currentWallet = window.user.wallet_address.toLowerCase();
+                const ownerWallet = (data.ownerWallet || '').toLowerCase();
+                const ownerProfilePicture = data.ownerProfilePicture || null;
+                
+                // Start with allowed wallets, filter out current user
+                otherAccounts = (data.wallets || []).filter(w => 
+                    w.wallet.toLowerCase() !== currentWallet
+                );
+                
+                // Add owner wallet if current user is NOT the owner
+                if (ownerWallet && ownerWallet !== currentWallet) {
+                    // Check if owner is already in the list (shouldn't be, but safety check)
+                    const ownerInList = otherAccounts.some(w => w.wallet.toLowerCase() === ownerWallet);
+                    if (!ownerInList) {
+                        otherAccounts.unshift({ wallet: ownerWallet, role: 'owner', profilePicture: ownerProfilePicture });
+                    }
+                }
+                
+                console.log('[PC2] Other accounts for switcher:', otherAccounts.length);
+            }
+        } catch (err) {
+            console.warn('[PC2] Failed to fetch allowed wallets for switcher:', err);
+        }
+    }
     //--------------------------------------------------
     // Save Session
     //--------------------------------------------------
@@ -2577,12 +2626,15 @@ $(document).on('click', '.user-options-menu-btn', async function (e) {
     // Current user's wallet addresses (if both exist, show both)
     // -------------------------------------------
     if (window.user && (window.user.wallet_address || window.user.smart_account_address)) {
-        // Show wallet_address (UAE wallet) first if it exists
+        // EOA Wallet icon (key symbol)
+        const eoaIconSvg = `<svg style="width:16px;height:16px;vertical-align:middle;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>`;
+        
+        // Show wallet_address (EOA wallet) first if it exists
         if (window.user.wallet_address) {
             const displayName = window.user.wallet_address.slice(0, 10) + '...' + window.user.wallet_address.slice(-8);
             items.push({
                 html: displayName,
-                icon: '✓',
+                icon: eoaIconSvg,
                 onClick: async function () {
                     // Already on this wallet, do nothing
                 }
@@ -2593,19 +2645,66 @@ $(document).on('click', '.user-options-menu-btn', async function (e) {
         if (window.user.smart_account_address) {
             const displayName = window.user.smart_account_address.slice(0, 10) + '...' + window.user.smart_account_address.slice(-8);
             const subtitle = '<span style="display:block;font-size:10px;color:#666;margin-top:2px;margin-left:0;padding-left:0;text-align:left;">UniversalX Smart Account</span>';
+            // Smart Account icon (shield with bolt)
+            const smartIconSvg = `<svg style="width:16px;height:16px;vertical-align:middle;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M13 6l-4 6h3l-1 6 4-6h-3l1-6z" fill="currentColor" stroke="none"/></svg>`;
             items.push({
                 html: displayName + subtitle,
-                icon: '',
+                icon: smartIconSvg,
                 onClick: async function () {
                     // Already on this account, do nothing
                 }
             });
         }
         
-        // Add separator if there are other logged in users
-        if (window.logged_in_users.length > 0) {
+        // Add separator if there are other logged in users or other accounts on node
+        if (window.logged_in_users.length > 0 || otherAccounts.length > 0) {
             items.push('-');
         }
+    }
+    
+    // -------------------------------------------
+    // Other accounts on this PC2 node (requires wallet sign to switch)
+    // -------------------------------------------
+    if (isPC2Mode && otherAccounts.length > 0) {
+        items.push({
+            html: '<span style="font-size:11px;color:#666;font-weight:500;">Switch Account</span>',
+            disabled: true
+        });
+        
+        otherAccounts.forEach(account => {
+            const walletAddr = account.wallet || account.address;
+            const displayAddr = walletAddr.slice(0, 8) + '...' + walletAddr.slice(-6);
+            const roleLabel = account.role === 'owner' 
+                ? '<span style="font-size:9px;background:#fef3c7;color:#92400e;padding:1px 4px;border-radius:2px;vertical-align:middle;margin-left:4px;">Owner</span>' 
+                : account.role === 'admin' 
+                    ? '<span style="font-size:9px;background:#dbeafe;color:#1d4ed8;padding:1px 4px;border-radius:2px;vertical-align:middle;margin-left:4px;">Admin</span>' 
+                    : '';
+            // Use profile picture only if it's a valid HTTP URL, otherwise default Elastos icon
+            const pp = account.profilePicture;
+            const isValidUrl = pp && (pp.startsWith('http://') || pp.startsWith('https://') || pp.startsWith('/ipfs/'));
+            const profilePicUrl = isValidUrl ? pp : '/images/elastos-icon-default.svg';
+            const accountIconHtml = `<img src="${profilePicUrl}" style="width:16px;height:16px;vertical-align:middle;border-radius:50%;" onerror="this.src='/images/elastos-icon-default.svg'">`;
+            items.push({
+                html: `<span style="vertical-align:middle;">${displayAddr}</span>${roleLabel}`,
+                icon: accountIconHtml,
+                onClick: async function () {
+                    // Log out and prompt to sign in with the selected wallet
+                    const confirmed = await UIAlert({
+                        message: `<p>Switch to account <strong>${displayAddr}</strong>?</p><p style="font-size:12px;color:#666;margin-top:8px;">You will need to sign in with this wallet to access this account.</p>`,
+                        buttons: [
+                            { label: 'Switch Account', value: 'switch', type: 'primary' },
+                            { label: 'Cancel' }
+                        ]
+                    });
+                    if (confirmed === 'switch') {
+                        // Clear current session and reload to login screen
+                        window.logout();
+                    }
+                }
+            });
+        });
+        
+        items.push('-');
     }
 
     // -------------------------------------------
@@ -2704,6 +2803,7 @@ $(document).on('click', '.user-options-menu-btn', async function (e) {
             {
                 html: i18n('settings'),
                 id: 'settings',
+                icon: `<svg style="width:16px;height:16px;vertical-align:middle;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
                 onClick: async function () {
                     UIWindowSettings();
                 }
@@ -2724,6 +2824,7 @@ $(document).on('click', '.user-options-menu-btn', async function (e) {
             {
                 html: i18n('task_manager'),
                 id: 'task_manager',
+                icon: `<svg style="width:16px;height:16px;vertical-align:middle;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>`,
                 onClick: async function () {
                     UIWindowTaskManager();
                 }
@@ -2748,6 +2849,7 @@ $(document).on('click', '.user-options-menu-btn', async function (e) {
             //--------------------------------------------------
             {
                 html: i18n('log_out'),
+                icon: `<svg style="width:16px;height:16px;vertical-align:middle;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`,
                 onClick: async function () {
                     // see if there are any open windows, if yes notify user
                     if ($('.window-app').length > 0) {

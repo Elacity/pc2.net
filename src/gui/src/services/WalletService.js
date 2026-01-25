@@ -1183,12 +1183,18 @@ class WalletService {
                 });
             }
             
-            // Also fetch common stablecoins for this network
+            // Also fetch common stablecoins/tokens for this network
             const stablecoins = this._getStablecoinAddresses(chainId);
             for (const stable of stablecoins) {
                 try {
                     const stableBalance = await this._getERC20BalanceWithFallback(chainId, address, stable.address, stable.decimals);
-                    if (stableBalance > 0.01) {
+                    // Show if balance > 0.01 OR if alwaysShow is true
+                    if (stableBalance > 0.01 || stable.alwaysShow) {
+                        // Get price from oracle for non-stablecoins
+                        let price = 1;
+                        if (stable.symbol === 'BTCD') {
+                            price = await this._getTokenPrice('BTCD');
+                        }
                         tokens.push({
                             symbol: stable.symbol,
                             name: stable.name,
@@ -1197,8 +1203,9 @@ class WalletService {
                             decimals: stable.decimals,
                             chainId: chainId,
                             network: chainInfo.name,
-                            usdValue: stableBalance, // Stablecoins ~$1
-                            price: 1,
+                            usdValue: stableBalance * price,
+                            price: price,
+                            icon: stable.icon || null,
                         });
                     }
                 } catch (e) {
@@ -1526,7 +1533,7 @@ class WalletService {
             12343: [],
             // Elastos PGP Chain (chainId 860621)
             860621: [
-                { symbol: 'BTCD', name: 'BTC Dollar', address: '0xF9BF836FEd97a9c9Bfe4D4c28316b9400C59Cc6B', decimals: 18 },
+                { symbol: 'BTCD', name: 'BTC Dollar', address: '0xF9BF836FEd97a9c9Bfe4D4c28316b9400C59Cc6B', decimals: 18, alwaysShow: true, icon: '/images/tokens/BTCD.webp' },
             ],
             // Ethereum (chainId 1)
             1: [

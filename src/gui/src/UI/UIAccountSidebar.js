@@ -1299,16 +1299,19 @@ function renderTokensList(tokens) {
     // Sort by USD value
     const sortedTokens = sortTokensByValue(tokens);
     
-    // Token image paths (relative to gui/src/images/tokens/)
+    // Token image paths (local images for common tokens)
     const tokenImages = {
-        'ELA': 'images/tokens/ELA.png',
-        'ETH': 'images/tokens/ETH.png',
-        'USDC': 'images/tokens/USDC.png',
-        'USDT': 'images/tokens/USDT.png',
-        'BNB': 'images/tokens/BNB.png',
-        'SOL': 'images/tokens/Sol.webp',
-        'BTC': 'images/tokens/BTC.svg',
-        'MATIC': 'images/tokens/ETH.png', // Fallback to ETH style
+        'ELA': '/images/tokens/ELA.png',
+        'ETH': '/images/tokens/ETH.png',
+        'USDC': '/images/tokens/USDC.png',
+        'USDT': '/images/tokens/USDT.png',
+        'BNB': '/images/tokens/BNB.png',
+        'SOL': '/images/tokens/Sol.webp',
+        'BTC': '/images/tokens/BTC.svg',
+        'PGA': '/images/tokens/PGP.webp',
+        'MATIC': '/images/tokens/ETH.png',
+        'POL': '/images/tokens/ETH.png',
+        'AVAX': '/images/tokens/ETH.png',
     };
     
     // Fallback styling for tokens without images
@@ -1319,12 +1322,16 @@ function renderTokensList(tokens) {
             'USDC': 'background:#2775ca;color:#fff;',
             'USDT': 'background:#26a17b;color:#fff;',
             'BNB': 'background:#f3ba2f;color:#000;',
+            'PGA': 'background:linear-gradient(135deg,#8B5CF6,#6D28D9);color:#fff;',
         };
         return styles[symbol] || 'background:rgba(255,255,255,0.1);color:#9ca3af;';
     };
     
-    const getTokenIconHtml = (symbol) => {
-        const imgPath = tokenImages[symbol];
+    // Get token icon HTML - uses local image, token.icon, or fallback
+    const getTokenIconHtml = (token) => {
+        const symbol = token.symbol || '';
+        // Priority: local image > token.icon property > fallback
+        const imgPath = tokenImages[symbol] || token.icon;
         if (imgPath) {
             return `<img src="${imgPath}" alt="${symbol}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" onerror="this.style.display='none';this.nextSibling.style.display='flex';" /><span style="display:none;width:100%;height:100%;align-items:center;justify-content:center;${getTokenIconStyle(symbol)}font-weight:600;font-size:12px;border-radius:50%;">${symbol ? symbol.slice(0, 2).toUpperCase() : '??'}</span>`;
         }
@@ -1336,7 +1343,7 @@ function renderTokensList(tokens) {
              data-token-address="${html_encode(token.address || '')}"
              data-chain-id="${html_encode(token.chainId || '')}">
             <div class="token-icon" style="display:flex;align-items:center;justify-content:center;overflow:hidden;">
-                ${getTokenIconHtml(token.symbol)}
+                ${getTokenIconHtml(token)}
             </div>
             <div class="token-info">
                 <span class="token-symbol">${html_encode(token.symbol || 'Unknown')}</span>

@@ -1,0 +1,69 @@
+From: PC2 Personal Cloud <team@pc2.net>
+Subject: [PATCH] feat(wallet): Add BTC and Tron address support to walletaccess intent
+
+This patch adds support for requesting Bitcoin and Tron wallet addresses
+through the walletaccess intent, enabling third-party apps to request
+these addresses alongside ELA mainchain and ESC addresses.
+
+## Motivation
+
+Third-party applications like PC2 (Personal Cloud 2) need to display
+multi-chain wallet balances for users who tether their Elastos DID.
+Currently, the walletaccess intent only supports:
+- elaaddress (ELA mainchain)
+- elaamount (ELA balance)
+- ethaddress (Elastos Smart Chain)
+
+This leaves Bitcoin and Tron addresses inaccessible through the intent
+system, even though Essentials already manages these wallets internally.
+
+## Changes
+
+1. `access.page.ts`: Add `btcaddress` and `tronaddress` cases to
+   `getClaimValue()` and `getClaimTitle()` methods
+2. Add translation keys for the new address types
+
+## Usage
+
+After this change, apps can request:
+```javascript
+{
+  elaaddress: true,
+  ethaddress: true,
+  btcaddress: true,    // NEW
+  tronaddress: true    // NEW
+}
+```
+
+---
+
+diff --git a/src/app/wallet/pages/intents/access/access.page.ts b/src/app/wallet/pages/intents/access/access.page.ts
+index abc1234..def5678 100644
+--- a/src/app/wallet/pages/intents/access/access.page.ts
++++ b/src/app/wallet/pages/intents/access/access.page.ts
+@@ -136,6 +136,12 @@ export class AccessPage implements OnInit {
+             case 'ethaddress':
+                 value = await this.getAddress(StandardCoinName.ETHSC);
+                 break;
++            case 'btcaddress':
++                value = await this.getAddress(StandardCoinName.BTC);
++                break;
++            case 'tronaddress':
++                value = await this.getAddress(StandardCoinName.TRON);
++                break;
+             default:
+                 Logger.log('wallet', 'Not support ', key);
+                 break;
+@@ -155,6 +161,12 @@ export class AccessPage implements OnInit {
+             case 'ethaddress':
+                 value = 'wallet.ethaddress';
+                 break;
++            case 'btcaddress':
++                value = 'wallet.btcaddress';
++                break;
++            case 'tronaddress':
++                value = 'wallet.tronaddress';
++                break;
+             default:
+                 Logger.log('wallet', 'Not support ', key);
+                 break;

@@ -226,11 +226,30 @@ class WalletService {
      * @returns {Array} List of available networks with chain info
      */
     getAvailableEOANetworks() {
-        return Object.keys(this.EOA_RPC_URLS).map(chainId => ({
-            chainId: parseInt(chainId),
-            ...(CHAIN_INFO[chainId] || { name: `Chain ${chainId}` }),
-            isSelected: parseInt(chainId) === this.selectedEOAChainId,
-        }));
+        // Define explicit order: Elastos ecosystem first, then major networks
+        const chainOrder = [
+            // Elastos Ecosystem (grouped)
+            20,      // Elastos (ESC)
+            22,      // Elastos (EID)
+            12343,   // Elastos (ECO)
+            860621,  // Elastos (PGP)
+            // Major EVM Networks
+            1,       // Ethereum
+            8453,    // Base
+            42161,   // Arbitrum
+            10,      // Optimism
+            137,     // Polygon
+            56,      // BNB Chain
+            43114,   // Avalanche
+        ];
+        
+        return chainOrder
+            .filter(chainId => this.EOA_RPC_URLS[chainId])
+            .map(chainId => ({
+                chainId: chainId,
+                ...(CHAIN_INFO[chainId] || { name: `Chain ${chainId}` }),
+                isSelected: chainId === this.selectedEOAChainId,
+            }));
     }
     
     /**

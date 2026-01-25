@@ -876,3 +876,276 @@ body {
     0% { background-position: 200% 0; }
     100% { background-position: -200% 0; }
 }
+
+/* Wallet Button */
+.wallet-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: 8px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-surface);
+    color: var(--text-secondary);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.wallet-btn:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+.wallet-btn.connected {
+    background: linear-gradient(135deg, #22c55e, #16a34a);
+    border-color: transparent;
+    color: white;
+}
+
+.wallet-label {
+    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+    .wallet-label {
+        display: none;
+    }
+    
+    .wallet-btn {
+        padding: 8px;
+    }
+}
+
+/* Vote Modal */
+.vote-modal-content {
+    max-width: 420px;
+}
+
+.vote-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+}
+
+.vote-proposal-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: var(--spacing-sm);
+}
+
+.vote-options {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+}
+
+.vote-option {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    padding: var(--spacing-md);
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.vote-option:hover {
+    border-color: var(--primary);
+    background: #f8fafc;
+}
+
+.vote-option.selected {
+    border-color: var(--primary);
+    background: #eff6ff;
+}
+
+.vote-option.approve.selected {
+    border-color: var(--success);
+    background: #f0fdf4;
+}
+
+.vote-option.reject.selected {
+    border-color: var(--error);
+    background: #fef2f2;
+}
+
+.vote-option.abstain.selected {
+    border-color: var(--text-muted);
+    background: #f8fafc;
+}
+
+.vote-option-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    background: var(--bg-page);
+}
+
+.vote-option.approve .vote-option-icon {
+    background: #dcfce7;
+}
+
+.vote-option.reject .vote-option-icon {
+    background: #fee2e2;
+}
+
+.vote-option.abstain .vote-option-icon {
+    background: #f1f5f9;
+}
+
+.vote-option-label {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.vote-option-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.vote-amount-section {
+    margin-top: var(--spacing-sm);
+}
+
+.vote-amount-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: var(--spacing-xs);
+}
+
+.vote-amount-input {
+    width: 100%;
+    padding: 12px 16px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    font-size: 16px;
+    background: var(--bg-page);
+    color: var(--text-primary);
+    transition: all 0.15s;
+}
+
+.vote-amount-input:focus {
+    outline: none;
+    border-color: var(--primary);
+    background: var(--bg-surface);
+}
+
+.vote-submit-btn {
+    width: 100%;
+    padding: 14px;
+    border: none;
+    border-radius: var(--radius-md);
+    background: var(--primary);
+    color: white;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    margin-top: var(--spacing-sm);
+}
+
+.vote-submit-btn:hover:not(:disabled) {
+    background: var(--primary-hover);
+}
+
+.vote-submit-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.vote-submit-btn.loading {
+    pointer-events: none;
+}
+
+.vote-error {
+    padding: var(--spacing-md);
+    background: #fef2f2;
+    border-radius: var(--radius-md);
+    color: var(--error);
+    font-size: 13px;
+    text-align: center;
+}
+
+.vote-success {
+    padding: var(--spacing-md);
+    background: #f0fdf4;
+    border-radius: var(--radius-md);
+    color: var(--success);
+    font-size: 13px;
+    text-align: center;
+}
+
+.vote-connect-prompt {
+    text-align: center;
+    padding: var(--spacing-lg);
+}
+
+.vote-connect-prompt p {
+    color: var(--text-muted);
+    margin-bottom: var(--spacing-md);
+}
+
+.vote-connect-btn {
+    padding: 12px 24px;
+    border: none;
+    border-radius: var(--radius-md);
+    background: var(--primary);
+    color: white;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.vote-connect-btn:hover {
+    background: var(--primary-hover);
+}
+
+/* Proposal Detail Vote Button */
+.detail-vote-section {
+    margin-top: var(--spacing-lg);
+    padding-top: var(--spacing-lg);
+    border-top: 1px solid var(--border-color);
+}
+
+.vote-now-btn {
+    width: 100%;
+    padding: 14px;
+    border: none;
+    border-radius: var(--radius-md);
+    background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+    color: white;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-sm);
+}
+
+.vote-now-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+}
+
+.vote-now-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}

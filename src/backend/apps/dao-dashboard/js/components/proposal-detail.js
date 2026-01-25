@@ -13,6 +13,9 @@ class ProposalDetail {
         const statusInfo = DAOApiClient.getStatusInfo(proposal.status);
         const votes = DAOApiClient.calculateVotes(proposal.voteResult);
         
+        // Check if voting is possible (only for active proposals)
+        const canVote = ['registered', 'cragreed', 'voteragreed'].includes(proposal.status);
+        
         return `
             <div class="detail-header">
                 <span class="proposal-status ${statusInfo.class}">${statusInfo.label}</span>
@@ -42,6 +45,18 @@ class ProposalDetail {
                        style="color: var(--primary); text-decoration: none; font-size: 13px;">
                         View on CyberRepublic →
                     </a>
+                </div>
+            ` : ''}
+
+            ${canVote ? `
+                <div class="detail-vote-section">
+                    <button class="vote-now-btn" data-proposal-hash="${proposal.proposalHash || proposal._id}">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                        </svg>
+                        Vote on This Proposal
+                    </button>
                 </div>
             ` : ''}
         `;

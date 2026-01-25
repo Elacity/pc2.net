@@ -13,6 +13,10 @@ class DAODashboard {
         this.searchQuery = '';
         this.searchTimeout = null;
         
+        // Voting state
+        this.currentVoteProposal = null;
+        this.selectedVoteType = null;
+        
         this.init();
     }
 
@@ -22,11 +26,40 @@ class DAODashboard {
         // Bind event handlers
         this.bindEvents();
         
+        // Initialize wallet
+        await this.initWallet();
+        
         // Load initial data
         await this.loadCRStage();
         await this.loadProposals();
         
         console.log('[DAO Dashboard] Ready');
+    }
+
+    async initWallet() {
+        try {
+            await window.daoWallet.init();
+            this.updateWalletUI();
+        } catch (error) {
+            console.error('[DAO Dashboard] Wallet init failed:', error);
+        }
+    }
+
+    updateWalletUI() {
+        const walletBtn = document.getElementById('walletBtn');
+        const walletLabel = document.getElementById('walletLabel');
+        
+        if (!walletBtn || !walletLabel) return;
+
+        const status = window.daoWallet.getStatus();
+        
+        if (status.connected) {
+            walletBtn.classList.add('connected');
+            walletLabel.textContent = DAOWalletService.truncateAddress(status.address);
+        } else {
+            walletBtn.classList.remove('connected');
+            walletLabel.textContent = 'Connect';
+        }
     }
 
     bindEvents() {
@@ -77,8 +110,163 @@ class DAODashboard {
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 this.closeModal();
+                this.closeVoteModal();
             }
         });
+
+        // Wallet button
+        document.getElementById('walletBtn')?.addEventListener('click', () => this.handleWalletClick());
+
+        // Vote modal
+        document.getElementById('closeVoteModal')?.addEventListener('click', () => this.closeVoteModal());
+        document.querySelector('#voteModal .modal-backdrop')?.addEventListener('click', () => this.closeVoteModal());
+    }
+
+    // ==================== WALLET ====================
+
+    async handleWalletClick() {
+        const status = window.daoWallet.getStatus();
+        
+        if (status.connected) {
+            // Show wallet info or disconnect option
+            if (confirm(`Connected: ${status.address}\n\nDisconnect wallet?`)) {
+                window.daoWallet.disconnect();
+                this.updateWalletUI();
+            }
+        } else {
+            // Connect wallet
+            const connected = await window.daoWallet.connect();
+            this.updateWalletUI();
+            
+            if (!connected) {
+                alert('Failed to connect wallet. Please try again or use Essentials wallet.');
+            }
+        }
+    }
+
+    // ==================== VOTING ====================
+
+    openVoteModal(proposal) {
+        this.currentVoteProposal = proposal;
+        this.selectedVoteType = null;
+        
+        const modal = document.getElementById('voteModal');
+        const modalBody = document.getElementById('voteModalBody');
+        
+        const walletStatus = window.daoWallet.getStatus();
+        modalBody.innerHTML = VoteModal.render(proposal, walletStatus);
+        
+        modal.classList.add('active');
+
+        // Bind vote option clicks
+        this.bindVoteModalEvents();
+    }
+
+    bindVoteModalEvents() {
+        // Vote options
+        document.querySelectorAll('#voteOptions .vote-option').forEach(option => {
+            option.addEventListener('click', (e) => {
+                const voteType = e.currentTarget.dataset.vote;
+                this.selectVoteOption(voteType);
+            });
+        });
+
+        // Submit button
+        document.getElementById('submitVoteBtn')?.addEventListener('click', () => this.submitVote());
+
+        // Connect button in modal
+        document.getElementById('voteConnectBtn')?.addEventListener('click', async () => {
+            await window.daoWallet.connect();
+            this.updateWalletUI();
+            // Re-render modal if connected
+            if (window.daoWallet.connected && this.currentVoteProposal) {
+                this.openVoteModal(this.currentVoteProposal);
+            }
+        });
+    }
+
+    selectVoteOption(voteType) {
+        this.selectedVoteType = voteType;
+
+        // Update UI
+        document.querySelectorAll('#voteOptions .vote-option').forEach(option => {
+            option.classList.remove('selected');
+            if (option.dataset.vote === voteType) {
+                option.classList.add('selected');
+            }
+        });
+
+        // Update submit button
+        const submitBtn = document.getElementById('submitVoteBtn');
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            const labels = { approve: 'Vote Approve', reject: 'Vote Reject', abstain: 'Vote Abstain' };
+            submitBtn.textContent = labels[voteType] || 'Submit Vote';
+        }
+    }
+
+    async submitVote() {
+        if (!this.currentVoteProposal || !this.selectedVoteType) {
+            return;
+        }
+
+        const amountInput = document.getElementById('voteAmount');
+        const amount = parseFloat(amountInput?.value || 0);
+
+        if (!amount || amount <= 0) {
+            this.showVoteMessage('Please enter a valid vote amount', 'error');
+            return;
+        }
+
+        const walletStatus = window.daoWallet.getStatus();
+        if (amount > walletStatus.balance) {
+            this.showVoteMessage('Insufficient balance', 'error');
+            return;
+        }
+
+        // Show loading
+        const modalBody = document.getElementById('voteModalBody');
+        modalBody.innerHTML = VoteModal.renderLoading();
+
+        try {
+            const result = await window.daoWallet.voteOnProposal(
+                this.currentVoteProposal.proposalHash,
+                this.selectedVoteType,
+                amount
+            );
+
+            if (result.success) {
+                modalBody.innerHTML = VoteModal.renderSuccess(result.txid);
+                // Refresh wallet balance
+                await window.daoWallet.fetchBalance();
+                this.updateWalletUI();
+            } else {
+                throw new Error(result.error || 'Vote failed');
+            }
+        } catch (error) {
+            console.error('[DAO Dashboard] Vote failed:', error);
+            modalBody.innerHTML = VoteModal.renderError(error.message);
+        }
+    }
+
+    retryVote() {
+        if (this.currentVoteProposal) {
+            this.openVoteModal(this.currentVoteProposal);
+        }
+    }
+
+    showVoteMessage(message, type = 'error') {
+        const messageEl = document.getElementById('voteMessage');
+        if (messageEl) {
+            messageEl.innerHTML = `<div class="vote-${type}">${message}</div>`;
+        }
+    }
+
+    closeVoteModal() {
+        const modal = document.getElementById('voteModal');
+        modal.classList.remove('active');
+        this.currentVoteProposal = null;
+        this.selectedVoteType = null;
     }
 
     // ==================== TAB MANAGEMENT ====================
@@ -250,8 +438,20 @@ class DAODashboard {
                 throw new Error('Proposal not found');
             }
 
+            // Store proposal for voting
+            this.currentDetailProposal = proposal;
+
             modalTitle.textContent = proposal.title || 'Proposal Details';
             modalBody.innerHTML = ProposalDetail.render(proposal);
+
+            // Bind vote button
+            const voteBtn = modalBody.querySelector('.vote-now-btn');
+            if (voteBtn) {
+                voteBtn.addEventListener('click', () => {
+                    this.closeModal();
+                    this.openVoteModal(proposal);
+                });
+            }
 
         } catch (error) {
             console.error('[DAO Dashboard] Failed to load proposal detail:', error);

@@ -20,7 +20,7 @@ class VoteModal {
                 
                 <div class="vote-options" id="voteOptions">
                     <div class="vote-option approve" data-vote="approve">
-                        <div class="vote-option-icon">✓</div>
+                        <div class="vote-option-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></div>
                         <div>
                             <div class="vote-option-label">Approve</div>
                             <div class="vote-option-desc">Support this proposal</div>
@@ -28,7 +28,7 @@ class VoteModal {
                     </div>
                     
                     <div class="vote-option reject" data-vote="reject">
-                        <div class="vote-option-icon">✗</div>
+                        <div class="vote-option-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6L6 18M6 6l12 12"/></svg></div>
                         <div>
                             <div class="vote-option-label">Reject</div>
                             <div class="vote-option-desc">Vote against this proposal</div>
@@ -36,7 +36,7 @@ class VoteModal {
                     </div>
                     
                     <div class="vote-option abstain" data-vote="abstain">
-                        <div class="vote-option-icon">−</div>
+                        <div class="vote-option-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12h14"/></svg></div>
                         <div>
                             <div class="vote-option-label">Abstain</div>
                             <div class="vote-option-desc">Neither approve nor reject</div>
@@ -101,7 +101,7 @@ class VoteModal {
     static renderSuccess(txid) {
         return `
             <div class="vote-success">
-                <div style="font-size: 48px; margin-bottom: 16px;">✓</div>
+                <div style="margin-bottom: 16px;"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="16 8 10 16 7 13"/></svg></div>
                 <h3 style="margin-bottom: 8px;">Vote Submitted!</h3>
                 <p style="margin-bottom: 16px;">Your vote has been recorded on the blockchain.</p>
                 ${txid ? `
@@ -122,7 +122,7 @@ class VoteModal {
     static renderError(message) {
         return `
             <div class="vote-error">
-                <div style="font-size: 48px; margin-bottom: 16px;">⚠️</div>
+                <div style="margin-bottom: 16px;"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="1.5"><path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
                 <h3 style="margin-bottom: 8px;">Vote Failed</h3>
                 <p>${this.escapeHtml(message)}</p>
                 <button class="vote-submit-btn" onclick="window.daoApp.retryVote()" style="margin-top: 16px;">

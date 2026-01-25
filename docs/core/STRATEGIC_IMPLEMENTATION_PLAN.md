@@ -2241,6 +2241,13 @@ Local Server (localhost:4200)
 
 ## 🔧 Development Workflow & Multi-Level Change Process
 
+> **CRITICAL REMINDER (Added 2026-01-25):** When running `npm start` in pc2-node, the server executes compiled JavaScript from `dist/`, NOT the TypeScript source. After ANY code changes:
+> 1. Run `npm run build` in pc2-node to recompile
+> 2. **RESTART the server** - the running process caches old code
+> 3. Hard refresh browser (Cmd+Shift+R)
+>
+> The `tsx watch` dev mode (`npm run dev`) auto-reloads on file changes, but production mode (`npm start`) does NOT.
+
 ### Critical Lesson: Multi-Level Architecture Requires Multi-Level Updates
 
 **Problem:** PC2 Node uses a **three-layer architecture** that requires changes at multiple levels:

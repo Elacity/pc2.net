@@ -34,6 +34,8 @@ import UIPopover from './UI/UIPopover.js';
 import socialLink from './helpers/socialLink.js';
 import UIWindowEmailConfirmationRequired from './UI/UIWindowEmailConfirmationRequired.js';
 import UIWindowSaveAccount from './UI/UIWindowSaveAccount.js';
+import walletService from './services/WalletService.js';
+import { showDIDTetherModal } from './UI/Settings/UITabAccount.js';
 
 import { PROCESS_IPC_ATTACHED } from './definitions.js';
 
@@ -203,6 +205,70 @@ const ipc_listener = async (event, handled) => {
     // Dispatch custom event so that extensions can listen to it
     // --------------------------------------------------------
     window.dispatchEvent(new CustomEvent('ipc:message', { detail: event.data }));
+
+    //--------------------------------------------------------
+    // DAO Wallet Request - Handle requests from DAO Dashboard app
+    //--------------------------------------------------------
+    if ( event.data.type === 'dao-wallet-request' ) {
+        const messageId = event.data.messageId;
+        const action = event.data.action;
+        
+        console.log('[IPC] DAO Wallet request:', action, messageId);
+        
+        try {
+            let result = null;
+            
+            switch (action) {
+                case 'getTetheredDID': {
+                    // Get tethered DID from walletService
+                    const tetheredDID = walletService.getTetheredDID();
+                    const wallets = walletService.getTetheredWallets();
+                    result = tetheredDID ? {
+                        did: tetheredDID.did,
+                        wallets: wallets
+                    } : null;
+                    break;
+                }
+                
+                case 'openDIDTether': {
+                    // Open the DID tether modal
+                    await showDIDTetherModal();
+                    // After tethering, return the new DID info
+                    const tetheredDID = walletService.getTetheredDID();
+                    const wallets = walletService.getTetheredWallets();
+                    result = tetheredDID ? {
+                        did: tetheredDID.did,
+                        wallets: wallets
+                    } : null;
+                    break;
+                }
+                
+                case 'signDigest': {
+                    // Sign a digest using Essentials
+                    // For now, return an error - this requires Essentials integration
+                    throw new Error('Signing requires Essentials wallet');
+                }
+                
+                default:
+                    throw new Error(`Unknown DAO wallet action: ${action}`);
+            }
+            
+            // Send response back to DAO Dashboard
+            event.source.postMessage({
+                messageId: messageId,
+                result: result
+            }, event.origin);
+            
+        } catch (error) {
+            console.error('[IPC] DAO Wallet error:', error);
+            event.source.postMessage({
+                messageId: messageId,
+                error: error.message
+            }, event.origin);
+        }
+        
+        return; // Don't continue processing this message
+    }
 
     // todo validate all event.data stuff coming from the client (e.g. event.data.message, .msg, ...)
     //-------------------------------------------------

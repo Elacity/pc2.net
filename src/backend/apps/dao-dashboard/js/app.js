@@ -20,6 +20,20 @@ class DAODashboard {
         this.init();
     }
 
+    // ==================== PROGRESS BAR ====================
+
+    updateProgress(elementPrefix, percentage, text = null) {
+        const bar = document.getElementById(`${elementPrefix}ProgressBar`);
+        const textEl = document.getElementById(`${elementPrefix}ProgressText`);
+        
+        if (bar) {
+            bar.style.width = `${percentage}%`;
+        }
+        if (textEl) {
+            textEl.textContent = text || `${percentage}%`;
+        }
+    }
+
     async init() {
         console.log('[DAO Dashboard] Initializing...');
         
@@ -55,10 +69,17 @@ class DAODashboard {
         
         if (status.connected) {
             walletBtn.classList.add('connected');
-            walletLabel.textContent = DAOWalletService.truncateAddress(status.address);
+            // Show truncated DID if available, otherwise address
+            if (status.did) {
+                walletLabel.textContent = DAOWalletService.truncateDID(status.did);
+            } else if (status.address) {
+                walletLabel.textContent = DAOWalletService.truncateAddress(status.address);
+            } else {
+                walletLabel.textContent = 'Connected';
+            }
         } else {
             walletBtn.classList.remove('connected');
-            walletLabel.textContent = 'Connect';
+            walletLabel.textContent = 'Connect DID';
         }
     }
 
@@ -606,18 +627,25 @@ class DAODashboard {
 
         if (!grid) return;
 
-        // Show loading
+        // Show loading with progress bar
         loading.style.display = 'flex';
         empty.style.display = 'none';
         grid.innerHTML = '';
+        this.updateProgress('proposals', 0, '0%');
 
         try {
+            // Progress: 20% - starting request
+            this.updateProgress('proposals', 20, '20%');
+            
             let data;
             if (this.searchQuery) {
                 data = await window.daoApi.searchProposals(this.searchQuery, this.currentPage, this.resultsPerPage);
             } else {
                 data = await window.daoApi.getProposals(this.currentStatus, this.currentPage, this.resultsPerPage);
             }
+            
+            // Progress: 60% - data received
+            this.updateProgress('proposals', 60, '60%');
 
             this.totalProposals = data.total || 0;
             const proposals = data.proposals || [];
@@ -627,7 +655,16 @@ class DAODashboard {
             if (this.currentType !== 'all') {
                 filteredProposals = proposals.filter(p => p.type === this.currentType);
             }
+            
+            // Progress: 80% - processing complete
+            this.updateProgress('proposals', 80, '80%');
 
+            // Progress: 100% - done
+            this.updateProgress('proposals', 100, '100%');
+            
+            // Small delay so user sees 100%
+            await new Promise(r => setTimeout(r, 150));
+            
             loading.style.display = 'none';
 
             if (filteredProposals.length === 0) {
@@ -645,7 +682,7 @@ class DAODashboard {
             console.error('[DAO Dashboard] Failed to load proposals:', error);
             loading.style.display = 'none';
             empty.innerHTML = `
-                <div class="empty-icon">⚠️</div>
+                <div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="1.5"><path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
                 <h3>Failed to load proposals</h3>
                 <p>${error.message}</p>
                 <button onclick="window.daoApp.loadProposals()" style="margin-top: 16px; padding: 8px 16px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer;">
@@ -776,18 +813,27 @@ class DAODashboard {
 
         loading.style.display = 'flex';
         grid.innerHTML = '';
+        this.updateProgress('council', 0, '0%');
 
         try {
+            this.updateProgress('council', 30, '30%');
+            
             const data = await window.daoApi.getCouncilMembers();
+            
+            this.updateProgress('council', 70, '70%');
+            
             const members = data.council || data.crmembersinfo || [];
             const secretary = data.secretariat?.[0] || data.secretarygeneralinfo;
 
+            this.updateProgress('council', 100, '100%');
+            await new Promise(r => setTimeout(r, 150));
+            
             loading.style.display = 'none';
 
             if (members.length === 0) {
                 grid.innerHTML = `
                     <div class="empty-state" style="grid-column: 1/-1;">
-                        <div class="empty-icon">👥</div>
+                        <div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/><circle cx="19" cy="11" r="3"/><path d="M23 21v-1.5a3 3 0 00-3-3h-1"/></svg></div>
                         <h3>No council members found</h3>
                     </div>
                 `;
@@ -809,7 +855,7 @@ class DAODashboard {
             loading.style.display = 'none';
             grid.innerHTML = `
                 <div class="empty-state" style="grid-column: 1/-1;">
-                    <div class="empty-icon">⚠️</div>
+                    <div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="1.5"><path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
                     <h3>Failed to load council</h3>
                     <p>${error.message}</p>
                 </div>
@@ -827,17 +873,29 @@ class DAODashboard {
 
         loading.style.display = 'flex';
         grid.innerHTML = '';
+        this.updateProgress('suggestions', 0, '0%');
 
         try {
+            this.updateProgress('suggestions', 30, '30%');
+            
             const data = await window.daoApi.getSuggestions(1, 20);
-            const suggestions = data.list || [];
+            console.log('[DAO Dashboard] Suggestions API response:', data);
+            
+            this.updateProgress('suggestions', 70, '70%');
+            
+            // Try multiple response formats
+            const suggestions = data.list || data.suggestions || data.data?.list || [];
+            console.log('[DAO Dashboard] Parsed suggestions:', suggestions.length);
 
+            this.updateProgress('suggestions', 100, '100%');
+            await new Promise(r => setTimeout(r, 150));
+            
             loading.style.display = 'none';
 
             if (suggestions.length === 0) {
                 grid.innerHTML = `
                     <div class="empty-state" style="grid-column: 1/-1;">
-                        <div class="empty-icon">💡</div>
+                        <div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 18h6m-5 4h4m-2-15a6 6 0 016 6c0 2.22-1.21 4.16-3 5.19V20H9v-1.81C7.21 17.16 6 15.22 6 13a6 6 0 016-6z"/></svg></div>
                         <h3>No suggestions found</h3>
                     </div>
                 `;
@@ -852,7 +910,7 @@ class DAODashboard {
             loading.style.display = 'none';
             grid.innerHTML = `
                 <div class="empty-state" style="grid-column: 1/-1;">
-                    <div class="empty-icon">⚠️</div>
+                    <div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="1.5"><path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
                     <h3>Failed to load suggestions</h3>
                     <p>${error.message}</p>
                 </div>
@@ -873,9 +931,9 @@ class DAODashboard {
                 </div>
                 <h3 class="proposal-title">${ProposalCard.escapeHtml(suggestion.title || 'Untitled')}</h3>
                 <div class="proposal-meta">
-                    <span>👍 ${likes}</span>
-                    <span>👎 ${dislikes}</span>
-                    <span>👤 ${ProposalCard.escapeHtml(suggestion.proposer || 'Unknown')}</span>
+                    <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2" style="vertical-align: middle;"><path d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3H14z"/><path d="M7 22H4a2 2 0 01-2-2v-7a2 2 0 012-2h3"/></svg> ${likes}</span>
+                    <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--error)" stroke-width="2" style="vertical-align: middle;"><path d="M10 15v4a3 3 0 003 3l4-9V2H5.72a2 2 0 00-2 1.7l-1.38 9a2 2 0 002 2.3H10z"/><path d="M17 2h3a2 2 0 012 2v7a2 2 0 01-2 2h-3"/></svg> ${dislikes}</span>
+                    <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle;"><circle cx="12" cy="8" r="4"/><path d="M6 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/></svg> ${ProposalCard.escapeHtml(suggestion.proposer || 'Unknown')}</span>
                 </div>
             </div>
         `;

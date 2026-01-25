@@ -36,10 +36,10 @@ class ProposalCard {
                 <h3 class="proposal-title">${this.escapeHtml(proposal.title || 'Untitled')}</h3>
                 <div class="proposal-meta">
                     <span class="proposal-budget">
-                        💰 ${DAOApiClient.formatELA(totalBudget)} ELA
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle;"><circle cx="12" cy="12" r="10"/><path d="M12 6v12m-4-8h8m-6 4h4"/></svg> ${DAOApiClient.formatELA(totalBudget)} ELA
                     </span>
                     <span class="proposal-proposer">
-                        👤 ${this.escapeHtml(proposerName)}
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle;"><circle cx="12" cy="8" r="4"/><path d="M6 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/></svg> ${this.escapeHtml(proposerName)}
                     </span>
                 </div>
                 <div class="proposal-votes">
@@ -48,7 +48,7 @@ class ProposalCard {
                         <div class="votes-fill" style="width: ${votePercent}%"></div>
                     </div>
                     <div class="votes-count">
-                        <span>✓ ${votes.approve} approve</span>
+                        <span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="3" style="vertical-align: middle;"><polyline points="20 6 9 17 4 12"/></svg> ${votes.approve} approve</span>
                         <span>${votes.approve}/${votes.total}</span>
                     </div>
                 </div>

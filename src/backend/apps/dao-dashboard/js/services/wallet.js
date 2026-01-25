@@ -1,14 +1,15 @@
 /**
  * Wallet Service for DAO Dashboard
- * Handles wallet connections and transaction signing
+ * Integrates with PC2's existing DID tethering mechanism
  */
 
 class DAOWalletService {
     constructor() {
         this.connected = false;
+        this.did = null;
         this.address = null;
         this.balance = null;
-        this.chainId = 20; // Elastos mainchain
+        this.wallets = null;
         
         // Check for Essentials in-app browser
         this.isEssentials = this.detectEssentials();
@@ -24,24 +25,39 @@ class DAOWalletService {
     }
 
     /**
-     * Initialize wallet connection
+     * Initialize - check for existing tethered DID from PC2
      */
     async init() {
         console.log('[DAO Wallet] Initializing...');
         
+        // First, try to get tethered DID from parent PC2 window
+        try {
+            const didStatus = await this.sendToParent('getTetheredDID');
+            console.log('[DAO Wallet] Tethered DID status:', didStatus);
+            
+            if (didStatus && didStatus.did) {
+                this.connected = true;
+                this.did = didStatus.did;
+                this.wallets = didStatus.wallets || {};
+                this.address = didStatus.wallets?.ela || null;
+                console.log('[DAO Wallet] Connected via tethered DID:', this.did);
+                return true;
+            }
+        } catch (error) {
+            console.log('[DAO Wallet] No tethered DID available:', error.message);
+        }
+        
+        // If inside Essentials, try direct connection
         if (this.isEssentials) {
-            console.log('[DAO Wallet] Essentials detected');
+            console.log('[DAO Wallet] Essentials detected, trying direct connection');
             await this.connectEssentials();
-        } else {
-            console.log('[DAO Wallet] Standard browser - using Web3');
-            await this.checkWeb3Connection();
         }
 
         return this.connected;
     }
 
     /**
-     * Connect via Essentials Intent API
+     * Connect via Essentials Intent API (for in-app browser)
      */
     async connectEssentials() {
         try {
@@ -105,36 +121,42 @@ class DAOWalletService {
     }
 
     /**
-     * Request wallet connection
+     * Request DID connection - opens PC2's DID tether modal
      */
     async connect() {
         if (this.isEssentials) {
             return await this.connectEssentials();
         }
 
-        // For web, try to request connection from parent
+        // Request parent PC2 to open DID tether modal
         try {
-            const response = await this.sendToParent('connectWallet');
-            if (response && response.connected) {
-                this.address = response.address;
-                this.balance = response.balance;
+            console.log('[DAO Wallet] Requesting DID tether from parent...');
+            const response = await this.sendToParent('openDIDTether');
+            
+            if (response && response.did) {
                 this.connected = true;
+                this.did = response.did;
+                this.wallets = response.wallets || {};
+                this.address = response.wallets?.ela || null;
+                console.log('[DAO Wallet] DID tethered successfully:', this.did);
                 return true;
             }
         } catch (error) {
-            console.error('[DAO Wallet] Connection failed:', error);
+            console.error('[DAO Wallet] DID tether failed:', error);
         }
 
         return false;
     }
 
     /**
-     * Disconnect wallet
+     * Disconnect / untether DID
      */
     disconnect() {
         this.connected = false;
+        this.did = null;
         this.address = null;
         this.balance = null;
+        this.wallets = null;
     }
 
     /**
@@ -385,13 +407,30 @@ class DAOWalletService {
     }
 
     /**
+     * Truncate DID for display
+     */
+    static truncateDID(did) {
+        if (!did) return '';
+        if (did.length <= 20) return did;
+        // Format: did:elastos:abcd...wxyz
+        const parts = did.split(':');
+        if (parts.length === 3) {
+            const id = parts[2];
+            return `did:...${id.slice(-8)}`;
+        }
+        return `${did.slice(0, 10)}...${did.slice(-6)}`;
+    }
+
+    /**
      * Get connection status
      */
     getStatus() {
         return {
             connected: this.connected,
+            did: this.did,
             address: this.address,
             balance: this.balance,
+            wallets: this.wallets,
             isEssentials: this.isEssentials
         };
     }

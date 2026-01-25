@@ -174,8 +174,36 @@ class DAOApiClient {
         const cacheKey = `suggestions_${page}_${results}`;
         const url = `${this.crApiBase}/api/v2/suggestion/all_search?page=${page}&results=${results}`;
         
-        const response = await this.httpGet(url, cacheKey);
-        return response.data || { list: [], total: 0 };
+        try {
+            const response = await this.httpGet(url, cacheKey);
+            console.log('[DAO API] Suggestions raw response:', response);
+            
+            // Handle various response formats
+            if (response.data) {
+                return response.data;
+            }
+            if (response.list) {
+                return response;
+            }
+            if (Array.isArray(response)) {
+                return { list: response, total: response.length };
+            }
+            
+            // Try list_search endpoint as fallback
+            console.log('[DAO API] Trying fallback suggestions endpoint...');
+            const fallbackUrl = `${this.crApiBase}/api/v2/suggestion/list?page=${page}&results=${results}`;
+            const fallbackResponse = await this.httpGet(fallbackUrl);
+            console.log('[DAO API] Fallback response:', fallbackResponse);
+            
+            if (fallbackResponse.data) {
+                return fallbackResponse.data;
+            }
+            return fallbackResponse || { list: [], total: 0 };
+            
+        } catch (error) {
+            console.error('[DAO API] Suggestions fetch failed:', error);
+            return { list: [], total: 0 };
+        }
     }
 
     /**

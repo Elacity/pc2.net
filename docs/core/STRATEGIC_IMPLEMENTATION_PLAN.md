@@ -127,6 +127,18 @@ npm start
 
 Branch: `feature/elastos-ecosystem-integration`
 
+**Multi-Chain Wallet Support - Complete Elastos Ecosystem:**
+
+| Chain | Chain ID | Native Token | Status |
+|-------|----------|--------------|--------|
+| Elastos Smart Chain (ESC) | 20 | ELA | ✅ Already supported |
+| Elastos Identity Chain (EID) | 22 | ELA | ✅ Added |
+| Elastos PGP ECO Chain | 12343 | ELA | ✅ Added |
+| PGP Chain | 860621 | PGA | ✅ Added |
+| Ethereum, Base, Arbitrum, etc. | Various | ETH | ✅ Already supported |
+
+All Elastos EVM-compatible chains now available in ConnectKit network dropdown.
+
 **UI/UX Polish:**
 | Change | Description |
 |--------|-------------|
@@ -154,13 +166,14 @@ Branch: `feature/elastos-ecosystem-integration`
 - Includes bug report for `elaaddress` crash (issues disabled on repo)
 
 **Files Modified:**
+- `packages/particle-auth/src/particle/contexts/connectkit.tsx` - Added Elastos ecosystem chains (EID, ECO, PGP)
 - `src/gui/src/UI/Settings/UITabAccount.js` - Tooltips, DID modal rewrite
 - `pc2-node/frontend/gui.js` - PC2 self-hosted mode fixes
 - `docs/core/STRATEGIC_IMPLEMENTATION_PLAN.md` - Startup docs
 
 **Pending (Blocked on Upstream):**
 - Step 2 wallet address collection (requires Essentials `elaaddress` fix)
-- Multi-chain balance display (requires PR merge)
+- Multi-chain balance display from Essentials (requires PR merge)
 
 ---
 

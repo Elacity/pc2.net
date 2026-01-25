@@ -121,6 +121,49 @@ npm start
 
 ## 📊 Current State Assessment
 
+### 🎯 Recent Progress (2026-01-25)
+
+**Elastos Ecosystem Integration - Phase 1 Complete**
+
+Branch: `feature/elastos-ecosystem-integration`
+
+**UI/UX Polish:**
+| Change | Description |
+|--------|-------------|
+| Tooltips | Added working tooltips for Admin Wallet (EOA) and Smart Account using custom popup implementation |
+| DID Modal Z-index | Fixed DID tether modal appearing behind wallet sidebar by using custom body-appended modal with z-index 999999 |
+| Smart Account Tooltip | Updated to mention "owned by your EOA account" |
+| Startup Docs | Added comprehensive build/startup sequence to Quick Start section |
+
+**DID Tethering (Single-Step Flow):**
+- Simplified to single-step DID verification (Step 1 only)
+- Multi-chain wallet address collection (Step 2) preserved in code for future activation
+- Waiting on upstream Essentials fixes before enabling Step 2
+
+**Upstream Contributions to Elastos Essentials:**
+
+| Type | Status | Link |
+|------|--------|------|
+| Feature PR | ✅ Submitted | [PR #1: Add BTC/Tron address support](https://github.com/CyberRepublic/Elastos.Essentials.App/pull/1) |
+| Bug Report | ✅ Included in PR | `elaaddress` crash via `walletaccess` intent |
+
+**PR Details:**
+- Adds `btcaddress` and `tronaddress` cases to `walletaccess` intent
+- Uses existing `StandardCoinName.BTC` and `StandardCoinName.TRON` enums
+- 12 lines of additive code, no breaking changes
+- Includes bug report for `elaaddress` crash (issues disabled on repo)
+
+**Files Modified:**
+- `src/gui/src/UI/Settings/UITabAccount.js` - Tooltips, DID modal rewrite
+- `pc2-node/frontend/gui.js` - PC2 self-hosted mode fixes
+- `docs/core/STRATEGIC_IMPLEMENTATION_PLAN.md` - Startup docs
+
+**Pending (Blocked on Upstream):**
+- Step 2 wallet address collection (requires Essentials `elaaddress` fix)
+- Multi-chain balance display (requires PR merge)
+
+---
+
 ### 🎯 Recent Progress (2026-01-23)
 
 **Active Proxy URL Resolution Fix - ✅ COMPLETE**

@@ -1,0 +1,1 @@
+import{_ as r,h as n,r as s,X as i}from"./index-CrVsRjMv.js";function u(){const[t,o]=s.useState(i());return s.useEffect(()=>{const e=()=>{o(i())};return window.addEventListener("resize",e),()=>window.removeEventListener("resize",e)},[]),t}var l=r({"src/hooks/useIsMobile.ts"(){n()}});export{l as i,u};

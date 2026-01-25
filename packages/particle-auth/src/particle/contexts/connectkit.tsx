@@ -12,7 +12,17 @@ import {
   ConnectKitProvider, createConfig, ConnectKitOptions,
 } from '@particle-network/connectkit';
 import { wallet, EntryPosition } from '@particle-network/connectkit/wallet';
-import { defineChain } from '@particle-network/connectkit/chains';
+import { 
+  defineChain,
+  mainnet,
+  arbitrum,
+  polygon,
+  base,
+  optimism,
+  bsc,
+  avalanche,
+  linea,
+} from '@particle-network/connectkit/chains';
 import { authWalletConnectors } from '@particle-network/connectkit/auth';
 import { evmWalletConnectors, walletConnect } from '@particle-network/connectkit/evm';
 import { injected } from '../connectors/injected';
@@ -56,13 +66,18 @@ const elastos = /* #__PURE__ */ defineChain({
 });
 
 // Configure supported chains
-// @todo: MERGE <These mainnet entries are included here for testing purposes only.
-// The goal is to demonstrate to the user the ability to add predefined ERC-20 tokens
-// set by Particle Network in the wallet, as direct addition in the code does not work.
-// Please, DO NOT MERGE THIS BRANCH without carefully considering the implications,
-// as it may disrupt the current flow>.
+// Multi-chain support: Elastos + major EVM networks
+// Users can switch between networks in the wallet interface
 const chains: ConnectKitOptions['chains'] = [
-  elastos,
+  elastos,      // Elastos Smart Chain (primary)
+  mainnet,      // Ethereum
+  base,         // Base
+  arbitrum,     // Arbitrum One
+  optimism,     // Optimism
+  polygon,      // Polygon
+  bsc,          // BNB Smart Chain
+  avalanche,    // Avalanche C-Chain
+  linea,        // Linea
 ];
 
 /**

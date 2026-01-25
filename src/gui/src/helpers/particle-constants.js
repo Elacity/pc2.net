@@ -76,7 +76,7 @@ export const CHAIN_INFO = {
         color: '#121212',
     },
     20: {
-        name: 'Elastos (ESC)',
+        name: 'ESC',
         shortName: 'ESC',
         icon: 'https://static.particle.network/token-list/elastos/native.png',
         explorer: 'https://esc.elastos.io',
@@ -84,7 +84,7 @@ export const CHAIN_INFO = {
         color: '#F6921A',
     },
     22: {
-        name: 'Elastos (EID)',
+        name: 'EID Chain',
         shortName: 'EID',
         icon: 'https://static.particle.network/token-list/elastos/native.png',
         explorer: 'https://eid.elastos.io',
@@ -92,7 +92,7 @@ export const CHAIN_INFO = {
         color: '#F6921A',
     },
     12343: {
-        name: 'Elastos (ECO)',
+        name: 'ECO Chain',
         shortName: 'ECO',
         icon: 'https://static.particle.network/token-list/elastos/native.png',
         explorer: 'https://eco.elastos.io',
@@ -100,7 +100,7 @@ export const CHAIN_INFO = {
         color: '#F6921A',
     },
     860621: {
-        name: 'Elastos (PGP)',
+        name: 'PGP Chain',
         shortName: 'PGP',
         icon: 'https://static.particle.network/token-list/elastos/native.png',
         explorer: 'https://pgp.elastos.io',

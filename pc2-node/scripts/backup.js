@@ -4,9 +4,14 @@
  * Backup Script
  * 
  * Creates a timestamped backup archive containing:
- * - Database file (data/pc2.db)
+ * - Database file (data/pc2.db) + WAL files if present
  * - IPFS repository (data/ipfs/)
  * - User configuration (config/config.json if exists)
+ * - Encryption key (data/encryption.key) - CRITICAL for API key decryption
+ * - Node configuration (data/node-config.json) - Owner wallet, access control, tethered DIDs
+ * - Boson identity (data/identity.json) - Node keypair and DID
+ * - Username registration (data/username.json) - Registered Boson username
+ * - Setup completion flag (data/setup-complete) - Skips setup wizard on restore
  */
 
 import { createWriteStream, existsSync, statSync, mkdirSync, readFileSync } from 'fs';
@@ -27,6 +32,15 @@ const DB_PATH = process.env.DB_PATH || './data/pc2.db';
 const IPFS_REPO_PATH = process.env.IPFS_REPO_PATH || './data/ipfs';
 const CONFIG_PATH = './config/config.json';
 const BACKUPS_DIR = join(PROJECT_ROOT, 'backups');
+
+// Critical data files that must be backed up for complete restore
+const CRITICAL_DATA_FILES = [
+  { relative: 'data/encryption.key', description: 'Encryption key (CRITICAL - needed for API key decryption)', sensitive: true },
+  { relative: 'data/node-config.json', description: 'Node configuration (owner wallet, access control, tethered DIDs)' },
+  { relative: 'data/identity.json', description: 'Boson node identity (keypair and DID)' },
+  { relative: 'data/username.json', description: 'Registered Boson username' },
+  { relative: 'data/setup-complete', description: 'Setup completion flag' }
+];
 
 // Resolve absolute paths
 const dbPath = resolve(PROJECT_ROOT, DB_PATH);
@@ -138,6 +152,59 @@ async function createBackup() {
     console.log('ℹ️  User configuration not found (using defaults)');
   }
 
+  // Check SQLite WAL files (if database is in WAL mode)
+  const walPath = dbPath + '-wal';
+  const shmPath = dbPath + '-shm';
+  if (existsSync(walPath)) {
+    const walStats = statSync(walPath);
+    itemsToBackup.push({
+      path: walPath,
+      name: 'data/pc2.db-wal',
+      size: walStats.size
+    });
+    console.log(`✅ SQLite WAL file found: ${formatBytes(walStats.size)}`);
+  }
+  if (existsSync(shmPath)) {
+    const shmStats = statSync(shmPath);
+    itemsToBackup.push({
+      path: shmPath,
+      name: 'data/pc2.db-shm',
+      size: shmStats.size
+    });
+    console.log(`✅ SQLite SHM file found: ${formatBytes(shmStats.size)}`);
+  }
+
+  // Check critical data files for complete node restoration
+  console.log('\n📋 Checking critical node files...');
+  const criticalFilesFound = [];
+  const criticalFilesMissing = [];
+
+  for (const criticalFile of CRITICAL_DATA_FILES) {
+    const filePath = resolve(PROJECT_ROOT, criticalFile.relative);
+    if (existsSync(filePath)) {
+      const fileStats = statSync(filePath);
+      itemsToBackup.push({
+        path: filePath,
+        name: criticalFile.relative,
+        size: fileStats.size,
+        sensitive: criticalFile.sensitive
+      });
+      criticalFilesFound.push(criticalFile);
+      const sizeInfo = criticalFile.sensitive ? '(sensitive)' : formatBytes(fileStats.size);
+      console.log(`   ✅ ${criticalFile.description}: ${sizeInfo}`);
+    } else {
+      criticalFilesMissing.push(criticalFile);
+      console.log(`   ⚠️  ${criticalFile.description}: not found`);
+    }
+  }
+
+  // Warn if critical files are missing
+  if (criticalFilesMissing.length > 0) {
+    console.log(`\n⚠️  Warning: ${criticalFilesMissing.length} critical file(s) not found.`);
+    console.log('   This may be normal for a fresh install, but a restore from this backup');
+    console.log('   may not fully restore node identity, access control, or encrypted data.');
+  }
+
   // Check if we have anything to backup
   if (itemsToBackup.length === 0) {
     console.log('\n❌ No data found to backup.');
@@ -171,11 +238,54 @@ async function createBackup() {
     const backupStats = statSync(backupPath);
     const backupSize = backupStats.size;
 
-    console.log('✅ Backup created successfully!');
+    console.log('✅ Backup archive created!');
+
+    // Verify backup contents
+    console.log('\n🔍 Verifying backup contents...');
+    const { list: listTar } = await import('tar');
+    const archivedFiles = [];
+    await listTar({
+      file: backupPath,
+      onReadEntry: (entry) => {
+        archivedFiles.push(entry.path);
+      }
+    });
+
+    // Check that all critical files are in the archive
+    const missingFromArchive = [];
+    for (const item of itemsToBackup) {
+      const found = archivedFiles.some(f => f === item.name || f.startsWith(item.name + '/'));
+      if (!found) {
+        missingFromArchive.push(item.name);
+      }
+    }
+
+    if (missingFromArchive.length > 0) {
+      console.log('⚠️  Warning: Some files may be missing from archive:');
+      missingFromArchive.forEach(f => console.log(`   - ${f}`));
+    } else {
+      console.log('✅ All files verified in archive');
+    }
+
+    // Summary
     console.log(`\n📊 Backup Summary:`);
     console.log(`   File: ${backupFilename}`);
     console.log(`   Size: ${formatBytes(backupSize)}`);
     console.log(`   Location: ${backupPath}`);
+    console.log(`   Items backed up: ${itemsToBackup.length}`);
+    
+    // Show what's included
+    console.log('\n📦 Backup includes:');
+    console.log('   - Database (pc2.db)' + (existsSync(walPath) ? ' + WAL' : ''));
+    console.log('   - IPFS repository');
+    console.log('   - Server configuration');
+    if (criticalFilesFound.length > 0) {
+      console.log(`   - ${criticalFilesFound.length} critical node files:`);
+      criticalFilesFound.forEach(f => {
+        console.log(`     • ${f.relative.replace('data/', '')}`);
+      });
+    }
+    
     console.log(`\n💡 To restore this backup, run:`);
     console.log(`   npm run restore ${backupFilename}`);
 

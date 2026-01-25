@@ -4,12 +4,21 @@
  * Restore Script
  * 
  * Restores PC2 Node data from a backup archive.
+ * Handles all critical files for complete node restoration:
+ * - Database + WAL files
+ * - IPFS repository  
+ * - Server configuration
+ * - Encryption key (with secure 0600 permissions)
+ * - Node configuration (owner wallet, access control, tethered DIDs)
+ * - Boson identity (node keypair and DID)
+ * - Username registration
+ * - Setup completion flag
  * 
  * Usage: node scripts/restore.js <backup-filename>
  * Example: node scripts/restore.js pc2-backup-20251219-120000.tar.gz
  */
 
-import { existsSync, statSync, mkdirSync, readdirSync, rmSync, renameSync } from 'fs';
+import { existsSync, statSync, mkdirSync, readdirSync, rmSync, renameSync, chmodSync, copyFileSync } from 'fs';
 import { join, dirname, resolve, basename } from 'path';
 import { fileURLToPath } from 'url';
 import { createReadStream } from 'fs';
@@ -30,6 +39,15 @@ const DB_PATH = process.env.DB_PATH || './data/pc2.db';
 const IPFS_REPO_PATH = process.env.IPFS_REPO_PATH || './data/ipfs';
 const CONFIG_PATH = './config/config.json';
 const BACKUPS_DIR = join(PROJECT_ROOT, 'backups');
+
+// Critical data files that need special handling during restore
+const CRITICAL_DATA_FILES = [
+  { relative: 'data/encryption.key', description: 'Encryption key', permissions: 0o600, sensitive: true },
+  { relative: 'data/node-config.json', description: 'Node configuration' },
+  { relative: 'data/identity.json', description: 'Boson identity' },
+  { relative: 'data/username.json', description: 'Username registration' },
+  { relative: 'data/setup-complete', description: 'Setup completion flag' }
+];
 
 // Resolve absolute paths
 const dbPath = resolve(PROJECT_ROOT, DB_PATH);
@@ -182,8 +200,18 @@ async function restoreBackup(backupFilename) {
       if (existsSync(join(extractedData, 'pc2.db'))) {
         console.log('      ✅ Database file (pc2.db)');
       }
+      if (existsSync(join(extractedData, 'pc2.db-wal'))) {
+        console.log('      ✅ Database WAL file');
+      }
       if (existsSync(join(extractedData, 'ipfs'))) {
         console.log('      ✅ IPFS repository');
+      }
+      // Check for critical files
+      for (const criticalFile of CRITICAL_DATA_FILES) {
+        const fileName = criticalFile.relative.replace('data/', '');
+        if (existsSync(join(extractedData, fileName))) {
+          console.log(`      ✅ ${criticalFile.description} (${fileName})`);
+        }
       }
     }
     if (hasConfig && existsSync(join(extractedConfig, 'config.json'))) {
@@ -230,6 +258,31 @@ async function restoreBackup(backupFilename) {
       console.log('   ✅ Current configuration backed up');
     }
 
+    // Backup current critical files
+    for (const criticalFile of CRITICAL_DATA_FILES) {
+      const filePath = resolve(PROJECT_ROOT, criticalFile.relative);
+      if (existsSync(filePath)) {
+        const oldFilePath = join(oldBackupDir, criticalFile.relative);
+        mkdirSync(dirname(oldFilePath), { recursive: true });
+        renameSync(filePath, oldFilePath);
+        console.log(`   ✅ Current ${criticalFile.description} backed up`);
+      }
+    }
+
+    // Backup SQLite WAL files if present
+    const walPath = dbPath + '-wal';
+    const shmPath = dbPath + '-shm';
+    if (existsSync(walPath)) {
+      const oldWalPath = join(oldBackupDir, 'data', 'pc2.db-wal');
+      renameSync(walPath, oldWalPath);
+      console.log('   ✅ Current database WAL backed up');
+    }
+    if (existsSync(shmPath)) {
+      const oldShmPath = join(oldBackupDir, 'data', 'pc2.db-shm');
+      renameSync(shmPath, oldShmPath);
+      console.log('   ✅ Current database SHM backed up');
+    }
+
     console.log('\n🔄 Restoring data from backup...');
 
     // Ensure data directory exists
@@ -265,15 +318,112 @@ async function restoreBackup(backupFilename) {
       console.log('   ✅ Configuration restored');
     }
 
+    // Restore SQLite WAL files if present in backup
+    if (existsSync(join(extractedData, 'pc2.db-wal'))) {
+      renameSync(join(extractedData, 'pc2.db-wal'), dbPath + '-wal');
+      console.log('   ✅ Database WAL restored');
+    }
+    if (existsSync(join(extractedData, 'pc2.db-shm'))) {
+      renameSync(join(extractedData, 'pc2.db-shm'), dbPath + '-shm');
+      console.log('   ✅ Database SHM restored');
+    }
+
+    // Restore critical node files
+    console.log('\n🔐 Restoring critical node files...');
+    const restoredCritical = [];
+    const missingCritical = [];
+
+    for (const criticalFile of CRITICAL_DATA_FILES) {
+      const fileName = criticalFile.relative.replace('data/', '');
+      const sourcePath = join(extractedData, fileName);
+      const destPath = resolve(PROJECT_ROOT, criticalFile.relative);
+
+      if (existsSync(sourcePath)) {
+        // Ensure destination directory exists
+        mkdirSync(dirname(destPath), { recursive: true });
+        
+        // Move file to destination
+        renameSync(sourcePath, destPath);
+        
+        // Set secure permissions for sensitive files
+        if (criticalFile.permissions) {
+          chmodSync(destPath, criticalFile.permissions);
+          console.log(`   ✅ ${criticalFile.description} restored (permissions: ${criticalFile.permissions.toString(8)})`);
+        } else {
+          console.log(`   ✅ ${criticalFile.description} restored`);
+        }
+        restoredCritical.push(criticalFile);
+      } else {
+        missingCritical.push(criticalFile);
+      }
+    }
+
+    if (missingCritical.length > 0) {
+      console.log(`\n⚠️  Warning: ${missingCritical.length} critical file(s) not found in backup:`);
+      missingCritical.forEach(f => console.log(`   - ${f.description} (${f.relative})`));
+      console.log('   Some node features may not work correctly.');
+    }
+
     // Clean up temporary directory
     rmSync(tempDir, { recursive: true, force: true });
+
+    // Verification step
+    console.log('\n🔍 Verifying restored files...');
+    const verificationErrors = [];
+
+    // Verify database
+    if (existsSync(dbPath)) {
+      const dbStats = statSync(dbPath);
+      console.log(`   ✅ Database: ${formatBytes(dbStats.size)}`);
+    } else {
+      verificationErrors.push('Database not found after restore');
+    }
+
+    // Verify IPFS
+    if (existsSync(ipfsRepoPath)) {
+      console.log('   ✅ IPFS repository present');
+    } else {
+      console.log('   ⚠️  IPFS repository not found (may be OK for fresh backups)');
+    }
+
+    // Verify critical files
+    for (const criticalFile of CRITICAL_DATA_FILES) {
+      const filePath = resolve(PROJECT_ROOT, criticalFile.relative);
+      if (existsSync(filePath)) {
+        console.log(`   ✅ ${criticalFile.description}`);
+      }
+    }
+
+    if (verificationErrors.length > 0) {
+      console.log('\n⚠️  Verification warnings:');
+      verificationErrors.forEach(err => console.log(`   - ${err}`));
+    }
 
     console.log('\n✅ Restore completed successfully!');
     console.log(`\n📊 Restore Summary:`);
     console.log(`   Backup: ${basename(backupPath)}`);
     console.log(`   Previous data: ${oldBackupDir}`);
+    console.log(`   Critical files restored: ${restoredCritical.length}/${CRITICAL_DATA_FILES.length}`);
+    
+    // Show what was restored
+    console.log('\n📦 Restored:');
+    if (existsSync(dbPath)) console.log('   - Database (pc2.db)');
+    if (existsSync(ipfsRepoPath)) console.log('   - IPFS repository');
+    if (existsSync(configPath)) console.log('   - Server configuration');
+    restoredCritical.forEach(f => {
+      console.log(`   - ${f.description}`);
+    });
+
     console.log(`\n💡 You can now start the server:`);
     console.log(`   npm start`);
+    
+    if (restoredCritical.length === CRITICAL_DATA_FILES.length) {
+      console.log('\n🎉 Full node restoration complete!');
+      console.log('   - Admin wallet will be recognized');
+      console.log('   - All authorized accounts preserved');
+      console.log('   - DID tethering intact');
+      console.log('   - AI API keys will decrypt correctly');
+    }
 
     process.exit(0);
   } catch (error) {

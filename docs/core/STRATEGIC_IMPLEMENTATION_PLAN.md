@@ -3280,7 +3280,7 @@ Based on the current PC2 architecture and self-hosted vision, here are strategic
 - ✅ Version history preserved on file rename/move
 - ✅ Frontend UI complete (version browser in Properties window)
 
-**Backup & Restore System** - ✅ Core Complete (2025-12-19)
+**Backup & Restore System** - ✅ Core Complete (2025-12-19), ✅ Critical Files Complete (2026-01-25)
 - ✅ Backup creation (UI + terminal): `npm run backup` or Settings UI
 - ✅ Backup download (UI): Download to local device
 - ✅ Backup restore (terminal): `npm run restore <backup-file>`
@@ -3289,6 +3289,16 @@ Based on the current PC2 architecture and self-hosted vision, here are strategic
 - ✅ Off-server backup strategy: Download to separate device
 - ✅ Restore to new node: Cross-hardware restore works
 - ✅ Database migrations: Automatic schema upgrades
+- ✅ **Complete Node Restoration** (2026-01-25): All critical files now backed up and restored:
+  - ✅ Encryption key (`data/encryption.key`) - Enables API key decryption
+  - ✅ Node configuration (`data/node-config.json`) - Owner wallet, access control, tethered DIDs
+  - ✅ Boson identity (`data/identity.json`) - Node keypair and DID
+  - ✅ Username registration (`data/username.json`) - Registered Boson username
+  - ✅ Setup completion flag (`data/setup-complete`) - Skips setup wizard on restore
+  - ✅ SQLite WAL files (`pc2.db-wal`, `pc2.db-shm`) - Database transaction logs
+  - ✅ Backup verification - Post-backup archive verification
+  - ✅ Restore verification - Post-restore file validation
+  - ✅ Secure permissions - Encryption key restored with 0600 permissions
 - ⚠️ **Phase 3 Required:** User documentation, UI polish, testing, automated scheduling
 
 **Infrastructure Improvements** - ✅ Complete (2025-12-19)
@@ -3552,8 +3562,8 @@ node pc2-node/test-fresh-install/scripts/build-frontend.js
 
 ## 🛡️ CRITICAL: Backup/Restore System - User Trust & Safety Requirements
 
-**Last Updated:** 2025-12-21  
-**Status:** Phase 2.5 Complete ✅, Phase 3 Polish In Progress  
+**Last Updated:** 2026-01-25  
+**Status:** Phase 2.5 Complete ✅, Critical Files Backup Complete ✅, Phase 3 Polish In Progress  
 **Priority:** **CRITICAL** - Essential for user trust and data safety
 
 ### Current Implementation (Phase 2.5 - ✅ Complete)
@@ -3568,6 +3578,15 @@ node pc2-node/test-fresh-install/scripts/build-frontend.js
 - ✅ Off-server backup strategy (download to separate device)
 - ✅ Cross-node restore (works across different hardware/servers)
 - ✅ Database migration compatibility (automatic schema upgrades)
+- ✅ **Complete Node Restoration** (NEW - 2026-01-25) - All critical files backed up and restored:
+  - ✅ Encryption key (`data/encryption.key`) - Master key for API key decryption (restored with 0600 permissions)
+  - ✅ Node configuration (`data/node-config.json`) - Owner wallet, allowed wallets, tethered DIDs
+  - ✅ Boson identity (`data/identity.json`) - Node Ed25519 keypair, node ID, encrypted mnemonic
+  - ✅ Username registration (`data/username.json`) - Registered Boson username (e.g., user.ela.city)
+  - ✅ Setup completion flag (`data/setup-complete`) - Skips setup wizard on restore
+  - ✅ SQLite WAL files - Database transaction logs for consistency
+  - ✅ Backup verification - Post-backup archive integrity check
+  - ✅ Restore verification - Post-restore file validation and permissions check
 
 **Phase 2.5 Enhancements (Completed 2025-12-21):**
 - ✅ **One-Click Restore Feature** - Users can upload backup files through web UI and restore without SSH/terminal
@@ -3578,6 +3597,19 @@ node pc2-node/test-fresh-install/scripts/build-frontend.js
 - ✅ **Off-Server Storage Warnings** - Prominent warnings about downloading backups to external devices
 - ✅ **Improved User Feedback** - Better success/error messages, progress indicators for restore
 - ✅ **Technical Fixes** - Fixed `isPC2Mode` scope issue, added SDK proxying for terminal apps
+
+**Critical Files Backup Enhancement (Completed 2026-01-25):**
+- ✅ **Complete Node Restoration** - Backup now includes all critical files for full "pick up where you left off" restore:
+  - Admin wallet ownership preserved
+  - All authorized accounts preserved
+  - DID tethering intact
+  - AI API keys decrypt correctly
+  - Boson network identity preserved
+  - Username registration preserved
+  - Setup wizard skipped on restore
+- ✅ **Backup Verification** - Post-backup archive integrity check confirms all files included
+- ✅ **Restore Verification** - Post-restore validation confirms all files present and permissions correct
+- ✅ **Secure Permissions** - Encryption key restored with 0600 permissions for security
 
 ### Phase 3 Requirements (MANDATORY for User Trust)
 

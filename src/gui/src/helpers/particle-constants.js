@@ -237,6 +237,7 @@ export const TOKEN_ICONS = {
     'bnb': '/images/tokens/BNB.png',
     'ela': '/images/tokens/ELA.png',
     'pga': '/images/tokens/PGP.webp',
+    'btcd': '/images/tokens/BTCD.webp',
 };
 
 // ============================================

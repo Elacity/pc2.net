@@ -1524,8 +1524,10 @@ class WalletService {
             22: [],
             // Elastos ECO Chain (chainId 12343) - Check for tokens
             12343: [],
-            // Elastos PGP Chain (chainId 860621) - Check for tokens
-            860621: [],
+            // Elastos PGP Chain (chainId 860621)
+            860621: [
+                { symbol: 'BTCD', name: 'BTC Dollar', address: '0xF9BF836FEd97a9c9Bfe4D4c28316b9400C59Cc6B', decimals: 18 },
+            ],
             // Ethereum (chainId 1)
             1: [
                 { symbol: 'USDC', name: 'USD Coin', address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', decimals: 6 },
@@ -1622,9 +1624,9 @@ class WalletService {
                 return price;
             }
             
-            // For PGA, try DexScreener (if there's a trading pair)
+            // For PGA, use the PGP chain price oracle
             if (symbol === 'PGA') {
-                const price = await this._getDexScreenerPrice('elastos', '0x0000000000000000000000000000000000000000');
+                const price = await this._getPGPOraclePrice();
                 if (price > 0) {
                     this._cachePrice(cacheKey, price);
                     return price;
@@ -1679,6 +1681,39 @@ class WalletService {
             return 0;
         } catch (error) {
             logger.warn('DexScreener price fetch failed:', error.message);
+            return 0;
+        }
+    }
+    
+    /**
+     * Get PGA price from PGP chain oracle contract
+     * Oracle: 0xAaCb8fD571F1dA27D5F7af9CdaF0158245f4d915
+     * Wrapped PGA: 0x1369a5f999618607bB0bb92892Ef69e2233F88f8
+     */
+    async _getPGPOraclePrice() {
+        try {
+            const WPGA_ADDRESS = '0x1369a5f999618607bB0bb92892Ef69e2233F88f8';
+            const ORACLE_ADDRESS = '0xAaCb8fD571F1dA27D5F7af9CdaF0158245f4d915';
+            
+            // getprice(address) function signature
+            const data = '0x41976e09' + WPGA_ADDRESS.toLowerCase().replace('0x', '').padStart(64, '0');
+            
+            const result = await this.rpcCallWithFallback(860621, {
+                jsonrpc: '2.0',
+                method: 'eth_call',
+                params: [{ to: ORACLE_ADDRESS, data }, 'latest'],
+                id: 1,
+            });
+            
+            if (result.result && result.result !== '0x') {
+                const priceWei = BigInt(result.result);
+                const price = Number(priceWei) / 1e18;
+                logger.log('PGA price from oracle:', price);
+                return price;
+            }
+            return 0;
+        } catch (error) {
+            logger.warn('PGP oracle price fetch failed:', error.message);
             return 0;
         }
     }

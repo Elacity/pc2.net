@@ -1309,6 +1309,7 @@ function renderTokensList(tokens) {
         'SOL': '/images/tokens/Sol.webp',
         'BTC': '/images/tokens/BTC.svg',
         'PGA': '/images/tokens/PGP.webp',
+        'BTCD': '/images/tokens/BTCD.webp',
         'MATIC': '/images/tokens/ETH.png',
         'POL': '/images/tokens/ETH.png',
         'AVAX': '/images/tokens/ETH.png',
@@ -1323,6 +1324,7 @@ function renderTokensList(tokens) {
             'USDT': 'background:#26a17b;color:#fff;',
             'BNB': 'background:#f3ba2f;color:#000;',
             'PGA': 'background:linear-gradient(135deg,#8B5CF6,#6D28D9);color:#fff;',
+            'BTCD': 'background:linear-gradient(135deg,#F7931A,#E87C00);color:#fff;',
         };
         return styles[symbol] || 'background:rgba(255,255,255,0.1);color:#9ca3af;';
     };

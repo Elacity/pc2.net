@@ -1,59 +1,99 @@
 /**
  * Proposal Card Component
- * Renders a proposal card in the grid
+ * Renders a proposal row in list view (CyberRepublic style)
  */
 
 class ProposalCard {
     /**
-     * Create proposal card HTML
+     * Create proposal row HTML (list view for desktop)
      * @param {Object} proposal - Proposal data
      * @returns {string} HTML string
      */
     static render(proposal) {
         const statusInfo = DAOApiClient.getStatusInfo(proposal.status);
-        const votes = DAOApiClient.calculateVotes(proposal.voteResult);
-        const votePercent = Math.round((votes.approve / votes.total) * 100);
+        const votes = this.parseVoteResult(proposal.voteResult);
+        const votePercent = votes.total > 0 ? ((votes.approve / votes.total) * 100).toFixed(1) : '0.0';
         
-        // Calculate total budget
-        let totalBudget = 0;
-        if (proposal.budgets && Array.isArray(proposal.budgets)) {
-            proposal.budgets.forEach(b => {
-                totalBudget += parseInt(b.amount || 0);
-            });
-        } else if (proposal.budgetAmount) {
-            totalBudget = parseInt(proposal.budgetAmount);
-        }
-
         const proposerName = proposal.proposer || proposal.proposerName || 'Unknown';
         const proposalId = proposal.vid || proposal.id || '--';
+        const proposalType = proposal.type || 'New Motion';
+        
+        // Format date
+        const dateStr = proposal.createdAt ? DAOApiClient.formatDate(proposal.createdAt) : '--';
+
+        // Generate 12 vote bars
+        const voteBarsHtml = this.renderVoteBars(votes.individual);
 
         return `
-            <div class="proposal-card" data-hash="${proposal.proposalHash || proposal._id}" data-id="${proposalId}">
-                <div class="proposal-header">
-                    <span class="proposal-status ${statusInfo.class}">${statusInfo.label}</span>
-                    <span class="proposal-id">#${proposalId}</span>
+            <div class="proposal-row" data-hash="${proposal.proposalHash || proposal._id}" data-id="${proposalId}">
+                <div class="proposal-col proposal-col-id">#${proposalId}</div>
+                <div class="proposal-col proposal-col-title">
+                    <a href="#" class="proposal-link">${this.escapeHtml(proposal.title || 'Untitled')}</a>
                 </div>
-                <h3 class="proposal-title">${this.escapeHtml(proposal.title || 'Untitled')}</h3>
-                <div class="proposal-meta">
-                    <span class="proposal-budget">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle;"><circle cx="12" cy="12" r="10"/><path d="M12 6v12m-4-8h8m-6 4h4"/></svg> ${DAOApiClient.formatELA(totalBudget)} ELA
-                    </span>
-                    <span class="proposal-proposer">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle;"><circle cx="12" cy="8" r="4"/><path d="M6 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/></svg> ${this.escapeHtml(proposerName)}
-                    </span>
+                <div class="proposal-col proposal-col-type">${this.escapeHtml(proposalType)}</div>
+                <div class="proposal-col proposal-col-proposer">${this.escapeHtml(proposerName)}</div>
+                <div class="proposal-col proposal-col-votes">
+                    <div class="vote-percent">${votePercent}%</div>
+                    <div class="vote-bars">${voteBarsHtml}</div>
                 </div>
-                <div class="proposal-votes">
-                    <div class="votes-label">Council Votes</div>
-                    <div class="votes-bar">
-                        <div class="votes-fill" style="width: ${votePercent}%"></div>
-                    </div>
-                    <div class="votes-count">
-                        <span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="3" style="vertical-align: middle;"><polyline points="20 6 9 17 4 12"/></svg> ${votes.approve} approve</span>
-                        <span>${votes.approve}/${votes.total}</span>
-                    </div>
+                <div class="proposal-col proposal-col-date">${dateStr}</div>
+                <div class="proposal-col proposal-col-status">
+                    <span class="status-badge ${statusInfo.class}">${statusInfo.label.toUpperCase()}</span>
                 </div>
             </div>
         `;
+    }
+
+    /**
+     * Parse vote result into individual votes
+     */
+    static parseVoteResult(voteResult) {
+        const result = { approve: 0, reject: 0, abstain: 0, total: 12, individual: [] };
+        
+        if (!voteResult || !Array.isArray(voteResult)) {
+            // No votes yet - all gray
+            for (let i = 0; i < 12; i++) {
+                result.individual.push('pending');
+            }
+            return result;
+        }
+
+        // Parse each vote
+        voteResult.forEach(vote => {
+            const value = vote.value?.toLowerCase() || '';
+            if (value === 'support' || value === 'approve') {
+                result.approve++;
+                result.individual.push('approve');
+            } else if (value === 'reject') {
+                result.reject++;
+                result.individual.push('reject');
+            } else if (value === 'abstain' || value === 'abstention') {
+                result.abstain++;
+                result.individual.push('abstain');
+            } else {
+                result.individual.push('pending');
+            }
+        });
+
+        // Fill remaining slots as pending
+        while (result.individual.length < 12) {
+            result.individual.push('pending');
+        }
+
+        return result;
+    }
+
+    /**
+     * Render 12 vote bars with colors
+     */
+    static renderVoteBars(votes) {
+        return votes.map(vote => {
+            let colorClass = 'vote-bar-pending';
+            if (vote === 'approve') colorClass = 'vote-bar-approve';
+            else if (vote === 'reject') colorClass = 'vote-bar-reject';
+            else if (vote === 'abstain') colorClass = 'vote-bar-abstain';
+            return `<div class="vote-bar ${colorClass}"></div>`;
+        }).join('');
     }
 
     /**

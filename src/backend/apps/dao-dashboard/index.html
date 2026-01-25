@@ -11,7 +11,7 @@
         <!-- Header -->
         <header class="dao-header">
             <div class="header-left">
-                <div class="header-icon">🏛️</div>
+                <div class="header-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 21v-6h6v6"/><path d="M10 9h4"/><path d="M10 12h4"/></svg></div>
                 <h1 class="header-title">Elastos DAO</h1>
             </div>
             <div class="header-right">
@@ -127,7 +127,17 @@
 
                 <!-- Content Panels -->
                 <div class="tab-content active" id="proposals-content">
-                    <div class="proposals-grid" id="proposalsGrid">
+                    <!-- List Header (Desktop) -->
+                    <div class="proposals-list-header" id="proposalsListHeader">
+                        <div>ID</div>
+                        <div>Title</div>
+                        <div>Type</div>
+                        <div>Proposer</div>
+                        <div>Votes</div>
+                        <div>Date</div>
+                        <div>Status</div>
+                    </div>
+                    <div class="proposals-list" id="proposalsGrid">
                         <!-- Proposals will be loaded here -->
                     </div>
                     <div class="loading-container" id="proposalsLoading">

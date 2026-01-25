@@ -305,8 +305,15 @@ body {
     transition: width 0.3s ease;
 }
 
-/* Proposals Grid */
-.proposals-grid,
+/* Proposals List (Desktop) */
+.proposals-list {
+    display: block;
+    background: var(--bg-surface);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+/* Grid layouts for Council and Suggestions */
 .council-grid,
 .suggestions-grid {
     display: grid;
@@ -442,6 +449,166 @@ body {
     font-size: 11px;
     color: var(--text-muted);
     margin-top: 4px;
+}
+
+/* ==================== LIST VIEW (Desktop) ==================== */
+
+/* List Header */
+.proposals-list-header {
+    display: grid;
+    grid-template-columns: 60px 1fr 100px 100px 140px 100px 100px;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: var(--bg-page);
+    border-bottom: 2px solid var(--border-color);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+/* Proposal Row */
+.proposal-row {
+    display: grid;
+    grid-template-columns: 60px 1fr 100px 100px 140px 100px 100px;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-md);
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border-color);
+    cursor: pointer;
+    transition: background 0.15s;
+    align-items: center;
+}
+
+.proposal-row:hover {
+    background: #f8fafc;
+}
+
+.proposal-row:first-child {
+    border-top: 1px solid var(--border-color);
+}
+
+.proposal-col {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.proposal-col-id {
+    font-weight: 600;
+    color: var(--primary);
+}
+
+.proposal-col-title {
+    min-width: 0;
+}
+
+.proposal-link {
+    color: var(--primary);
+    text-decoration: none;
+    font-weight: 500;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.proposal-link:hover {
+    text-decoration: underline;
+}
+
+.proposal-col-type {
+    font-size: 12px;
+}
+
+.proposal-col-proposer {
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Vote Bars (12 individual bars) */
+.proposal-col-votes {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.vote-percent {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--success);
+}
+
+.vote-bars {
+    display: flex;
+    gap: 2px;
+}
+
+.vote-bar {
+    width: 8px;
+    height: 16px;
+    border-radius: 2px;
+}
+
+.vote-bar-approve {
+    background: #10b981;
+}
+
+.vote-bar-reject {
+    background: #ef4444;
+}
+
+.vote-bar-abstain {
+    background: #1e293b;
+}
+
+.vote-bar-pending {
+    background: #e2e8f0;
+}
+
+.proposal-col-date {
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.proposal-col-status {
+    text-align: right;
+}
+
+.status-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+
+.status-badge.registered {
+    background: #fff7ed;
+    color: #f97316;
+}
+
+.status-badge.cragreed {
+    background: #eff6ff;
+    color: #3b82f6;
+}
+
+.status-badge.voteragreed {
+    background: #f0fdf4;
+    color: #22c55e;
+}
+
+.status-badge.finished {
+    background: #f8fafc;
+    color: #64748b;
+}
+
+.status-badge.crcanceled,
+.status-badge.votercanceled {
+    background: #fef2f2;
+    color: #ef4444;
 }
 
 /* Council Card */
@@ -882,7 +1049,52 @@ body {
         display: flex;
     }
     
-    .proposals-grid,
+    /* Hide list header on mobile */
+    .proposals-list-header {
+        display: none;
+    }
+    
+    /* Convert row to card on mobile */
+    .proposal-row {
+        display: block;
+        padding: var(--spacing-md);
+        margin-bottom: var(--spacing-sm);
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border-color);
+    }
+    
+    .proposal-col {
+        margin-bottom: var(--spacing-xs);
+    }
+    
+    .proposal-col-id {
+        display: inline-block;
+        margin-right: var(--spacing-sm);
+    }
+    
+    .proposal-col-title {
+        margin-bottom: var(--spacing-sm);
+    }
+    
+    .proposal-col-type,
+    .proposal-col-proposer {
+        display: inline-block;
+        margin-right: var(--spacing-md);
+    }
+    
+    .proposal-col-votes {
+        margin: var(--spacing-sm) 0;
+    }
+    
+    .proposal-col-date {
+        display: inline-block;
+        margin-right: var(--spacing-md);
+    }
+    
+    .proposal-col-status {
+        text-align: left;
+    }
+    
     .council-grid,
     .suggestions-grid {
         grid-template-columns: 1fr;

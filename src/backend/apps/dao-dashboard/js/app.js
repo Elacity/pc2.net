@@ -119,11 +119,15 @@ class DAODashboard {
         document.getElementById('closeModal')?.addEventListener('click', () => this.closeModal());
         document.querySelector('.modal-backdrop')?.addEventListener('click', () => this.closeModal());
 
-        // Proposal card clicks (delegated)
+        // Proposal row/card clicks (delegated)
         document.getElementById('proposalsGrid')?.addEventListener('click', (e) => {
-            const card = e.target.closest('.proposal-card');
-            if (card) {
-                this.openProposalDetail(card.dataset.hash);
+            // Prevent link click from propagating
+            if (e.target.classList.contains('proposal-link')) {
+                e.preventDefault();
+            }
+            const row = e.target.closest('.proposal-row') || e.target.closest('.proposal-card');
+            if (row) {
+                this.openProposalDetail(row.dataset.hash);
             }
         });
 

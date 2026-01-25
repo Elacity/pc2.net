@@ -769,6 +769,97 @@ Consider centralizing app metadata in a single source of truth (e.g., `appRegist
 
 ---
 
+**Phase 2.6: PC2 Network Map - ✅ COMPLETE (2026-01-25)**
+
+**Live URL:** https://map.ela.city
+
+**Overview:**
+Public-facing visualization of the PC2 decentralized network, showing all registered nodes, supernodes, and real-time network statistics.
+
+**Major Features Delivered:**
+1. ✅ **Force-Directed Graph Visualization** - Interactive node display with drag, zoom, pan
+2. ✅ **Real-Time Updates** - WebSocket-based live status updates
+3. ✅ **Privacy-First Design** - Anonymized node identifiers, no URLs/IPs exposed
+4. ✅ **Supernode Highlighting** - Gold-colored larger dots for infrastructure nodes
+5. ✅ **Activity Patterns** - Nodes classified as always-on, intermittent, occasional, inactive
+6. ✅ **Node List Table** - Detailed list with Status, Node ID, Type, Activity columns
+7. ✅ **Mobile Responsive** - Optimized for all screen sizes
+8. ✅ **Web Gateway Integration** - Routed via existing ela.city infrastructure
+9. ✅ **Comprehensive Backup/Restore** - All critical node files included in backups
+
+**Technical Stack:**
+- Backend: Express.js, SQLite, WebSocket
+- Frontend: React 18, Vite, react-force-graph-2d
+- Deployment: systemd service on InterServer
+- Routing: Integrated with pc2-gateway for map.ela.city
+
+**Files Created:**
+- `deploy/network-map/` - Complete service codebase
+- `docs/pc2-infrastructure/NETWORK_MAP.md` - Full documentation
+
+**Privacy Protection:**
+- Node identifiers are SHA-256 hashed (non-reversible)
+- No usernames, URLs, or IPs ever exposed
+- Prevents DDoS targeting and user doxing
+
+**Status:** Complete and deployed at https://map.ela.city
+
+---
+
+**Phase 2.7: Multi-Domain & Supernode Expansion - 🔜 PLANNED**
+
+**Goal:** Expand PC2 network across all Elastos domains and multiple geographic supernodes.
+
+**Part A: Multi-Domain Network Map**
+| Domain | Map URL | Status |
+|--------|---------|--------|
+| ela.city | map.ela.city | ✅ Live |
+| pc2.net | map.pc2.net | 🔜 Planned |
+| ela.net | map.ela.net | 🔜 Planned |
+
+**Part B: Multi-Domain Subdomain Routing**
+Enable PC2 nodes to be accessible via all three domain variants:
+```
+sash.ela.city  ─┐
+sash.pc2.net   ─┼─► Same PC2 Node
+sash.ela.net   ─┘
+```
+
+**Requirements:**
+1. DNS: Wildcard A records for `*.pc2.net` and `*.ela.net` → supernode IP
+2. SSL: Wildcard certificates for both domains (acme.sh + DNS-01)
+3. Web Gateway: Accept requests from all three domains, normalize lookups
+4. Registry: Optional per-user domain preferences
+
+**Part C: Multi-Supernode Network**
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│  Supernode US   │◄───▶│  Supernode EU   │◄───▶│  Supernode Asia │
+│  (InterServer)  │     │   (Contabo)     │     │     (TBD)       │
+└────────┬────────┘     └────────┬────────┘     └────────┬────────┘
+         │                       │                       │
+    PC2 Nodes              PC2 Nodes               PC2 Nodes
+```
+
+**Benefits:**
+- Geographic redundancy and lower latency
+- DHT replication across supernodes
+- Automatic failover for node routing
+- Network map shows all supernodes with inter-connections
+
+**Implementation Order:**
+1. [ ] DNS setup for pc2.net and ela.net wildcards
+2. [ ] SSL certificates for new domains
+3. [ ] Web Gateway multi-domain support
+4. [ ] Deploy second supernode (EU - Contabo)
+5. [ ] DHT synchronization between supernodes
+6. [ ] Network Map multi-supernode visualization
+7. [ ] Failover testing and documentation
+
+**Documentation:** See `docs/pc2-infrastructure/NETWORK_MAP.md` for detailed technical plans.
+
+---
+
 ### ✅ What We've Achieved (Current Branch: `sash-work`)
 
 #### 1. **Desktop UI Working**

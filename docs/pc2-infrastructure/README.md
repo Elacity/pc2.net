@@ -80,6 +80,7 @@ This documentation covers the PC2 (Personal Cloud Computer) infrastructure that 
 | [README.md](README.md) | This overview document |
 | [SUPERNODE_OPERATOR_GUIDE.md](SUPERNODE_OPERATOR_GUIDE.md) | How to run a super node |
 | [WEB_GATEWAY.md](WEB_GATEWAY.md) | Web Gateway API and configuration |
+| [NETWORK_MAP.md](NETWORK_MAP.md) | Network Map service (map.ela.city) |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Detailed technical architecture |
 | [PC2_CLIENT_INTEGRATION.md](PC2_CLIENT_INTEGRATION.md) | PC2 node identity & connectivity |
 | [DEPLOYMENT_LOG.md](DEPLOYMENT_LOG.md) | Deployment history and decisions |
@@ -88,6 +89,7 @@ This documentation covers the PC2 (Personal Cloud Computer) infrastructure that 
 ## Quick Links
 
 ### Live URLs
+- https://map.ela.city - **Network Map** (real-time network visualization)
 - https://demo.ela.city - Demo PC2 node
 - https://test.ela.city - Test PC2 node
 - https://test7.ela.city - Test7 PC2 node (Contabo)
@@ -107,6 +109,7 @@ This documentation covers the PC2 (Personal Cloud Computer) infrastructure that 
 | Boson DHT | 39001/UDP | ✅ Running |
 | Active Proxy | 8090/TCP | ✅ Running |
 | Web Gateway | 80, 443/TCP | ✅ Running |
+| Network Map | 3100/TCP | ✅ Running (map.ela.city) |
 | DNS Wildcard | *.ela.city | ✅ Configured |
 | SSL Wildcard | *.ela.city | ✅ Let's Encrypt (auto-renew) |
 | HTTP→HTTPS Redirect | 80→443 | ✅ Enabled |
@@ -226,4 +229,4 @@ This documentation covers the PC2 (Personal Cloud Computer) infrastructure that 
 
 ---
 
-*Last Updated: January 22, 2026*
+*Last Updated: January 25, 2026*

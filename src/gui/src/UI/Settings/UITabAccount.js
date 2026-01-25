@@ -29,9 +29,14 @@ import walletService from '../../services/WalletService.js';
  * Initialize Elastos Identity section
  * Handles DID tethering via QR code
  */
-function initElastosIdentity($el_window) {
-    // Check if DID is already tethered
-    const tetheredDID = walletService.getTetheredDID();
+async function initElastosIdentity($el_window) {
+    // First, try to load tethered DID from backend (in case it wasn't loaded yet)
+    let tetheredDID = walletService.getTetheredDID();
+    
+    if (!tetheredDID) {
+        // Try loading from backend
+        tetheredDID = await walletService.loadTetheredDID();
+    }
     
     if (tetheredDID) {
         // Show tethered state
@@ -41,12 +46,7 @@ function initElastosIdentity($el_window) {
         
         // Show connected wallets if available
         const wallets = walletService.getTetheredWallets();
-        if (wallets) {
-            if (wallets.esc) $el_window.find('#elastos-esc-addr').text(truncateAddr(wallets.esc));
-            if (wallets.elaMainchain) $el_window.find('#elastos-mainchain-addr').text(truncateAddr(wallets.elaMainchain));
-            if (wallets.btc) $el_window.find('#elastos-btc-addr').text(truncateAddr(wallets.btc));
-            if (wallets.tron) $el_window.find('#elastos-tron-addr').text(truncateAddr(wallets.tron));
-        }
+        updateConnectedWallets($el_window, wallets);
     }
     
     // Tether DID button click
@@ -54,17 +54,103 @@ function initElastosIdentity($el_window) {
         await showDIDTetherModal($el_window);
     });
     
-    // Untether DID button click
+    // Untether DID button click - shows OS window confirmation
     $el_window.find('#untether-did-btn').on('click', async function() {
-        if (confirm('Are you sure you want to untether your Elastos DID? You will lose access to Mainchain ELA, Bitcoin, and Tron balances.')) {
-            // TODO: Implement untether
-            walletService.tetheredDID = null;
-            walletService.tetheredWallets = null;
-            
-            // Update UI
-            $el_window.find('#elastos-did-not-tethered').show();
-            $el_window.find('#elastos-did-tethered').hide();
-        }
+        const $btn = $(this);
+        
+        // Show confirmation window using UIWindow
+        const confirmHtml = `
+            <div style="padding: 20px; text-align: center;">
+                <div style="margin-bottom: 16px;">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="1.5">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="8" x2="12" y2="12"></line>
+                        <circle cx="12" cy="16" r="1" fill="#f59e0b"></circle>
+                    </svg>
+                </div>
+                <p style="color: #333; font-size: 14px; margin-bottom: 16px;">
+                    Are you sure you want to untether your Elastos DID?
+                </p>
+                <p style="color: #666; font-size: 12px; margin-bottom: 20px;">
+                    You will lose access to Mainchain ELA, Bitcoin, and Tron balances.
+                </p>
+                <div style="display: flex; gap: 12px; justify-content: center;">
+                    <button id="untether-cancel-btn" class="button" style="background: #e5e7eb; color: #333; padding: 6px 16px; font-size: 13px; line-height: 1.4; border-radius: 4px;">Cancel</button>
+                    <button id="untether-confirm-btn" class="button" style="background: #dc2626; color: white; padding: 6px 16px; font-size: 13px; line-height: 1.4; border-radius: 4px;">Untether</button>
+                </div>
+            </div>
+        `;
+        
+        const confirmWindow = UIWindow({
+            title: 'Confirm Untether',
+            icon: null,
+            uid: null,
+            is_dir: false,
+            body_content: confirmHtml,
+            has_head: true,
+            selectable_body: false,
+            allow_context_menu: false,
+            is_resizable: false,
+            is_droppable: false,
+            init_center: true,
+            allow_native_ctxmenu: true,
+            allow_user_select: true,
+            window_class: 'window-settings',
+            width: 320,
+            height: 'auto',
+            dominant: true,
+            show_in_taskbar: false,
+            draggable_body: false,
+            onAppend: function(el_confirm_window) {
+                // Cancel button
+                $(el_confirm_window).find('#untether-cancel-btn').on('click', function() {
+                    $(el_confirm_window).closest('.window').find('.window-close').click();
+                });
+                
+                // Confirm button
+                $(el_confirm_window).find('#untether-confirm-btn').on('click', async function() {
+                    const $confirmBtn = $(this);
+                    $confirmBtn.prop('disabled', true).text('...');
+                    
+                    try {
+                        // Call backend to remove DID tethering from node-config.json
+                        const apiOrigin = window.api_origin || '';
+                        const authToken = puter.authToken;
+                        
+                        const response = await fetch(`${apiOrigin}/api/did/untether`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${authToken}`
+                            }
+                        });
+                        
+                        if (!response.ok) {
+                            throw new Error('Failed to untether DID');
+                        }
+                        
+                        // Clear in-memory cache
+                        walletService.tetheredDID = null;
+                        walletService.tetheredWallets = null;
+                        
+                        // Update UI first
+                        $el_window.find('#elastos-did-not-tethered').show();
+                        $el_window.find('#elastos-did-tethered').hide();
+                        
+                        // Close confirm window after short delay to ensure UI updates
+                        setTimeout(() => {
+                            $(el_confirm_window).closest('.window').find('.window-close').trigger('click');
+                        }, 100);
+                        
+                    } catch (error) {
+                        console.error('[DID] Untether error:', error);
+                        $confirmBtn.prop('disabled', false).text('Untether');
+                        // Show error in the confirm window
+                        $(el_confirm_window).find('#untether-confirm-btn').after('<p style="color: #dc2626; font-size: 11px; margin-top: 8px;">Failed to untether. Please try again.</p>');
+                    }
+                });
+            }
+        });
     });
     
     // Copy DID button
@@ -82,26 +168,42 @@ function initElastosIdentity($el_window) {
 }
 
 /**
- * Show the DID Tether QR modal
+ * Check if running inside Essentials wallet in-app browser
  */
-async function showDIDTetherModal($el_window) {
+function isInsideEssentials() {
+    // Essentials injects these objects when running in its in-app browser
+    return !!(window.essentialsIntentAPI || window.elastos || 
+              (window.navigator.userAgent && window.navigator.userAgent.includes('Essentials')));
+}
+
+/**
+ * Show the DID Tether QR modal
+ * If inside Essentials browser, triggers direct signing instead of QR
+ * @param {jQuery} $el_window - Optional settings window reference for updating UI after tethering
+ */
+export async function showDIDTetherModal($el_window = null) {
     // Use UIWindow pattern for consistency
     const { default: UIWindow } = await import('../UIWindow.js');
     
+    // Check if running inside Essentials - use direct intent instead of QR
+    const insideEssentials = isInsideEssentials();
+    
+    // Single-step DID tethering UI
     const loadingHtml = `
         <div id="did-tether-content" style="padding: 20px; text-align: center;">
-            <p style="color: #666; font-size: 13px; margin-bottom: 20px;">Generating tether request...</p>
+            <p style="color: #333; font-size: 14px; font-weight: 600; margin-bottom: 8px;">Link Your Elastos DID</p>
+            <p style="color: #666; font-size: 12px; margin-bottom: 16px;">Verify your decentralized identity</p>
             
-            <div id="did-qr-container" style="background: #f5f5f5; padding: 20px; border-radius: 8px; display: inline-block; margin-bottom: 20px; border: 1px solid #e0e0e0;">
+            <div id="did-qr-container" style="background: #f5f5f5; padding: 20px; border-radius: 8px; display: inline-block; margin-bottom: 16px; border: 1px solid #e0e0e0;">
                 <div id="did-qr-placeholder" style="width: 180px; height: 180px; display: flex; align-items: center; justify-content: center; color: #999;">
                     <div class="loading-spinner"></div>
                 </div>
             </div>
             
-            <div style="text-align: left; font-size: 12px; color: #666; margin-bottom: 16px; padding: 12px; background: #f9f9f9; border-radius: 6px;">
-                <div style="margin-bottom: 6px;">1. Open Essentials wallet</div>
-                <div style="margin-bottom: 6px;">2. Scan this QR code</div>
-                <div>3. Approve the connection</div>
+            <div style="text-align: left; font-size: 11px; color: #666; margin-bottom: 12px; padding: 10px; background: #f9f9f9; border-radius: 6px;">
+                <div style="margin-bottom: 4px;">1. Open Essentials wallet</div>
+                <div style="margin-bottom: 4px;">2. Scan this QR code</div>
+                <div>3. Approve the request</div>
             </div>
             
             <div id="did-tether-status" style="font-size: 12px; color: #999;">
@@ -131,96 +233,93 @@ async function showDIDTetherModal($el_window) {
         show_in_taskbar: false,
         draggable_body: false,
         onAppend: async function(el_window) {
-            // Fetch tether request from backend
+            const apiOrigin = window.api_origin || '';
+            const authToken = puter.authToken;
+            let pollInterval = null;
+            
+            // Helper to generate QR code
+            const showQR = (url) => {
+                const qrContainer = el_window.querySelector('#did-qr-placeholder');
+                if (qrContainer && window.QRCode) {
+                    qrContainer.innerHTML = '';
+                    new window.QRCode(qrContainer, {
+                        text: url,
+                        width: 180,
+                        height: 180,
+                        colorDark: '#000000',
+                        colorLight: '#ffffff',
+                        correctLevel: window.QRCode.CorrectLevel.M
+                    });
+                }
+            };
+            
+            const statusEl = el_window.querySelector('#did-tether-status');
+            
             try {
-                const apiOrigin = window.api_origin || '';
-                const authToken = puter.authToken;
+                if (statusEl) {
+                    statusEl.textContent = 'Generating QR code...';
+                    statusEl.style.color = '#999';
+                }
                 
+                // Request DID tethering (step 1 only)
                 const response = await fetch(`${apiOrigin}/api/did/tether-request`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${authToken}`
-                    }
+                    },
+                    body: JSON.stringify({ step: 1 })
                 });
                 
-                if (!response.ok) {
-                    throw new Error('Failed to create tether request');
-                }
+                if (!response.ok) throw new Error('Failed to create tether request');
                 
                 const data = await response.json();
                 
                 if (data.qrUrl) {
-                    // Generate QR code
-                    const qrContainer = el_window.querySelector('#did-qr-placeholder');
-                    if (qrContainer && window.QRCode) {
-                        qrContainer.innerHTML = '';
-                        new window.QRCode(qrContainer, {
-                            text: data.qrUrl,
-                            width: 180,
-                            height: 180,
-                            colorDark: '#000000',
-                            colorLight: '#ffffff',
-                            correctLevel: window.QRCode.CorrectLevel.M
-                        });
-                    } else {
-                        // Fallback: show URL
-                        qrContainer.innerHTML = `
-                            <div style="text-align: center; font-size: 10px; word-break: break-all; padding: 10px;">
-                                <a href="${data.qrUrl}" target="_blank" style="color: #3b82f6;">Open in Essentials</a>
-                            </div>
-                        `;
-                    }
-                    
-                    // Update status
-                    const statusEl = el_window.querySelector('#did-tether-status');
+                    showQR(data.qrUrl);
                     if (statusEl) {
-                        statusEl.textContent = 'Waiting for approval...';
+                        statusEl.textContent = 'Scan with Essentials to verify...';
                         statusEl.style.color = '#F6921A';
                     }
                     
-                    // Poll for completion
-                    const pollInterval = setInterval(async () => {
+                    // Poll for DID tethering completion
+                    pollInterval = setInterval(async () => {
                         try {
                             const statusResponse = await fetch(`${apiOrigin}/api/did/status`, {
                                 headers: { 'Authorization': `Bearer ${authToken}` }
                             });
                             const statusData = await statusResponse.json();
                             
-                            if (statusData.tethered) {
+                            if (statusData.tethered && statusData.did && statusData.did !== 'pending') {
+                                // DID tethered successfully
                                 clearInterval(pollInterval);
-                                
-                                // Update walletService
                                 walletService.tetheredDID = { did: statusData.did };
-                                walletService.tetheredWallets = statusData.wallets;
                                 
-                                // Update UI
                                 if (statusEl) {
-                                    statusEl.textContent = 'DID tethered successfully!';
+                                    statusEl.textContent = 'DID linked successfully!';
                                     statusEl.style.color = '#22c55e';
                                 }
                                 
-                                // Refresh the account tab
+                                // Close and refresh after short delay
                                 setTimeout(() => {
                                     $(el_window).closest('.window').find('.window-close').click();
-                                    // Refresh account section
-                                    $el_window.find('#elastos-did-not-tethered').hide();
-                                    $el_window.find('#elastos-did-tethered').show();
-                                    $el_window.find('#elastos-did-value').text(truncateDID(statusData.did));
+                                    if ($el_window) {
+                                        $el_window.find('#elastos-did-not-tethered').hide();
+                                        $el_window.find('#elastos-did-tethered').show();
+                                        $el_window.find('#elastos-did-value').text(truncateDID(statusData.did));
+                                    }
                                 }, 1500);
                             }
                         } catch (e) {
                             // Ignore polling errors
                         }
-                    }, 3000); // Poll every 3 seconds
+                    }, 2000);
                     
                     // Stop polling after 5 minutes
-                    setTimeout(() => clearInterval(pollInterval), 5 * 60 * 1000);
+                    setTimeout(() => { if (pollInterval) clearInterval(pollInterval); }, 5 * 60 * 1000);
                 }
-                
             } catch (error) {
                 console.error('[DID Tether] Error:', error);
-                const statusEl = el_window.querySelector('#did-tether-status');
                 if (statusEl) {
                     statusEl.textContent = 'Failed to generate QR code';
                     statusEl.style.color = '#ef4444';
@@ -228,6 +327,7 @@ async function showDIDTetherModal($el_window) {
             }
         },
         window_css: { height: 'auto' },
+        z_index: 10001,
     });
 }
 
@@ -247,6 +347,15 @@ function truncateAddr(addr) {
     if (!addr) return 'N/A';
     if (addr.length <= 16) return addr;
     return addr.substring(0, 8) + '...' + addr.substring(addr.length - 6);
+}
+
+/**
+ * Update connected wallets display
+ */
+function updateConnectedWallets($el_window, wallets) {
+    // ESC is the user's current wallet address (from Particle login)
+    const escAddr = window.user?.wallet_address || wallets?.esc;
+    $el_window.find('#elastos-esc-addr').text(escAddr ? truncateAddr(escAddr) : 'N/A');
 }
 
 // Account Tab - Compact Layout
@@ -403,14 +512,15 @@ export default {
         
         if(walletAddr || smartAddr){
             h += `<div class="account-section">`;
-                h += `<div class="account-section-title">Wallets</div>`;
+                h += `<div class="account-section-title">Admin Wallets</div>`;
                 h += `<div class="account-group">`;
                 
                     if(walletAddr){
                     h += `<div class="account-group-row">`;
                         h += `<div class="account-card-row">`;
                             h += `<div style="flex: 1; min-width: 0;">`;
-                                h += `<span class="account-card-label">${smartAddr ? 'EOA Wallet' : 'Wallet Address'}</span>`;
+                                h += `<span class="account-card-label">${smartAddr ? 'Admin Wallet (EOA)' : 'Wallet Address'}</span>`;
+                                if(smartAddr) h += `<span class="account-tooltip" title="Your Externally Owned Account - the original wallet address controlled directly by your private key" style="cursor: help; margin-left: 4px; color: #999; font-size: 12px;">ⓘ</span>`;
                                 h += `<div class="account-card-value" style="margin-top: 4px;">${html_encode(walletAddr.substring(0, 10))}...${html_encode(walletAddr.substring(walletAddr.length - 8))}</div>`;
                             h += `</div>`;
                             h += `<span class="copy-btn copy-address-btn" data-address="${html_encode(walletAddr)}" title="Copy">`;
@@ -424,7 +534,8 @@ export default {
                     h += `<div class="account-group-row">`;
                         h += `<div class="account-card-row">`;
                             h += `<div style="flex: 1; min-width: 0;">`;
-                                h += `<span class="account-card-label" style="color: #1976d2;">Smart Account</span>`;
+                                h += `<span class="account-card-label">Smart Account</span>`;
+                                h += `<span class="account-tooltip" title="Your ERC-4337 Smart Account - a contract wallet with advanced features like gas sponsorship and batch transactions" style="cursor: help; margin-left: 4px; color: #999; font-size: 12px;">ⓘ</span>`;
                                 h += `<div class="account-card-value" style="margin-top: 4px;">${html_encode(smartAddr.substring(0, 10))}...${html_encode(smartAddr.substring(smartAddr.length - 8))}</div>`;
                                 h += `<div class="account-card-sublabel">ERC-4337 Account</div>`;
                             h += `</div>`;
@@ -437,6 +548,73 @@ export default {
                 h += `</div>`;
             h += `</div>`;
         }
+
+        // Elastos Identity Section (PC2 mode only) - placed above Node Identity
+        h += `<div id="elastos-identity-section" style="display: none;">`;
+            h += `<div class="account-section">`;
+                h += `<div class="account-section-title">Elastos Identity</div>`;
+                h += `<div class="account-group">`;
+                
+                // DID Status row
+                h += `<div class="account-group-row" id="elastos-did-row">`;
+                    h += `<div id="elastos-did-not-tethered" style="display: block;">`;
+                        h += `<div class="account-card-row">`;
+                            h += `<div>`;
+                                h += `<span class="account-card-label">Elastos DID</span>`;
+                                h += `<div class="account-card-sublabel" style="color: #9ca3af;">Not linked</div>`;
+                            h += `</div>`;
+                            h += `<button id="tether-did-btn" class="button account-btn">Tether DID</button>`;
+                        h += `</div>`;
+                        h += `<div style="font-size: 12px; color: #6b7280; margin-top: 8px;">`;
+                            h += `Link your Elastos DID to unlock:`;
+                            h += `<ul style="margin: 8px 0 0 16px; padding: 0;">`;
+                                h += `<li>View Mainchain ELA, Bitcoin, and Tron balances</li>`;
+                                h += `<li>DAO voting and governance participation</li>`;
+                                h += `<li>Verifiable credentials (Build reputation as a trusted identity)</li>`;
+                            h += `</ul>`;
+                        h += `</div>`;
+                        h += `<div style="font-size: 11px; color: #9ca3af; margin-top: 12px; padding-top: 12px; border-top: 1px solid #e5e5e5;">`;
+                            h += `<span>Don't have Essentials wallet? Download it:</span>`;
+                            h += `<div style="display: flex; gap: 12px; margin-top: 6px;">`;
+                                h += `<a href="https://apps.apple.com/us/app/elastos-essentials-wallet/id1568931743" target="_blank" style="display: flex; align-items: center; gap: 4px; color: #333; text-decoration: none;">`;
+                                    h += `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>`;
+                                    h += `App Store`;
+                                h += `</a>`;
+                                h += `<a href="https://play.google.com/store/apps/details?id=io.web3essentials.app" target="_blank" style="display: flex; align-items: center; gap: 4px; color: #333; text-decoration: none;">`;
+                                    h += `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 20.5v-17c0-.59.34-1.11.84-1.35L13.69 12l-9.85 9.85c-.5-.25-.84-.76-.84-1.35m13.81-5.38L6.05 21.34l8.49-8.49 2.27 2.27m3.35-4.31c.34.27.59.69.59 1.19s-.22.9-.57 1.18l-2.29 1.32-2.5-2.5 2.5-2.5 2.27 1.31M6.05 2.66l10.76 6.22-2.27 2.27-8.49-8.49z"/></svg>`;
+                                    h += `Google Play`;
+                                h += `</a>`;
+                            h += `</div>`;
+                        h += `</div>`;
+                    h += `</div>`;
+                    
+                    // Tethered state (hidden by default)
+                    h += `<div id="elastos-did-tethered" style="display: none;">`;
+                        // Top row: Status label + Untether button (top right)
+                        h += `<div class="account-card-row" style="margin-bottom: 8px;">`;
+                            h += `<span class="account-card-label" style="color: #22c55e;">✓ DID Tethered</span>`;
+                            h += `<button id="untether-did-btn" class="button account-btn" style="color: #dc2626;">Untether</button>`;
+                        h += `</div>`;
+                        // DID value with copy button inline (vertically centered)
+                        h += `<div style="display: inline-flex; align-items: center; gap: 6px; margin-bottom: 12px;">`;
+                            h += `<span id="elastos-did-value" class="account-card-value" style="display: inline;">did:elastos:...</span>`;
+                            h += `<span class="copy-btn copy-did-btn" title="Copy DID" style="cursor: pointer; display: inline-flex; align-items: center; vertical-align: middle;">`;
+                                h += `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
+                            h += `</span>`;
+                        h += `</div>`;
+                        // Connected wallet section (ESC only - from Particle login)
+                        h += `<div style="font-size: 12px; color: #6b7280;">`;
+                            h += `<strong>Linked Wallet:</strong>`;
+                            h += `<div id="elastos-connected-wallets" style="margin-top: 8px; font-family: monospace; font-size: 11px;">`;
+                                h += `<div>• ESC: <span id="elastos-esc-addr">Loading...</span></div>`;
+                            h += `</div>`;
+                        h += `</div>`;
+                    h += `</div>`;
+                h += `</div>`;
+                
+                h += `</div>`;
+            h += `</div>`;
+        h += `</div>`;
 
         // Node Identity Section (PC2 mode only)
         h += `<div id="node-identity-section" style="display: none;">`;
@@ -516,62 +694,6 @@ export default {
                         h += `<p id="encrypt-status" style="font-size: 11px; color: #666; margin-top: 6px; display: none;"></p>`;
                     h += `</div>`;
                 h += `</div>`;
-                h += `</div>`;
-            h += `</div>`;
-        h += `</div>`;
-
-        // Elastos Identity Section (PC2 mode only)
-        h += `<div id="elastos-identity-section" style="display: none;">`;
-            h += `<div class="account-section">`;
-                h += `<div class="account-section-title">Elastos Identity</div>`;
-                h += `<div class="account-group">`;
-                
-                // DID Status row
-                h += `<div class="account-group-row" id="elastos-did-row">`;
-                    h += `<div id="elastos-did-not-tethered" style="display: block;">`;
-                        h += `<div class="account-card-row">`;
-                            h += `<div>`;
-                                h += `<span class="account-card-label">Elastos DID</span>`;
-                                h += `<div class="account-card-sublabel" style="color: #9ca3af;">Not linked</div>`;
-                            h += `</div>`;
-                            h += `<button id="tether-did-btn" class="button account-btn">Tether DID</button>`;
-                        h += `</div>`;
-                        h += `<div style="font-size: 12px; color: #6b7280; margin-top: 8px;">`;
-                            h += `Link your Elastos DID to unlock:`;
-                            h += `<ul style="margin: 8px 0 0 16px; padding: 0;">`;
-                                h += `<li>View Mainchain ELA, Bitcoin, and Tron balances</li>`;
-                                h += `<li>DAO voting and governance participation</li>`;
-                                h += `<li>Verifiable credentials (coming soon)</li>`;
-                            h += `</ul>`;
-                        h += `</div>`;
-                    h += `</div>`;
-                    
-                    // Tethered state (hidden by default)
-                    h += `<div id="elastos-did-tethered" style="display: none;">`;
-                        h += `<div class="account-card-row">`;
-                            h += `<div style="flex: 1; min-width: 0;">`;
-                                h += `<span class="account-card-label" style="color: #22c55e;">✓ DID Tethered</span>`;
-                                h += `<div id="elastos-did-value" class="account-card-value" style="margin-top: 4px;">did:elastos:...</div>`;
-                                h += `<div style="font-size: 12px; color: #6b7280; margin-top: 8px;">`;
-                                    h += `<strong>Connected Wallets:</strong>`;
-                                    h += `<div id="elastos-connected-wallets" style="margin-top: 8px; font-family: monospace; font-size: 11px;">`;
-                                        h += `<div style="margin-bottom: 4px;">• ESC: <span id="elastos-esc-addr">Loading...</span></div>`;
-                                        h += `<div style="margin-bottom: 4px;">• Mainchain: <span id="elastos-mainchain-addr">Loading...</span></div>`;
-                                        h += `<div style="margin-bottom: 4px;">• Bitcoin: <span id="elastos-btc-addr">Loading...</span></div>`;
-                                        h += `<div>• Tron: <span id="elastos-tron-addr">Loading...</span></div>`;
-                                    h += `</div>`;
-                                h += `</div>`;
-                            h += `</div>`;
-                            h += `<div style="display: flex; gap: 6px; align-items: flex-start;">`;
-                                h += `<span class="copy-btn copy-did-btn" title="Copy DID">`;
-                                    h += `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
-                                h += `</span>`;
-                                h += `<button id="untether-did-btn" class="button account-btn" style="color: #dc2626;">Untether</button>`;
-                            h += `</div>`;
-                        h += `</div>`;
-                    h += `</div>`;
-                h += `</div>`;
-                
                 h += `</div>`;
             h += `</div>`;
         h += `</div>`;

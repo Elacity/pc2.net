@@ -107,26 +107,58 @@ export async function handleTetherRequest(req: AuthenticatedRequest, res: Respon
       }
     }
     
-    // Credential access request with EMPTY claims - just proves DID ownership
-    // Format matches Elastos Essentials SDK expectations
-    const credAccessRequest = {
-      // The request itself - empty claims means just DID auth
-      claims: [],
-      // Nonce for replay protection
-      nonce: nonce,
-      // Where to POST the result
-      callbackurl: callbackUrl,
-      // Optional: human-readable reason
-      reason: 'Link your Elastos DID to your PC2 personal cloud'
-    };
-
-    // Base64 encode for URL (use standard base64, not base64url)
-    const requestBase64 = Buffer.from(JSON.stringify(credAccessRequest)).toString('base64');
-    const qrUrl = `https://did.web3essentials.io/credaccess?request=${encodeURIComponent(requestBase64)}`;
+    // Determine which step we're on
+    const step = req.body.step || 1;
+    
+    let jwtPayload: Record<string, unknown>;
+    let qrUrl: string;
+    let intentType: string;
+    
+    if (step === 1) {
+      // Step 1: credaccess for DID verification
+      intentType = 'credaccess';
+      jwtPayload = {
+        iss: 'did:elastos:pc2node',
+        callbackurl: callbackUrl,
+        nonce: nonce,
+        claims: {},  // Empty claims - just verify DID
+        website: {
+          domain: 'PC2 Personal Cloud',
+          logo: ''
+        }
+      };
+      const jwtHeader = { alg: 'none', typ: 'JWT' };
+      const headerB64 = Buffer.from(JSON.stringify(jwtHeader)).toString('base64url');
+      const payloadB64 = Buffer.from(JSON.stringify(jwtPayload)).toString('base64url');
+      const jwtToken = `${headerB64}.${payloadB64}.`;
+      qrUrl = `https://did.elastos.net/credaccess/${jwtToken}`;
+    } else {
+      // Step 2: walletaccess for wallet addresses
+      // Use reqfields to explicitly specify which addresses to request
+      intentType = 'walletaccess';
+      jwtPayload = {
+        iss: 'did:elastos:pc2node',
+        callbackurl: callbackUrl,
+        nonce: nonce,
+        // Use reqfields object to request specific wallet addresses
+        reqfields: {
+          elaaddress: true,
+          ethaddress: true
+          // Future: btcaddress, tronaddress (after Essentials PR)
+        }
+      };
+      const jwtHeader = { alg: 'none', typ: 'JWT' };
+      const headerB64 = Buffer.from(JSON.stringify(jwtHeader)).toString('base64url');
+      const payloadB64 = Buffer.from(JSON.stringify(jwtPayload)).toString('base64url');
+      const jwtToken = `${headerB64}.${payloadB64}.`;
+      qrUrl = `https://wallet.web3essentials.io/walletaccess/${jwtToken}`;
+    }
 
     logger.info('[DID] Tether request created', {
       wallet: walletAddress.substring(0, 10) + '...',
       nonce: nonce.substring(0, 16) + '...',
+      step,
+      intentType,
       expiresIn: '5 minutes'
     });
 
@@ -135,7 +167,9 @@ export async function handleTetherRequest(req: AuthenticatedRequest, res: Respon
       nonce,
       qrUrl,
       expiresAt,
-      callbackUrl
+      callbackUrl,
+      step,
+      intentType
     });
 
   } catch (error) {
@@ -190,6 +224,14 @@ export async function handleTetherStatus(req: AuthenticatedRequest, res: Respons
  * POST /api/did/callback
  */
 export async function handleDIDCallback(req: Request, res: Response): Promise<void> {
+  // Log ALL incoming callback requests for debugging
+  logger.info('[DID] ========== CALLBACK RECEIVED ==========');
+  logger.info('[DID] Method:', req.method);
+  logger.info('[DID] Headers:', JSON.stringify(req.headers, null, 2));
+  logger.info('[DID] Body:', JSON.stringify(req.body, null, 2));
+  logger.info('[DID] Query:', JSON.stringify(req.query, null, 2));
+  logger.info('[DID] ===========================================');
+  
   try {
     // didsign returns: { jwt: "..." } or { signedData: "..." }
     // credaccess returns: { presentation: "...", nonce: "..." }
@@ -207,37 +249,213 @@ export async function handleDIDCallback(req: Request, res: Response): Promise<vo
     let nonce: string | null = null;
     let wallets: {
       elaMainchain?: string;
+      esc?: string;
       btc?: string;
       tron?: string;
     } = {};
 
     try {
-      // Handle didsign JWT response
+      // Handle walletaccess response format: { result: JSON.stringify({ walletinfo: [...] }) }
+      if (req.body.result && typeof req.body.result === 'string') {
+        try {
+          const resultData = JSON.parse(req.body.result);
+          logger.info('[DID] Parsed walletaccess result:', JSON.stringify(resultData));
+          
+          if (resultData.walletinfo) {
+            const walletInfo = Array.isArray(resultData.walletinfo) ? resultData.walletinfo[0] : resultData.walletinfo;
+            logger.info('[DID] WalletInfo:', JSON.stringify(walletInfo));
+            
+            // Extract wallet addresses from walletinfo
+            if (walletInfo.elaaddress) {
+              wallets.elaMainchain = walletInfo.elaaddress;
+              logger.info('[DID] ELA Mainchain address:', walletInfo.elaaddress);
+            }
+            if (walletInfo.ethaddress) {
+              wallets.esc = walletInfo.ethaddress;
+              logger.info('[DID] ESC address:', walletInfo.ethaddress);
+            }
+            if (walletInfo.btcaddress) {
+              wallets.btc = walletInfo.btcaddress;
+              logger.info('[DID] BTC address:', walletInfo.btcaddress);
+            }
+            if (walletInfo.tronaddress) {
+              wallets.tron = walletInfo.tronaddress;
+              logger.info('[DID] Tron address:', walletInfo.tronaddress);
+            }
+            
+            // For walletaccess, we need to find the pending request without nonce
+            // since the response format doesn't include nonce
+            // Use the most recent pending request for this callback URL
+            for (const [pendingNonce, request] of pendingTetherRequests.entries()) {
+              if (request.expiresAt > Date.now()) {
+                nonce = pendingNonce;
+                logger.info('[DID] Found pending request for walletaccess:', pendingNonce.substring(0, 16) + '...');
+                break;
+              }
+            }
+          }
+        } catch (parseErr) {
+          logger.warn('[DID] Failed to parse result field:', parseErr);
+        }
+      }
+      
+      // Essentials credaccess sends: { jwt: "<signed JWT token>" }
+      // The JWT payload contains: iss (user DID), presentation.proof.nonce
       const jwtToken = jwt || signedData || presentation;
       
       if (typeof jwtToken === 'string' && jwtToken.includes('.')) {
         // JWT format - decode the payload
         const parts = jwtToken.split('.');
-        if (parts.length === 3) {
-          const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString());
-          did = payload.iss || payload.sub;
-          nonce = payload.nonce || payload.jti;
+        if (parts.length >= 2) {
+          // Add padding if needed for base64url
+          let payloadB64 = parts[1];
+          while (payloadB64.length % 4 !== 0) {
+            payloadB64 += '=';
+          }
+          const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString());
           
-          // Try to extract wallet addresses from JWT claims
-          if (payload.elaMainchainAddress) wallets.elaMainchain = payload.elaMainchainAddress;
-          if (payload.btcAddress) wallets.btc = payload.btcAddress;
-          if (payload.tronAddress) wallets.tron = payload.tronAddress;
+          // DID is in 'iss' or 'did' field
+          did = payload.iss || payload.did || payload.sub;
           
-          logger.info('[DID] Parsed JWT', {
-            did: did?.substring(0, 30) + '...',
-            nonceFromJwt: nonce?.substring(0, 16) + '...',
-            hasWallets: Object.keys(wallets).length > 0
+          // Nonce is in presentation.proof.nonce (Essentials format)
+          if (payload.presentation?.proof?.nonce) {
+            nonce = payload.presentation.proof.nonce;
+          } else {
+            // Fallback to direct nonce field
+            nonce = payload.nonce || payload.jti;
+          }
+          
+          // Try to extract wallet addresses from JWT claims or presentation
+          // Check various possible property names Essentials might use
+          const elaKeys = ['elaMainchainAddress', 'elaaddress', 'ela', 'mainchainAddress', 'ELAAddress'];
+          const btcKeys = ['btcAddress', 'btcaddress', 'btc', 'bitcoinAddress', 'BTCAddress'];
+          const tronKeys = ['tronAddress', 'tronaddress', 'trx', 'TRXAddress', 'TRONAddress'];
+          
+          // walletaccess response format: { walletinfo: [{ elaaddress: "...", ethaddress: "..." }] }
+          if (payload.walletinfo) {
+            const walletInfo = Array.isArray(payload.walletinfo) ? payload.walletinfo[0] : payload.walletinfo;
+            logger.info('[DID] Found walletinfo in response:', JSON.stringify(walletInfo));
+            if (walletInfo.elaaddress) wallets.elaMainchain = walletInfo.elaaddress;
+            if (walletInfo.ethaddress) logger.info('[DID] ESC address confirmed:', walletInfo.ethaddress);
+          }
+          
+          // Check top-level payload
+          for (const key of elaKeys) {
+            if (payload[key]) { wallets.elaMainchain = payload[key]; break; }
+          }
+          for (const key of btcKeys) {
+            if (payload[key]) { wallets.btc = payload[key]; break; }
+          }
+          for (const key of tronKeys) {
+            if (payload[key]) { wallets.tron = payload[key]; break; }
+          }
+          
+          // Check presentation credentials for wallet addresses
+          if (payload.presentation?.verifiableCredential) {
+            const credentials = Array.isArray(payload.presentation.verifiableCredential) 
+              ? payload.presentation.verifiableCredential 
+              : [payload.presentation.verifiableCredential];
+              
+            for (const vc of credentials) {
+              const subject = vc.credentialSubject || vc;
+              
+              // Check for "wallet" credential format from Essentials
+              // Format: { addressType: 'elastosmainchain'|'btclegacy'|'tron'|'evm', address: '...' }
+              if (subject.wallet || subject.addressType) {
+                const walletData = subject.wallet || subject;
+                const addressType = walletData.addressType;
+                const address = walletData.address;
+                
+                if (addressType && address) {
+                  logger.info('[DID] Found wallet credential:', { addressType, address: address.substring(0, 20) + '...' });
+                  
+                  switch (addressType) {
+                    case 'elastosmainchain':
+                      if (!wallets.elaMainchain) wallets.elaMainchain = address;
+                      break;
+                    case 'btclegacy':
+                    case 'btc':
+                      if (!wallets.btc) wallets.btc = address;
+                      break;
+                    case 'tron':
+                      if (!wallets.tron) wallets.tron = address;
+                      break;
+                    case 'evm':
+                      // EVM address is the same as ESC, already have from login
+                      break;
+                  }
+                }
+              }
+              
+              // Check each credential for direct wallet address keys
+              for (const key of elaKeys) {
+                if (subject[key] && !wallets.elaMainchain) { 
+                  // Handle both string and object formats
+                  wallets.elaMainchain = typeof subject[key] === 'object' ? subject[key].address : subject[key]; 
+                  break; 
+                }
+              }
+              for (const key of btcKeys) {
+                if (subject[key] && !wallets.btc) { 
+                  wallets.btc = typeof subject[key] === 'object' ? subject[key].address : subject[key]; 
+                  break; 
+                }
+              }
+              for (const key of tronKeys) {
+                if (subject[key] && !wallets.tron) { 
+                  wallets.tron = typeof subject[key] === 'object' ? subject[key].address : subject[key]; 
+                  break; 
+                }
+              }
+              
+              // Log the credential for debugging
+              logger.info('[DID] Credential subject:', JSON.stringify(subject).substring(0, 500));
+            }
+          }
+          
+          // Also check vp (Verifiable Presentation) format
+          if (payload.vp?.verifiableCredential) {
+            const credentials = Array.isArray(payload.vp.verifiableCredential) 
+              ? payload.vp.verifiableCredential 
+              : [payload.vp.verifiableCredential];
+              
+            for (const vc of credentials) {
+              const subject = vc.credentialSubject || vc;
+              for (const key of elaKeys) {
+                if (subject[key] && !wallets.elaMainchain) { wallets.elaMainchain = subject[key]; break; }
+              }
+              for (const key of btcKeys) {
+                if (subject[key] && !wallets.btc) { wallets.btc = subject[key]; break; }
+              }
+              for (const key of tronKeys) {
+                if (subject[key] && !wallets.tron) { wallets.tron = subject[key]; break; }
+              }
+            }
+          }
+          
+          // Log FULL payload for debugging wallet address extraction
+          logger.info('[DID] ===== FULL JWT PAYLOAD FOR DEBUGGING =====');
+          logger.info('[DID] Payload keys:', Object.keys(payload));
+          logger.info('[DID] Full payload:', JSON.stringify(payload, null, 2).substring(0, 2000));
+          if (payload.presentation) {
+            logger.info('[DID] Presentation keys:', Object.keys(payload.presentation));
+            if (payload.presentation.verifiableCredential) {
+              logger.info('[DID] VerifiableCredentials:', JSON.stringify(payload.presentation.verifiableCredential, null, 2).substring(0, 2000));
+            }
+          }
+          logger.info('[DID] ===========================================');
+          
+          logger.info('[DID] Parsed JWT from Essentials', {
+            did: did?.substring(0, 40) + '...',
+            nonceFromPresentation: nonce?.substring(0, 16) + '...',
+            hasWallets: Object.keys(wallets).length > 0,
+            wallets: JSON.stringify(wallets)
           });
         }
       } else if (typeof jwtToken === 'object') {
         // JSON-LD format or object response
         did = jwtToken?.holder || jwtToken?.iss || jwtToken?.sub;
-        nonce = jwtToken?.nonce;
+        nonce = jwtToken?.presentation?.proof?.nonce || jwtToken?.nonce;
         
         if (jwtToken?.credentialSubject) {
           wallets.elaMainchain = jwtToken.credentialSubject.elaMainchainAddress;
@@ -276,42 +494,74 @@ export async function handleDIDCallback(req: Request, res: Response): Promise<vo
       return;
     }
 
-    if (!did) {
-      res.status(400).json({ error: 'Could not extract DID from response' });
-      return;
-    }
-
-    // TODO: In production, verify the DID signature
-    // This would involve:
-    // 1. Resolving the DID document from the EID chain
-    // 2. Extracting the public key
-    // 3. Verifying the JWT/presentation signature
+    // Handle two types of callbacks:
+    // 1. credaccess: Returns DID (step 1)
+    // 2. walletaccess: Returns wallet addresses (step 2)
     
-    // For now, we'll trust the presentation and store the tether
     const nodeConfig = getNodeConfig();
     if (!nodeConfig.tetheredDIDs) {
       nodeConfig.tetheredDIDs = {};
     }
-
-    nodeConfig.tetheredDIDs[pendingRequest.walletAddress] = {
-      did,
-      tetheredAt: new Date().toISOString(),
-      wallets
-    };
-
-    saveNodeConfig(nodeConfig);
-    pendingTetherRequests.delete(nonce);
-
-    logger.info('[DID] Tether successful', {
-      wallet: pendingRequest.walletAddress.substring(0, 10) + '...',
-      did: did.substring(0, 30) + '...'
-    });
-
-    res.json({
-      success: true,
-      did,
-      message: 'DID successfully tethered'
-    });
+    
+    const existingTether = nodeConfig.tetheredDIDs[pendingRequest.walletAddress];
+    
+    if (did) {
+      // This is a credaccess response (step 1) - save DID
+      nodeConfig.tetheredDIDs[pendingRequest.walletAddress] = {
+        did,
+        tetheredAt: new Date().toISOString(),
+        wallets: existingTether?.wallets || wallets
+      };
+      
+      logger.info('[DID] Step 1 complete: DID tethered', {
+        wallet: pendingRequest.walletAddress.substring(0, 10) + '...',
+        did: did.substring(0, 30) + '...'
+      });
+      
+      saveNodeConfig(nodeConfig);
+      pendingTetherRequests.delete(nonce);
+      
+      res.json({
+        success: true,
+        step: 1,
+        did,
+        message: 'DID successfully tethered. Proceed to step 2 for wallet addresses.'
+      });
+    } else if (Object.keys(wallets).length > 0) {
+      // This is a walletaccess response (step 2) - save wallet addresses
+      if (!existingTether) {
+        // No existing DID tether - create a placeholder
+        nodeConfig.tetheredDIDs[pendingRequest.walletAddress] = {
+          did: 'pending',
+          tetheredAt: new Date().toISOString(),
+          wallets
+        };
+      } else {
+        // Update existing tether with wallet addresses
+        nodeConfig.tetheredDIDs[pendingRequest.walletAddress] = {
+          ...existingTether,
+          wallets: { ...existingTether.wallets, ...wallets }
+        };
+      }
+      
+      logger.info('[DID] Step 2 complete: Wallet addresses saved', {
+        wallet: pendingRequest.walletAddress.substring(0, 10) + '...',
+        wallets: JSON.stringify(wallets)
+      });
+      
+      saveNodeConfig(nodeConfig);
+      pendingTetherRequests.delete(nonce);
+      
+      res.json({
+        success: true,
+        step: 2,
+        wallets,
+        message: 'Wallet addresses successfully linked'
+      });
+    } else {
+      res.status(400).json({ error: 'Could not extract DID or wallet addresses from response' });
+      return;
+    }
 
   } catch (error) {
     logger.error('[DID] Callback error:', error);

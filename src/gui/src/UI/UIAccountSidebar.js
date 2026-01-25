@@ -635,6 +635,23 @@ async function UIAccountSidebar(options = {}) {
                             </div>
                         `).join('')}
                         <div class="network-dropdown-divider"></div>
+                        ${walletService.isDIDTethered() ? `
+                        <div class="network-dropdown-label" style="display: flex; align-items: center; justify-content: space-between;">
+                            <span style="color: #22c55e;">✓ DID Tethered</span>
+                        </div>
+                        <div class="network-dropdown-item" data-chain-id="mainchain" title="View Mainchain ELA">
+                            <img src="https://static.particle.network/token-list/elastos/native.png" class="network-icon" onerror="this.style.display='none'" />
+                            <span>ELA Mainchain</span>
+                        </div>
+                        <div class="network-dropdown-item" data-chain-id="btc" title="View Bitcoin">
+                            <img src="https://cryptologos.cc/logos/bitcoin-btc-logo.png" class="network-icon" onerror="this.style.display='none'" />
+                            <span>Bitcoin</span>
+                        </div>
+                        <div class="network-dropdown-item" data-chain-id="tron" title="View Tron">
+                            <img src="https://static.particle.network/token-list/tron/native.png" class="network-icon" onerror="this.style.display='none'" />
+                            <span>Tron</span>
+                        </div>
+                        ` : `
                         <div class="network-dropdown-label" style="display: flex; align-items: center; justify-content: space-between;">
                             <span>DID Required</span>
                             <button class="link-did-btn" style="font-size: 10px; padding: 2px 8px; background: rgba(246,146,26,0.15); border: 1px solid rgba(246,146,26,0.3); color: #F6921A; border-radius: 4px; cursor: pointer;">Link DID</button>
@@ -654,6 +671,7 @@ async function UIAccountSidebar(options = {}) {
                             <span>Tron</span>
                             ${lockIcon}
                         </div>
+                        `}
                     </div>
                 </div>
             </div>
@@ -861,20 +879,24 @@ async function UIAccountSidebar(options = {}) {
         }
     });
     
-    // Link DID button - opens Settings > Account
+    // Link DID button - opens DID tether modal directly
     $sidebar.on('click', '.link-did-btn', function(e) {
         e.stopPropagation();
         
-        // Close sidebar and dropdown
+        // Close dropdown
         $sidebar.find('#network-dropdown-menu').removeClass('open');
         $sidebar.find('#network-dropdown-btn').removeClass('open');
-        closeSidebar();
         
-        // Open settings window to Account tab using dynamic import
-        import('./Settings/UIWindowSettings.js').then(({ default: UIWindowSettings }) => {
-            UIWindowSettings({ tab: 'account' });
+        // Open DID tether modal directly (no need to close sidebar - modal is on top)
+        import('./Settings/UITabAccount.js').then(({ showDIDTetherModal }) => {
+            showDIDTetherModal();
         }).catch((err) => {
-            logger.error('Failed to open settings:', err);
+            logger.error('Failed to open DID tether modal:', err);
+            // Fallback: open settings
+            import('./Settings/UIWindowSettings.js').then(({ default: UIWindowSettings }) => {
+                closeSidebar();
+                UIWindowSettings({ tab: 'account' });
+            });
         });
     });
     

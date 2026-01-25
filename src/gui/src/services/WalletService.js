@@ -203,6 +203,48 @@ class WalletService {
     }
     
     /**
+     * Load tethered DID from backend (for page reloads)
+     * Call this on app initialization to restore DID tethering state
+     */
+    async loadTetheredDID() {
+        // Only run in PC2 mode
+        if (!window.api_origin || 
+            (!window.api_origin.includes('localhost:4200') && 
+             !window.api_origin.includes('127.0.0.1:4200') &&
+             !window.api_origin.includes('localhost:4202') &&
+             !window.api_origin.includes('127.0.0.1:4202'))) {
+            return null;
+        }
+        
+        try {
+            const authToken = window.auth_token || puter?.authToken;
+            const headers = { 'Content-Type': 'application/json' };
+            if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+            
+            const response = await fetch(`${window.api_origin}/api/did/status`, { headers });
+            
+            if (response.ok) {
+                const data = await response.json();
+                
+                if (data.tethered && data.did) {
+                    this.tetheredDID = { did: data.did };
+                    this.tetheredWallets = data.wallets || {};
+                    logger.log('Loaded tethered DID from backend:', data.did?.substring(0, 30) + '...');
+                    
+                    // Notify listeners so UI can update
+                    this._notifyListeners();
+                    
+                    return this.tetheredDID;
+                }
+            }
+        } catch (error) {
+            logger.warn('Failed to load tethered DID:', error.message);
+        }
+        
+        return null;
+    }
+    
+    /**
      * Get current wallet mode
      * @returns {'universal' | 'elastos'}
      */
@@ -838,6 +880,9 @@ class WalletService {
             logger.log('User has wallet, initializing iframe...');
             this._getOrCreateIframe();
             // Don't auto-fetch on init - let sidebar trigger it when opened
+            
+            // Load tethered DID from backend (for page reloads)
+            this.loadTetheredDID().catch(() => {});
         }
     }
     

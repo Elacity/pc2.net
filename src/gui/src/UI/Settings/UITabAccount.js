@@ -178,157 +178,183 @@ function isInsideEssentials() {
 
 /**
  * Show the DID Tether QR modal
- * If inside Essentials browser, triggers direct signing instead of QR
+ * Uses a custom modal appended directly to body to ensure it appears above the wallet sidebar
  * @param {jQuery} $el_window - Optional settings window reference for updating UI after tethering
  */
 export async function showDIDTetherModal($el_window = null) {
-    // Use UIWindow pattern for consistency
-    const { default: UIWindow } = await import('../UIWindow.js');
+    // Remove any existing modal
+    $('#did-tether-modal-overlay').remove();
     
     // Check if running inside Essentials - use direct intent instead of QR
     const insideEssentials = isInsideEssentials();
     
-    // Single-step DID tethering UI
-    const loadingHtml = `
-        <div id="did-tether-content" style="padding: 20px; text-align: center;">
-            <p style="color: #333; font-size: 14px; font-weight: 600; margin-bottom: 8px;">Link Your Elastos DID</p>
-            <p style="color: #666; font-size: 12px; margin-bottom: 16px;">Verify your decentralized identity</p>
-            
-            <div id="did-qr-container" style="background: #f5f5f5; padding: 20px; border-radius: 8px; display: inline-block; margin-bottom: 16px; border: 1px solid #e0e0e0;">
-                <div id="did-qr-placeholder" style="width: 180px; height: 180px; display: flex; align-items: center; justify-content: center; color: #999;">
-                    <div class="loading-spinner"></div>
+    // Create modal HTML - appended directly to body for highest z-index
+    const modalHtml = `
+        <div id="did-tether-modal-overlay" style="
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 999999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        ">
+            <div id="did-tether-modal" style="
+                background: white;
+                border-radius: 8px;
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+                max-width: 340px;
+                width: 90%;
+                overflow: hidden;
+            ">
+                <div style="
+                    background: #1f2020;
+                    color: white;
+                    padding: 12px 16px;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                ">
+                    <span style="font-size: 14px; font-weight: 500;">Tether Elastos DID</span>
+                    <span id="did-modal-close" style="cursor: pointer; font-size: 18px; opacity: 0.7;">&times;</span>
                 </div>
-            </div>
-            
-            <div style="text-align: left; font-size: 11px; color: #666; margin-bottom: 12px; padding: 10px; background: #f9f9f9; border-radius: 6px;">
-                <div style="margin-bottom: 4px;">1. Open Essentials wallet</div>
-                <div style="margin-bottom: 4px;">2. Scan this QR code</div>
-                <div>3. Approve the request</div>
-            </div>
-            
-            <div id="did-tether-status" style="font-size: 12px; color: #999;">
-                Initializing...
+                <div id="did-tether-content" style="padding: 20px; text-align: center;">
+                    <p style="color: #333; font-size: 14px; font-weight: 600; margin-bottom: 8px;">Link Your Elastos DID</p>
+                    <p style="color: #666; font-size: 12px; margin-bottom: 16px;">Verify your decentralized identity</p>
+                    
+                    <div id="did-qr-container" style="background: #f5f5f5; padding: 20px; border-radius: 8px; display: inline-block; margin-bottom: 16px; border: 1px solid #e0e0e0;">
+                        <div id="did-qr-placeholder" style="width: 180px; height: 180px; display: flex; align-items: center; justify-content: center; color: #999;">
+                            <div class="loading-spinner"></div>
+                        </div>
+                    </div>
+                    
+                    <div style="text-align: left; font-size: 11px; color: #666; margin-bottom: 12px; padding: 10px; background: #f9f9f9; border-radius: 6px;">
+                        <div style="margin-bottom: 4px;">1. Open Essentials wallet</div>
+                        <div style="margin-bottom: 4px;">2. Scan this QR code</div>
+                        <div>3. Approve the request</div>
+                    </div>
+                    
+                    <div id="did-tether-status" style="font-size: 12px; color: #999;">
+                        Initializing...
+                    </div>
+                </div>
             </div>
         </div>
     `;
     
-    const tetherWindow = UIWindow({
-        title: 'Tether Elastos DID',
-        icon: null,
-        uid: null,
-        is_dir: false,
-        body_content: loadingHtml,
-        has_head: true,
-        selectable_body: false,
-        allow_context_menu: false,
-        is_resizable: false,
-        is_droppable: false,
-        init_center: true,
-        allow_native_ctxmenu: true,
-        allow_user_select: true,
-        window_class: 'window-settings',
-        width: 340,
-        height: 'auto',
-        dominant: true,
-        show_in_taskbar: false,
-        draggable_body: false,
-        onAppend: async function(el_window) {
-            const apiOrigin = window.api_origin || '';
-            const authToken = puter.authToken;
-            let pollInterval = null;
-            
-            // Helper to generate QR code
-            const showQR = (url) => {
-                const qrContainer = el_window.querySelector('#did-qr-placeholder');
-                if (qrContainer && window.QRCode) {
-                    qrContainer.innerHTML = '';
-                    new window.QRCode(qrContainer, {
-                        text: url,
-                        width: 180,
-                        height: 180,
-                        colorDark: '#000000',
-                        colorLight: '#ffffff',
-                        correctLevel: window.QRCode.CorrectLevel.M
-                    });
-                }
-            };
-            
-            const statusEl = el_window.querySelector('#did-tether-status');
-            
-            try {
-                if (statusEl) {
-                    statusEl.textContent = 'Generating QR code...';
-                    statusEl.style.color = '#999';
-                }
-                
-                // Request DID tethering (step 1 only)
-                const response = await fetch(`${apiOrigin}/api/did/tether-request`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${authToken}`
-                    },
-                    body: JSON.stringify({ step: 1 })
-                });
-                
-                if (!response.ok) throw new Error('Failed to create tether request');
-                
-                const data = await response.json();
-                
-                if (data.qrUrl) {
-                    showQR(data.qrUrl);
-                    if (statusEl) {
-                        statusEl.textContent = 'Scan with Essentials to verify...';
-                        statusEl.style.color = '#F6921A';
-                    }
-                    
-                    // Poll for DID tethering completion
-                    pollInterval = setInterval(async () => {
-                        try {
-                            const statusResponse = await fetch(`${apiOrigin}/api/did/status`, {
-                                headers: { 'Authorization': `Bearer ${authToken}` }
-                            });
-                            const statusData = await statusResponse.json();
-                            
-                            if (statusData.tethered && statusData.did && statusData.did !== 'pending') {
-                                // DID tethered successfully
-                                clearInterval(pollInterval);
-                                walletService.tetheredDID = { did: statusData.did };
-                                
-                                if (statusEl) {
-                                    statusEl.textContent = 'DID linked successfully!';
-                                    statusEl.style.color = '#22c55e';
-                                }
-                                
-                                // Close and refresh after short delay
-                                setTimeout(() => {
-                                    $(el_window).closest('.window').find('.window-close').click();
-                                    if ($el_window) {
-                                        $el_window.find('#elastos-did-not-tethered').hide();
-                                        $el_window.find('#elastos-did-tethered').show();
-                                        $el_window.find('#elastos-did-value').text(truncateDID(statusData.did));
-                                    }
-                                }, 1500);
-                            }
-                        } catch (e) {
-                            // Ignore polling errors
-                        }
-                    }, 2000);
-                    
-                    // Stop polling after 5 minutes
-                    setTimeout(() => { if (pollInterval) clearInterval(pollInterval); }, 5 * 60 * 1000);
-                }
-            } catch (error) {
-                console.error('[DID Tether] Error:', error);
-                if (statusEl) {
-                    statusEl.textContent = 'Failed to generate QR code';
-                    statusEl.style.color = '#ef4444';
-                }
-            }
-        },
-        window_css: { height: 'auto' },
-        z_index: 10001,
+    // Append to body (not window-container) for highest z-index
+    $('body').append(modalHtml);
+    
+    const $modal = $('#did-tether-modal-overlay');
+    let pollInterval = null;
+    
+    // Close button handler
+    $('#did-modal-close').on('click', function() {
+        if (pollInterval) clearInterval(pollInterval);
+        $modal.remove();
     });
+    
+    // Click outside to close
+    $modal.on('click', function(e) {
+        if (e.target === this) {
+            if (pollInterval) clearInterval(pollInterval);
+            $modal.remove();
+        }
+    });
+    
+    // Helper to generate QR code
+    const showQR = (url) => {
+        const qrContainer = document.getElementById('did-qr-placeholder');
+        if (qrContainer && window.QRCode) {
+            qrContainer.innerHTML = '';
+            new window.QRCode(qrContainer, {
+                text: url,
+                width: 180,
+                height: 180,
+                colorDark: '#000000',
+                colorLight: '#ffffff',
+                correctLevel: window.QRCode.CorrectLevel.M
+            });
+        }
+    };
+    
+    const statusEl = document.getElementById('did-tether-status');
+    const apiOrigin = window.api_origin || '';
+    const authToken = puter.authToken;
+    
+    try {
+        if (statusEl) {
+            statusEl.textContent = 'Generating QR code...';
+            statusEl.style.color = '#999';
+        }
+        
+        // Request DID tethering (step 1 only)
+        const response = await fetch(`${apiOrigin}/api/did/tether-request`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`
+            },
+            body: JSON.stringify({ step: 1 })
+        });
+        
+        if (!response.ok) throw new Error('Failed to create tether request');
+        
+        const data = await response.json();
+        
+        if (data.qrUrl) {
+            showQR(data.qrUrl);
+            if (statusEl) {
+                statusEl.textContent = 'Scan with Essentials to verify...';
+                statusEl.style.color = '#F6921A';
+            }
+            
+            // Poll for DID tethering completion
+            pollInterval = setInterval(async () => {
+                try {
+                    const statusResponse = await fetch(`${apiOrigin}/api/did/status`, {
+                        headers: { 'Authorization': `Bearer ${authToken}` }
+                    });
+                    const statusData = await statusResponse.json();
+                    
+                    if (statusData.tethered && statusData.did && statusData.did !== 'pending') {
+                        // DID tethered successfully
+                        clearInterval(pollInterval);
+                        walletService.tetheredDID = { did: statusData.did };
+                        
+                        if (statusEl) {
+                            statusEl.textContent = 'DID linked successfully!';
+                            statusEl.style.color = '#22c55e';
+                        }
+                        
+                        // Close and refresh after short delay
+                        setTimeout(() => {
+                            $modal.remove();
+                            if ($el_window) {
+                                $el_window.find('#elastos-did-not-tethered').hide();
+                                $el_window.find('#elastos-did-tethered').show();
+                                $el_window.find('#elastos-did-value').text(truncateDID(statusData.did));
+                            }
+                        }, 1500);
+                    }
+                } catch (e) {
+                    // Ignore polling errors
+                }
+            }, 2000);
+            
+            // Stop polling after 5 minutes
+            setTimeout(() => { if (pollInterval) clearInterval(pollInterval); }, 5 * 60 * 1000);
+        }
+    } catch (error) {
+        console.error('[DID Tether] Error:', error);
+        if (statusEl) {
+            statusEl.textContent = 'Failed to generate QR code';
+            statusEl.style.color = '#ef4444';
+        }
+    }
 }
 
 /**
@@ -454,6 +480,19 @@ export default {
                 color: #6b7280;
                 margin-right: 4px;
             }
+            .account-tooltip-popup {
+                position: fixed;
+                background: #333;
+                color: white;
+                padding: 8px 12px;
+                border-radius: 6px;
+                font-size: 12px;
+                max-width: 280px;
+                z-index: 999999;
+                pointer-events: none;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+                line-height: 1.4;
+            }
         </style>`;
 
         // Profile Section - Compact
@@ -535,7 +574,7 @@ export default {
                         h += `<div class="account-card-row">`;
                             h += `<div style="flex: 1; min-width: 0;">`;
                                 h += `<span class="account-card-label">Smart Account</span>`;
-                                h += `<span class="account-tooltip" title="Your ERC-4337 Smart Account - a contract wallet with advanced features like gas sponsorship and batch transactions" style="cursor: help; margin-left: 4px; color: #999; font-size: 12px;">ⓘ</span>`;
+                                h += `<span class="account-tooltip" title="Your ERC-4337 Smart Account - a contract wallet with advanced features like gas sponsorship and batch transactions, owned by your EOA account" style="cursor: help; margin-left: 4px; color: #999; font-size: 12px;">ⓘ</span>`;
                                 h += `<div class="account-card-value" style="margin-top: 4px;">${html_encode(smartAddr.substring(0, 10))}...${html_encode(smartAddr.substring(smartAddr.length - 8))}</div>`;
                                 h += `<div class="account-card-sublabel">ERC-4337 Account</div>`;
                             h += `</div>`;
@@ -783,6 +822,53 @@ export default {
                 setTimeout(() => $btn.html(copyIcon).css('opacity', '0.5'), 1500);
             }
         });
+
+        // Tooltip handlers for info icons
+        (function initAccountTooltips() {
+            let tooltipEl = null;
+            
+            $el_window.find('.account-tooltip').on('mouseenter', function(e) {
+                const text = $(this).attr('title');
+                if (!text) return;
+                
+                // Remove title to prevent native tooltip
+                $(this).data('tooltip-text', text).removeAttr('title');
+                
+                // Create tooltip element
+                tooltipEl = document.createElement('div');
+                tooltipEl.className = 'account-tooltip-popup';
+                tooltipEl.textContent = text;
+                document.body.appendChild(tooltipEl);
+                
+                // Position below the icon
+                const rect = this.getBoundingClientRect();
+                tooltipEl.style.left = (rect.left + rect.width / 2 - tooltipEl.offsetWidth / 2) + 'px';
+                tooltipEl.style.top = (rect.bottom + 8) + 'px';
+                
+                // Adjust if off-screen right
+                const tooltipRect = tooltipEl.getBoundingClientRect();
+                if (tooltipRect.right > window.innerWidth - 10) {
+                    tooltipEl.style.left = (window.innerWidth - tooltipRect.width - 10) + 'px';
+                }
+                // Adjust if off-screen left
+                if (tooltipRect.left < 10) {
+                    tooltipEl.style.left = '10px';
+                }
+            });
+            
+            $el_window.find('.account-tooltip').on('mouseleave', function() {
+                // Restore title attribute
+                const text = $(this).data('tooltip-text');
+                if (text) {
+                    $(this).attr('title', text);
+                }
+                // Remove tooltip
+                if (tooltipEl && tooltipEl.parentNode) {
+                    tooltipEl.parentNode.removeChild(tooltipEl);
+                    tooltipEl = null;
+                }
+            });
+        })();
 
         // PC2 Mode Check
         const isPC2Mode = () => window.api_origin && (

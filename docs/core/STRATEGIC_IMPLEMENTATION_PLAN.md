@@ -43,14 +43,35 @@ npm start            # Production mode
 
 ```bash
 # Complete restart sequence (ALWAYS do all steps)
+
+# 1. Kill any running server
 lsof -ti:4200 | xargs kill -9 2>/dev/null || true
+
+# 2. Build GUI bundle (if UI files in src/gui/src/ were changed)
+cd /Users/mtk/Documents/Cursor/pc2.net/src/gui
+node ./build.js
+cp dist/bundle.min.js ../../pc2-node/frontend/bundle.min.js
+
+# 3. Build and start pc2-node
 cd /Users/mtk/Documents/Cursor/pc2.net/pc2-node
-npm run build:backend
-npm run build:frontend
-npm start
+npm run build      # Compiles TypeScript backend AND syncs frontend assets
+npm start          # Start server on http://localhost:4200
 ```
 
 **Then:** User must hard refresh browser (Cmd+Shift+R / Ctrl+Shift+R)
+
+### What Each Step Does:
+| Step | Command | What It Builds |
+|------|---------|----------------|
+| GUI Bundle | `src/gui: node ./build.js` | Compiles `src/gui/src/**/*.js` → `bundle.min.js` |
+| Backend | `pc2-node: npm run build:backend` | Compiles `src/**/*.ts` → `dist/**/*.js` |
+| Frontend Assets | `pc2-node: npm run build:frontend` | Copies SDK, apps, index.html to `frontend/` |
+| Full Build | `pc2-node: npm run build` | Runs both backend + frontend builds |
+
+### Common Issues:
+- **"Failed to generate QR code"** → Backend TypeScript not compiled. Run `npm run build` in pc2-node.
+- **UI changes not appearing** → GUI bundle not rebuilt. Run `node ./build.js` in src/gui.
+- **Tooltips/features missing** → Both builds needed. Follow full sequence above.
 
 **See:** "Full System Restart Process" section below for details
 

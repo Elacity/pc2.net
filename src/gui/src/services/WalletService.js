@@ -1624,9 +1624,18 @@ class WalletService {
                 return price;
             }
             
-            // For PGA, use the PGP chain price oracle
+            // For PGA, use PGP chain price oracle (WPGA address)
             if (symbol === 'PGA') {
-                const price = await this._getPGPOraclePrice();
+                const oraclePrice = await this._getPGPOraclePrice();
+                if (oraclePrice > 0) {
+                    this._cachePrice(cacheKey, oraclePrice);
+                    return oraclePrice;
+                }
+            }
+            
+            // For BTCD, try oracle
+            if (symbol === 'BTCD') {
+                const price = await this._getPGPOracleTokenPrice('0xF9BF836FEd97a9c9Bfe4D4c28316b9400C59Cc6B');
                 if (price > 0) {
                     this._cachePrice(cacheKey, price);
                     return price;
@@ -1691,12 +1700,20 @@ class WalletService {
      * Wrapped PGA: 0x1369a5f999618607bB0bb92892Ef69e2233F88f8
      */
     async _getPGPOraclePrice() {
+        return this._getPGPOracleTokenPrice('0x1369a5f999618607bB0bb92892Ef69e2233F88f8');
+    }
+    
+    /**
+     * Get any token price from PGP chain oracle
+     * @param {string} tokenAddress - Token contract address
+     */
+    async _getPGPOracleTokenPrice(tokenAddress) {
         try {
-            const WPGA_ADDRESS = '0x1369a5f999618607bB0bb92892Ef69e2233F88f8';
             const ORACLE_ADDRESS = '0xAaCb8fD571F1dA27D5F7af9CdaF0158245f4d915';
             
-            // getprice(address) function signature
-            const data = '0x41976e09' + WPGA_ADDRESS.toLowerCase().replace('0x', '').padStart(64, '0');
+            // getprice(address) function signature: keccak256("getprice(address)") = 0xf713dc1a
+            const addressPadded = tokenAddress.toLowerCase().replace('0x', '').padStart(64, '0');
+            const data = '0xf713dc1a' + addressPadded;
             
             const result = await this.rpcCallWithFallback(860621, {
                 jsonrpc: '2.0',
@@ -1705,10 +1722,10 @@ class WalletService {
                 id: 1,
             });
             
-            if (result.result && result.result !== '0x') {
+            if (result.result && result.result !== '0x' && result.result !== '0x0000000000000000000000000000000000000000000000000000000000000000') {
                 const priceWei = BigInt(result.result);
                 const price = Number(priceWei) / 1e18;
-                logger.log('PGA price from oracle:', price);
+                logger.log('PGP oracle price for', tokenAddress, ':', price);
                 return price;
             }
             return 0;

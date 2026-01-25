@@ -157,6 +157,19 @@
                 </div>
 
                 <div class="tab-content" id="suggestions-content">
+                    <div class="suggestions-header">
+                        <div class="suggestions-info">
+                            <h3>Community Suggestions</h3>
+                            <p>Suggest ideas that could become proposals</p>
+                        </div>
+                        <button class="create-suggestion-btn" id="createSuggestionBtn">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="12" y1="5" x2="12" y2="19"></line>
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                            </svg>
+                            Create Suggestion
+                        </button>
+                    </div>
                     <div class="suggestions-grid" id="suggestionsGrid">
                         <!-- Suggestions will be loaded here -->
                     </div>
@@ -178,6 +191,20 @@
                 </div>
                 <div class="modal-body" id="modalBody">
                     <!-- Proposal details will be loaded here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Suggestion Modal -->
+        <div class="modal" id="suggestionModal">
+            <div class="modal-backdrop"></div>
+            <div class="modal-content suggestion-modal-content">
+                <div class="modal-header">
+                    <h2 class="modal-title">Create Suggestion</h2>
+                    <button class="modal-close" id="closeSuggestionModal">×</button>
+                </div>
+                <div class="modal-body" id="suggestionModalBody">
+                    <!-- Suggestion form will be rendered here -->
                 </div>
             </div>
         </div>
@@ -233,6 +260,7 @@
     <script src="js/components/council-card.js"></script>
     <script src="js/components/proposal-detail.js"></script>
     <script src="js/components/vote-modal.js"></script>
+    <script src="js/components/suggestion-form.js"></script>
     <script src="js/app.js"></script>
 </body>
 </html>

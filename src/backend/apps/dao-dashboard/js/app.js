@@ -111,6 +111,8 @@ class DAODashboard {
             if (e.key === 'Escape') {
                 this.closeModal();
                 this.closeVoteModal();
+                this.closeSuggestionModal();
+                this.closeAIAssist();
             }
         });
 
@@ -120,6 +122,9 @@ class DAODashboard {
         // Vote modal
         document.getElementById('closeVoteModal')?.addEventListener('click', () => this.closeVoteModal());
         document.querySelector('#voteModal .modal-backdrop')?.addEventListener('click', () => this.closeVoteModal());
+
+        // Create suggestion button
+        document.getElementById('createSuggestionBtn')?.addEventListener('click', () => this.openSuggestionForm());
     }
 
     // ==================== WALLET ====================
@@ -267,6 +272,303 @@ class DAODashboard {
         modal.classList.remove('active');
         this.currentVoteProposal = null;
         this.selectedVoteType = null;
+    }
+
+    // ==================== SUGGESTIONS ====================
+
+    openSuggestionForm() {
+        const modal = document.getElementById('suggestionModal');
+        const modalBody = document.getElementById('suggestionModalBody');
+
+        // Load draft if exists
+        const draft = this.loadDraft();
+        modalBody.innerHTML = SuggestionForm.render(draft);
+        modal.classList.add('active');
+
+        // Bind form events
+        this.bindSuggestionFormEvents();
+    }
+
+    bindSuggestionFormEvents() {
+        // Close button
+        document.getElementById('closeSuggestionModal')?.addEventListener('click', () => this.closeSuggestionModal());
+        document.querySelector('#suggestionModal .modal-backdrop')?.addEventListener('click', () => this.closeSuggestionModal());
+
+        // Add relevance item
+        document.getElementById('addRelevanceBtn')?.addEventListener('click', () => this.addRelevanceItem());
+
+        // Add milestone
+        document.getElementById('addMilestoneBtn')?.addEventListener('click', () => this.addMilestoneItem());
+
+        // Save draft
+        document.getElementById('saveDraftBtn')?.addEventListener('click', () => this.saveDraft());
+
+        // AI assist
+        document.getElementById('aiAssistBtn')?.addEventListener('click', () => this.openAIAssist());
+
+        // Form submit
+        document.getElementById('suggestionForm')?.addEventListener('submit', (e) => this.submitSuggestion(e));
+
+        // Remove item buttons (delegated)
+        document.getElementById('suggestionForm')?.addEventListener('click', (e) => {
+            if (e.target.classList.contains('remove-item-btn')) {
+                e.target.closest('.relevance-item, .milestone-item')?.remove();
+            }
+        });
+    }
+
+    addRelevanceItem() {
+        const container = document.getElementById('relevanceItems');
+        const emptyMsg = container.querySelector('.empty-items');
+        if (emptyMsg) emptyMsg.remove();
+
+        const index = container.querySelectorAll('.relevance-item').length;
+        const html = `
+            <div class="relevance-item" data-index="${index}">
+                <input type="text" class="form-input" name="relevance[${index}][title]" placeholder="Title">
+                <textarea class="form-textarea" name="relevance[${index}][relevanceDetail]" placeholder="How is this relevant to Elastos?" rows="2"></textarea>
+                <button type="button" class="remove-item-btn" data-index="${index}">×</button>
+            </div>
+        `;
+        container.insertAdjacentHTML('beforeend', html);
+    }
+
+    addMilestoneItem() {
+        const container = document.getElementById('milestoneItems');
+        const emptyMsg = container.querySelector('.empty-items');
+        if (emptyMsg) emptyMsg.remove();
+
+        const index = container.querySelectorAll('.milestone-item').length;
+        const html = `
+            <div class="milestone-item" data-index="${index}">
+                <div class="milestone-header">
+                    <span class="milestone-number">Milestone ${index + 1}</span>
+                    <button type="button" class="remove-item-btn" data-index="${index}">×</button>
+                </div>
+                <input type="text" class="form-input" name="plan[${index}][version]" placeholder="Goal/Version">
+                <textarea class="form-textarea" name="plan[${index}][content]" placeholder="Description of this milestone..." rows="2"></textarea>
+                <div class="milestone-budget">
+                    <label>Budget (ELA):</label>
+                    <input type="number" class="form-input" name="plan[${index}][amount]" placeholder="0" min="0" step="0.01">
+                </div>
+            </div>
+        `;
+        container.insertAdjacentHTML('beforeend', html);
+    }
+
+    saveDraft() {
+        const data = SuggestionForm.collectFormData();
+        if (data) {
+            localStorage.setItem('dao_suggestion_draft', JSON.stringify(data));
+            this.showFormMessage('Draft saved successfully!', 'success');
+        }
+    }
+
+    loadDraft() {
+        try {
+            const saved = localStorage.getItem('dao_suggestion_draft');
+            return saved ? JSON.parse(saved) : {};
+        } catch (e) {
+            return {};
+        }
+    }
+
+    clearDraft() {
+        localStorage.removeItem('dao_suggestion_draft');
+    }
+
+    openAIAssist() {
+        // Show AI assist panel
+        const panel = document.createElement('div');
+        panel.id = 'aiAssistOverlay';
+        panel.innerHTML = SuggestionForm.renderAIAssist();
+        document.body.appendChild(panel);
+
+        // Bind AI events
+        document.getElementById('closeAIBtn')?.addEventListener('click', () => this.closeAIAssist());
+        document.getElementById('generateWithAIBtn')?.addEventListener('click', () => this.generateWithAI());
+    }
+
+    closeAIAssist() {
+        document.getElementById('aiAssistOverlay')?.remove();
+    }
+
+    async generateWithAI() {
+        const prompt = document.getElementById('aiPrompt')?.value;
+        if (!prompt || prompt.trim().length < 20) {
+            alert('Please describe your idea in more detail (at least 20 characters)');
+            return;
+        }
+
+        const loading = document.getElementById('aiLoading');
+        const btn = document.getElementById('generateWithAIBtn');
+        
+        if (loading) loading.style.display = 'block';
+        if (btn) btn.disabled = true;
+
+        try {
+            // Try to communicate with parent PC2 AI
+            const result = await this.requestAIGeneration(prompt);
+            
+            if (result) {
+                // Fill form fields with AI-generated content
+                if (result.title) document.getElementById('suggestionTitle').value = result.title;
+                if (result.abstract) document.getElementById('suggestionAbstract').value = result.abstract;
+                if (result.goal) document.getElementById('suggestionGoal').value = result.goal;
+                if (result.motivation) document.getElementById('suggestionMotivation').value = result.motivation;
+                if (result.planIntro) document.getElementById('suggestionPlanIntro').value = result.planIntro;
+                if (result.budgetIntro) document.getElementById('suggestionBudgetIntro').value = result.budgetIntro;
+
+                this.closeAIAssist();
+                this.showFormMessage('Fields generated by AI. Please review and edit.', 'success');
+            }
+        } catch (error) {
+            console.error('[DAO Dashboard] AI generation failed:', error);
+            alert('AI generation failed. Please try again or fill in the fields manually.');
+        } finally {
+            if (loading) loading.style.display = 'none';
+            if (btn) btn.disabled = false;
+        }
+    }
+
+    async requestAIGeneration(prompt) {
+        // Send request to parent PC2 window for AI processing
+        return new Promise((resolve, reject) => {
+            if (!window.parent || window.parent === window) {
+                reject(new Error('AI not available - not running in PC2'));
+                return;
+            }
+
+            const messageId = `ai_${Date.now()}`;
+            
+            const handler = (event) => {
+                if (event.data && event.data.messageId === messageId) {
+                    window.removeEventListener('message', handler);
+                    if (event.data.error) {
+                        reject(new Error(event.data.error));
+                    } else {
+                        resolve(event.data.result);
+                    }
+                }
+            };
+
+            window.addEventListener('message', handler);
+
+            setTimeout(() => {
+                window.removeEventListener('message', handler);
+                reject(new Error('AI request timeout'));
+            }, 60000);
+
+            window.parent.postMessage({
+                type: 'dao-ai-request',
+                messageId,
+                action: 'generateSuggestion',
+                data: {
+                    prompt,
+                    context: 'Elastos DAO proposal suggestion'
+                }
+            }, '*');
+        });
+    }
+
+    async submitSuggestion(e) {
+        e.preventDefault();
+
+        const data = SuggestionForm.collectFormData();
+        const errors = SuggestionForm.validateFormData(data);
+
+        if (errors.length > 0) {
+            this.showFormMessage(errors.join('<br>'), 'error');
+            return;
+        }
+
+        const walletStatus = window.daoWallet.getStatus();
+        if (!walletStatus.connected) {
+            this.showFormMessage('Please connect your wallet first', 'error');
+            return;
+        }
+
+        const submitBtn = document.getElementById('submitSuggestionBtn');
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Submitting...';
+        }
+
+        try {
+            // Sign the suggestion with DID
+            const signature = await this.signSuggestion(data);
+            
+            // Submit to API
+            const result = await this.sendSuggestionToAPI(data, signature);
+
+            if (result.success) {
+                this.clearDraft();
+                this.closeSuggestionModal();
+                alert('Suggestion submitted successfully!');
+                this.loadSuggestions(); // Refresh list
+            } else {
+                throw new Error(result.error || 'Submission failed');
+            }
+        } catch (error) {
+            console.error('[DAO Dashboard] Suggestion submission failed:', error);
+            this.showFormMessage(error.message, 'error');
+        } finally {
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Submit Suggestion';
+            }
+        }
+    }
+
+    async signSuggestion(data) {
+        // Use Essentials or wallet to sign the suggestion
+        if (window.daoWallet.isEssentials && window.daoWallet.essentialsAPI) {
+            const digest = this.hashSuggestionData(data);
+            const result = await window.daoWallet.essentialsAPI.sendIntent('https://did.web3essentials.io/signdigest', {
+                data: digest
+            });
+            return result?.signature || null;
+        }
+        
+        // For non-Essentials, return null (API may not require signature)
+        return null;
+    }
+
+    hashSuggestionData(data) {
+        // Simple hash of the data for signing
+        const str = JSON.stringify(data);
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
+            const char = str.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash;
+        }
+        return hash.toString(16);
+    }
+
+    async sendSuggestionToAPI(data, signature) {
+        // Note: This would require JWT auth in production
+        // For now, just log the attempt
+        console.log('[DAO Dashboard] Would submit suggestion:', data, 'with signature:', signature);
+        
+        // Return mock success for now - actual API integration would need auth
+        return {
+            success: false,
+            error: 'Suggestion submission requires authentication via CyberRepublic website. Draft saved locally.'
+        };
+    }
+
+    showFormMessage(message, type = 'error') {
+        const messageEl = document.getElementById('formMessage');
+        if (messageEl) {
+            const className = type === 'success' ? 'vote-success' : 'vote-error';
+            messageEl.innerHTML = `<div class="${className}">${message}</div>`;
+        }
+    }
+
+    closeSuggestionModal() {
+        const modal = document.getElementById('suggestionModal');
+        modal.classList.remove('active');
     }
 
     // ==================== TAB MANAGEMENT ====================

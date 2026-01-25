@@ -57,23 +57,78 @@ class WalletService {
         // Selected EOA network chain ID (default: Elastos Smart Chain)
         this.selectedEOAChainId = 20;
         
-        // EOA network RPC URLs
+        // EOA network RPC URLs (arrays for fallback support)
         this.EOA_RPC_URLS = {
-            20: 'https://api.elastos.io/eth',          // Elastos Smart Chain
-            22: 'https://api.elastos.io/eid',          // Elastos Identity Chain
-            1: 'https://eth.llamarpc.com',              // Ethereum
-            8453: 'https://mainnet.base.org',           // Base
-            137: 'https://polygon-rpc.com',             // Polygon
-            56: 'https://bsc-dataseed.binance.org',     // BNB Chain
-            42161: 'https://arb1.arbitrum.io/rpc',      // Arbitrum
-            10: 'https://mainnet.optimism.io',          // Optimism
-            43114: 'https://api.avax.network/ext/bc/C/rpc', // Avalanche
+            // Elastos Ecosystem (grouped first)
+            20: [
+                'https://api.elastos.io/eth',
+                'https://api.ela.city/esc',
+                'https://escrpc.elaphant.app',
+            ],
+            22: [
+                'https://api.elastos.io/eid',
+                'https://api2.elastos.io/eid',
+            ],
+            12343: [
+                'https://api.elastos.io/eco',
+                'https://api2.elastos.io/eco',
+            ],
+            860621: [
+                'https://api.elastos.io/pg',
+                'https://api2.elastos.io/pg',
+                'https://pgp-node.elastos.io',
+            ],
+            // Major EVM Networks (multiple public RPCs for reliability)
+            1: [
+                'https://eth.llamarpc.com',
+                'https://rpc.ankr.com/eth',
+                'https://ethereum.publicnode.com',
+                'https://1rpc.io/eth',
+            ],
+            8453: [
+                'https://mainnet.base.org',
+                'https://base.llamarpc.com',
+                'https://rpc.ankr.com/base',
+                'https://1rpc.io/base',
+            ],
+            137: [
+                'https://polygon-rpc.com',
+                'https://rpc.ankr.com/polygon',
+                'https://polygon.llamarpc.com',
+                'https://1rpc.io/matic',
+            ],
+            56: [
+                'https://bsc-dataseed.binance.org',
+                'https://bsc-dataseed1.defibit.io',
+                'https://rpc.ankr.com/bsc',
+                'https://1rpc.io/bnb',
+            ],
+            42161: [
+                'https://arb1.arbitrum.io/rpc',
+                'https://arbitrum.llamarpc.com',
+                'https://rpc.ankr.com/arbitrum',
+                'https://1rpc.io/arb',
+            ],
+            10: [
+                'https://mainnet.optimism.io',
+                'https://optimism.llamarpc.com',
+                'https://rpc.ankr.com/optimism',
+                'https://1rpc.io/op',
+            ],
+            43114: [
+                'https://api.avax.network/ext/bc/C/rpc',
+                'https://avalanche.llamarpc.com',
+                'https://rpc.ankr.com/avalanche',
+                'https://1rpc.io/avax/c',
+            ],
         };
         
         // Native token symbols per chain
         this.EOA_NATIVE_TOKENS = {
             20: { symbol: 'ELA', name: 'Elastos', decimals: 18 },
             22: { symbol: 'ELA', name: 'Elastos', decimals: 18 },
+            12343: { symbol: 'ELA', name: 'Elastos', decimals: 18 },
+            860621: { symbol: 'PGA', name: 'PanGu Asset', decimals: 18 },
             1: { symbol: 'ETH', name: 'Ethereum', decimals: 18 },
             8453: { symbol: 'ETH', name: 'Ethereum', decimals: 18 },
             137: { symbol: 'POL', name: 'Polygon', decimals: 18 },
@@ -176,6 +231,67 @@ class WalletService {
             ...(CHAIN_INFO[chainId] || { name: `Chain ${chainId}` }),
             isSelected: parseInt(chainId) === this.selectedEOAChainId,
         }));
+    }
+    
+    /**
+     * Get RPC URL for a chain (returns first URL from array for backwards compatibility)
+     * @param {number} chainId 
+     * @returns {string|null}
+     */
+    getRpcUrl(chainId) {
+        const urls = this.EOA_RPC_URLS[chainId];
+        if (!urls) return null;
+        return Array.isArray(urls) ? urls[0] : urls;
+    }
+    
+    /**
+     * Make RPC call with automatic fallback to backup RPCs
+     * @param {number} chainId - Chain ID
+     * @param {Object} payload - JSON-RPC payload
+     * @param {number} timeout - Request timeout in ms (default 5000)
+     * @returns {Promise<Object>} RPC response
+     */
+    async rpcCallWithFallback(chainId, payload, timeout = 5000) {
+        const urls = this.EOA_RPC_URLS[chainId];
+        if (!urls) throw new Error(`No RPC URLs configured for chain ${chainId}`);
+        
+        const rpcUrls = Array.isArray(urls) ? urls : [urls];
+        let lastError = null;
+        
+        for (const rpcUrl of rpcUrls) {
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), timeout);
+                
+                const response = await fetch(rpcUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                    signal: controller.signal,
+                });
+                
+                clearTimeout(timeoutId);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                // Check for RPC-level errors
+                if (data.error) {
+                    throw new Error(data.error.message || 'RPC error');
+                }
+                
+                return data;
+            } catch (error) {
+                lastError = error;
+                logger.warn(`RPC failed for ${rpcUrl}:`, error.message);
+                // Try next RPC
+            }
+        }
+        
+        throw lastError || new Error('All RPCs failed');
     }
     
     /**
@@ -1001,10 +1117,10 @@ class WalletService {
         if (!address) return { tokens: [], totalBalance: 0 };
         
         const chainId = this.selectedEOAChainId;
-        const rpcUrl = this.EOA_RPC_URLS[chainId];
+        const rpcUrls = this.EOA_RPC_URLS[chainId];
         const nativeToken = this.EOA_NATIVE_TOKENS[chainId];
         
-        if (!rpcUrl || !nativeToken) {
+        if (!rpcUrls || !nativeToken) {
             logger.error('Invalid chain configuration for chainId:', chainId);
             return { tokens: [], totalBalance: 0 };
         }
@@ -1017,19 +1133,14 @@ class WalletService {
         logger.log(`Fetching ${nativeToken.symbol} balance for EOA on ${chainInfo.name}:`, address);
         
         try {
-            // Fetch native token balance
-            const response = await fetch(rpcUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    jsonrpc: '2.0',
-                    method: 'eth_getBalance',
-                    params: [address, 'latest'],
-                    id: 1,
-                }),
+            // Fetch native token balance with RPC fallback
+            const data = await this.rpcCallWithFallback(chainId, {
+                jsonrpc: '2.0',
+                method: 'eth_getBalance',
+                params: [address, 'latest'],
+                id: 1,
             });
             
-            const data = await response.json();
             const tokens = [];
             
             if (!data.error && data.result) {
@@ -1057,7 +1168,7 @@ class WalletService {
             const stablecoins = this._getStablecoinAddresses(chainId);
             for (const stable of stablecoins) {
                 try {
-                    const stableBalance = await this._getERC20Balance(rpcUrl, address, stable.address, stable.decimals);
+                    const stableBalance = await this._getERC20BalanceWithFallback(chainId, address, stable.address, stable.decimals);
                     if (stableBalance > 0.01) {
                         tokens.push({
                             symbol: stable.symbol,
@@ -1330,7 +1441,7 @@ class WalletService {
     }
     
     /**
-     * Get ERC-20 token balance
+     * Get ERC-20 token balance (legacy - single RPC)
      */
     async _getERC20Balance(rpcUrl, walletAddress, tokenAddress, decimals) {
         // balanceOf(address) function selector: 0x70a08231
@@ -1352,6 +1463,31 @@ class WalletService {
         
         const balanceWei = BigInt(result.result);
         return Number(balanceWei) / Math.pow(10, decimals);
+    }
+    
+    /**
+     * Get ERC-20 token balance with RPC fallback
+     */
+    async _getERC20BalanceWithFallback(chainId, walletAddress, tokenAddress, decimals) {
+        // balanceOf(address) function selector: 0x70a08231
+        const callData = '0x70a08231' + walletAddress.toLowerCase().replace('0x', '').padStart(64, '0');
+        
+        try {
+            const result = await this.rpcCallWithFallback(chainId, {
+                jsonrpc: '2.0',
+                method: 'eth_call',
+                params: [{ to: tokenAddress, data: callData }, 'latest'],
+                id: 1,
+            });
+            
+            if (!result.result || result.result === '0x') return 0;
+            
+            const balanceWei = BigInt(result.result);
+            return Number(balanceWei) / Math.pow(10, decimals);
+        } catch (error) {
+            logger.warn('ERC20 balance fetch failed:', error.message);
+            return 0;
+        }
     }
     
     /**

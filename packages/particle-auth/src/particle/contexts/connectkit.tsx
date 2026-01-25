@@ -42,6 +42,7 @@ interface ParticleConnectkitContextProps {
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 interface ParticleConnectkitProps {}
 
+// Elastos Smart Chain (ESC) - Primary Elastos EVM chain
 const elastos = /* #__PURE__ */ defineChain({
   id: 20,
   name: 'Elastos Smart Chain',
@@ -65,19 +66,94 @@ const elastos = /* #__PURE__ */ defineChain({
   },
 });
 
+// Elastos Identity Chain (EID) - For DID publishing
+const elastosIdentity = /* #__PURE__ */ defineChain({
+  id: 22,
+  name: 'Elastos Identity Chain',
+  nativeCurrency: { name: 'Elastos', symbol: 'ELA', decimals: 18 },
+  rpcUrls: {
+    default: {
+      http: [
+        'https://api.elastos.io/eid',
+        'https://api2.elastos.io/eid',
+      ],
+    },
+  },
+  blockExplorers: {
+    default: {
+      name: 'Elastos Identity Explorer',
+      url: 'https://eid.elastos.io',
+    },
+  },
+  contracts: {
+  },
+});
+
+// Elastos PGP ECO Chain - EVM sidechain with cross-chain support
+const elastosEco = /* #__PURE__ */ defineChain({
+  id: 12343,
+  name: 'Elastos PGP ECO Chain',
+  nativeCurrency: { name: 'Elastos', symbol: 'ELA', decimals: 18 },
+  rpcUrls: {
+    default: {
+      http: [
+        'https://api.elastos.io/eco',
+        'https://api2.elastos.io/eco',
+      ],
+    },
+  },
+  blockExplorers: {
+    default: {
+      name: 'ECO Explorer',
+      url: 'https://eco.elastos.io',
+    },
+  },
+  contracts: {
+  },
+});
+
+// PGP Chain - Uses PGA as native token
+const elastosPgp = /* #__PURE__ */ defineChain({
+  id: 860621,
+  name: 'PGP Chain',
+  nativeCurrency: { name: 'PanGu Asset', symbol: 'PGA', decimals: 18 },
+  rpcUrls: {
+    default: {
+      http: [
+        'https://api.elastos.io/pg',
+        'https://api2.elastos.io/pg',
+        'https://pgp-node.elastos.io',
+      ],
+    },
+  },
+  blockExplorers: {
+    default: {
+      name: 'PGP Explorer',
+      url: 'https://pgp.elastos.io',
+    },
+  },
+  contracts: {
+  },
+});
+
 // Configure supported chains
-// Multi-chain support: Elastos + major EVM networks
+// Multi-chain support: Elastos ecosystem + major EVM networks
 // Users can switch between networks in the wallet interface
 const chains: ConnectKitOptions['chains'] = [
-  elastos,      // Elastos Smart Chain (primary)
-  mainnet,      // Ethereum
-  base,         // Base
-  arbitrum,     // Arbitrum One
-  optimism,     // Optimism
-  polygon,      // Polygon
-  bsc,          // BNB Smart Chain
-  avalanche,    // Avalanche C-Chain
-  linea,        // Linea
+  // Elastos Ecosystem
+  elastos,          // Elastos Smart Chain (primary)
+  elastosIdentity,  // Elastos Identity Chain (EID)
+  elastosEco,       // Elastos PGP ECO Chain
+  elastosPgp,       // PGP Chain
+  // Major EVM Networks
+  mainnet,          // Ethereum
+  base,             // Base
+  arbitrum,         // Arbitrum One
+  optimism,         // Optimism
+  polygon,          // Polygon
+  bsc,              // BNB Smart Chain
+  avalanche,        // Avalanche C-Chain
+  linea,            // Linea
 ];
 
 /**

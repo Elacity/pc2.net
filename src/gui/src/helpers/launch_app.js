@@ -60,21 +60,30 @@ const launch_app = async (options) => {
     else
     {
         try {
-            // Try puter.apps.get first (for cloud Puter)
-            if (typeof puter !== 'undefined' && puter.apps && puter.apps.get) {
+            // For PC2: Always try window.get_apps first (local backend has PC2-specific properties like maximize_on_start)
+            if (typeof window.get_apps === 'function') {
+                try {
+                    app_info = await window.get_apps(options.name);
+                    if (app_info) {
+                        console.log(`[launch_app] Got app info from local backend for "${options.name}"`);
+                    }
+                } catch (localError) {
+                    console.warn(`[launch_app] window.get_apps failed for "${options.name}":`, localError);
+                }
+            }
+            
+            // If local backend didn't have the app, try puter.apps.get (for cloud Puter apps)
+            if (!app_info && typeof puter !== 'undefined' && puter.apps && puter.apps.get) {
                 try {
                     app_info = await puter.apps.get(options.name, { icon_size: 64 });
+                    console.log(`[launch_app] Got app info from Puter SDK for "${options.name}"`);
                 } catch (sdkError) {
-                    // If SDK fails, fall back to window.get_apps (for PC2/local backend)
-                    console.warn(`[launch_app] puter.apps.get failed for "${options.name}", falling back to window.get_apps:`, sdkError);
-                    app_info = await window.get_apps(options.name);
+                    console.warn(`[launch_app] puter.apps.get failed for "${options.name}":`, sdkError);
                 }
-            } else {
-                // Use window.get_apps if SDK is not available
-                app_info = await window.get_apps(options.name);
             }
+            
             if (!app_info) {
-                console.error(`[launch_app] App "${options.name}" not found`);
+                console.error(`[launch_app] App "${options.name}" not found in any source`);
                 throw new Error(`App "${options.name}" not found`);
             }
         } catch (error) {
@@ -153,8 +162,14 @@ const launch_app = async (options) => {
     //-----------------------------------
     // maximize on start
     //-----------------------------------
-    if ( app_info.maximize_on_start ) {
+    // PC2-exclusive apps that should always open maximized
+    const PC2_MAXIMIZE_APPS = ['dao-dashboard', 'app-center'];
+    const shouldMaximize = app_info.maximize_on_start || PC2_MAXIMIZE_APPS.includes(options.name);
+    
+    console.log(`[launch_app] App "${options.name}" maximize_on_start:`, app_info.maximize_on_start, 'shouldMaximize:', shouldMaximize);
+    if ( shouldMaximize ) {
         options.maximized = 1;
+        console.log(`[launch_app] Setting maximized=1 for "${options.name}"`);
     }
     //-----------------------------------
     // if opened a file, sign it

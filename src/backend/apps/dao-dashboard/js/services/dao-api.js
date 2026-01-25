@@ -51,11 +51,13 @@ class DAOApiClient {
         const cacheKey = `rpc_${method}_${JSON.stringify(params)}`;
         
         if (this.cache.has(cacheKey)) {
-            console.log('[DAO API] RPC cache hit:', method);
             return this.cache.get(cacheKey);
         }
 
         try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+            
             const response = await fetch(this.elaRpcUrl, {
                 method: 'POST',
                 headers: {
@@ -66,8 +68,11 @@ class DAOApiClient {
                     method: method,
                     params: params,
                     id: Date.now()
-                })
+                }),
+                signal: controller.signal
             });
+            
+            clearTimeout(timeoutId);
 
             const data = await response.json();
             
@@ -78,7 +83,11 @@ class DAOApiClient {
             this.cache.set(cacheKey, data.result);
             return data.result;
         } catch (error) {
-            console.error('[DAO API] RPC failed:', method, error);
+            if (error.name === 'AbortError') {
+                console.error('[DAO API] RPC timeout:', method);
+            } else {
+                console.error('[DAO API] RPC failed:', method, error.message);
+            }
             throw error;
         }
     }
@@ -208,13 +217,51 @@ class DAOApiClient {
 
     /**
      * Fetch suggestion details
+     * Uses /api/suggestion/:id/show endpoint (same as CyberRepublic)
      */
     async getSuggestionDetail(suggestionId) {
         const cacheKey = `suggestion_${suggestionId}`;
-        const url = `${this.crApiBase}/api/v2/suggestion/get_suggestion/${suggestionId}`;
+        // CyberRepublic uses /api/suggestion/:id/show endpoint
+        const url = `${this.crApiBase}/api/suggestion/${suggestionId}/show`;
         
-        const response = await this.httpGet(url, cacheKey);
-        return response.data || null;
+        try {
+            const response = await this.httpGet(url, cacheKey);
+            console.log('[DAO API] Suggestion detail raw response:', JSON.stringify(response, null, 2));
+            
+            // Extract the suggestion data - may be nested in different ways
+            let suggestion = null;
+            if (response && typeof response === 'object') {
+                // Check various response structures
+                if (response._id && response.title) {
+                    // Direct suggestion object
+                    suggestion = response;
+                } else if (response.data && response.data._id) {
+                    // Wrapped in data
+                    suggestion = response.data;
+                } else if (response.suggestion) {
+                    // Wrapped in suggestion key
+                    suggestion = response.suggestion;
+                } else {
+                    // Just return as-is
+                    suggestion = response;
+                }
+            }
+            
+            console.log('[DAO API] Extracted suggestion:', suggestion ? suggestion.title : 'null');
+            return suggestion;
+        } catch (error) {
+            console.error('[DAO API] Failed to fetch suggestion detail:', error);
+            // Try fallback endpoint
+            try {
+                const fallbackUrl = `${this.crApiBase}/api/v2/suggestion/${suggestionId}`;
+                const fallbackResponse = await this.httpGet(fallbackUrl);
+                console.log('[DAO API] Fallback response:', JSON.stringify(fallbackResponse, null, 2));
+                return fallbackResponse.data || fallbackResponse || null;
+            } catch (fallbackError) {
+                console.error('[DAO API] Fallback also failed:', fallbackError);
+                throw error;
+            }
+        }
     }
 
     // ==================== GOVERNANCE STAGE ====================
@@ -279,34 +326,147 @@ class DAOApiClient {
 
     /**
      * Get status display info
+     * Based on CyberRepublic status flow:
+     * - registered: Council voting (7 days)
+     * - cragreed: Community veto period (7 days) 
+     * - voteragreed: Passed (active proposal)
+     * - finished: Completed
+     * - crcanceled: Rejected by council
+     * - votercanceled: Vetoed by community
      */
     static getStatusInfo(status) {
         const statusMap = {
-            'registered': { label: 'In Review', class: 'registered' },
-            'cragreed': { label: 'Council Agreed', class: 'cragreed' },
-            'voteragreed': { label: 'Active', class: 'voteragreed' },
-            'finished': { label: 'Finished', class: 'finished' },
-            'crcanceled': { label: 'Rejected', class: 'crcanceled' },
-            'votercanceled': { label: 'Vetoed', class: 'votercanceled' }
+            'registered': { label: 'Voting', class: 'registered', isFinal: false },
+            'cragreed': { label: 'Veto Period', class: 'cragreed', isFinal: false },
+            'voteragreed': { label: 'Passed', class: 'voteragreed', isFinal: true },
+            'finished': { label: 'Completed', class: 'finished', isFinal: true },
+            'crcanceled': { label: 'Rejected', class: 'crcanceled', isFinal: true },
+            'votercanceled': { label: 'Vetoed', class: 'votercanceled', isFinal: true }
         };
-        return statusMap[status] || { label: status, class: 'unknown' };
+        return statusMap[status] || { label: status, class: 'unknown', isFinal: false };
     }
 
     /**
-     * Calculate council vote counts
+     * Calculate time remaining for a proposal
+     * CyberRepublic API returns different fields depending on endpoint:
+     * - List endpoint: voteEndIn (minutes remaining as string)
+     * - Detail endpoint: duration (seconds), proposedEnds/notificationEnds (Date)
+     * @param {Object} proposal - Proposal object
+     * @param {number} currentHeight - Current blockchain height (optional)
+     * @returns {Object} { blocks, minutes, display }
      */
-    static calculateVotes(voteResult) {
-        if (!voteResult || !Array.isArray(voteResult)) {
-            return { approve: 0, reject: 0, abstain: 0, total: 12 };
+    static calculateTimeRemaining(proposal, currentHeight) {
+        let secondsRemaining = 0;
+        let endBlockHeight = proposal.proposedEndsHeight || proposal.notificationEndsHeight || 0;
+        
+        // Priority 1: Use voteEndIn from list API (in SECONDS - calculated as blocks * 2min * 60sec)
+        if (proposal.voteEndIn) {
+            secondsRemaining = parseInt(proposal.voteEndIn) || 0;
         }
+        // Priority 2: Use duration (seconds) from detail API
+        else if (proposal.duration && proposal.duration > 0) {
+            secondsRemaining = proposal.duration;
+        }
+        // Priority 3: Calculate from proposedEnds/notificationEnds (Date/timestamp)
+        else if (proposal.proposedEnds) {
+            const endTime = new Date(proposal.proposedEnds).getTime();
+            const now = Date.now();
+            secondsRemaining = Math.max(0, Math.floor((endTime - now) / 1000));
+        }
+        else if (proposal.notificationEnds) {
+            const endTime = new Date(proposal.notificationEnds).getTime();
+            const now = Date.now();
+            secondsRemaining = Math.max(0, Math.floor((endTime - now) / 1000));
+        }
+        // Priority 4: Calculate from block heights (2 min = 120 sec per block)
+        else if (proposal.proposedEndsHeight && currentHeight) {
+            const blocksRemaining = proposal.proposedEndsHeight - currentHeight;
+            secondsRemaining = Math.max(0, blocksRemaining * 120);
+        }
+        else if (proposal.notificationEndsHeight && currentHeight) {
+            const blocksRemaining = proposal.notificationEndsHeight - currentHeight;
+            secondsRemaining = Math.max(0, blocksRemaining * 120);
+        }
+        
+        if (secondsRemaining <= 0) {
+            return { blocks: endBlockHeight, minutes: 0, display: 'Ended' };
+        }
+        
+        const minutesRemaining = Math.floor(secondsRemaining / 60);
+        const hoursRemaining = Math.floor(secondsRemaining / 3600);
+        const daysRemaining = Math.floor(secondsRemaining / 86400);
+        
+        let display;
+        if (daysRemaining > 0) {
+            const hours = Math.floor((secondsRemaining % 86400) / 3600);
+            const mins = Math.floor((secondsRemaining % 3600) / 60);
+            display = `${daysRemaining}d ${hours}h ${mins}m`;
+        } else if (hoursRemaining > 0) {
+            const mins = Math.floor((secondsRemaining % 3600) / 60);
+            display = `${hoursRemaining}h ${mins}m`;
+        } else {
+            display = `${minutesRemaining}m`;
+        }
+        
+        return { blocks: endBlockHeight, minutes: minutesRemaining, display };
+    }
 
+    /**
+     * Check if proposal status is final (can be cached permanently)
+     */
+    static isFinalStatus(status) {
+        const finalStatuses = ['voteragreed', 'finished', 'crcanceled', 'votercanceled'];
+        return finalStatuses.includes(status);
+    }
+
+    /**
+     * Calculate council vote counts from proposal object
+     * Handles multiple API response formats
+     */
+    static calculateVotes(proposal) {
         let approve = 0, reject = 0, abstain = 0;
         
-        voteResult.forEach(vote => {
-            if (vote.value === 'support' || vote.value === 'approve') approve++;
-            else if (vote.value === 'reject') reject++;
-            else if (vote.value === 'abstain' || vote.value === 'abstention') abstain++;
-        });
+        if (!proposal) {
+            return { approve, reject, abstain, total: 12 };
+        }
+
+        // Check for crVotes object (CyberRepublic API format)
+        if (proposal.crVotes) {
+            approve = proposal.crVotes.approve || 0;
+            reject = proposal.crVotes.reject || 0;
+            abstain = proposal.crVotes.abstain || 0;
+            return { approve, reject, abstain, total: 12 };
+        }
+        
+        // Check for numeric counts
+        if (proposal.votesFor !== undefined || proposal.approveNum !== undefined) {
+            approve = proposal.votesFor || proposal.approveNum || 0;
+            reject = proposal.votesAgainst || proposal.rejectNum || proposal.opposeNum || 0;
+            abstain = proposal.abstentions || proposal.abstainNum || 0;
+            return { approve, reject, abstain, total: 12 };
+        }
+        
+        // Check for voteResult array
+        const voteResult = proposal.voteResult || proposal.councilVote || proposal.voteStatus;
+        
+        if (Array.isArray(voteResult)) {
+            voteResult.forEach(vote => {
+                const value = (vote.value || vote.vote || vote.status || '').toLowerCase();
+                if (value === 'support' || value === 'approve' || value === 'yes') approve++;
+                else if (value === 'reject' || value === 'oppose' || value === 'no') reject++;
+                else if (value === 'abstain' || value === 'abstention') abstain++;
+            });
+        }
+        
+        // Check for voteResultMap object
+        if (approve === 0 && reject === 0 && abstain === 0 && proposal.voteResultMap) {
+            Object.values(proposal.voteResultMap).forEach(vote => {
+                const value = (typeof vote === 'string' ? vote : vote?.value || '').toLowerCase();
+                if (value === 'support' || value === 'approve' || value === 'yes') approve++;
+                else if (value === 'reject' || value === 'oppose' || value === 'no') reject++;
+                else if (value === 'abstain' || value === 'abstention') abstain++;
+            });
+        }
 
         return { approve, reject, abstain, total: 12 };
     }

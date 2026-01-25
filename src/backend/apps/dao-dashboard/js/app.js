@@ -4,14 +4,27 @@
 
 class DAODashboard {
     constructor() {
-        this.currentTab = 'proposals';
+        this.currentTab = 'suggestions';
         this.currentStatus = 'all';
         this.currentType = 'all';
         this.currentPage = 1;
-        this.resultsPerPage = 12;
+        this.resultsPerPage = 20; // Load more per page for lazy loading
         this.totalProposals = 0;
         this.searchQuery = '';
         this.searchTimeout = null;
+        this.currentBlockHeight = null;
+        
+        // Lazy loading state
+        this.loadedProposals = [];
+        this.isLoadingMore = false;
+        this.hasMoreProposals = true;
+        
+        // Suggestions lazy loading
+        this.suggestionsPage = 1;
+        this.loadedSuggestions = [];
+        this.hasMoreSuggestions = true;
+        this.isLoadingSuggestions = false;
+        this.totalSuggestions = 0;
         
         // Voting state
         this.currentVoteProposal = null;
@@ -40,14 +53,73 @@ class DAODashboard {
         // Bind event handlers
         this.bindEvents();
         
-        // Initialize wallet
-        await this.initWallet();
+        // Initialize wallet (non-blocking)
+        this.initWallet();
         
-        // Load initial data
-        await this.loadCRStage();
-        await this.loadProposals();
+        // Load stage indicator first (fast, important for user)
+        this.loadCRStage().catch(e => console.warn('[DAO Dashboard] Stage load error:', e));
+        
+        // Load suggestions first (default tab)
+        await this.loadSuggestions();
+        
+        // Hide sidebar on suggestions tab (filters are for proposals only)
+        this.updateSidebarVisibility('suggestions');
+        
+        // Set up infinite scroll after first load
+        this.setupInfiniteScroll();
+        
+        // Load status counts in background (for proposals)
+        this.loadStatusCounts().catch(e => console.warn('[DAO Dashboard] Status counts error:', e));
+        
+        // Preload council and proposals in background for faster tab switching
+        setTimeout(() => {
+            this.preloadCouncil();
+            this.preloadProposals();
+        }, 500);
         
         console.log('[DAO Dashboard] Ready');
+    }
+
+    async preloadCouncil() {
+        try {
+            // Preload council data into cache
+            await window.daoApi.getCouncilMembers();
+            console.log('[DAO Dashboard] Council preloaded');
+        } catch (e) {
+            console.warn('[DAO Dashboard] Council preload failed:', e);
+        }
+    }
+
+    async preloadSuggestions() {
+        try {
+            // Preload first page of suggestions into cache
+            await window.daoApi.getSuggestions(1, 20);
+            console.log('[DAO Dashboard] Suggestions preloaded');
+        } catch (e) {
+            console.warn('[DAO Dashboard] Suggestions preload failed:', e);
+        }
+    }
+
+    async preloadProposals() {
+        try {
+            // Preload first page of proposals into cache
+            await window.daoApi.getProposals(1, 20);
+            console.log('[DAO Dashboard] Proposals preloaded');
+        } catch (e) {
+            console.warn('[DAO Dashboard] Proposals preload failed:', e);
+        }
+    }
+
+    updateSidebarVisibility(tab) {
+        const sidebar = document.getElementById('sidebar');
+        if (!sidebar) return;
+        
+        // Only show sidebar on proposals tab (filters are proposal-specific)
+        if (tab === 'proposals') {
+            sidebar.style.display = '';
+        } else {
+            sidebar.style.display = 'none';
+        }
     }
 
     async initWallet() {
@@ -119,18 +191,6 @@ class DAODashboard {
         document.getElementById('closeModal')?.addEventListener('click', () => this.closeModal());
         document.querySelector('.modal-backdrop')?.addEventListener('click', () => this.closeModal());
 
-        // Proposal row/card clicks (delegated)
-        document.getElementById('proposalsGrid')?.addEventListener('click', (e) => {
-            // Prevent link click from propagating
-            if (e.target.classList.contains('proposal-link')) {
-                e.preventDefault();
-            }
-            const row = e.target.closest('.proposal-row') || e.target.closest('.proposal-card');
-            if (row) {
-                this.openProposalDetail(row.dataset.hash);
-            }
-        });
-
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
@@ -150,6 +210,178 @@ class DAODashboard {
 
         // Create suggestion button
         document.getElementById('createSuggestionBtn')?.addEventListener('click', () => this.openSuggestionForm());
+
+        // Proposal/Suggestion click handlers (delegated)
+        document.addEventListener('click', (e) => {
+            // Proposal link click
+            const proposalLink = e.target.closest('.proposal-link:not(.suggestion-link)');
+            if (proposalLink) {
+                e.preventDefault();
+                const row = proposalLink.closest('.proposal-row');
+                if (row) {
+                    const hash = row.dataset.hash;
+                    if (hash) this.openProposalDetail(hash);
+                }
+            }
+            
+            // Suggestion link click
+            const suggestionLink = e.target.closest('.suggestion-link');
+            if (suggestionLink) {
+                e.preventDefault();
+                const row = suggestionLink.closest('.suggestion-row');
+                if (row) {
+                    const id = row.dataset.id;
+                    if (id) this.openSuggestionDetail(id);
+                }
+            }
+        });
+    }
+
+    // ==================== DETAIL VIEW ====================
+
+    async openProposalDetail(proposalHash) {
+        const mainContent = document.querySelector('.dao-main');
+        if (!mainContent) return;
+        
+        // Store that we're viewing a detail and save original content
+        this.viewingDetail = true;
+        if (!this.originalMainContent) {
+            this.originalMainContent = mainContent.innerHTML;
+        }
+        
+        // Show loading in main content area
+        mainContent.innerHTML = `
+            <div class="detail-view">
+                <div class="loading-container" style="display: flex;">
+                    <div class="progress-bar-wrapper">
+                        <div class="progress-bar-track">
+                            <div class="progress-bar-fill" style="width: 50%"></div>
+                        </div>
+                    </div>
+                    <div class="progress-text">Loading proposal...</div>
+                </div>
+            </div>
+        `;
+        
+        try {
+            // Fetch full proposal details
+            const proposal = await window.daoApi.getProposalDetail(proposalHash);
+            
+            if (!proposal) {
+                throw new Error('Proposal not found');
+            }
+            
+            // Render detail view
+            mainContent.innerHTML = DetailView.renderProposal(proposal);
+            
+            // Scroll to top
+            window.scrollTo(0, 0);
+            
+        } catch (error) {
+            console.error('[DAO Dashboard] Failed to load proposal:', error);
+            mainContent.innerHTML = `
+                <div class="detail-view">
+                    <div class="detail-header">
+                        <button class="back-btn" onclick="window.daoApp.closeDetailView('proposals')">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M19 12H5M12 19l-7-7 7-7"/>
+                            </svg>
+                            Back to Proposals
+                        </button>
+                    </div>
+                    <div class="empty-state">
+                        <h3>Failed to load proposal</h3>
+                        <p>${error.message}</p>
+                    </div>
+                </div>
+            `;
+        }
+    }
+
+    async openSuggestionDetail(suggestionId) {
+        const mainContent = document.querySelector('.dao-main');
+        if (!mainContent) return;
+        
+        // Store that we're viewing a detail and save original content
+        this.viewingDetail = true;
+        if (!this.originalMainContent) {
+            this.originalMainContent = mainContent.innerHTML;
+        }
+        
+        // Show loading
+        mainContent.innerHTML = `
+            <div class="detail-view">
+                <div class="loading-container" style="display: flex;">
+                    <div class="progress-bar-wrapper">
+                        <div class="progress-bar-track">
+                            <div class="progress-bar-fill" style="width: 50%"></div>
+                        </div>
+                    </div>
+                    <div class="progress-text">Loading suggestion...</div>
+                </div>
+            </div>
+        `;
+        
+        try {
+            // Fetch full suggestion details
+            const suggestion = await window.daoApi.getSuggestionDetail(suggestionId);
+            
+            console.log('[DAO Dashboard] Suggestion detail data:', JSON.stringify(suggestion, null, 2));
+            
+            if (!suggestion) {
+                throw new Error('Suggestion not found');
+            }
+            
+            // Render detail view
+            mainContent.innerHTML = DetailView.renderSuggestion(suggestion);
+            
+            // Scroll to top
+            window.scrollTo(0, 0);
+            
+        } catch (error) {
+            console.error('[DAO Dashboard] Failed to load suggestion:', error);
+            mainContent.innerHTML = `
+                <div class="detail-view">
+                    <div class="detail-header">
+                        <button class="back-btn" onclick="window.daoApp.closeDetailView('suggestions')">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M19 12H5M12 19l-7-7 7-7"/>
+                            </svg>
+                            Back to Suggestions
+                        </button>
+                    </div>
+                    <div class="empty-state">
+                        <h3>Failed to load suggestion</h3>
+                        <p>${error.message}</p>
+                    </div>
+                </div>
+            `;
+        }
+    }
+
+    closeDetailView(tab = 'proposals') {
+        console.log('[DAO Dashboard] Closing detail view, returning to:', tab);
+        this.viewingDetail = false;
+        
+        // Restore original main content HTML
+        const mainContent = document.querySelector('.dao-main');
+        if (mainContent && this.originalMainContent) {
+            console.log('[DAO Dashboard] Restoring original content');
+            mainContent.innerHTML = this.originalMainContent;
+        }
+        
+        // Clear saved content so next detail view saves fresh content
+        this.originalMainContent = null;
+        
+        // Force reload the tab content - we need to bypass the currentTab check
+        // by temporarily clearing it
+        this.currentTab = null;
+        
+        // Now switch to the tab (this will reload the content)
+        this.switchTab(tab);
+        
+        // Scroll to top
+        window.scrollTo(0, 0);
     }
 
     // ==================== WALLET ====================
@@ -612,6 +844,9 @@ class DAODashboard {
         document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
         document.getElementById(`${tab}-content`)?.classList.add('active');
 
+        // Update sidebar visibility (filters only apply to proposals)
+        this.updateSidebarVisibility(tab);
+
         // Load data for tab
         if (tab === 'proposals') {
             this.loadProposals();
@@ -622,24 +857,95 @@ class DAODashboard {
         }
     }
 
+    // ==================== STATUS COUNTS ====================
+
+    async loadStatusCounts() {
+        console.log('[DAO Dashboard] Loading status counts...');
+        try {
+            // Fetch counts for each status
+            const statuses = ['all', 'registered', 'cragreed', 'voteragreed', 'finished', 'crcanceled'];
+            const counts = {};
+            
+            // Fetch all proposals first to get total count
+            const allData = await window.daoApi.getProposals('all', 1, 1);
+            console.log('[DAO Dashboard] All data response:', allData);
+            counts.all = allData.total || 0;
+            
+            // Fetch counts for each status in parallel
+            const statusPromises = statuses.slice(1).map(async (status) => {
+                const data = await window.daoApi.getProposals(status, 1, 1);
+                return { status, count: data.total || 0 };
+            });
+            
+            const statusResults = await Promise.all(statusPromises);
+            statusResults.forEach(result => {
+                counts[result.status] = result.count;
+            });
+            
+            console.log('[DAO Dashboard] Status counts:', counts);
+            
+            // Update UI
+            this.updateStatusCounts(counts);
+            
+        } catch (error) {
+            console.error('[DAO Dashboard] Failed to load status counts:', error);
+        }
+    }
+
+    updateStatusCounts(counts) {
+        const countElements = {
+            'all': document.getElementById('count-all'),
+            'registered': document.getElementById('count-registered'),
+            'cragreed': document.getElementById('count-cragreed'),
+            'voteragreed': document.getElementById('count-voteragreed'),
+            'finished': document.getElementById('count-finished'),
+            'crcanceled': document.getElementById('count-crcanceled')
+        };
+        
+        Object.entries(countElements).forEach(([status, element]) => {
+            if (element) {
+                element.textContent = counts[status] || 0;
+            }
+        });
+    }
+
     // ==================== PROPOSALS ====================
 
-    async loadProposals() {
+    async loadProposals(append = false) {
         const grid = document.getElementById('proposalsGrid');
         const loading = document.getElementById('proposalsLoading');
         const empty = document.getElementById('proposalsEmpty');
 
         if (!grid) return;
 
-        // Show loading with progress bar
-        loading.style.display = 'flex';
-        empty.style.display = 'none';
-        grid.innerHTML = '';
-        this.updateProgress('proposals', 0, '0%');
+        // Reset state if not appending (new filter/search)
+        if (!append) {
+            this.currentPage = 1;
+            this.loadedProposals = [];
+            this.hasMoreProposals = true;
+            grid.innerHTML = '';
+            loading.style.display = 'flex';
+            empty.style.display = 'none';
+            this.updateProgress('proposals', 0, '0%');
+        }
+
+        if (this.isLoadingMore) return;
+        this.isLoadingMore = true;
 
         try {
             // Progress: 20% - starting request
-            this.updateProgress('proposals', 20, '20%');
+            if (!append) this.updateProgress('proposals', 20, '20%');
+            
+            // Get current block height for time remaining calculations
+            let currentHeight = this.currentBlockHeight;
+            if (!currentHeight) {
+                try {
+                    currentHeight = await window.daoApi.getBlockHeight();
+                    this.currentBlockHeight = currentHeight;
+                } catch (e) {
+                    console.warn('[DAO Dashboard] Could not get block height:', e);
+                }
+            }
             
             let data;
             if (this.searchQuery) {
@@ -649,7 +955,7 @@ class DAODashboard {
             }
             
             // Progress: 60% - data received
-            this.updateProgress('proposals', 60, '60%');
+            if (!append) this.updateProgress('proposals', 60, '60%');
 
             this.totalProposals = data.total || 0;
             const proposals = data.proposals || [];
@@ -660,41 +966,122 @@ class DAODashboard {
                 filteredProposals = proposals.filter(p => p.type === this.currentType);
             }
             
-            // Progress: 80% - processing complete
-            this.updateProgress('proposals', 80, '80%');
-
-            // Progress: 100% - done
-            this.updateProgress('proposals', 100, '100%');
+            // Cache final proposals to localStorage for sovereign storage
+            filteredProposals.forEach(p => {
+                if (DAOApiClient.isFinalStatus(p.status)) {
+                    window.daoApi.cache.saveProposalPersistent(p);
+                }
+            });
             
-            // Small delay so user sees 100%
-            await new Promise(r => setTimeout(r, 150));
+            // Add to loaded proposals
+            this.loadedProposals = this.loadedProposals.concat(filteredProposals);
+            
+            // Check if more pages available
+            this.hasMoreProposals = this.loadedProposals.length < this.totalProposals;
+            
+            // Progress: 100% - done
+            if (!append) {
+                this.updateProgress('proposals', 100, '100%');
+                await new Promise(r => setTimeout(r, 150));
+            }
             
             loading.style.display = 'none';
 
-            if (filteredProposals.length === 0) {
+            if (this.loadedProposals.length === 0) {
                 empty.style.display = 'block';
+                this.isLoadingMore = false;
                 return;
             }
 
-            // Render proposal cards
-            grid.innerHTML = filteredProposals.map(p => ProposalCard.render(p)).join('');
+            // Render proposal cards with current block height for time remaining
+            if (append) {
+                // Append new proposals
+                const newHtml = filteredProposals.map(p => ProposalCard.render(p, currentHeight)).join('');
+                grid.insertAdjacentHTML('beforeend', newHtml);
+            } else {
+                grid.innerHTML = this.loadedProposals.map(p => ProposalCard.render(p, currentHeight)).join('');
+            }
 
-            // Update pagination
-            this.updatePagination();
+            // Update load more button
+            this.updateLoadMoreButton('proposals');
 
         } catch (error) {
             console.error('[DAO Dashboard] Failed to load proposals:', error);
             loading.style.display = 'none';
-            empty.innerHTML = `
-                <div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="1.5"><path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
-                <h3>Failed to load proposals</h3>
-                <p>${error.message}</p>
-                <button onclick="window.daoApp.loadProposals()" style="margin-top: 16px; padding: 8px 16px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer;">
-                    Try Again
-                </button>
-            `;
-            empty.style.display = 'block';
+            if (!append) {
+                empty.innerHTML = `
+                    <div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="1.5"><path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
+                    <h3>Failed to load proposals</h3>
+                    <p>${error.message}</p>
+                    <button onclick="window.daoApp.loadProposals()" style="margin-top: 16px; padding: 8px 16px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer;">
+                        Try Again
+                    </button>
+                `;
+                empty.style.display = 'block';
+            }
+        } finally {
+            this.isLoadingMore = false;
         }
+    }
+
+    async loadMoreProposals() {
+        if (!this.hasMoreProposals || this.isLoadingMore) return;
+        this.currentPage++;
+        await this.loadProposals(true);
+    }
+
+    setupInfiniteScroll() {
+        // Create sentinel elements for intersection observer
+        const proposalsGrid = document.getElementById('proposalsGrid');
+        const suggestionsGrid = document.getElementById('suggestionsGrid');
+        
+        if (proposalsGrid && !document.getElementById('proposalsSentinel')) {
+            const sentinel = document.createElement('div');
+            sentinel.id = 'proposalsSentinel';
+            sentinel.className = 'scroll-sentinel';
+            proposalsGrid.parentElement.appendChild(sentinel);
+        }
+        
+        if (suggestionsGrid && !document.getElementById('suggestionsSentinel')) {
+            const sentinel = document.createElement('div');
+            sentinel.id = 'suggestionsSentinel';
+            sentinel.className = 'scroll-sentinel';
+            suggestionsGrid.parentElement.appendChild(sentinel);
+        }
+        
+        // Set up intersection observer for proposals
+        this.proposalsObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting && this.hasMoreProposals && !this.isLoadingMore && this.currentTab === 'proposals') {
+                    this.loadMoreProposals();
+                }
+            });
+        }, { rootMargin: '200px' });
+        
+        const proposalsSentinel = document.getElementById('proposalsSentinel');
+        if (proposalsSentinel) {
+            this.proposalsObserver.observe(proposalsSentinel);
+        }
+        
+        // Set up intersection observer for suggestions
+        this.suggestionsObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting && this.hasMoreSuggestions && !this.isLoadingSuggestions && this.currentTab === 'suggestions') {
+                    this.loadMoreSuggestions();
+                }
+            });
+        }, { rootMargin: '200px' });
+        
+        const suggestionsSentinel = document.getElementById('suggestionsSentinel');
+        if (suggestionsSentinel) {
+            this.suggestionsObserver.observe(suggestionsSentinel);
+        }
+    }
+
+    updateLoadMoreButton(type) {
+        // No longer using load more buttons - using infinite scroll instead
+        // Just ensure sentinel exists
+        this.setupInfiniteScroll();
     }
 
     setStatusFilter(status) {
@@ -762,51 +1149,6 @@ class DAODashboard {
         }
     }
 
-    // ==================== PROPOSAL DETAIL ====================
-
-    async openProposalDetail(proposalHash) {
-        if (!proposalHash) return;
-
-        const modal = document.getElementById('proposalModal');
-        const modalBody = document.getElementById('modalBody');
-        const modalTitle = document.getElementById('modalTitle');
-
-        modal.classList.add('active');
-        modalBody.innerHTML = ProposalDetail.renderLoading();
-
-        try {
-            const proposal = await window.daoApi.getProposalDetail(proposalHash);
-            
-            if (!proposal) {
-                throw new Error('Proposal not found');
-            }
-
-            // Store proposal for voting
-            this.currentDetailProposal = proposal;
-
-            modalTitle.textContent = proposal.title || 'Proposal Details';
-            modalBody.innerHTML = ProposalDetail.render(proposal);
-
-            // Bind vote button
-            const voteBtn = modalBody.querySelector('.vote-now-btn');
-            if (voteBtn) {
-                voteBtn.addEventListener('click', () => {
-                    this.closeModal();
-                    this.openVoteModal(proposal);
-                });
-            }
-
-        } catch (error) {
-            console.error('[DAO Dashboard] Failed to load proposal detail:', error);
-            modalBody.innerHTML = ProposalDetail.renderError(error.message);
-        }
-    }
-
-    closeModal() {
-        const modal = document.getElementById('proposalModal');
-        modal.classList.remove('active');
-    }
-
     // ==================== COUNCIL ====================
 
     async loadCouncil() {
@@ -869,75 +1211,169 @@ class DAODashboard {
 
     // ==================== SUGGESTIONS ====================
 
-    async loadSuggestions() {
+    async loadSuggestions(append = false) {
         const grid = document.getElementById('suggestionsGrid');
         const loading = document.getElementById('suggestionsLoading');
 
         if (!grid) return;
 
-        loading.style.display = 'flex';
-        grid.innerHTML = '';
-        this.updateProgress('suggestions', 0, '0%');
+        // Reset state if not appending
+        if (!append) {
+            this.suggestionsPage = 1;
+            this.loadedSuggestions = [];
+            this.hasMoreSuggestions = true;
+            grid.innerHTML = '';
+            loading.style.display = 'flex';
+            this.updateProgress('suggestions', 0, '0%');
+        }
+
+        if (this.isLoadingSuggestions) return;
+        this.isLoadingSuggestions = true;
 
         try {
-            this.updateProgress('suggestions', 30, '30%');
+            if (!append) this.updateProgress('suggestions', 30, '30%');
             
-            const data = await window.daoApi.getSuggestions(1, 20);
+            // Fetch more suggestions per page (50 instead of 20)
+            const data = await window.daoApi.getSuggestions(this.suggestionsPage, 50);
             console.log('[DAO Dashboard] Suggestions API response:', data);
             
-            this.updateProgress('suggestions', 70, '70%');
+            if (!append) this.updateProgress('suggestions', 70, '70%');
             
             // Try multiple response formats
             const suggestions = data.list || data.suggestions || data.data?.list || [];
-            console.log('[DAO Dashboard] Parsed suggestions:', suggestions.length);
+            this.totalSuggestions = data.total || suggestions.length;
+            
+            // Add to loaded suggestions
+            this.loadedSuggestions = this.loadedSuggestions.concat(suggestions);
+            
+            // Check if more pages available
+            this.hasMoreSuggestions = suggestions.length >= 50 && this.loadedSuggestions.length < this.totalSuggestions;
+            
+            console.log('[DAO Dashboard] Parsed suggestions:', suggestions.length, 'Total loaded:', this.loadedSuggestions.length);
 
-            this.updateProgress('suggestions', 100, '100%');
-            await new Promise(r => setTimeout(r, 150));
+            if (!append) {
+                this.updateProgress('suggestions', 100, '100%');
+                await new Promise(r => setTimeout(r, 150));
+            }
             
             loading.style.display = 'none';
 
-            if (suggestions.length === 0) {
+            if (this.loadedSuggestions.length === 0) {
                 grid.innerHTML = `
                     <div class="empty-state" style="grid-column: 1/-1;">
                         <div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 18h6m-5 4h4m-2-15a6 6 0 016 6c0 2.22-1.21 4.16-3 5.19V20H9v-1.81C7.21 17.16 6 15.22 6 13a6 6 0 016-6z"/></svg></div>
                         <h3>No suggestions found</h3>
                     </div>
                 `;
+                this.isLoadingSuggestions = false;
                 return;
             }
 
-            // Render suggestion cards (reuse proposal card structure)
-            grid.innerHTML = suggestions.map(s => this.renderSuggestionCard(s)).join('');
+            // Render as list (like proposals) - add header if first load
+            if (append) {
+                const newHtml = suggestions.map(s => this.renderSuggestionRow(s)).join('');
+                grid.insertAdjacentHTML('beforeend', newHtml);
+            } else {
+                grid.innerHTML = this.renderSuggestionsHeader() + 
+                    this.loadedSuggestions.map(s => this.renderSuggestionRow(s)).join('');
+            }
+
+            // Update load more button
+            this.updateLoadMoreButton('suggestions');
 
         } catch (error) {
             console.error('[DAO Dashboard] Failed to load suggestions:', error);
             loading.style.display = 'none';
-            grid.innerHTML = `
-                <div class="empty-state" style="grid-column: 1/-1;">
-                    <div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="1.5"><path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
-                    <h3>Failed to load suggestions</h3>
-                    <p>${error.message}</p>
-                </div>
-            `;
+            if (!append) {
+                grid.innerHTML = `
+                    <div class="empty-state" style="grid-column: 1/-1;">
+                        <div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="1.5"><path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
+                        <h3>Failed to load suggestions</h3>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        } finally {
+            this.isLoadingSuggestions = false;
         }
     }
 
-    renderSuggestionCard(suggestion) {
-        const likes = suggestion.likesNum || 0;
-        const dislikes = suggestion.dislikesNum || 0;
+    async loadMoreSuggestions() {
+        if (!this.hasMoreSuggestions || this.isLoadingSuggestions) return;
+        this.suggestionsPage++;
+        await this.loadSuggestions(true);
+    }
+
+    renderSuggestionsHeader() {
+        // Return empty - we'll use inline header row like proposals
+        return '';
+    }
+
+    renderSuggestionRow(suggestion) {
+        // Note: CyberRepublic API's suggestion list endpoint doesn't return likesNum/dislikesNum
+        // Those fields are only available in the detail view
         const status = suggestion.status || 'active';
+        const id = suggestion.displayId || suggestion.id || '--';
+        const title = suggestion.title || 'Untitled';
+        const author = suggestion.createdBy?.username || suggestion.proposer || 'Unknown';
+        const type = suggestion.type || 'Suggestion';
+        const dateStr = suggestion.createdAt ? DAOApiClient.formatDate(suggestion.createdAt) : '--';
+        
+        // Status mapping for suggestions
+        const statusMap = {
+            'active': { label: 'Active', class: 'registered' },
+            'proposed': { label: 'Proposed', class: 'cragreed' },
+            'signed': { label: 'Signed', class: 'voteragreed' },
+            'unsigned': { label: 'Unsigned', class: 'unknown' },
+            'archived': { label: 'Archived', class: 'finished' },
+            'rejected': { label: 'Rejected', class: 'crcanceled' }
+        };
+        const statusInfo = statusMap[status] || { label: status, class: 'unknown' };
+
+        // Use sid (MongoDB ObjectId) for the API, fall back to _id
+        const suggestionId = suggestion.sid || suggestion._id;
+        
+        return `
+            <div class="proposal-row suggestion-row" data-id="${suggestionId}">
+                <div class="proposal-col proposal-col-id">#${id}</div>
+                <div class="proposal-col proposal-col-title">
+                    <a href="#" class="proposal-link suggestion-link">${this.escapeHtml(title)}</a>
+                </div>
+                <div class="proposal-col proposal-col-type">${this.escapeHtml(type)}</div>
+                <div class="proposal-col proposal-col-proposer">${this.escapeHtml(author)}</div>
+                <div class="proposal-col proposal-col-date">${dateStr}</div>
+                <div class="proposal-col proposal-col-status">
+                    <span class="status-badge ${statusInfo.class}">${statusInfo.label.toUpperCase()}</span>
+                </div>
+            </div>
+        `;
+    }
+
+    escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    renderSuggestionCard(suggestion) {
+        // Note: Likes/dislikes not available in list API, only in detail view
+        const status = suggestion.status || 'active';
+        // Use sid (MongoDB ObjectId) for the API, fall back to _id
+        const suggestionId = suggestion.sid || suggestion._id;
+        const author = suggestion.createdBy?.username || suggestion.proposer || 'Unknown';
+        const dateStr = suggestion.createdAt ? DAOApiClient.formatDate(suggestion.createdAt) : '--';
 
         return `
-            <div class="proposal-card suggestion-card" data-id="${suggestion._id}">
+            <div class="proposal-card suggestion-card" data-id="${suggestionId}">
                 <div class="proposal-header">
                     <span class="proposal-status ${status === 'active' ? 'voteragreed' : 'finished'}">${status}</span>
-                    <span class="proposal-id">#${suggestion.displayId || '--'}</span>
+                    <span class="proposal-id">#${suggestion.displayId || suggestion.id || '--'}</span>
                 </div>
                 <h3 class="proposal-title">${ProposalCard.escapeHtml(suggestion.title || 'Untitled')}</h3>
                 <div class="proposal-meta">
-                    <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2" style="vertical-align: middle;"><path d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3H14z"/><path d="M7 22H4a2 2 0 01-2-2v-7a2 2 0 012-2h3"/></svg> ${likes}</span>
-                    <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--error)" stroke-width="2" style="vertical-align: middle;"><path d="M10 15v4a3 3 0 003 3l4-9V2H5.72a2 2 0 00-2 1.7l-1.38 9a2 2 0 002 2.3H10z"/><path d="M17 2h3a2 2 0 012 2v7a2 2 0 01-2 2h-3"/></svg> ${dislikes}</span>
-                    <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle;"><circle cx="12" cy="8" r="4"/><path d="M6 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/></svg> ${ProposalCard.escapeHtml(suggestion.proposer || 'Unknown')}</span>
+                    <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle;"><circle cx="12" cy="8" r="4"/><path d="M6 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/></svg> ${ProposalCard.escapeHtml(author)}</span>
+                    <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle;"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> ${dateStr}</span>
                 </div>
             </div>
         `;
@@ -946,28 +1382,46 @@ class DAODashboard {
     // ==================== CR STAGE ====================
 
     async loadCRStage() {
+        const nameEl = document.getElementById('stageNameCompact');
+        const timeEl = document.getElementById('stageTimeCompact');
+        const progressBar = document.getElementById('stageProgressBarCompact');
+        
+        if (nameEl) nameEl.textContent = 'Loading...';
+        
         try {
+            // Get stage info
             const stage = await window.daoApi.getCRStage();
             const height = await window.daoApi.getBlockHeight();
             
-            this.updateStageIndicator(stage, height);
+            if (stage && height) {
+                this.updateStageIndicator(stage, height);
+            } else {
+                throw new Error('Invalid response');
+            }
         } catch (error) {
-            console.error('[DAO Dashboard] Failed to load CR stage:', error);
-            this.updateStageIndicator(null, null);
+            console.error('[DAO Dashboard] Stage load error:', error);
+            // Show fallback with estimated values
+            if (nameEl) nameEl.textContent = 'Council Active';
+            if (timeEl) timeEl.textContent = '~141d';
+            if (progressBar) progressBar.style.width = '50%';
         }
     }
 
     updateStageIndicator(stage, currentHeight) {
-        const nameEl = document.getElementById('stageName');
-        const blockEl = document.getElementById('stageBlock');
-        const timeEl = document.getElementById('stageTime');
-        const progressBar = document.getElementById('stageProgressBar');
+        // Store current height for proposal time calculations
+        this.currentBlockHeight = currentHeight;
+        
+        // Compact stage indicator elements
+        const nameEl = document.getElementById('stageNameCompact');
+        const timeEl = document.getElementById('stageTimeCompact');
+        const progressBar = document.getElementById('stageProgressBarCompact');
+
+        if (!nameEl) return; // Elements not found
 
         if (!stage) {
-            nameEl.textContent = 'Unable to load stage';
-            blockEl.textContent = '';
-            timeEl.textContent = '';
-            progressBar.style.width = '0%';
+            nameEl.textContent = 'Unable to load';
+            if (timeEl) timeEl.textContent = '';
+            if (progressBar) progressBar.style.width = '0%';
             return;
         }
 
@@ -975,21 +1429,20 @@ class DAODashboard {
         let stageName, startHeight, endHeight;
         
         if (stage.invoting) {
-            stageName = 'CR Voting Period';
+            stageName = 'CR Voting';
             startHeight = stage.votingstartheight;
             endHeight = stage.votingendheight;
         } else if (stage.onduty) {
-            stageName = 'CR Council On Duty';
+            stageName = 'Council Active';
             startHeight = stage.ondutystartheight;
             endHeight = stage.ondutyendheight;
         } else {
-            stageName = 'Idle Period';
+            stageName = 'Idle';
             startHeight = 0;
             endHeight = 0;
         }
 
         nameEl.textContent = stageName;
-        blockEl.textContent = `Block: ${currentHeight?.toLocaleString() || '--'}`;
 
         // Calculate progress and time remaining
         if (startHeight && endHeight && currentHeight) {
@@ -1018,6 +1471,7 @@ class DAODashboard {
 
         // Reload current tab
         await this.loadCRStage();
+        await this.loadStatusCounts();
         
         if (this.currentTab === 'proposals') {
             await this.loadProposals();

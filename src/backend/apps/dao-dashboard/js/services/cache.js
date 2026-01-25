@@ -1,11 +1,13 @@
 /**
  * Simple Cache Service with TTL
+ * Supports in-memory cache and persistent localStorage for final proposals
  */
 
 class CacheService {
     constructor(defaultTTL = 120000) { // 2 minutes default
         this.cache = new Map();
         this.defaultTTL = defaultTTL;
+        this.STORAGE_KEY = 'dao_proposal_cache';
     }
 
     /**
@@ -71,7 +73,7 @@ class CacheService {
     }
 
     /**
-     * Clear all cache
+     * Clear all cache (memory only, not localStorage)
      */
     clear() {
         this.cache.clear();
@@ -94,6 +96,88 @@ class CacheService {
      */
     get size() {
         return this.cache.size;
+    }
+
+    // ==================== PERSISTENT STORAGE ====================
+
+    /**
+     * Save a proposal to persistent localStorage (for final statuses)
+     * @param {Object} proposal - Proposal data
+     */
+    saveProposalPersistent(proposal) {
+        if (!proposal || !proposal.proposalHash) return;
+        
+        try {
+            const stored = this.getStoredProposals();
+            stored[proposal.proposalHash] = {
+                ...proposal,
+                cachedAt: Date.now()
+            };
+            localStorage.setItem(this.STORAGE_KEY, JSON.stringify(stored));
+            console.log('[Cache] Saved proposal to persistent storage:', proposal.proposalHash);
+        } catch (e) {
+            console.warn('[Cache] Failed to save to localStorage:', e);
+        }
+    }
+
+    /**
+     * Get a proposal from persistent localStorage
+     * @param {string} proposalHash - Proposal hash
+     * @returns {Object|null}
+     */
+    getProposalPersistent(proposalHash) {
+        try {
+            const stored = this.getStoredProposals();
+            return stored[proposalHash] || null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    /**
+     * Check if proposal exists in persistent storage
+     * @param {string} proposalHash - Proposal hash
+     * @returns {boolean}
+     */
+    hasProposalPersistent(proposalHash) {
+        try {
+            const stored = this.getStoredProposals();
+            return !!stored[proposalHash];
+        } catch (e) {
+            return false;
+        }
+    }
+
+    /**
+     * Get all stored proposals from localStorage
+     * @returns {Object} Map of proposalHash -> proposal
+     */
+    getStoredProposals() {
+        try {
+            const data = localStorage.getItem(this.STORAGE_KEY);
+            return data ? JSON.parse(data) : {};
+        } catch (e) {
+            return {};
+        }
+    }
+
+    /**
+     * Get count of persistently cached proposals
+     * @returns {number}
+     */
+    getPersistentCount() {
+        return Object.keys(this.getStoredProposals()).length;
+    }
+
+    /**
+     * Clear persistent storage
+     */
+    clearPersistent() {
+        try {
+            localStorage.removeItem(this.STORAGE_KEY);
+        } catch (e) {
+            console.warn('[Cache] Failed to clear localStorage:', e);
+        }
     }
 }
 

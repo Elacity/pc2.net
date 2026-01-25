@@ -1,7 +1,7 @@
 # Strategic Implementation Plan: Sash + Anders Vision
 ## Puter-on-PC2 Architecture
 
-**Date:** 2025-01-11 (Started) | 2026-01-23 (Current)  
+**Date:** 2025-01-11 (Started) | 2026-01-25 (Current)  
 **Branch:** `main` (MVP Complete)  
 **Status:** ✅ **MVP v1.0.0 COMPLETE** - Production Infrastructure Deployed
 
@@ -122,6 +122,36 @@ npm start
 ## 📊 Current State Assessment
 
 ### 🎯 Recent Progress (2026-01-25)
+
+**DAO Dashboard & App Center UX Improvements - Complete**
+
+**Window Management:**
+- ✅ Fixed `maximize_on_start` for `dao-dashboard` and `app-center` apps
+- ✅ Apps now open maximized automatically (no manual maximize needed)
+- ✅ Prioritized local backend (`window.get_apps`) over cloud SDK for PC2-specific properties
+- ✅ Added hardcoded fallback list `PC2_MAXIMIZE_APPS` for reliability
+
+**DAO Dashboard Enhancements:**
+- ✅ Fixed time remaining calculation - now shows minutes (e.g., "0d 1h 36m")
+- ✅ Fixed time display on both list view and detail view (uses `voteEndIn` in seconds)
+- ✅ Removed percentage display from vote bars (cleaner UI)
+- ✅ Reduced council row height/padding (better spacing)
+- ✅ Fixed suggestions loading - now loads all 354+ suggestions on first open
+- ✅ Hidden sidebar on Suggestions/Council tabs (filters only apply to Proposals)
+- ✅ Changed default tab to Suggestions (was Proposals)
+
+**App Center Fixes:**
+- ✅ Removed auto-scroll on first open - app now starts at top of page
+- ✅ Better UX - users see content from the beginning
+
+**Files Modified:**
+- `src/gui/src/helpers/launch_app.js` - Prioritize local backend, maximize logic
+- `pc2-node/src/api/apps.ts` - Added `maximize_on_start: true` for both apps
+- `src/backend/apps/dao-dashboard/js/services/dao-api.js` - Fixed time calculation
+- `src/backend/apps/dao-dashboard/js/components/detail-view.js` - Added minutes to time display
+- `src/backend/apps/dao-dashboard/js/app.js` - Load suggestions first, hide sidebar logic
+- `src/backend/apps/dao-dashboard/css/styles.css` - Reduced council row padding
+- `src/backend/apps/app-center/index.html` - Removed auto-scroll
 
 **Elastos Ecosystem Integration - Phase 1 Complete**
 
@@ -1589,7 +1619,67 @@ const buffer = Buffer.concat(chunks.map(c => Buffer.from(c)));
 
 ---
 
-### Lesson 3: Token Validation & Storage
+### Lesson 3: App Window Management & UX Best Practices (2026-01-25)
+
+**Problem 1: Apps Not Opening Maximized**
+- Apps configured with `maximize_on_start: true` in backend weren't opening maximized
+- User had to manually maximize every time
+
+**Root Cause:**
+- `launch_app.js` was trying `puter.apps.get()` (cloud SDK) **first**, which doesn't have PC2-specific properties like `maximize_on_start`
+- Only fell back to `window.get_apps()` (local backend) if SDK failed
+- Cloud SDK returned app info without `maximize_on_start`, so maximize logic never triggered
+
+**Solution:**
+1. **Prioritize Local Backend:** Changed app info fetching to try `window.get_apps()` (local backend) **first**
+   ```javascript
+   // ✅ CORRECT - Try local backend first for PC2-specific properties
+   if (typeof window.get_apps === 'function') {
+       app_info = await window.get_apps(options.name);
+   }
+   // Fallback to cloud SDK only if local backend doesn't have the app
+   if (!app_info && typeof puter !== 'undefined' && puter.apps && puter.apps.get) {
+       app_info = await puter.apps.get(options.name, { icon_size: 64 });
+   }
+   ```
+
+2. **Hardcoded Fallback List:** Added `PC2_MAXIMIZE_APPS` array as backup
+   ```javascript
+   const PC2_MAXIMIZE_APPS = ['dao-dashboard', 'app-center'];
+   const shouldMaximize = app_info.maximize_on_start || PC2_MAXIMIZE_APPS.includes(options.name);
+   ```
+
+**Wisdom:**
+- Always prioritize local backend (`window.get_apps`) for PC2-exclusive apps
+- Cloud SDK (`puter.apps.get`) should only be fallback for cloud Puter apps
+- Hardcoded fallback lists provide safety net if API doesn't return expected properties
+- Backend must have `maximize_on_start: true` in `pc2-node/src/api/apps.ts` AND compiled to `dist/api/apps.js`
+
+**Problem 2: Auto-Scrolling on App Open**
+- Dapp Centre was scrolling to bottom on first open
+- Poor UX - user expects to see top of page first
+
+**Root Cause:**
+- `selectCategory()` function called `scrollIntoView()` on category selection
+- This was also triggered on initial page load, causing unwanted scroll
+
+**Solution:**
+- Removed `scrollIntoView()` call - let user stay at top of page
+- Users can manually scroll if they want to see specific sections
+
+**Wisdom:**
+- **Never auto-scroll on page/app open** - always start at top
+- Only scroll programmatically when user explicitly triggers an action (e.g., clicking a category)
+- Respect user's scroll position - don't force navigation unless necessary
+
+**Files Modified:**
+- `src/gui/src/helpers/launch_app.js` - Prioritize local backend, add hardcoded maximize list
+- `pc2-node/src/api/apps.ts` - Added `maximize_on_start: true` for `dao-dashboard` and `app-center`
+- `src/backend/apps/app-center/index.html` - Removed auto-scroll
+
+---
+
+### Lesson 4: Token Validation & Storage
 
 **Problem:** Frontend was capturing and storing mock tokens from `/whoami` responses, causing wrong user sessions.
 

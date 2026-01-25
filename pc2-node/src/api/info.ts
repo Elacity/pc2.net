@@ -189,7 +189,8 @@ export function handleGetLaunchApps(req: Request, res: Response): void {
       icon: loadIconAsBase64('dao-dashboard'),
       description: 'Elastos DAO governance - proposals, council, voting',
       index_url: `${baseUrl}/apps/dao-dashboard/index.html`,
-      pc2_exclusive: true
+      pc2_exclusive: true,
+      maximize_on_start: true
     }
   ];
   

@@ -78,7 +78,9 @@ export function handleGetApp(req: Request, res: Response): void {
       uuid: 'app-app-center', 
       uid: 'app-app-center', 
       icon: hardcodedIcons['app-center'], 
-      index_url: `${baseUrl}/apps/app-center/index.html` 
+      index_url: `${baseUrl}/apps/app-center/index.html`,
+      pc2_exclusive: true,
+      maximize_on_start: true
     },
     'pdf': { 
       name: 'pdf', 
@@ -144,7 +146,8 @@ export function handleGetApp(req: Request, res: Response): void {
       icon: hardcodedIcons['dao-dashboard'], 
       index_url: `${baseUrl}/apps/dao-dashboard/index.html`,
       description: 'Elastos DAO governance dashboard - view proposals, council, and vote',
-      pc2_exclusive: true
+      pc2_exclusive: true,
+      maximize_on_start: true
     },
     'system-terminal': { 
       name: 'system-terminal', 

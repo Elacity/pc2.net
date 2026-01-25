@@ -5,7 +5,7 @@
 
 class CouncilCard {
     /**
-     * Create council member card HTML
+     * Create council member row HTML (list view)
      * @param {Object} member - Council member data
      * @returns {string} HTML string
      */
@@ -18,38 +18,40 @@ class CouncilCard {
         const impeachPercent = Math.min(impeachRatio * 100, 100);
         const location = this.getLocationName(member.location);
         
-        // Avatar - use image if available, otherwise initial
+        // Avatar initial
         const initial = name.charAt(0).toUpperCase();
-        const avatarHtml = member.avatar 
-            ? `<img src="${member.avatar}" alt="${name}" onerror="this.style.display='none';this.parentElement.textContent='${initial}';">`
-            : initial;
 
         return `
-            <div class="council-card" data-did="${did}">
-                <div class="council-avatar">
-                    ${avatarHtml}
+            <div class="proposal-row council-row" data-did="${did}">
+                <div class="proposal-col proposal-col-id">
+                    <span class="council-avatar-small">${initial}</span>
                 </div>
-                <h3 class="council-name">${this.escapeHtml(name)}</h3>
-                <div class="council-did" title="${did}">${shortDid}</div>
-                <div class="council-stats">
-                    <div class="council-stat">
-                        <div class="council-stat-value">${deposit}</div>
-                        <div class="council-stat-label">ELA Deposit</div>
-                    </div>
-                    <div class="council-stat">
-                        <div class="council-stat-value">${location}</div>
-                        <div class="council-stat-label">Location</div>
-                    </div>
+                <div class="proposal-col proposal-col-title">${this.escapeHtml(name)}</div>
+                <div class="proposal-col proposal-col-type">
+                    <span class="council-did-inline" title="${did}">${shortDid}</span>
+                    <button class="copy-btn-small" onclick="CouncilCard.copyAddress('${did}')" title="Copy DID">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                            <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"></path>
+                        </svg>
+                    </button>
                 </div>
-                <div class="impeachment-bar" title="Impeachment: ${impeachPercent.toFixed(1)}%">
-                    <div class="impeachment-fill" style="width: ${impeachPercent}%"></div>
+                <div class="proposal-col proposal-col-proposer">${location}</div>
+                <div class="proposal-col proposal-col-votes">
+                    <div class="impeachment-bar-inline" title="${impeachPercent.toFixed(1)}%">
+                        <div class="impeachment-fill" style="width: ${impeachPercent}%"></div>
+                    </div>
+                    <span class="impeach-text">${impeachPercent.toFixed(1)}%</span>
+                </div>
+                <div class="proposal-col proposal-col-status">
+                    <span class="status-badge voteragreed">MEMBER</span>
                 </div>
             </div>
         `;
     }
 
     /**
-     * Render Secretary General card
+     * Render Secretary General row
      */
     static renderSecretary(secretary) {
         const name = secretary.didName || secretary.nickname || 'Secretary General';
@@ -57,25 +59,50 @@ class CouncilCard {
         const shortDid = DAOApiClient.truncateDID(did);
         
         const initial = name.charAt(0).toUpperCase();
-        const avatarHtml = secretary.avatar 
-            ? `<img src="${secretary.avatar}" alt="${name}" onerror="this.style.display='none';this.parentElement.textContent='${initial}';">`
-            : initial;
 
         return `
-            <div class="council-card secretary" data-did="${did}">
-                <div class="council-avatar" style="background: linear-gradient(135deg, #f97316, #ea580c);">
-                    ${avatarHtml}
+            <div class="proposal-row council-row secretary-row" data-did="${did}">
+                <div class="proposal-col proposal-col-id">
+                    <span class="council-avatar-small secretary-avatar">${initial}</span>
                 </div>
-                <h3 class="council-name">${this.escapeHtml(name)}</h3>
-                <div class="council-did" title="${did}">${shortDid}</div>
-                <div class="council-stats">
-                    <div class="council-stat">
-                        <div class="council-stat-value">Secretary</div>
-                        <div class="council-stat-label">Role</div>
-                    </div>
+                <div class="proposal-col proposal-col-title">${this.escapeHtml(name)}</div>
+                <div class="proposal-col proposal-col-type">
+                    <span class="council-did-inline" title="${did}">${shortDid}</span>
+                    <button class="copy-btn-small" onclick="CouncilCard.copyAddress('${did}')" title="Copy DID">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                            <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"></path>
+                        </svg>
+                    </button>
+                </div>
+                <div class="proposal-col proposal-col-proposer">--</div>
+                <div class="proposal-col proposal-col-votes">--</div>
+                <div class="proposal-col proposal-col-status">
+                    <span class="status-badge registered">SECRETARY</span>
                 </div>
             </div>
         `;
+    }
+
+    /**
+     * Copy address to clipboard
+     */
+    static copyAddress(address) {
+        if (!address) return;
+        
+        navigator.clipboard.writeText(address).then(() => {
+            // Show brief feedback
+            const btn = event.target.closest('.copy-btn');
+            if (btn) {
+                const originalHtml = btn.innerHTML;
+                btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>';
+                setTimeout(() => {
+                    btn.innerHTML = originalHtml;
+                }, 1500);
+            }
+        }).catch(err => {
+            console.error('Failed to copy:', err);
+        });
     }
 
     /**

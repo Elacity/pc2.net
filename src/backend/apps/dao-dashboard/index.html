@@ -8,42 +8,34 @@
 </head>
 <body>
     <div id="app" class="dao-container">
-        <!-- Header -->
-        <header class="dao-header">
-            <div class="header-left">
-                <div class="header-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 21v-6h6v6"/><path d="M10 9h4"/><path d="M10 12h4"/></svg></div>
-                <h1 class="header-title">Elastos DAO</h1>
+        <!-- Unified Header Bar -->
+        <nav class="dao-header-bar">
+            <!-- Tabs (far left) -->
+            <div class="header-tabs">
+                <button class="tab active" data-tab="suggestions">Suggestions</button>
+                <button class="tab" data-tab="proposals">Proposals</button>
+                <button class="tab" data-tab="council">Council</button>
             </div>
-            <div class="header-right">
-                <div class="search-container">
-                    <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="11" cy="11" r="8"></circle>
-                        <path d="m21 21-4.35-4.35"></path>
-                    </svg>
-                    <input type="text" class="search-input" placeholder="Search proposals..." id="searchInput">
+            
+            <!-- Spacer -->
+            <div class="header-spacer"></div>
+            
+            <!-- Stage Indicator with Progress -->
+            <div class="stage-indicator-compact" id="stageCompact">
+                <span class="stage-name-compact" id="stageNameCompact">Loading...</span>
+                <span class="stage-time-compact" id="stageTimeCompact"></span>
+                <div class="stage-progress-compact">
+                    <div class="stage-progress-bar-compact" id="stageProgressBarCompact" style="width: 0%"></div>
                 </div>
-                <button class="wallet-btn" id="walletBtn" title="Connect Elastos DID">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="8" r="4"/><path d="M6 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"></path>
-                        <path d="M3 5v14a2 2 0 0 0 2 2h16v-5"></path>
-                        <path d="M18 12a2 2 0 0 0 0 4h4v-4Z"></path>
-                    </svg>
-                    <span class="wallet-label" id="walletLabel">Connect DID</span>
-                </button>
-                <button class="header-btn" id="refreshBtn" title="Refresh">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M21 12a9 9 0 11-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
-                        <path d="M21 3v5h-5"></path>
-                    </svg>
-                </button>
             </div>
-        </header>
-
-        <!-- Tabs -->
-        <nav class="dao-tabs">
-            <button class="tab active" data-tab="proposals">Proposals</button>
-            <button class="tab" data-tab="council">Council</button>
-            <button class="tab" data-tab="suggestions">Suggestions</button>
+            
+            <!-- Refresh only -->
+            <button class="icon-btn" id="refreshBtn" title="Refresh">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 12a9 9 0 11-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
+                    <path d="M21 3v5h-5"></path>
+                </svg>
+            </button>
         </nav>
 
         <!-- Main Content -->
@@ -110,23 +102,33 @@
 
             <!-- Main Panel -->
             <main class="dao-main">
-                <!-- Governance Stage Indicator -->
-                <div class="stage-indicator" id="stageIndicator">
-                    <div class="stage-header">
-                        <span class="stage-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3v18h14V3H5z"/><path d="M12 8v6m-3-3h6"/></svg></span>
-                        <span class="stage-name" id="stageName">Loading...</span>
+                <!-- Content Panels -->
+                <div class="tab-content active" id="suggestions-content">
+                    <!-- List Header (Desktop) -->
+                    <div class="proposals-list-header suggestions-list-header" id="suggestionsListHeader">
+                        <div>ID</div>
+                        <div>Title</div>
+                        <div>Type</div>
+                        <div>Author</div>
+                        <div>Date</div>
+                        <div>Status</div>
                     </div>
-                    <div class="stage-details">
-                        <span class="stage-block" id="stageBlock">Block: --</span>
-                        <span class="stage-time" id="stageTime">--</span>
+                    <div class="proposals-list" id="suggestionsGrid">
+                        <!-- Suggestions will be loaded here in list format -->
                     </div>
-                    <div class="stage-progress">
-                        <div class="stage-progress-bar" id="stageProgressBar" style="width: 0%"></div>
+                    <div class="loading-container" id="suggestionsLoading">
+                        <div class="progress-bar-wrapper">
+                            <div class="progress-bar-track">
+                                <div class="progress-bar-fill" id="suggestionsProgressBar"></div>
+                            </div>
+                        </div>
+                        <div class="progress-text">
+                            Loading... <span class="progress-percentage" id="suggestionsProgressText">0%</span>
+                        </div>
                     </div>
                 </div>
 
-                <!-- Content Panels -->
-                <div class="tab-content active" id="proposals-content">
+                <div class="tab-content" id="proposals-content">
                     <!-- List Header (Desktop) -->
                     <div class="proposals-list-header" id="proposalsListHeader">
                         <div>ID</div>
@@ -155,15 +157,19 @@
                         <h3>No proposals found</h3>
                         <p>Try adjusting your filters or search query</p>
                     </div>
-                    <div class="pagination" id="proposalsPagination">
-                        <button class="pagination-btn" id="prevPage" disabled>← Previous</button>
-                        <span class="pagination-info" id="pageInfo">Page 1</span>
-                        <button class="pagination-btn" id="nextPage">Next →</button>
-                    </div>
                 </div>
 
                 <div class="tab-content" id="council-content">
-                    <div class="council-grid" id="councilGrid">
+                    <!-- List Header (Desktop) -->
+                    <div class="proposals-list-header" id="councilListHeader">
+                        <div></div>
+                        <div>Name</div>
+                        <div>DID</div>
+                        <div>Location</div>
+                        <div>Impeachment</div>
+                        <div>Role</div>
+                    </div>
+                    <div class="proposals-list" id="councilGrid">
                         <!-- Council members will be loaded here -->
                     </div>
                     <div class="loading-container" id="councilLoading">
@@ -174,35 +180,6 @@
                         </div>
                         <div class="progress-text">
                             Loading... <span class="progress-percentage" id="councilProgressText">0%</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="tab-content" id="suggestions-content">
-                    <div class="suggestions-header">
-                        <div class="suggestions-info">
-                            <h3>Community Suggestions</h3>
-                            <p>Suggest ideas that could become proposals</p>
-                        </div>
-                        <button class="create-suggestion-btn" id="createSuggestionBtn">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <line x1="12" y1="5" x2="12" y2="19"></line>
-                                <line x1="5" y1="12" x2="19" y2="12"></line>
-                            </svg>
-                            Create Suggestion
-                        </button>
-                    </div>
-                    <div class="suggestions-grid" id="suggestionsGrid">
-                        <!-- Suggestions will be loaded here -->
-                    </div>
-                    <div class="loading-container" id="suggestionsLoading">
-                        <div class="progress-bar-wrapper">
-                            <div class="progress-bar-track">
-                                <div class="progress-bar-fill" id="suggestionsProgressBar"></div>
-                            </div>
-                        </div>
-                        <div class="progress-text">
-                            Loading... <span class="progress-percentage" id="suggestionsProgressText">0%</span>
                         </div>
                     </div>
                 </div>
@@ -253,7 +230,13 @@
 
         <!-- Mobile Bottom Navigation -->
         <nav class="mobile-nav" id="mobileNav">
-            <button class="mobile-nav-item active" data-tab="proposals">
+            <button class="mobile-nav-item active" data-tab="suggestions">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+                </svg>
+                <span>Suggestions</span>
+            </button>
+            <button class="mobile-nav-item" data-tab="proposals">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
                     <polyline points="14 2 14 8 20 8"></polyline>
@@ -271,24 +254,19 @@
                 </svg>
                 <span>Council</span>
             </button>
-            <button class="mobile-nav-item" data-tab="suggestions">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
-                </svg>
-                <span>Suggestions</span>
-            </button>
         </nav>
     </div>
 
-    <!-- Scripts -->
-    <script src="js/services/cache.js"></script>
-    <script src="js/services/dao-api.js"></script>
-    <script src="js/services/wallet.js"></script>
-    <script src="js/components/proposal-card.js"></script>
-    <script src="js/components/council-card.js"></script>
-    <script src="js/components/proposal-detail.js"></script>
-    <script src="js/components/vote-modal.js"></script>
-    <script src="js/components/suggestion-form.js"></script>
-    <script src="js/app.js"></script>
+    <!-- Scripts (ts=1769351800 - force cache bust) -->
+    <script src="js/services/cache.js?ts=1769351800"></script>
+    <script src="js/services/dao-api.js?ts=1769351800"></script>
+    <script src="js/services/wallet.js?ts=1769351800"></script>
+    <script src="js/components/proposal-card.js?ts=1769351800"></script>
+    <script src="js/components/council-card.js?ts=1769351800"></script>
+    <script src="js/components/proposal-detail.js?ts=1769351800"></script>
+    <script src="js/components/vote-modal.js?ts=1769351800"></script>
+    <script src="js/components/suggestion-form.js?ts=1769351800"></script>
+    <script src="js/components/detail-view.js?ts=1769351800"></script>
+    <script src="js/app.js?ts=1769351800"></script>
 </body>
 </html>

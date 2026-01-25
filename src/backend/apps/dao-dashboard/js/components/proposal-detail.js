@@ -11,7 +11,7 @@ class ProposalDetail {
      */
     static render(proposal) {
         const statusInfo = DAOApiClient.getStatusInfo(proposal.status);
-        const votes = DAOApiClient.calculateVotes(proposal.voteResult);
+        const votes = DAOApiClient.calculateVotes(proposal);
         
         // Check if voting is possible (only for active proposals)
         const canVote = ['registered', 'cragreed', 'voteragreed'].includes(proposal.status);
@@ -30,7 +30,7 @@ class ProposalDetail {
             
             ${this.renderBudgetSection(proposal.budgets)}
             
-            ${this.renderCouncilVotes(proposal.voteResult)}
+            ${this.renderCouncilVotes(proposal)}
             
             ${this.renderSection('Proposer', `
                 <div style="font-family: 'SF Mono', Monaco, monospace; font-size: 13px;">
@@ -117,9 +117,18 @@ class ProposalDetail {
 
     /**
      * Render council votes
+     * @param {Object} proposal - Full proposal object
      */
-    static renderCouncilVotes(voteResult) {
-        if (!voteResult || !Array.isArray(voteResult) || voteResult.length === 0) {
+    static renderCouncilVotes(proposal) {
+        // Get vote result from various possible property names
+        const voteResult = proposal?.voteResult || proposal?.councilVote || proposal?.voteStatus || [];
+        const counts = DAOApiClient.calculateVotes(proposal);
+        
+        // Check if we have any vote data
+        const hasVotes = (Array.isArray(voteResult) && voteResult.length > 0) || 
+                        counts.approve > 0 || counts.reject > 0 || counts.abstain > 0;
+        
+        if (!hasVotes) {
             return `
                 <div class="detail-section">
                     <h4 class="detail-section-title">Council Votes</h4>
@@ -130,35 +139,36 @@ class ProposalDetail {
             `;
         }
 
-        const voteItems = voteResult.map(vote => {
-            const name = vote.name || vote.didName || 'Council Member';
-            const result = vote.value || vote.result || 'undecided';
-            const resultClass = result === 'support' || result === 'approve' ? 'approve' 
-                              : result === 'reject' ? 'reject' 
-                              : 'abstain';
-            const resultLabel = result === 'support' ? 'Approve' 
-                              : result === 'approve' ? 'Approve'
-                              : result === 'reject' ? 'Reject'
-                              : result === 'abstain' || result === 'abstention' ? 'Abstain'
-                              : 'Pending';
-            
-            const initial = name.charAt(0).toUpperCase();
-            const avatarHtml = vote.avatar 
-                ? `<img src="${vote.avatar}" alt="${name}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`
-                : initial;
+        // If we have individual vote details
+        let voteItems = '';
+        if (Array.isArray(voteResult) && voteResult.length > 0) {
+            voteItems = voteResult.map(vote => {
+                const name = vote.name || vote.didName || 'Council Member';
+                const result = (vote.value || vote.vote || vote.result || vote.status || 'undecided').toLowerCase();
+                const resultClass = (result === 'support' || result === 'approve' || result === 'yes') ? 'approve' 
+                                  : (result === 'reject' || result === 'oppose' || result === 'no') ? 'reject' 
+                                  : 'abstain';
+                const resultLabel = (result === 'support' || result === 'approve' || result === 'yes') ? 'Approve'
+                                  : (result === 'reject' || result === 'oppose' || result === 'no') ? 'Reject'
+                                  : (result === 'abstain' || result === 'abstention') ? 'Abstain'
+                                  : 'Pending';
+                
+                const initial = name.charAt(0).toUpperCase();
+                const avatarHtml = vote.avatar 
+                    ? `<img src="${vote.avatar}" alt="${name}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`
+                    : initial;
 
-            return `
-                <div class="vote-item">
-                    <div class="vote-avatar" style="display:flex;align-items:center;justify-content:center;background:var(--border-color);color:var(--text-muted);font-size:12px;font-weight:600;">
-                        ${avatarHtml}
+                return `
+                    <div class="vote-item">
+                        <div class="vote-avatar" style="display:flex;align-items:center;justify-content:center;background:var(--border-color);color:var(--text-muted);font-size:12px;font-weight:600;">
+                            ${avatarHtml}
+                        </div>
+                        <span class="vote-name">${this.escapeHtml(name)}</span>
+                        <span class="vote-result ${resultClass}">${resultLabel}</span>
                     </div>
-                    <span class="vote-name">${this.escapeHtml(name)}</span>
-                    <span class="vote-result ${resultClass}">${resultLabel}</span>
-                </div>
-            `;
-        }).join('');
-
-        const counts = DAOApiClient.calculateVotes(voteResult);
+                `;
+            }).join('');
+        }
 
         return `
             <div class="detail-section">
@@ -168,9 +178,7 @@ class ProposalDetail {
                         (${counts.approve} approve, ${counts.reject} reject, ${counts.abstain} abstain)
                     </span>
                 </h4>
-                <div class="council-votes-list">
-                    ${voteItems}
-                </div>
+                ${voteItems ? `<div class="council-votes-list">${voteItems}</div>` : ''}
             </div>
         `;
     }

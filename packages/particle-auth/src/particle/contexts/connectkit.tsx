@@ -45,7 +45,7 @@ interface ParticleConnectkitProps {}
 // Elastos Smart Chain (ESC) - Primary Elastos EVM chain
 const elastos = /* #__PURE__ */ defineChain({
   id: 20,
-  name: 'Elastos Smart Chain',
+  name: 'Elastos (ESC)',
   nativeCurrency: { name: 'Elastos', symbol: 'ELA', decimals: 18 },
   rpcUrls: {
     default: {
@@ -69,7 +69,7 @@ const elastos = /* #__PURE__ */ defineChain({
 // Elastos Identity Chain (EID) - For DID publishing
 const elastosIdentity = /* #__PURE__ */ defineChain({
   id: 22,
-  name: 'Elastos Identity Chain',
+  name: 'Elastos (EID)',
   nativeCurrency: { name: 'Elastos', symbol: 'ELA', decimals: 18 },
   rpcUrls: {
     default: {
@@ -90,9 +90,11 @@ const elastosIdentity = /* #__PURE__ */ defineChain({
 });
 
 // Elastos PGP ECO Chain - EVM sidechain with cross-chain support
+// Note: Chain ID 12343 is not in Particle's supported list, may not appear in dropdown
 const elastosEco = /* #__PURE__ */ defineChain({
   id: 12343,
-  name: 'Elastos PGP ECO Chain',
+  name: 'Elastos (ECO)',
+  network: 'elastos-eco',
   nativeCurrency: { name: 'Elastos', symbol: 'ELA', decimals: 18 },
   rpcUrls: {
     default: {
@@ -108,14 +110,16 @@ const elastosEco = /* #__PURE__ */ defineChain({
       url: 'https://eco.elastos.io',
     },
   },
-  contracts: {
-  },
+  contracts: {},
+  testnet: false,
 });
 
 // PGP Chain - Uses PGA as native token
+// Note: Chain ID 860621 is not in Particle's supported list, may not appear in dropdown
 const elastosPgp = /* #__PURE__ */ defineChain({
   id: 860621,
-  name: 'PGP Chain',
+  name: 'Elastos (PGP)',
+  network: 'elastos-pgp',
   nativeCurrency: { name: 'PanGu Asset', symbol: 'PGA', decimals: 18 },
   rpcUrls: {
     default: {
@@ -132,28 +136,28 @@ const elastosPgp = /* #__PURE__ */ defineChain({
       url: 'https://pgp.elastos.io',
     },
   },
-  contracts: {
-  },
+  contracts: {},
+  testnet: false,
 });
 
 // Configure supported chains
 // Multi-chain support: Elastos ecosystem + major EVM networks
 // Users can switch between networks in the wallet interface
 const chains: ConnectKitOptions['chains'] = [
-  // Elastos Ecosystem
+  // Elastos Ecosystem (grouped together for visibility)
   elastos,          // Elastos Smart Chain (primary)
   elastosIdentity,  // Elastos Identity Chain (EID)
-  elastosEco,       // Elastos PGP ECO Chain
-  elastosPgp,       // PGP Chain
+  elastosEco,       // Elastos PGP ECO Chain (12343)
+  elastosPgp,       // PGP Chain (860621)
   // Major EVM Networks
-  mainnet,          // Ethereum
-  base,             // Base
-  arbitrum,         // Arbitrum One
-  optimism,         // Optimism
-  polygon,          // Polygon
-  bsc,              // BNB Smart Chain
-  avalanche,        // Avalanche C-Chain
-  linea,            // Linea
+  mainnet,          // Ethereum (1)
+  base,             // Base (8453)
+  arbitrum,         // Arbitrum One (42161)
+  optimism,         // Optimism (10)
+  polygon,          // Polygon (137)
+  bsc,              // BNB Smart Chain (56)
+  avalanche,        // Avalanche C-Chain (43114)
+  linea,            // Linea (59144)
 ];
 
 /**

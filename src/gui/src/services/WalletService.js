@@ -1589,30 +1589,97 @@ class WalletService {
     
     /**
      * Get approximate token price in USD
+     * Uses CoinGecko for major tokens, DexScreener for others
      */
     async _getTokenPrice(symbol) {
+        // Check cache first (prices cached for 5 minutes)
+        const cacheKey = `price_${symbol}`;
+        const cached = this._priceCache?.[cacheKey];
+        if (cached && Date.now() - cached.timestamp < 300000) {
+            return cached.price;
+        }
+        
         try {
-            // Use CoinGecko's simple price API
-            const ids = {
+            // CoinGecko IDs for major tokens
+            const coingeckoIds = {
                 'ETH': 'ethereum',
                 'MATIC': 'matic-network',
+                'POL': 'matic-network',
                 'BNB': 'binancecoin',
                 'ELA': 'elastos',
+                'AVAX': 'avalanche-2',
             };
             
-            const id = ids[symbol];
-            if (!id) return 0;
+            const id = coingeckoIds[symbol];
+            if (id) {
+                const response = await fetch(
+                    `https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=usd`,
+                    { signal: AbortSignal.timeout(5000) }
+                );
+                const data = await response.json();
+                const price = data[id]?.usd || 0;
+                this._cachePrice(cacheKey, price);
+                return price;
+            }
             
+            // For PGA, try DexScreener (if there's a trading pair)
+            if (symbol === 'PGA') {
+                const price = await this._getDexScreenerPrice('elastos', '0x0000000000000000000000000000000000000000');
+                if (price > 0) {
+                    this._cachePrice(cacheKey, price);
+                    return price;
+                }
+            }
+            
+            return 0;
+        } catch (error) {
+            logger.warn('Price fetch failed:', error.message);
+            // Fallback prices (approximate)
+            const fallbackPrices = { 
+                'ETH': 2500, 
+                'POL': 0.4, 
+                'MATIC': 0.4,
+                'BNB': 350, 
+                'ELA': 1.8,
+                'AVAX': 25,
+                'PGA': 0.001,
+            };
+            return fallbackPrices[symbol] || 0;
+        }
+    }
+    
+    /**
+     * Cache token price
+     */
+    _cachePrice(key, price) {
+        if (!this._priceCache) this._priceCache = {};
+        this._priceCache[key] = { price, timestamp: Date.now() };
+    }
+    
+    /**
+     * Get token price from DexScreener API
+     * @param {string} chainKey - Chain identifier (e.g., 'elastos')
+     * @param {string} tokenAddress - Token contract address
+     */
+    async _getDexScreenerPrice(chainKey, tokenAddress) {
+        try {
             const response = await fetch(
-                `https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=usd`
+                `https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`,
+                { signal: AbortSignal.timeout(5000) }
             );
             const data = await response.json();
-            return data[id]?.usd || 0;
+            
+            if (data.pairs) {
+                for (const pair of data.pairs) {
+                    if (pair.chainId === chainKey && pair.priceUsd && pair.liquidity?.usd > 1000) {
+                        return parseFloat(pair.priceUsd);
+                    }
+                }
+            }
+            return 0;
         } catch (error) {
-            logger.warn('Price fetch failed:', error);
-            // Fallback prices
-            const fallbackPrices = { 'ETH': 2000, 'MATIC': 0.5, 'BNB': 300, 'ELA': 1.5 };
-            return fallbackPrices[symbol] || 0;
+            logger.warn('DexScreener price fetch failed:', error.message);
+            return 0;
         }
     }
     

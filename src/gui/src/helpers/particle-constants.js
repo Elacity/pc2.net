@@ -102,10 +102,10 @@ export const CHAIN_INFO = {
     860621: {
         name: 'PGP Chain',
         shortName: 'PGP',
-        icon: 'https://static.particle.network/token-list/elastos/native.png',
+        icon: '/images/tokens/PGP.webp',
         explorer: 'https://pgp.elastos.io',
         chainType: 'evm',
-        color: '#F6921A',
+        color: '#8B5CF6',
     },
 };
 
@@ -236,6 +236,7 @@ export const TOKEN_ICONS = {
     'sol': '/images/tokens/Sol.webp',
     'bnb': '/images/tokens/BNB.png',
     'ela': '/images/tokens/ELA.png',
+    'pga': '/images/tokens/PGP.webp',
 };
 
 // ============================================

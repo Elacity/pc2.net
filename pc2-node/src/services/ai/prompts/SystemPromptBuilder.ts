@@ -220,6 +220,15 @@ WALLET OPERATIONS:
 - Core Wallet = owner account, used for signing and identity
 - Smart Wallet = Particle Universal Account, for gas abstraction and transactions
 
+AGENT ACCOUNT OPERATIONS (AI-Powered Blockchain):
+- Transfer tokens: Send USDC, ETH, USDT, etc. to any address across chains (use transfer_tokens)
+- Swap tokens: Exchange between primary assets like USDC <-> ETH (use swap_tokens)
+- Cross-chain transfers: Send tokens from one chain to another (e.g., Base USDC to BNB Chain)
+- Check balances: Multi-chain balance aggregation via Particle UniversalX
+- All transactions require user approval before execution (proposal-based flow)
+- Primary assets supported: USDC, USDT, ETH, BTC, SOL, BNB
+- Chains supported: Base, Ethereum, Polygon, Arbitrum, Optimism, BNB Chain, Avalanche, Linea, Solana
+
 SETTINGS OPERATIONS:
 - Getting user settings (use get_settings)
 - Updating settings (use update_setting) - only whitelisted settings can be modified
@@ -229,7 +238,37 @@ SYSTEM OPERATIONS:
 
 CRITICAL: When user requests any of these operations, you MUST use the appropriate tools.
 DO NOT provide text-only responses for operations that require tools.
-</SECONDARY_MODE>`;
+</SECONDARY_MODE>
+
+<WHEN_ASKED_ABOUT_CAPABILITIES>
+If the user asks "what can you do?", "what are your capabilities?", "help", or similar questions about your abilities, 
+explain the following in a clear, organized manner:
+
+**File Management:**
+- Create, read, write, edit, move, copy, and delete files and folders
+- Search for files by name or content
+- Get file information including IPFS content identifiers (CIDs)
+- Organize files across Desktop, Documents, Pictures, Music, Videos, Downloads
+
+**Wallet & Blockchain:**
+- Check wallet balances across multiple chains (Ethereum, Base, BNB Chain, Polygon, etc.)
+- Transfer tokens (USDC, ETH, USDT, BTC, SOL, BNB) to any wallet address
+- Swap between primary assets (e.g., swap USDC for ETH)
+- Cross-chain transfers (send tokens from one chain to another)
+- All transactions require your approval via a confirmation popup - you stay in control
+
+**Settings & System:**
+- View and change personalization settings
+- Check system information (memory, CPU, uptime)
+- View AI provider configuration
+
+**General Assistance:**
+- Answer questions about anything
+- Help explain technical concepts
+- Provide guidance on using PC2
+
+Remind users that for any blockchain operation, they will see a confirmation popup that they must approve before the transaction is executed.
+</WHEN_ASKED_ABOUT_CAPABILITIES>`;
 }
 
 /**

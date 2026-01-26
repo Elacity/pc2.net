@@ -100,6 +100,43 @@ async function UIWindowTransactionConfirm(options = {}) {
             
             <!-- Amount Card -->
             <div class="tx-summary-card">
+                ${isSwap ? `
+                <!-- Swap visual: FROM → TO -->
+                <div class="tx-amount-row" style="display: flex; align-items: center; justify-content: center; gap: 12px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <div class="tx-token-icon" style="width:32px;height:32px;">
+                            <img src="/static/elacity/tokens/${swapFromSymbol.toUpperCase()}.webp" 
+                                 style="width:100%;height:100%;border-radius:50%;"
+                                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+                            <div class="token-icon-fallback" style="display:none;width:32px;height:32px;font-size:14px;">
+                                ${swapFromSymbol.charAt(0).toUpperCase()}
+                            </div>
+                        </div>
+                        <div style="text-align: left;">
+                            <div style="font-size: 16px; font-weight: 600;">${html_encode(formatTokenBalance(swapFromAmount))}</div>
+                            <div style="font-size: 12px; color: #6b7280;">${html_encode(swapFromSymbol)}</div>
+                        </div>
+                    </div>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <div class="tx-token-icon" style="width:32px;height:32px;">
+                            <img src="/static/elacity/tokens/${swapToSymbol.toUpperCase()}.webp" 
+                                 style="width:100%;height:100%;border-radius:50%;"
+                                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+                            <div class="token-icon-fallback" style="display:none;width:32px;height:32px;font-size:14px;">
+                                ${swapToSymbol.charAt(0).toUpperCase()}
+                            </div>
+                        </div>
+                        <div style="text-align: left;">
+                            <div style="font-size: 16px; font-weight: 600;" id="swap-header-amount">~?</div>
+                            <div style="font-size: 12px; color: #6b7280;">${html_encode(swapToSymbol)}</div>
+                        </div>
+                    </div>
+                </div>
+                ` : `
+                <!-- Transfer visual -->
                 <div class="tx-amount-row">
                     <div class="tx-token-icon">
                         <img src="${html_encode(tokenIconUrl)}" 
@@ -113,6 +150,7 @@ async function UIWindowTransactionConfirm(options = {}) {
                         <span class="amount-symbol">${html_encode(symbol)}</span>
                     </div>
                 </div>
+                `}
                 <div class="tx-chain-badge">
                     <img src="${html_encode(chainInfo.icon)}" onerror="this.style.display='none'" />
                     <span>${html_encode(chainInfo.name)}</span>
@@ -125,15 +163,21 @@ async function UIWindowTransactionConfirm(options = {}) {
                 <!-- Swap-specific details -->
                 <div class="tx-detail-row">
                     <span class="detail-label">You Send</span>
-                    <span class="detail-value swap-token-value">
+                    <span class="detail-value swap-token-value" style="display: flex; align-items: center; gap: 6px;">
+                        <img src="/static/elacity/tokens/${swapFromSymbol.toUpperCase()}.webp" 
+                             style="width:18px;height:18px;border-radius:50%;" 
+                             onerror="this.style.display='none';" />
                         <strong>${html_encode(swapFromAmount)} ${html_encode(swapFromSymbol)}</strong>
                     </span>
                 </div>
                 
                 <div class="tx-detail-row">
                     <span class="detail-label">You Receive</span>
-                    <span class="detail-value swap-token-value" id="swap-expected-output">
+                    <span class="detail-value swap-token-value" id="swap-expected-output" style="display: flex; align-items: center; gap: 6px;">
                         ${readOnly ? `
+                            <img src="/static/elacity/tokens/${swapToSymbol.toUpperCase()}.webp" 
+                                 style="width:18px;height:18px;border-radius:50%;" 
+                                 onerror="this.style.display='none';" />
                             <strong>${html_encode(swapExpectedOutput)} ${html_encode(swapToSymbol)}</strong>
                         ` : `
                             <span class="fee-loading" style="display: inline-flex; align-items: center; gap: 6px;">
@@ -625,12 +669,18 @@ async function UIWindowTransactionConfirm(options = {}) {
                 logger.log('Swap estimation result:', result);
                 
                 if (result && result.expectedOutput) {
-                    // Update the expected output display
+                    // Update the expected output display with token icon
                     const formattedOutput = parseFloat(result.expectedOutput).toFixed(6);
                     $window.find('#swap-expected-output').html(
+                        `<img src="/static/elacity/tokens/${toTokenSymbol.toUpperCase()}.webp" ` +
+                        `     style="width:18px;height:18px;border-radius:50%;" ` +
+                        `     onerror="this.style.display='none';" />` +
                         `<strong>${formattedOutput} ${toTokenSymbol}</strong>` +
                         `<span style="color: #6b7280; font-size: 11px; margin-left: 4px;">(~$${result.fromAmountUSD || '0'})</span>`
                     );
+                    
+                    // Also update the header amount
+                    $window.find('#swap-header-amount').text(`~${formattedOutput}`);
                     
                     // Update fee display
                     $window.find('#fee-loading').hide();

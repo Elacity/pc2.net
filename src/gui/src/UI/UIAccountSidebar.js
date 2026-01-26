@@ -1665,9 +1665,15 @@ function renderActivityList(proposals) {
         // Get chain info
         const chainInfo = chainId ? CHAIN_INFO[chainId] : null;
         
-        // Get token icon
-        const tokenSymbol = token.symbol || 'TOKEN';
-        const tokenIconUrl = token.icon || `/static/elacity/tokens/${tokenSymbol.toUpperCase()}.webp`;
+        // Get token info - for swaps, get from swap object
+        const swap = proposal.swap || {};
+        const isSwap = type === 'swap';
+        const tokenSymbol = isSwap ? (swap.fromToken?.symbol || 'TOKEN') : (token.symbol || 'TOKEN');
+        const tokenIconUrl = chainInfo?.icon || token.icon || `/static/elacity/tokens/${tokenSymbol.toUpperCase()}.webp`;
+        
+        // For swaps, also get the to token symbol
+        const toTokenSymbol = isSwap ? (swap.toToken?.symbol || '') : '';
+        const fromAmount = isSwap ? (swap.fromToken?.amount || token.amount) : token.amount;
         
         // Status styling
         const statusStyles = {
@@ -1718,7 +1724,7 @@ function renderActivityList(proposals) {
                     cursor: pointer;
                     transition: all 0.2s;
                  ">
-                <!-- Token Icon -->
+                <!-- Chain Icon (main icon) -->
                 <div style="
                     width: 36px;
                     height: 36px;
@@ -1731,11 +1737,11 @@ function renderActivityList(proposals) {
                     flex-shrink: 0;
                     overflow: hidden;
                 ">
-                    <img src="${html_encode(tokenIconUrl)}" 
+                    <img src="${html_encode(chainInfo?.icon || tokenIconUrl)}" 
                          style="width:100%;height:100%;object-fit:cover;border-radius:50%;"
                          onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
                     <div style="display:none;width:100%;height:100%;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:#71717a;">
-                        ${tokenSymbol.charAt(0).toUpperCase()}
+                        ${chainInfo?.name?.charAt(0) || tokenSymbol.charAt(0).toUpperCase()}
                     </div>
                 </div>
                 
@@ -1761,7 +1767,22 @@ function renderActivityList(proposals) {
                 
                 <!-- Time/Amount -->
                 <div style="text-align: right; flex-shrink: 0;">
-                    ${token.amount ? `<div style="font-weight: 500; font-size: 12px; color: #e5e5e5;">${formatTokenBalance(token.amount)} ${html_encode(token.symbol || '')}</div>` : ''}
+                    ${isSwap ? `
+                        <div style="display: flex; align-items: center; justify-content: flex-end; gap: 4px; font-weight: 500; font-size: 12px; color: #e5e5e5;">
+                            <img src="/static/elacity/tokens/${tokenSymbol.toUpperCase()}.webp" style="width:14px;height:14px;border-radius:50%;" onerror="this.style.display='none';" />
+                            <span>${formatTokenBalance(fromAmount || '')}</span>
+                            <span style="color:#6b7280;">→</span>
+                            <img src="/static/elacity/tokens/${toTokenSymbol.toUpperCase()}.webp" style="width:14px;height:14px;border-radius:50%;" onerror="this.style.display='none';" />
+                            <span>${html_encode(toTokenSymbol)}</span>
+                        </div>
+                    ` : `
+                        ${token.amount ? `
+                            <div style="display: flex; align-items: center; justify-content: flex-end; gap: 4px; font-weight: 500; font-size: 12px; color: #e5e5e5;">
+                                <img src="/static/elacity/tokens/${tokenSymbol.toUpperCase()}.webp" style="width:14px;height:14px;border-radius:50%;" onerror="this.style.display='none';" />
+                                <span>${formatTokenBalance(token.amount)} ${html_encode(token.symbol || '')}</span>
+                            </div>
+                        ` : ''}
+                    `}
                     <div style="font-size: 10px; color: #6b7280;">${timeDisplay}</div>
                 </div>
             </div>

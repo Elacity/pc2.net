@@ -258,9 +258,10 @@ export class ClaudeProvider {
         description: tool.function?.description || tool.description,
         input_schema: tool.function?.parameters || tool.parameters || {},
       }));
-      // Set tool_choice to 'auto' to encourage (but not force) tool usage
-      // This tells Claude to use tools when appropriate rather than just generating text
-      (sdkParams as any).tool_choice = { type: 'auto' };
+      // Set tool_choice to 'any' to FORCE at least one tool call
+      // This is necessary because conversation history may contain examples of 
+      // Claude just generating text (fake tool calls) instead of using actual tools
+      (sdkParams as any).tool_choice = { type: 'any' };
     }
 
     try {

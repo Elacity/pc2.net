@@ -2105,6 +2105,40 @@ class WalletService {
     }
     
     /**
+     * Swap between primary assets using Particle UniversalX
+     * Primary assets: USDC, USDT, ETH, BTC, SOL, BNB
+     * @param {Object} params - Swap parameters
+     * @param {string} params.fromToken - Token to swap from (e.g., "USDC", "ETH")
+     * @param {string} params.toToken - Token to receive (e.g., "ETH", "USDC")
+     * @param {string} params.fromAmount - Amount to swap (human readable, e.g. "100.5")
+     * @param {number} params.toChainId - Target chain ID for output token
+     * @returns {Promise<{success: boolean, transactionId: string, expectedOutput: string}>}
+     */
+    async swapTokens({ fromToken, toToken, fromAmount, toChainId = 8453 }) {
+        if (!this.isConnected()) {
+            return Promise.reject(new Error('Wallet not connected'));
+        }
+        
+        // Validate primary assets
+        const primaryAssets = ['USDC', 'USDT', 'ETH', 'BTC', 'SOL', 'BNB'];
+        if (!primaryAssets.includes(fromToken?.toUpperCase())) {
+            return Promise.reject(new Error(`${fromToken} is not a primary asset. Only ${primaryAssets.join(', ')} supported.`));
+        }
+        if (!primaryAssets.includes(toToken?.toUpperCase())) {
+            return Promise.reject(new Error(`${toToken} is not a primary asset. Only ${primaryAssets.join(', ')} supported.`));
+        }
+        
+        logger.log('Swapping tokens via Particle UniversalX:', { fromToken, toToken, fromAmount, toChainId });
+        
+        return this._sendToIframe('particle-wallet.swap', {
+            fromToken: fromToken.toUpperCase(),
+            toToken: toToken.toUpperCase(),
+            fromAmount,
+            toChainId,
+        });
+    }
+    
+    /**
      * Start periodic polling for wallet data
      * @param {number} interval - Polling interval in ms (default 30s)
      */

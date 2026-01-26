@@ -12,6 +12,7 @@ import {
   UniversalAccount,
   createMultiChainUnsignedData,
   injectMultiChainSignature,
+  SUPPORTED_TOKEN_TYPE,
   type IAssetsResponse,
 } from '@particle-network/universal-account-sdk';
 import { Web3Provider } from '../provider/web3-provider';
@@ -795,6 +796,147 @@ const ParticleNetworkProvider: React.FC<React.PropsWithChildren<ParticleNetworkC
                   solanaRentUSD,
                   isSolanaTransfer,
                 },
+              },
+            }, '*');
+            break;
+          }
+          
+          case 'particle-wallet.swap': {
+            // Swap between primary assets using createConvertTransaction
+            // Primary assets: USDC, USDT, ETH, BTC, SOL, BNB
+            if (!smartAccountInfo?.smartAccountAddress) {
+              throw new Error('Smart Account not yet initialized. Please wait for wallet to fully connect.');
+            }
+            
+            const { fromToken, toToken, fromAmount, toChainId } = payload;
+            
+            console.log('[Particle Wallet Handler] Swap request:', {
+              fromToken,
+              toToken,
+              fromAmount,
+              toChainId,
+            });
+            
+            // Map token symbols to SUPPORTED_TOKEN_TYPE enum
+            const tokenTypeMap: Record<string, any> = {
+              'USDC': SUPPORTED_TOKEN_TYPE.USDC,
+              'USDT': SUPPORTED_TOKEN_TYPE.USDT,
+              'ETH': SUPPORTED_TOKEN_TYPE.ETH,
+              'BTC': SUPPORTED_TOKEN_TYPE.BTC,
+              'SOL': SUPPORTED_TOKEN_TYPE.SOL,
+              'BNB': SUPPORTED_TOKEN_TYPE.BNB,
+            };
+            
+            // Decimals for each token
+            const tokenDecimals: Record<string, number> = {
+              'USDC': 6,
+              'USDT': 6,
+              'ETH': 18,
+              'BTC': 8,
+              'SOL': 9,
+              'BNB': 18,
+            };
+            
+            const toTokenType = tokenTypeMap[toToken?.toUpperCase()];
+            if (!toTokenType) {
+              throw new Error(`Unsupported target token: ${toToken}. Primary assets only: USDC, USDT, ETH, BTC, SOL, BNB`);
+            }
+            
+            // Get prices to calculate expected output
+            console.log('[Particle Wallet Handler] Fetching prices for swap calculation...');
+            const assets = await universalAccount.getPrimaryAssets();
+            
+            const fromAsset = assets.assets.find(
+              (a: any) => a.tokenType?.toUpperCase() === fromToken?.toUpperCase()
+            );
+            const toAsset = assets.assets.find(
+              (a: any) => a.tokenType?.toUpperCase() === toToken?.toUpperCase()
+            );
+            
+            const fromPrice = fromAsset?.price || 1;
+            const toPrice = toAsset?.price || 1;
+            
+            if (!toPrice || toPrice <= 0) {
+              throw new Error(`Price data not available for ${toToken}`);
+            }
+            
+            // Calculate expected output: (fromAmount * fromPrice) / toPrice
+            const fromAmountFloat = parseFloat(fromAmount);
+            const fromAmountUSD = fromAmountFloat * fromPrice;
+            const expectedOutput = fromAmountUSD / toPrice;
+            
+            // Format with correct decimals
+            const toTokenDecimals = tokenDecimals[toToken?.toUpperCase()] || 18;
+            const expectedOutputString = expectedOutput.toFixed(toTokenDecimals);
+            
+            console.log('[Particle Wallet Handler] Swap calculation:', {
+              fromAmount,
+              fromPrice,
+              fromAmountUSD,
+              toPrice,
+              expectedOutput,
+              expectedOutputString,
+            });
+            
+            // Create convert transaction using Particle SDK
+            const swapTransaction = await universalAccount.createConvertTransaction({
+              expectToken: {
+                type: toTokenType,
+                amount: expectedOutputString,
+              },
+              chainId: toChainId || 8453, // Default to Base
+            });
+            
+            console.log('[Particle Wallet Handler] Convert transaction created:', swapTransaction);
+            
+            // Sign the transaction (same flow as transfer)
+            const swapUserOps = swapTransaction.userOps || [];
+            if (swapUserOps.length === 0) {
+              throw new Error('No user operations in swap transaction');
+            }
+            
+            const swapUnsignedData = createMultiChainUnsignedData(swapUserOps);
+            console.log('[Particle Wallet Handler] Swap unsigned data:', swapUnsignedData);
+            
+            const swapProvider = await connector?.getProvider();
+            if (!swapProvider) {
+              throw new Error('No wallet provider available');
+            }
+            
+            const swapDataToSign = typeof swapUnsignedData === 'string' 
+              ? swapUnsignedData 
+              : swapUnsignedData.merkleRoot || swapUnsignedData.hash;
+            
+            console.log('[Particle Wallet Handler] Signing swap with address:', connectedEoaAddress);
+            
+            const swapSignature = await (swapProvider as any).request({
+              method: 'personal_sign',
+              params: [swapDataToSign, connectedEoaAddress],
+            });
+            
+            console.log('[Particle Wallet Handler] Swap signature obtained');
+            
+            // Inject signature and send
+            injectMultiChainSignature(swapTransaction, swapSignature);
+            const swapResult = await universalAccount.sendTransaction(swapTransaction, swapSignature);
+            
+            console.log('[Particle Wallet Handler] Swap sent:', swapResult);
+            
+            // Extract fee info for display
+            const swapFees = swapTransaction.tokenChanges?.totalFeeInUSD || '0';
+            
+            window.parent.postMessage({
+              type: 'particle-wallet.swap-result',
+              requestId,
+              payload: { 
+                success: true,
+                transactionId: swapResult.transactionId || swapTransaction.transactionId,
+                fromToken,
+                toToken,
+                fromAmount,
+                expectedOutput: expectedOutputString,
+                toChainId: toChainId || 8453,
+                feeUSD: swapFees,
               },
             }, '*');
             break;

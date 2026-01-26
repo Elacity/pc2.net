@@ -24,7 +24,9 @@ import {
 import { 
   COMMON_TOKENS, 
   getTokenInfo, 
-  getChainIdFromName 
+  getChainIdFromName,
+  isPrimaryAsset,
+  PRIMARY_ASSETS,
 } from './AgentKitTools.js';
 import { Server as SocketIOServer } from 'socket.io';
 import { getDatabase } from '../../../storage/index.js';
@@ -435,15 +437,143 @@ export class AgentKitExecutor {
   }
   
   /**
-   * Create a swap proposal (placeholder - requires DEX integration)
+   * Create a swap proposal for primary assets using Particle UniversalX
+   * Primary assets: USDC, USDT, ETH, BTC, SOL, BNB
    */
   private async swapTokens(args: any): Promise<AgentKitToolResult> {
-    // For Phase 1, swaps are not yet implemented
-    return {
-      success: false,
-      error: 'Swaps not yet implemented',
-      message: 'Token swaps are coming soon! For now, I can only transfer tokens. Please use a DEX like Uniswap directly for swaps.',
-    };
+    if (!this.walletProvider) {
+      return {
+        success: false,
+        error: 'Smart Account not available',
+        message: 'Swapping requires a Universal Account. Please connect your wallet first.',
+      };
+    }
+    
+    const { from_token, to_token, amount, to_chain } = args;
+    
+    // Validate required parameters
+    if (!from_token || !to_token || !amount) {
+      return {
+        success: false,
+        error: 'Missing required parameters',
+        message: 'Please specify from_token, to_token, and amount for the swap.',
+      };
+    }
+    
+    const fromTokenUpper = from_token.toUpperCase();
+    const toTokenUpper = to_token.toUpperCase();
+    
+    // Validate both tokens are primary assets
+    if (!isPrimaryAsset(fromTokenUpper)) {
+      return {
+        success: false,
+        error: `${fromTokenUpper} is not a primary asset`,
+        message: `Cannot swap from ${fromTokenUpper}. Primary assets only: ${PRIMARY_ASSETS.join(', ')}. ` +
+          `For non-primary tokens, please use a DEX directly.`,
+      };
+    }
+    
+    if (!isPrimaryAsset(toTokenUpper)) {
+      return {
+        success: false,
+        error: `${toTokenUpper} is not a primary asset`,
+        message: `Cannot swap to ${toTokenUpper}. Primary assets only: ${PRIMARY_ASSETS.join(', ')}. ` +
+          `For buying non-primary tokens, this feature is coming soon.`,
+      };
+    }
+    
+    // Same token check
+    if (fromTokenUpper === toTokenUpper) {
+      return {
+        success: false,
+        error: 'Cannot swap same token',
+        message: `Cannot swap ${fromTokenUpper} to itself. Please choose different tokens.`,
+      };
+    }
+    
+    // Validate amount
+    const parsedAmount = parseFloat(amount);
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      return {
+        success: false,
+        error: 'Invalid amount',
+        message: 'Please provide a valid positive amount to swap.',
+      };
+    }
+    
+    // Get destination chain ID
+    const toChainId = to_chain ? getChainIdFromName(to_chain) : 8453; // Default to Base
+    
+    try {
+      // Create swap proposal
+      const proposal = await this.walletProvider.createSwapProposal(
+        fromTokenUpper,
+        toTokenUpper,
+        amount,
+        toChainId
+      );
+      
+      // Store proposal in memory and database
+      pendingProposals.set(proposal.id, proposal);
+      
+      // Persist to database (same pattern as transfer)
+      try {
+        const db = getDatabase();
+        db.saveProposal({
+          id: proposal.id,
+          walletAddress: this.walletAddress,
+          type: proposal.type,
+          status: proposal.status,
+          from: proposal.from,
+          smartAccountAddress: proposal.smartAccountAddress,
+          to: proposal.to,
+          chainId: proposal.chainId,
+          // For swaps, store from_token info in the token field
+          token: {
+            address: null,
+            symbol: fromTokenUpper,
+            decimals: 18,
+            amount: amount,
+          },
+          summary: proposal.summary,
+          createdAt: proposal.createdAt,
+          expiresAt: proposal.expiresAt,
+        });
+        logger.info('[AgentKitExecutor] Swap proposal saved to database:', proposal.id);
+      } catch (dbError) {
+        logger.warn('[AgentKitExecutor] Failed to save swap proposal to database:', dbError);
+      }
+      
+      // Notify frontend via WebSocket (same room format as transfer)
+      if (this.io) {
+        const room = `user:${this.walletAddress.toLowerCase()}`;
+        this.io.to(room).emit('wallet-agent:proposal', { proposal });
+        logger.info('[AgentKitExecutor] Sent swap proposal to frontend via room:', room, 'proposalId:', proposal.id);
+      } else {
+        logger.warn('[AgentKitExecutor] No WebSocket (io) available - cannot notify frontend');
+      }
+      
+      // Return success with proposal details
+      return {
+        success: true,
+        proposal,
+        message: `📊 **Swap Proposal Created**\n\n` +
+          `**Swap**: ${amount} ${fromTokenUpper} → ${toTokenUpper}\n` +
+          `**Destination Chain**: ${getChainById(toChainId)?.name || 'Unknown'}\n` +
+          `**Protocol**: Particle UniversalX\n` +
+          `⛽ **Gas**: ${proposal.summary.estimatedGas}\n\n` +
+          `⏳ This proposal requires your approval. Please review and approve in the wallet panel.\n\n` +
+          `_Note: Exact output amount will be calculated at signing time based on current market prices._\n\n` +
+          `_Proposal ID: ${proposal.id}_`,
+      };
+    } catch (error: any) {
+      logger.error('[AgentKitExecutor] Failed to create swap proposal:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to create swap proposal',
+        message: `Failed to create swap proposal: ${error.message || 'Unknown error'}`,
+      };
+    }
   }
   
   /**

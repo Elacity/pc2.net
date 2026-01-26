@@ -418,6 +418,77 @@ export class ParticleWalletProvider {
   }
   
   /**
+   * Create a swap proposal for user approval
+   * This creates a proposal for swapping between PRIMARY assets (USDC, USDT, ETH, BTC, SOL, BNB)
+   * The frontend will execute this using Particle SDK's createConvertTransaction
+   */
+  async createSwapProposal(
+    fromToken: string,
+    toToken: string,
+    fromAmount: string,
+    toChainId?: number
+  ): Promise<TransactionProposal> {
+    const targetChainId = toChainId || this.defaultChainId;
+    const networkConfig = getChainById(targetChainId);
+    
+    // Create proposal ID
+    const proposalId = `prop_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    // For swaps, we can't pre-calculate the exact output - frontend will do that
+    // using getPrimaryAssets() to get current prices
+    const proposal: TransactionProposal = {
+      id: proposalId,
+      type: 'swap',
+      status: 'pending_approval',
+      
+      from: this.eoaAddress,
+      smartAccountAddress: this.smartAccountAddress,
+      
+      // For swaps, 'to' is the smart account (self-swap)
+      to: this.smartAccountAddress,
+      chainId: targetChainId,
+      
+      // Swap-specific info
+      swap: {
+        fromToken: {
+          address: null, // Primary assets - frontend resolves
+          symbol: fromToken.toUpperCase(),
+          amount: fromAmount,
+        },
+        toToken: {
+          address: null, // Primary assets - frontend resolves  
+          symbol: toToken.toUpperCase(),
+          expectedAmount: 'TBD', // Frontend calculates from prices
+          minAmount: 'TBD', // Frontend calculates with slippage
+        },
+        slippage: 1, // 1% default slippage
+        protocol: 'particle-universalx',
+      },
+      
+      summary: {
+        action: `Swap ${fromAmount} ${fromToken.toUpperCase()} → ${toToken.toUpperCase()} on ${networkConfig?.name || 'Unknown'}`,
+        estimatedGas: 'Free (sponsored)', // Particle usually sponsors swaps
+        estimatedGasUSD: 0,
+        isSponsored: true,
+        totalCost: `${fromAmount} ${fromToken.toUpperCase()} (+ fees calculated at signing)`,
+      },
+      
+      createdAt: Date.now(),
+      expiresAt: Date.now() + 5 * 60 * 1000, // 5 minutes
+    };
+    
+    logger.info('[ParticleWalletProvider] Created swap proposal', {
+      proposalId,
+      fromToken,
+      toToken,
+      fromAmount,
+      toChain: networkConfig?.name,
+    });
+    
+    return proposal;
+  }
+  
+  /**
    * Format address for display (truncate middle)
    */
   private formatAddress(address: string): string {

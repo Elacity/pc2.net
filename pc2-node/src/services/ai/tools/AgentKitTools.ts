@@ -87,29 +87,30 @@ export const agentKitTools: NormalizedTool[] = [
     type: 'function',
     function: {
       name: 'swap_tokens',
-      description: 'Creates a proposal to swap one token for another on a DEX. IMPORTANT: This creates a transaction proposal that the user must approve. The swap will be executed at the best available rate across supported DEXs. Returns a proposal with expected output amount and slippage.',
+      description: 'Creates a proposal to swap one PRIMARY ASSET for another PRIMARY ASSET using Particle UniversalX. ' +
+        'PRIMARY ASSETS ONLY: USDC, USDT, ETH, BTC, SOL, BNB. ' +
+        'Examples: Swap USDC to ETH, swap ETH to BTC, swap BNB to USDC. ' +
+        'This uses Particle\'s unified liquidity and handles cross-chain automatically. ' +
+        'IMPORTANT: This creates a transaction proposal that the user must approve. ' +
+        'For buying non-primary tokens (like UNI, ARB, LINK), use buy_tokens instead (coming soon).',
       parameters: {
         type: 'object',
         properties: {
           from_token: {
             type: 'string',
-            description: 'Token to swap from (e.g., "ETH", "USDC")'
+            description: 'Token to swap FROM. MUST be a primary asset: USDC, USDT, ETH, BTC, SOL, or BNB'
           },
           to_token: {
             type: 'string',
-            description: 'Token to receive (e.g., "USDC", "ETH")'
+            description: 'Token to RECEIVE. MUST be a primary asset: USDC, USDT, ETH, BTC, SOL, or BNB'
           },
           amount: {
             type: 'string',
-            description: 'Amount of from_token to swap (e.g., "0.5", "100")'
+            description: 'Amount of from_token to swap as a human-readable string (e.g., "0.5", "100.25")'
           },
-          chain: {
+          to_chain: {
             type: 'string',
-            description: 'Blockchain for the swap. Options: "base", "ethereum", "arbitrum", "optimism", "polygon". Defaults to "base".'
-          },
-          slippage: {
-            type: 'number',
-            description: 'Maximum slippage tolerance as percentage (e.g., 0.5 for 0.5%). Defaults to 0.5%.'
+            description: 'Destination chain where you want to receive the output token. Options: "base", "ethereum", "arbitrum", "optimism", "polygon", "bnb", "bsc", "avalanche", "linea", "solana". Defaults to "base". Particle handles cross-chain routing automatically.'
           }
         },
         required: ['from_token', 'to_token', 'amount']
@@ -314,4 +315,38 @@ export function getTokenInfo(symbol: string, chainId: number): { address: string
 export function getChainIdFromName(name: string): number {
   const lowerName = name.toLowerCase();
   return CHAIN_NAME_TO_ID[lowerName] || 8453; // Default to Base
+}
+
+/**
+ * Primary assets supported by Particle UniversalX for swaps/converts
+ * These are the only tokens that can be swapped using createConvertTransaction
+ */
+export const PRIMARY_ASSETS = ['USDC', 'USDT', 'ETH', 'BTC', 'SOL', 'BNB'] as const;
+
+export type PrimaryAsset = typeof PRIMARY_ASSETS[number];
+
+/**
+ * Check if a token is a primary asset (eligible for UniversalX swaps)
+ */
+export function isPrimaryAsset(symbol: string): boolean {
+  return PRIMARY_ASSETS.includes(symbol.toUpperCase() as PrimaryAsset);
+}
+
+/**
+ * Primary asset decimals
+ */
+export const PRIMARY_ASSET_DECIMALS: Record<string, number> = {
+  'USDC': 6,
+  'USDT': 6,
+  'ETH': 18,
+  'BTC': 8,
+  'SOL': 9,
+  'BNB': 18,
+};
+
+/**
+ * Get decimals for a primary asset
+ */
+export function getPrimaryAssetDecimals(symbol: string): number {
+  return PRIMARY_ASSET_DECIMALS[symbol.toUpperCase()] || 18;
 }

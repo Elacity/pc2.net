@@ -58,6 +58,14 @@ async function UIWindowTransactionConfirm(options = {}) {
     const amount = token.amount || '0';
     const symbol = token.symbol || 'TOKEN';
     
+    // Swap-specific details
+    const swap = proposal.swap || {};
+    const isSwap = type === 'swap';
+    const swapFromSymbol = swap.fromToken?.symbol || symbol;
+    const swapToSymbol = swap.toToken?.symbol || '';
+    const swapFromAmount = swap.fromToken?.amount || amount;
+    const swapExpectedOutput = swap.toToken?.expectedAmount || 'TBD';
+    
     // Token icon URL
     const tokenIconUrl = token.icon || `/static/elacity/tokens/${symbol.toUpperCase()}.webp`;
     
@@ -111,6 +119,29 @@ async function UIWindowTransactionConfirm(options = {}) {
             
             <!-- Transaction Details -->
             <div class="tx-details-section">
+                ${isSwap ? `
+                <!-- Swap-specific details -->
+                <div class="tx-detail-row">
+                    <span class="detail-label">You Send</span>
+                    <span class="detail-value swap-token-value">
+                        <strong>${html_encode(swapFromAmount)} ${html_encode(swapFromSymbol)}</strong>
+                    </span>
+                </div>
+                
+                <div class="tx-detail-row">
+                    <span class="detail-label">You Receive</span>
+                    <span class="detail-value swap-token-value">
+                        <strong id="swap-expected-output">${html_encode(swapExpectedOutput)} ${html_encode(swapToSymbol)}</strong>
+                        <span style="color: #6b7280; font-size: 11px; margin-left: 4px;">(estimated)</span>
+                    </span>
+                </div>
+                
+                <div class="tx-detail-row">
+                    <span class="detail-label">Protocol</span>
+                    <span class="detail-value" style="color: #7c3aed;">Particle UniversalX</span>
+                </div>
+                ` : `
+                <!-- Transfer details -->
                 <div class="tx-detail-row">
                     <span class="detail-label">To</span>
                     <span class="detail-value address-value" title="${html_encode(displayRecipient || '')}">
@@ -130,6 +161,7 @@ async function UIWindowTransactionConfirm(options = {}) {
                         ${html_encode(truncateAddress(smartAccountAddress || '', 8, 6))}
                     </span>
                 </div>
+                `}
                 
                 <div class="tx-detail-row">
                     <span class="detail-label">Network Fee</span>
@@ -631,21 +663,51 @@ async function UIWindowTransactionConfirm(options = {}) {
             `);
             $rejectBtn.prop('disabled', true);
             
-            logger.log('Transaction approved, executing via Particle:', proposalId);
+            logger.log('Transaction approved, executing via Particle:', proposalId, 'type:', type);
             
             try {
-                const actualRecipient = proposal.recipient || to;
+                let result;
                 
-                const result = await walletService.sendTokens({
-                    to: actualRecipient,
-                    amount: token.amount || amount,
-                    tokenAddress: token.address,
-                    chainId: chainId,
-                    decimals: token.decimals || 6,
-                    mode: 'universal',
-                });
-                
-                logger.log('Transaction executed via Particle:', result);
+                if (type === 'swap') {
+                    // Handle swap transactions
+                    const swapInfo = proposal.swap || {};
+                    result = await walletService.swapTokens({
+                        fromToken: swapInfo.fromToken?.symbol || token.symbol,
+                        toToken: swapInfo.toToken?.symbol,
+                        fromAmount: swapInfo.fromToken?.amount || token.amount,
+                        toChainId: chainId,
+                    });
+                    
+                    logger.log('Swap executed via Particle:', result);
+                    
+                    UINotification({
+                        icon: window.icons['checkmark.svg'],
+                        title: 'Swap Submitted',
+                        text: `Swapping ${swapInfo.fromToken?.amount || amount} ${swapInfo.fromToken?.symbol || symbol} → ${swapInfo.toToken?.symbol}`,
+                        duration: 5000,
+                    });
+                } else {
+                    // Handle transfer transactions
+                    const actualRecipient = proposal.recipient || to;
+                    
+                    result = await walletService.sendTokens({
+                        to: actualRecipient,
+                        amount: token.amount || amount,
+                        tokenAddress: token.address,
+                        chainId: chainId,
+                        decimals: token.decimals || 6,
+                        mode: 'universal',
+                    });
+                    
+                    logger.log('Transfer executed via Particle:', result);
+                    
+                    UINotification({
+                        icon: window.icons['checkmark.svg'],
+                        title: 'Transaction Sent',
+                        text: `${formatTokenBalance(amount)} ${symbol} sent successfully`,
+                        duration: 5000,
+                    });
+                }
                 
                 try {
                     await walletService.approveTransactionProposal(proposalId);
@@ -656,13 +718,6 @@ async function UIWindowTransactionConfirm(options = {}) {
                 if (onApprove) {
                     onApprove({ proposalId, result });
                 }
-                
-                UINotification({
-                    icon: window.icons['checkmark.svg'],
-                    title: 'Transaction Sent',
-                    text: `${formatTokenBalance(amount)} ${symbol} sent successfully`,
-                    duration: 5000,
-                });
                 
                 closeWindowWithBackdrop(el_window);
                 resolve({ approved: true, result });

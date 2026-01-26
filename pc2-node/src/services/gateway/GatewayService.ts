@@ -14,6 +14,7 @@
 
 import { EventEmitter } from 'events';
 import path from 'path';
+import fs from 'fs';
 import { logger } from '../../utils/logger.js';
 import { DatabaseManager } from '../../storage/database.js';
 import { WhatsAppChannel, createWhatsAppChannel } from './channels/WhatsAppChannel.js';
@@ -83,14 +84,16 @@ export class GatewayService extends EventEmitter {
   constructor(db?: DatabaseManager, credentialsDir?: string) {
     super();
     this.db = db;
-    this.config = this.loadConfig();
     
-    // Set credentials directory (default to ~/.pc2/credentials)
+    // Set credentials directory FIRST (before loadConfig which needs it)
     this.credentialsDir = credentialsDir || path.join(
       process.env.HOME || process.env.USERPROFILE || '.',
       '.pc2',
       'credentials'
     );
+    
+    // Now load config (uses credentialsDir)
+    this.config = this.loadConfig();
     
     // Initialize channel status
     const channels: ChannelType[] = ['whatsapp', 'telegram', 'discord', 'signal', 'webchat'];
@@ -141,7 +144,6 @@ export class GatewayService extends EventEmitter {
     
     try {
       const configPath = this.getConfigPath();
-      const fs = require('fs');
       if (fs.existsSync(configPath)) {
         const data = fs.readFileSync(configPath, 'utf8');
         const saved = JSON.parse(data);

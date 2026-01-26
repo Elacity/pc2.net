@@ -4,6 +4,7 @@ import { loadConfig, type Config } from './config/loader.js';
 import { logger } from './utils/logger.js';
 import { AIChatService } from './services/ai/AIChatService.js';
 import { BosonService } from './services/boson/index.js';
+import { getGatewayService } from './services/gateway/index.js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -108,6 +109,15 @@ async function main() {
     }
   } else {
     logger.info('ℹ️  AI service disabled in config');
+  }
+
+  // Initialize Gateway service (messaging channels)
+  try {
+    const gatewayService = getGatewayService(db);
+    await gatewayService.initialize();
+    logger.info('📡 Gateway service initialized');
+  } catch (error) {
+    logger.error('❌ Failed to initialize gateway service:', error);
   }
 
   // Initialize Boson service (identity, connectivity)

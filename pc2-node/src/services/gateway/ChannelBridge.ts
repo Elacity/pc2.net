@@ -26,21 +26,28 @@ import type {
 } from './types.js';
 
 /**
+ * Message with channel metadata
+ */
+export interface ChannelChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+  channel: ChannelType;
+  senderName?: string;
+}
+
+/**
  * Session context for a conversation
  */
 interface SessionContext {
   agentId: string;
   channel: ChannelType;
   senderId: string;
+  senderName?: string;
   isGroup: boolean;
   groupId?: string;
   walletAddress?: string;
-  messageHistory: Array<{
-    role: 'user' | 'assistant';
-    content: string;
-    timestamp: string;
-    channel: ChannelType;
-  }>;
+  messageHistory: ChannelChatMessage[];
   lastActivity: Date;
 }
 
@@ -54,6 +61,27 @@ interface ToolFilter {
   allowWalletWrite: boolean;  // Always false for Phase 1
   allowSettings: boolean;
 }
+
+/**
+ * Read-only wallet tools that are safe for channel access
+ */
+const READ_ONLY_WALLET_TOOLS = [
+  'get_wallet_info',
+  'get_wallet_balance',
+  'get_multi_chain_balances',
+  'get_token_price',
+  'get_system_info',
+];
+
+/**
+ * Write wallet tools that are BLOCKED for channel access
+ */
+const WRITE_WALLET_TOOLS = [
+  'transfer_tokens',
+  'swap_tokens',
+  'approve_token',
+  'bridge_tokens',
+];
 
 /**
  * Channel Bridge class
@@ -133,6 +161,7 @@ export class ChannelBridge {
       content: content.text || '[Media message]',
       timestamp: message.timestamp,
       channel,
+      senderName: sender.name,
     });
     
     // Trim history if too long
@@ -260,8 +289,10 @@ export class ChannelBridge {
       parts.push(`- You can create and modify files in the user's PC2 storage`);
     }
     if (perms.walletAccess) {
-      parts.push(`- You can check wallet balances and transaction history (READ-ONLY)`);
-      parts.push(`- You CANNOT send transactions or transfer funds`);
+      parts.push(`- You can check wallet balances across all chains (get_wallet_balance, get_multi_chain_balances)`);
+      parts.push(`- You can check token prices (get_token_price)`);
+      parts.push(`- You can provide wallet information (get_wallet_info)`);
+      parts.push(`- This is READ-ONLY access - you cannot create any transactions`);
     }
     if (perms.reminders) {
       parts.push(`- You can set reminders and scheduled tasks`);
@@ -278,7 +309,9 @@ export class ChannelBridge {
     if (!perms.webBrowsing) {
       parts.push(`- You cannot browse the web`);
     }
-    parts.push(`- You CANNOT send cryptocurrency transactions (this is disabled)`);
+    parts.push(`- You CANNOT send cryptocurrency transactions via messaging (this is disabled for security)`);
+    parts.push(`- You CANNOT call transfer_tokens, swap_tokens, or any transaction-creating functions`);
+    parts.push(`- If user asks to send/transfer/swap crypto, explain they must do this from the PC2 desktop interface`);
     
     // Response guidelines
     parts.push(`\n## Response Guidelines`);
@@ -347,6 +380,7 @@ export class ChannelBridge {
         agentId,
         channel,
         senderId: sender.id,
+        senderName: sender.name,
         isGroup: sender.isGroup,
         groupId: sender.groupId,
         messageHistory: [],
@@ -355,6 +389,9 @@ export class ChannelBridge {
       
       this.sessions.set(sessionKey, session);
       logger.info(`[ChannelBridge] Created new session: ${sessionKey}`);
+    } else if (sender.name && !session.senderName) {
+      // Update sender name if we didn't have it before
+      session.senderName = sender.name;
     }
     
     return session;

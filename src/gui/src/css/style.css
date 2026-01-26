@@ -335,6 +335,38 @@
     margin-left: auto;
 }
 
+/* Channel source indicator for messages from WhatsApp/Telegram/etc */
+.ai-message-channel-source {
+    font-size: 10px;
+    color: #888;
+    margin-bottom: 4px;
+    text-align: right;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+}
+
+.ai-message-channel-source .channel-icon {
+    font-size: 12px;
+}
+
+.ai-message-channel-source.channel-whatsapp {
+    color: #25D366;
+}
+
+.ai-message-channel-source.channel-telegram {
+    color: #0088cc;
+}
+
+.ai-message-channel-source.channel-discord {
+    color: #5865F2;
+}
+
+.ai-message-channel-source.channel-signal {
+    color: #3A76F0;
+}
+
 .ai-chat-message-user {
     background-color: var(--ai-message-user-bg);
     color: var(--ai-text-color);

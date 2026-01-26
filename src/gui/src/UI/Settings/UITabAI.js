@@ -1104,25 +1104,21 @@ export default {
         }
 
         // Telegram connection modal
-        function showTelegramConnectModal() {
-            const token = prompt(
-                'Telegram Bot Setup\n\n' +
-                '1. Open Telegram and search for @BotFather\n' +
-                '2. Send /newbot and follow the prompts\n' +
-                '3. Copy the bot token and paste it below\n\n' +
-                'Bot Token:'
-            );
-            
-            if (!token || !token.trim()) {
-                return;
+        async function showTelegramConnectModal() {
+            try {
+                // Dynamically import the Telegram connect modal
+                const { showTelegramConnectModal: showModal } = await import('../Channels/UITelegramConnect.js');
+                const result = await showModal();
+                
+                if (result && result.success) {
+                    // Refresh channel status
+                    await loadChannelStatuses();
+                }
+            } catch (error) {
+                if (error.message !== 'Cancelled') {
+                    console.error('[AI Settings] Telegram connect error:', error);
+                }
             }
-            
-            // Connect with token
-            connectChannelWithConfig('telegram', {
-                telegram: { botToken: token.trim() },
-                dmPolicy: 'pairing',
-                allowFrom: []
-            });
         }
 
         // Connect channel with config

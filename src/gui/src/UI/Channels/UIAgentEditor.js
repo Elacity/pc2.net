@@ -1,36 +1,52 @@
 /**
- * Agent Editor Modal
+ * Agent Editor Window
  * 
- * Create or edit an AI agent with:
- * - Name and avatar
- * - AI Model selection
- * - Personality (SOUL.md based)
+ * Comprehensive agent configuration including:
+ * - Name and description
+ * - AI Provider and Model selection
+ * - Personality (SOUL.md)
+ * - Knowledge base / workspace
  * - Permissions
+ * - Access control
+ * - Channel connections (Telegram bot, etc.)
  */
 
 import UIWindow from '../UIWindow.js';
 
 const UIAgentEditor = async function(options = {}) {
     const { agentId, onSave } = options;
-    const isNew = !agentId;
+    const isNew = !agentId || agentId === 'new';
     
-    // Fetch existing agent if editing
+    // Default agent structure
     let agent = {
         id: '',
         name: '',
-        model: 'ollama:llama3.2',
+        description: '',
+        model: '',
+        provider: 'ollama',
         personality: 'friendly',
         customSoul: '',
+        workspace: '~/pc2/agents/default',
         permissions: {
             fileRead: true,
             fileWrite: false,
             walletAccess: true,
             webBrowsing: false,
             codeExecution: false,
+            reminders: false,
+        },
+        accessControl: {
+            mode: 'public',
+            rateLimit: { perMinute: 10, perDay: 100 },
+        },
+        channels: {
+            telegram: { enabled: false, botToken: '', botUsername: '' },
+            discord: { enabled: false, botToken: '' },
         }
     };
     
-    if (agentId) {
+    // Fetch existing agent if editing
+    if (agentId && agentId !== 'new') {
         try {
             const response = await $.ajax({
                 url: `/api/gateway/agents/${agentId}`,
@@ -45,10 +61,8 @@ const UIAgentEditor = async function(options = {}) {
         }
     }
     
-    // Get available AI models
-    let availableModels = [
-        { id: 'ollama:llama3.2', name: 'Llama 3.2 (Local)', provider: 'ollama' },
-    ];
+    // Fetch available AI providers and models
+    let providers = {};
     try {
         const aiConfig = await $.ajax({
             url: '/api/ai/config',
@@ -56,113 +70,231 @@ const UIAgentEditor = async function(options = {}) {
             headers: { 'Authorization': `Bearer ${window.auth_token}` }
         });
         if (aiConfig.providers) {
-            availableModels = [];
-            Object.entries(aiConfig.providers).forEach(([provider, config]) => {
-                if (config.enabled && config.models) {
-                    config.models.forEach(model => {
-                        availableModels.push({
-                            id: `${provider}:${model}`,
-                            name: `${model} (${provider})`,
-                            provider
-                        });
-                    });
-                }
-            });
+            providers = aiConfig.providers;
         }
     } catch (e) {
-        // Use defaults
+        // Default to Ollama
+        providers = { ollama: { enabled: true, models: ['llama3.2'] } };
     }
     
-    // Personality presets
-    const personalityPresets = [
-        { id: 'professional', name: 'Professional', description: 'Formal, concise, business-focused', color: '#3b82f6' },
-        { id: 'friendly', name: 'Friendly', description: 'Warm, conversational, approachable', color: '#10b981' },
-        { id: 'technical', name: 'Technical', description: 'Detailed, precise, developer-focused', color: '#8b5cf6' },
-        { id: 'support', name: 'Support', description: 'Patient, thorough, customer-service', color: '#f59e0b' },
-        { id: 'custom', name: 'Custom', description: 'Define your own personality', color: '#6b7280' },
-    ];
+    // Build provider options
+    const providerOptions = Object.entries(providers)
+        .filter(([_, config]) => config.enabled)
+        .map(([id, config]) => `<option value="${id}" ${agent.provider === id ? 'selected' : ''}>${id.charAt(0).toUpperCase() + id.slice(1)}</option>`)
+        .join('');
     
-    const modelOptions = availableModels.map(m => 
-        `<option value="${m.id}" ${m.id === agent.model ? 'selected' : ''}>${m.name}</option>`
+    // Build initial model options
+    const initialModels = providers[agent.provider]?.models || ['default'];
+    const modelOptions = initialModels.map(m => 
+        `<option value="${m}" ${agent.model === m || (!agent.model && m === initialModels[0]) ? 'selected' : ''}>${m}</option>`
     ).join('');
     
-    const personalityCards = personalityPresets.map(p => `
-        <div class="personality-card ${agent.personality === p.id ? 'selected' : ''}" data-personality="${p.id}" 
-            style="flex: 1; min-width: 80px; padding: 10px; border: 2px solid ${agent.personality === p.id ? p.color : '#e5e7eb'}; border-radius: 8px; cursor: pointer; text-align: center; transition: all 0.2s;">
-            <div style="width: 24px; height: 24px; border-radius: 50%; background: ${p.color}; margin: 0 auto 6px;"></div>
-            <div style="font-weight: 600; font-size: 11px;">${p.name}</div>
-            <div style="font-size: 9px; color: #888; margin-top: 2px;">${p.description}</div>
-        </div>
-    `).join('');
+    // Personality presets
+    const personalities = [
+        { id: 'professional', name: 'Professional', desc: 'Formal & business-focused', color: '#3b82f6', 
+          soul: 'You are a professional assistant. Be formal, concise, and focused on productivity.' },
+        { id: 'friendly', name: 'Friendly', desc: 'Warm & conversational', color: '#10b981',
+          soul: 'You are a friendly and approachable assistant. Be warm and conversational while being helpful.' },
+        { id: 'technical', name: 'Technical', desc: 'Precise & developer-focused', color: '#8b5cf6',
+          soul: 'You are a technical expert. Provide detailed, precise answers with code examples when helpful.' },
+        { id: 'support', name: 'Support', desc: 'Patient & thorough', color: '#f59e0b',
+          soul: 'You are a patient support agent. Guide users step-by-step and confirm understanding.' },
+        { id: 'custom', name: 'Custom', desc: 'Define your own', color: '#6b7280', soul: '' },
+    ];
 
     const h = `
-        <div class="agent-editor-modal" style="padding: 20px; width: 480px;">
-            <h2 style="margin: 0 0 20px 0; font-size: 18px; font-weight: 600;">
-                ${isNew ? 'Create New Agent' : 'Edit Agent'}
-            </h2>
-            
-            <!-- Name -->
-            <div style="margin-bottom: 16px;">
-                <label style="display: block; font-weight: 600; margin-bottom: 6px; font-size: 13px;">Agent Name</label>
-                <input type="text" id="agent-name" value="${agent.name}" placeholder="e.g., Support Bot, Trading Assistant"
-                    style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+        <div class="agent-editor" style="display: flex; flex-direction: column; height: 100%; background: #fff;">
+            <!-- Header -->
+            <div style="padding: 16px 20px; border-bottom: 1px solid #e5e7eb; background: #f9fafb;">
+                <h2 style="margin: 0; font-size: 18px; font-weight: 600;">
+                    ${isNew ? 'Create New Agent' : 'Edit Agent'}
+                </h2>
+                <p style="margin: 4px 0 0 0; font-size: 12px; color: #666;">
+                    Configure your AI agent's personality, capabilities, and channel connections
+                </p>
             </div>
             
-            <!-- Model -->
-            <div style="margin-bottom: 16px;">
-                <label style="display: block; font-weight: 600; margin-bottom: 6px; font-size: 13px;">AI Model</label>
-                <select id="agent-model" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
-                    ${modelOptions}
-                </select>
-            </div>
-            
-            <!-- Personality -->
-            <div style="margin-bottom: 16px;">
-                <label style="display: block; font-weight: 600; margin-bottom: 8px; font-size: 13px;">Personality</label>
-                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                    ${personalityCards}
+            <!-- Scrollable Content -->
+            <div class="agent-editor-content" style="flex: 1; overflow-y: auto; padding: 20px;">
+                
+                <!-- Basic Info -->
+                <div class="editor-section" style="margin-bottom: 24px;">
+                    <h3 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600; color: #374151;">Basic Info</h3>
+                    <div style="display: grid; gap: 12px;">
+                        <div>
+                            <label style="display: block; font-size: 12px; font-weight: 500; margin-bottom: 4px; color: #555;">Agent Name *</label>
+                            <input type="text" id="agent-name" value="${agent.name}" placeholder="e.g., Support Bot, Trading Assistant"
+                                style="width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; box-sizing: border-box;">
+                        </div>
+                        <div>
+                            <label style="display: block; font-size: 12px; font-weight: 500; margin-bottom: 4px; color: #555;">Description</label>
+                            <input type="text" id="agent-description" value="${agent.description || ''}" placeholder="What does this agent do?"
+                                style="width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; box-sizing: border-box;">
+                        </div>
+                    </div>
                 </div>
-            </div>
-            
-            <!-- Custom Soul -->
-            <div id="custom-soul-section" style="margin-bottom: 16px; display: ${agent.personality === 'custom' ? 'block' : 'none'};">
-                <label style="display: block; font-weight: 600; margin-bottom: 6px; font-size: 13px;">Custom Personality (SOUL.md)</label>
-                <textarea id="agent-custom-soul" 
-                    style="width: 100%; height: 100px; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 12px; font-family: monospace; resize: vertical;"
-                    placeholder="Define your agent's core personality and values...
+                
+                <!-- AI Model -->
+                <div class="editor-section" style="margin-bottom: 24px;">
+                    <h3 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600; color: #374151;">AI Model</h3>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                        <div>
+                            <label style="display: block; font-size: 12px; font-weight: 500; margin-bottom: 4px; color: #555;">Provider</label>
+                            <select id="agent-provider" style="width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+                                ${providerOptions}
+                            </select>
+                        </div>
+                        <div>
+                            <label style="display: block; font-size: 12px; font-weight: 500; margin-bottom: 4px; color: #555;">Model</label>
+                            <select id="agent-model" style="width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+                                ${modelOptions}
+                            </select>
+                        </div>
+                    </div>
+                    <p style="margin: 8px 0 0 0; font-size: 11px; color: #888;">
+                        Add API keys in Settings > AI Assistant to enable more providers
+                    </p>
+                </div>
+                
+                <!-- Personality -->
+                <div class="editor-section" style="margin-bottom: 24px;">
+                    <h3 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600; color: #374151;">Personality</h3>
+                    <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px;" id="personality-grid">
+                        ${personalities.map(p => `
+                            <div class="personality-option ${agent.personality === p.id ? 'selected' : ''}" data-id="${p.id}" data-soul="${encodeURIComponent(p.soul)}"
+                                style="padding: 12px 8px; border: 2px solid ${agent.personality === p.id ? p.color : '#e5e7eb'}; border-radius: 8px; cursor: pointer; text-align: center; transition: all 0.15s;">
+                                <div style="width: 20px; height: 20px; border-radius: 50%; background: ${p.color}; margin: 0 auto 6px;"></div>
+                                <div style="font-weight: 600; font-size: 11px; color: #374151;">${p.name}</div>
+                                <div style="font-size: 9px; color: #888; margin-top: 2px;">${p.desc}</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                    
+                    <!-- Custom SOUL -->
+                    <div id="custom-soul-section" style="margin-top: 12px; display: ${agent.personality === 'custom' ? 'block' : 'none'};">
+                        <label style="display: block; font-size: 12px; font-weight: 500; margin-bottom: 4px; color: #555;">Custom SOUL.md</label>
+                        <textarea id="agent-soul" placeholder="Define your agent's core personality and values...
 
 Example:
 You are a crypto trading assistant. Be analytical and data-driven.
-Always cite sources for market data. Warn about risks.">${agent.customSoul || ''}</textarea>
-            </div>
-            
-            <!-- Permissions -->
-            <div style="margin-bottom: 20px;">
-                <label style="display: block; font-weight: 600; margin-bottom: 8px; font-size: 13px;">Permissions</label>
-                <div style="background: #f8f9fa; border-radius: 8px; padding: 12px;">
-                    <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer;">
-                        <input type="checkbox" id="perm-file-read" ${agent.permissions?.fileRead ? 'checked' : ''}>
-                        <span style="font-size: 12px;">Read files from storage</span>
-                    </label>
-                    <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer;">
-                        <input type="checkbox" id="perm-file-write" ${agent.permissions?.fileWrite ? 'checked' : ''}>
-                        <span style="font-size: 12px;">Write files to storage</span>
-                    </label>
-                    <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer;">
-                        <input type="checkbox" id="perm-wallet" ${agent.permissions?.walletAccess ? 'checked' : ''}>
-                        <span style="font-size: 12px;">View wallet balances (read-only)</span>
-                    </label>
-                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; opacity: 0.5;">
-                        <input type="checkbox" disabled>
-                        <span style="font-size: 12px;">Execute transactions (coming soon)</span>
-                    </label>
+Always cite sources for market data. Warn about risks clearly."
+                            style="width: 100%; height: 120px; padding: 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 12px; font-family: monospace; resize: vertical; box-sizing: border-box;">${agent.customSoul || ''}</textarea>
+                    </div>
                 </div>
+                
+                <!-- Permissions -->
+                <div class="editor-section" style="margin-bottom: 24px;">
+                    <h3 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600; color: #374151;">Permissions</h3>
+                    <div style="background: #f9fafb; border-radius: 8px; padding: 12px; display: grid; gap: 8px;">
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                            <input type="checkbox" id="perm-file-read" ${agent.permissions?.fileRead ? 'checked' : ''} style="width: 16px; height: 16px;">
+                            <div>
+                                <div style="font-size: 13px; font-weight: 500;">Read Files</div>
+                                <div style="font-size: 10px; color: #888;">Access workspace documents and knowledge base</div>
+                            </div>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                            <input type="checkbox" id="perm-file-write" ${agent.permissions?.fileWrite ? 'checked' : ''} style="width: 16px; height: 16px;">
+                            <div>
+                                <div style="font-size: 13px; font-weight: 500;">Write Files</div>
+                                <div style="font-size: 10px; color: #888;">Create and modify files in workspace</div>
+                            </div>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                            <input type="checkbox" id="perm-wallet" ${agent.permissions?.walletAccess ? 'checked' : ''} style="width: 16px; height: 16px;">
+                            <div>
+                                <div style="font-size: 13px; font-weight: 500;">View Wallet</div>
+                                <div style="font-size: 10px; color: #888;">Check balances and prices (read-only)</div>
+                            </div>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; opacity: 0.5;">
+                            <input type="checkbox" disabled style="width: 16px; height: 16px;">
+                            <div>
+                                <div style="font-size: 13px; font-weight: 500;">Execute Transactions</div>
+                                <div style="font-size: 10px; color: #888;">Coming soon - requires additional security</div>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+                
+                <!-- Access Control -->
+                <div class="editor-section" style="margin-bottom: 24px;">
+                    <h3 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600; color: #374151;">Access Control</h3>
+                    <div style="display: grid; gap: 8px;">
+                        <label style="display: flex; align-items: flex-start; gap: 10px; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px; cursor: pointer;">
+                            <input type="radio" name="access-mode" value="public" ${agent.accessControl?.mode !== 'private' ? 'checked' : ''} style="margin-top: 2px;">
+                            <div style="flex: 1;">
+                                <div style="font-size: 13px; font-weight: 500;">Public</div>
+                                <div style="font-size: 11px; color: #888;">Anyone can message this agent</div>
+                                <div style="display: flex; gap: 12px; margin-top: 8px;">
+                                    <div>
+                                        <label style="font-size: 10px; color: #666;">Per minute</label>
+                                        <input type="number" id="rate-per-minute" value="${agent.accessControl?.rateLimit?.perMinute || 10}" min="1" max="60"
+                                            style="width: 60px; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 12px;">
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 10px; color: #666;">Per day</label>
+                                        <input type="number" id="rate-per-day" value="${agent.accessControl?.rateLimit?.perDay || 100}" min="1" max="10000"
+                                            style="width: 70px; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 12px;">
+                                    </div>
+                                </div>
+                            </div>
+                        </label>
+                        <label style="display: flex; align-items: flex-start; gap: 10px; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px; cursor: pointer;">
+                            <input type="radio" name="access-mode" value="private" ${agent.accessControl?.mode === 'private' ? 'checked' : ''} style="margin-top: 2px;">
+                            <div>
+                                <div style="font-size: 13px; font-weight: 500;">Private</div>
+                                <div style="font-size: 11px; color: #888;">Only approved users can message</div>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+                
+                <!-- Channel Connections -->
+                <div class="editor-section" style="margin-bottom: 24px;">
+                    <h3 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600; color: #374151;">Channel Connections</h3>
+                    <p style="margin: 0 0 12px 0; font-size: 12px; color: #666;">Connect messaging platforms to this agent</p>
+                    
+                    <!-- Telegram -->
+                    <div style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; margin-bottom: 8px;">
+                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="#0088cc"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
+                            <div style="flex: 1;">
+                                <div style="font-size: 13px; font-weight: 500;">Telegram Bot</div>
+                            </div>
+                            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                                <input type="checkbox" id="telegram-enabled" ${agent.channels?.telegram?.enabled ? 'checked' : ''}>
+                                <span style="font-size: 11px;">Enable</span>
+                            </label>
+                        </div>
+                        <div id="telegram-config" style="display: ${agent.channels?.telegram?.enabled ? 'block' : 'none'};">
+                            <input type="text" id="telegram-token" value="${agent.channels?.telegram?.botToken || ''}" 
+                                placeholder="Bot token from @BotFather (e.g., 123456789:ABC...)"
+                                style="width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 12px; font-family: monospace; box-sizing: border-box;">
+                            <p style="margin: 6px 0 0 0; font-size: 10px; color: #888;">
+                                Get a token: Message @BotFather on Telegram, send /newbot
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <!-- Discord (Coming Soon) -->
+                    <div style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; opacity: 0.5;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="#5865F2"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286z"/></svg>
+                            <div style="flex: 1;">
+                                <div style="font-size: 13px; font-weight: 500;">Discord Bot</div>
+                                <div style="font-size: 10px; color: #888;">Coming soon</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
             </div>
             
-            <!-- Actions -->
-            <div style="display: flex; gap: 10px; justify-content: flex-end; padding-top: 15px; border-top: 1px solid #eee;">
-                <button class="button cancel-btn" style="padding: 8px 16px; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer; font-size: 13px;">Cancel</button>
-                <button class="button save-btn" style="padding: 8px 16px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px;">
+            <!-- Footer -->
+            <div style="padding: 12px 20px; border-top: 1px solid #e5e7eb; background: #f9fafb; display: flex; justify-content: flex-end; gap: 10px;">
+                <button class="cancel-btn" style="padding: 10px 20px; background: #fff; border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer; font-size: 13px;">Cancel</button>
+                <button class="save-btn" style="padding: 10px 20px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500;">
                     ${isNew ? 'Create Agent' : 'Save Changes'}
                 </button>
             </div>
@@ -170,54 +302,73 @@ Always cite sources for market data. Warn about risks.">${agent.customSoul || ''
     `;
 
     const el_window = await UIWindow({
-        title: null,
+        title: isNew ? 'Create New Agent' : `Edit: ${agent.name || 'Agent'}`,
         icon: null,
-        uid: null,
+        uid: 'agent-editor-' + (agentId || 'new'),
         is_dir: false,
         body_content: h,
-        has_head: false,
+        has_head: true,
         selectable_body: false,
-        draggable_body: true,
+        draggable_body: false,
         allow_context_menu: false,
-        is_resizable: false,
+        is_resizable: true,
         is_droppable: false,
         init_center: true,
         allow_native_ctxmenu: true,
         allow_user_select: true,
-        backdrop: true,
-        width: 520,
-        dominant: true,
+        backdrop: false,
+        width: 580,
+        height: 700,
+        dominant: false,
         onAppend: function(el_window) {
             const $win = $(el_window);
             let selectedPersonality = agent.personality || 'friendly';
             
+            // Provider change -> update models
+            $win.find('#agent-provider').on('change', function() {
+                const provider = $(this).val();
+                const models = providers[provider]?.models || ['default'];
+                const $modelSelect = $win.find('#agent-model');
+                $modelSelect.empty();
+                models.forEach(m => {
+                    $modelSelect.append(`<option value="${m}">${m}</option>`);
+                });
+            });
+            
             // Personality selection
-            $win.find('.personality-card').on('click', function() {
-                const personality = $(this).data('personality');
-                selectedPersonality = personality;
+            $win.find('.personality-option').on('click', function() {
+                const id = $(this).data('id');
+                selectedPersonality = id;
                 
-                // Update visual selection
-                $win.find('.personality-card').each(function() {
-                    const p = $(this).data('personality');
-                    const preset = personalityPresets.find(pr => pr.id === p);
-                    $(this).css('border-color', p === personality ? preset.color : '#e5e7eb');
-                    $(this).toggleClass('selected', p === personality);
+                $win.find('.personality-option').each(function() {
+                    const thisId = $(this).data('id');
+                    const color = personalities.find(p => p.id === thisId)?.color || '#e5e7eb';
+                    $(this).css('border-color', thisId === id ? color : '#e5e7eb');
+                    $(this).toggleClass('selected', thisId === id);
                 });
                 
-                // Show/hide custom soul
-                if (personality === 'custom') {
+                if (id === 'custom') {
                     $win.find('#custom-soul-section').slideDown();
                 } else {
                     $win.find('#custom-soul-section').slideUp();
                 }
             });
             
-            // Cancel
-            $win.find('.cancel-btn').on('click', function() {
-                $win.close();
+            // Telegram toggle
+            $win.find('#telegram-enabled').on('change', function() {
+                if ($(this).is(':checked')) {
+                    $win.find('#telegram-config').slideDown();
+                } else {
+                    $win.find('#telegram-config').slideUp();
+                }
             });
             
-            // Save
+            // Cancel button
+            $win.find('.cancel-btn').on('click', function() {
+                $(el_window).close();
+            });
+            
+            // Save button
             $win.find('.save-btn').on('click', async function() {
                 const name = $win.find('#agent-name').val().trim();
                 if (!name) {
@@ -225,19 +376,45 @@ Always cite sources for market data. Warn about risks.">${agent.customSoul || ''
                     return;
                 }
                 
+                // Get soul content
+                let soulContent = '';
+                if (selectedPersonality === 'custom') {
+                    soulContent = $win.find('#agent-soul').val();
+                } else {
+                    const preset = personalities.find(p => p.id === selectedPersonality);
+                    soulContent = preset?.soul || '';
+                }
+                
                 const newAgent = {
-                    id: agentId || name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+                    id: agentId && agentId !== 'new' ? agentId : name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
                     name,
+                    description: $win.find('#agent-description').val(),
+                    provider: $win.find('#agent-provider').val(),
                     model: $win.find('#agent-model').val(),
                     personality: selectedPersonality,
-                    customSoul: selectedPersonality === 'custom' ? $win.find('#agent-custom-soul').val() : '',
+                    customSoul: selectedPersonality === 'custom' ? $win.find('#agent-soul').val() : '',
+                    soulContent,
                     permissions: {
                         fileRead: $win.find('#perm-file-read').is(':checked'),
                         fileWrite: $win.find('#perm-file-write').is(':checked'),
                         walletAccess: $win.find('#perm-wallet').is(':checked'),
                         webBrowsing: false,
                         codeExecution: false,
-                    }
+                        reminders: false,
+                    },
+                    accessControl: {
+                        mode: $win.find('input[name="access-mode"]:checked').val(),
+                        rateLimit: {
+                            perMinute: parseInt($win.find('#rate-per-minute').val()) || 10,
+                            perDay: parseInt($win.find('#rate-per-day').val()) || 100,
+                        },
+                    },
+                    channels: {
+                        telegram: {
+                            enabled: $win.find('#telegram-enabled').is(':checked'),
+                            botToken: $win.find('#telegram-token').val(),
+                        },
+                    },
                 };
                 
                 try {
@@ -249,7 +426,7 @@ Always cite sources for market data. Warn about risks.">${agent.customSoul || ''
                         data: JSON.stringify(newAgent)
                     });
                     
-                    $win.close();
+                    $(el_window).close();
                     
                     if (onSave) {
                         onSave(newAgent);

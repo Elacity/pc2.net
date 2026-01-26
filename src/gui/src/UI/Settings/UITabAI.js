@@ -204,8 +204,7 @@ export default {
                                 </div>
                             </div>
                             <div style="display: flex; gap: 4px;">
-                                <button class="button ai-btn agent-edit-btn" style="font-size: 10px;">Edit</button>
-                                <button class="button ai-btn agent-channels-btn" style="font-size: 10px; background: #0088cc; color: white;">Channels</button>
+                                <button class="button ai-btn agent-edit-btn" style="font-size: 10px; background: #3b82f6; color: white;">Edit</button>
                             </div>
                         </div>
                     </div>
@@ -1245,21 +1244,6 @@ export default {
             });
         });
 
-        $el_window.find('.agent-channels-btn').off('click').on('click', async function() {
-            const $row = $(this).closest('.agent-row');
-            const agentId = $row.data('agent-id');
-            const agentName = $row.find('.agent-name').text();
-            
-            const { default: UIAgentChannels } = await import('../Channels/UIAgentChannels.js');
-            UIAgentChannels({
-                agentId,
-                agentName,
-                onSave: async () => {
-                    await loadAgents();
-                    await loadChannelStatus();
-                }
-            });
-        });
 
         // Load agents function
         async function loadAgents() {

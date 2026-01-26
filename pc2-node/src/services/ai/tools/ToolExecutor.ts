@@ -11,6 +11,7 @@ import { logger } from '../../../utils/logger.js';
 import { Server as SocketIOServer } from 'socket.io';
 import { broadcastItemAdded, broadcastItemRemoved, broadcastItemMoved, broadcastItemUpdated } from '../../../websocket/events.js';
 import { ALLOWED_SETTINGS, AllowedSettingKey } from './SettingsTools.js';
+import { AgentKitExecutor, isAgentKitTool } from './AgentKitExecutor.js';
 
 // Elastos Smart Chain RPC endpoint for balance queries
 const ESC_RPC_URL = 'https://api.elastos.io/esc';
@@ -24,6 +25,7 @@ export interface ToolExecutionResult {
 export class ToolExecutor {
   private db?: DatabaseManager;
   private smartAccountAddress?: string;
+  private agentKitExecutor?: AgentKitExecutor;
 
   constructor(
     private filesystem: FilesystemManager,
@@ -39,6 +41,16 @@ export class ToolExecutor {
     }
     this.db = options?.db;
     this.smartAccountAddress = options?.smartAccountAddress;
+    
+    // Initialize AgentKitExecutor if smart account is available
+    if (this.smartAccountAddress) {
+      this.agentKitExecutor = new AgentKitExecutor(this.walletAddress, {
+        smartAccountAddress: this.smartAccountAddress,
+        io: this.io,
+      });
+      logger.info('[ToolExecutor] AgentKitExecutor initialized for Agent Account features');
+    }
+    
     logger.info('[ToolExecutor] Initialized with io available:', !!this.io, 'walletAddress:', this.walletAddress, 'hasDb:', !!this.db, 'hasSmartAccount:', !!this.smartAccountAddress);
     if (!this.io) {
       logger.warn('[ToolExecutor] ⚠️ WebSocket server (io) not provided - live UI updates will be disabled!');
@@ -190,6 +202,25 @@ export class ToolExecutor {
   async executeTool(toolName: string, args: any): Promise<ToolExecutionResult> {
     try {
       logger.info('[ToolExecutor] Executing tool:', { toolName, args, walletAddress: this.walletAddress });
+
+      // Route AgentKit tools to the AgentKitExecutor
+      if (isAgentKitTool(toolName)) {
+        if (!this.agentKitExecutor) {
+          return {
+            success: false,
+            error: 'Agent Account features require a Universal Account (Smart Wallet). Please ensure you are logged in with Particle.',
+          };
+        }
+        
+        const result = await this.agentKitExecutor.executeTool(toolName, args);
+        
+        // Transform AgentKitToolResult to ToolExecutionResult
+        return {
+          success: result.success,
+          result: result.proposal || result.data || { message: result.message },
+          error: result.error,
+        };
+      }
 
       switch (toolName) {
         case 'create_folder': {

@@ -15,6 +15,7 @@ import { normalizeToolsObject } from './utils/FunctionCalling.js';
 import { filesystemTools } from './tools/FilesystemTools.js';
 import { walletTools } from './tools/WalletTools.js';
 import { settingsTools } from './tools/SettingsTools.js';
+import { agentKitTools } from './tools/AgentKitTools.js';
 import { ToolExecutor } from './tools/ToolExecutor.js';
 import { FilesystemManager } from '../../storage/filesystem.js';
 import { DatabaseManager } from '../../storage/database.js';
@@ -490,9 +491,9 @@ export class AIChatService {
       logger.info('[AIChatService] Tools provided by frontend:', tools.length, 'with sources:', Array.from(toolSourceMap.entries()).map(([name, source]) => `${name}:${source.type}`).join(', '));
     } else if (args.filesystem && args.walletAddress) {
       // Automatically include all AI tools if filesystem is available
-      // This allows AI to perform filesystem, wallet, and settings operations
-      const allTools = [...filesystemTools, ...walletTools, ...settingsTools];
-      logger.info('[AIChatService] Auto-including all AI tools - filesystem:', filesystemTools.length, 'wallet:', walletTools.length, 'settings:', settingsTools.length, 'total:', allTools.length);
+      // This allows AI to perform filesystem, wallet, settings, and AgentKit operations
+      const allTools = [...filesystemTools, ...walletTools, ...settingsTools, ...agentKitTools];
+      logger.info('[AIChatService] Auto-including all AI tools - filesystem:', filesystemTools.length, 'wallet:', walletTools.length, 'settings:', settingsTools.length, 'agentKit:', agentKitTools.length, 'total:', allTools.length);
       tools = normalizeToolsObject(allTools);
       
       // Mark all tools by their type
@@ -502,7 +503,8 @@ export class AIChatService {
           // Determine tool type based on which array it came from
           const isWalletTool = walletTools.some(t => t.function.name === toolName);
           const isSettingsTool = settingsTools.some(t => t.function.name === toolName);
-          toolSourceMap.set(toolName, { type: isWalletTool || isSettingsTool ? 'filesystem' : 'filesystem' });
+          const isAgentKitTool = agentKitTools.some(t => t.function.name === toolName);
+          toolSourceMap.set(toolName, { type: isWalletTool || isSettingsTool || isAgentKitTool ? 'filesystem' : 'filesystem' });
         }
       }
       
@@ -1574,9 +1576,9 @@ Example: {"tool_calls": [{"name": "write_file", "arguments": {"path": "${filePat
       logger.info('[AIChatService] streamComplete - Tools provided by frontend:', tools.length, 'with sources:', Array.from(toolSourceMap.entries()).map(([name, source]) => `${name}:${source.type}`).join(', '));
     } else if (args.filesystem && args.walletAddress) {
       // CRITICAL: Auto-inject all AI tools when no tools provided
-      // This ensures AI always has filesystem, wallet, and settings tools available
-      const allTools = [...filesystemTools, ...walletTools, ...settingsTools];
-      logger.info('[AIChatService] streamComplete - ✅ Auto-including all AI tools - filesystem:', filesystemTools.length, 'wallet:', walletTools.length, 'settings:', settingsTools.length, 'total:', allTools.length);
+      // This ensures AI always has filesystem, wallet, settings, and AgentKit tools available
+      const allTools = [...filesystemTools, ...walletTools, ...settingsTools, ...agentKitTools];
+      logger.info('[AIChatService] streamComplete - ✅ Auto-including all AI tools - filesystem:', filesystemTools.length, 'wallet:', walletTools.length, 'settings:', settingsTools.length, 'agentKit:', agentKitTools.length, 'total:', allTools.length);
       logger.info('[AIChatService] streamComplete - filesystem available:', !!args.filesystem, 'walletAddress:', args.walletAddress?.substring(0, 10) + '...');
       tools = normalizeToolsObject(allTools);
       

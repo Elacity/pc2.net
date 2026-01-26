@@ -98,12 +98,17 @@ export class GatewayService extends EventEmitter {
   }
   
   /**
-   * Load gateway configuration from database or use defaults
+   * Get the config file path
+   */
+  private getConfigPath(): string {
+    return path.join(this.credentialsDir, '..', 'gateway-config.json');
+  }
+
+  /**
+   * Load gateway configuration from file or use defaults
    */
   private loadConfig(): GatewayConfig {
-    // For now, return default config
-    // TODO: Load from database when storage is implemented
-    return {
+    const defaultConfig: GatewayConfig = {
       enabled: false,
       port: 18789,
       channels: {},
@@ -133,14 +138,49 @@ export class GatewayService extends EventEmitter {
         auditLogging: true,
       },
     };
+    
+    try {
+      const configPath = this.getConfigPath();
+      const fs = require('fs');
+      if (fs.existsSync(configPath)) {
+        const data = fs.readFileSync(configPath, 'utf8');
+        const saved = JSON.parse(data);
+        logger.info('[GatewayService] Loaded config from file');
+        return { ...defaultConfig, ...saved };
+      }
+    } catch (error: any) {
+      logger.warn('[GatewayService] Failed to load config:', error.message);
+    }
+    
+    return defaultConfig;
   }
   
   /**
-   * Save gateway configuration to database
+   * Save gateway configuration to file
    */
   private async saveConfig(): Promise<void> {
-    // TODO: Save to database when storage is implemented
-    logger.info('[GatewayService] Config saved (in-memory only for now)');
+    try {
+      const configPath = this.getConfigPath();
+      const fs = await import('fs');
+      const dir = path.dirname(configPath);
+      
+      // Ensure directory exists
+      await fs.promises.mkdir(dir, { recursive: true });
+      
+      // Save config (excluding sensitive data that's stored separately)
+      const configToSave = {
+        enabled: this.config.enabled,
+        port: this.config.port,
+        channels: this.config.channels,
+        defaultAgentId: this.config.defaultAgentId,
+        settings: this.config.settings,
+      };
+      
+      await fs.promises.writeFile(configPath, JSON.stringify(configToSave, null, 2));
+      logger.info('[GatewayService] Config saved to file');
+    } catch (error: any) {
+      logger.error('[GatewayService] Failed to save config:', error.message);
+    }
   }
   
   /**
@@ -156,6 +196,29 @@ export class GatewayService extends EventEmitter {
       enabled: this.config.enabled,
       agents: this.config.agents.length,
     });
+    
+    // Auto-reconnect saved channels
+    await this.autoReconnectChannels();
+  }
+  
+  /**
+   * Auto-reconnect channels that were previously connected
+   */
+  private async autoReconnectChannels(): Promise<void> {
+    const channels = this.config.channels;
+    
+    // Check for Telegram
+    if (channels.telegram?.botToken) {
+      logger.info('[GatewayService] Auto-reconnecting Telegram...');
+      try {
+        await this.connectChannel('telegram', { telegram: channels.telegram });
+      } catch (error: any) {
+        logger.error('[GatewayService] Failed to auto-reconnect Telegram:', error.message);
+      }
+    }
+    
+    // WhatsApp auto-reconnect would happen via saved credentials
+    // Discord and others can be added similarly
   }
   
   /**

@@ -298,20 +298,22 @@ router.get('/channels/whatsapp/qr', authenticate, async (req: AuthenticatedReque
     
     // Get the stored QR code
     const qrCode = gateway.getWhatsAppQR();
-    let qrText: string | null = null;
+    let qrDataUrl: string | null = null;
     
     if (qrCode) {
-      // Generate text representation
+      // Generate data URL image for browser display
       try {
-        const qrcode = await import('qrcode-terminal');
-        qrText = await new Promise<string>((resolve) => {
-          qrcode.generate(qrCode, { small: true }, (text: string) => {
-            resolve(text);
-          });
+        const QRCode = await import('qrcode');
+        qrDataUrl = await QRCode.toDataURL(qrCode, {
+          width: 256,
+          margin: 2,
+          color: {
+            dark: '#000000',
+            light: '#ffffff',
+          },
         });
-      } catch (e) {
-        // If qrcode-terminal fails, just use the raw QR
-        qrText = qrCode;
+      } catch (e: any) {
+        logger.error('[Gateway API] QR generation failed:', e.message);
       }
     }
     
@@ -320,7 +322,7 @@ router.get('/channels/whatsapp/qr', authenticate, async (req: AuthenticatedReque
       data: {
         available: !!qrCode,
         qrCode,
-        qrText,
+        qrDataUrl,
       },
     });
   } catch (error: any) {

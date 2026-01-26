@@ -320,10 +320,10 @@ export function showWhatsAppConnectModal() {
                     if (qrResponse.ok) {
                         const qrData = await qrResponse.json();
                         
-                        if (qrData.data?.available && qrData.data?.qrText) {
+                        if (qrData.data?.available && qrData.data?.qrDataUrl) {
                             const qrArea = overlay.querySelector('#whatsapp-qr-area');
                             qrArea.innerHTML = `
-                                <div class="whatsapp-qr-code">${escapeHtml(qrData.data.qrText)}</div>
+                                <img src="${qrData.data.qrDataUrl}" alt="WhatsApp QR Code" style="width: 256px; height: 256px; border-radius: 8px;" />
                             `;
                         }
                     }

@@ -521,8 +521,8 @@ export default {
 
         // Setup event handlers
         function setupEventHandlers() {
-            // Provider select change
-            $el_window.find('#ai-provider-select').on('change', async function() {
+            // Provider select change (use .off() to prevent duplicates)
+            $el_window.find('#ai-provider-select').off('change').on('change', async function() {
                 const provider = $(this).val();
                 try {
                     const apiOrigin = getAPIOrigin();
@@ -557,32 +557,32 @@ export default {
                 }
             });
             
-            // API key buttons - Add and Update both open the same dialog
-            $el_window.find('#ai-openai-add-btn, #ai-openai-update-btn').on('click', () => showAPIKeyDialog('openai', 'OpenAI'));
-            $el_window.find('#ai-claude-add-btn, #ai-claude-update-btn').on('click', () => showAPIKeyDialog('claude', 'Claude'));
-            $el_window.find('#ai-gemini-add-btn, #ai-gemini-update-btn').on('click', () => showAPIKeyDialog('gemini', 'Gemini'));
-            $el_window.find('#ai-xai-add-btn, #ai-xai-update-btn').on('click', () => showAPIKeyDialog('xai', 'xAI (Grok)'));
+            // API key buttons - Add and Update both open the same dialog (use .off() to prevent duplicates)
+            $el_window.find('#ai-openai-add-btn, #ai-openai-update-btn').off('click').on('click', () => showAPIKeyDialog('openai', 'OpenAI'));
+            $el_window.find('#ai-claude-add-btn, #ai-claude-update-btn').off('click').on('click', () => showAPIKeyDialog('claude', 'Claude'));
+            $el_window.find('#ai-gemini-add-btn, #ai-gemini-update-btn').off('click').on('click', () => showAPIKeyDialog('gemini', 'Gemini'));
+            $el_window.find('#ai-xai-add-btn, #ai-xai-update-btn').off('click').on('click', () => showAPIKeyDialog('xai', 'xAI (Grok)'));
             
             // Delete buttons
-            $el_window.find('#ai-openai-delete-btn').on('click', async () => {
+            $el_window.find('#ai-openai-delete-btn').off('click').on('click', async () => {
                 if (!confirm('Are you sure you want to delete the OpenAI API key?')) return;
                 await deleteAPIKey('openai');
             });
-            $el_window.find('#ai-claude-delete-btn').on('click', async () => {
+            $el_window.find('#ai-claude-delete-btn').off('click').on('click', async () => {
                 if (!confirm('Are you sure you want to delete the Claude API key?')) return;
                 await deleteAPIKey('claude');
             });
-            $el_window.find('#ai-gemini-delete-btn').on('click', async () => {
+            $el_window.find('#ai-gemini-delete-btn').off('click').on('click', async () => {
                 if (!confirm('Are you sure you want to delete the Gemini API key?')) return;
                 await deleteAPIKey('gemini');
             });
-            $el_window.find('#ai-xai-delete-btn').on('click', async () => {
+            $el_window.find('#ai-xai-delete-btn').off('click').on('click', async () => {
                 if (!confirm('Are you sure you want to delete the xAI API key?')) return;
                 await deleteAPIKey('xai');
             });
             
             // Ollama URL save
-            $el_window.find('#ai-ollama-url-save').on('click', async () => {
+            $el_window.find('#ai-ollama-url-save').off('click').on('click', async () => {
                 const url = $el_window.find('#ai-ollama-url').val();
                 try {
                     const apiOrigin = getAPIOrigin();
@@ -843,8 +843,8 @@ export default {
             }
         }
 
-        // Setup button handler
-        $el_window.find('#ai-setup-local-btn').on('click', () => {
+        // Setup button handler (use .off() to prevent duplicates)
+        $el_window.find('#ai-setup-local-btn').off('click').on('click', () => {
             setupLocalAI();
         });
 
@@ -1158,18 +1158,18 @@ export default {
             }
         }
 
-        // Setup channel event handlers
-        $el_window.find('.channel-connect-btn').on('click', function() {
+        // Setup channel event handlers (use .off() first to prevent duplicates)
+        $el_window.find('.channel-connect-btn').off('click').on('click', function() {
             const channel = $(this).closest('.channel-row').data('channel');
             connectChannel(channel);
         });
 
-        $el_window.find('.channel-disconnect-btn').on('click', function() {
+        $el_window.find('.channel-disconnect-btn').off('click').on('click', function() {
             const channel = $(this).closest('.channel-row').data('channel');
             disconnectChannel(channel);
         });
 
-        $el_window.find('.channel-settings-btn').on('click', function() {
+        $el_window.find('.channel-settings-btn').off('click').on('click', function() {
             const channel = $(this).closest('.channel-row').data('channel');
             // TODO: Open channel settings modal
             alert(`${channel} settings coming soon!`);

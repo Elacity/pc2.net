@@ -207,11 +207,12 @@ export class GatewayService extends EventEmitter {
   private async autoReconnectChannels(): Promise<void> {
     const channels = this.config.channels;
     
-    // Check for Telegram
-    if (channels.telegram?.botToken) {
+    // Check for Telegram - need to check the nested telegram config
+    const telegramConfig = channels.telegram as any;
+    if (telegramConfig?.telegram?.botToken) {
       logger.info('[GatewayService] Auto-reconnecting Telegram...');
       try {
-        await this.connectChannel('telegram', { telegram: channels.telegram });
+        await this.connectChannel('telegram');
       } catch (error: any) {
         logger.error('[GatewayService] Failed to auto-reconnect Telegram:', error.message);
       }

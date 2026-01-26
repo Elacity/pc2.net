@@ -4,7 +4,7 @@ import { loadConfig, type Config } from './config/loader.js';
 import { logger } from './utils/logger.js';
 import { AIChatService } from './services/ai/AIChatService.js';
 import { BosonService } from './services/boson/index.js';
-import { getGatewayService } from './services/gateway/index.js';
+import { getGatewayService, createChannelBridge } from './services/gateway/index.js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -115,7 +115,14 @@ async function main() {
   try {
     const gatewayService = getGatewayService(db);
     await gatewayService.initialize();
-    logger.info('📡 Gateway service initialized');
+    
+    // Connect the channel bridge if AI service is available
+    if (aiService) {
+      const channelBridge = createChannelBridge(aiService, { db, filesystem: filesystem || undefined });
+      logger.info('📡 Gateway service initialized with AI bridge');
+    } else {
+      logger.info('📡 Gateway service initialized (no AI bridge - AI service unavailable)');
+    }
   } catch (error) {
     logger.error('❌ Failed to initialize gateway service:', error);
   }

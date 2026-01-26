@@ -456,14 +456,17 @@ async function UIWindowTransactionConfirm(options = {}) {
     
     // Helper to close window and remove backdrop
     function closeWindowWithBackdrop(el) {
-        if (typeof $(el).close === 'function') {
-            $(el).close();
+        const $el = $(el);
+        // Try jQuery .close() method first (defined by UIWindow)
+        if ($el.close && typeof $el.close === 'function') {
+            $el.close();
         } else {
-            const $backdrop = $(el).closest('.window-backdrop');
+            // Fallback: remove backdrop or element directly
+            const $backdrop = $el.closest('.window-backdrop');
             if ($backdrop.length) {
                 $backdrop.remove();
             } else {
-                $(el).remove();
+                $el.remove();
             }
         }
     }
@@ -674,7 +677,10 @@ async function UIWindowTransactionConfirm(options = {}) {
         });
         
         // Handle window close button (X in header)
-        $window.find('.window-close-btn').on('click', (e) => {
+        // Remove UIWindow's default handler and replace with our own
+        const $closeBtn = $window.find('.window-close-btn');
+        $closeBtn.off('click'); // Remove UIWindow's default handler
+        $closeBtn.on('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
             if (readOnly) {

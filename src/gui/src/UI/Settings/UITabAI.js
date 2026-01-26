@@ -95,6 +95,107 @@ export default {
                 </div>
             </div>
             
+            <!-- Messaging Channels -->
+            <div class="ai-section" style="margin-top: 20px; border-top: 1px solid #e5e5e5; padding-top: 16px;">
+                <div class="ai-section-title" style="display: flex; align-items: center; gap: 8px;">
+                    <span>Messaging Channels</span>
+                    <span style="font-size: 9px; font-weight: 400; color: #666; text-transform: none; letter-spacing: 0;">Talk to your AI from anywhere</span>
+                </div>
+                <div class="ai-group" id="channels-list">
+                    <!-- WhatsApp -->
+                    <div class="ai-group-row channel-row" data-channel="whatsapp">
+                        <div class="ai-card-row">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span class="channel-icon" style="font-size: 16px;">📱</span>
+                                <div>
+                                    <span class="ai-card-label">WhatsApp</span>
+                                    <div class="channel-status" style="font-size: 10px; color: #666; margin-top: 2px;">
+                                        <span class="channel-status-dot" style="width: 6px; height: 6px; border-radius: 50%; background: #999; display: inline-block; margin-right: 4px;"></span>
+                                        <span class="channel-status-text">Not connected</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="display: flex; gap: 4px;">
+                                <button class="button ai-btn channel-connect-btn" style="background: #25D366; color: white;">Connect</button>
+                                <button class="button ai-btn channel-settings-btn" style="display: none;">Settings</button>
+                                <button class="button ai-btn channel-disconnect-btn" style="display: none; background: #dc2626; color: white;">Disconnect</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Telegram -->
+                    <div class="ai-group-row channel-row" data-channel="telegram">
+                        <div class="ai-card-row">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span class="channel-icon" style="font-size: 16px;">✈️</span>
+                                <div>
+                                    <span class="ai-card-label">Telegram</span>
+                                    <div class="channel-status" style="font-size: 10px; color: #666; margin-top: 2px;">
+                                        <span class="channel-status-dot" style="width: 6px; height: 6px; border-radius: 50%; background: #999; display: inline-block; margin-right: 4px;"></span>
+                                        <span class="channel-status-text">Not connected</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="display: flex; gap: 4px;">
+                                <button class="button ai-btn channel-connect-btn" style="background: #0088cc; color: white;">Connect</button>
+                                <button class="button ai-btn channel-settings-btn" style="display: none;">Settings</button>
+                                <button class="button ai-btn channel-disconnect-btn" style="display: none; background: #dc2626; color: white;">Disconnect</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Discord -->
+                    <div class="ai-group-row channel-row" data-channel="discord">
+                        <div class="ai-card-row">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span class="channel-icon" style="font-size: 16px;">🎮</span>
+                                <div>
+                                    <span class="ai-card-label">Discord</span>
+                                    <div class="channel-status" style="font-size: 10px; color: #666; margin-top: 2px;">
+                                        <span class="channel-status-dot" style="width: 6px; height: 6px; border-radius: 50%; background: #999; display: inline-block; margin-right: 4px;"></span>
+                                        <span class="channel-status-text">Not connected</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="display: flex; gap: 4px;">
+                                <button class="button ai-btn channel-connect-btn" style="background: #5865F2; color: white;">Connect</button>
+                                <button class="button ai-btn channel-settings-btn" style="display: none;">Settings</button>
+                                <button class="button ai-btn channel-disconnect-btn" style="display: none; background: #dc2626; color: white;">Disconnect</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Signal -->
+                    <div class="ai-group-row channel-row" data-channel="signal">
+                        <div class="ai-card-row">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span class="channel-icon" style="font-size: 16px;">🔒</span>
+                                <div>
+                                    <span class="ai-card-label">Signal</span>
+                                    <div class="channel-status" style="font-size: 10px; color: #666; margin-top: 2px;">
+                                        <span class="channel-status-dot" style="width: 6px; height: 6px; border-radius: 50%; background: #999; display: inline-block; margin-right: 4px;"></span>
+                                        <span class="channel-status-text">Not connected</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="display: flex; gap: 4px;">
+                                <button class="button ai-btn channel-connect-btn" style="background: #3A76F0; color: white;">Connect</button>
+                                <button class="button ai-btn channel-settings-btn" style="display: none;">Settings</button>
+                                <button class="button ai-btn channel-disconnect-btn" style="display: none; background: #dc2626; color: white;">Disconnect</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Pending Pairings -->
+                <div id="pending-pairings-section" style="display: none; margin-top: 12px;">
+                    <div class="ai-section-title" style="font-size: 10px;">Pending Approvals</div>
+                    <div class="ai-group" id="pending-pairings-list">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+            </div>
+            
             <style>
                 .ai-status-dot {
                     width: 8px;
@@ -774,16 +875,370 @@ export default {
             setupLocalAI();
         });
 
+        // ============================================================
+        // MESSAGING CHANNELS HANDLERS
+        // ============================================================
+
+        // Load channel status
+        async function loadChannelStatus() {
+            try {
+                const apiOrigin = getAPIOrigin();
+                const url = new URL('/api/gateway/channels', apiOrigin);
+                const authToken = getAuthToken();
+                
+                const headers = {
+                    'Content-Type': 'application/json'
+                };
+                if (authToken) {
+                    headers['Authorization'] = `Bearer ${authToken}`;
+                }
+                
+                const response = await fetch(url.toString(), {
+                    method: 'GET',
+                    headers
+                });
+                
+                if (!response.ok) {
+                    // Gateway API might not be available yet - silently fail
+                    console.log('[AI Settings] Gateway API not available');
+                    return;
+                }
+                
+                const data = await response.json();
+                if (!data.success) {
+                    return;
+                }
+                
+                // Update channel UI
+                for (const channel of data.data) {
+                    updateChannelUI(channel);
+                }
+                
+            } catch (error) {
+                console.log('[AI Settings] Error loading channel status:', error.message);
+            }
+        }
+
+        // Update channel UI based on status
+        function updateChannelUI(channel) {
+            const row = $el_window.find(`.channel-row[data-channel="${channel.type}"]`);
+            if (!row.length) return;
+            
+            const statusDot = row.find('.channel-status-dot');
+            const statusText = row.find('.channel-status-text');
+            const connectBtn = row.find('.channel-connect-btn');
+            const settingsBtn = row.find('.channel-settings-btn');
+            const disconnectBtn = row.find('.channel-disconnect-btn');
+            
+            if (channel.status === 'connected') {
+                statusDot.css('background', '#10b981');
+                
+                // Show channel-specific info
+                if (channel.type === 'whatsapp' && channel.info?.phoneNumber) {
+                    statusText.text(`Connected (${channel.info.phoneNumber})`);
+                } else if (channel.type === 'telegram' && channel.info?.botUsername) {
+                    statusText.text(`Connected (@${channel.info.botUsername})`);
+                } else {
+                    statusText.text('Connected');
+                }
+                
+                connectBtn.hide();
+                settingsBtn.show();
+                disconnectBtn.show();
+            } else if (channel.status === 'connecting') {
+                statusDot.css('background', '#f59e0b');
+                statusText.text('Connecting...');
+                connectBtn.prop('disabled', true);
+            } else if (channel.status === 'error') {
+                statusDot.css('background', '#dc2626');
+                statusText.text('Connection error');
+                connectBtn.show();
+                settingsBtn.hide();
+                disconnectBtn.hide();
+            } else {
+                statusDot.css('background', '#999');
+                statusText.text('Not connected');
+                connectBtn.show();
+                settingsBtn.hide();
+                disconnectBtn.hide();
+            }
+        }
+
+        // Load pending pairings
+        async function loadPendingPairings() {
+            try {
+                const apiOrigin = getAPIOrigin();
+                const url = new URL('/api/gateway/pairings', apiOrigin);
+                const authToken = getAuthToken();
+                
+                const headers = {
+                    'Content-Type': 'application/json'
+                };
+                if (authToken) {
+                    headers['Authorization'] = `Bearer ${authToken}`;
+                }
+                
+                const response = await fetch(url.toString(), {
+                    method: 'GET',
+                    headers
+                });
+                
+                if (!response.ok) return;
+                
+                const data = await response.json();
+                if (!data.success) return;
+                
+                const pairings = data.data;
+                const section = $el_window.find('#pending-pairings-section');
+                const list = $el_window.find('#pending-pairings-list');
+                
+                if (pairings.length === 0) {
+                    section.hide();
+                    return;
+                }
+                
+                section.show();
+                list.empty();
+                
+                for (const pairing of pairings) {
+                    const expiresIn = Math.max(0, Math.floor((new Date(pairing.expiresAt) - new Date()) / 60000));
+                    const row = $(`
+                        <div class="ai-group-row" data-pairing-id="${pairing.id}">
+                            <div class="ai-card-row">
+                                <div>
+                                    <span class="ai-card-label">${pairing.senderName || pairing.senderId}</span>
+                                    <div style="font-size: 10px; color: #666;">
+                                        ${pairing.channel} • Code: ${pairing.code} • Expires in ${expiresIn} min
+                                    </div>
+                                </div>
+                                <div style="display: flex; gap: 4px;">
+                                    <button class="button ai-btn approve-pairing-btn" style="background: #10b981; color: white;">Approve</button>
+                                </div>
+                            </div>
+                        </div>
+                    `);
+                    
+                    row.find('.approve-pairing-btn').on('click', async () => {
+                        await approvePairing(pairing.channel, pairing.senderId);
+                    });
+                    
+                    list.append(row);
+                }
+                
+            } catch (error) {
+                console.log('[AI Settings] Error loading pairings:', error.message);
+            }
+        }
+
+        // Approve a pairing
+        async function approvePairing(channel, senderId) {
+            try {
+                const apiOrigin = getAPIOrigin();
+                const url = new URL(`/api/gateway/pairings/${channel}/${encodeURIComponent(senderId)}/approve`, apiOrigin);
+                const authToken = getAuthToken();
+                
+                const headers = {
+                    'Content-Type': 'application/json'
+                };
+                if (authToken) {
+                    headers['Authorization'] = `Bearer ${authToken}`;
+                }
+                
+                const response = await fetch(url.toString(), {
+                    method: 'POST',
+                    headers
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Failed to approve pairing');
+                }
+                
+                // Reload pairings
+                await loadPendingPairings();
+                
+            } catch (error) {
+                console.error('[AI Settings] Error approving pairing:', error);
+                alert('Failed to approve pairing: ' + error.message);
+            }
+        }
+
+        // Connect channel handler
+        async function connectChannel(channelType) {
+            try {
+                // Show appropriate connection modal based on channel type
+                if (channelType === 'whatsapp') {
+                    showWhatsAppConnectModal();
+                } else if (channelType === 'telegram') {
+                    showTelegramConnectModal();
+                } else if (channelType === 'discord') {
+                    showDiscordConnectModal();
+                } else if (channelType === 'signal') {
+                    showSignalConnectModal();
+                }
+            } catch (error) {
+                console.error(`[AI Settings] Error connecting ${channelType}:`, error);
+                alert(`Failed to connect ${channelType}: ${error.message}`);
+            }
+        }
+
+        // Disconnect channel handler
+        async function disconnectChannel(channelType) {
+            if (!confirm(`Are you sure you want to disconnect ${channelType}?`)) {
+                return;
+            }
+            
+            try {
+                const apiOrigin = getAPIOrigin();
+                const url = new URL(`/api/gateway/channels/${channelType}/disconnect`, apiOrigin);
+                const authToken = getAuthToken();
+                
+                const headers = {
+                    'Content-Type': 'application/json'
+                };
+                if (authToken) {
+                    headers['Authorization'] = `Bearer ${authToken}`;
+                }
+                
+                const response = await fetch(url.toString(), {
+                    method: 'POST',
+                    headers
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Failed to disconnect');
+                }
+                
+                await loadChannelStatus();
+                
+            } catch (error) {
+                console.error(`[AI Settings] Error disconnecting ${channelType}:`, error);
+                alert(`Failed to disconnect: ${error.message}`);
+            }
+        }
+
+        // WhatsApp connection modal (placeholder - will be enhanced with QR code)
+        function showWhatsAppConnectModal() {
+            // For now, show a simple info modal
+            // TODO: Implement full QR code modal
+            alert('WhatsApp connection coming soon!\n\nThis will show a QR code for you to scan with WhatsApp.');
+        }
+
+        // Telegram connection modal
+        function showTelegramConnectModal() {
+            const token = prompt(
+                'Telegram Bot Setup\n\n' +
+                '1. Open Telegram and search for @BotFather\n' +
+                '2. Send /newbot and follow the prompts\n' +
+                '3. Copy the bot token and paste it below\n\n' +
+                'Bot Token:'
+            );
+            
+            if (!token || !token.trim()) {
+                return;
+            }
+            
+            // Connect with token
+            connectChannelWithConfig('telegram', {
+                telegram: { botToken: token.trim() },
+                dmPolicy: 'pairing',
+                allowFrom: []
+            });
+        }
+
+        // Discord connection modal
+        function showDiscordConnectModal() {
+            const token = prompt(
+                'Discord Bot Setup\n\n' +
+                '1. Go to discord.com/developers/applications\n' +
+                '2. Create a new application and add a bot\n' +
+                '3. Copy the bot token and paste it below\n\n' +
+                'Bot Token:'
+            );
+            
+            if (!token || !token.trim()) {
+                return;
+            }
+            
+            connectChannelWithConfig('discord', {
+                discord: { botToken: token.trim() },
+                dmPolicy: 'pairing',
+                allowFrom: []
+            });
+        }
+
+        // Signal connection modal
+        function showSignalConnectModal() {
+            alert('Signal connection coming soon!\n\nThis requires signal-cli to be installed on your PC2 node.');
+        }
+
+        // Connect channel with config
+        async function connectChannelWithConfig(channelType, config) {
+            try {
+                const apiOrigin = getAPIOrigin();
+                const url = new URL(`/api/gateway/channels/${channelType}/connect`, apiOrigin);
+                const authToken = getAuthToken();
+                
+                const headers = {
+                    'Content-Type': 'application/json'
+                };
+                if (authToken) {
+                    headers['Authorization'] = `Bearer ${authToken}`;
+                }
+                
+                const response = await fetch(url.toString(), {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify(config)
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Failed to connect');
+                }
+                
+                const data = await response.json();
+                if (!data.success) {
+                    throw new Error(data.error || 'Connection failed');
+                }
+                
+                await loadChannelStatus();
+                
+            } catch (error) {
+                console.error(`[AI Settings] Error connecting ${channelType}:`, error);
+                alert(`Failed to connect ${channelType}: ${error.message}`);
+            }
+        }
+
+        // Setup channel event handlers
+        $el_window.find('.channel-connect-btn').on('click', function() {
+            const channel = $(this).closest('.channel-row').data('channel');
+            connectChannel(channel);
+        });
+
+        $el_window.find('.channel-disconnect-btn').on('click', function() {
+            const channel = $(this).closest('.channel-row').data('channel');
+            disconnectChannel(channel);
+        });
+
+        $el_window.find('.channel-settings-btn').on('click', function() {
+            const channel = $(this).closest('.channel-row').data('channel');
+            // TODO: Open channel settings modal
+            alert(`${channel} settings coming soon!`);
+        });
+
         // Initialize
         setupEventHandlers();
         await loadAIConfig();
         await checkOllamaStatus();
+        
+        // Load channel status (non-blocking)
+        loadChannelStatus().catch(() => {});
+        loadPendingPairings().catch(() => {});
     },
     on_show: async function($content) {
         // Refresh config when tab is shown
         const $el_window = $content.closest('.window-settings');
         if ($el_window.length) {
-            // Re-run init to refresh data (includes Ollama status check)
+            // Re-run init to refresh data (includes Ollama status check and channel status)
             await this.init($el_window);
         }
     }

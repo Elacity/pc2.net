@@ -11,7 +11,7 @@
  */
 
 import { createPublicClient, http, encodeFunctionData, parseUnits, formatUnits } from 'viem';
-import { base, mainnet, arbitrum, optimism, polygon } from 'viem/chains';
+import { base, mainnet, arbitrum, optimism, polygon, bsc, avalanche, linea } from 'viem/chains';
 import { logger } from '../../utils/logger.js';
 import { 
   SupportedNetwork, 
@@ -30,6 +30,10 @@ const VIEM_CHAINS: Record<number, any> = {
   42161: arbitrum,
   10: optimism,
   137: polygon,
+  56: bsc,
+  43114: avalanche,
+  59144: linea,
+  // Note: Solana (101) requires different handling - not EVM
 };
 
 /**

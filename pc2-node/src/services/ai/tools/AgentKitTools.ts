@@ -76,7 +76,7 @@ export const agentKitTools: NormalizedTool[] = [
           },
           chain: {
             type: 'string',
-            description: 'Blockchain to use. Options: "base", "ethereum", "arbitrum", "optimism", "polygon". Defaults to "base" for best gas efficiency.'
+            description: 'Blockchain to send on. Options: "base", "ethereum", "arbitrum", "optimism", "polygon", "bnb", "bsc", "avalanche", "linea", "solana". Defaults to "base". Note: Particle UniversalX handles cross-chain automatically - tokens are sent FROM wherever you have funds TO the specified chain.'
           }
         },
         required: ['to', 'amount', 'token']
@@ -238,6 +238,38 @@ export const COMMON_TOKENS: Record<number, Record<string, { address: string | nu
     'DAI': { address: '0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063', decimals: 18 },
     'WETH': { address: '0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619', decimals: 18 },
   },
+  // BNB Chain (chainId 56)
+  56: {
+    'BNB': { address: null, decimals: 18 },
+    'USDC': { address: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', decimals: 18 },
+    'USDT': { address: '0x55d398326f99059fF775485246999027B3197955', decimals: 18 },
+    'BUSD': { address: '0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56', decimals: 18 },
+    'DAI': { address: '0x1AF3F329e8BE154074D8769D1FFa4eE058B1DBc3', decimals: 18 },
+    'WBNB': { address: '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c', decimals: 18 },
+    'ETH': { address: '0x2170Ed0880ac9A755fd29B2688956BD959F933F8', decimals: 18 },
+  },
+  // Avalanche (chainId 43114)
+  43114: {
+    'AVAX': { address: null, decimals: 18 },
+    'USDC': { address: '0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E', decimals: 6 },
+    'USDT': { address: '0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7', decimals: 6 },
+    'DAI': { address: '0xd586E7F844cEa2F87f50152665BCbc2C279D8d70', decimals: 18 },
+    'WETH': { address: '0x49D5c2BdFfac6CE2BFdB6640F4F80f226bc10bAB', decimals: 18 },
+    'WAVAX': { address: '0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7', decimals: 18 },
+  },
+  // Linea (chainId 59144)
+  59144: {
+    'ETH': { address: null, decimals: 18 },
+    'USDC': { address: '0x176211869cA2b568f2A7D4EE941E073a821EE1ff', decimals: 6 },
+    'USDT': { address: '0xA219439258ca9da29E9Cc4cE5596924745e12B93', decimals: 6 },
+    'WETH': { address: '0xe5D7C2a44FfDDf6b295A15c148167daaAf5Cf34f', decimals: 18 },
+  },
+  // Solana (chainId 101) - SPL token addresses
+  101: {
+    'SOL': { address: null, decimals: 9 },
+    'USDC': { address: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', decimals: 6 },
+    'USDT': { address: 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', decimals: 6 },
+  },
 };
 
 /**
@@ -254,6 +286,15 @@ export const CHAIN_NAME_TO_ID: Record<string, number> = {
   'op': 10,
   'polygon': 137,
   'matic': 137,
+  'bnb': 56,
+  'bsc': 56,
+  'binance': 56,
+  'bnb chain': 56,
+  'avalanche': 43114,
+  'avax': 43114,
+  'linea': 59144,
+  'solana': 101,
+  'sol': 101,
 };
 
 /**

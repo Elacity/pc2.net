@@ -313,6 +313,43 @@ export const AGENT_SUPPORTED_CHAINS: SupportedNetwork[] = [
     explorerUrl: 'https://polygonscan.com',
     isTestnet: false,
   },
+  {
+    chainId: 56,
+    name: 'BNB Chain',
+    shortName: 'BSC',
+    nativeCurrency: { symbol: 'BNB', decimals: 18 },
+    rpcUrl: 'https://bsc-dataseed.binance.org',
+    explorerUrl: 'https://bscscan.com',
+    isTestnet: false,
+  },
+  {
+    chainId: 43114,
+    name: 'Avalanche',
+    shortName: 'AVAX',
+    nativeCurrency: { symbol: 'AVAX', decimals: 18 },
+    rpcUrl: 'https://api.avax.network/ext/bc/C/rpc',
+    explorerUrl: 'https://snowtrace.io',
+    isTestnet: false,
+  },
+  {
+    chainId: 59144,
+    name: 'Linea',
+    shortName: 'Linea',
+    nativeCurrency: { symbol: 'ETH', decimals: 18 },
+    rpcUrl: 'https://rpc.linea.build',
+    explorerUrl: 'https://lineascan.build',
+    isTestnet: false,
+  },
+  // Solana (special handling - not EVM)
+  {
+    chainId: 101,
+    name: 'Solana',
+    shortName: 'SOL',
+    nativeCurrency: { symbol: 'SOL', decimals: 9 },
+    rpcUrl: 'https://api.mainnet-beta.solana.com',
+    explorerUrl: 'https://solscan.io',
+    isTestnet: false,
+  },
 ];
 
 /**

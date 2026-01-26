@@ -1169,10 +1169,16 @@ export default {
             disconnectChannel(channel);
         });
 
-        $el_window.find('.channel-settings-btn').off('click').on('click', function() {
+        $el_window.find('.channel-settings-btn').off('click').on('click', async function() {
             const channel = $(this).closest('.channel-row').data('channel');
-            // TODO: Open channel settings modal
-            alert(`${channel} settings coming soon!`);
+            
+            if (channel === 'telegram') {
+                // Open Telegram settings modal
+                const { default: UITelegramSettings } = await import('../Channels/UITelegramSettings.js');
+                UITelegramSettings();
+            } else {
+                alert(`${channel} settings coming soon!`);
+            }
         });
 
         // Initialize

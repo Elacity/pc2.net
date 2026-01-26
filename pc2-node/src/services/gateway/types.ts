@@ -21,6 +21,21 @@ export type ChannelStatus = 'disconnected' | 'connecting' | 'connected' | 'error
 export type DMPolicy = 'pairing' | 'allowlist' | 'open' | 'disabled';
 
 /**
+ * Channel-specific AI settings (model, personality, access control)
+ */
+export interface ChannelSettings {
+  model?: string;            // e.g., 'ollama:llama3.2', 'openai:gpt-4'
+  personality?: string;      // Preset ID: 'professional', 'friendly', 'technical', 'support', 'custom'
+  customSoul?: string;       // Custom SOUL.md content (when personality='custom')
+  soulContent?: string;      // Resolved soul content for system prompt
+  accessMode?: 'public' | 'private';
+  rateLimit?: {
+    messagesPerMinute: number;
+    messagesPerHour: number;
+  };
+}
+
+/**
  * Channel configuration stored in PC2
  */
 export interface ChannelConfig {
@@ -30,6 +45,9 @@ export interface ChannelConfig {
   allowFrom: string[];  // E.164 phone numbers or usernames
   linkedAt?: string;    // ISO timestamp
   lastActive?: string;  // ISO timestamp
+  
+  // AI settings for this channel
+  settings?: ChannelSettings;
   
   // Channel-specific config
   whatsapp?: WhatsAppConfig;

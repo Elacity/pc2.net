@@ -590,4 +590,78 @@ router.post('/pairings/:channel/:senderId/approve', authenticate, async (req: Au
   }
 });
 
+/**
+ * GET /api/gateway/channels/:channel/settings
+ * Get channel-specific settings (model, personality, access control)
+ */
+router.get('/channels/:channel/settings', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const channel = req.params.channel as ChannelType;
+    const gateway = getGatewayService(req.app.locals.db);
+    const config = gateway.getChannelConfig(channel);
+    
+    // Extract settings from config
+    const settings = {
+      model: config?.settings?.model || 'ollama:llama3.2',
+      personality: config?.settings?.personality || 'friendly',
+      customSoul: config?.settings?.customSoul || '',
+      soulContent: config?.settings?.soulContent || '',
+      accessMode: config?.settings?.accessMode || 'public',
+      rateLimit: config?.settings?.rateLimit || {
+        messagesPerMinute: 10,
+        messagesPerHour: 100,
+      },
+    };
+    
+    res.json({
+      success: true,
+      data: settings,
+    });
+  } catch (error: any) {
+    logger.error('[Gateway API] Error getting channel settings:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * POST /api/gateway/channels/:channel/settings
+ * Save channel-specific settings (model, personality, access control)
+ */
+router.post('/channels/:channel/settings', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const channel = req.params.channel as ChannelType;
+    const { model, personality, customSoul, soulContent, accessMode, rateLimit } = req.body;
+    
+    const gateway = getGatewayService(req.app.locals.db);
+    
+    // Update channel config with settings
+    await gateway.updateChannelConfig(channel, {
+      settings: {
+        model,
+        personality,
+        customSoul,
+        soulContent,
+        accessMode,
+        rateLimit,
+      },
+    });
+    
+    logger.info(`[Gateway API] Channel ${channel} settings updated`);
+    
+    res.json({
+      success: true,
+      data: { channel, settingsUpdated: true },
+    });
+  } catch (error: any) {
+    logger.error('[Gateway API] Error saving channel settings:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
 export default router;

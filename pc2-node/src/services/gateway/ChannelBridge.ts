@@ -202,11 +202,18 @@ export class ChannelBridge {
   ): Promise<string> {
     const { content } = message;
     
+    // Get channel settings for model selection
+    const channelConfig = this.gateway.getChannelConfig(session.channel);
+    const channelModel = channelConfig?.settings?.model;
+    
     // Build messages array for AI
     const messages = this.buildMessages(session, agent, content.text || '');
     
     // Get tool filter based on agent permissions
     const toolFilter = this.getToolFilter(agent.permissions);
+    
+    // Determine which model to use: channel setting > agent setting > default
+    const modelToUse = channelModel || agent.model;
     
     // Build request
     const request: CompleteRequest = {
@@ -214,13 +221,13 @@ export class ChannelBridge {
       walletAddress: session.walletAddress,
       filesystem: this.filesystem,
       io: this.io,
-      // Use agent's model if specified, otherwise use default
-      model: agent.model,
+      model: modelToUse,
     };
     
     logger.info(`[ChannelBridge] Sending to AI`, {
       agent: agent.id,
-      model: agent.model,
+      model: modelToUse,
+      channelModel,
       messageCount: messages.length,
       toolFilter,
     });
@@ -269,11 +276,22 @@ export class ChannelBridge {
   private buildSystemPrompt(session: SessionContext, agent: AgentConfig): string {
     const parts: string[] = [];
     
-    // Agent identity
-    parts.push(`You are ${agent.name}, an AI assistant running on a PC2 sovereign node.`);
+    // Get channel settings for personality
+    const channelConfig = this.gateway.getChannelConfig(session.channel);
+    const settings = channelConfig?.settings;
+    const soulContent = settings?.soulContent;
     
-    // Channel context
-    parts.push(`\nThe user is messaging you via ${session.channel}.`);
+    // Agent identity with soul/personality
+    if (soulContent) {
+      // Use custom soul content from settings
+      parts.push(soulContent);
+      parts.push(`\nYou are running on a PC2 sovereign node, messaging via ${session.channel}.`);
+    } else {
+      // Default identity
+      parts.push(`You are ${agent.name}, an AI assistant running on a PC2 sovereign node.`);
+      parts.push(`\nThe user is messaging you via ${session.channel}.`);
+    }
+    
     if (session.isGroup) {
       parts.push(`This is a group chat.`);
     }
@@ -313,11 +331,13 @@ export class ChannelBridge {
     parts.push(`- You CANNOT call transfer_tokens, swap_tokens, or any transaction-creating functions`);
     parts.push(`- If user asks to send/transfer/swap crypto, explain they must do this from the PC2 desktop interface`);
     
-    // Response guidelines
+    // Response guidelines based on personality
     parts.push(`\n## Response Guidelines`);
     parts.push(`- Keep responses concise as they're sent via messaging`);
     parts.push(`- Use markdown sparingly (not all channels render it)`);
-    parts.push(`- Be helpful, friendly, and respect user privacy`);
+    if (!soulContent) {
+      parts.push(`- Be helpful, friendly, and respect user privacy`);
+    }
     parts.push(`- If you cannot do something, explain why clearly`);
     
     return parts.join('\n');

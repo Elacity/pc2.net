@@ -58,6 +58,7 @@ export interface TransactionProposal {
   
   // Transaction details
   to: string;
+  recipient?: string; // The actual recipient address (for ERC-20 transfers, 'to' is the contract)
   value?: string;
   data?: string;
   chainId: number;
@@ -100,7 +101,11 @@ export interface TransactionProposal {
   createdAt: number;
   expiresAt: number;
   approvedAt?: number;
+  rejectedAt?: number;
   executedAt?: number;
+  
+  // Rejection reason (if rejected)
+  rejectionReason?: string;
   
   // Result (after execution)
   txHash?: string;

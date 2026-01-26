@@ -29,7 +29,7 @@ function findSchemaFile(): string {
   }
   throw new Error(`Schema file not found. Tried: ${SCHEMA_FILE} and ${sourceSchema}`);
 }
-const CURRENT_VERSION = 13;
+const CURRENT_VERSION = 14;
 
 interface Migration {
   version: number;
@@ -542,6 +542,66 @@ export function runMigrations(db: Database.Database): void {
         recordMigration(db, 13);
       } catch (error: any) {
         console.error(`❌ Migration 13 error: ${error.message}`);
+        throw error;
+      }
+    }
+    
+    // Migration 14: Agent Proposals table (AI agent transaction proposals)
+    if (currentVersion < 14) {
+      try {
+        console.log('📦 Running Migration 14: Agent Proposals table...');
+        
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS agent_proposals (
+            id TEXT PRIMARY KEY,
+            wallet_address TEXT NOT NULL,
+            type TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending_approval',
+            from_address TEXT,
+            smart_account_address TEXT,
+            recipient TEXT,
+            to_address TEXT,
+            value TEXT,
+            data TEXT,
+            chain_id INTEGER,
+            token_address TEXT,
+            token_symbol TEXT,
+            token_decimals INTEGER,
+            token_amount TEXT,
+            summary_action TEXT,
+            summary_estimated_gas TEXT,
+            summary_total_cost TEXT,
+            tx_hash TEXT,
+            error TEXT,
+            rejection_reason TEXT,
+            created_at INTEGER NOT NULL,
+            expires_at INTEGER,
+            approved_at INTEGER,
+            rejected_at INTEGER,
+            executed_at INTEGER,
+            FOREIGN KEY (wallet_address) REFERENCES users(wallet_address) ON DELETE CASCADE
+          )
+        `);
+        
+        db.exec(`
+          CREATE INDEX IF NOT EXISTS idx_agent_proposals_wallet 
+          ON agent_proposals(wallet_address)
+        `);
+        
+        db.exec(`
+          CREATE INDEX IF NOT EXISTS idx_agent_proposals_status 
+          ON agent_proposals(status)
+        `);
+        
+        db.exec(`
+          CREATE INDEX IF NOT EXISTS idx_agent_proposals_created 
+          ON agent_proposals(wallet_address, created_at DESC)
+        `);
+        
+        console.log('✅ Migration 14 complete: Agent Proposals table created');
+        recordMigration(db, 14);
+      } catch (error: any) {
+        console.error(`❌ Migration 14 error: ${error.message}`);
         throw error;
       }
     }

@@ -10,6 +10,8 @@ import {
 // @ts-ignore - TypeScript types not properly exported from package
 import {
   UniversalAccount,
+  createMultiChainUnsignedData,
+  injectMultiChainSignature,
   type IAssetsResponse,
 } from '@particle-network/universal-account-sdk';
 import { Web3Provider } from '../provider/web3-provider';
@@ -43,14 +45,38 @@ export const ParticleNetworkContext = React.createContext<ConnectorContextValue>
   deactivate: () => {},
 });
 
+// Helper: Convert human-readable amount to smallest unit (wei)
+function toSmallestUnit(amount: string, decimals: number): bigint {
+  // Handle edge cases
+  if (!amount || amount === '0') return BigInt(0);
+  
+  // Normalize the amount string
+  const amountStr = amount.toString().trim();
+  
+  // Split into whole and fractional parts
+  const [whole, fraction = ''] = amountStr.split('.');
+  
+  // Pad or truncate fraction to match decimals
+  const paddedFraction = fraction.padEnd(decimals, '0').slice(0, decimals);
+  
+  // Combine and convert to BigInt
+  const combined = whole + paddedFraction;
+  
+  // Remove leading zeros but keep at least one digit
+  const cleaned = combined.replace(/^0+/, '') || '0';
+  
+  return BigInt(cleaned);
+}
+
 // Helper: Encode ERC-20 transfer function call
-function encodeERC20Transfer(to: string, amount: string): string {
+function encodeERC20Transfer(to: string, amount: string, decimals: number = 18): string {
   // transfer(address,uint256) function selector: 0xa9059cbb
   const functionSelector = '0xa9059cbb';
   // Pad address to 32 bytes (remove 0x, pad to 64 chars)
   const paddedTo = to.toLowerCase().replace('0x', '').padStart(64, '0');
-  // Convert amount to hex and pad to 32 bytes
-  const amountHex = BigInt(amount).toString(16).padStart(64, '0');
+  // Convert human-readable amount to smallest unit, then to hex
+  const amountInSmallestUnit = toSmallestUnit(amount, decimals);
+  const amountHex = amountInSmallestUnit.toString(16).padStart(64, '0');
   return functionSelector + paddedTo + amountHex;
 }
 
@@ -185,19 +211,27 @@ const ParticleNetworkProvider: React.FC<React.PropsWithChildren<ParticleNetworkC
       const fetchSmartAccountInfo = async () => {
         try {
           const options = await universalAccount.getSmartAccountOptions();
-          console.log('[Particle Auth]: Smart Account Options:', options);
+          
+          // Debug: Log the entire options object to see all fields
+          console.log('[Particle Auth]: Smart Account Options (full):', JSON.stringify(options, null, 2));
+          console.log('[Particle Auth]: options.smartAccountAddress:', options.smartAccountAddress);
+          console.log('[Particle Auth]: options.solanaSmartAccountAddress:', options.solanaSmartAccountAddress);
+          console.log('[Particle Auth]: options.senderSolanaAddress:', (options as any).senderSolanaAddress);
+          
+          // Try different possible field names for Solana address
+          const solanaAddr = options.solanaSmartAccountAddress 
+            || (options as any).senderSolanaAddress 
+            || (options as any).solanaAddress
+            || '';
           
           setSmartAccountInfo({
             ownerAddress: eoaAddress,
             smartAccountAddress: options.smartAccountAddress || '',
-            solanaSmartAccountAddress: options.solanaSmartAccountAddress || '',
+            solanaSmartAccountAddress: solanaAddr,
           });
           
-          if (options.smartAccountAddress) {
-            console.log('[Particle Auth]: Using Smart Account:', options.smartAccountAddress);
-          } else {
-            console.log('[Particle Auth]: No Smart Account available, using EOA');
-          }
+          console.log('[Particle Auth]: Using Smart Account (EVM):', options.smartAccountAddress);
+          console.log('[Particle Auth]: Using Smart Account (Solana):', solanaAddr || 'Not available');
         } catch (error) {
           console.error('[Particle Auth]: Failed to get Smart Account options:', error);
         }
@@ -476,57 +510,214 @@ const ParticleNetworkProvider: React.FC<React.PropsWithChildren<ParticleNetworkC
           
           case 'particle-wallet.get-transactions': {
             // Fetch transaction history from Universal Account
-            const transactions = await universalAccount.getTransactions({
-              page: 1,
-              limit: 50,
+            // API: getTransactions(page, limit) returns { data: Transaction[] }
+            const page = payload?.page || 1;
+            const limit = payload?.limit || 20;
+            
+            console.log('[Particle Wallet Handler] Fetching transactions, page:', page, 'limit:', limit);
+            
+            const txResponse = await universalAccount.getTransactions(page, limit);
+            const transactions = txResponse?.data || txResponse || [];
+            
+            console.log('[Particle Wallet Handler] Transactions response:', transactions?.length || 0, 'items');
+            
+            // Format transactions - flatten structure for frontend compatibility
+            const formattedTxs = (Array.isArray(transactions) ? transactions : []).map((tx: any) => {
+              // Determine if send or receive based on amount sign
+              const rawAmount = parseFloat(tx.change?.amount || '0');
+              const isSend = rawAmount < 0;
+              const displayAmount = Math.abs(rawAmount).toString();
+              
+              return {
+                transactionId: tx.transactionId,
+                hash: tx.transactionId, // Internal ID, real hash needs getTransaction() call
+                tag: tx.tag, // e.g., 'transfer_v2', 'buy', 'sell'
+                type: isSend ? 'send' : 'receive',
+                createdAt: tx.createdAt,
+                timestamp: tx.createdAt,
+                status: tx.status, // 0 = pending, 7 = finished
+                
+                // Flatten token info to top level (what frontend expects)
+                symbol: tx.targetToken?.symbol || 'Unknown',
+                tokenName: tx.targetToken?.name || 'Unknown Token',
+                tokenIcon: tx.targetToken?.image, // Frontend will check this
+                tokenPrice: tx.targetToken?.price,
+                
+                // Also keep targetToken for backward compatibility
+                targetToken: {
+                  name: tx.targetToken?.name,
+                  symbol: tx.targetToken?.symbol,
+                  image: tx.targetToken?.image,
+                  type: tx.targetToken?.type,
+                  price: tx.targetToken?.price,
+                  chainId: tx.targetToken?.chainId,
+                },
+                
+                // Change info - use absolute amount for display
+                amount: displayAmount,
+                rawAmount: tx.change?.amount, // Keep original signed amount
+                amountInUSD: tx.change?.amountInUSD,
+                from: tx.change?.from,
+                to: tx.change?.to,
+                
+                // Chain info
+                fromChains: tx.fromChains || [],
+                toChains: tx.toChains || [],
+                chainId: tx.targetToken?.chainId || tx.toChains?.[0],
+              };
             });
             
-            const formattedTxs = transactions?.list?.map((tx: any) => ({
-              hash: tx.hash || tx.transactionHash,
-              type: tx.type || 'transfer',
-              from: tx.from,
-              to: tx.to,
-              value: tx.value,
-              amount: tx.amount,
-              symbol: tx.symbol || 'ETH',
-              chainId: tx.chainId,
-              timestamp: tx.timestamp || tx.createdAt,
-              status: tx.status || 'confirmed',
-            })) || [];
+            console.log('[Particle Wallet Handler] Formatted transactions:', formattedTxs.length);
             
             window.parent.postMessage({
               type: 'particle-wallet.transactions',
               requestId,
-              payload: { transactions: formattedTxs },
+              payload: { 
+                transactions: formattedTxs,
+                hasMore: formattedTxs.length >= limit,
+                page,
+              },
+            }, '*');
+            break;
+          }
+          
+          case 'particle-wallet.get-transaction-details': {
+            // Fetch full transaction details to get blockchain tx hash for explorer
+            const { transactionId } = payload;
+            
+            if (!transactionId) {
+              throw new Error('Transaction ID required');
+            }
+            
+            console.log('[Particle Wallet Handler] Fetching transaction details:', transactionId);
+            
+            // Call universalAccount.getTransaction(transactionId)
+            const txDetails = await universalAccount.getTransaction(transactionId);
+            
+            console.log('[Particle Wallet Handler] Transaction details:', txDetails);
+            
+            // Extract blockchain tx hash from user operations
+            const operations = [
+              ...(txDetails?.lendingUserOperations || []),
+              ...(txDetails?.depositUserOperations || []),
+              ...(txDetails?.userOperations || []),
+            ];
+            
+            // Find first operation with a blockchain transaction hash
+            const operation = operations.find((op: any) => op?.txHash);
+            
+            const blockchainTxHash = operation?.txHash || null;
+            const operationChainId = operation?.chainId || txDetails?.targetToken?.chainId;
+            
+            console.log('[Particle Wallet Handler] Blockchain hash:', blockchainTxHash, 'chainId:', operationChainId);
+            
+            window.parent.postMessage({
+              type: 'particle-wallet.transaction-details',
+              requestId,
+              payload: {
+                transactionId,
+                blockchainTxHash,
+                chainId: operationChainId,
+                details: txDetails,
+              },
             }, '*');
             break;
           }
           
           case 'particle-wallet.send': {
-            // Send tokens using Universal Account
-            const { to, amount, tokenAddress, chainId: targetChainId } = payload;
-            
-            const txParams: any = {
-              to,
-              value: tokenAddress ? '0' : amount,
-            };
-            
-            // For ERC-20 tokens, create transfer call
-            if (tokenAddress) {
-              txParams.to = tokenAddress;
-              txParams.data = encodeERC20Transfer(to, amount);
+            // Ensure smart account is fully initialized before operations
+            if (!smartAccountInfo?.smartAccountAddress) {
+              throw new Error('Smart Account not yet initialized. Please wait for wallet to fully connect.');
             }
             
-            const result = await universalAccount.sendTransaction(txParams, {
-              chainId: targetChainId,
+            // Send tokens using Universal Account's createTransferTransaction API
+            const { to, amount, tokenAddress, chainId: targetChainId, decimals = 18 } = payload;
+            
+            // Detect if this is a Solana transfer (chain ID 101)
+            const isSolanaTransfer = targetChainId === 101;
+            
+            console.log('[Particle Wallet Handler] Transfer request:', {
+              to,
+              amount,
+              tokenAddress,
+              targetChainId,
+              decimals,
+              isSolanaTransfer,
             });
+            
+            // For Solana transfers, verify we have a Solana smart account
+            if (isSolanaTransfer && !smartAccountInfo?.solanaSmartAccountAddress) {
+              console.warn('[Particle Wallet Handler] Solana smart account not available');
+              // Continue anyway - the SDK may still handle it
+            }
+            
+            // Use the proper Universal Account transfer API
+            // The SDK expects the token as { chainId, address } and amount as string
+            const transferPayload = {
+              token: {
+                chainId: targetChainId || 8453, // Default to Base
+                address: tokenAddress || '0x0000000000000000000000000000000000000000', // Native token = zero address
+              },
+              amount: amount, // Human-readable amount (SDK handles conversion)
+              receiver: to,
+            };
+            
+            console.log('[Particle Wallet Handler] Creating transfer transaction:', transferPayload);
+            console.log('[Particle Wallet Handler] Connected EOA:', connectedEoaAddress);
+            console.log('[Particle Wallet Handler] Smart Account (EVM):', smartAccountInfo?.smartAccountAddress);
+            console.log('[Particle Wallet Handler] Smart Account (Solana):', smartAccountInfo?.solanaSmartAccountAddress);
+            
+            // Create the transaction (this includes fee calculation)
+            const transaction = await universalAccount.createTransferTransaction(transferPayload);
+            
+            console.log('[Particle Wallet Handler] Transaction created:', transaction);
+            console.log('[Particle Wallet Handler] Transaction userOps:', transaction.userOps?.length);
+            
+            // For Universal Account, we need to sign using the proper multi-chain signing flow
+            const userOps = transaction.userOps || [];
+            if (userOps.length === 0) {
+              throw new Error('No user operations in transaction');
+            }
+            
+            // Create the unsigned data that needs to be signed
+            const unsignedData = createMultiChainUnsignedData(userOps);
+            console.log('[Particle Wallet Handler] Unsigned data to sign:', unsignedData);
+            
+            // Request signature from the wallet provider
+            const provider = await connector?.getProvider();
+            if (!provider) {
+              throw new Error('No wallet provider available');
+            }
+            
+            // The unsignedData is typically a hex string (the merkle root or combined hash)
+            // Sign it with personal_sign using the connected EOA
+            const dataToSign = typeof unsignedData === 'string' ? unsignedData : unsignedData.merkleRoot || unsignedData.hash;
+            
+            console.log('[Particle Wallet Handler] Signing data:', dataToSign, 'with address:', connectedEoaAddress);
+            
+            const signature = await (provider as any).request({
+              method: 'personal_sign',
+              params: [dataToSign, connectedEoaAddress],
+            });
+            
+            console.log('[Particle Wallet Handler] Signature obtained:', signature?.substring(0, 20) + '...');
+            
+            // Inject the signature into the transaction
+            injectMultiChainSignature(transaction, signature);
+            console.log('[Particle Wallet Handler] Signature injected into transaction');
+            
+            // Send the signed transaction
+            const result = await universalAccount.sendTransaction(transaction, signature);
+            
+            console.log('[Particle Wallet Handler] Transaction sent:', result);
             
             window.parent.postMessage({
               type: 'particle-wallet.send-result',
               requestId,
               payload: { 
                 success: true, 
-                hash: result.hash || result.transactionHash,
+                hash: result.transactionHash || result.hash || transaction.transactionId,
+                transactionId: transaction.transactionId,
                 result,
               },
             }, '*');
@@ -534,33 +725,76 @@ const ParticleNetworkProvider: React.FC<React.PropsWithChildren<ParticleNetworkC
           }
           
           case 'particle-wallet.estimate-fee': {
-            // Estimate fee for transaction
-            const { to, amount, tokenAddress, chainId: targetChainId } = payload;
-            
-            const txParams: any = {
-              to: tokenAddress || to,
-              value: tokenAddress ? '0' : amount,
-            };
-            
-            if (tokenAddress) {
-              txParams.data = encodeERC20Transfer(to, amount);
+            // Ensure smart account is fully initialized before operations
+            if (!smartAccountInfo?.smartAccountAddress) {
+              throw new Error('Smart Account not yet initialized. Please wait for wallet to fully connect.');
             }
             
-            const feeQuote = await universalAccount.getFeeQuotes(txParams, {
-              chainId: targetChainId,
+            // Estimate fee by creating a transfer transaction (doesn't execute)
+            const { to, amount, tokenAddress, chainId: targetChainId } = payload;
+            
+            // Detect if this is a Solana transfer
+            const isSolanaTransfer = targetChainId === 101;
+            
+            // Use the proper Universal Account transfer API
+            const transferPayload = {
+              token: {
+                chainId: targetChainId || 8453, // Default to Base
+                address: tokenAddress || '0x0000000000000000000000000000000000000000',
+              },
+              amount: amount,
+              receiver: to,
+            };
+            
+            console.log('[Particle Wallet Handler] Estimating fee for:', {
+              ...transferPayload,
+              isSolanaTransfer,
             });
             
-            const fee = feeQuote?.gasless?.fee || feeQuote?.standard?.fee || '0';
-            const feeUSD = feeQuote?.gasless?.feeUSD || feeQuote?.standard?.feeUSD || 0;
+            // Create transaction to get fee info (doesn't execute)
+            const transaction = await universalAccount.createTransferTransaction(transferPayload);
+            
+            console.log('[Particle Wallet Handler] Transaction created for fee estimate:', transaction);
+            
+            // Extract fee information from the transaction
+            const fees = transaction.tokenChanges?.totalFeeInUSD || '0';
+            const freeGasFee = transaction.transactionFees?.freeGasFee || false;
+            const freeServiceFee = transaction.transactionFees?.freeServiceFee || false;
+            
+            // Solana-specific fees (rent for new token accounts)
+            const solanaRent = transaction.tokenChanges?.solanaRentFee || transaction.fees?.totals?.solanaRentFee || null;
+            const solanaRentUSD = transaction.tokenChanges?.solanaRentFeeInUSD || transaction.fees?.totals?.solanaRentFeeInUSD || null;
+            
+            console.log('[Particle Wallet Handler] Fee estimate:', { 
+              fees, 
+              freeGasFee, 
+              freeServiceFee,
+              isSolanaTransfer,
+              solanaRent,
+              solanaRentUSD,
+            });
             
             window.parent.postMessage({
-              type: 'particle-wallet.tokens', // Reuse tokens response type
+              type: 'particle-wallet.fee-estimate',
               requestId,
               payload: { 
-                fee,
-                feeUSD,
-                feeSymbol: 'ETH',
-                feeQuote,
+                success: true,
+                feeEstimate: {
+                  total: fees,
+                  totalUSD: parseFloat(fees) || 0,
+                  gas: transaction.transactionFees?.transactionServiceFeeAmountInUSD || '0',
+                  gasUSD: parseFloat(transaction.transactionFees?.transactionServiceFeeAmountInUSD || '0'),
+                  service: transaction.transactionFees?.transactionLPFeeAmountInUSD || '0',
+                  serviceUSD: parseFloat(transaction.transactionFees?.transactionLPFeeAmountInUSD || '0'),
+                  lp: '0',
+                  lpUSD: 0,
+                  freeGasFee,
+                  freeServiceFee,
+                  // Solana-specific
+                  solanaRent,
+                  solanaRentUSD,
+                  isSolanaTransfer,
+                },
               },
             }, '*');
             break;

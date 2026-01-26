@@ -27,12 +27,13 @@ import {
   getChainIdFromName 
 } from './AgentKitTools.js';
 import { Server as SocketIOServer } from 'socket.io';
+import { getDatabase } from '../../../storage/index.js';
 
 /**
  * In-memory store for pending proposals
  * In production, this should be persisted to the database
  */
-const pendingProposals: Map<string, TransactionProposal> = new Map();
+export const pendingProposals: Map<string, TransactionProposal> = new Map();
 
 /**
  * AgentKit Executor - handles AI tool calls for wallet operations
@@ -258,6 +259,14 @@ export class AgentKitExecutor {
    * Create a transfer proposal (requires user approval)
    */
   private async transferTokens(args: any): Promise<AgentKitToolResult> {
+    logger.info('[AgentKitExecutor] transferTokens called with:', {
+      hasWalletProvider: !!this.walletProvider,
+      hasIo: !!this.io,
+      walletAddress: this.walletAddress,
+      smartAccountAddress: this.smartAccountAddress,
+      args,
+    });
+    
     if (!this.walletProvider) {
       return {
         success: false,
@@ -374,13 +383,42 @@ export class AgentKitExecutor {
       chainId
     );
     
-    // Store proposal
+    // Store proposal in memory and database
     pendingProposals.set(proposal.id, proposal);
     
+    // Persist to database
+    try {
+      const db = getDatabase();
+      db.saveProposal({
+        id: proposal.id,
+        walletAddress: this.walletAddress,
+        type: proposal.type,
+        status: proposal.status,
+        from: proposal.from,
+        smartAccountAddress: proposal.smartAccountAddress,
+        recipient: proposal.recipient,
+        to: proposal.to,
+        value: proposal.value,
+        data: proposal.data,
+        chainId: proposal.chainId,
+        token: proposal.token,
+        summary: proposal.summary,
+        createdAt: proposal.createdAt,
+        expiresAt: proposal.expiresAt,
+      });
+      logger.info('[AgentKitExecutor] Proposal saved to database:', proposal.id);
+    } catch (dbError) {
+      logger.warn('[AgentKitExecutor] Failed to save proposal to database:', dbError);
+    }
+    
     // Notify frontend via WebSocket
+    // Room format is `user:${normalizedWallet}` (lowercase)
     if (this.io) {
-      this.io.to(this.walletAddress).emit('wallet-agent:proposal', { proposal });
-      logger.info('[AgentKitExecutor] Sent proposal to frontend:', proposal.id);
+      const room = `user:${this.walletAddress.toLowerCase()}`;
+      this.io.to(room).emit('wallet-agent:proposal', { proposal });
+      logger.info('[AgentKitExecutor] Sent proposal to frontend via room:', room, 'proposalId:', proposal.id);
+    } else {
+      logger.warn('[AgentKitExecutor] No WebSocket (io) available - cannot notify frontend');
     }
     
     // Return proposal for AI to present to user
@@ -565,8 +603,8 @@ export class AgentKitExecutor {
    */
   static updateProposalStatus(
     proposalId: string,
-    status: 'approved' | 'rejected' | 'executed' | 'failed',
-    extra?: { txHash?: string; error?: string }
+    status: 'approved' | 'rejected' | 'executed' | 'failed' | 'expired',
+    extra?: { txHash?: string; error?: string; rejectionReason?: string }
   ): TransactionProposal | null {
     const proposal = pendingProposals.get(proposalId);
     if (!proposal) return null;
@@ -580,9 +618,20 @@ export class AgentKitExecutor {
       proposal.txHash = extra?.txHash;
     } else if (status === 'failed') {
       proposal.error = extra?.error;
+    } else if (status === 'rejected') {
+      proposal.error = extra?.rejectionReason || 'User rejected';
     }
     
     pendingProposals.set(proposalId, proposal);
+    
+    // Update in database
+    try {
+      const db = getDatabase();
+      db.updateProposalStatus(proposalId, status, extra);
+    } catch (dbError) {
+      logger.warn('[AgentKitExecutor] Failed to update proposal in database:', dbError);
+    }
+    
     return proposal;
   }
   
@@ -590,7 +639,18 @@ export class AgentKitExecutor {
    * Get proposal by ID
    */
   static getProposal(proposalId: string): TransactionProposal | null {
-    return pendingProposals.get(proposalId) || null;
+    // Try memory first
+    const memoryProposal = pendingProposals.get(proposalId);
+    if (memoryProposal) return memoryProposal;
+    
+    // Fall back to database
+    try {
+      const db = getDatabase();
+      return db.getProposal(proposalId);
+    } catch (dbError) {
+      logger.warn('[AgentKitExecutor] Failed to get proposal from database:', dbError);
+      return null;
+    }
   }
   
   /**

@@ -29,6 +29,10 @@ export interface SystemPromptConfig {
   
   // Model type (affects prompt structure)
   modelType?: 'claude' | 'openai' | 'gemini' | 'ollama' | 'xai';
+  
+  // Wallet addresses (for Agent Account context)
+  walletAddress?: string;       // EOA (Core Wallet)
+  smartAccountAddress?: string; // Universal Account (Agent Wallet)
 }
 
 /**
@@ -39,6 +43,11 @@ export function buildSystemPrompt(config: SystemPromptConfig = {}): string {
   
   // Role definition
   sections.push(buildRoleSection());
+  
+  // Wallet context (if available) - CRITICAL for Agent Account operations
+  if (config.walletAddress || config.smartAccountAddress) {
+    sections.push(buildWalletContextSection(config.walletAddress, config.smartAccountAddress));
+  }
   
   // Memory context (if available)
   if (config.memoryContext) {
@@ -118,6 +127,40 @@ Use the CONTEXT_MEMORY above to understand:
 - The user's current intent
 - When user says "inside it", "that folder", etc., refer to entities from memory
 </MEMORY_INSTRUCTIONS>`;
+}
+
+/**
+ * Wallet context section - user's wallet addresses for Agent Account operations
+ * CRITICAL: This gives the AI the EXACT addresses so it never needs to guess or fabricate
+ */
+function buildWalletContextSection(walletAddress?: string, smartAccountAddress?: string): string {
+  const parts: string[] = [`<WALLET_CONTEXT>`];
+  
+  parts.push(`CRITICAL: These are the user's ACTUAL wallet addresses. NEVER fabricate or guess addresses.`);
+  parts.push(``);
+  
+  if (walletAddress) {
+    parts.push(`EOA_WALLET (Core Wallet / Admin Wallet):`);
+    parts.push(`  Address: ${walletAddress}`);
+    parts.push(`  Use: When user says "my EOA wallet", "my core wallet", or "my admin wallet", use THIS EXACT address.`);
+    parts.push(``);
+  }
+  
+  if (smartAccountAddress) {
+    parts.push(`AGENT_ACCOUNT (Universal Account / Smart Wallet):`);
+    parts.push(`  Address: ${smartAccountAddress}`);
+    parts.push(`  Use: This is where AI-assisted transactions are sent FROM. The Agent Account.`);
+    parts.push(``);
+  }
+  
+  parts.push(`RULES:`);
+  parts.push(`- When transferring to "my EOA wallet", use the EOA_WALLET address above: ${walletAddress || 'NOT SET'}`);
+  parts.push(`- NEVER invent, guess, or use placeholder addresses`);
+  parts.push(`- If an address is needed but not available above, ASK the user for the full address`);
+  
+  parts.push(`</WALLET_CONTEXT>`);
+  
+  return parts.join('\n');
 }
 
 /**

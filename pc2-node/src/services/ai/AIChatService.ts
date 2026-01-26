@@ -694,6 +694,8 @@ export class AIChatService {
           toolDescriptions,
           verboseReasoning: true,
           modelType: providerType,
+          walletAddress,
+          smartAccountAddress,
         });
     
     // Inject cognitive framework for complex tasks

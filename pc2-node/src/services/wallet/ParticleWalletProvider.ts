@@ -300,7 +300,7 @@ export class ParticleWalletProvider {
       const gasPrice = await client.getGasPrice();
       
       // Calculate estimated cost
-      const estimatedCostWei = gasLimit * gasPrice;
+      const estimatedCostWei = BigInt(gasLimit) * gasPrice;
       const estimatedCost = formatUnits(estimatedCostWei, 18);
       
       // Get native token price for USD conversion (simplified)
@@ -376,6 +376,7 @@ export class ParticleWalletProvider {
       smartAccountAddress: this.smartAccountAddress,
       
       to: txData.to,
+      recipient: to, // Store the actual recipient (for ERC-20, 'to' is the contract)
       value: txData.value,
       data: txData.data,
       chainId: targetChainId,

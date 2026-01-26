@@ -1,5 +1,5 @@
 import { createServer } from './server.js';
-import { DatabaseManager, IPFSStorage, FilesystemManager, type IPFSNetworkMode } from './storage/index.js';
+import { DatabaseManager, IPFSStorage, FilesystemManager, type IPFSNetworkMode, setGlobalDatabase } from './storage/index.js';
 import { loadConfig, type Config } from './config/loader.js';
 import { logger } from './utils/logger.js';
 import { AIChatService } from './services/ai/AIChatService.js';
@@ -49,6 +49,9 @@ async function main() {
   try {
     db = new DatabaseManager(DB_PATH);
     db.initialize();
+    
+    // Set global database singleton for access from services
+    setGlobalDatabase(db);
     
     // Cleanup expired sessions on startup
     const cleaned = db.cleanupExpiredSessions();

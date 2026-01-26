@@ -973,21 +973,29 @@ export class ToolExecutor {
         // ==================== WALLET TOOLS ====================
         
         case 'get_wallet_info': {
-          // Return both wallet addresses separately
+          // Return both wallets with clear roles
           return {
             success: true,
             result: {
+              // EOA - user's owner key (read-only for AI, user controls directly)
               core_wallet: {
                 address: this.walletAddress,
-                type: 'EOA',
-                description: 'Owner account - used for signing and identity'
+                type: 'EOA (Owner Key)',
+                role: 'Direct manual control - not AI accessible for transactions',
               },
-              smart_wallet: this.smartAccountAddress ? {
+              // Agent Account - where AI can execute transactions
+              agent_account: this.smartAccountAddress ? {
                 address: this.smartAccountAddress,
-                type: 'Smart Account',
-                description: 'Particle Universal Account - gas abstraction, batched transactions'
-              } : null,
-              auth_method: this.smartAccountAddress ? 'universalx' : 'wallet'
+                type: 'Universal Account (Agent Wallet)',
+                role: 'AI-powered multi-chain wallet - can send/receive/swap tokens',
+                supported_chains: ['Base', 'Ethereum', 'Polygon', 'Arbitrum', 'Optimism', 'BNB Chain'],
+                features: ['Gas sponsorship', 'Multi-chain transfers', 'Token swaps', 'AI-assisted operations'],
+                can_execute: true,
+              } : {
+                error: 'Not connected',
+                note: 'Connect with Particle Universal Account to enable Agent Account',
+                can_execute: false,
+              }
             }
           };
         }
@@ -996,8 +1004,8 @@ export class ToolExecutor {
           const includeTokens = args.include_tokens !== false; // Default to true
           
           try {
-            // Helper function to get native ELA balance via RPC
-            const getBalance = async (address: string): Promise<string> => {
+            // Helper function to get native ELA balance via Elastos RPC
+            const getElaBalance = async (address: string): Promise<string> => {
               const response = await fetch(ESC_RPC_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1012,40 +1020,165 @@ export class ToolExecutor {
               if (data.error) {
                 throw new Error(data.error.message || 'RPC error');
               }
-              // Convert hex wei to ELA (18 decimals)
               const weiHex = data.result || '0x0';
               const wei = BigInt(weiHex);
               const ela = Number(wei) / 1e18;
               return ela.toFixed(6);
             };
 
-            // Get Core Wallet balance
-            const coreBalance = await getBalance(this.walletAddress);
-            
-            // Get Smart Wallet balance if available
-            let smartBalance: string | null = null;
-            if (this.smartAccountAddress) {
-              smartBalance = await getBalance(this.smartAccountAddress);
-            }
+            // Helper function to get token balance via RPC
+            const getTokenBalance = async (tokenAddress: string, walletAddress: string, rpcUrl: string, decimals: number = 18): Promise<string> => {
+              try {
+                // ERC20 balanceOf(address) call - address must be zero-padded to 32 bytes
+                const addressWithoutPrefix = walletAddress.toLowerCase().replace('0x', '');
+                const paddedAddress = addressWithoutPrefix.padStart(64, '0');
+                const data = '0x70a08231' + paddedAddress;
+                
+                logger.info('[ToolExecutor] getTokenBalance query:', { tokenAddress, walletAddress, rpcUrl, decimals, data });
+                
+                const response = await fetch(rpcUrl, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    jsonrpc: '2.0',
+                    method: 'eth_call',
+                    params: [{ to: tokenAddress, data }, 'latest'],
+                    id: 1
+                  })
+                });
+                const result = await response.json() as { result?: string; error?: any };
+                
+                logger.info('[ToolExecutor] getTokenBalance result:', { tokenAddress, result: result.result, error: result.error });
+                
+                if (result.error || !result.result || result.result === '0x') {
+                  return '0';
+                }
+                const balance = BigInt(result.result);
+                const formatted = Number(balance) / Math.pow(10, decimals);
+                logger.info('[ToolExecutor] getTokenBalance formatted:', { tokenAddress, balance: balance.toString(), formatted });
+                return formatted.toFixed(6);
+              } catch (e: any) {
+                logger.error('[ToolExecutor] getTokenBalance error:', { tokenAddress, error: e.message });
+                return '0';
+              }
+            };
 
-            // TODO: Add ERC-20 token balance queries when includeTokens is true
-            // For now, just return native ELA balances
-            const coreTokens: any[] = [];
-            const smartTokens: any[] = [];
+            // Get EOA balance (ELA on Elastos) for visibility
+            const elaBalance = await getElaBalance(this.walletAddress);
+
+            // Get Agent Account (Universal/Smart Wallet) multi-chain balances
+            // This is where the AI can execute transactions
+            const agentTokens: any[] = [];
+            let totalAgentBalanceUSD = 0;
+            
+            logger.info('[ToolExecutor] get_wallet_balance - querying:', {
+              walletAddress: this.walletAddress,
+              smartAccountAddress: this.smartAccountAddress,
+              includeTokens
+            });
+            
+            if (this.smartAccountAddress && includeTokens) {
+              // Define chains and tokens to query
+              const chainConfigs = [
+                { 
+                  chainId: 8453, 
+                  name: 'Base', 
+                  rpcUrl: 'https://mainnet.base.org',
+                  tokens: [
+                    { symbol: 'USDC', address: '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913', decimals: 6 },
+                    { symbol: 'USDT', address: '0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2', decimals: 6 },
+                  ]
+                },
+                { 
+                  chainId: 1, 
+                  name: 'Ethereum', 
+                  rpcUrl: 'https://eth.llamarpc.com',
+                  tokens: [
+                    { symbol: 'USDC', address: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', decimals: 6 },
+                    { symbol: 'USDT', address: '0xdac17f958d2ee523a2206206994597c13d831ec7', decimals: 6 },
+                  ]
+                },
+                { 
+                  chainId: 137, 
+                  name: 'Polygon', 
+                  rpcUrl: 'https://polygon-rpc.com',
+                  tokens: [
+                    { symbol: 'USDC', address: '0x3c499c542cef5e3811e1192ce70d8cc03d5c3359', decimals: 6 },
+                  ]
+                },
+              ];
+              
+              for (const chain of chainConfigs) {
+                // Get native balance
+                try {
+                  const nativeResp = await fetch(chain.rpcUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      jsonrpc: '2.0',
+                      method: 'eth_getBalance',
+                      params: [this.smartAccountAddress.toLowerCase(), 'latest'],
+                      id: 1
+                    })
+                  });
+                  const nativeData = await nativeResp.json() as { result?: string };
+                  if (nativeData.result) {
+                    const wei = BigInt(nativeData.result);
+                    const balance = Number(wei) / 1e18;
+                    if (balance > 0.0001) {
+                      agentTokens.push({
+                        symbol: chain.chainId === 137 ? 'MATIC' : 'ETH',
+                        balance: balance.toFixed(6),
+                        chain: chain.name,
+                        chainId: chain.chainId,
+                      });
+                    }
+                  }
+                } catch (e) {
+                  // Ignore errors for individual chains
+                }
+                
+                // Get token balances
+                for (const token of chain.tokens) {
+                  const balance = await getTokenBalance(token.address, this.smartAccountAddress, chain.rpcUrl, token.decimals);
+                  const balanceNum = parseFloat(balance);
+                  if (balanceNum > 0.0001) {
+                    agentTokens.push({
+                      symbol: token.symbol,
+                      balance,
+                      chain: chain.name,
+                      chainId: chain.chainId,
+                      usdValue: token.symbol === 'USDC' || token.symbol === 'USDT' ? balanceNum : undefined,
+                    });
+                    if (token.symbol === 'USDC' || token.symbol === 'USDT') {
+                      totalAgentBalanceUSD += balanceNum;
+                    }
+                  }
+                }
+              }
+            }
 
             return {
               success: true,
               result: {
+                // EOA for visibility only (user's owner key)
                 core_wallet: {
                   address: this.walletAddress,
-                  ela_balance: coreBalance,
-                  tokens: includeTokens ? coreTokens : undefined
+                  ela_balance: elaBalance,
+                  note: 'EOA owner account - for direct manual control only'
                 },
-                smart_wallet: this.smartAccountAddress ? {
+                // Agent Account - where AI can execute transactions
+                agent_account: this.smartAccountAddress ? {
                   address: this.smartAccountAddress,
-                  ela_balance: smartBalance,
-                  tokens: includeTokens ? smartTokens : undefined
-                } : null
+                  tokens: agentTokens,
+                  total_usd: totalAgentBalanceUSD > 0 ? `$${totalAgentBalanceUSD.toFixed(2)}` : undefined,
+                  note: agentTokens.length === 0 ? 'No tokens found on Base, Ethereum, or Polygon' : 'AI can send/receive tokens from this wallet',
+                  can_execute: true,
+                } : {
+                  error: 'Agent Account not connected',
+                  note: 'Connect with Particle Universal Account to enable AI-powered transactions',
+                  can_execute: false,
+                }
               }
             };
           } catch (error: any) {

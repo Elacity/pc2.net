@@ -1307,4 +1307,217 @@ export class DatabaseManager {
     `).run(walletAddress);
     return result.changes;
   }
+
+  // ============================================================================
+  // Agent Proposal Operations
+  // ============================================================================
+
+  /**
+   * Save an agent proposal to the database
+   */
+  saveProposal(proposal: {
+    id: string;
+    walletAddress: string;
+    type: string;
+    status: string;
+    from?: string;
+    smartAccountAddress?: string;
+    recipient?: string;
+    to?: string;
+    value?: string;
+    data?: string;
+    chainId?: number;
+    token?: {
+      address?: string | null;
+      symbol?: string;
+      decimals?: number;
+      amount?: string;
+    };
+    summary?: {
+      action?: string;
+      estimatedGas?: string;
+      totalCost?: string;
+    };
+    txHash?: string;
+    error?: string;
+    rejectionReason?: string;
+    createdAt: number;
+    expiresAt?: number;
+    approvedAt?: number;
+    rejectedAt?: number;
+    executedAt?: number;
+  }): void {
+    const db = this.getDB();
+    
+    db.prepare(`
+      INSERT INTO agent_proposals (
+        id, wallet_address, type, status, from_address, smart_account_address,
+        recipient, to_address, value, data, chain_id,
+        token_address, token_symbol, token_decimals, token_amount,
+        summary_action, summary_estimated_gas, summary_total_cost,
+        tx_hash, error, rejection_reason,
+        created_at, expires_at, approved_at, rejected_at, executed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        status = excluded.status,
+        tx_hash = excluded.tx_hash,
+        error = excluded.error,
+        rejection_reason = excluded.rejection_reason,
+        approved_at = excluded.approved_at,
+        rejected_at = excluded.rejected_at,
+        executed_at = excluded.executed_at
+    `).run(
+      proposal.id,
+      proposal.walletAddress,
+      proposal.type,
+      proposal.status,
+      proposal.from || null,
+      proposal.smartAccountAddress || null,
+      proposal.recipient || null,
+      proposal.to || null,
+      proposal.value || null,
+      proposal.data || null,
+      proposal.chainId || null,
+      proposal.token?.address || null,
+      proposal.token?.symbol || null,
+      proposal.token?.decimals || null,
+      proposal.token?.amount || null,
+      proposal.summary?.action || null,
+      proposal.summary?.estimatedGas || null,
+      proposal.summary?.totalCost || null,
+      proposal.txHash || null,
+      proposal.error || null,
+      proposal.rejectionReason || null,
+      proposal.createdAt,
+      proposal.expiresAt || null,
+      proposal.approvedAt || null,
+      proposal.rejectedAt || null,
+      proposal.executedAt || null
+    );
+  }
+
+  /**
+   * Get proposals for a wallet
+   */
+  getProposals(walletAddress: string, limit = 50): any[] {
+    const db = this.getDB();
+    
+    const rows = db.prepare(`
+      SELECT * FROM agent_proposals
+      WHERE wallet_address = ?
+      ORDER BY created_at DESC
+      LIMIT ?
+    `).all(walletAddress, limit) as any[];
+    
+    return rows.map(row => ({
+      id: row.id,
+      type: row.type,
+      status: row.status,
+      from: row.from_address,
+      smartAccountAddress: row.smart_account_address,
+      recipient: row.recipient,
+      to: row.to_address,
+      value: row.value,
+      data: row.data,
+      chainId: row.chain_id,
+      token: row.token_symbol ? {
+        address: row.token_address,
+        symbol: row.token_symbol,
+        decimals: row.token_decimals,
+        amount: row.token_amount,
+      } : undefined,
+      summary: row.summary_action ? {
+        action: row.summary_action,
+        estimatedGas: row.summary_estimated_gas,
+        totalCost: row.summary_total_cost,
+      } : undefined,
+      txHash: row.tx_hash,
+      error: row.error,
+      rejectionReason: row.rejection_reason,
+      createdAt: row.created_at,
+      expiresAt: row.expires_at,
+      approvedAt: row.approved_at,
+      rejectedAt: row.rejected_at,
+      executedAt: row.executed_at,
+    }));
+  }
+
+  /**
+   * Update proposal status
+   */
+  updateProposalStatus(
+    proposalId: string,
+    status: string,
+    extra?: { txHash?: string; error?: string; rejectionReason?: string }
+  ): boolean {
+    const db = this.getDB();
+    const now = Date.now();
+    
+    let timestampField = '';
+    if (status === 'approved') timestampField = 'approved_at = ?,';
+    else if (status === 'rejected') timestampField = 'rejected_at = ?,';
+    else if (status === 'executed') timestampField = 'executed_at = ?,';
+    
+    const sql = `
+      UPDATE agent_proposals SET
+        status = ?,
+        ${timestampField}
+        tx_hash = COALESCE(?, tx_hash),
+        error = COALESCE(?, error),
+        rejection_reason = COALESCE(?, rejection_reason)
+      WHERE id = ?
+    `;
+    
+    const params = timestampField 
+      ? [status, now, extra?.txHash || null, extra?.error || null, extra?.rejectionReason || null, proposalId]
+      : [status, extra?.txHash || null, extra?.error || null, extra?.rejectionReason || null, proposalId];
+    
+    const result = db.prepare(sql).run(...params);
+    return result.changes > 0;
+  }
+
+  /**
+   * Get proposal by ID
+   */
+  getProposal(proposalId: string): any | null {
+    const db = this.getDB();
+    
+    const row = db.prepare(`
+      SELECT * FROM agent_proposals WHERE id = ?
+    `).get(proposalId) as any;
+    
+    if (!row) return null;
+    
+    return {
+      id: row.id,
+      type: row.type,
+      status: row.status,
+      from: row.from_address,
+      smartAccountAddress: row.smart_account_address,
+      recipient: row.recipient,
+      to: row.to_address,
+      value: row.value,
+      data: row.data,
+      chainId: row.chain_id,
+      token: row.token_symbol ? {
+        address: row.token_address,
+        symbol: row.token_symbol,
+        decimals: row.token_decimals,
+        amount: row.token_amount,
+      } : undefined,
+      summary: row.summary_action ? {
+        action: row.summary_action,
+        estimatedGas: row.summary_estimated_gas,
+        totalCost: row.summary_total_cost,
+      } : undefined,
+      txHash: row.tx_hash,
+      error: row.error,
+      rejectionReason: row.rejection_reason,
+      createdAt: row.created_at,
+      expiresAt: row.expires_at,
+      approvedAt: row.approved_at,
+      rejectedAt: row.rejected_at,
+      executedAt: row.executed_at,
+    };
+  }
 }

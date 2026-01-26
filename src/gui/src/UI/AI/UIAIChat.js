@@ -1319,8 +1319,36 @@ async function loadAIConfigForChat() {
         }
         
         const config = data.result;
-        const provider = config.default_provider || 'ollama';
-        let model = config.default_model || (provider === 'ollama' ? 'deepseek-r1:1.5b' : null);
+        
+        // Determine default provider and model
+        // Priority: 1) User-configured default, 2) Claude if API key exists, 3) Ollama/DeepSeek
+        let provider = config.default_provider;
+        let model = config.default_model;
+        
+        // If no default is configured, pick the best available provider
+        if (!provider || !model) {
+            if (config.api_keys?.claude) {
+                // Claude is connected - use Claude 3.5 Sonnet as default
+                provider = 'claude';
+                model = 'claude-3-5-sonnet-20241022';
+            } else if (config.api_keys?.openai) {
+                // OpenAI is connected - use GPT-4o as default
+                provider = 'openai';
+                model = 'gpt-4o';
+            } else if (config.api_keys?.gemini) {
+                // Gemini is connected - use Gemini 2.0 Flash as default
+                provider = 'gemini';
+                model = 'gemini-2.0-flash';
+            } else if (config.api_keys?.xai) {
+                // xAI is connected - use Grok 3 as default
+                provider = 'xai';
+                model = 'grok-3';
+            } else {
+                // Fallback to local Ollama/DeepSeek
+                provider = 'ollama';
+                model = 'deepseek-r1:1.5b';
+            }
+        }
         
         // If model already has a provider prefix (e.g., "ollama:llava:7b"), extract just the model name
         if (model && model.includes(':')) {

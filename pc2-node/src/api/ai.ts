@@ -105,6 +105,51 @@ router.get('/config', authenticate, async (req: AuthenticatedRequest, res: Respo
       providerStatus = 'not_initialized';
     }
 
+    // Build providers list with their enabled status and available models
+    const ollamaModels: string[] = [];
+    if (aiService) {
+      try {
+        const models = await aiService.listModels();
+        models.forEach(m => ollamaModels.push(m.id));
+      } catch (e) {
+        // Default models if Ollama not available
+      }
+    }
+    if (ollamaModels.length === 0) {
+      ollamaModels.push('llama3.2', 'deepseek-r1:1.5b');
+    }
+    
+    // Parse API keys to check which providers are enabled
+    let rawApiKeys: Record<string, string> = {};
+    if (config?.api_keys) {
+      try {
+        rawApiKeys = JSON.parse(config.api_keys);
+      } catch (e) { /* ignore */ }
+    }
+    
+    const providers: Record<string, { enabled: boolean; models: string[] }> = {
+      ollama: { 
+        enabled: true, // Ollama is always available (local)
+        models: ollamaModels 
+      },
+      openai: { 
+        enabled: !!rawApiKeys.openai, 
+        models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'] 
+      },
+      claude: { 
+        enabled: !!rawApiKeys.claude, 
+        models: ['claude-sonnet-4-5-20250929', 'claude-3-5-sonnet-20241022', 'claude-3-opus-20240229'] 
+      },
+      gemini: { 
+        enabled: !!rawApiKeys.gemini, 
+        models: ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash-exp'] 
+      },
+      xai: { 
+        enabled: !!rawApiKeys.xai, 
+        models: ['grok-3', 'grok-2'] 
+      }
+    };
+
     res.json({
       success: true,
       result: {
@@ -115,7 +160,8 @@ router.get('/config', authenticate, async (req: AuthenticatedRequest, res: Respo
         ollama_base_url: config?.ollama_base_url || 'http://localhost:11434',
         provider_status: providerStatus,
         updated_at: config?.updated_at || null
-      }
+      },
+      providers // Include providers for agent editor
     });
   } catch (error: any) {
     logger.error('[AI API] Error getting config:', error);

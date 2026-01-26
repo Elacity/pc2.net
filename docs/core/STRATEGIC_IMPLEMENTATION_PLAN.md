@@ -6147,3 +6147,179 @@ const timeouts = {
 
 *This document is a living guide and will be updated as the project evolves.*
 
+
+---
+
+## AgentKit Integration: Lessons Learned (January 2026)
+
+### Successfully Implemented
+
+We successfully implemented Phase 1 of the AgentKit integration roadmap with the following key achievements:
+
+1. **Transaction Proposal System**
+   - AI creates proposals, user approves via modal
+   - Real-time countdown timers with expiration
+   - Persistent storage in `agent_proposals` table (tied to wallet address)
+   - Activity tab with live countdown and pending badge
+
+2. **Dual-Account Architecture**
+   - EOA (Core Wallet) for direct control
+   - Agent Account (Universal/Smart Wallet) for AI-powered operations
+   - AI correctly distinguishes between "my EOA wallet" and agent account
+
+3. **Tool Integration Pattern**
+   - AgentKit tools integrated as AI chat tools
+   - Proper tool calling via Claude's `tool_choice` mechanism
+
+### Critical Technical Lessons
+
+#### 1. AI Tool Calling vs Text Generation
+
+**Problem**: Claude was generating *text* that looked like tool results instead of actually *calling* the tools.
+
+**Root Cause**: 
+- Conversation history contained examples of "fake" tool calls (AI just outputting text)
+- Claude learned from this pattern and continued it
+- `tool_choice: auto` wasn't strong enough to override learned behavior
+
+**Solution**:
+```typescript
+// Force at least one tool call
+(sdkParams as any).tool_choice = { type: 'any' };
+```
+
+**Lesson**: When tools are available and the user is requesting an action that requires tools, use `tool_choice: { type: 'any' }` to force actual tool usage. For conversational responses, `auto` is fine.
+
+#### 2. Wallet Address Context Injection
+
+**Problem**: AI was fabricating wallet addresses when user said "my EOA wallet".
+
+**Root Cause**:
+- AI didn't have the actual addresses in its context
+- Tool descriptions saying "call get_wallet_info first" weren't followed
+- AI would make up plausible-looking addresses
+
+**Solution**: Inject wallet context directly into system prompt:
+```typescript
+const walletContext = `
+<WALLET_CONTEXT>
+CRITICAL: These are the user's ACTUAL wallet addresses.
+
+EOA_WALLET: ${args.walletAddress}
+AGENT_ACCOUNT: ${args.smartAccountAddress}
+
+RULES:
+- When user says "my EOA wallet", use EOA_WALLET address
+- NEVER fabricate, guess, or use placeholder addresses
+</WALLET_CONTEXT>
+`;
+```
+
+**Lesson**: Don't rely on AI to call tools to get critical context. Inject it directly into the system prompt. The AI should have all necessary context upfront.
+
+#### 3. Streaming Path vs Non-Streaming Path
+
+**Problem**: Fixes applied to one code path didn't affect the other.
+
+**Root Cause**: 
+- `executeWithTools()` and `streamComplete()` had different message preparation logic
+- Wallet context injection was only added to one path
+
+**Solution**: Ensure both paths inject the same context. Consider extracting common logic.
+
+**Lesson**: When AI chat has multiple code paths (streaming/non-streaming), ensure all paths receive the same context injection and tool configuration.
+
+#### 4. jQuery Event Handler Conflicts
+
+**Problem**: UIWindow's close button handler conflicted with custom handler.
+
+**Root Cause**:
+- UIWindow attaches its own click handler to `.window-close-btn`
+- Adding another handler results in both running
+- `e.stopPropagation()` only stops bubbling, not same-element handlers
+
+**Solution**:
+```javascript
+// Remove UIWindow's handler, add our own
+$closeBtn.off('click');
+$closeBtn.on('click', customHandler);
+```
+
+**Lesson**: When extending UIWindow with custom behavior, explicitly remove default handlers before adding custom ones.
+
+#### 5. Live Countdown Intervals
+
+**Problem**: Countdown timers need to update every second but shouldn't create memory leaks.
+
+**Solution**:
+- Store interval ID in module-level variable
+- Clear interval when sidebar closes
+- Use data attributes on elements for state (`data-expires-at`)
+
+**Pattern**:
+```javascript
+// Module level
+let countdownIntervalId = null;
+
+// On sidebar open
+countdownIntervalId = setInterval(updateCountdowns, 1000);
+
+// On sidebar close
+if (countdownIntervalId) {
+  clearInterval(countdownIntervalId);
+  countdownIntervalId = null;
+}
+```
+
+### Architecture Patterns That Worked Well
+
+1. **Proposal State Machine**
+   ```
+   pending_approval → approved → executed
+                   → rejected
+                   → expired
+                   → failed
+   ```
+
+2. **WebSocket Real-Time Updates**
+   - Backend emits `agent:proposal:created` event
+   - Frontend receives and shows modal immediately
+   - Activity list updates in real-time
+
+3. **Database Schema for Proposals**
+   - Tied to `wallet_address` for multi-user support
+   - Stores full transaction details for audit trail
+   - Indexed by `created_at` for efficient sorting
+
+### Recommendations for Future Features
+
+1. **Session Keys (Phase 3)**
+   - Will require UI for setting spending limits
+   - Consider time-based vs transaction-based limits
+   - Need revocation mechanism
+
+2. **Multi-Chain Intelligence (Phase 2)**
+   - AI should know balances across all chains
+   - Recommend optimal execution paths
+   - Show gas comparison
+
+3. **Personal AI Memory (Phase 4)**
+   - Store contacts: "Send Bob $20" should work
+   - Remember preferences: preferred chains, max gas
+   - Encrypted storage for sensitive data
+
+### Files Modified in Phase 1
+
+| File | Purpose |
+|------|---------|
+| `pc2-node/src/services/ai/tools/AgentKitTools.ts` | Tool definitions for transfers |
+| `pc2-node/src/services/ai/tools/AgentKitExecutor.ts` | Proposal creation and execution |
+| `pc2-node/src/services/ai/AIChatService.ts` | Wallet context injection |
+| `pc2-node/src/services/ai/providers/ClaudeProvider.ts` | Tool choice configuration |
+| `pc2-node/src/api/wallet.ts` | Proposal API endpoints |
+| `pc2-node/src/storage/database.ts` | Proposal storage |
+| `src/gui/src/UI/UIAccountSidebar.js` | Activity list with countdown |
+| `src/gui/src/UI/UIWindowTransactionConfirm.js` | Approval modal |
+| `src/gui/src/services/WalletService.js` | Proposal management |
+
+---

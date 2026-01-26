@@ -661,6 +661,14 @@ class WalletService {
                     logger.log('Received fee-estimate message:', payload);
                     this._handleFeeEstimate(payload, requestId);
                     break;
+                case 'particle-wallet.estimate-swap-result':
+                    logger.log('Received estimate-swap-result message:', payload);
+                    this._handleGenericResult(payload, requestId);
+                    break;
+                case 'particle-wallet.swap-result':
+                    logger.log('Received swap-result message:', payload);
+                    this._handleSwapResult(payload, requestId);
+                    break;
                 case 'particle-wallet.error':
                     this._handleError(payload, requestId);
                     break;
@@ -890,6 +898,46 @@ class WalletService {
         this.walletData.error = payload.message;
         this.walletData.isLoading = false;
         this._notifyListeners();
+    }
+    
+    /**
+     * Handle generic result responses (like estimate-swap-result)
+     */
+    _handleGenericResult(payload, requestId) {
+        const resolver = this.pendingRequests.get(requestId);
+        if (resolver) {
+            this.pendingRequests.delete(requestId);
+            
+            if (payload.success === false || payload.error) {
+                resolver.reject(new Error(payload.error || payload.message || 'Operation failed'));
+            } else {
+                resolver.resolve(payload);
+            }
+        }
+    }
+    
+    /**
+     * Handle swap transaction result
+     */
+    _handleSwapResult(payload, requestId) {
+        logger.log('Processing swap result:', payload);
+        
+        const resolver = this.pendingRequests.get(requestId);
+        if (resolver) {
+            this.pendingRequests.delete(requestId);
+            
+            if (payload.success) {
+                logger.log('Swap successful:', payload.transactionId);
+                resolver.resolve(payload);
+                // Refresh balances after successful swap
+                this.refreshTokens();
+            } else if (payload.error) {
+                logger.error('Swap failed:', payload.error);
+                resolver.reject(new Error(payload.error));
+            } else {
+                resolver.resolve(payload);
+            }
+        }
     }
     
     /**

@@ -55,18 +55,20 @@ async function UIWindowTransactionConfirm(options = {}) {
     
     const typeLabels = { 'transfer': 'Send', 'swap': 'Swap', 'approve': 'Approve' };
     const typeLabel = typeLabels[type] || 'Transaction';
-    const amount = token.amount || '0';
-    const symbol = token.symbol || 'TOKEN';
     
-    // Swap-specific details
+    // Swap-specific details (extract first for use in generic fields)
     const swap = proposal.swap || {};
     const isSwap = type === 'swap';
-    const swapFromSymbol = swap.fromToken?.symbol || symbol;
+    const swapFromSymbol = swap.fromToken?.symbol || token.symbol || 'TOKEN';
     const swapToSymbol = swap.toToken?.symbol || '';
-    const swapFromAmount = swap.fromToken?.amount || amount;
+    const swapFromAmount = swap.fromToken?.amount || token.amount || '0';
     const swapExpectedOutput = swap.toToken?.expectedAmount || 'TBD';
     
-    // Token icon URL
+    // For swaps, use swap data; for transfers, use token data
+    const amount = isSwap ? swapFromAmount : (token.amount || '0');
+    const symbol = isSwap ? swapFromSymbol : (token.symbol || 'TOKEN');
+    
+    // Token icon URL - use the "from" token for swaps
     const tokenIconUrl = token.icon || `/static/elacity/tokens/${symbol.toUpperCase()}.webp`;
     
     // Status display for read-only mode

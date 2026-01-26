@@ -319,9 +319,9 @@ export class GatewayService extends EventEmitter {
     const fs = await import('fs');
     await fs.promises.mkdir(credentialsPath, { recursive: true });
     
-    // Create WhatsApp channel
+    // Create WhatsApp channel with selfChatMode enabled by default
     this.whatsAppChannel = createWhatsAppChannel(
-      config.whatsapp || {},
+      { selfChatMode: true, ...config.whatsapp },
       credentialsPath
     );
     

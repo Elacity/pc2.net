@@ -147,12 +147,13 @@ export class WhatsAppChannel extends EventEmitter {
           logger.info('[WhatsAppChannel] Connection closed:', reason, statusCode);
           this.connected = false;
           
-          // Reconnect if not logged out
-          if (statusCode !== DisconnectReason.loggedOut) {
+          // Don't reconnect if logged out OR connection was replaced (440)
+          if (statusCode !== DisconnectReason.loggedOut && statusCode !== 440) {
             logger.info('[WhatsAppChannel] Reconnecting...');
             setTimeout(() => this.connect(), 3000);
           } else {
-            this.emit('disconnected', 'Logged out');
+            const disconnectReason = statusCode === 440 ? 'Connection replaced' : 'Logged out';
+            this.emit('disconnected', disconnectReason);
           }
         }
         

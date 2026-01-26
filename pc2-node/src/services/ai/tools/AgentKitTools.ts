@@ -58,13 +58,13 @@ export const agentKitTools: NormalizedTool[] = [
     type: 'function',
     function: {
       name: 'transfer_tokens',
-      description: 'Creates a proposal to transfer tokens to another address. IMPORTANT: This creates a transaction proposal that the user must approve before execution. Always confirm the recipient address and amount with the user before calling this. Returns a proposal object that will be shown to the user for approval.',
+      description: 'Creates a proposal to transfer tokens to another address. IMPORTANT: This creates a transaction proposal that the user must approve before execution. CRITICAL REQUIREMENT: If user mentions "my EOA wallet", "my core wallet", "my admin wallet", or "my other wallet", you MUST STOP and FIRST call get_wallet_info to retrieve the EXACT address from core_wallet.address field. NEVER fabricate, guess, or use placeholder addresses! The core_wallet.address is the user\'s actual EOA that they control directly. If you do not have the exact address from get_wallet_info, ask the user to provide the full address. Always confirm the recipient address and amount with the user before calling this. Returns a proposal object that will be shown to the user for approval.',
       parameters: {
         type: 'object',
         properties: {
           to: {
             type: 'string',
-            description: 'Recipient wallet address (0x...) or ENS name (.eth). Must be a valid address.'
+            description: 'Recipient wallet address (0x...) - MUST be exact 42-character hex address. MANDATORY: If user says "my EOA/core/admin wallet", you MUST first call get_wallet_info and extract the address from core_wallet.address field. NEVER invent addresses. Example: if get_wallet_info returns core_wallet.address as "0x34DAF31B99B5A59cEB18E424Dbc112FA6e5f3Dc3", use that exact address.'
           },
           amount: {
             type: 'string',

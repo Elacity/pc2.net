@@ -171,8 +171,133 @@ class WalletService {
         this.pendingRequests = new Map();
         this.requestId = 0;
         
+        // Agent Account: pending proposals
+        this.pendingProposals = new Map();
+        this.proposalListeners = new Set();
+        
         // Initialize message listener
         this._initMessageListener();
+        
+        // Initialize WebSocket listener for agent proposals
+        this._initProposalListener();
+    }
+    
+    /**
+     * Initialize WebSocket listener for transaction proposals from AI agent
+     */
+    _initProposalListener() {
+        // Wait for window.socket to be available (set by UIDesktop.js)
+        const setupListener = () => {
+            if (!window.socket) {
+                // Retry after a short delay
+                setTimeout(setupListener, 1000);
+                return;
+            }
+            
+            const socket = window.socket;
+            
+            // Listen for new transaction proposals from the AI agent
+            socket.on('wallet-agent:proposal', (data) => {
+                logger.log('[WalletService] Received transaction proposal:', data);
+                
+                if (data?.proposal) {
+                    this.pendingProposals.set(data.proposal.id, data.proposal);
+                    this._notifyProposalListeners('new', data.proposal);
+                    
+                    // Show the confirmation modal
+                    this._showTransactionConfirmModal(data.proposal);
+                }
+            });
+            
+            // Listen for proposal status updates
+            socket.on('wallet-agent:proposal-approved', (data) => {
+                logger.log('[WalletService] Proposal approved:', data);
+                if (data?.proposalId) {
+                    const proposal = this.pendingProposals.get(data.proposalId);
+                    if (proposal) {
+                        proposal.status = 'approved';
+                        this._notifyProposalListeners('approved', proposal);
+                    }
+                }
+            });
+            
+            socket.on('wallet-agent:proposal-rejected', (data) => {
+                logger.log('[WalletService] Proposal rejected:', data);
+                if (data?.proposalId) {
+                    const proposal = this.pendingProposals.get(data.proposalId);
+                    if (proposal) {
+                        proposal.status = 'rejected';
+                        this._notifyProposalListeners('rejected', proposal);
+                    }
+                }
+            });
+            
+            socket.on('wallet-agent:proposal-executed', (data) => {
+                logger.log('[WalletService] Proposal executed:', data);
+                if (data?.proposalId) {
+                    const proposal = this.pendingProposals.get(data.proposalId);
+                    if (proposal) {
+                        proposal.status = 'executed';
+                        proposal.txHash = data.txHash;
+                        this._notifyProposalListeners('executed', proposal);
+                    }
+                    // Clean up after execution
+                    setTimeout(() => this.pendingProposals.delete(data.proposalId), 30000);
+                }
+            });
+            
+            logger.log('[WalletService] Proposal WebSocket listener initialized');
+        };
+        
+        // Start setup process
+        setupListener();
+    }
+    
+    /**
+     * Show the transaction confirmation modal
+     * @param {Object} proposal - Transaction proposal
+     */
+    async _showTransactionConfirmModal(proposal) {
+        try {
+            // Dynamically import the modal to avoid circular dependencies
+            const { default: UIWindowTransactionConfirm } = await import('../UI/UIWindowTransactionConfirm.js');
+            
+            await UIWindowTransactionConfirm({
+                proposal,
+                onApprove: (result) => {
+                    logger.log('[WalletService] Proposal approved by user:', result);
+                },
+                onReject: (result) => {
+                    logger.log('[WalletService] Proposal rejected by user:', result);
+                },
+            });
+        } catch (error) {
+            logger.error('[WalletService] Failed to show transaction confirm modal:', error);
+        }
+    }
+    
+    /**
+     * Register a listener for proposal events
+     * @param {Function} callback - Callback function (event, proposal) => void
+     */
+    onProposal(callback) {
+        this.proposalListeners.add(callback);
+        return () => this.proposalListeners.delete(callback);
+    }
+    
+    /**
+     * Notify proposal listeners
+     * @param {string} event - Event type (new, approved, rejected, executed)
+     * @param {Object} proposal - The proposal object
+     */
+    _notifyProposalListeners(event, proposal) {
+        this.proposalListeners.forEach(callback => {
+            try {
+                callback(event, proposal);
+            } catch (error) {
+                logger.error('[WalletService] Proposal listener error:', error);
+            }
+        });
     }
     
     /**
@@ -2197,6 +2322,132 @@ class WalletService {
         
         // DON'T create iframe automatically - it will be created lazily when needed
         // This prevents the cascade of reinitializations
+    }
+    
+    // ============================================
+    // AGENT ACCOUNT: TRANSACTION PROPOSALS
+    // ============================================
+    
+    /**
+     * Approve a transaction proposal from the AI agent
+     * @param {string} proposalId - The proposal ID to approve
+     * @returns {Promise<Object>} Transaction result
+     */
+    async approveTransactionProposal(proposalId) {
+        if (!proposalId) {
+            return Promise.reject(new Error('Proposal ID required'));
+        }
+        
+        logger.log('Approving transaction proposal:', proposalId);
+        
+        try {
+            // Call backend API to approve and execute
+            const response = await fetch(`${window.api_origin}/api/wallet/proposals/${proposalId}/approve`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${puter.authToken}`,
+                },
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.message || 'Failed to approve proposal');
+            }
+            
+            const result = await response.json();
+            logger.log('Proposal approved, result:', result);
+            
+            // Refresh wallet data after transaction
+            this.refreshTokens().catch(() => {});
+            this.refreshTransactions().catch(() => {});
+            
+            return result;
+        } catch (error) {
+            logger.error('Approve proposal failed:', error);
+            throw error;
+        }
+    }
+    
+    /**
+     * Reject a transaction proposal from the AI agent
+     * @param {string} proposalId - The proposal ID to reject
+     * @param {string} reason - Rejection reason (user, expired, etc.)
+     * @returns {Promise<Object>} Rejection result
+     */
+    async rejectTransactionProposal(proposalId, reason = 'user') {
+        if (!proposalId) {
+            return Promise.reject(new Error('Proposal ID required'));
+        }
+        
+        logger.log('Rejecting transaction proposal:', proposalId, reason);
+        
+        try {
+            // Call backend API to reject
+            const response = await fetch(`${window.api_origin}/api/wallet/proposals/${proposalId}/reject`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${puter.authToken}`,
+                },
+                body: JSON.stringify({ reason }),
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.message || 'Failed to reject proposal');
+            }
+            
+            const result = await response.json();
+            logger.log('Proposal rejected:', result);
+            
+            return result;
+        } catch (error) {
+            logger.error('Reject proposal failed:', error);
+            throw error;
+        }
+    }
+    
+    /**
+     * Get cached pending proposals (synchronous)
+     * @returns {Array} List of cached proposals
+     */
+    getPendingProposals() {
+        return Array.from(this.pendingProposals.values()).sort((a, b) => {
+            // Sort by creation time only - newest first (most recent activity at top)
+            return (b.createdAt || 0) - (a.createdAt || 0);
+        });
+    }
+    
+    /**
+     * Fetch pending transaction proposals from server
+     * @returns {Promise<Array>} List of pending proposals
+     */
+    async fetchPendingProposals() {
+        try {
+            const response = await fetch(`${window.api_origin}/api/wallet/proposals/pending`, {
+                headers: {
+                    'Authorization': `Bearer ${puter.authToken}`,
+                },
+            });
+            
+            if (!response.ok) {
+                throw new Error('Failed to fetch proposals');
+            }
+            
+            const result = await response.json();
+            const proposals = result.proposals || [];
+            
+            // Update local cache
+            proposals.forEach(p => {
+                this.pendingProposals.set(p.id, p);
+            });
+            
+            return proposals;
+        } catch (error) {
+            logger.error('Fetch pending proposals failed:', error);
+            return [];
+        }
     }
 }
 

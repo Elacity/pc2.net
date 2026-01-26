@@ -334,8 +334,12 @@ async function UIAccountSidebar(options = {}) {
             .tab-content.active {
                 display: block;
             }
-            .tokens-list, .history-list {
+            .tokens-list, .history-list, .activity-list {
                 padding: 8px 0;
+            }
+            .activity-item.clickable:hover {
+                background: rgba(251, 191, 36, 0.08) !important;
+                border-color: rgba(251, 191, 36, 0.5) !important;
             }
             .token-row, .history-row {
                 display: flex;
@@ -691,6 +695,7 @@ async function UIAccountSidebar(options = {}) {
             <!-- Tab Navigation -->
             <div class="account-sidebar-tabs" role="tablist" aria-label="Wallet sections">
                 <div class="sidebar-tab active" data-tab="tokens" role="tab" aria-selected="true" tabindex="0">${i18n('tokens') || 'Tokens'}</div>
+                <div class="sidebar-tab" data-tab="activity" role="tab" aria-selected="false" tabindex="-1">Activity</div>
                 <div class="sidebar-tab" data-tab="history" role="tab" aria-selected="false" tabindex="-1">${i18n('history') || 'History'}</div>
             </div>
             
@@ -699,6 +704,11 @@ async function UIAccountSidebar(options = {}) {
                 <div class="tab-content active" data-tab="tokens">
                     <div class="tokens-list">
                         ${renderTokensList(walletData.tokens)}
+                    </div>
+                </div>
+                <div class="tab-content" data-tab="activity">
+                    <div class="activity-list">
+                        ${renderActivityList(walletService.getPendingProposals())}
                     </div>
                 </div>
                 <div class="tab-content" data-tab="history">
@@ -741,9 +751,33 @@ async function UIAccountSidebar(options = {}) {
         $sidebar.find('.tab-content').removeClass('active');
         $sidebar.find(`.tab-content[data-tab="${tab}"]`).addClass('active');
         
-        // Refresh data when switching to history tab
+        // Refresh data when switching tabs
         if (tab === 'history' && walletData.transactions.length === 0) {
             walletService.refreshTransactions().catch(() => {});
+        }
+        if (tab === 'activity') {
+            // Show cached first, then fetch from server
+            $sidebar.find('.activity-list').html(renderActivityList(walletService.getPendingProposals()));
+            // Fetch from server and update
+            walletService.fetchPendingProposals().then(() => {
+                $sidebar.find('.activity-list').html(renderActivityList(walletService.getPendingProposals()));
+            }).catch(() => {});
+        }
+    });
+    
+    // Activity item click - show proposal details
+    $sidebar.on('click', '.activity-item', async function() {
+        const proposalId = $(this).data('proposal-id');
+        const status = $(this).data('status');
+        
+        // Get the proposal and show the modal (view-only for non-pending)
+        const proposals = walletService.getPendingProposals();
+        const proposal = proposals.find(p => p.id === proposalId);
+        if (proposal) {
+            const UIWindowTransactionConfirm = (await import('./UIWindowTransactionConfirm.js')).default;
+            // Pass readOnly flag for completed proposals
+            const readOnly = status !== 'pending_approval';
+            UIWindowTransactionConfirm({ proposal, readOnly });
         }
     });
     
@@ -1517,6 +1551,135 @@ function getStatusBadge(status) {
     }
     
     return `<span style="padding:1px 6px;border-radius:4px;font-size:10px;background:${config.bg};color:${config.color};">${config.label}</span>`;
+}
+
+/**
+ * Render activity list (AI agent proposals)
+ */
+function renderActivityList(proposals) {
+    if (!proposals || proposals.length === 0) {
+        return `
+            <div class="empty-state">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#4b5563" stroke-width="1.5" style="display:block;margin:0 auto 16px;">
+                    <path d="M12 2a4 4 0 0 1 4 4c0 1.1-.9 2-2 2h-4a2 2 0 0 1-2-2 4 4 0 0 1 4-4z"/>
+                    <path d="M12 8v8"/>
+                    <circle cx="12" cy="20" r="2"/>
+                    <path d="M8 12h8"/>
+                </svg>
+                <div style="font-size:14px;font-weight:500;color:#9ca3af;margin-bottom:4px;">No Agent Activity</div>
+                <div style="font-size:12px;color:#6b7280;">AI agent transaction proposals will appear here</div>
+            </div>
+        `;
+    }
+    
+    return proposals.map(proposal => {
+        const { id, type, token = {}, status, expiresAt, summary = {}, chainId, createdAt } = proposal;
+        
+        // Get chain info
+        const chainInfo = chainId ? CHAIN_INFO[chainId] : null;
+        
+        // Get token icon
+        const tokenSymbol = token.symbol || 'TOKEN';
+        const tokenIconUrl = token.icon || `/static/elacity/tokens/${tokenSymbol.toUpperCase()}.webp`;
+        
+        // Status styling
+        const statusStyles = {
+            'pending_approval': { label: 'Pending', color: '#fbbf24', bg: 'rgba(251, 191, 36, 0.15)', action: true },
+            'approved': { label: 'Approved', color: '#22c55e', bg: 'rgba(34, 197, 94, 0.1)', action: false },
+            'rejected': { label: 'Rejected', color: '#ef4444', bg: 'rgba(239, 68, 68, 0.1)', action: false },
+            'executed': { label: 'Completed', color: '#22c55e', bg: 'rgba(34, 197, 94, 0.1)', action: false },
+            'expired': { label: 'Expired', color: '#6b7280', bg: 'rgba(107, 114, 128, 0.1)', action: false },
+            'failed': { label: 'Failed', color: '#ef4444', bg: 'rgba(239, 68, 68, 0.1)', action: false },
+        };
+        
+        const statusInfo = statusStyles[status] || statusStyles['pending_approval'];
+        
+        // Calculate countdown for pending proposals
+        let countdownHtml = '';
+        if (status === 'pending_approval' && expiresAt) {
+            const remaining = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
+            const mins = Math.floor(remaining / 60);
+            const secs = remaining % 60;
+            countdownHtml = remaining > 0 
+                ? `<span style="font-size:10px;color:#fbbf24;">${mins}:${secs.toString().padStart(2, '0')}</span>`
+                : `<span style="font-size:10px;color:#ef4444;">Expired</span>`;
+        }
+        
+        // Time display
+        const timeDisplay = createdAt ? formatRelativeTime(createdAt) : '';
+        
+        // Chain badge
+        const chainBadge = chainInfo ? `
+            <span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:#6b7280;">
+                <img src="${html_encode(chainInfo.icon)}" style="width:12px;height:12px;border-radius:50%;" onerror="this.style.display='none';" />
+                ${html_encode(chainInfo.name)}
+            </span>
+        ` : '';
+        
+        return `
+            <div class="activity-item clickable" 
+                 data-proposal-id="${html_encode(id)}"
+                 data-status="${html_encode(status)}"
+                 style="
+                    display: flex;
+                    align-items: center;
+                    padding: 12px;
+                    background: rgba(255, 255, 255, 0.02);
+                    border: 1px solid ${statusInfo.action ? 'rgba(251, 191, 36, 0.3)' : 'rgba(255, 255, 255, 0.05)'};
+                    border-radius: 8px;
+                    margin-bottom: 8px;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                 ">
+                <!-- Token Icon -->
+                <div style="
+                    width: 36px;
+                    height: 36px;
+                    border-radius: 50%;
+                    background: rgba(255, 255, 255, 0.08);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    margin-right: 12px;
+                    flex-shrink: 0;
+                    overflow: hidden;
+                ">
+                    <img src="${html_encode(tokenIconUrl)}" 
+                         style="width:100%;height:100%;object-fit:cover;border-radius:50%;"
+                         onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+                    <div style="display:none;width:100%;height:100%;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:#71717a;">
+                        ${tokenSymbol.charAt(0).toUpperCase()}
+                    </div>
+                </div>
+                
+                <!-- Info -->
+                <div style="flex: 1; min-width: 0;">
+                    <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 2px;">
+                        <span style="font-size: 12px; font-weight: 500; color: #e5e5e5;">
+                            ${html_encode(summary.action || `${type} ${token.amount || ''} ${token.symbol || ''}`)}
+                        </span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <span style="
+                            padding: 2px 6px;
+                            border-radius: 4px;
+                            font-size: 10px;
+                            background: ${statusInfo.bg};
+                            color: ${statusInfo.color};
+                        ">${statusInfo.label}</span>
+                        ${chainBadge}
+                        ${countdownHtml}
+                    </div>
+                </div>
+                
+                <!-- Time/Amount -->
+                <div style="text-align: right; flex-shrink: 0;">
+                    ${token.amount ? `<div style="font-weight: 500; font-size: 12px; color: #e5e5e5;">${formatTokenBalance(token.amount)} ${html_encode(token.symbol || '')}</div>` : ''}
+                    <div style="font-size: 10px; color: #6b7280;">${timeDisplay}</div>
+                </div>
+            </div>
+        `;
+    }).join('');
 }
 
 /**

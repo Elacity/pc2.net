@@ -2105,6 +2105,40 @@ class WalletService {
     }
     
     /**
+     * Estimate swap output without executing - for real-time UI updates
+     * Uses the same createConvertTransaction API to get accurate expected output and fees
+     * @param {Object} params - Estimation parameters
+     * @param {string} params.fromToken - Token to swap from (e.g., "USDC", "ETH")
+     * @param {string} params.toToken - Token to receive (e.g., "ETH", "USDC")  
+     * @param {string} params.fromAmount - Amount to swap (human readable)
+     * @param {number} params.toChainId - Target chain ID
+     * @returns {Promise<{success: boolean, expectedOutput: string, fees: object}>}
+     */
+    async estimateSwap({ fromToken, toToken, fromAmount, toChainId = 8453 }) {
+        if (!this.isConnected()) {
+            return Promise.reject(new Error('Wallet not connected'));
+        }
+        
+        // Validate primary assets
+        const primaryAssets = ['USDC', 'USDT', 'ETH', 'BTC', 'SOL', 'BNB'];
+        if (!primaryAssets.includes(fromToken?.toUpperCase())) {
+            return Promise.reject(new Error(`${fromToken} is not a primary asset.`));
+        }
+        if (!primaryAssets.includes(toToken?.toUpperCase())) {
+            return Promise.reject(new Error(`${toToken} is not a primary asset.`));
+        }
+        
+        logger.log('Estimating swap via Particle:', { fromToken, toToken, fromAmount, toChainId });
+        
+        return this._sendToIframe('particle-wallet.estimate-swap', {
+            fromToken: fromToken.toUpperCase(),
+            toToken: toToken.toUpperCase(),
+            fromAmount,
+            toChainId,
+        });
+    }
+    
+    /**
      * Swap between primary assets using Particle UniversalX
      * Primary assets: USDC, USDT, ETH, BTC, SOL, BNB
      * @param {Object} params - Swap parameters

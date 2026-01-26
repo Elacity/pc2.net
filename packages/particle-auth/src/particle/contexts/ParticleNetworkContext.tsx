@@ -801,6 +801,115 @@ const ParticleNetworkProvider: React.FC<React.PropsWithChildren<ParticleNetworkC
             break;
           }
           
+          case 'particle-wallet.estimate-swap': {
+            // Estimate swap output without executing - for real-time UI updates
+            if (!smartAccountInfo?.smartAccountAddress) {
+              throw new Error('Smart Account not yet initialized. Please wait for wallet to fully connect.');
+            }
+            
+            const { fromToken: estFromToken, toToken: estToToken, fromAmount: estFromAmount, toChainId: estToChainId } = payload;
+            
+            console.log('[Particle Wallet Handler] Estimating swap:', { estFromToken, estToToken, estFromAmount, estToChainId });
+            
+            // Token type mapping
+            const estTokenTypeMap: Record<string, any> = {
+              'USDC': SUPPORTED_TOKEN_TYPE.USDC,
+              'USDT': SUPPORTED_TOKEN_TYPE.USDT,
+              'ETH': SUPPORTED_TOKEN_TYPE.ETH,
+              'BTC': SUPPORTED_TOKEN_TYPE.BTC,
+              'SOL': SUPPORTED_TOKEN_TYPE.SOL,
+              'BNB': SUPPORTED_TOKEN_TYPE.BNB,
+            };
+            
+            const estTokenDecimals: Record<string, number> = {
+              'USDC': 6, 'USDT': 6, 'ETH': 18, 'BTC': 8, 'SOL': 9, 'BNB': 18,
+            };
+            
+            const estToTokenType = estTokenTypeMap[estToToken?.toUpperCase()];
+            if (!estToTokenType) {
+              throw new Error(`Unsupported target token: ${estToToken}`);
+            }
+            
+            // Get prices
+            const estAssets = await universalAccount.getPrimaryAssets();
+            const estFromAsset = estAssets.assets.find((a: any) => a.tokenType?.toUpperCase() === estFromToken?.toUpperCase());
+            const estToAsset = estAssets.assets.find((a: any) => a.tokenType?.toUpperCase() === estToToken?.toUpperCase());
+            
+            const estFromPrice = estFromAsset?.price || 1;
+            const estToPrice = estToAsset?.price || 1;
+            
+            if (estToPrice <= 0) {
+              throw new Error(`Price not available for ${estToToken}`);
+            }
+            
+            // Calculate expected output
+            const estFromAmountFloat = parseFloat(estFromAmount);
+            const estFromAmountUSD = estFromAmountFloat * estFromPrice;
+            const estExpectedOutput = estFromAmountUSD / estToPrice;
+            const estToTokenDecimals = estTokenDecimals[estToToken?.toUpperCase()] || 18;
+            const estExpectedOutputString = estExpectedOutput.toFixed(estToTokenDecimals);
+            
+            // Create transaction to get accurate fees and output
+            const estTransaction = await universalAccount.createConvertTransaction({
+              expectToken: {
+                type: estToTokenType,
+                amount: estExpectedOutputString,
+              },
+              chainId: estToChainId || 8453,
+            });
+            
+            console.log('[Particle Wallet Handler] Estimation transaction created:', estTransaction);
+            
+            // Extract actual receive amount from lendingTokens
+            let actualReceiveAmount = estExpectedOutputString;
+            if (estTransaction.lendingTokens && estTransaction.lendingTokens.length > 0) {
+              const lendingToken = estTransaction.lendingTokens[0];
+              const rawAmount = lendingToken.amount || '0';
+              // Particle returns amounts in 18 decimals
+              actualReceiveAmount = (Number(BigInt(rawAmount)) / 1e18).toFixed(estToTokenDecimals);
+              console.log('[Particle Wallet Handler] Actual receive amount from lendingTokens:', actualReceiveAmount);
+            }
+            
+            // Extract fees
+            let feesData = null;
+            if (estTransaction.feeQuotes?.[0]) {
+              const totals = estTransaction.feeQuotes[0].fees?.totals || {};
+              feesData = {
+                totalFeeUSD: totals.feeTokenAmountInUSD 
+                  ? (Number(BigInt(totals.feeTokenAmountInUSD)) / 1e18).toFixed(4) 
+                  : '0',
+                gasFeeUSD: totals.gasFeeTokenAmountInUSD 
+                  ? (Number(BigInt(totals.gasFeeTokenAmountInUSD)) / 1e18).toFixed(4) 
+                  : '0',
+                serviceFeeUSD: totals.transactionServiceFeeTokenAmountInUSD 
+                  ? (Number(BigInt(totals.transactionServiceFeeTokenAmountInUSD)) / 1e18).toFixed(4) 
+                  : '0',
+                freeGasFee: estTransaction.feeQuotes[0].fees?.freeGasFee || false,
+                freeServiceFee: estTransaction.feeQuotes[0].fees?.freeServiceFee || false,
+              };
+            }
+            
+            // Also try tokenChanges for fee info
+            const tokenChangesFee = estTransaction.tokenChanges?.totalFeeInUSD || '0';
+            
+            window.parent.postMessage({
+              type: 'particle-wallet.estimate-swap-result',
+              requestId,
+              payload: {
+                success: true,
+                fromToken: estFromToken,
+                toToken: estToToken,
+                fromAmount: estFromAmount,
+                fromAmountUSD: estFromAmountUSD.toFixed(2),
+                expectedOutput: actualReceiveAmount,
+                toChainId: estToChainId || 8453,
+                fees: feesData,
+                tokenChangesFeeUSD: tokenChangesFee,
+              },
+            }, '*');
+            break;
+          }
+          
           case 'particle-wallet.swap': {
             // Swap between primary assets using createConvertTransaction
             // Primary assets: USDC, USDT, ETH, BTC, SOL, BNB

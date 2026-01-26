@@ -130,9 +130,15 @@ async function UIWindowTransactionConfirm(options = {}) {
                 
                 <div class="tx-detail-row">
                     <span class="detail-label">You Receive</span>
-                    <span class="detail-value swap-token-value">
-                        <strong id="swap-expected-output">${html_encode(swapExpectedOutput)} ${html_encode(swapToSymbol)}</strong>
-                        <span style="color: #6b7280; font-size: 11px; margin-left: 4px;">(estimated)</span>
+                    <span class="detail-value swap-token-value" id="swap-expected-output">
+                        ${readOnly ? `
+                            <strong>${html_encode(swapExpectedOutput)} ${html_encode(swapToSymbol)}</strong>
+                        ` : `
+                            <span class="fee-loading" style="display: inline-flex; align-items: center; gap: 6px;">
+                                <div class="fee-spinner"></div>
+                                <span>Calculating...</span>
+                            </span>
+                        `}
                     </span>
                 </div>
                 
@@ -590,9 +596,79 @@ async function UIWindowTransactionConfirm(options = {}) {
             }
         }
         
-        // Start fee estimation (only for pending proposals)
+        // Estimate swap output - gets real expected amount from Particle SDK
+        async function estimateSwapOutput() {
+            if (!isSwap) return;
+            
+            const swapInfo = proposal.swap || {};
+            const fromTokenSymbol = swapInfo.fromToken?.symbol || token.symbol;
+            const toTokenSymbol = swapInfo.toToken?.symbol;
+            const fromAmountVal = swapInfo.fromToken?.amount || token.amount;
+            
+            if (!fromTokenSymbol || !toTokenSymbol || !fromAmountVal) {
+                logger.warn('Missing swap info for estimation');
+                return;
+            }
+            
+            try {
+                logger.log('Estimating swap output:', { fromTokenSymbol, toTokenSymbol, fromAmountVal, chainId });
+                
+                const result = await walletService.estimateSwap({
+                    fromToken: fromTokenSymbol,
+                    toToken: toTokenSymbol,
+                    fromAmount: fromAmountVal,
+                    toChainId: chainId,
+                });
+                
+                logger.log('Swap estimation result:', result);
+                
+                if (result && result.expectedOutput) {
+                    // Update the expected output display
+                    const formattedOutput = parseFloat(result.expectedOutput).toFixed(6);
+                    $window.find('#swap-expected-output').html(
+                        `<strong>${formattedOutput} ${toTokenSymbol}</strong>` +
+                        `<span style="color: #6b7280; font-size: 11px; margin-left: 4px;">(~$${result.fromAmountUSD || '0'})</span>`
+                    );
+                    
+                    // Update fee display
+                    $window.find('#fee-loading').hide();
+                    if (result.fees) {
+                        const totalFee = parseFloat(result.fees.totalFeeUSD) || 0;
+                        if (totalFee < 0.01 || result.fees.freeGasFee) {
+                            $window.find('#fee-amount').addClass('fee-sponsored').text('~$0.0000 (sponsored)');
+                        } else {
+                            $window.find('#fee-amount').text(`~$${totalFee.toFixed(4)}`);
+                        }
+                    } else if (result.tokenChangesFeeUSD) {
+                        const fee = parseFloat(result.tokenChangesFeeUSD);
+                        if (fee < 0.01) {
+                            $window.find('#fee-amount').addClass('fee-sponsored').text('~$0.0000 (sponsored)');
+                        } else {
+                            $window.find('#fee-amount').text(`~$${fee.toFixed(4)}`);
+                        }
+                    }
+                    
+                    // Update total cost
+                    $window.find('#total-cost').text(`${fromAmountVal} ${fromTokenSymbol} → ~${formattedOutput} ${toTokenSymbol}`);
+                }
+            } catch (error) {
+                logger.warn('Swap estimation failed:', error);
+                $window.find('#swap-expected-output').html(
+                    `<strong>~${swapExpectedOutput} ${swapToSymbol}</strong>` +
+                    `<span style="color: #dc2626; font-size: 11px; margin-left: 4px;">(estimation failed)</span>`
+                );
+                $window.find('#fee-loading').hide();
+                $window.find('#fee-amount').text('--');
+            }
+        }
+        
+        // Start estimation (only for pending proposals)
         if (!readOnly) {
-            estimateFee();
+            if (isSwap) {
+                estimateSwapOutput();
+            } else {
+                estimateFee();
+            }
         }
         
         // Countdown timer (only for pending proposals)

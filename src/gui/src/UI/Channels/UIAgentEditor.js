@@ -161,8 +161,8 @@ Always cite sources for market data. Warn about risks.">${agent.customSoul || ''
             
             <!-- Actions -->
             <div style="display: flex; gap: 10px; justify-content: flex-end; padding-top: 15px; border-top: 1px solid #eee;">
-                <button class="button cancel-btn" style="padding: 10px 20px;">Cancel</button>
-                <button class="button save-btn" style="padding: 10px 20px; background: #3b82f6; color: white;">
+                <button class="button cancel-btn" style="padding: 8px 16px; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer; font-size: 13px;">Cancel</button>
+                <button class="button save-btn" style="padding: 8px 16px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px;">
                     ${isNew ? 'Create Agent' : 'Save Changes'}
                 </button>
             </div>

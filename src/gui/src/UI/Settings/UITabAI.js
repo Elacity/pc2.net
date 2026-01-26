@@ -1116,11 +1116,20 @@ export default {
             }
         }
 
-        // WhatsApp connection modal (placeholder - will be enhanced with QR code)
-        function showWhatsAppConnectModal() {
-            // For now, show a simple info modal
-            // TODO: Implement full QR code modal
-            alert('WhatsApp connection coming soon!\n\nThis will show a QR code for you to scan with WhatsApp.');
+        // WhatsApp connection modal with QR code
+        async function showWhatsAppConnectModal() {
+            try {
+                // Dynamically import the WhatsApp connect modal
+                const { showWhatsAppConnectModal: showModal } = await import('../Channels/UIWhatsAppConnect.js');
+                await showModal();
+                // Refresh channel status after connection
+                await loadChannelStatus();
+            } catch (error) {
+                if (error.message !== 'Cancelled') {
+                    console.error('[AI Settings] WhatsApp connect error:', error);
+                    alert('Failed to connect WhatsApp: ' + error.message);
+                }
+            }
         }
 
         // Telegram connection modal

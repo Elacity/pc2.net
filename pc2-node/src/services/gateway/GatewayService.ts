@@ -13,8 +13,11 @@
  */
 
 import { EventEmitter } from 'events';
+import path from 'path';
 import { logger } from '../../utils/logger.js';
 import { DatabaseManager } from '../../storage/database.js';
+import { WhatsAppChannel, createWhatsAppChannel } from './channels/WhatsAppChannel.js';
+import { TelegramChannel, createTelegramChannel } from './channels/TelegramChannel.js';
 import type {
   ChannelType,
   ChannelStatus,
@@ -25,7 +28,6 @@ import type {
   GatewayStatus,
   AgentConfig,
   PairingRequest,
-  DEFAULT_GATEWAY_CONFIG,
 } from './types.js';
 
 /**
@@ -55,6 +57,13 @@ export class GatewayService extends EventEmitter {
   // Channel status tracking
   private channelStatus: Map<ChannelType, ChannelStatus> = new Map();
   
+  // Channel adapters
+  private whatsAppChannel: WhatsAppChannel | null = null;
+  private telegramChannel: TelegramChannel | null = null;
+  
+  // Credentials directory
+  private credentialsDir: string;
+  
   // Pending pairing requests
   private pendingPairings: Map<string, PairingRequest> = new Map();
   
@@ -68,10 +77,17 @@ export class GatewayService extends EventEmitter {
   // Message handler callback (set by ChannelBridge)
   private messageHandler?: (message: ChannelMessage) => Promise<void>;
   
-  constructor(db?: DatabaseManager) {
+  constructor(db?: DatabaseManager, credentialsDir?: string) {
     super();
     this.db = db;
     this.config = this.loadConfig();
+    
+    // Set credentials directory (default to ~/.pc2/credentials)
+    this.credentialsDir = credentialsDir || path.join(
+      process.env.HOME || process.env.USERPROFILE || '.',
+      '.pc2',
+      'credentials'
+    );
     
     // Initialize channel status
     const channels: ChannelType[] = ['whatsapp', 'telegram', 'discord', 'signal', 'webchat'];
@@ -246,43 +262,143 @@ export class GatewayService extends EventEmitter {
   async disconnectChannel(channel: ChannelType): Promise<void> {
     logger.info(`[GatewayService] Disconnecting channel: ${channel}`);
     
-    // Channel-specific disconnection logic would go here
-    // For now, just update status
-    
-    this.channelStatus.set(channel, 'disconnected');
-    this.emit('channel:disconnected', channel);
-    logger.info(`[GatewayService] Channel disconnected: ${channel}`);
+    try {
+      switch (channel) {
+        case 'whatsapp':
+          if (this.whatsAppChannel) {
+            await this.whatsAppChannel.disconnect();
+            this.whatsAppChannel = null;
+          }
+          break;
+          
+        case 'telegram':
+          if (this.telegramChannel) {
+            await this.telegramChannel.disconnect();
+            this.telegramChannel = null;
+          }
+          break;
+          
+        case 'discord':
+        case 'signal':
+        case 'webchat':
+          // TODO: Implement other channels
+          break;
+      }
+      
+      this.channelStatus.set(channel, 'disconnected');
+      this.emit('channel:disconnected', channel);
+      logger.info(`[GatewayService] Channel disconnected: ${channel}`);
+      
+    } catch (error: any) {
+      logger.error(`[GatewayService] Error disconnecting ${channel}:`, error);
+      this.channelStatus.set(channel, 'error');
+      throw error;
+    }
   }
   
   /**
    * WhatsApp connection (Baileys)
-   * This will be implemented with actual Baileys integration
    */
   private async connectWhatsApp(config: ChannelConfig): Promise<void> {
-    // TODO: Implement Baileys integration
-    // For now, this is a placeholder
-    logger.info('[GatewayService] WhatsApp connection placeholder');
+    logger.info('[GatewayService] Connecting WhatsApp with Baileys...');
     
-    // In real implementation:
-    // 1. Initialize Baileys socket
-    // 2. Load credentials from storage
-    // 3. Handle QR code generation if not linked
-    // 4. Set up message handlers
+    // Create credentials path
+    const credentialsPath = path.join(this.credentialsDir, 'whatsapp', 'default');
+    
+    // Ensure directory exists
+    const fs = await import('fs');
+    await fs.promises.mkdir(credentialsPath, { recursive: true });
+    
+    // Create WhatsApp channel
+    this.whatsAppChannel = createWhatsAppChannel(
+      config.whatsapp || {},
+      credentialsPath
+    );
+    
+    // Set up event handlers
+    this.whatsAppChannel.on('qr', (qr: string) => {
+      logger.info('[GatewayService] WhatsApp QR code generated');
+      this.emit('whatsapp:qr', qr);
+    });
+    
+    this.whatsAppChannel.on('connected', (phoneNumber: string) => {
+      logger.info('[GatewayService] WhatsApp connected:', phoneNumber);
+      this.channelStatus.set('whatsapp', 'connected');
+      
+      // Update config with phone number
+      if (config.whatsapp) {
+        config.whatsapp.phoneNumber = phoneNumber;
+      }
+      config.linkedAt = new Date().toISOString();
+      
+      this.emit('channel:connected', 'whatsapp');
+    });
+    
+    this.whatsAppChannel.on('disconnected', (reason: string) => {
+      logger.info('[GatewayService] WhatsApp disconnected:', reason);
+      this.channelStatus.set('whatsapp', 'disconnected');
+      this.emit('channel:disconnected', 'whatsapp');
+    });
+    
+    this.whatsAppChannel.on('message', (message: ChannelMessage) => {
+      this.handleInboundMessage(message);
+    });
+    
+    this.whatsAppChannel.on('error', (error: Error) => {
+      logger.error('[GatewayService] WhatsApp error:', error);
+      this.channelStatus.set('whatsapp', 'error');
+      this.emit('channel:error', 'whatsapp', error);
+    });
+    
+    // Connect
+    await this.whatsAppChannel.connect();
   }
   
   /**
    * Telegram connection (grammY)
-   * This will be implemented with actual grammY integration
    */
   private async connectTelegram(config: ChannelConfig): Promise<void> {
-    // TODO: Implement grammY integration
-    logger.info('[GatewayService] Telegram connection placeholder');
+    logger.info('[GatewayService] Connecting Telegram with grammY...');
     
-    // In real implementation:
-    // 1. Initialize grammY bot with token
-    // 2. Set up command handlers
-    // 3. Set up message handlers
-    // 4. Start polling or webhooks
+    if (!config.telegram?.botToken) {
+      throw new Error('Telegram bot token is required');
+    }
+    
+    // Create Telegram channel
+    this.telegramChannel = createTelegramChannel(config.telegram);
+    
+    // Set up event handlers
+    this.telegramChannel.on('connected', (botUsername: string) => {
+      logger.info('[GatewayService] Telegram connected:', botUsername);
+      this.channelStatus.set('telegram', 'connected');
+      
+      // Update config with bot username
+      if (config.telegram) {
+        config.telegram.botUsername = botUsername;
+      }
+      config.linkedAt = new Date().toISOString();
+      
+      this.emit('channel:connected', 'telegram');
+    });
+    
+    this.telegramChannel.on('disconnected', (reason: string) => {
+      logger.info('[GatewayService] Telegram disconnected:', reason);
+      this.channelStatus.set('telegram', 'disconnected');
+      this.emit('channel:disconnected', 'telegram');
+    });
+    
+    this.telegramChannel.on('message', (message: ChannelMessage) => {
+      this.handleInboundMessage(message);
+    });
+    
+    this.telegramChannel.on('error', (error: Error) => {
+      logger.error('[GatewayService] Telegram error:', error);
+      this.channelStatus.set('telegram', 'error');
+      this.emit('channel:error', 'telegram', error);
+    });
+    
+    // Connect
+    await this.telegramChannel.connect();
   }
   
   /**
@@ -362,13 +478,44 @@ export class GatewayService extends EventEmitter {
       textLength: reply.content.text?.length,
     });
     
-    // TODO: Implement actual channel sending
-    // For now, just log and emit event
-    
-    this.stats.messagesSent++;
-    this.emit('message:sent', reply);
-    
-    logger.info(`[GatewayService] Reply sent to ${reply.channel}`);
+    try {
+      switch (reply.channel) {
+        case 'whatsapp':
+          if (this.whatsAppChannel?.isConnected()) {
+            await this.whatsAppChannel.sendReply(reply);
+          } else {
+            throw new Error('WhatsApp not connected');
+          }
+          break;
+          
+        case 'telegram':
+          if (this.telegramChannel?.isConnected()) {
+            await this.telegramChannel.sendReply(reply);
+          } else {
+            throw new Error('Telegram not connected');
+          }
+          break;
+          
+        case 'discord':
+        case 'signal':
+        case 'webchat':
+          // TODO: Implement other channels
+          logger.warn(`[GatewayService] Channel ${reply.channel} not yet implemented`);
+          break;
+          
+        default:
+          throw new Error(`Unknown channel: ${reply.channel}`);
+      }
+      
+      this.stats.messagesSent++;
+      this.emit('message:sent', reply);
+      logger.info(`[GatewayService] Reply sent to ${reply.channel}`);
+      
+    } catch (error: any) {
+      this.stats.errors++;
+      logger.error(`[GatewayService] Failed to send reply:`, error);
+      throw error;
+    }
   }
   
   /**

@@ -288,6 +288,63 @@ router.post('/channels/:channel/connect', authenticate, async (req: Authenticate
 });
 
 /**
+ * GET /api/gateway/channels/whatsapp/qr
+ * Get WhatsApp QR code for linking
+ * This endpoint is polled by the frontend while waiting for QR
+ */
+router.get('/channels/whatsapp/qr', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const gateway = getGatewayService(req.app.locals.db);
+    
+    // Check if there's a pending QR code
+    // The QR code is emitted as an event, we need to capture it
+    let qrCode: string | null = null;
+    let qrText: string | null = null;
+    
+    // Listen for QR event (with timeout)
+    const qrPromise = new Promise<string>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('QR code not yet available'));
+      }, 1000);
+      
+      gateway.once('whatsapp:qr', (qr: string) => {
+        clearTimeout(timeout);
+        resolve(qr);
+      });
+    });
+    
+    try {
+      qrCode = await qrPromise;
+      
+      // Generate text representation
+      const qrcode = await import('qrcode-terminal');
+      qrText = await new Promise<string>((resolve) => {
+        qrcode.generate(qrCode!, { small: true }, (text: string) => {
+          resolve(text);
+        });
+      });
+    } catch {
+      // QR not available yet
+    }
+    
+    res.json({
+      success: true,
+      data: {
+        available: !!qrCode,
+        qrCode,
+        qrText,
+      },
+    });
+  } catch (error: any) {
+    logger.error('[Gateway API] Error getting QR:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+/**
  * POST /api/gateway/channels/:channel/disconnect
  * Disconnect a channel
  */

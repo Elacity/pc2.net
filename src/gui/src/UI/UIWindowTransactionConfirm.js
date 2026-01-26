@@ -134,10 +134,14 @@ async function UIWindowTransactionConfirm(options = {}) {
                 <div class="tx-detail-row">
                     <span class="detail-label">Network Fee</span>
                     <span class="detail-value fee-value">
-                        <span id="fee-loading" class="fee-loading">
-                            <div class="fee-spinner"></div>
-                        </span>
-                        <span id="fee-amount">--</span>
+                        ${readOnly ? `
+                            <span id="fee-amount" class="fee-sponsored">~$0.0000</span>
+                        ` : `
+                            <span id="fee-loading" class="fee-loading">
+                                <div class="fee-spinner"></div>
+                            </span>
+                            <span id="fee-amount">estimating...</span>
+                        `}
                     </span>
                 </div>
                 
@@ -377,6 +381,17 @@ async function UIWindowTransactionConfirm(options = {}) {
                 margin-right: 6px;
             }
             
+            .fee-sponsored {
+                color: #059669;
+                font-weight: 500;
+            }
+            
+            .fee-sponsored::after {
+                content: ' (sponsored)';
+                color: #6b7280;
+                font-weight: 400;
+            }
+            
             @keyframes spin {
                 from { transform: rotate(0deg); }
                 to { transform: rotate(360deg); }
@@ -524,12 +539,15 @@ async function UIWindowTransactionConfirm(options = {}) {
                 $window.find('#fee-loading').hide();
                 
                 if (result.freeGasFee) {
-                    $window.find('#fee-amount').text('$0.00 (sponsored)');
+                    $window.find('#fee-amount').addClass('fee-sponsored').text('~$0.0000');
                 } else {
                     const feeUSD = result.totalUSD || result.total || 0;
-                    $window.find('#fee-amount').text(`~$${parseFloat(feeUSD).toFixed(4)}`);
-                    // Update total if there's a significant fee
-                    if (feeUSD > 0.01) {
+                    if (feeUSD < 0.01) {
+                        // Very low fee - show as effectively free
+                        $window.find('#fee-amount').addClass('fee-sponsored').text(`~$${parseFloat(feeUSD).toFixed(4)}`);
+                    } else {
+                        $window.find('#fee-amount').text(`~$${parseFloat(feeUSD).toFixed(4)}`);
+                        // Update total if there's a significant fee
                         $window.find('#total-cost').text(`${amount} ${symbol} + ~$${parseFloat(feeUSD).toFixed(2)} fee`);
                     }
                 }

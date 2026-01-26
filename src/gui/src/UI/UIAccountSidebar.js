@@ -41,6 +41,7 @@ const logger = createLogger('UIAccountSidebar');
 // Track sidebar instance and cleanup functions
 let sidebarInstance = null;
 let walletUnsubscribe = null;
+let countdownIntervalId = null;
 
 /**
  * UIAccountSidebar - Slide-out wallet panel for Puter OS
@@ -323,6 +324,35 @@ async function UIAccountSidebar(options = {}) {
             .sidebar-tab.active {
                 color: #F6921A;
                 border-bottom-color: #F6921A;
+            }
+            .sidebar-tab {
+                position: relative;
+            }
+            .activity-pending-badge {
+                position: absolute;
+                top: 6px;
+                right: 8px;
+                min-width: 16px;
+                height: 16px;
+                padding: 0 4px;
+                border-radius: 8px;
+                background: #ef4444;
+                color: white;
+                font-size: 10px;
+                font-weight: 600;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                animation: pulse-badge 2s infinite;
+            }
+            @keyframes pulse-badge {
+                0%, 100% { opacity: 1; }
+                50% { opacity: 0.7; }
+            }
+            .activity-countdown {
+                font-family: 'SF Mono', Monaco, Consolas, monospace;
+                font-size: 10px;
+                color: #fbbf24;
             }
             .account-sidebar-content {
                 flex: 1;
@@ -695,7 +725,10 @@ async function UIAccountSidebar(options = {}) {
             <!-- Tab Navigation -->
             <div class="account-sidebar-tabs" role="tablist" aria-label="Wallet sections">
                 <div class="sidebar-tab active" data-tab="tokens" role="tab" aria-selected="true" tabindex="0">${i18n('tokens') || 'Tokens'}</div>
-                <div class="sidebar-tab" data-tab="activity" role="tab" aria-selected="false" tabindex="-1">Activity</div>
+                <div class="sidebar-tab" data-tab="activity" role="tab" aria-selected="false" tabindex="-1">
+                    Activity
+                    <span class="activity-pending-badge" style="display:none;"></span>
+                </div>
                 <div class="sidebar-tab" data-tab="history" role="tab" aria-selected="false" tabindex="-1">${i18n('history') || 'History'}</div>
             </div>
             
@@ -738,6 +771,54 @@ async function UIAccountSidebar(options = {}) {
         $sidebar.addClass('open');
         $backdrop.addClass('visible');
     });
+    
+    // ==========================================
+    // Live Countdown and Pending Badge
+    // ==========================================
+    
+    // Update pending badge
+    function updatePendingBadge() {
+        const proposals = walletService.getPendingProposals();
+        const pendingCount = proposals.filter(p => p.status === 'pending_approval').length;
+        const $badge = $sidebar.find('.activity-pending-badge');
+        
+        if (pendingCount > 0) {
+            $badge.text(pendingCount).show();
+        } else {
+            $badge.hide();
+        }
+    }
+    
+    // Update countdown timers
+    function updateCountdowns() {
+        $sidebar.find('.activity-countdown[data-expires-at]').each(function() {
+            const expiresAt = parseInt($(this).data('expires-at'));
+            if (!expiresAt) return;
+            
+            const remaining = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
+            
+            if (remaining <= 0) {
+                $(this).addClass('expired').css('color', '#ef4444').text('Expired');
+                $(this).removeAttr('data-expires-at');
+            } else {
+                const mins = Math.floor(remaining / 60);
+                const secs = remaining % 60;
+                $(this).text(`${mins}:${secs.toString().padStart(2, '0')}`);
+            }
+        });
+    }
+    
+    // Initial update
+    updatePendingBadge();
+    
+    // Live countdown interval (every second)
+    if (countdownIntervalId) {
+        clearInterval(countdownIntervalId);
+    }
+    countdownIntervalId = setInterval(() => {
+        updateCountdowns();
+        updatePendingBadge();
+    }, 1000);
     
     // ==========================================
     // Event Handlers
@@ -1275,6 +1356,12 @@ function closeSidebar() {
         walletUnsubscribe = null;
     }
     
+    // Clean up countdown interval
+    if (countdownIntervalId) {
+        clearInterval(countdownIntervalId);
+        countdownIntervalId = null;
+    }
+    
     // Clean up document-level handlers immediately
     $(document).off('.accountSidebar');
     $(document).off('keydown.accountSidebar');
@@ -1601,8 +1688,8 @@ function renderActivityList(proposals) {
             const mins = Math.floor(remaining / 60);
             const secs = remaining % 60;
             countdownHtml = remaining > 0 
-                ? `<span style="font-size:10px;color:#fbbf24;">${mins}:${secs.toString().padStart(2, '0')}</span>`
-                : `<span style="font-size:10px;color:#ef4444;">Expired</span>`;
+                ? `<span class="activity-countdown" data-expires-at="${expiresAt}">${mins}:${secs.toString().padStart(2, '0')}</span>`
+                : `<span class="activity-countdown expired" style="color:#ef4444;">Expired</span>`;
         }
         
         // Time display

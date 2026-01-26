@@ -194,10 +194,14 @@ export class TelegramChannel extends EventEmitter {
     const from = msg.from;
     const isGroup = chat.type === 'group' || chat.type === 'supergroup';
     
-    // Get sender ID (username or user ID)
-    const senderId = from?.username 
+    // Use numeric chat ID for replies (required by Telegram API)
+    // The chat.id is the correct target for sendMessage
+    const senderId = chat.id.toString();
+    
+    // Display name: prefer username, fallback to name or ID
+    const senderDisplayName = from?.username 
       ? `@${from.username}`
-      : `${from?.id || 'unknown'}`;
+      : from?.first_name || `User ${from?.id || 'unknown'}`;
     
     // Parse media
     let mediaType: 'image' | 'audio' | 'video' | 'document' | undefined;
@@ -216,7 +220,7 @@ export class TelegramChannel extends EventEmitter {
       channel: 'telegram',
       sender: {
         id: senderId,
-        name: from?.first_name || from?.username || undefined,
+        name: senderDisplayName,
         isGroup,
         groupId: isGroup ? chat.id.toString() : undefined,
         groupName: isGroup ? chat.title : undefined,

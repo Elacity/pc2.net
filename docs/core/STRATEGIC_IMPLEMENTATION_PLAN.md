@@ -6406,4 +6406,20 @@ const TOKEN_ICONS = {
 | `src/gui/src/services/WalletService.js` | Proposal management, WebSocket balance response |
 | `src/gui/src/css/style.css` | Activity button styling |
 
+### Remaining AgentKit Tasks (To Resume Later)
+
+**Task File Location:** `.cursor/tasks/agentkit-integration/agentkit-integration.md`
+
+| Priority | Feature | Effort | Description |
+|----------|---------|--------|-------------|
+| 1 | **Session Keys** | High | True autonomy - AI acts within spending limits without per-tx approval. Requires UI for limit config, ERC-4337 session key support. |
+| 2 | **Buy/Sell Non-Primary Tokens** | Medium | Trade any token via `createBuyTransaction`/`createSellTransaction`. Requires token discovery/search UI first. |
+| 3 | **Security Framework** | Medium | Spending limits (per-tx, daily, monthly), action whitelist, audit logging for compliance. |
+| 4 | **Personal AI Memory** | High | Persistent contacts ("Send Bob $20"), preferences, encrypted storage. Foundation for proactive AI. |
+| 5 | **MCP Server** | Medium | Expose PC2 wallet to Claude Desktop, Cursor, and other MCP-compatible agents. |
+| 6 | **Streaming Payments** | High | Superfluid integration for node monetization - pay per compute/storage/inference. |
+| - | **Multi-Chain Intelligence** | DEFERRED | AI recommends optimal execution paths. Foundation already in place via Particle balance fetching. |
+
+**To resume:** Open `.cursor/tasks/agentkit-integration/agentkit-integration.md` and continue from pending todos.
+
 ---

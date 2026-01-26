@@ -1138,6 +1138,14 @@ export default function UIAIChat() {
             return;
         }
 
+        // Wait for cloud button to exist first (it should insert before us)
+        const $cloudBtn = $('.pc2-status-bar');
+        if ($cloudBtn.length === 0) {
+            // Cloud button not ready yet, wait a bit
+            setTimeout(insertAIButton, 150);
+            return;
+        }
+
         // Remove existing AI button if any
         $('.ai-toolbar-btn').remove();
 
@@ -1147,19 +1155,9 @@ export default function UIAIChat() {
             </div>
         `);
 
-        // Insert after cloud icon (pc2-status-bar)
-        const $cloudBtn = $('.pc2-status-bar');
-        if ($cloudBtn.length > 0) {
-            $cloudBtn.after($aiBtn);
-        } else {
-            // Fallback: insert before wallet button
-            const $walletBtn = $('.wallet-btn');
-            if ($walletBtn.length > 0) {
-                $walletBtn.before($aiBtn);
-            } else {
-                $toolbar.append($aiBtn);
-            }
-        }
+        // Insert after cloud icon (pc2-status-bar), before wallet
+        // Order: Cloud | AI | Wallet
+        $cloudBtn.after($aiBtn);
     };
 
     insertAIButton();
@@ -1184,6 +1182,7 @@ export default function UIAIChat() {
             h += `</div>`;
             h += `<div class="ai-attached-files"></div>`;
             h += `<div class="ai-chat-input-actions">`;
+                h += `<button class="ai-activity-btn" title="View Activity"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></button>`;
                 h += `<button class="ai-attach-btn" title="Attach file"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></button>`;
                 h += `<select class="ai-model-select">`;
                     h += `<option value="ollama:deepseek-r1:1.5b">Local DeepSeek</option>`;
@@ -1667,6 +1666,24 @@ $(document).on('keydown', '.ai-chat-input', function (e) {
         e.preventDefault();
         const $container = $(this).closest('.ai-window-panel, .ai-chat-panel');
         sendAIMessage($container);
+    }
+});
+
+// Activity button - opens wallet sidebar on Activity tab
+$(document).on('click', '.ai-activity-btn', function() {
+    // Open wallet sidebar
+    const $walletBtn = $('.wallet-btn');
+    if ($walletBtn.length > 0) {
+        // Trigger wallet sidebar open
+        $walletBtn.trigger('click');
+        
+        // After a brief delay, switch to Activity tab
+        setTimeout(() => {
+            const $activityTab = $('.sidebar-tab[data-tab="activity"]');
+            if ($activityTab.length > 0) {
+                $activityTab.trigger('click');
+            }
+        }, 100);
     }
 });
 

@@ -22,6 +22,25 @@ import { CHAIN_INFO, getTokenAddress } from '../helpers/particle-constants.js';
 
 const logger = createLogger('UIWindowTransactionConfirm');
 
+// Token icon URLs from reliable CDNs
+const TOKEN_ICONS = {
+    'ETH': 'https://assets.coingecko.com/coins/images/279/small/ethereum.png',
+    'USDC': 'https://assets.coingecko.com/coins/images/6319/small/usdc.png',
+    'USDT': 'https://assets.coingecko.com/coins/images/325/small/Tether.png',
+    'BTC': 'https://assets.coingecko.com/coins/images/1/small/bitcoin.png',
+    'WBTC': 'https://assets.coingecko.com/coins/images/7598/small/wrapped_bitcoin_wbtc.png',
+    'BNB': 'https://assets.coingecko.com/coins/images/825/small/bnb-icon2_2x.png',
+    'MATIC': 'https://assets.coingecko.com/coins/images/4713/small/polygon.png',
+    'AVAX': 'https://assets.coingecko.com/coins/images/12559/small/Avalanche_Circle_RedWhite_Trans.png',
+    'SOL': 'https://assets.coingecko.com/coins/images/4128/small/solana.png',
+    'ELA': 'https://assets.coingecko.com/coins/images/2780/small/Elastos.png',
+};
+
+function getTokenIconUrl(symbol) {
+    const upperSymbol = (symbol || '').toUpperCase();
+    return TOKEN_ICONS[upperSymbol] || `https://assets.coingecko.com/coins/images/279/small/ethereum.png`;
+}
+
 /**
  * UIWindowTransactionConfirm - Modal dialog for approving/rejecting AI-proposed transactions
  */
@@ -69,7 +88,7 @@ async function UIWindowTransactionConfirm(options = {}) {
     const symbol = isSwap ? swapFromSymbol : (token.symbol || 'TOKEN');
     
     // Token icon URL - use the "from" token for swaps
-    const tokenIconUrl = token.icon || `/static/elacity/tokens/${symbol.toUpperCase()}.webp`;
+    const tokenIconUrl = token.icon || getTokenIconUrl(symbol);
     
     // Status display for read-only mode
     const statusLabels = {
@@ -105,10 +124,10 @@ async function UIWindowTransactionConfirm(options = {}) {
                 <div class="tx-amount-row" style="display: flex; align-items: center; justify-content: center; gap: 12px;">
                     <div style="display: flex; align-items: center; gap: 8px;">
                         <div class="tx-token-icon" style="width:32px;height:32px;">
-                            <img src="/static/elacity/tokens/${swapFromSymbol.toUpperCase()}.webp" 
-                                 style="width:100%;height:100%;border-radius:50%;"
+                            <img src="${getTokenIconUrl(swapFromSymbol)}" 
+                                 style="width:100%;height:100%;border-radius:50%;background:#f3f4f6;"
                                  onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
-                            <div class="token-icon-fallback" style="display:none;width:32px;height:32px;font-size:14px;">
+                            <div class="token-icon-fallback" style="display:none;width:32px;height:32px;font-size:14px;background:#e5e7eb;border-radius:50%;align-items:center;justify-content:center;">
                                 ${swapFromSymbol.charAt(0).toUpperCase()}
                             </div>
                         </div>
@@ -122,10 +141,10 @@ async function UIWindowTransactionConfirm(options = {}) {
                     </svg>
                     <div style="display: flex; align-items: center; gap: 8px;">
                         <div class="tx-token-icon" style="width:32px;height:32px;">
-                            <img src="/static/elacity/tokens/${swapToSymbol.toUpperCase()}.webp" 
-                                 style="width:100%;height:100%;border-radius:50%;"
+                            <img src="${getTokenIconUrl(swapToSymbol)}" 
+                                 style="width:100%;height:100%;border-radius:50%;background:#f3f4f6;"
                                  onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
-                            <div class="token-icon-fallback" style="display:none;width:32px;height:32px;font-size:14px;">
+                            <div class="token-icon-fallback" style="display:none;width:32px;height:32px;font-size:14px;background:#e5e7eb;border-radius:50%;align-items:center;justify-content:center;">
                                 ${swapToSymbol.charAt(0).toUpperCase()}
                             </div>
                         </div>
@@ -164,8 +183,8 @@ async function UIWindowTransactionConfirm(options = {}) {
                 <div class="tx-detail-row">
                     <span class="detail-label">You Send</span>
                     <span class="detail-value swap-token-value" style="display: flex; align-items: center; gap: 6px;">
-                        <img src="/static/elacity/tokens/${swapFromSymbol.toUpperCase()}.webp" 
-                             style="width:18px;height:18px;border-radius:50%;" 
+                        <img src="${getTokenIconUrl(swapFromSymbol)}" 
+                             style="width:18px;height:18px;border-radius:50%;background:#f3f4f6;" 
                              onerror="this.style.display='none';" />
                         <strong>${html_encode(swapFromAmount)} ${html_encode(swapFromSymbol)}</strong>
                     </span>
@@ -175,8 +194,8 @@ async function UIWindowTransactionConfirm(options = {}) {
                     <span class="detail-label">You Receive</span>
                     <span class="detail-value swap-token-value" id="swap-expected-output" style="display: flex; align-items: center; gap: 6px;">
                         ${readOnly ? `
-                            <img src="/static/elacity/tokens/${swapToSymbol.toUpperCase()}.webp" 
-                                 style="width:18px;height:18px;border-radius:50%;" 
+                            <img src="${getTokenIconUrl(swapToSymbol)}" 
+                                 style="width:18px;height:18px;border-radius:50%;background:#f3f4f6;" 
                                  onerror="this.style.display='none';" />
                             <strong>${html_encode(swapExpectedOutput)} ${html_encode(swapToSymbol)}</strong>
                         ` : `
@@ -878,29 +897,24 @@ async function UIWindowTransactionConfirm(options = {}) {
         });
         
         // Handle window close button (X in header)
-        // Remove UIWindow's default handler and replace with our own
+        // Closing the window does NOT reject the transaction - user can still approve from Activity
+        // Only clicking "Reject" button should reject the transaction
         const $closeBtn = $window.find('.window-close-btn');
         $closeBtn.off('click'); // Remove UIWindow's default handler
         $closeBtn.on('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
-            if (readOnly) {
-                closeWindowWithBackdrop(el_window);
-                resolve({ closed: true });
-            } else {
-                handleReject('user');
-            }
+            clearInterval(countdownInterval);
+            closeWindowWithBackdrop(el_window);
+            resolve({ closed: true, dismissed: true });
         });
         
-        // Handle backdrop click to close
+        // Handle backdrop click to close (does NOT reject)
         $(el_window).closest('.window-backdrop').on('click', function(e) {
             if ($(e.target).hasClass('window-backdrop')) {
-                if (readOnly) {
-                    closeWindowWithBackdrop(el_window);
-                    resolve({ closed: true });
-                } else {
-                    handleReject('user');
-                }
+                clearInterval(countdownInterval);
+                closeWindowWithBackdrop(el_window);
+                resolve({ closed: true, dismissed: true });
             }
         });
         

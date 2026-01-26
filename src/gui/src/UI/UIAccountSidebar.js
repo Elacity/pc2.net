@@ -274,9 +274,10 @@ async function UIAccountSidebar(options = {}) {
                 margin-top: 4px;
             }
             .account-sidebar-actions {
-                display: flex;
+                display: grid;
+                grid-template-columns: 1fr 1fr;
                 gap: 10px;
-                padding: 16px 20px;
+                padding: 0 20px 16px;
                 border-bottom: 1px solid rgba(255, 255, 255, 0.1);
             }
             .action-btn {
@@ -293,6 +294,7 @@ async function UIAccountSidebar(options = {}) {
                 font-size: 12px;
                 font-weight: 500;
                 cursor: pointer;
+                box-sizing: border-box;
             }
             .action-btn:hover {
                 background: #e5e5e5;
@@ -330,19 +332,13 @@ async function UIAccountSidebar(options = {}) {
             }
             .activity-pending-badge {
                 position: absolute;
-                top: 6px;
-                right: 8px;
-                min-width: 16px;
-                height: 16px;
-                padding: 0 4px;
-                border-radius: 8px;
+                top: 4px;
+                right: 6px;
+                width: 10px;
+                height: 10px;
+                border-radius: 50%;
                 background: #ef4444;
-                color: white;
-                font-size: 10px;
-                font-weight: 600;
-                display: flex;
-                align-items: center;
-                justify-content: center;
+                box-shadow: 0 0 4px rgba(239, 68, 68, 0.6);
                 animation: pulse-badge 2s infinite;
             }
             @keyframes pulse-badge {
@@ -428,8 +424,9 @@ async function UIAccountSidebar(options = {}) {
             }
             /* Mode Toggle Styles */
             .wallet-mode-toggle {
-                display: flex;
-                gap: 8px;
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 10px;
                 padding: 0 20px 16px;
             }
             .mode-btn {
@@ -440,13 +437,14 @@ async function UIAccountSidebar(options = {}) {
                 gap: 8px;
                 padding: 10px 12px;
                 border: 1px solid rgba(255, 255, 255, 0.15);
-                border-radius: 8px;
+                border-radius: 10px;
                 background: transparent;
                 color: #9ca3af;
                 font-size: 13px;
                 font-weight: 500;
                 cursor: pointer;
                 transition: all 0.2s ease;
+                box-sizing: border-box;
             }
             .mode-btn:hover {
                 border-color: rgba(255, 255, 255, 0.3);
@@ -475,22 +473,26 @@ async function UIAccountSidebar(options = {}) {
             .network-dropdown-container {
                 position: relative;
                 flex: 1;
+                min-width: 0;
+                box-sizing: border-box;
             }
             .network-dropdown-btn {
                 width: 100%;
+                height: 100%;
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
-                gap: 8px;
-                padding: 10px 12px;
+                gap: 4px;
+                padding: 10px 8px 10px 12px;
                 border: 1px solid rgba(255, 255, 255, 0.15);
-                border-radius: 8px;
+                border-radius: 10px;
                 background: transparent;
                 color: #9ca3af;
                 font-size: 13px;
                 font-weight: 500;
-                cursor: pointer;
+                cursor: default;
                 transition: all 0.2s ease;
+                box-sizing: border-box;
             }
             .network-dropdown-btn:hover {
                 border-color: rgba(255, 255, 255, 0.3);
@@ -506,6 +508,35 @@ async function UIAccountSidebar(options = {}) {
             }
             .network-dropdown-btn.open .dropdown-arrow {
                 transform: rotate(180deg);
+            }
+            .network-main-btn {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                flex: 1;
+                cursor: pointer;
+            }
+            .network-main-btn:hover {
+                color: #fff;
+            }
+            .network-arrow-btn {
+                width: 24px;
+                height: 24px;
+                border-radius: 50%;
+                background: rgba(255, 255, 255, 0.1);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                transition: background 0.2s ease;
+                cursor: pointer;
+                flex-shrink: 0;
+            }
+            .network-arrow-btn:hover {
+                background: rgba(255, 255, 255, 0.25);
+            }
+            .network-arrow-btn svg {
+                width: 14px;
+                height: 14px;
             }
             .network-dropdown-menu {
                 position: absolute;
@@ -653,13 +684,15 @@ async function UIAccountSidebar(options = {}) {
                     <span class="mode-label">Universal</span>
                 </button>
                 <div class="network-dropdown-container">
-                    <button class="network-dropdown-btn ${currentMode === 'elastos' ? 'active' : ''}" id="network-dropdown-btn" role="button" aria-haspopup="listbox" aria-expanded="false">
-                        <span style="display:flex;align-items:center;gap:8px;">
+                    <div class="network-dropdown-btn ${currentMode === 'elastos' ? 'active' : ''}" id="network-dropdown-btn" role="button">
+                        <span class="network-main-btn" id="network-main-btn" title="Switch to EOA mode">
                             <img src="${currentNetwork?.icon || ''}" class="network-icon" style="width:18px;height:18px;border-radius:50%;" onerror="this.style.display='none'" />
                             <span class="network-name">${currentNetwork?.shortName || currentNetwork?.name || 'Select Network'}</span>
                         </span>
-                        ${dropdownArrowIcon}
-                    </button>
+                        <span class="network-arrow-btn" id="network-arrow-btn" title="Select network" aria-haspopup="listbox" aria-expanded="false">
+                            ${dropdownArrowIcon}
+                        </span>
+                    </div>
                     <div class="network-dropdown-menu" id="network-dropdown-menu" role="listbox">
                         ${availableNetworks.map(network => `
                             <div class="network-dropdown-item ${network.isSelected ? 'selected' : ''}" data-chain-id="${network.chainId}" role="option" aria-selected="${network.isSelected}">
@@ -783,7 +816,7 @@ async function UIAccountSidebar(options = {}) {
         const $badge = $sidebar.find('.activity-pending-badge');
         
         if (pendingCount > 0) {
-            $badge.text(pendingCount).show();
+            $badge.show();
         } else {
             $badge.hide();
         }
@@ -911,27 +944,48 @@ async function UIAccountSidebar(options = {}) {
         }
     });
     
-    // Network dropdown toggle
-    $sidebar.on('click', '#network-dropdown-btn', function(e) {
+    // Network main button click - switch to EOA mode directly
+    $sidebar.on('click', '#network-main-btn', async function(e) {
         e.stopPropagation();
-        const $btn = $(this);
+        const $container = $sidebar.find('#network-dropdown-btn');
+        const $menu = $sidebar.find('#network-dropdown-menu');
+        
+        // Close dropdown if open
+        $menu.removeClass('open');
+        $container.removeClass('open');
+        
+        // Switch to EOA mode
+        if (walletService.getMode() !== 'elastos') {
+            $sidebar.find('.mode-btn[data-mode="universal"]').removeClass('active');
+            $container.addClass('active');
+            
+            // Show loading state
+            $sidebar.find('.balance-amount').text('...');
+            $sidebar.find('.tokens-list').html('<div class="empty-state"><p>Loading...</p></div>');
+            
+            await walletService.setMode('elastos');
+            
+            // Update UI
+            const eoaAddress = walletService.getEOAAddress();
+            $sidebar.find('.account-address').attr('data-address', eoaAddress);
+            $sidebar.find('.address-text').text(truncateAddress(eoaAddress));
+            updateSolanaAddressDisplay();
+        }
+    });
+    
+    // Network arrow button click - toggle dropdown only
+    $sidebar.on('click', '#network-arrow-btn', function(e) {
+        e.stopPropagation();
+        const $container = $sidebar.find('#network-dropdown-btn');
         const $menu = $sidebar.find('#network-dropdown-menu');
         const isOpen = $menu.hasClass('open');
         
         if (isOpen) {
             $menu.removeClass('open');
-            $btn.removeClass('open');
+            $container.removeClass('open');
         } else {
             $menu.addClass('open');
-            $btn.addClass('open');
-            
-            // If not in EOA mode, switch to it
-            if (walletService.getMode() !== 'elastos') {
-                // Update button states
-                $sidebar.find('.mode-btn[data-mode="universal"]').removeClass('active');
-                $btn.addClass('active');
-                walletService.setMode('elastos');
-            }
+            $container.addClass('open');
         }
     });
     

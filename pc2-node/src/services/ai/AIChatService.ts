@@ -1566,6 +1566,11 @@ RULES:
 - When transferring to "my EOA wallet", use: ${args.walletAddress || 'ASK USER'}
 - NEVER invent, guess, or use placeholder addresses
 - If an address is needed but not available above, ASK the user for the full address
+
+TOOL USAGE REQUIREMENT:
+- When creating transfers, you MUST actually call the transfer_tokens tool using the proper tool_call mechanism
+- Do NOT just write text describing what you would do - you must USE the tool
+- The tool call will create a real proposal that appears in the user's wallet interface
 </WALLET_CONTEXT>
 `;
       

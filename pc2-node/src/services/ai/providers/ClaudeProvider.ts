@@ -258,6 +258,9 @@ export class ClaudeProvider {
         description: tool.function?.description || tool.description,
         input_schema: tool.function?.parameters || tool.parameters || {},
       }));
+      // Set tool_choice to 'auto' to encourage (but not force) tool usage
+      // This tells Claude to use tools when appropriate rather than just generating text
+      (sdkParams as any).tool_choice = { type: 'auto' };
     }
 
     try {
@@ -265,6 +268,7 @@ export class ClaudeProvider {
         model,
         messageCount: messages.length,
         hasTools: !!(args.tools && args.tools.length > 0),
+        toolChoice: (sdkParams as any).tool_choice?.type || 'none',
       });
       
       // Use official SDK streaming API like Puter does

@@ -889,6 +889,48 @@ export class GatewayService extends EventEmitter {
   getConfig(): GatewayConfig {
     return { ...this.config };
   }
+  
+  /**
+   * Update or create an agent (alias for upsertAgent with partial data support)
+   */
+  async updateAgent(agentId: string, agentData: Partial<AgentConfig>): Promise<void> {
+    const existing = this.getAgent(agentId);
+    
+    const agent: AgentConfig = {
+      id: agentId,
+      name: agentData.name || existing?.name || 'New Agent',
+      enabled: agentData.enabled ?? existing?.enabled ?? true,
+      workspace: agentData.workspace || existing?.workspace || `~/pc2/agents/${agentId}`,
+      model: agentData.model || existing?.model,
+      permissions: agentData.permissions || existing?.permissions || {
+        fileRead: true,
+        fileWrite: false,
+        walletAccess: true,
+        webBrowsing: false,
+        codeExecution: false,
+        reminders: true,
+        sandbox: true,
+        auditLogging: true,
+      },
+      accessControl: agentData.accessControl || existing?.accessControl || {
+        publicAccess: true,
+      },
+      ...agentData,
+    };
+    
+    await this.upsertAgent(agent);
+  }
+  
+  /**
+   * Delete an agent
+   */
+  async deleteAgent(agentId: string): Promise<void> {
+    if (!this.config.agents) return;
+    
+    this.config.agents = this.config.agents.filter(a => a.id !== agentId);
+    await this.saveConfig();
+    logger.info(`[GatewayService] Agent ${agentId} deleted`);
+  }
 }
 
 // Singleton instance

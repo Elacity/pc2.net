@@ -169,6 +169,49 @@ export default {
                 </div>
             </div>
             
+            <!-- Agents Section -->
+            <div class="ai-section" style="margin-top: 20px; border-top: 1px solid #e5e5e5; padding-top: 16px;">
+                <div class="ai-section-title" style="display: flex; align-items: center; justify-content: space-between;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span>Agents</span>
+                        <span style="font-size: 9px; font-weight: 400; color: #666; text-transform: none; letter-spacing: 0;">AI personalities for your channels</span>
+                    </div>
+                    <button class="button ai-btn" id="create-agent-btn" style="background: #3b82f6; color: white; font-size: 11px; padding: 4px 10px;">
+                        + New Agent
+                    </button>
+                </div>
+                <div class="ai-group" id="agents-list">
+                    <!-- Default Personal Agent -->
+                    <div class="ai-group-row agent-row" data-agent-id="personal">
+                        <div class="ai-card-row">
+                            <div style="display: flex; align-items: center; gap: 10px; flex: 1;">
+                                <div class="agent-avatar" style="width: 36px; height: 36px; border-radius: 8px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 600; font-size: 14px;">
+                                    P
+                                </div>
+                                <div style="flex: 1;">
+                                    <div style="display: flex; align-items: center; gap: 6px;">
+                                        <span class="ai-card-label agent-name">Personal Assistant</span>
+                                        <span class="agent-badge" style="font-size: 8px; padding: 1px 4px; background: #e5e7eb; color: #666; border-radius: 2px;">Default</span>
+                                    </div>
+                                    <div style="font-size: 10px; color: #666; margin-top: 2px;">
+                                        <span class="agent-personality">Friendly Helper</span>
+                                        <span style="margin: 0 4px;">|</span>
+                                        <span class="agent-model">Ollama (llama3.2)</span>
+                                    </div>
+                                    <div class="agent-channels" style="font-size: 9px; color: #888; margin-top: 3px;">
+                                        <!-- Channel badges will be added here -->
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="display: flex; gap: 4px;">
+                                <button class="button ai-btn agent-edit-btn" style="font-size: 10px;">Edit</button>
+                                <button class="button ai-btn agent-channels-btn" style="font-size: 10px; background: #0088cc; color: white;">Channels</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
             <style>
                 .ai-status-dot {
                     width: 8px;
@@ -1180,6 +1223,61 @@ export default {
                 alert(`${channel} settings coming soon!`);
             }
         });
+
+        // Agent handlers
+        $el_window.find('#create-agent-btn').off('click').on('click', async function() {
+            const { default: UIAgentEditor } = await import('../Channels/UIAgentEditor.js');
+            UIAgentEditor({
+                onSave: async () => {
+                    await loadAgents();
+                }
+            });
+        });
+
+        $el_window.find('.agent-edit-btn').off('click').on('click', async function() {
+            const agentId = $(this).closest('.agent-row').data('agent-id');
+            const { default: UIAgentEditor } = await import('../Channels/UIAgentEditor.js');
+            UIAgentEditor({
+                agentId,
+                onSave: async () => {
+                    await loadAgents();
+                }
+            });
+        });
+
+        $el_window.find('.agent-channels-btn').off('click').on('click', async function() {
+            const $row = $(this).closest('.agent-row');
+            const agentId = $row.data('agent-id');
+            const agentName = $row.find('.agent-name').text();
+            
+            const { default: UIAgentChannels } = await import('../Channels/UIAgentChannels.js');
+            UIAgentChannels({
+                agentId,
+                agentName,
+                onSave: async () => {
+                    await loadAgents();
+                    await loadChannelStatus();
+                }
+            });
+        });
+
+        // Load agents function
+        async function loadAgents() {
+            try {
+                const response = await fetch(`${getAPIOrigin()}/api/gateway/agents`, {
+                    headers: { 'Authorization': `Bearer ${getAuthToken()}` }
+                });
+                const data = await response.json();
+                
+                if (data.success && data.data) {
+                    const $list = $el_window.find('#agents-list');
+                    // For now, just update the default agent display
+                    // Full implementation would render all agents
+                }
+            } catch (e) {
+                console.warn('[AI Settings] Could not load agents:', e);
+            }
+        }
 
         // Initialize
         setupEventHandlers();

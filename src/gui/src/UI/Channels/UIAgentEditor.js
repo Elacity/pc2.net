@@ -320,6 +320,11 @@ Always cite sources for market data. Warn about risks clearly."
         width: 580,
         height: 700,
         dominant: false,
+        show_in_taskbar: false,
+        on_close: function() {
+            // Allow close
+            return true;
+        },
         onAppend: function(el_window) {
             const $win = $(el_window);
             let selectedPersonality = agent.personality || 'friendly';
@@ -338,6 +343,12 @@ Always cite sources for market data. Warn about risks clearly."
                     }
                 }
             }
+            
+            // Also bind to window close button (in case default handler doesn't work)
+            $win.find('.window-close-btn').off('click').on('click', function(e) {
+                e.stopPropagation();
+                closeWindow();
+            });
             
             // Provider change -> update models
             $win.find('#agent-provider').on('change', function() {

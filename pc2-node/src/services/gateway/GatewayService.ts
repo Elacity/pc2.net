@@ -64,6 +64,9 @@ export class GatewayService extends EventEmitter {
   // Credentials directory
   private credentialsDir: string;
   
+  // Current WhatsApp QR code (stored for API retrieval)
+  private currentWhatsAppQR: string | null = null;
+  
   // Pending pairing requests
   private pendingPairings: Map<string, PairingRequest> = new Map();
   
@@ -243,9 +246,16 @@ export class GatewayService extends EventEmitter {
           throw new Error(`Unknown channel type: ${channel}`);
       }
       
-      this.channelStatus.set(channel, 'connected');
-      this.emit('channel:connected', channel);
-      logger.info(`[GatewayService] Channel connected: ${channel}`);
+      // For WhatsApp, status is 'connecting' until QR is scanned
+      // The 'connected' event from WhatsAppChannel will set it to 'connected'
+      if (channel === 'whatsapp') {
+        this.channelStatus.set(channel, 'connecting');
+        logger.info(`[GatewayService] WhatsApp connecting, waiting for QR scan...`);
+      } else {
+        this.channelStatus.set(channel, 'connected');
+        this.emit('channel:connected', channel);
+        logger.info(`[GatewayService] Channel connected: ${channel}`);
+      }
       
     } catch (error: any) {
       this.channelStatus.set(channel, 'error');
@@ -318,12 +328,15 @@ export class GatewayService extends EventEmitter {
     // Set up event handlers
     this.whatsAppChannel.on('qr', (qr: string) => {
       logger.info('[GatewayService] WhatsApp QR code generated');
+      this.currentWhatsAppQR = qr;
       this.emit('whatsapp:qr', qr);
     });
     
     this.whatsAppChannel.on('connected', (phoneNumber: string) => {
       logger.info('[GatewayService] WhatsApp connected:', phoneNumber);
+      this.currentWhatsAppQR = null; // Clear QR code on successful connection
       this.channelStatus.set('whatsapp', 'connected');
+      this.emit('channel:connected', 'whatsapp');
       
       // Update config with phone number
       if (config.whatsapp) {
@@ -669,6 +682,13 @@ export class GatewayService extends EventEmitter {
       code += chars.charAt(Math.floor(Math.random() * chars.length));
     }
     return code;
+  }
+  
+  /**
+   * Get current WhatsApp QR code (if available)
+   */
+  getWhatsAppQR(): string | null {
+    return this.currentWhatsAppQR;
   }
   
   /**

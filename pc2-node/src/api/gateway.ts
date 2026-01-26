@@ -296,35 +296,23 @@ router.get('/channels/whatsapp/qr', authenticate, async (req: AuthenticatedReque
   try {
     const gateway = getGatewayService(req.app.locals.db);
     
-    // Check if there's a pending QR code
-    // The QR code is emitted as an event, we need to capture it
-    let qrCode: string | null = null;
+    // Get the stored QR code
+    const qrCode = gateway.getWhatsAppQR();
     let qrText: string | null = null;
     
-    // Listen for QR event (with timeout)
-    const qrPromise = new Promise<string>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error('QR code not yet available'));
-      }, 1000);
-      
-      gateway.once('whatsapp:qr', (qr: string) => {
-        clearTimeout(timeout);
-        resolve(qr);
-      });
-    });
-    
-    try {
-      qrCode = await qrPromise;
-      
+    if (qrCode) {
       // Generate text representation
-      const qrcode = await import('qrcode-terminal');
-      qrText = await new Promise<string>((resolve) => {
-        qrcode.generate(qrCode!, { small: true }, (text: string) => {
-          resolve(text);
+      try {
+        const qrcode = await import('qrcode-terminal');
+        qrText = await new Promise<string>((resolve) => {
+          qrcode.generate(qrCode, { small: true }, (text: string) => {
+            resolve(text);
+          });
         });
-      });
-    } catch {
-      // QR not available yet
+      } catch (e) {
+        // If qrcode-terminal fails, just use the raw QR
+        qrText = qrCode;
+      }
     }
     
     res.json({

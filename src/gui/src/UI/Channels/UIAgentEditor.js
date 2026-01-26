@@ -324,6 +324,21 @@ Always cite sources for market data. Warn about risks clearly."
             const $win = $(el_window);
             let selectedPersonality = agent.personality || 'friendly';
             
+            // Helper to close window
+            function closeWindow() {
+                if ($win.close && typeof $win.close === 'function') {
+                    $win.close();
+                } else {
+                    // Fallback: remove backdrop or element
+                    const $backdrop = $win.closest('.window-backdrop');
+                    if ($backdrop.length) {
+                        $backdrop.remove();
+                    } else {
+                        $win.remove();
+                    }
+                }
+            }
+            
             // Provider change -> update models
             $win.find('#agent-provider').on('change', function() {
                 const provider = $(this).val();
@@ -365,7 +380,7 @@ Always cite sources for market data. Warn about risks clearly."
             
             // Cancel button
             $win.find('.cancel-btn').on('click', function() {
-                $(el_window).close();
+                closeWindow();
             });
             
             // Save button
@@ -426,7 +441,7 @@ Always cite sources for market data. Warn about risks clearly."
                         data: JSON.stringify(newAgent)
                     });
                     
-                    $(el_window).close();
+                    closeWindow();
                     
                     if (onSave) {
                         onSave(newAgent);

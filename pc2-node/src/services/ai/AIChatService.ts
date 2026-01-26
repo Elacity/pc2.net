@@ -1545,7 +1545,49 @@ Example: {"tool_calls": [{"name": "write_file", "arguments": {"path": "${filePat
       throw new Error(`No provider available for model: ${args.model || 'default'}`);
     }
 
-    const normalizedMessages = normalizeMessages(args.messages);
+    let normalizedMessages = normalizeMessages(args.messages);
+    
+    // CRITICAL: Inject wallet context into system message so AI knows the user's actual addresses
+    // This prevents the AI from fabricating wallet addresses
+    if (args.walletAddress || args.smartAccountAddress) {
+      const walletContext = `
+<WALLET_CONTEXT>
+CRITICAL: These are the user's ACTUAL wallet addresses. NEVER fabricate or guess addresses.
+
+EOA_WALLET (Core Wallet / Admin Wallet):
+  Address: ${args.walletAddress || 'NOT SET'}
+  Use: When user says "my EOA wallet", "my core wallet", or "my admin wallet", use THIS EXACT address.
+
+AGENT_ACCOUNT (Universal Account / Smart Wallet):
+  Address: ${args.smartAccountAddress || 'NOT SET'}
+  Use: This is where AI-assisted transactions are sent FROM.
+
+RULES:
+- When transferring to "my EOA wallet", use: ${args.walletAddress || 'ASK USER'}
+- NEVER invent, guess, or use placeholder addresses
+- If an address is needed but not available above, ASK the user for the full address
+</WALLET_CONTEXT>
+`;
+      
+      // Find and update system message, or prepend wallet context
+      const systemIndex = normalizedMessages.findIndex((m: any) => m.role === 'system');
+      if (systemIndex >= 0) {
+        // Prepend wallet context to existing system message content array
+        const existingContent = normalizedMessages[systemIndex].content;
+        if (Array.isArray(existingContent)) {
+          // Insert wallet context at the beginning of the content array
+          existingContent.unshift({ type: 'text', text: walletContext });
+        }
+        logger.info('[AIChatService] streamComplete - Injected wallet context into existing system message');
+      } else {
+        // Add new system message with wallet context
+        normalizedMessages.unshift({
+          role: 'system' as const,
+          content: [{ type: 'text' as const, text: walletContext }],
+        });
+        logger.info('[AIChatService] streamComplete - Added wallet context as new system message');
+      }
+    }
     
     // Normalize tools if provided
     // If tools are requested and filesystem is available, automatically include filesystem tools

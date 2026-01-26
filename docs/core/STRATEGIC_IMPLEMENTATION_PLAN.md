@@ -6291,6 +6291,82 @@ if (countdownIntervalId) {
    - Stores full transaction details for audit trail
    - Indexed by `created_at` for efficient sorting
 
+### Additional Phase 1.5 Achievements (January 2026)
+
+After Phase 1, we implemented several critical improvements:
+
+1. **Swap/Convert Transactions**
+   - `swap_primary_assets` tool using Particle's `createConvertTransaction`
+   - AI can swap between USDC, USDT, ETH, BTC, SOL, BNB across chains
+   - Real-time swap estimation before approval
+
+2. **Balance Fetching via Particle**
+   - AI now uses WebSocket to request balances from frontend
+   - Frontend calls Particle's `getPrimaryAssets()` for accurate multi-chain data
+   - Solves discrepancy between direct RPC queries and Particle's abstracted view
+
+3. **UI/UX Polish**
+   - Token icons from CoinGecko CDN (local assets not available)
+   - Activity button in AI chat input area (opens wallet sidebar to Activity tab)
+   - Toolbar icon order: Cloud | AI Chat | Wallet
+   - Pending badge as circular red dot
+   - Close button (X) dismisses modal without rejecting - can still approve from Activity
+
+4. **Wallet Sidebar Improvements**
+   - EOA button split: main area switches mode, arrow opens dropdown
+   - CSS Grid for perfect button alignment (Universal/ESC same width as Send/Receive)
+   - `box-sizing: border-box` on all button elements for consistent sizing
+
+### Additional Technical Lessons
+
+#### 6. WebSocket for Frontend-Backend Data Flow
+
+**Problem**: AI needed accurate Particle-based balance data but Particle SDK runs in frontend.
+
+**Solution**:
+```typescript
+// Backend sends request
+this.io.to(room).emit('wallet-agent:get-balances', { requestId });
+
+// Frontend responds
+socket.on('wallet-agent:get-balances', async (data) => {
+  const tokens = await this.getTokens(); // Uses Particle SDK
+  socket.emit('wallet-agent:balances-response', { requestId, data: tokens });
+});
+```
+
+**Lesson**: When browser-only SDKs (like Particle) have data the backend needs, use WebSocket as a bidirectional bridge.
+
+#### 7. CSS Grid vs Flexbox for Perfect Alignment
+
+**Problem**: Flexbox with `flex: 1` didn't perfectly align elements across multiple rows.
+
+**Solution**:
+```css
+.wallet-mode-toggle, .account-sidebar-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+```
+
+**Lesson**: Use CSS Grid with `1fr 1fr` for guaranteed 50/50 splits across rows. Flexbox `flex: 1` can have subtle sizing differences.
+
+#### 8. External CDN for Token Icons
+
+**Problem**: Local token icon directory didn't exist or was incomplete.
+
+**Solution**:
+```javascript
+const TOKEN_ICONS = {
+  'ETH': 'https://assets.coingecko.com/coins/images/279/small/ethereum.png',
+  'USDC': 'https://assets.coingecko.com/coins/images/6319/small/usdc.png',
+  // ...
+};
+```
+
+**Lesson**: For token icons, use CoinGecko CDN - it's reliable and comprehensive.
+
 ### Recommendations for Future Features
 
 1. **Session Keys (Phase 3)**
@@ -6298,28 +6374,36 @@ if (countdownIntervalId) {
    - Consider time-based vs transaction-based limits
    - Need revocation mechanism
 
-2. **Multi-Chain Intelligence (Phase 2)**
-   - AI should know balances across all chains
-   - Recommend optimal execution paths
-   - Show gas comparison
+2. **Multi-Chain Intelligence (DEFERRED)**
+   - Deferred to later in roadmap
+   - AI already fetches balances via Particle - foundation is in place
+   - When revisited: recommend optimal execution paths, show gas comparison
 
 3. **Personal AI Memory (Phase 4)**
    - Store contacts: "Send Bob $20" should work
    - Remember preferences: preferred chains, max gas
    - Encrypted storage for sensitive data
 
-### Files Modified in Phase 1
+4. **Buy/Sell Non-Primary Tokens (Phase 2)**
+   - Requires token discovery UI
+   - Uses `createBuyTransaction` / `createSellTransaction`
+   - Build token search and selection interface first
+
+### Files Modified in Phase 1 & 1.5
 
 | File | Purpose |
 |------|---------|
-| `pc2-node/src/services/ai/tools/AgentKitTools.ts` | Tool definitions for transfers |
+| `pc2-node/src/services/ai/tools/AgentKitTools.ts` | Tool definitions for transfers and swaps |
 | `pc2-node/src/services/ai/tools/AgentKitExecutor.ts` | Proposal creation and execution |
+| `pc2-node/src/services/ai/tools/ToolExecutor.ts` | WebSocket balance fetching from frontend |
 | `pc2-node/src/services/ai/AIChatService.ts` | Wallet context injection |
 | `pc2-node/src/services/ai/providers/ClaudeProvider.ts` | Tool choice configuration |
 | `pc2-node/src/api/wallet.ts` | Proposal API endpoints |
 | `pc2-node/src/storage/database.ts` | Proposal storage |
-| `src/gui/src/UI/UIAccountSidebar.js` | Activity list with countdown |
-| `src/gui/src/UI/UIWindowTransactionConfirm.js` | Approval modal |
-| `src/gui/src/services/WalletService.js` | Proposal management |
+| `src/gui/src/UI/UIAccountSidebar.js` | Activity list with countdown, EOA button split, CSS Grid alignment |
+| `src/gui/src/UI/UIWindowTransactionConfirm.js` | Approval modal, dismiss vs reject, CDN token icons |
+| `src/gui/src/UI/AI/UIAIChat.js` | Activity button, toolbar icon order |
+| `src/gui/src/services/WalletService.js` | Proposal management, WebSocket balance response |
+| `src/gui/src/css/style.css` | Activity button styling |
 
 ---

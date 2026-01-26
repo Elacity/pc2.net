@@ -260,8 +260,18 @@ export class TelegramChannel extends EventEmitter {
       logger.info('[TelegramChannel] Reply sent successfully');
       
     } catch (error: any) {
-      logger.error('[TelegramChannel] Failed to send reply:', error);
-      throw error;
+      // Handle common Telegram errors gracefully
+      if (error.error_code === 400 && error.description?.includes('chat not found')) {
+        logger.warn('[TelegramChannel] Chat not found, user may need to start conversation with bot first:', chatId);
+        // Don't throw - this is expected for new users
+        return;
+      }
+      if (error.error_code === 403) {
+        logger.warn('[TelegramChannel] Bot was blocked by user:', chatId);
+        return;
+      }
+      logger.error('[TelegramChannel] Failed to send reply:', error.message || error);
+      // Don't throw to prevent server crash
     }
   }
 }

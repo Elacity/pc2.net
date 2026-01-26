@@ -594,11 +594,16 @@ export class GatewayService extends EventEmitter {
     // Send pairing code to sender
     const pairingMessage = `🔐 Pairing Required\n\nYour pairing code is: ${code}\n\nAsk the PC2 owner to approve this code in Settings.`;
     
-    await this.sendReply({
-      channel,
-      target: { id: sender.id, isGroup: false },
-      content: { text: pairingMessage },
-    });
+    try {
+      await this.sendReply({
+        channel,
+        target: { id: sender.id, isGroup: false },
+        content: { text: pairingMessage },
+      });
+    } catch (error: any) {
+      // Don't crash if we can't send the pairing message
+      logger.warn(`[GatewayService] Could not send pairing message:`, error.message);
+    }
     
     logger.info(`[GatewayService] Pairing request created`, {
       channel,
@@ -640,11 +645,15 @@ export class GatewayService extends EventEmitter {
     this.emit('pairing:approved', request);
     
     // Notify the sender
-    await this.sendReply({
-      channel,
-      target: { id: senderId, isGroup: false },
-      content: { text: '✅ Pairing approved! You can now chat with the AI assistant.' },
-    });
+    try {
+      await this.sendReply({
+        channel,
+        target: { id: senderId, isGroup: false },
+        content: { text: '✅ Pairing approved! You can now chat with the AI assistant.' },
+      });
+    } catch (error: any) {
+      logger.warn(`[GatewayService] Could not send approval message:`, error.message);
+    }
     
     logger.info(`[GatewayService] Pairing approved for ${pairingKey}`);
     return true;

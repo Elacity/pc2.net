@@ -9,6 +9,36 @@ import { EventEmitter } from 'events';
 import { logger } from '../../../utils/logger.js';
 import type { ChannelMessage, ChannelReply, WhatsAppConfig } from '../types.js';
 
+/**
+ * Create a Pino-compatible logger wrapper for Baileys
+ * Baileys expects a logger with .child() method
+ */
+function createBaileysLogger() {
+  const levels = ['trace', 'debug', 'info', 'warn', 'error', 'fatal'] as const;
+  
+  const baileysLogger: any = {
+    level: 'warn', // Only log warnings and errors from Baileys
+    child: () => baileysLogger, // Return self for child loggers
+  };
+  
+  // Add log methods that forward to our logger
+  levels.forEach(level => {
+    baileysLogger[level] = (obj: any, msg?: string) => {
+      // Only forward warn and error to our logger
+      if (level === 'warn' || level === 'error') {
+        const message = msg || (typeof obj === 'string' ? obj : JSON.stringify(obj));
+        if (level === 'error') {
+          logger.error(`[Baileys] ${message}`);
+        } else {
+          logger.warn(`[Baileys] ${message}`);
+        }
+      }
+    };
+  });
+  
+  return baileysLogger;
+}
+
 // Baileys types (imported dynamically to handle ESM)
 type WASocket = any;
 type AuthState = any;
@@ -84,15 +114,18 @@ export class WhatsAppChannel extends EventEmitter {
       const { state, saveCreds } = await useMultiFileAuthState(this.credentialsPath);
       this.authState = { state, saveCreds };
       
+      // Create Baileys-compatible logger
+      const baileysLogger = createBaileysLogger();
+      
       // Create socket
       this.socket = makeWASocket({
         version,
         auth: {
           creds: state.creds,
-          keys: makeCacheableSignalKeyStore(state.keys, logger as any),
+          keys: makeCacheableSignalKeyStore(state.keys, baileysLogger),
         },
         printQRInTerminal: false, // We'll handle QR ourselves
-        logger: logger as any,
+        logger: baileysLogger,
         browser: ['PC2 Node', 'Chrome', '1.0.0'],
         generateHighQualityLinkPreview: false,
         syncFullHistory: false,

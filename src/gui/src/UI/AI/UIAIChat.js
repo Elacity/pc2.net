@@ -1321,12 +1321,19 @@ async function loadAIConfigForChat() {
         const config = data.result;
         
         // Determine default provider and model
-        // Priority: 1) User-configured default, 2) Claude if API key exists, 3) Ollama/DeepSeek
+        // Priority: Cloud providers (if API keys exist) > User's explicit non-ollama choice > Ollama fallback
         let provider = config.default_provider;
         let model = config.default_model;
         
-        // If no default is configured, pick the best available provider
-        if (!provider || !model) {
+        // Check if any cloud provider API keys are configured
+        const hasCloudProvider = config.api_keys?.claude || config.api_keys?.openai || 
+                                  config.api_keys?.gemini || config.api_keys?.xai;
+        
+        // If user hasn't explicitly chosen a cloud provider but has cloud API keys,
+        // OR if no provider/model is set at all, pick the best cloud provider
+        const shouldUseCloudDefault = (!provider || provider === 'ollama') && hasCloudProvider;
+        
+        if (shouldUseCloudDefault || !provider || !model) {
             if (config.api_keys?.claude) {
                 // Claude is connected - use Claude 3.5 Sonnet as default
                 provider = 'claude';
@@ -1345,8 +1352,8 @@ async function loadAIConfigForChat() {
                 model = 'grok-3';
             } else {
                 // Fallback to local Ollama/DeepSeek
-                provider = 'ollama';
-                model = 'deepseek-r1:1.5b';
+                provider = provider || 'ollama';
+                model = model || 'deepseek-r1:1.5b';
             }
         }
         

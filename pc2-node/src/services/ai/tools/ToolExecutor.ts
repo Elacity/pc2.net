@@ -1006,59 +1006,26 @@ export class ToolExecutor {
           try {
             // Helper function to get native ELA balance via Elastos RPC
             const getElaBalance = async (address: string): Promise<string> => {
-              const response = await fetch(ESC_RPC_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  jsonrpc: '2.0',
-                  method: 'eth_getBalance',
-                  params: [address.toLowerCase(), 'latest'],
-                  id: 1
-                })
-              });
-              const data = await response.json() as { result?: string; error?: any };
-              if (data.error) {
-                throw new Error(data.error.message || 'RPC error');
-              }
-              const weiHex = data.result || '0x0';
-              const wei = BigInt(weiHex);
-              const ela = Number(wei) / 1e18;
-              return ela.toFixed(6);
-            };
-
-            // Helper function to get token balance via RPC
-            const getTokenBalance = async (tokenAddress: string, walletAddress: string, rpcUrl: string, decimals: number = 18): Promise<string> => {
               try {
-                // ERC20 balanceOf(address) call - address must be zero-padded to 32 bytes
-                const addressWithoutPrefix = walletAddress.toLowerCase().replace('0x', '');
-                const paddedAddress = addressWithoutPrefix.padStart(64, '0');
-                const data = '0x70a08231' + paddedAddress;
-                
-                logger.info('[ToolExecutor] getTokenBalance query:', { tokenAddress, walletAddress, rpcUrl, decimals, data });
-                
-                const response = await fetch(rpcUrl, {
+                const response = await fetch(ESC_RPC_URL, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
                     jsonrpc: '2.0',
-                    method: 'eth_call',
-                    params: [{ to: tokenAddress, data }, 'latest'],
+                    method: 'eth_getBalance',
+                    params: [address.toLowerCase(), 'latest'],
                     id: 1
                   })
                 });
-                const result = await response.json() as { result?: string; error?: any };
-                
-                logger.info('[ToolExecutor] getTokenBalance result:', { tokenAddress, result: result.result, error: result.error });
-                
-                if (result.error || !result.result || result.result === '0x') {
+                const data = await response.json() as { result?: string; error?: any };
+                if (data.error) {
                   return '0';
                 }
-                const balance = BigInt(result.result);
-                const formatted = Number(balance) / Math.pow(10, decimals);
-                logger.info('[ToolExecutor] getTokenBalance formatted:', { tokenAddress, balance: balance.toString(), formatted });
-                return formatted.toFixed(6);
-              } catch (e: any) {
-                logger.error('[ToolExecutor] getTokenBalance error:', { tokenAddress, error: e.message });
+                const weiHex = data.result || '0x0';
+                const wei = BigInt(weiHex);
+                const ela = Number(wei) / 1e18;
+                return ela.toFixed(6);
+              } catch {
                 return '0';
               }
             };
@@ -1066,95 +1033,84 @@ export class ToolExecutor {
             // Get EOA balance (ELA on Elastos) for visibility
             const elaBalance = await getElaBalance(this.walletAddress);
 
-            // Get Agent Account (Universal/Smart Wallet) multi-chain balances
-            // This is where the AI can execute transactions
-            const agentTokens: any[] = [];
+            // Get Agent Account balances from Particle via WebSocket
+            // This uses Particle's getPrimaryAssets() API for accurate Universal Account balances
+            let agentTokens: any[] = [];
             let totalAgentBalanceUSD = 0;
+            let particleBalanceError: string | undefined;
             
-            logger.info('[ToolExecutor] get_wallet_balance - querying:', {
+            logger.info('[ToolExecutor] get_wallet_balance - requesting Particle balances via WebSocket:', {
               walletAddress: this.walletAddress,
               smartAccountAddress: this.smartAccountAddress,
+              hasIO: !!this.io,
               includeTokens
             });
-            
-            if (this.smartAccountAddress && includeTokens) {
-              // Define chains and tokens to query
-              const chainConfigs = [
-                { 
-                  chainId: 8453, 
-                  name: 'Base', 
-                  rpcUrl: 'https://mainnet.base.org',
-                  tokens: [
-                    { symbol: 'USDC', address: '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913', decimals: 6 },
-                    { symbol: 'USDT', address: '0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2', decimals: 6 },
-                  ]
-                },
-                { 
-                  chainId: 1, 
-                  name: 'Ethereum', 
-                  rpcUrl: 'https://eth.llamarpc.com',
-                  tokens: [
-                    { symbol: 'USDC', address: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', decimals: 6 },
-                    { symbol: 'USDT', address: '0xdac17f958d2ee523a2206206994597c13d831ec7', decimals: 6 },
-                  ]
-                },
-                { 
-                  chainId: 137, 
-                  name: 'Polygon', 
-                  rpcUrl: 'https://polygon-rpc.com',
-                  tokens: [
-                    { symbol: 'USDC', address: '0x3c499c542cef5e3811e1192ce70d8cc03d5c3359', decimals: 6 },
-                  ]
-                },
-              ];
+
+            if (this.smartAccountAddress && includeTokens && this.io) {
+              // Request balances from frontend via WebSocket
+              const requestId = `balance-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+              const room = `user:${this.walletAddress.toLowerCase()}`;
               
-              for (const chain of chainConfigs) {
-                // Get native balance
-                try {
-                  const nativeResp = await fetch(chain.rpcUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      jsonrpc: '2.0',
-                      method: 'eth_getBalance',
-                      params: [this.smartAccountAddress.toLowerCase(), 'latest'],
-                      id: 1
-                    })
-                  });
-                  const nativeData = await nativeResp.json() as { result?: string };
-                  if (nativeData.result) {
-                    const wei = BigInt(nativeData.result);
-                    const balance = Number(wei) / 1e18;
-                    if (balance > 0.0001) {
-                      agentTokens.push({
-                        symbol: chain.chainId === 137 ? 'MATIC' : 'ETH',
-                        balance: balance.toFixed(6),
-                        chain: chain.name,
-                        chainId: chain.chainId,
-                      });
-                    }
-                  }
-                } catch (e) {
-                  // Ignore errors for individual chains
-                }
+              // Create a promise that resolves when we get the response
+              const balancePromise = new Promise<{ tokens: any[], total_usd?: string }>((resolve, reject) => {
+                const timeout = setTimeout(() => {
+                  reject(new Error('Balance request timeout'));
+                }, 10000); // 10 second timeout
                 
-                // Get token balances
-                for (const token of chain.tokens) {
-                  const balance = await getTokenBalance(token.address, this.smartAccountAddress, chain.rpcUrl, token.decimals);
-                  const balanceNum = parseFloat(balance);
-                  if (balanceNum > 0.0001) {
-                    agentTokens.push({
-                      symbol: token.symbol,
-                      balance,
-                      chain: chain.name,
-                      chainId: chain.chainId,
-                      usdValue: token.symbol === 'USDC' || token.symbol === 'USDT' ? balanceNum : undefined,
-                    });
-                    if (token.symbol === 'USDC' || token.symbol === 'USDT') {
-                      totalAgentBalanceUSD += balanceNum;
+                // Set up one-time listener for the response
+                const handleResponse = (data: any) => {
+                  if (data?.requestId === requestId) {
+                    clearTimeout(timeout);
+                    // Remove the listener after handling
+                    this.io?.sockets.removeListener('wallet-agent:balances-response', handleResponse);
+                    
+                    if (data.success) {
+                      resolve({
+                        tokens: data.data?.tokens || [],
+                        total_usd: data.data?.total_usd
+                      });
+                    } else {
+                      reject(new Error(data.error || 'Failed to get balances from Particle'));
                     }
                   }
+                };
+                
+                // Listen on all sockets in the room for the response
+                const roomSockets = this.io?.sockets.adapter.rooms.get(room);
+                if (roomSockets && roomSockets.size > 0) {
+                  roomSockets.forEach(socketId => {
+                    const socket = this.io?.sockets.sockets.get(socketId);
+                    if (socket) {
+                      socket.once('wallet-agent:balances-response', handleResponse);
+                    }
+                  });
+                } else {
+                  clearTimeout(timeout);
+                  reject(new Error('No connected clients'));
                 }
+              });
+              
+              // Send request to frontend
+              this.io.to(room).emit('wallet-agent:get-balances', { requestId });
+              logger.info('[ToolExecutor] Sent balance request to frontend, requestId:', requestId);
+              
+              try {
+                const balanceResult = await balancePromise;
+                agentTokens = balanceResult.tokens;
+                
+                // Calculate total USD
+                totalAgentBalanceUSD = agentTokens.reduce((sum, t) => {
+                  if (t.usdValue) return sum + t.usdValue;
+                  return sum;
+                }, 0);
+                
+                logger.info('[ToolExecutor] Received Particle balances:', { 
+                  tokenCount: agentTokens.length, 
+                  totalUsd: totalAgentBalanceUSD 
+                });
+              } catch (wsError: any) {
+                logger.warn('[ToolExecutor] WebSocket balance request failed:', wsError.message);
+                particleBalanceError = wsError.message;
               }
             }
 
@@ -1167,12 +1123,14 @@ export class ToolExecutor {
                   ela_balance: elaBalance,
                   note: 'EOA owner account - for direct manual control only'
                 },
-                // Agent Account - where AI can execute transactions
+                // Agent Account - where AI can execute transactions (balances from Particle SDK)
                 agent_account: this.smartAccountAddress ? {
                   address: this.smartAccountAddress,
                   tokens: agentTokens,
                   total_usd: totalAgentBalanceUSD > 0 ? `$${totalAgentBalanceUSD.toFixed(2)}` : undefined,
-                  note: agentTokens.length === 0 ? 'No tokens found on Base, Ethereum, or Polygon' : 'AI can send/receive tokens from this wallet',
+                  note: particleBalanceError 
+                    ? `Could not fetch balances: ${particleBalanceError}` 
+                    : (agentTokens.length === 0 ? 'No tokens found' : 'AI can send/receive tokens from this wallet'),
                   can_execute: true,
                 } : {
                   error: 'Agent Account not connected',

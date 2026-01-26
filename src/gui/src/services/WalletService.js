@@ -246,6 +246,54 @@ class WalletService {
                 }
             });
             
+            // Listen for balance requests from AI agent
+            socket.on('wallet-agent:get-balances', async (data) => {
+                logger.log('[WalletService] AI agent requesting balances:', data);
+                const requestId = data?.requestId;
+                
+                try {
+                    // Get balances from Particle's Universal Account
+                    const tokens = await this.getTokens();
+                    const smartAccountAddress = this.getAddress();
+                    
+                    // Format tokens for the AI agent
+                    const formattedTokens = tokens.map(token => ({
+                        symbol: token.symbol,
+                        balance: token.balance,
+                        chain: token.chainName || token.chain,
+                        chainId: token.chainId,
+                        usdValue: token.usdValue || (token.symbol === 'USDC' || token.symbol === 'USDT' ? parseFloat(token.balance) : undefined),
+                        tokenAddress: token.address,
+                    }));
+                    
+                    // Calculate total USD value
+                    const totalUsd = formattedTokens.reduce((sum, t) => {
+                        if (t.usdValue) return sum + t.usdValue;
+                        return sum;
+                    }, 0);
+                    
+                    // Send response back to backend
+                    socket.emit('wallet-agent:balances-response', {
+                        requestId,
+                        success: true,
+                        data: {
+                            address: smartAccountAddress,
+                            tokens: formattedTokens,
+                            total_usd: totalUsd > 0 ? `$${totalUsd.toFixed(2)}` : undefined,
+                        }
+                    });
+                    
+                    logger.log('[WalletService] Sent balance response:', formattedTokens.length, 'tokens');
+                } catch (error) {
+                    logger.error('[WalletService] Failed to get balances for AI agent:', error);
+                    socket.emit('wallet-agent:balances-response', {
+                        requestId,
+                        success: false,
+                        error: error.message || 'Failed to fetch balances'
+                    });
+                }
+            });
+            
             logger.log('[WalletService] Proposal WebSocket listener initialized');
         };
         

@@ -179,13 +179,19 @@ main() {
     cd "$PC2_DIR"
     
     # Install dependencies
-    echo -e "${CYAN}Installing dependencies (this may take a minute)...${NC}"
-    npm install --silent 2>&1 | tail -5
+    echo -e "${CYAN}Installing dependencies (this may take a few minutes)...${NC}"
+    if ! npm install 2>&1; then
+        echo -e "${RED}❌ Failed to install dependencies${NC}"
+        exit 1
+    fi
     echo -e "${GREEN}✓ Dependencies installed${NC}"
     
     # Build
     echo -e "${CYAN}Building PC2...${NC}"
-    npm run build --silent 2>&1 | tail -3
+    if ! npm run build 2>&1; then
+        echo -e "${RED}❌ Build failed. Check errors above.${NC}"
+        exit 1
+    fi
     echo -e "${GREEN}✓ Build complete${NC}"
     
     echo ""

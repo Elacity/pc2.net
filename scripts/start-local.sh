@@ -198,6 +198,11 @@ main() {
     fi
     echo -e "${GREEN}✓ Dependencies installed${NC}"
     
+    # Rebuild native modules (skipped by --ignore-scripts)
+    echo -e "${CYAN}Building native modules...${NC}"
+    npm rebuild 2>&1 || true
+    echo -e "${GREEN}✓ Native modules built${NC}"
+    
     # Build
     echo -e "${CYAN}Building PC2...${NC}"
     if ! npm run build 2>&1; then

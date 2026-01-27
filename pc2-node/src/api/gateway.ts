@@ -19,6 +19,30 @@ import type {
 const router = Router();
 
 /**
+ * Sanitize agent ID to prevent path traversal attacks
+ * Only allows alphanumeric, hyphens, and underscores
+ */
+function sanitizeAgentId(agentId: string): string {
+  if (!agentId || typeof agentId !== 'string') {
+    throw new Error('Agent ID is required');
+  }
+  
+  // Check for path traversal attempts
+  if (agentId.includes('..') || agentId.includes('/') || agentId.includes('\\')) {
+    throw new Error('Agent ID contains invalid path characters');
+  }
+  
+  // Only allow safe characters
+  const sanitized = agentId.replace(/[^a-zA-Z0-9_\-]/g, '-');
+  
+  if (sanitized.length === 0) {
+    throw new Error('Agent ID is empty after sanitization');
+  }
+  
+  return sanitized;
+}
+
+/**
  * GET /api/gateway/status
  * Get gateway status including channel connections and stats
  */
@@ -400,7 +424,7 @@ router.get('/agents', authenticate, async (req: AuthenticatedRequest, res: Respo
  */
 router.get('/agents/:agentId', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { agentId } = req.params;
+    const agentId = sanitizeAgentId(req.params.agentId);
     
     const gateway = getGatewayService(req.app.locals.db);
     const agent = gateway.getAgent(agentId);
@@ -440,6 +464,9 @@ router.post('/agents', authenticate, async (req: AuthenticatedRequest, res: Resp
         error: 'Agent must have id, name, and workspace',
       });
     }
+    
+    // Sanitize agent ID to prevent path traversal
+    agent.id = sanitizeAgentId(agent.id);
     
     // Set defaults
     if (!agent.permissions) {
@@ -483,7 +510,7 @@ router.post('/agents', authenticate, async (req: AuthenticatedRequest, res: Resp
  */
 router.put('/agents/:agentId', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { agentId } = req.params;
+    const agentId = sanitizeAgentId(req.params.agentId);
     const updates = req.body;
     
     const gateway = getGatewayService(req.app.locals.db);
@@ -523,7 +550,7 @@ router.put('/agents/:agentId', authenticate, async (req: AuthenticatedRequest, r
  */
 router.delete('/agents/:agentId', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { agentId } = req.params;
+    const agentId = sanitizeAgentId(req.params.agentId);
     
     const gateway = getGatewayService(req.app.locals.db);
     const deleted = await gateway.removeAgent(agentId);
@@ -707,7 +734,7 @@ router.get('/agents', authenticate, async (req: AuthenticatedRequest, res: Respo
  */
 router.get('/agents/:agentId', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { agentId } = req.params;
+    const agentId = sanitizeAgentId(req.params.agentId);
     const gateway = getGatewayService(req.app.locals.db);
     const agent = gateway.getAgent(agentId);
     

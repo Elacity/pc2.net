@@ -58,6 +58,33 @@ const DEFAULT_CONFIG: VectorStoreConfig = {
 };
 
 /**
+ * Sanitize identifier to prevent path traversal attacks
+ * Only allows alphanumeric, hyphens, underscores, and periods
+ */
+function sanitizePathComponent(value: string, name: string): string {
+  if (!value || typeof value !== 'string') {
+    throw new Error(`${name} is required and must be a string`);
+  }
+  
+  // Check for path traversal attempts
+  if (value.includes('..') || value.includes('/') || value.includes('\\')) {
+    throw new Error(`${name} contains invalid path characters`);
+  }
+  
+  // Only allow safe characters (alphanumeric, hyphen, underscore, period)
+  const sanitized = value.replace(/[^a-zA-Z0-9_\-\.]/g, '');
+  if (sanitized !== value) {
+    logger.warn(`[Security] ${name} contained invalid characters, sanitized:`, { original: value, sanitized });
+  }
+  
+  if (sanitized.length === 0) {
+    throw new Error(`${name} is empty after sanitization`);
+  }
+  
+  return sanitized;
+}
+
+/**
  * Vector Memory Store
  * 
  * Provides vector-based semantic search for agent memories.
@@ -76,21 +103,20 @@ export class VectorMemoryStore {
     private embeddingProvider: EmbeddingProvider,
     config: Partial<VectorStoreConfig> = {}
   ) {
-    if (!walletAddress) {
-      throw new Error('VectorMemoryStore requires walletAddress for security isolation');
-    }
-    if (!agentId) {
-      throw new Error('VectorMemoryStore requires agentId for agent isolation');
-    }
+    // Sanitize inputs to prevent path traversal attacks
+    const safeWallet = sanitizePathComponent(walletAddress, 'walletAddress');
+    const safeAgentId = sanitizePathComponent(agentId, 'agentId');
     
+    this.walletAddress = safeWallet;
+    this.agentId = safeAgentId;
     this.config = { ...DEFAULT_CONFIG, ...config };
     
     // Database path: data/agents/{walletAddress}/{agentId}/memory.db
     this.dbPath = path.join(
       dataDir,
       'agents',
-      walletAddress.toLowerCase(),
-      agentId,
+      safeWallet.toLowerCase(),
+      safeAgentId,
       'memory.db'
     );
     

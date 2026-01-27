@@ -41,8 +41,17 @@ fi
 echo -e "${CYAN}Detected: ${OS}${NC}"
 echo ""
 
+# Load nvm if available
+load_nvm() {
+    export NVM_DIR="$HOME/.nvm"
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+}
+
 # Check for Node.js
 check_node() {
+    # Try to load nvm first (in case it's installed but not in PATH)
+    load_nvm
+    
     if command -v node &> /dev/null; then
         NODE_VERSION=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
         if [ "$NODE_VERSION" -ge 18 ]; then
@@ -58,34 +67,30 @@ check_node() {
     fi
 }
 
-# Install Node.js
+# Install Node.js via nvm (no admin required)
 install_node() {
     echo -e "${CYAN}Installing Node.js...${NC}"
     echo ""
     
-    if [[ "$OS" == "macos" ]]; then
-        # Check for Homebrew
-        if ! command -v brew &> /dev/null; then
-            echo -e "${CYAN}Installing Homebrew first...${NC}"
-            /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-            
-            # Add Homebrew to PATH for Apple Silicon Macs
-            if [[ -f /opt/homebrew/bin/brew ]]; then
-                eval "$(/opt/homebrew/bin/brew shellenv)"
-            fi
-        fi
-        
-        echo -e "${CYAN}Installing Node.js via Homebrew...${NC}"
-        brew install node@20
-        brew link node@20 --force --overwrite 2>/dev/null || true
-        
-    elif [[ "$OS" == "linux" ]]; then
-        echo -e "${CYAN}Installing Node.js via NodeSource...${NC}"
-        curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-        sudo apt-get install -y nodejs
-    fi
+    # Use nvm - works on both macOS and Linux without admin rights
+    echo -e "${CYAN}Installing nvm (Node Version Manager)...${NC}"
     
-    echo -e "${GREEN}✓ Node.js installed${NC}"
+    # Install nvm
+    export NVM_DIR="$HOME/.nvm"
+    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+    
+    # Load nvm immediately
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+    
+    # Install Node.js 20
+    echo -e "${CYAN}Installing Node.js 20...${NC}"
+    nvm install 20
+    nvm use 20
+    nvm alias default 20
+    
+    echo -e "${GREEN}✓ Node.js $(node -v) installed${NC}"
+    echo ""
+    echo -e "${YELLOW}Note: Node.js installed via nvm. To use in new terminals, run: source ~/.nvm/nvm.sh${NC}"
 }
 
 # Check for git
@@ -104,14 +109,22 @@ install_git() {
     echo -e "${CYAN}Installing Git...${NC}"
     
     if [[ "$OS" == "macos" ]]; then
-        xcode-select --install 2>/dev/null || true
-        # Or via Homebrew if available
-        if command -v brew &> /dev/null; then
-            brew install git
-        fi
+        echo -e "${YELLOW}Git is required. On macOS, it usually comes with Xcode Command Line Tools.${NC}"
+        echo -e "${YELLOW}Please run this command and follow the prompts:${NC}"
+        echo ""
+        echo -e "${CYAN}  xcode-select --install${NC}"
+        echo ""
+        echo -e "${YELLOW}Then re-run this script.${NC}"
+        exit 1
     elif [[ "$OS" == "linux" ]]; then
-        sudo apt-get update
-        sudo apt-get install -y git
+        if command -v apt-get &> /dev/null; then
+            sudo apt-get update && sudo apt-get install -y git
+        elif command -v yum &> /dev/null; then
+            sudo yum install -y git
+        else
+            echo -e "${RED}Please install git manually and re-run this script.${NC}"
+            exit 1
+        fi
     fi
     
     echo -e "${GREEN}✓ Git installed${NC}"

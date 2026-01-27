@@ -213,7 +213,17 @@ export class ChannelBridge {
     const toolFilter = this.getToolFilter(agent.permissions);
     
     // Determine which model to use: channel setting > agent setting > default
-    const modelToUse = channelModel || agent.model;
+    let modelToUse = channelModel || agent.model;
+    
+    // Ensure the model includes the provider prefix for proper routing
+    // The AI service uses "provider:model" format to determine which provider to use
+    if (modelToUse && !modelToUse.includes(':')) {
+      const provider = agent.provider || 'ollama';
+      // Only add prefix for non-ollama providers (ollama is the default)
+      if (provider !== 'ollama') {
+        modelToUse = `${provider}:${modelToUse}`;
+      }
+    }
     
     // Build request
     const request: CompleteRequest = {

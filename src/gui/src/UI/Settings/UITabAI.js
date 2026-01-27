@@ -1262,6 +1262,7 @@ export default {
                                     </div>
                                     <div style="display: flex; gap: 4px;">
                                         <button class="button ai-btn agent-edit-btn" style="font-size: 10px; background: #3b82f6; color: white;">Edit</button>
+                                        ${!isDefault ? '<button class="button ai-btn agent-delete-btn" style="font-size: 10px; background: #dc2626; color: white;" title="Delete Agent">×</button>' : ''}
                                     </div>
                                 </div>
                             </div>
@@ -1308,6 +1309,35 @@ export default {
                                 await loadAgents();
                             }
                         });
+                    });
+                    
+                    // Bind delete handlers
+                    $list.find('.agent-delete-btn').off('click').on('click', async function() {
+                        const $row = $(this).closest('.agent-row');
+                        const agentId = $row.data('agent-id');
+                        const agentName = $row.find('.agent-name').text();
+                        
+                        if (!confirm(`Are you sure you want to delete the agent "${agentName}"?\n\nThis will also delete the agent's memory files.`)) {
+                            return;
+                        }
+                        
+                        try {
+                            const response = await fetch(`${getAPIOrigin()}/api/gateway/agents/${agentId}`, {
+                                method: 'DELETE',
+                                headers: { 'Authorization': `Bearer ${getAuthToken()}` }
+                            });
+                            
+                            const data = await response.json();
+                            if (!data.success) {
+                                throw new Error(data.error || 'Failed to delete agent');
+                            }
+                            
+                            // Reload agents list
+                            await loadAgents();
+                        } catch (error) {
+                            console.error('[AI Settings] Error deleting agent:', error);
+                            alert('Failed to delete agent: ' + error.message);
+                        }
                     });
                 }
             } catch (e) {

@@ -170,11 +170,13 @@ export class GatewayService extends EventEmitter {
       // Ensure directory exists
       await fs.promises.mkdir(dir, { recursive: true });
       
-      // Save config (excluding sensitive data that's stored separately)
+      // Save full config including savedChannels and agents
       const configToSave = {
         enabled: this.config.enabled,
         port: this.config.port,
         channels: this.config.channels,
+        savedChannels: this.config.savedChannels || [],
+        agents: this.config.agents || [],
         defaultAgentId: this.config.defaultAgentId,
         settings: this.config.settings,
       };

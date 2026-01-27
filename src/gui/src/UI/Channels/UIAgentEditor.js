@@ -310,10 +310,8 @@ Always cite sources for market data. Warn about risks clearly."
             
             <!-- Footer -->
             <div style="padding: 12px 20px; border-top: 1px solid #e5e7eb; background: #f9fafb; display: flex; justify-content: flex-end; gap: 10px;">
-                <button class="cancel-btn" style="padding: 10px 20px; background: #fff; border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer; font-size: 13px;">Cancel</button>
-                <button class="save-btn" style="padding: 10px 20px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500;">
-                    ${isNew ? 'Create Agent' : 'Save Changes'}
-                </button>
+                <button class="cancel-btn" style="display: inline-flex; align-items: center; justify-content: center; padding: 10px 20px; background: #fff; border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer; font-size: 13px; line-height: 1; font-family: inherit;">Cancel</button>
+                <button class="save-btn" style="display: inline-flex; align-items: center; justify-content: center; padding: 10px 20px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; line-height: 1; font-family: inherit;">${isNew ? 'Create Agent' : 'Save Changes'}</button>
             </div>
         </div>
     `;

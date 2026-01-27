@@ -68,22 +68,27 @@ const UIChannelManager = async function(options = {}) {
             const statusColor = isConnected ? '#10b981' : '#999';
             const statusText = isConnected ? 'Connected' : 'Disconnected';
             
+            // Get bot username for display
+            const botUsername = ch.telegram?.botUsername 
+                ? `@${ch.telegram.botUsername}` 
+                : ch.name;
+            
             return `
                 <div class="saved-channel-row" data-channel-id="${ch.id}" style="display: flex; align-items: center; justify-content: space-between; padding: 12px; background: #f9fafb; border-radius: 8px; margin-bottom: 8px;">
                     <div style="display: flex; align-items: center; gap: 10px;">
                         ${icon}
                         <div>
-                            <div style="font-weight: 500; font-size: 13px;">${ch.name}</div>
+                            <div style="font-weight: 500; font-size: 13px;">${botUsername}</div>
                             <div style="font-size: 10px; color: #666; display: flex; align-items: center; gap: 4px; margin-top: 2px;">
-                                <span style="width: 6px; height: 6px; border-radius: 50%; background: ${statusColor};"></span>
-                                ${statusText}
+                                <span style="width: 6px; height: 6px; border-radius: 50%; background: ${statusColor}; display: inline-block;"></span>
+                                <span>${statusText}</span>
                             </div>
                         </div>
                     </div>
-                    <div style="display: flex; gap: 6px;">
-                        ${!isConnected ? `<button class="button connect-channel-btn" style="padding: 4px 10px; font-size: 10px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer;">Connect</button>` : ''}
-                        ${isConnected ? `<button class="button disconnect-channel-btn" style="padding: 4px 10px; font-size: 10px; background: #dc2626; color: white; border: none; border-radius: 4px; cursor: pointer;">Disconnect</button>` : ''}
-                        <button class="button delete-channel-btn" style="padding: 4px 10px; font-size: 10px; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 4px; cursor: pointer;">Delete</button>
+                    <div style="display: flex; gap: 6px; align-items: center;">
+                        ${!isConnected ? `<button class="connect-channel-btn" style="display: inline-flex; align-items: center; justify-content: center; padding: 6px 12px; font-size: 11px; line-height: 1; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-family: inherit;">Connect</button>` : ''}
+                        ${isConnected ? `<button class="disconnect-channel-btn" style="display: inline-flex; align-items: center; justify-content: center; padding: 6px 12px; font-size: 11px; line-height: 1; background: #dc2626; color: white; border: none; border-radius: 4px; cursor: pointer; font-family: inherit;">Disconnect</button>` : ''}
+                        <button class="delete-channel-btn" style="display: inline-flex; align-items: center; justify-content: center; padding: 6px 12px; font-size: 11px; line-height: 1; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 4px; cursor: pointer; font-family: inherit;">Delete</button>
                     </div>
                 </div>
             `;
@@ -134,7 +139,7 @@ const UIChannelManager = async function(options = {}) {
             
             <!-- Footer -->
             <div style="padding: 16px 20px; border-top: 1px solid #e5e7eb; display: flex; justify-content: flex-end;">
-                <button class="button close-btn" style="padding: 8px 16px; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer; font-size: 13px;">Close</button>
+                <button class="close-btn" style="display: inline-flex; align-items: center; justify-content: center; padding: 8px 16px; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer; font-size: 13px; line-height: 1; font-family: inherit;">Close</button>
             </div>
         </div>
     `;

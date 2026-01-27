@@ -748,6 +748,49 @@ console.warn('Transaction ID is internal only:', transaction.transactionId);
 
 ---
 
+## 🚨 CRITICAL: Button Styling in UIWindow Components
+
+> **⚠️ RECURRING ISSUE** - Buttons in custom windows/modals often have incorrect padding with extra space above text. This is caused by default `.button` class styles and incorrect CSS properties.
+
+### The Problem: Buttons with Extra Top Padding
+
+**❌ WRONG - Default button class causes spacing issues:**
+```html
+<button class="button close-btn" style="padding: 8px 16px;">Close</button>
+```
+
+**Why This Fails:**
+1. The `.button` class adds its own padding/line-height that conflicts with inline styles
+2. Missing `line-height: 1` causes extra vertical space
+3. Missing `display: inline-flex` and alignment properties
+
+**✅ CORRECT - Proper button styling:**
+```html
+<button class="close-btn" style="display: inline-flex; align-items: center; justify-content: center; padding: 8px 16px; font-size: 13px; line-height: 1; font-family: inherit; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer;">Close</button>
+```
+
+**Required Button Properties:**
+1. **DO NOT use `class="button"`** - Remove the default button class to avoid style conflicts
+2. **`display: inline-flex`** - Enables proper flexbox alignment
+3. **`align-items: center; justify-content: center`** - Centers text vertically and horizontally
+4. **`line-height: 1`** - Prevents extra vertical spacing from line-height
+5. **`font-family: inherit`** - Ensures consistent font rendering
+6. **`padding: Xpx Ypx`** - Explicit padding with no reliance on defaults
+
+**Standard Button Template:**
+```html
+<!-- Primary Button -->
+<button style="display: inline-flex; align-items: center; justify-content: center; padding: 8px 16px; font-size: 13px; line-height: 1; font-family: inherit; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer;">Save</button>
+
+<!-- Secondary Button -->
+<button style="display: inline-flex; align-items: center; justify-content: center; padding: 8px 16px; font-size: 13px; line-height: 1; font-family: inherit; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer;">Cancel</button>
+
+<!-- Danger Button -->
+<button style="display: inline-flex; align-items: center; justify-content: center; padding: 8px 16px; font-size: 13px; line-height: 1; font-family: inherit; background: #dc2626; color: white; border: none; border-radius: 6px; cursor: pointer;">Delete</button>
+```
+
+---
+
 ## ⚡ Quick Reference: Before Committing
 
 **Run this mental checklist:**
@@ -763,6 +806,7 @@ console.warn('Transaction ID is internal only:', transaction.transactionId);
 - [ ] ESLint warnings addressed or properly disabled with comments
 - [ ] No inline complex logic in JSX
 - [ ] Functions extracted and named descriptively
+- [ ] **Buttons use proper styling** (no `.button` class, use `inline-flex`, `line-height: 1`)
 
 ---
 

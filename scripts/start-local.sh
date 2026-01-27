@@ -178,27 +178,25 @@ main() {
     echo -e "${CYAN}Setting up PC2...${NC}"
     cd "$PC2_DIR"
     
-    # Install dependencies for frontend (src/gui) FIRST
-    echo -e "${CYAN}Installing frontend dependencies...${NC}"
-    GUI_DIR="$(dirname "$PC2_DIR")/src/gui"
-    if [[ -d "$GUI_DIR" ]]; then
-        cd "$GUI_DIR"
-        # Use --ignore-scripts to skip husky prepare hook, --legacy-peer-deps for conflicts
-        if ! npm install --legacy-peer-deps --ignore-scripts 2>&1; then
-            echo -e "${RED}❌ Failed to install frontend dependencies${NC}"
-            exit 1
-        fi
-        cd "$PC2_DIR"
-    fi
-    echo -e "${GREEN}✓ Frontend dependencies installed${NC}"
-    
-    # Install dependencies for pc2-node
-    echo -e "${CYAN}Installing backend dependencies...${NC}"
+    # Install all dependencies from root (sets up workspace links)
+    echo -e "${CYAN}Installing all dependencies (this takes a few minutes)...${NC}"
+    ROOT_DIR="$(dirname "$PC2_DIR")"
+    cd "$ROOT_DIR"
+    # Use --ignore-scripts to skip husky prepare hook, --legacy-peer-deps for conflicts
     if ! npm install --legacy-peer-deps --ignore-scripts 2>&1; then
-        echo -e "${RED}❌ Failed to install backend dependencies${NC}"
+        echo -e "${YELLOW}⚠ Root install had issues, trying individual installs...${NC}"
+        # Fallback: install in gui and pc2-node separately
+        cd "$ROOT_DIR/src/gui"
+        npm install --legacy-peer-deps --ignore-scripts 2>&1 || true
+    fi
+    
+    # Also ensure pc2-node has its dependencies
+    cd "$PC2_DIR"
+    if ! npm install --legacy-peer-deps --ignore-scripts 2>&1; then
+        echo -e "${RED}❌ Failed to install dependencies${NC}"
         exit 1
     fi
-    echo -e "${GREEN}✓ Backend dependencies installed${NC}"
+    echo -e "${GREEN}✓ Dependencies installed${NC}"
     
     # Build
     echo -e "${CYAN}Building PC2...${NC}"

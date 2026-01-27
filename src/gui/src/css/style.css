@@ -6438,9 +6438,9 @@ fieldset[name=number-code] {
 
 .language-item {
     cursor: pointer;
-    padding: 10px;
+    padding: 6px 10px;
     border-radius: 4px;
-    margin-bottom: 10px;
+    margin-bottom: 2px;
     margin-right: 10px;
     font-size: 13px;
     position: relative;

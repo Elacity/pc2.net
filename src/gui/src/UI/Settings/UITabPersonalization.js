@@ -67,7 +67,7 @@ export default {
             <div class="pers-section">
                 <div class="pers-section-title">Display</div>
                 <div class="pers-group">
-                    <div class="pers-group-row"><div class="pers-card-row"><span class="pers-card-label">${i18n('clock_visibility')}</span><select class="pers-select change-clock-visible"><option value="auto">${i18n('clock_visible_auto')}</option><option value="hide">${i18n('clock_visible_hide')}</option><option value="show">${i18n('clock_visible_show')}</option></select></div></div>
+                    <div class="pers-group-row"><div class="pers-card-row"><span class="pers-card-label">${i18n('clock_visibility')}</span><select class="pers-select change-clock-visible" style="width: auto; min-width: 100px;"><option value="auto">${i18n('clock_visible_auto')}</option><option value="hide">${i18n('clock_visible_hide')}</option><option value="show">${i18n('clock_visible_show')}</option></select></div></div>
                     <div class="pers-group-row"><div class="pers-card-row"><span class="pers-card-label">Font Size</span><select id="font-size-select" class="pers-select"><option value="small" ${fontSize === 'small' ? 'selected' : ''}>Small</option><option value="medium" ${fontSize === 'medium' ? 'selected' : ''}>Medium</option><option value="large" ${fontSize === 'large' ? 'selected' : ''}>Large</option></select></div></div>
                 </div>
             </div>

@@ -101,7 +101,7 @@ const UIAgentEditor = async function(options = {}) {
         `<option value="${m}" ${agent.model === m || (!agent.model && m === initialModels[0]) ? 'selected' : ''}>${m}</option>`
     ).join('');
     
-    // Personality presets
+    // Personality presets (Custom SOUL.md is always available as an extension, not a personality option)
     const personalities = [
         { id: 'professional', name: 'Professional', desc: 'Formal & business-focused', color: '#3b82f6', 
           soul: 'You are a professional assistant. Be formal, concise, and focused on productivity.' },
@@ -111,7 +111,6 @@ const UIAgentEditor = async function(options = {}) {
           soul: 'You are a technical expert. Provide detailed, precise answers with code examples when helpful.' },
         { id: 'support', name: 'Support', desc: 'Patient & thorough', color: '#f59e0b',
           soul: 'You are a patient support agent. Guide users step-by-step and confirm understanding.' },
-        { id: 'custom', name: 'Custom', desc: 'Define your own', color: '#6b7280', soul: '' },
     ];
 
     const h = `
@@ -171,26 +170,40 @@ const UIAgentEditor = async function(options = {}) {
                 <!-- Personality -->
                 <div class="editor-section" style="margin-bottom: 24px;">
                     <h3 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600; color: #374151;">Personality</h3>
-                    <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px;" id="personality-grid">
-                        ${personalities.map(p => `
-                            <div class="personality-option ${agent.personality === p.id ? 'selected' : ''}" data-id="${p.id}" data-soul="${encodeURIComponent(p.soul)}"
-                                style="padding: 12px 8px; border: 2px solid ${agent.personality === p.id ? p.color : '#e5e7eb'}; border-radius: 8px; cursor: pointer; text-align: center; transition: all 0.15s;">
-                                <div style="width: 20px; height: 20px; border-radius: 50%; background: ${p.color}; margin: 0 auto 6px;"></div>
-                                <div style="font-weight: 600; font-size: 11px; color: #374151;">${p.name}</div>
-                                <div style="font-size: 9px; color: #888; margin-top: 2px;">${p.desc}</div>
-                            </div>
-                        `).join('')}
+                    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;" id="personality-grid">
+                        ${(() => {
+                            // Handle legacy 'custom' personality - default to 'friendly'
+                            const effectivePersonality = agent.personality === 'custom' ? 'friendly' : (agent.personality || 'friendly');
+                            return personalities.map(p => {
+                                const isSelected = effectivePersonality === p.id;
+                                return `
+                                <div class="personality-option ${isSelected ? 'selected' : ''}" data-id="${p.id}" data-soul="${encodeURIComponent(p.soul)}"
+                                    style="padding: 12px 8px; border: 2px solid ${isSelected ? p.color : '#e5e7eb'}; border-radius: 8px; cursor: pointer; text-align: center; transition: all 0.15s;">
+                                    <div style="width: 20px; height: 20px; border-radius: 50%; background: ${p.color}; margin: 0 auto 6px;"></div>
+                                    <div style="font-weight: 600; font-size: 11px; color: #374151;">${p.name}</div>
+                                    <div style="font-size: 9px; color: #888; margin-top: 2px;">${p.desc}</div>
+                                </div>`;
+                            }).join('');
+                        })()}
                     </div>
                     
-                    <!-- Custom SOUL -->
-                    <div id="custom-soul-section" style="margin-top: 12px; display: ${agent.personality === 'custom' ? 'block' : 'none'};">
-                        <label style="display: block; font-size: 12px; font-weight: 500; margin-bottom: 4px; color: #555;">Custom SOUL.md</label>
-                        <textarea id="agent-soul" placeholder="Define your agent's core personality and values...
+                    <!-- Custom SOUL.md - Always visible as an extension to any personality -->
+                    <div id="custom-soul-section" style="margin-top: 16px;">
+                        <label style="display: block; font-size: 12px; font-weight: 500; margin-bottom: 2px; color: #555;">Custom SOUL.md</label>
+                        <p style="margin: 0 0 8px 0; font-size: 11px; color: #888;">Additional context and instructions that extend the selected personality</p>
+                        <textarea id="agent-soul" placeholder="Add custom instructions, domain knowledge, or behavioral guidelines...
 
 Example:
-You are a crypto trading assistant. Be analytical and data-driven.
-Always cite sources for market data. Warn about risks clearly."
-                            style="width: 100%; height: 120px; padding: 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 12px; font-family: monospace; resize: vertical; box-sizing: border-box;">${agent.customSoul || ''}</textarea>
+# SOUL.md - PC2 Personal Cloud Assistant
+
+## Identity
+You are **PC2 Guide**, a knowledgeable assistant for PC2 (Personal Cloud Computer).
+
+## Core Purpose
+- Educate users about PC2 and data sovereignty
+- Guide them through setup and features
+- Provide technical support"
+                            style="width: 100%; height: 140px; padding: 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 12px; font-family: monospace; resize: vertical; box-sizing: border-box;">${agent.customSoul || ''}</textarea>
                     </div>
                 </div>
                 
@@ -350,7 +363,8 @@ Always cite sources for market data. Warn about risks clearly."
         },
         onAppend: function(el_window) {
             const $win = $(el_window);
-            let selectedPersonality = agent.personality || 'friendly';
+            // Handle legacy 'custom' personality - default to 'friendly'
+            let selectedPersonality = agent.personality === 'custom' ? 'friendly' : (agent.personality || 'friendly');
             
             // Helper to close window
             function closeWindow() {
@@ -395,12 +409,7 @@ Always cite sources for market data. Warn about risks clearly."
                     $(this).css('border-color', thisId === id ? color : '#e5e7eb');
                     $(this).toggleClass('selected', thisId === id);
                 });
-                
-                if (id === 'custom') {
-                    $win.find('#custom-soul-section').slideDown();
-                } else {
-                    $win.find('#custom-soul-section').slideUp();
-                }
+                // Custom SOUL.md section is always visible - no need to toggle
             });
             
             // Channel checkbox styling
@@ -426,13 +435,15 @@ Always cite sources for market data. Warn about risks clearly."
                     return;
                 }
                 
-                // Get soul content
-                let soulContent = '';
-                if (selectedPersonality === 'custom') {
-                    soulContent = $win.find('#agent-soul').val();
-                } else {
-                    const preset = personalities.find(p => p.id === selectedPersonality);
-                    soulContent = preset?.soul || '';
+                // Get soul content: base personality + custom extensions
+                const preset = personalities.find(p => p.id === selectedPersonality);
+                const baseSoul = preset?.soul || '';
+                const customSoul = $win.find('#agent-soul').val().trim();
+                
+                // Combine base personality with custom extensions
+                let soulContent = baseSoul;
+                if (customSoul) {
+                    soulContent = customSoul; // Custom SOUL replaces base if provided
                 }
                 
                 // Gather tethered channels from checkboxes
@@ -470,7 +481,7 @@ Always cite sources for market data. Warn about risks clearly."
                         provider: $win.find('#agent-provider').val(),
                         model: $win.find('#agent-model').val(),
                         personality: selectedPersonality,
-                        customSoul: selectedPersonality === 'custom' ? $win.find('#agent-soul').val() : '',
+                        customSoul: customSoul, // Always save custom SOUL content
                         soulContent,
                         permissions: {
                             fileRead: $win.find('#perm-file-read').is(':checked'),

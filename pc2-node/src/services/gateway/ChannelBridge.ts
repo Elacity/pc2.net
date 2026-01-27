@@ -92,6 +92,7 @@ export class ChannelBridge {
   private db?: DatabaseManager;
   private filesystem?: FilesystemManager;
   private io?: any;  // Socket.IO for WebSocket events
+  private ownerWalletAddress?: string;  // PC2 node owner's wallet for API key lookup
   
   // Session storage (keyed by channel:senderId or channel:groupId)
   private sessions: Map<string, SessionContext> = new Map();
@@ -109,12 +110,14 @@ export class ChannelBridge {
       db?: DatabaseManager;
       filesystem?: FilesystemManager;
       io?: any;
+      ownerWalletAddress?: string;
     }
   ) {
     this.aiService = aiService;
     this.gateway = gateway;
     this.db = options?.db;
     this.filesystem = options?.filesystem;
+    this.ownerWalletAddress = options?.ownerWalletAddress;
     this.io = options?.io;
     
     // Register message handler with gateway
@@ -225,10 +228,10 @@ export class ChannelBridge {
       }
     }
     
-    // Build request
+    // Build request - use owner wallet for API key lookup (not session user)
     const request: CompleteRequest = {
       messages,
-      walletAddress: session.walletAddress,
+      walletAddress: this.ownerWalletAddress || session.walletAddress,
       filesystem: this.filesystem,
       io: this.io,
       model: modelToUse,
@@ -532,6 +535,7 @@ export function createChannelBridge(
     db?: DatabaseManager;
     filesystem?: FilesystemManager;
     io?: any;
+    ownerWalletAddress?: string;
   }
 ): ChannelBridge {
   const gateway = getGatewayService(options?.db);

@@ -118,7 +118,11 @@ async function main() {
     
     // Connect the channel bridge if AI service is available
     if (aiService) {
-      const channelBridge = createChannelBridge(aiService, { db, filesystem: filesystem || undefined });
+      const channelBridge = createChannelBridge(aiService, { 
+        db, 
+        filesystem: filesystem || undefined,
+        ownerWalletAddress: config.owner.wallet_address || undefined,
+      });
       logger.info('📡 Gateway service initialized with AI bridge');
     } else {
       logger.info('📡 Gateway service initialized (no AI bridge - AI service unavailable)');

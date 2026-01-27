@@ -248,6 +248,21 @@ You are **PC2 Guide**, a knowledgeable assistant for PC2 (Personal Cloud Compute
                     </div>
                 </div>
                 
+                <!-- Agent Memory -->
+                <div class="editor-section" style="margin-bottom: 24px;">
+                    <h3 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600; color: #374151;">Agent Memory</h3>
+                    <p style="margin: 0 0 8px 0; font-size: 11px; color: #888;">Persistent knowledge the agent has learned about you. The agent can add to this using the update_memory tool.</p>
+                    <div style="position: relative;">
+                        <textarea id="agent-memory" placeholder="No memories yet. The agent will save important facts here..."
+                            style="width: 100%; height: 120px; padding: 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 12px; font-family: monospace; resize: vertical; box-sizing: border-box; background: #fafafa;"></textarea>
+                        <div id="memory-loading" style="display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 12px; color: #888;">Loading...</div>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px;">
+                        <span id="memory-status" style="font-size: 10px; color: #888;"></span>
+                        <button type="button" id="clear-memory-btn" style="font-size: 11px; padding: 4px 10px; background: #fff; border: 1px solid #d1d5db; border-radius: 4px; cursor: pointer; color: #dc2626;">Clear Memory</button>
+                    </div>
+                </div>
+                
                 <!-- Permissions -->
                 <div class="editor-section" style="margin-bottom: 24px;">
                     <h3 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600; color: #374151;">Permissions</h3>
@@ -436,6 +451,54 @@ You are **PC2 Guide**, a knowledgeable assistant for PC2 (Personal Cloud Compute
                     }
                 })();
             }
+            
+            // Load agent memory (MEMORY.md) if editing existing agent
+            let originalMemoryContent = '';
+            if (!isNew && agentId) {
+                const $memoryTextarea = $win.find('#agent-memory');
+                const $memoryLoading = $win.find('#memory-loading');
+                const $memoryStatus = $win.find('#memory-status');
+                const userRoot = window.user?.username || window.user?.wallet_address || '';
+                const memoryPath = '/' + userRoot + '/pc2/agents/' + agentId + '/MEMORY.md';
+                
+                $memoryLoading.show();
+                $memoryTextarea.prop('disabled', true);
+                
+                (async function() {
+                    try {
+                        const content = await puter.fs.read(memoryPath);
+                        if (content) {
+                            // Handle Blob/ArrayBuffer
+                            let text = '';
+                            if (content instanceof Blob) {
+                                text = await content.text();
+                            } else if (typeof content === 'string') {
+                                text = content;
+                            } else if (content.text) {
+                                text = await content.text();
+                            }
+                            originalMemoryContent = text;
+                            $memoryTextarea.val(text);
+                            $memoryStatus.text('Memory loaded');
+                        }
+                    } catch (err) {
+                        // File doesn't exist yet - this is fine
+                        $memoryStatus.text('No memory file yet');
+                    } finally {
+                        $memoryLoading.hide();
+                        $memoryTextarea.prop('disabled', false);
+                    }
+                })();
+            }
+            
+            // Clear Memory button
+            $win.find('#clear-memory-btn').on('click', function() {
+                if (!confirm('Are you sure you want to clear all memory for this agent? This cannot be undone.')) {
+                    return;
+                }
+                $win.find('#agent-memory').val('');
+                $win.find('#memory-status').text('Memory cleared (save to apply)');
+            });
             
             // Helper to close window
             function closeWindow() {
@@ -685,6 +748,25 @@ You are **PC2 Guide**, a knowledgeable assistant for PC2 (Personal Cloud Compute
                         contentType: 'application/json',
                         data: JSON.stringify(newAgent)
                     });
+                    
+                    // Save memory if changed
+                    const memoryContent = $win.find('#agent-memory').val();
+                    if (memoryContent !== originalMemoryContent) {
+                        const userRoot = window.user?.username || window.user?.wallet_address || '';
+                        const agentDir = '/' + userRoot + '/pc2/agents/' + generatedId;
+                        const memoryPath = agentDir + '/MEMORY.md';
+                        
+                        try {
+                            // Ensure directory exists
+                            try { await puter.fs.mkdir(agentDir, { recursive: true }); } catch (e) { /* may exist */ }
+                            
+                            // Write memory file
+                            await puter.fs.write(memoryPath, memoryContent || '');
+                            console.log('[AgentEditor] Saved memory to:', memoryPath);
+                        } catch (memErr) {
+                            console.warn('[AgentEditor] Failed to save memory:', memErr);
+                        }
+                    }
                     
                     closeWindow();
                     

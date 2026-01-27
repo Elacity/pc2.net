@@ -16,27 +16,44 @@
 
 **Perfect for:** Developers, curious users, quick evaluation
 
-### Prerequisites
-- Node.js 20+ ([download](https://nodejs.org/))
-- Git
+### One-Liner Start (Mac / Linux)
 
-### One-Liner Start
+Open Terminal and paste this single command:
 
 ```bash
-git clone https://github.com/Elacity/pc2.net.git && cd pc2.net && npm run start:local
+curl -fsSL https://raw.githubusercontent.com/Elacity/pc2.net/main/scripts/start-local.sh | bash
 ```
 
-### What Happens
+**That's it!** The script automatically:
+- Installs Node.js if needed (via nvm)
+- Downloads PC2
+- Installs all dependencies
+- Builds and starts the server
 
-1. Dependencies install (first run only)
-2. PC2 builds (first run only)
-3. Server starts on `http://localhost:4200`
+### Windows Users
+
+Use WSL2 (Windows Subsystem for Linux):
+
+1. Install WSL2: Open PowerShell as Admin and run:
+   ```powershell
+   wsl --install
+   ```
+2. Restart your computer
+3. Open "Ubuntu" from Start menu
+4. Run the one-liner above
+
+### What to Expect
+
+1. You'll see the ElastOS banner
+2. Dependencies install (2-5 minutes first time)
+3. Server starts and shows: `PC2 Node running on http://localhost:4200`
 
 ### Next Steps
 
-1. Open `http://localhost:4200` in your browser
-2. Login with your wallet (MetaMask, WalletConnect, etc.)
-3. Start using your personal cloud!
+1. **Open your browser** (Chrome, Safari, Firefox)
+2. **Go to:** `http://localhost:4200`
+3. **Connect your wallet** to claim your personal cloud
+4. Done! You're the owner of this PC2 node.
 
 ### Useful Commands
 
@@ -44,11 +61,15 @@ git clone https://github.com/Elacity/pc2.net.git && cd pc2.net && npm run start:
 # Stop PC2
 Ctrl+C
 
-# Restart
-npm run start:local
+# Restart (after stopping)
+cd ~/pc2.net/pc2-node && npm start
+
+# Restart from scratch
+rm -rf ~/pc2.net
+# Then run the one-liner again
 
 # Development mode (hot reload)
-cd pc2-node && npm run dev
+cd ~/pc2.net/pc2-node && npm run dev
 ```
 
 ---

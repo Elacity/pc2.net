@@ -214,7 +214,8 @@ export class ChannelBridge {
     if (this.filesystem && this.ownerWalletAddress) {
       try {
         const memoryPath = `/${this.ownerWalletAddress}/pc2/agents/MEMORY.md`;
-        memoryContent = await this.filesystem.readFile(memoryPath, this.ownerWalletAddress);
+        const buffer = await this.filesystem.readFile(memoryPath, this.ownerWalletAddress);
+        memoryContent = buffer?.toString('utf-8');
         if (memoryContent) {
           logger.info('[ChannelBridge] Loaded agent memory:', memoryContent.length, 'chars');
         }

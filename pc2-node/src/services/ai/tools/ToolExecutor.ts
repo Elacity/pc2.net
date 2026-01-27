@@ -986,7 +986,7 @@ export class ToolExecutor {
           // Ensure directory exists
           const memoryDir = memoryPath.substring(0, memoryPath.lastIndexOf('/'));
           try {
-            await this.filesystem.mkdir(memoryDir, this.walletAddress, true);
+            await this.filesystem.createDirectory(memoryDir, this.walletAddress);
           } catch {
             // Directory may already exist
           }
@@ -994,7 +994,8 @@ export class ToolExecutor {
           // Read existing memory or create new
           let existingContent = '';
           try {
-            existingContent = await this.filesystem.readFile(memoryPath, this.walletAddress) || '';
+            const buffer = await this.filesystem.readFile(memoryPath, this.walletAddress);
+            existingContent = buffer?.toString('utf-8') || '';
           } catch {
             // File doesn't exist yet, start fresh
             existingContent = '# Agent Memory\n\nThis file stores persistent memories across conversations.\n\n';

@@ -288,8 +288,12 @@ export function showTelegramConnectModal() {
                     throw new Error(data.error || 'Failed to connect');
                 }
                 
-                // Success
-                closeModal({ success: true, token });
+                // Success - include botUsername from response
+                closeModal({ 
+                    success: true, 
+                    token,
+                    botUsername: data.data?.botUsername || ''
+                });
                 
             } catch (error) {
                 console.error('[Telegram Connect] Error:', error);
@@ -335,24 +339,8 @@ const UITelegramConnect = async function(options = {}) {
     try {
         const result = await showTelegramConnectModal();
         if (result && result.success && onSuccess) {
-            // Extract bot username from token by calling API
-            let botUsername = '';
-            try {
-                const apiOrigin = window.api_origin || `${window.location.protocol}//${window.location.host}`;
-                const authToken = window.auth_token;
-                const statusResp = await fetch(`${apiOrigin}/api/gateway/status`, {
-                    headers: { 'Authorization': `Bearer ${authToken}` }
-                });
-                const statusData = await statusResp.json();
-                if (statusData.success && statusData.data?.channels?.telegram) {
-                    // Try to get username from connected bot
-                    botUsername = statusData.data.channels.telegram.botUsername || '';
-                }
-            } catch (e) {
-                console.warn('[TelegramConnect] Could not fetch bot username:', e);
-            }
-            
-            onSuccess(result.token, botUsername);
+            // Use botUsername from the connect response
+            onSuccess(result.token, result.botUsername || '');
         }
     } catch (e) {
         if (onCancel) onCancel();

@@ -450,15 +450,22 @@ export class GatewayService extends EventEmitter {
     this.telegramChannel = createTelegramChannel(config.telegram);
     
     // Set up event handlers
-    this.telegramChannel.on('connected', (botUsername: string) => {
+    this.telegramChannel.on('connected', async (botUsername: string) => {
       logger.info('[GatewayService] Telegram connected:', botUsername);
       this.channelStatus.set('telegram', 'connected');
       
-      // Update config with bot username
+      // Update config with bot username (both local config and this.config)
       if (config.telegram) {
         config.telegram.botUsername = botUsername;
       }
       config.linkedAt = new Date().toISOString();
+      
+      // Also update this.config.channels.telegram
+      if (this.config.channels.telegram?.telegram) {
+        this.config.channels.telegram.telegram.botUsername = botUsername;
+        // Save config to persist the username
+        await this.saveConfig();
+      }
       
       this.emit('channel:connected', 'telegram');
     });

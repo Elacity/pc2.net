@@ -275,9 +275,19 @@ router.post('/channels/:channel/connect', authenticate, async (req: Authenticate
     // Then connect
     await gateway.connectChannel(channel);
     
+    // Get updated config to include bot username etc.
+    const channelConfig = gateway.getChannelConfig(channel);
+    const botUsername = channelConfig?.telegram?.botUsername || 
+                        channelConfig?.discord?.botUsername || 
+                        undefined;
+    
     res.json({
       success: true,
-      data: { channel, connected: true },
+      data: { 
+        channel, 
+        connected: true,
+        botUsername, // Return the bot username
+      },
     });
   } catch (error: any) {
     logger.error('[Gateway API] Error connecting channel:', error);

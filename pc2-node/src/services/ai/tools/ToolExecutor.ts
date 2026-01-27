@@ -12,6 +12,7 @@ import { Server as SocketIOServer } from 'socket.io';
 import { broadcastItemAdded, broadcastItemRemoved, broadcastItemMoved, broadcastItemUpdated } from '../../../websocket/events.js';
 import { ALLOWED_SETTINGS, AllowedSettingKey } from './SettingsTools.js';
 import { AgentKitExecutor, isAgentKitTool } from './AgentKitExecutor.js';
+import { AgentMemoryManager } from '../memory/AgentMemoryManager.js';
 
 // Elastos Smart Chain RPC endpoint for balance queries
 const ESC_RPC_URL = 'https://api.elastos.io/esc';
@@ -26,6 +27,8 @@ export class ToolExecutor {
   private db?: DatabaseManager;
   private smartAccountAddress?: string;
   private agentKitExecutor?: AgentKitExecutor;
+  private agentId?: string;
+  private memoryManager?: AgentMemoryManager;
 
   constructor(
     private filesystem: FilesystemManager,
@@ -34,6 +37,7 @@ export class ToolExecutor {
     options?: {
       db?: DatabaseManager;
       smartAccountAddress?: string;
+      agentId?: string;  // Agent ID for scoped memory
     }
   ) {
     if (!walletAddress) {
@@ -41,6 +45,17 @@ export class ToolExecutor {
     }
     this.db = options?.db;
     this.smartAccountAddress = options?.smartAccountAddress;
+    this.agentId = options?.agentId;
+    
+    // Initialize per-agent memory manager if agentId is provided
+    if (this.agentId) {
+      this.memoryManager = new AgentMemoryManager(
+        this.filesystem,
+        this.walletAddress,
+        this.agentId
+      );
+      logger.info('[ToolExecutor] AgentMemoryManager initialized for agent:', this.agentId);
+    }
     
     // Initialize AgentKitExecutor if smart account is available
     if (this.smartAccountAddress) {
@@ -51,7 +66,7 @@ export class ToolExecutor {
       logger.info('[ToolExecutor] AgentKitExecutor initialized for Agent Account features');
     }
     
-    logger.info('[ToolExecutor] Initialized with io available:', !!this.io, 'walletAddress:', this.walletAddress, 'hasDb:', !!this.db, 'hasSmartAccount:', !!this.smartAccountAddress);
+    logger.info('[ToolExecutor] Initialized with io available:', !!this.io, 'walletAddress:', this.walletAddress, 'hasDb:', !!this.db, 'hasSmartAccount:', !!this.smartAccountAddress, 'agentId:', this.agentId);
     if (!this.io) {
       logger.warn('[ToolExecutor] ⚠️ WebSocket server (io) not provided - live UI updates will be disabled!');
     }
@@ -978,6 +993,29 @@ export class ToolExecutor {
           
           const fact = args.fact as string;
           const category = (args.category as string) || 'fact';
+          
+          // Use AgentMemoryManager for per-agent isolated memory
+          if (this.memoryManager) {
+            await this.memoryManager.updateMemory(fact, category);
+            
+            logger.info('[ToolExecutor] Updated agent memory (per-agent):', { 
+              agentId: this.agentId,
+              category, 
+              fact: fact.substring(0, 50) 
+            });
+            
+            return {
+              success: true,
+              result: {
+                message: `Memory saved: ${fact}`,
+                category,
+                agentId: this.agentId,
+                path: this.memoryManager.getWorkspacePath() + '/MEMORY.md'
+              }
+            };
+          }
+          
+          // Fallback: Legacy shared memory (when no agentId provided)
           const timestamp = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
           
           // Memory is stored per-user in their workspace
@@ -1033,7 +1071,7 @@ export class ToolExecutor {
             mimeType: 'text/markdown'
           });
           
-          logger.info('[ToolExecutor] Updated agent memory:', { category, fact: fact.substring(0, 50) });
+          logger.info('[ToolExecutor] Updated agent memory (shared):', { category, fact: fact.substring(0, 50) });
           
           return {
             success: true,

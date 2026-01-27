@@ -17,6 +17,7 @@ import { AIChatService, CompleteRequest } from '../ai/AIChatService.js';
 import { FilesystemManager } from '../../storage/filesystem.js';
 import { DatabaseManager } from '../../storage/database.js';
 import { GatewayService, getGatewayService } from './GatewayService.js';
+import { AgentMemoryManager } from '../ai/memory/AgentMemoryManager.js';
 import type {
   ChannelMessage,
   ChannelReply,
@@ -209,18 +210,29 @@ export class ChannelBridge {
     const channelConfig = this.gateway.getChannelConfig(session.channel);
     const channelModel = channelConfig?.settings?.model;
     
-    // Load persistent memory for the agent if filesystem is available
+    // Load persistent memory for the agent using AgentMemoryManager
     let memoryContent: string | undefined;
     if (this.filesystem && this.ownerWalletAddress) {
       try {
-        const memoryPath = `/${this.ownerWalletAddress}/pc2/agents/MEMORY.md`;
-        const buffer = await this.filesystem.readFile(memoryPath, this.ownerWalletAddress);
-        memoryContent = buffer?.toString('utf-8');
+        // Use AgentMemoryManager for per-agent isolated memory
+        const memoryManager = new AgentMemoryManager(
+          this.filesystem,
+          this.ownerWalletAddress,
+          agent.id
+        );
+        
+        // Build full memory context string (includes MEMORY.md + recent daily notes)
+        memoryContent = await memoryManager.buildContextString();
+        
         if (memoryContent) {
-          logger.info('[ChannelBridge] Loaded agent memory:', memoryContent.length, 'chars');
+          logger.info('[ChannelBridge] Loaded agent memory:', {
+            agentId: agent.id,
+            contentLength: memoryContent.length,
+          });
         }
-      } catch {
+      } catch (error: any) {
         // Memory file doesn't exist yet - this is fine
+        logger.debug('[ChannelBridge] No memory for agent:', agent.id, error.message);
       }
     }
     
@@ -269,6 +281,8 @@ export class ChannelBridge {
       io: this.io,
       model: modelToUse,
       temperature,
+      // Pass agent ID for per-agent memory isolation
+      agentId: agent.id,
     };
     
     logger.info(`[ChannelBridge] Sending to AI`, {

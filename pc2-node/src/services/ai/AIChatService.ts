@@ -56,6 +56,7 @@ export interface CompleteRequest {
   smartAccountAddress?: string; // Particle Smart Account address (optional)
   filesystem?: FilesystemManager; // For tool execution
   io?: any; // Socket.IO server instance for WebSocket events
+  agentId?: string; // Agent ID for per-agent memory isolation
 }
 
 type AIProvider = OllamaProvider | ClaudeProvider | OpenAIProvider | GeminiProvider | XAIProvider;
@@ -557,7 +558,8 @@ export class AIChatService {
         args.walletAddress!,
         args.io,
         (args as any).toolSourceMap, // Pass tool source map
-        args.smartAccountAddress // Pass smart account address for wallet tools
+        args.smartAccountAddress, // Pass smart account address for wallet tools
+        args.agentId // Pass agent ID for per-agent memory isolation
       );
     } else {
       logger.info('[AIChatService] Tool execution disabled - filesystem:', !!args.filesystem, 'walletAddress:', !!args.walletAddress, 'tools:', tools?.length || 0);
@@ -600,11 +602,13 @@ export class AIChatService {
     walletAddress: string,
     io?: any,
     toolSourceMap?: Map<string, { type: 'filesystem' | 'app'; appInstanceID?: string }>,
-    smartAccountAddress?: string
+    smartAccountAddress?: string,
+    agentId?: string
   ): Promise<ChatCompletion> {
     const toolExecutor = new ToolExecutor(filesystem, walletAddress, io, {
       db: this.db,
-      smartAccountAddress
+      smartAccountAddress,
+      agentId
     });
     const MAX_TOOL_ITERATIONS = 5; // Prevent infinite loops
     let iteration = 0;
@@ -1800,10 +1804,11 @@ TOOL USAGE REQUIREMENT:
           
           // Execute AI tools using ToolExecutor (filesystem, wallet, settings)
           if (filesystemToolCalls.length > 0) {
-            logger.info('[AIChatService] streamComplete - Creating ToolExecutor with io:', !!args.io, 'walletAddress:', args.walletAddress, 'hasSmartAccount:', !!args.smartAccountAddress);
+            logger.info('[AIChatService] streamComplete - Creating ToolExecutor with io:', !!args.io, 'walletAddress:', args.walletAddress, 'hasSmartAccount:', !!args.smartAccountAddress, 'agentId:', args.agentId);
             const toolExecutor = new ToolExecutor(args.filesystem, args.walletAddress, args.io, {
               db: this.db,
-              smartAccountAddress: args.smartAccountAddress
+              smartAccountAddress: args.smartAccountAddress,
+              agentId: args.agentId
             });
             const normalizedMessages = normalizeMessages(args.messages);
             

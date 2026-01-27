@@ -67,7 +67,7 @@ if(window.logged_in_users.length === 0 && window.user !== null){
     localStorage.setItem("logged_in_users", window.logged_in_users);
 }
 
-window.last_window_zindex = 1;
+window.last_window_zindex = 10000; // Start above AI panel (9997) so windows appear in front
 
 // first visit tracker
 window.first_visit_ever = localStorage.getItem("has_visited_before") === null ? true : false;

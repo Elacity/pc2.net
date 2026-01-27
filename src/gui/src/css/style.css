@@ -1720,6 +1720,38 @@
     height: 18px;
 }
 
+/* Agent selector button - same style as attach button */
+.ai-agent-btn {
+    background: var(--ai-input-bg);
+    border: 1px solid var(--ai-border-color);
+    padding: 0;
+    cursor: pointer;
+    color: #666;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    box-sizing: border-box;
+    transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+}
+
+[data-theme="dark"] .ai-agent-btn {
+    color: #9ca3af;
+}
+
+.ai-agent-btn:hover {
+    background: var(--ai-message-user-bg);
+    color: var(--ai-text-color);
+}
+
+.ai-agent-btn svg {
+    width: 20px;
+    height: 20px;
+}
+
 /* Chat Input - full width at top */
 .ai-chat-input {
     width: 100%;

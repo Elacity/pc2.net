@@ -21,7 +21,6 @@ import UITaskbarItem from './UITaskbarItem.js';
 import UIPopover from './UIPopover.js';
 import launch_app from '../helpers/launch_app.js';
 import UIContextMenu from './UIContextMenu.js';
-import UIAgentSelector from './UIAgentSelector.js';
 
 // Debug flag for UITaskbar logging
 const UITASKBAR_DEBUG = false;
@@ -414,38 +413,6 @@ async function UITaskbar (options) {
             return false;
         },
     });
-
-    //---------------------------------------------
-    // add `Agent Selector` to taskbar (PC2 only)
-    //---------------------------------------------
-    if (window.user?.wallet_address) {
-        // Inline SVG for agent icon (robot head)
-        const agentIconSvg = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2" ry="2"/><circle cx="12" cy="5" r="3"/><line x1="12" y1="8" x2="12" y2="11"/><circle cx="8" cy="16" r="1" fill="white"/><circle cx="16" cy="16" r="1" fill="white"/><path d="M9 19h6"/></svg>')}`;
-        
-        UITaskbarItem({
-            icon: agentIconSvg,
-            app: 'agent-selector',
-            name: 'AI Agents',
-            sortable: false,
-            keep_in_taskbar: true,
-            lock_keep_in_taskbar: true,
-            disable_context_menu: true,
-            onClick: async function (item) {
-                // Skip if popover already open
-                if ($(item).hasClass('has-open-popover')) {
-                    return;
-                }
-                
-                // Show agent selector popover
-                await UIAgentSelector({
-                    snapToElement: item,
-                    onSelect: function(agentId, agent) {
-                        UITASKBAR_DEBUG && console.log('[UITaskbar] Agent selected:', agentId, agent?.name);
-                    }
-                });
-            },
-        });
-    }
 
     //---------------------------------------------
     // Add other useful apps to the taskbar

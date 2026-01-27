@@ -33,9 +33,9 @@ const UIAgentEditor = async function(options = {}) {
         },
         thinkingLevel: 'fast', // fast, balanced, deep - maps to temperature
         permissions: {
-            fileRead: true,
+            fileRead: false,
             fileWrite: false,
-            walletAccess: true,
+            walletAccess: false,
             webBrowsing: false,
             codeExecution: false,
             reminders: false,

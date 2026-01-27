@@ -12,6 +12,7 @@
  */
 
 import UIWindow from '../UIWindow.js';
+import UIAlert from '../UIAlert.js';
 
 const UIAgentEditor = async function(options = {}) {
     const { agentId, onSave } = options;
@@ -492,10 +493,20 @@ You are **PC2 Guide**, a knowledgeable assistant for PC2 (Personal Cloud Compute
             }
             
             // Clear Memory button
-            $win.find('#clear-memory-btn').on('click', function() {
-                if (!confirm('Are you sure you want to clear all memory for this agent? This cannot be undone.')) {
+            $win.find('#clear-memory-btn').on('click', async function() {
+                const confirmed = await UIAlert({
+                    type: 'confirm',
+                    message: 'Are you sure you want to clear all memory for this agent?<br><br>This cannot be undone.',
+                    buttons: [
+                        { label: 'Clear Memory', value: 'clear', type: 'danger' },
+                        { label: 'Cancel', value: 'cancel', type: 'secondary' },
+                    ]
+                });
+                
+                if (confirmed !== 'clear') {
                     return;
                 }
+                
                 $win.find('#agent-memory').val('');
                 $win.find('#memory-status').text('Memory cleared (save to apply)');
             });

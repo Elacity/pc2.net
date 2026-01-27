@@ -11,6 +11,7 @@
  */
 
 import UIAgentEditor from '../Channels/UIAgentEditor.js';
+import UIAlert from '../UIAlert.js';
 
 export default {
     id: 'ai',
@@ -1317,7 +1318,17 @@ export default {
                         const agentId = $row.data('agent-id');
                         const agentName = $row.find('.agent-name').text();
                         
-                        if (!confirm(`Are you sure you want to delete the agent "${agentName}"?\n\nThis will also delete the agent's memory files.`)) {
+                        // Use PC2 native dialog instead of browser confirm
+                        const confirmed = await UIAlert({
+                            type: 'confirm',
+                            message: `Are you sure you want to delete the agent "<strong>${agentName}</strong>"?<br><br>This will also delete the agent's memory files.`,
+                            buttons: [
+                                { label: 'Delete', value: 'delete', type: 'danger' },
+                                { label: 'Cancel', value: 'cancel', type: 'secondary' },
+                            ]
+                        });
+                        
+                        if (confirmed !== 'delete') {
                             return;
                         }
                         
@@ -1336,7 +1347,10 @@ export default {
                             await loadAgents();
                         } catch (error) {
                             console.error('[AI Settings] Error deleting agent:', error);
-                            alert('Failed to delete agent: ' + error.message);
+                            await UIAlert({
+                                type: 'error',
+                                message: 'Failed to delete agent: ' + error.message,
+                            });
                         }
                     });
                 }

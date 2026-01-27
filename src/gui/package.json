@@ -46,6 +46,7 @@
     ]
   },
   "dependencies": {
+    "@heyputer/putility": "^1.1.1",
     "json-colorizer": "^3.0.1",
     "string-template": "^1.0.0",
     "uuid": "^9.0.1"

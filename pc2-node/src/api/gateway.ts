@@ -13,6 +13,7 @@ import type {
   ChannelType,
   ChannelConfig,
   AgentConfig,
+  SavedChannel,
 } from '../services/gateway/types.js';
 
 const router = Router();
@@ -777,6 +778,198 @@ router.delete('/agents/:agentId', authenticate, async (req: AuthenticatedRequest
       success: false,
       error: error.message,
     });
+  }
+});
+
+// ============================================
+// Saved Channels (Credentials) Endpoints
+// ============================================
+
+/**
+ * GET /api/gateway/saved-channels
+ * Get all saved channel credentials
+ */
+router.get('/saved-channels', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const gateway = getGatewayService(req.app.locals.db);
+    const channels = gateway.getSavedChannels();
+    
+    // Mask tokens
+    const masked = channels.map(ch => ({
+      ...ch,
+      telegram: ch.telegram ? { ...ch.telegram, botToken: '***' + (ch.telegram.botToken?.slice(-4) || '') } : undefined,
+      discord: ch.discord ? { ...ch.discord, botToken: '***' + (ch.discord.botToken?.slice(-4) || '') } : undefined,
+    }));
+    
+    res.json({ success: true, data: masked });
+  } catch (error: any) {
+    logger.error('[Gateway API] Error getting saved channels:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * GET /api/gateway/saved-channels/:type
+ * Get saved channels by type (telegram, discord, whatsapp)
+ */
+router.get('/saved-channels/type/:type', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { type } = req.params;
+    const gateway = getGatewayService(req.app.locals.db);
+    const channels = gateway.getSavedChannelsByType(type as ChannelType);
+    
+    // Mask tokens
+    const masked = channels.map(ch => ({
+      ...ch,
+      telegram: ch.telegram ? { ...ch.telegram, botToken: '***' + (ch.telegram.botToken?.slice(-4) || '') } : undefined,
+      discord: ch.discord ? { ...ch.discord, botToken: '***' + (ch.discord.botToken?.slice(-4) || '') } : undefined,
+    }));
+    
+    res.json({ success: true, data: masked });
+  } catch (error: any) {
+    logger.error('[Gateway API] Error getting saved channels by type:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * GET /api/gateway/saved-channels/:channelId
+ * Get a specific saved channel
+ */
+router.get('/saved-channels/:channelId', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { channelId } = req.params;
+    const gateway = getGatewayService(req.app.locals.db);
+    const channel = gateway.getSavedChannel(channelId);
+    
+    if (!channel) {
+      return res.status(404).json({ success: false, error: 'Saved channel not found' });
+    }
+    
+    // Mask tokens
+    const masked = {
+      ...channel,
+      telegram: channel.telegram ? { ...channel.telegram, botToken: '***' + (channel.telegram.botToken?.slice(-4) || '') } : undefined,
+      discord: channel.discord ? { ...channel.discord, botToken: '***' + (channel.discord.botToken?.slice(-4) || '') } : undefined,
+    };
+    
+    res.json({ success: true, data: masked });
+  } catch (error: any) {
+    logger.error('[Gateway API] Error getting saved channel:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * POST /api/gateway/saved-channels
+ * Create a new saved channel
+ */
+router.post('/saved-channels', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { type, name, telegram, discord, whatsapp } = req.body;
+    
+    if (!type || !name) {
+      return res.status(400).json({ success: false, error: 'type and name are required' });
+    }
+    
+    const gateway = getGatewayService(req.app.locals.db);
+    
+    const channel: SavedChannel = {
+      id: `${type}-${Date.now()}`,
+      type,
+      name,
+      createdAt: new Date().toISOString(),
+      telegram,
+      discord,
+      whatsapp,
+    };
+    
+    await gateway.upsertSavedChannel(channel);
+    
+    logger.info(`[Gateway API] Saved channel ${channel.id} created`);
+    
+    res.json({ success: true, data: { ...channel, telegram: channel.telegram ? { ...channel.telegram, botToken: '***' } : undefined } });
+  } catch (error: any) {
+    logger.error('[Gateway API] Error creating saved channel:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * PUT /api/gateway/saved-channels/:channelId
+ * Update a saved channel
+ */
+router.put('/saved-channels/:channelId', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { channelId } = req.params;
+    const { name, telegram, discord, whatsapp } = req.body;
+    
+    const gateway = getGatewayService(req.app.locals.db);
+    const existing = gateway.getSavedChannel(channelId);
+    
+    if (!existing) {
+      return res.status(404).json({ success: false, error: 'Saved channel not found' });
+    }
+    
+    const updated: SavedChannel = {
+      ...existing,
+      name: name || existing.name,
+      telegram: telegram || existing.telegram,
+      discord: discord || existing.discord,
+      whatsapp: whatsapp || existing.whatsapp,
+    };
+    
+    await gateway.upsertSavedChannel(updated);
+    
+    logger.info(`[Gateway API] Saved channel ${channelId} updated`);
+    
+    res.json({ success: true, data: { ...updated, telegram: updated.telegram ? { ...updated.telegram, botToken: '***' } : undefined } });
+  } catch (error: any) {
+    logger.error('[Gateway API] Error updating saved channel:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * DELETE /api/gateway/saved-channels/:channelId
+ * Delete a saved channel
+ */
+router.delete('/saved-channels/:channelId', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { channelId } = req.params;
+    
+    const gateway = getGatewayService(req.app.locals.db);
+    await gateway.deleteSavedChannel(channelId);
+    
+    logger.info(`[Gateway API] Saved channel ${channelId} deleted`);
+    
+    res.json({ success: true, data: { channelId, deleted: true } });
+  } catch (error: any) {
+    logger.error('[Gateway API] Error deleting saved channel:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * POST /api/gateway/saved-channels/:channelId/connect
+ * Connect a saved channel (start the bot)
+ */
+router.post('/saved-channels/:channelId/connect', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { channelId } = req.params;
+    
+    const gateway = getGatewayService(req.app.locals.db);
+    const result = await gateway.connectSavedChannel(channelId);
+    
+    if (result.success) {
+      logger.info(`[Gateway API] Saved channel ${channelId} connected`);
+      res.json({ success: true, data: { channelId, connected: true } });
+    } else {
+      res.status(400).json({ success: false, error: result.error });
+    }
+  } catch (error: any) {
+    logger.error('[Gateway API] Error connecting saved channel:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 

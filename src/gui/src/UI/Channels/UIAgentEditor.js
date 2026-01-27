@@ -39,10 +39,7 @@ const UIAgentEditor = async function(options = {}) {
             mode: 'public',
             rateLimit: { perMinute: 10, perDay: 100 },
         },
-        channels: {
-            telegram: { enabled: false, botToken: '', botUsername: '' },
-            discord: { enabled: false, botToken: '' },
-        }
+        tetheredChannels: [], // Array of SavedChannel IDs
     };
     
     // Fetch existing agent if editing
@@ -59,6 +56,21 @@ const UIAgentEditor = async function(options = {}) {
         } catch (e) {
             console.warn('[AgentEditor] Could not fetch agent:', e);
         }
+    }
+    
+    // Fetch saved channels for dropdown
+    let savedChannels = [];
+    try {
+        const response = await $.ajax({
+            url: '/api/gateway/saved-channels',
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${window.auth_token}` }
+        });
+        if (response.success && response.data) {
+            savedChannels = response.data;
+        }
+    } catch (e) {
+        console.warn('[AgentEditor] Could not fetch saved channels:', e);
     }
     
     // Fetch available AI providers and models
@@ -252,41 +264,37 @@ Always cite sources for market data. Warn about risks clearly."
                 
                 <!-- Channel Connections -->
                 <div class="editor-section" style="margin-bottom: 24px;">
-                    <h3 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600; color: #374151;">Channel Connections</h3>
-                    <p style="margin: 0 0 12px 0; font-size: 12px; color: #666;">Connect messaging platforms to this agent</p>
+                    <h3 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600; color: #374151;">Tethered Channels</h3>
+                    <p style="margin: 0 0 12px 0; font-size: 12px; color: #666;">Select which messaging bots this agent responds to</p>
                     
-                    <!-- Telegram -->
-                    <div style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; margin-bottom: 8px;">
-                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="#0088cc"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
-                            <div style="flex: 1;">
-                                <div style="font-size: 13px; font-weight: 500;">Telegram Bot</div>
-                            </div>
-                            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
-                                <input type="checkbox" id="telegram-enabled" ${agent.channels?.telegram?.enabled ? 'checked' : ''}>
-                                <span style="font-size: 11px;">Enable</span>
-                            </label>
+                    ${savedChannels.length === 0 ? `
+                        <div style="text-align: center; padding: 20px; background: #f9fafb; border-radius: 8px; border: 1px dashed #d1d5db;">
+                            <div style="font-size: 11px; color: #888;">No channels configured yet</div>
+                            <div style="font-size: 10px; color: #666; margin-top: 4px;">Add bots in Settings > AI Assistant > Messaging Channels > Manage</div>
                         </div>
-                        <div id="telegram-config" style="display: ${agent.channels?.telegram?.enabled ? 'block' : 'none'};">
-                            <input type="text" id="telegram-token" value="${agent.channels?.telegram?.botToken || ''}" 
-                                placeholder="Bot token from @BotFather (e.g., 123456789:ABC...)"
-                                style="width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 12px; font-family: monospace; box-sizing: border-box;">
-                            <p style="margin: 6px 0 0 0; font-size: 10px; color: #888;">
-                                Get a token: Message @BotFather on Telegram, send /newbot
-                            </p>
+                    ` : `
+                        <div id="channel-checkboxes" style="display: flex; flex-direction: column; gap: 8px;">
+                            ${savedChannels.map(ch => {
+                                const isChecked = (agent.tetheredChannels || []).includes(ch.id);
+                                const icon = ch.type === 'telegram' 
+                                    ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="#0088cc"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>`
+                                    : ch.type === 'discord'
+                                    ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="#5865F2"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152z"/></svg>`
+                                    : `<svg width="16" height="16" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382z"/></svg>`;
+                                
+                                return `
+                                    <label class="channel-checkbox" data-channel-id="${ch.id}" style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid ${isChecked ? '#3b82f6' : '#e5e7eb'}; border-radius: 8px; cursor: pointer; background: ${isChecked ? '#eff6ff' : '#fff'}; transition: all 0.15s;">
+                                        <input type="checkbox" class="tether-checkbox" value="${ch.id}" ${isChecked ? 'checked' : ''} style="width: 16px; height: 16px;">
+                                        ${icon}
+                                        <div style="flex: 1;">
+                                            <div style="font-size: 13px; font-weight: 500;">${ch.name}</div>
+                                            <div style="font-size: 10px; color: #888; text-transform: capitalize;">${ch.type}</div>
+                                        </div>
+                                    </label>
+                                `;
+                            }).join('')}
                         </div>
-                    </div>
-                    
-                    <!-- Discord (Coming Soon) -->
-                    <div style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; opacity: 0.5;">
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="#5865F2"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286z"/></svg>
-                            <div style="flex: 1;">
-                                <div style="font-size: 13px; font-weight: 500;">Discord Bot</div>
-                                <div style="font-size: 10px; color: #888;">Coming soon</div>
-                            </div>
-                        </div>
-                    </div>
+                    `}
                 </div>
                 
             </div>
@@ -380,12 +388,13 @@ Always cite sources for market data. Warn about risks clearly."
                 }
             });
             
-            // Telegram toggle
-            $win.find('#telegram-enabled').on('change', function() {
+            // Channel checkbox styling
+            $win.find('.tether-checkbox').on('change', function() {
+                const $label = $(this).closest('.channel-checkbox');
                 if ($(this).is(':checked')) {
-                    $win.find('#telegram-config').slideDown();
+                    $label.css({ border: '1px solid #3b82f6', background: '#eff6ff' });
                 } else {
-                    $win.find('#telegram-config').slideUp();
+                    $label.css({ border: '1px solid #e5e7eb', background: '#fff' });
                 }
             });
             
@@ -435,12 +444,9 @@ Always cite sources for market data. Warn about risks clearly."
                             perDay: parseInt($win.find('#rate-per-day').val()) || 100,
                         },
                     },
-                    channels: {
-                        telegram: {
-                            enabled: $win.find('#telegram-enabled').is(':checked'),
-                            botToken: $win.find('#telegram-token').val(),
-                        },
-                    },
+                    tetheredChannels: $win.find('.tether-checkbox:checked').map(function() {
+                        return $(this).val();
+                    }).get(),
                 };
                 
                 try {

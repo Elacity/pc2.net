@@ -115,6 +115,7 @@ export class GatewayService extends EventEmitter {
       enabled: false,
       port: 18789,
       channels: {},
+      savedChannels: [],
       agents: [{
         id: 'personal',
         name: 'Personal Assistant',
@@ -930,6 +931,112 @@ export class GatewayService extends EventEmitter {
     this.config.agents = this.config.agents.filter(a => a.id !== agentId);
     await this.saveConfig();
     logger.info(`[GatewayService] Agent ${agentId} deleted`);
+  }
+  
+  // ============================================
+  // Saved Channel Credentials Management
+  // ============================================
+  
+  /**
+   * Get all saved channels
+   */
+  getSavedChannels(): import('./types.js').SavedChannel[] {
+    return this.config.savedChannels || [];
+  }
+  
+  /**
+   * Get saved channels by type
+   */
+  getSavedChannelsByType(type: ChannelType): import('./types.js').SavedChannel[] {
+    return (this.config.savedChannels || []).filter(c => c.type === type);
+  }
+  
+  /**
+   * Get saved channel by ID
+   */
+  getSavedChannel(channelId: string): import('./types.js').SavedChannel | undefined {
+    return (this.config.savedChannels || []).find(c => c.id === channelId);
+  }
+  
+  /**
+   * Add or update a saved channel
+   */
+  async upsertSavedChannel(channel: import('./types.js').SavedChannel): Promise<void> {
+    if (!this.config.savedChannels) {
+      this.config.savedChannels = [];
+    }
+    
+    const index = this.config.savedChannels.findIndex(c => c.id === channel.id);
+    if (index >= 0) {
+      this.config.savedChannels[index] = channel;
+    } else {
+      this.config.savedChannels.push(channel);
+    }
+    
+    await this.saveConfig();
+    logger.info(`[GatewayService] Saved channel ${channel.id} (${channel.type}) upserted`);
+  }
+  
+  /**
+   * Delete a saved channel
+   */
+  async deleteSavedChannel(channelId: string): Promise<void> {
+    if (!this.config.savedChannels) return;
+    
+    // Also remove from any agents that reference this channel
+    if (this.config.agents) {
+      this.config.agents.forEach(agent => {
+        if (agent.tetheredChannels) {
+          agent.tetheredChannels = agent.tetheredChannels.filter(id => id !== channelId);
+        }
+      });
+    }
+    
+    this.config.savedChannels = this.config.savedChannels.filter(c => c.id !== channelId);
+    await this.saveConfig();
+    logger.info(`[GatewayService] Saved channel ${channelId} deleted`);
+  }
+  
+  /**
+   * Connect a saved channel (start the bot/connection)
+   */
+  async connectSavedChannel(channelId: string): Promise<{ success: boolean; error?: string }> {
+    const saved = this.getSavedChannel(channelId);
+    if (!saved) {
+      return { success: false, error: 'Saved channel not found' };
+    }
+    
+    try {
+      if (saved.type === 'telegram' && saved.telegram?.botToken) {
+        // Update channel config with the bot token first
+        await this.updateChannelConfig('telegram', {
+          enabled: true,
+          telegram: {
+            botToken: saved.telegram.botToken,
+            botUsername: saved.telegram.botUsername,
+          },
+        });
+        await this.connectChannel('telegram');
+        return { success: true };
+      } else if (saved.type === 'whatsapp') {
+        await this.updateChannelConfig('whatsapp', { enabled: true });
+        await this.connectChannel('whatsapp');
+        return { success: true };
+      } else if (saved.type === 'discord' && saved.discord?.botToken) {
+        await this.updateChannelConfig('discord', {
+          enabled: true,
+          discord: {
+            botToken: saved.discord.botToken,
+            botUsername: saved.discord.botUsername,
+          },
+        });
+        await this.connectChannel('discord');
+        return { success: true };
+      }
+      return { success: false, error: 'Channel type not supported yet' };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
   }
 }
 

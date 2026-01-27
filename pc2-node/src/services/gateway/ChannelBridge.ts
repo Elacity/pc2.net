@@ -422,11 +422,19 @@ export class ChannelBridge {
    */
   private getAgentIdForChannel(channel: ChannelType, senderId: string): string {
     const agents = this.gateway.getAgents();
+    const savedChannels = this.gateway.getSavedChannels();
     
-    // Find an agent configured for this channel
+    // Find saved channels of this type
+    const channelsOfType = savedChannels.filter(c => c.type === channel);
+    
+    // Find an agent tethered to any of these saved channels
     for (const agent of agents) {
-      if (agent.enabled && agent.channels?.includes(channel)) {
-        return agent.id;
+      if (agent.enabled && agent.tetheredChannels) {
+        for (const savedChannel of channelsOfType) {
+          if (agent.tetheredChannels.includes(savedChannel.id)) {
+            return agent.id;
+          }
+        }
       }
     }
     

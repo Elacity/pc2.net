@@ -101,14 +101,48 @@ export interface SignalConfig {
 }
 
 /**
+ * Saved channel credential (bot/account stored for reuse)
+ */
+export interface SavedChannel {
+  id: string;                 // Unique ID for this saved credential
+  type: ChannelType;          // telegram, discord, whatsapp, etc.
+  name: string;               // Display name (e.g., "@Flint2822_bot")
+  createdAt: string;          // ISO timestamp
+  
+  // Channel-specific credentials
+  telegram?: {
+    botToken: string;
+    botUsername?: string;
+  };
+  discord?: {
+    botToken: string;
+    botUsername?: string;
+    guildIds?: string[];
+  };
+  whatsapp?: {
+    phoneNumber?: string;
+    sessionId?: string;       // For reconnection
+  };
+}
+
+/**
  * Agent configuration for multi-agent support
  */
 export interface AgentConfig {
   id: string;
   name: string;
+  description?: string;
   enabled: boolean;
   workspace: string;        // Path to agent workspace
-  model?: string;           // Override default model
+  
+  // AI model settings
+  provider?: string;        // e.g., 'ollama', 'openai', 'claude'
+  model?: string;           // e.g., 'llama3.2', 'gpt-4o'
+  
+  // Personality
+  personality?: string;     // Preset ID: 'professional', 'friendly', etc.
+  customSoul?: string;      // Custom SOUL.md content
+  soulContent?: string;     // Resolved soul content for prompts
   
   // Permissions (toggles)
   permissions: AgentPermissions;
@@ -116,8 +150,8 @@ export interface AgentConfig {
   // Access control
   accessControl: AgentAccessControl;
   
-  // Channel routing
-  channels?: string[];      // Which channels route to this agent
+  // Tethered channels (references to SavedChannel IDs)
+  tetheredChannels?: string[];  // Array of SavedChannel IDs
 }
 
 /**
@@ -234,8 +268,11 @@ export interface GatewayConfig {
   enabled: boolean;
   port: number;             // Default 18789
   
-  // Channel configs
+  // Channel configs (runtime status)
   channels: Partial<Record<ChannelType, ChannelConfig>>;
+  
+  // Saved channel credentials (bots/accounts)
+  savedChannels: SavedChannel[];
   
   // Agent configs
   agents: AgentConfig[];
@@ -258,6 +295,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   enabled: false,
   port: 18789,
   channels: {},
+  savedChannels: [],
   agents: [{
     id: 'personal',
     name: 'Personal Assistant',

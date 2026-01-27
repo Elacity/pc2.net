@@ -1,330 +1,239 @@
 # PC2 Quick Start Guide
 
-**Get your sovereign cloud running in under 5 minutes.**
+> Your sovereign personal cloud in minutes.
+
+## Choose Your Path
+
+| Path | Time | Best For |
+|------|------|----------|
+| [Local Testing](#local-testing) | 2 min | Trying PC2 on your computer |
+| [VPS Deployment](#vps-deployment) | 15 min | Always-on cloud server |
+| [ARM Devices](#arm-devices) | 20 min | Raspberry Pi, Jetson Nano |
 
 ---
 
-## 🛑 CRITICAL: Run pc2-node, NOT main Puter
+## Local Testing
 
-The repository contains two servers:
-- **`pc2-node/`** = The PC2 standalone server - **USE THIS**
-- **Main Puter** (root) = Reference code only - **NEVER RUN**
-
----
-
-## 🚀 Option 1: From Source (Developers)
+**Perfect for:** Developers, curious users, quick evaluation
 
 ### Prerequisites
-- Node.js 20+ (23+ recommended)
-- npm or yarn
+- Node.js 20+ ([download](https://nodejs.org/))
 - Git
 
-### Steps
+### One-Liner Start
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/Elacity/pc2.net
-cd pc2.net
-
-# 2. Install pc2-node dependencies
-cd pc2-node
-npm install
-
-# 3. Build and start
-npm run build:backend
-npm run build:frontend
-npm start
+git clone https://github.com/Elacity/pc2.net.git && cd pc2.net && npm run start:local
 ```
 
-### Development Mode (with hot reload)
+### What Happens
+
+1. Dependencies install (first run only)
+2. PC2 builds (first run only)
+3. Server starts on `http://localhost:4200`
+
+### Next Steps
+
+1. Open `http://localhost:4200` in your browser
+2. Login with your wallet (MetaMask, WalletConnect, etc.)
+3. Start using your personal cloud!
+
+### Useful Commands
 
 ```bash
-cd pc2-node
-npm run dev
-```
+# Stop PC2
+Ctrl+C
 
-### Access
+# Restart
+npm run start:local
 
-Open your browser to: **http://localhost:4200**
-
-You should see the PC2 desktop. Click "Connect Wallet" to login!
-
----
-
-## 🐳 Option 2: Docker
-
-### Quick Run
-
-```bash
-# Create directories for persistent storage
-mkdir -p pc2/config pc2/data
-
-# Run PC2 container
-docker run -d \
-  --name pc2 \
-  -p 4202:4202 \
-  -v $(pwd)/pc2/config:/etc/pc2 \
-  -v $(pwd)/pc2/data:/var/pc2 \
-  ghcr.io/elacity/pc2:latest
-```
-
-### Docker Compose
-
-```yaml
-# docker-compose.yml
-version: '3.8'
-services:
-  pc2:
-    image: ghcr.io/elacity/pc2:latest
-    ports:
-      - "4202:4202"
-    volumes:
-      - ./pc2/config:/etc/pc2
-      - ./pc2/data:/var/pc2
-    restart: unless-stopped
-```
-
-Then run:
-```bash
-docker compose up -d
+# Development mode (hot reload)
+cd pc2-node && npm run dev
 ```
 
 ---
 
-## 🍓 Option 3: Raspberry Pi
+## VPS Deployment
 
-### Hardware Requirements
-- Raspberry Pi 4 (4GB) or Pi 5
-- 64GB+ microSD card
-- Power supply (3A recommended)
-- Ethernet cable (or WiFi)
+**Perfect for:** Always-on access, production use
 
-### Installation
+### Recommended VPS Providers
 
-1. **Download PC2 OS Image** (coming soon)
-   ```
-   https://pc2.net/downloads/pc2-raspberrypi.img.gz
-   ```
+| Provider | Price | RAM | Link |
+|----------|-------|-----|------|
+| Contabo | $5.99/mo | 4GB | [contabo.com](https://contabo.com) |
+| DigitalOcean | $6/mo | 1GB | [digitalocean.com](https://digitalocean.com) |
+| Vultr | $6/mo | 1GB | [vultr.com](https://vultr.com) |
+| Hetzner | €4.15/mo | 2GB | [hetzner.com](https://hetzner.com) |
 
-2. **Flash to SD Card**
-   - Use [Raspberry Pi Imager](https://www.raspberrypi.com/software/)
-   - Select "Use custom" and choose the PC2 image
-   - Flash to your SD card
+**Requirements:** Ubuntu 22.04, 2GB RAM, 20GB disk
 
-3. **Boot and Configure**
-   - Insert SD card into Pi
-   - Connect to network (Ethernet recommended)
-   - Plug in power
-   - Wait 2-3 minutes for first boot
-
-4. **Access Your Cloud**
-   - Open browser to `http://pc2.local` or check your router for the Pi's IP
-   - Connect your wallet
-   - Done!
-
----
-
-## ☁️ Option 4: VPS Deployment
-
-### Recommended Providers
-- DigitalOcean: $12/month (4GB RAM, 80GB SSD)
-- Linode: $12/month
-- Hetzner: €4.51/month (Europe)
-- Vultr: $12/month
-- Contabo: €5.99/month (great value)
-
-### Setup
+### Step 1: Connect to Your VPS
 
 ```bash
-# 1. Create VPS with Ubuntu 22.04
-
-# 2. SSH into your server
 ssh root@your-server-ip
-
-# 3. Install Node.js
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt-get install -y nodejs
-
-# 4. Clone and install PC2
-git clone https://github.com/Elacity/pc2.net
-cd pc2.net
-npm install
-
-# 5. Start with PM2 (for production)
-npm install -g pm2
-pm2 start npm --name pc2 -- start
-pm2 save
-pm2 startup
 ```
 
-### Configure HTTPS
-
-#### Option A: *.ela.city Subdomain (Easiest - Recommended!)
-
-Get instant HTTPS without any certificate setup:
+### Step 2: Install PC2 (Docker)
 
 ```bash
-# Register your node with the Super Node
-curl -X POST https://cloud.ela.city/api/gateway/register \
-  -H "Content-Type: application/json" \
-  -d '{"subdomain": "yourname", "endpoint": "http://YOUR_SERVER_IP:4200"}'
+curl -sSL https://raw.githubusercontent.com/Elacity/pc2.net/main/scripts/install-pc2.sh | bash
 ```
 
-Now access your node at: **https://yourname.ela.city** ✅
+### Step 3: Access Your PC2
 
-The Super Node handles SSL automatically with a wildcard certificate.
+Open in browser: `http://your-server-ip:4100`
 
-#### Option B: Custom Domain (Manual SSL)
+### Step 4: (Optional) Set Up Domain
+
+Register a username for `username.ela.city` access:
+
+1. Open Settings → PC2
+2. Enter a username
+3. Click "Register"
+
+Now accessible at: `https://username.ela.city`
+
+### Useful Commands
 
 ```bash
-# Install Caddy for HTTPS
-sudo apt install -y caddy
+# View logs
+cd ~/pc2 && docker compose logs -f
 
-# Configure reverse proxy
-echo 'your-domain.com {
-  reverse_proxy localhost:4202
-}' | sudo tee /etc/caddy/Caddyfile
+# Stop PC2
+docker compose down
 
-sudo systemctl reload caddy
+# Restart PC2
+docker compose restart
+
+# Update PC2
+docker compose pull && docker compose up -d
 ```
 
 ---
 
-## 🔑 Wallet Login Setup
+## ARM Devices
 
-PC2 uses Particle Network for wallet authentication.
+**Perfect for:** Raspberry Pi 4/5, Jetson Nano, home servers
 
-### Supported Wallets
-- MetaMask
-- WalletConnect
-- Coinbase Wallet
-- Social Login (Google, Twitter, Email)
+### Prerequisites
+
+- Raspberry Pi 4/5 (4GB+ RAM) or Jetson Nano
+- Raspberry Pi OS or Ubuntu 22.04
+- Internet connection
+
+### One-Liner Install
+
+```bash
+curl -sSL https://raw.githubusercontent.com/Elacity/pc2.net/main/scripts/install-arm.sh | bash
+```
+
+### What Gets Installed
+
+1. Node.js 20
+2. Build tools
+3. PC2 from source
+4. systemd service for auto-start
+
+### Access Your PC2
+
+```
+Local:   http://localhost:4200
+Network: http://192.168.x.x:4200  (shown after install)
+```
+
+### Enable Remote Access
+
+For access outside your home network:
+
+1. Open Settings → PC2
+2. Enable "Active Proxy"
+3. Register a username
+4. Access via `https://username.ela.city`
+
+### Useful Commands
+
+```bash
+# View logs
+sudo journalctl -u pc2 -f
+
+# Stop PC2
+sudo systemctl stop pc2
+
+# Start PC2
+sudo systemctl start pc2
+
+# Restart PC2
+sudo systemctl restart pc2
+
+# Check status
+sudo systemctl status pc2
+```
+
+---
+
+## After Setup
 
 ### First Login
 
-1. Click "Connect Wallet" on the login screen
-2. Choose your wallet type
-3. Approve the connection
-4. Sign the authentication message
-5. You're in!
+1. Click "Login with Wallet"
+2. Connect MetaMask, WalletConnect, or 50+ other methods
+3. You're now the **owner** of this PC2 node
 
-Your session persists across page refreshes and devices.
+### Explore Features
 
----
+- **Files:** Upload, organize, and access your files
+- **AI Assistant:** Chat with AI (Settings → AI to configure)
+- **Apps:** Run web apps in your personal cloud
+- **Settings:** Customize your experience
 
-## 🧪 Testing Your Installation
+### Get Help
 
-### Checklist
-
-- [ ] **Desktop loads** - You see the PC2 desktop UI
-- [ ] **Wallet login works** - Can connect and authenticate
-- [ ] **Files persist** - Upload a file, refresh, file is still there
-- [ ] **Apps work** - Open File Manager, Text Editor, Image Viewer
-- [ ] **Real-time updates** - Delete a file, it disappears immediately
-
-### WASM Demo (Proof of Private Computation)
-
-1. Open the Calculator app from the desktop
-2. Perform a calculation (e.g., 5 + 3)
-3. Check the server terminal - you'll see the calculation happening on YOUR node!
-
-This proves that computation runs on YOUR hardware, not in the browser or cloud.
+- **GitHub:** [github.com/Elacity/pc2.net/issues](https://github.com/Elacity/pc2.net/issues)
+- **Documentation:** [docs.ela.city](https://docs.ela.city)
 
 ---
 
-## ⚙️ Configuration
+## Troubleshooting
 
-### Config File Location
-
-Development: `volatile/config/config.json`
-
-### Basic Configuration
-
-```json
-{
-  "env": "dev",
-  "http_port": 4202,
-  "domain": "localhost",
-  "pc2_enabled": true
-}
-```
-
-### Common Settings
-
-| Setting | Description | Default |
-|---------|-------------|---------|
-| `http_port` | Server port | `auto` (4100) |
-| `domain` | Domain name | `puter.localhost` |
-| `env` | Environment | `dev` |
-| `pc2_enabled` | Enable PC2 extensions | `false` |
-
----
-
-## 🆘 Troubleshooting
-
-### "Cannot connect to server"
+### "Port 4200 already in use"
 
 ```bash
-# Check if server is running
-lsof -i :4202
-
-# Restart server
-npm start
+# Find and kill the process
+lsof -ti:4200 | xargs kill -9
 ```
 
-### "Wallet login fails"
+### "Node.js version too old"
 
-1. Ensure Particle Auth is built: `npm run build:particle-auth`
-2. Check browser console for errors
-3. Try a different wallet (MetaMask recommended)
+```bash
+# Install Node.js 20
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo bash -
+sudo apt-get install -y nodejs
+```
 
-### "Files not persisting"
+### "Build failed"
 
-1. Check SQLite database exists: `ls volatile/runtime/`
-2. Verify user directory: `ls volatile/runtime/users/`
-3. Check server logs for errors
+```bash
+# Clean and rebuild
+cd pc2-node
+npm run clean
+npm run build
+```
 
-### "WASM apps not working"
+### "Can't access from other devices"
 
-1. Ensure WASM files exist: `ls pc2-node/test-fresh-install/data/wasm-apps/`
-2. Check server logs for WASM errors
-3. Verify Node.js version: `node --version` (need 20+)
-
----
-
-## 📞 Support
-
-- **Issues:** [github.com/Elacity/pc2.net/issues](https://github.com/Elacity/pc2.net/issues)
-- **Docs:** [github.com/Elacity/pc2.net/docs](https://github.com/Elacity/pc2.net/tree/main/docs)
-- **Community:** Elastos Discord / Telegram
+1. Check firewall: `sudo ufw allow 4200`
+2. Use your local IP, not `localhost`
+3. For remote access, enable Active Proxy in Settings
 
 ---
 
-## 🔄 Keeping Your Node Updated
+## Updates
 
-PC2 includes a macOS-style auto-update system:
+PC2 checks for updates automatically. When available:
 
-1. **Automatic Check** - Your node checks for updates every 6 hours
-2. **Toast Notification** - When an update is available, you'll see a notification
-3. **One-Click Install** - Click "Update Now" to start the update
-4. **Progress UI** - Watch the progress: Downloading → Installing → Building → Restarting
-5. **Auto-Refresh** - The page refreshes automatically when the update is complete
+1. Go to Settings → About
+2. Click "Install Update"
+3. PC2 restarts with new version
 
-You can also check for updates manually in **Settings → About**.
-
----
-
-## 🎯 Next Steps
-
-After installation:
-
-1. **Explore the desktop** - Try all the built-in apps
-2. **Upload files** - Test IPFS storage
-3. **Try the WASM Calculator** - See private computation in action
-4. **Check AI Chat** - If you have Ollama running locally
-5. **Backup your data** - Go to Settings → PC2 → Create Backup
-6. **Check for updates** - Go to Settings → About to see version info
-
----
-
-**Welcome to your sovereign cloud!** 🏠☁️
+Your data is **always safe** during updates.

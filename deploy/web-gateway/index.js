@@ -24,10 +24,114 @@ const CONFIG = {
   domain: "ela.city",
   dataDir: "./data",
   registryFile: "./data/registry.json",
+  // Security settings
+  enableHttpsRedirect: true,
+  rateLimits: {
+    register: { windowMs: 60000, max: 5 },   // 5 registrations per minute per IP
+    api: { windowMs: 60000, max: 100 },       // 100 API calls per minute per IP
+    proxy: { windowMs: 60000, max: 500 },     // 500 proxy requests per minute per IP
+  },
+  allowedOrigins: [
+    /^https?:\/\/.*\.ela\.city$/,
+    /^https?:\/\/localhost(:\d+)?$/,
+    /^https?:\/\/127\.0\.0\.1(:\d+)?$/,
+  ],
 };
 
 // In-memory registry with file persistence
 const registry = new Map();
+
+// Rate limiting store
+const rateLimitStore = new Map();
+
+/**
+ * Rate limiter middleware
+ * @param {string} key - Unique key for this rate limit (e.g., 'register', 'api')
+ * @param {string} ip - Client IP address
+ * @returns {boolean} - true if allowed, false if rate limited
+ */
+function checkRateLimit(key, ip) {
+  const config = CONFIG.rateLimits[key] || CONFIG.rateLimits.api;
+  const now = Date.now();
+  const storeKey = `${key}:${ip}`;
+  
+  let entry = rateLimitStore.get(storeKey);
+  
+  if (!entry || now - entry.windowStart > config.windowMs) {
+    // New window
+    entry = { windowStart: now, count: 1 };
+    rateLimitStore.set(storeKey, entry);
+    return true;
+  }
+  
+  entry.count++;
+  
+  if (entry.count > config.max) {
+    return false;
+  }
+  
+  return true;
+}
+
+/**
+ * Get client IP from request
+ */
+function getClientIP(req) {
+  return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 
+         req.headers['x-real-ip'] || 
+         req.socket?.remoteAddress || 
+         'unknown';
+}
+
+/**
+ * Add security headers to response
+ */
+function addSecurityHeaders(res) {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  // HSTS for HTTPS connections
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+}
+
+/**
+ * Check if origin is allowed for CORS
+ */
+function isOriginAllowed(origin) {
+  if (!origin) return true; // Same-origin requests
+  return CONFIG.allowedOrigins.some(pattern => pattern.test(origin));
+}
+
+/**
+ * Set CORS headers based on origin
+ */
+function setCorsHeaders(req, res) {
+  const origin = req.headers.origin;
+  
+  if (origin && isOriginAllowed(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  } else if (!origin) {
+    // Same-origin or no origin (e.g., curl)
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+  
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  res.setHeader('Access-Control-Max-Age', '86400');
+}
+
+// Clean up old rate limit entries every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of rateLimitStore) {
+    const config = CONFIG.rateLimits.api; // Use default window
+    if (now - entry.windowStart > config.windowMs * 2) {
+      rateLimitStore.delete(key);
+    }
+  }
+}, 5 * 60 * 1000);
 
 // Active Proxy connection pool (for proxy:// endpoints)
 const proxyConnections = new Map();
@@ -525,10 +629,22 @@ function extractUsername(hostname) {
 async function handleRequest(req, res) {
   const hostname = req.headers.host?.split(":")[0];
   const username = extractUsername(hostname);
+  const clientIP = getClientIP(req);
 
   // API routes (main domain only)
   if (!username || hostname === CONFIG.domain || hostname === `www.${CONFIG.domain}`) {
     return handleApiRequest(req, res);
+  }
+
+  // Rate limiting for proxy requests
+  if (!checkRateLimit('proxy', clientIP)) {
+    res.writeHead(429, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ 
+      error: "Too Many Requests", 
+      message: "Rate limit exceeded. Please slow down.",
+      retryAfter: 60
+    }));
+    return;
   }
 
   // Look up user in registry
@@ -610,15 +726,28 @@ async function handleRequest(req, res) {
 // API request handler
 function handleApiRequest(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
+  const clientIP = getClientIP(req);
 
-  // CORS headers for API
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  // Add security headers
+  addSecurityHeaders(res);
+  
+  // CORS headers
+  setCorsHeaders(req, res);
 
   if (req.method === "OPTIONS") {
     res.writeHead(204);
     res.end();
+    return;
+  }
+  
+  // Rate limiting for API
+  if (!checkRateLimit('api', clientIP)) {
+    res.writeHead(429, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ 
+      error: "Too Many Requests", 
+      message: "Rate limit exceeded. Please try again later.",
+      retryAfter: 60
+    }));
     return;
   }
 
@@ -672,6 +801,17 @@ function handleApiRequest(req, res) {
 
   // Register user
   if (url.pathname === "/api/register" && req.method === "POST") {
+    // Stricter rate limiting for registration
+    if (!checkRateLimit('register', clientIP)) {
+      res.writeHead(429, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ 
+        error: "Too Many Requests", 
+        message: "Registration rate limit exceeded. Please try again in a minute.",
+        retryAfter: 60
+      }));
+      return;
+    }
+    
     let body = "";
     req.on("data", (chunk) => (body += chunk));
     req.on("end", () => {
@@ -785,17 +925,50 @@ function loadSSL() {
 // Start servers
 loadRegistry();
 
-// HTTP server (redirect to HTTPS in production)
-const httpServer = http.createServer(handleRequest);
-httpServer.on("upgrade", handleUpgrade);
+// Load SSL first to know if we should redirect
+const sslOptions = loadSSL();
+const httpsAvailable = !!sslOptions;
+
+// HTTP server - redirect to HTTPS if available, otherwise serve directly
+const httpServer = http.createServer((req, res) => {
+  // Always add security headers
+  addSecurityHeaders(res);
+  
+  // Redirect to HTTPS if SSL is available and redirect is enabled
+  if (httpsAvailable && CONFIG.enableHttpsRedirect) {
+    const host = req.headers.host?.split(':')[0] || CONFIG.domain;
+    const redirectUrl = `https://${host}${req.url}`;
+    
+    res.writeHead(301, {
+      'Location': redirectUrl,
+      'Cache-Control': 'no-cache',
+    });
+    res.end(`Redirecting to ${redirectUrl}`);
+    return;
+  }
+  
+  // No HTTPS, serve directly
+  handleRequest(req, res);
+});
+
+httpServer.on("upgrade", (req, socket, head) => {
+  // For WebSocket, we can't redirect, so handle directly
+  handleUpgrade(req, socket, head);
+});
+
 httpServer.listen(CONFIG.httpPort, () => {
   console.log(`[Gateway] HTTP server listening on port ${CONFIG.httpPort}`);
+  if (httpsAvailable && CONFIG.enableHttpsRedirect) {
+    console.log(`[Gateway] HTTP requests will redirect to HTTPS`);
+  }
 });
 
 // HTTPS server
-const sslOptions = loadSSL();
-if (sslOptions) {
-  const httpsServer = https.createServer(sslOptions, handleRequest);
+if (httpsAvailable) {
+  const httpsServer = https.createServer(sslOptions, (req, res) => {
+    addSecurityHeaders(res);
+    handleRequest(req, res);
+  });
   httpsServer.on("upgrade", handleUpgrade);
   httpsServer.listen(CONFIG.httpsPort, () => {
     console.log(`[Gateway] HTTPS server listening on port ${CONFIG.httpsPort}`);
@@ -806,3 +979,4 @@ if (sslOptions) {
 
 console.log(`[Gateway] PC2 Web Gateway started for *.${CONFIG.domain}`);
 console.log(`[Gateway] Proxy endpoint support: http://, proxy://`);
+console.log(`[Gateway] Security: Rate limiting enabled, CORS restricted to *.ela.city`);

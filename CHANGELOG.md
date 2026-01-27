@@ -28,10 +28,21 @@
 - **Persistence Layer**: SQLite-backed file metadata
 
 #### AI Integration
-- **Local AI via Ollama**: Connect to local AI models
-- **Cloud AI Providers**: OpenAI, Claude, Groq, Mistral, and more
+- **Local AI via Ollama**: Connect to local AI models (default, sovereign)
+- **Cloud AI Providers**: Claude API supported (OpenAI, Gemini, xAI coming soon)
 - **AI Filesystem Tools**: AI can read, write, and manage files
 - **WebSocket Broadcasting**: Real-time AI events across sessions
+
+#### AI Agents (Clawdbot Integration)
+- **Per-Agent Memory**: Each agent has isolated MEMORY.md for persistent knowledge
+- **Agent Editor**: Full configuration UI with identity, permissions, response mode
+- **Agent Selector**: Quick-switch agents from AI chat panel
+- **Custom SOUL.md**: Define agent personality and custom instructions
+- **Thinking Levels**: Fast/Balanced/Deep modes (maps to temperature)
+- **Agent Permissions**: Granular control (file read/write, wallet access)
+- **Memory Editor**: View and edit agent memory directly in settings
+- **Delete Agent**: Remove agents with confirmation dialog
+- **Path Traversal Protection**: Security hardening for agent IDs
 
 #### Backup & Restore
 - **One-click Backup**: Export your entire node to a zip file
@@ -49,16 +60,24 @@
 - SQLite for local persistence
 - Socket.io for real-time communication
 
+### 🔒 Security
+- **Wallet-scoped isolation**: Each wallet address has separate storage
+- **Agent path traversal protection**: Agent IDs sanitized at API and storage layers
+- **Session token validation**: Proper expiration and refresh handling
+- **Local-first by default**: All data stays on your node (Ollama, SQLite, IPFS)
+
 ### 🐛 Known Issues
 - Preamble worker build warning (non-critical)
 - Some filesystem provider errors under WASM branch (non-critical)
 - WASI file I/O still in progress
 
 ### 🔜 Coming Next
-- Docker image
-- Raspberry Pi image
+- Docker image for easy deployment
+- Raspberry Pi / Jetson Nano images
 - SSL/TLS auto-configuration
-- DApp marketplace integration
+- OpenAI, Gemini, xAI provider support
+- Agent-to-agent communication
+- WhatsApp/Telegram channel integration
 - dDRM (decentralized Digital Rights Management)
 
 ---

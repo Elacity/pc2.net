@@ -642,10 +642,13 @@ You are **PC2 Guide**, a knowledgeable assistant for PC2 (Personal Cloud Compute
                         }
                     }
                     
+                    const isNewAgent = !agentId || agentId === 'new';
+                    const generatedId = isNewAgent ? name.toLowerCase().replace(/[^a-z0-9]/g, '-') : agentId;
                     const newAgent = {
-                        id: agentId && agentId !== 'new' ? agentId : name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+                        id: generatedId,
                         name,
                         description: $win.find('#agent-description').val(),
+                        workspace: `~/pc2/agents/${generatedId}`, // Required by backend
                         identity: {
                             displayName: name,
                             imageUrl: selectedImageUrl,
@@ -674,9 +677,10 @@ You are **PC2 Guide**, a knowledgeable assistant for PC2 (Personal Cloud Compute
                         tetheredChannels,
                     };
                     
+                    // Use POST for new agents, PUT for updates
                     await $.ajax({
-                        url: `/api/gateway/agents/${newAgent.id}`,
-                        method: 'PUT',
+                        url: isNewAgent ? '/api/gateway/agents' : `/api/gateway/agents/${newAgent.id}`,
+                        method: isNewAgent ? 'POST' : 'PUT',
                         headers: { 'Authorization': `Bearer ${window.auth_token}` },
                         contentType: 'application/json',
                         data: JSON.stringify(newAgent)

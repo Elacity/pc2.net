@@ -5,6 +5,7 @@ import { logger } from './utils/logger.js';
 import { AIChatService } from './services/ai/AIChatService.js';
 import { BosonService } from './services/boson/index.js';
 import { getGatewayService, createChannelBridge } from './services/gateway/index.js';
+import { getNodeConfig } from './api/setup.js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -118,12 +119,21 @@ async function main() {
     
     // Connect the channel bridge if AI service is available
     if (aiService) {
+      // Get owner wallet from node config (set during first auth)
+      const nodeConfig = getNodeConfig();
+      const ownerWallet = nodeConfig.ownerWallet || config.owner.wallet_address || undefined;
+      
       const channelBridge = createChannelBridge(aiService, { 
         db, 
         filesystem: filesystem || undefined,
-        ownerWalletAddress: config.owner.wallet_address || undefined,
+        ownerWalletAddress: ownerWallet,
       });
-      logger.info('📡 Gateway service initialized with AI bridge');
+      
+      if (ownerWallet) {
+        logger.info(`📡 Gateway service initialized with AI bridge (owner: ${ownerWallet.substring(0, 10)}...)`);
+      } else {
+        logger.warn('📡 Gateway service initialized with AI bridge (no owner wallet - AI providers may not load)');
+      }
     } else {
       logger.info('📡 Gateway service initialized (no AI bridge - AI service unavailable)');
     }

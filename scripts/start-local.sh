@@ -178,26 +178,26 @@ main() {
     echo -e "${CYAN}Setting up PC2...${NC}"
     cd "$PC2_DIR"
     
-    # Install dependencies for pc2-node
-    echo -e "${CYAN}Installing backend dependencies...${NC}"
-    if ! npm install 2>&1; then
-        echo -e "${RED}❌ Failed to install backend dependencies${NC}"
-        exit 1
-    fi
-    echo -e "${GREEN}✓ Backend dependencies installed${NC}"
-    
-    # Install dependencies for frontend (src/gui)
+    # Install dependencies for frontend (src/gui) FIRST
     echo -e "${CYAN}Installing frontend dependencies...${NC}"
     GUI_DIR="$(dirname "$PC2_DIR")/src/gui"
     if [[ -d "$GUI_DIR" ]]; then
         cd "$GUI_DIR"
-        if ! npm install 2>&1; then
+        if ! npm install --legacy-peer-deps 2>&1; then
             echo -e "${RED}❌ Failed to install frontend dependencies${NC}"
             exit 1
         fi
         cd "$PC2_DIR"
     fi
     echo -e "${GREEN}✓ Frontend dependencies installed${NC}"
+    
+    # Install dependencies for pc2-node
+    echo -e "${CYAN}Installing backend dependencies...${NC}"
+    if ! npm install --legacy-peer-deps 2>&1; then
+        echo -e "${RED}❌ Failed to install backend dependencies${NC}"
+        exit 1
+    fi
+    echo -e "${GREEN}✓ Backend dependencies installed${NC}"
     
     # Build
     echo -e "${CYAN}Building PC2...${NC}"

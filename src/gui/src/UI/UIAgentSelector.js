@@ -28,6 +28,18 @@ async function UIAgentSelector(options = {}) {
     // Build agent list HTML
     const currentAgentId = window.selectedAgentId || null;
     
+    // Default robot icon SVG for agents without images
+    const defaultAgentIcon = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="3"/><line x1="12" y1="8" x2="12" y2="11"/><circle cx="8" cy="16" r="1" fill="#6b7280"/><circle cx="16" cy="16" r="1" fill="#6b7280"/></svg>';
+    const defaultAssistantIcon = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>';
+    
+    // Helper to render agent image or fallback icon
+    const renderAgentIcon = (imageUrl, isDefault = false) => {
+        if (imageUrl) {
+            return `<div style="width: 32px; height: 32px; background: url('${imageUrl}') center/cover; border-radius: 8px;"></div>`;
+        }
+        return `<div style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; background: #f3f4f6; border-radius: 8px;">${isDefault ? defaultAssistantIcon : defaultAgentIcon}</div>`;
+    };
+    
     let contentHtml = `
         <div class="agent-selector" style="padding: 12px; min-width: 220px;">
             <div style="font-size: 12px; font-weight: 600; color: #374151; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #e5e7eb;">
@@ -37,7 +49,7 @@ async function UIAgentSelector(options = {}) {
             <!-- No Agent Option -->
             <div class="agent-option ${!currentAgentId ? 'selected' : ''}" data-agent-id="" 
                 style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; cursor: pointer; transition: background 0.15s; ${!currentAgentId ? 'background: #eff6ff; border: 1px solid #3b82f6;' : 'border: 1px solid transparent;'}">
-                <div style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; background: #f3f4f6; border-radius: 8px; font-size: 18px;">✨</div>
+                ${renderAgentIcon(null, true)}
                 <div style="flex: 1;">
                     <div style="font-size: 13px; font-weight: 500; color: #374151;">Default Assistant</div>
                     <div style="font-size: 10px; color: #888;">No specific agent</div>
@@ -49,14 +61,14 @@ async function UIAgentSelector(options = {}) {
                 
                 ${agents.map(agent => {
                     const isSelected = currentAgentId === agent.id;
-                    const emoji = agent.identity?.emoji || '🤖';
+                    const imageUrl = agent.identity?.imageUrl || '';
                     const displayName = agent.identity?.displayName || agent.name;
                     const desc = agent.description || 'Custom agent';
                     
                     return `
-                        <div class="agent-option ${isSelected ? 'selected' : ''}" data-agent-id="${agent.id}"
+                        <div class="agent-option ${isSelected ? 'selected' : ''}" data-agent-id="${agent.id}" data-image-url="${imageUrl}"
                             style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; cursor: pointer; transition: background 0.15s; margin-top: 4px; ${isSelected ? 'background: #eff6ff; border: 1px solid #3b82f6;' : 'border: 1px solid transparent;'}">
-                            <div style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; background: #f3f4f6; border-radius: 8px; font-size: 18px;">${emoji}</div>
+                            <div class="agent-icon-container" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; background: #f3f4f6; border-radius: 8px;">${defaultAgentIcon}</div>
                             <div style="flex: 1; min-width: 0;">
                                 <div style="font-size: 13px; font-weight: 500; color: #374151; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${displayName}</div>
                                 <div style="font-size: 10px; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${desc}</div>
@@ -83,6 +95,25 @@ async function UIAgentSelector(options = {}) {
         center_horizontally: true,
     });
     
+    // Load agent images with signed URLs
+    $(popover).find('.agent-option[data-image-url]').each(async function() {
+        const $option = $(this);
+        const imageUrl = $option.data('image-url');
+        if (imageUrl && typeof puter !== 'undefined' && puter.fs && puter.fs.sign) {
+            try {
+                const signedUrl = await puter.fs.sign(imageUrl, { expiry: 3600 });
+                if (signedUrl) {
+                    $option.find('.agent-icon-container').css({
+                        'background': `url('${signedUrl}') center/cover`,
+                        'background-size': 'cover'
+                    }).html('');
+                }
+            } catch (err) {
+                console.warn('[AgentSelector] Could not sign image URL:', imageUrl, err);
+            }
+        }
+    });
+    
     // Handle agent selection
     $(popover).on('click', '.agent-option', function() {
         const agentId = $(this).data('agent-id') || null;
@@ -100,17 +131,13 @@ async function UIAgentSelector(options = {}) {
             'border': '1px solid #3b82f6'
         });
         
-        // Update taskbar icon to show selected agent
-        const selectedAgent = agents.find(a => a.id === agentId);
-        const emoji = selectedAgent?.identity?.emoji || (agentId ? '🤖' : '✨');
-        $('.taskbar-item[data-app="agent-selector"] .taskbar-icon img').attr('alt', emoji);
-        
         // Notify AI Chat if open
         if (window.updateAIChatAgent) {
             window.updateAIChatAgent(agentId);
         }
         
         // Callback
+        const selectedAgent = agents.find(a => a.id === agentId);
         if (onSelect) {
             onSelect(agentId, selectedAgent);
         }

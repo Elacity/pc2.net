@@ -29,7 +29,7 @@ const UIAgentEditor = async function(options = {}) {
         workspace: '~/pc2/agents/default',
         identity: {
             displayName: '',
-            emoji: '🤖',
+            imageUrl: '',
         },
         thinkingLevel: 'fast', // fast, balanced, deep - maps to temperature
         permissions: {
@@ -137,20 +137,18 @@ const UIAgentEditor = async function(options = {}) {
                 <div class="editor-section" style="margin-bottom: 24px;">
                     <h3 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600; color: #374151;">Agent Identity</h3>
                     <div style="display: grid; gap: 12px;">
-                        <!-- Emoji and Name Row -->
+                        <!-- Image and Name Row -->
                         <div style="display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: end;">
                             <div>
-                                <label style="display: block; font-size: 12px; font-weight: 500; margin-bottom: 4px; color: #555;">Emoji</label>
-                                <div id="emoji-picker-container" style="position: relative;">
-                                    <button type="button" id="emoji-btn" style="width: 48px; height: 42px; padding: 0; border: 1px solid #d1d5db; border-radius: 6px; font-size: 24px; cursor: pointer; background: #fff; display: flex; align-items: center; justify-content: center;">${agent.identity?.emoji || '🤖'}</button>
-                                    <div id="emoji-dropdown" style="display: none; position: absolute; top: 100%; left: 0; z-index: 1000; background: #fff; border: 1px solid #d1d5db; border-radius: 8px; padding: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin-top: 4px;">
-                                        <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px;">
-                                            ${['🤖', '💬', '🧠', '💡', '🔧', '💼', '🎯', '📊', '🚀', '⭐', '🔮', '🎨', '📚', '🛡️', '🌟', '🦾', '👾', '🤝'].map(e => 
-                                                `<button type="button" class="emoji-option" data-emoji="${e}" style="width: 32px; height: 32px; padding: 0; border: none; background: none; font-size: 20px; cursor: pointer; border-radius: 4px; transition: background 0.15s;" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background='none'">${e}</button>`
-                                            ).join('')}
-                                        </div>
-                                    </div>
+                                <label style="display: block; font-size: 12px; font-weight: 500; margin-bottom: 4px; color: #555;">Image</label>
+                                <div id="agent-image-picker-wrapper" 
+                                    style="width: 36px; height: 36px; border: 2px dashed #d1d5db; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; background-color: #f9fafb; background-size: cover; background-position: center; transition: border-color 0.15s;"
+                                    title="Click to select image">
+                                    <span id="agent-image-icon" style="${agent.identity?.imageUrl ? 'display:none;' : ''}">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                                    </span>
                                 </div>
+                                <input type="hidden" id="agent-image-url" value="${agent.identity?.imageUrl || ''}">
                             </div>
                             <div>
                                 <label style="display: block; font-size: 12px; font-weight: 500; margin-bottom: 4px; color: #555;">Agent Name *</label>
@@ -196,16 +194,15 @@ const UIAgentEditor = async function(options = {}) {
                         ${['fast', 'balanced', 'deep'].map(level => {
                             const isSelected = (agent.thinkingLevel || 'fast') === level;
                             const config = {
-                                fast: { name: 'Fast', desc: 'Quick & efficient', icon: '⚡', color: '#10b981' },
-                                balanced: { name: 'Balanced', desc: 'Default reasoning', icon: '⚖️', color: '#3b82f6' },
-                                deep: { name: 'Deep', desc: 'Thorough analysis', icon: '🧠', color: '#8b5cf6' },
+                                fast: { name: 'Fast', desc: 'Quick & efficient', color: '#10b981' },
+                                balanced: { name: 'Balanced', desc: 'Default reasoning', color: '#3b82f6' },
+                                deep: { name: 'Deep', desc: 'Thorough analysis', color: '#8b5cf6' },
                             }[level];
                             return `
                             <div class="thinking-option ${isSelected ? 'selected' : ''}" data-level="${level}"
                                 style="padding: 12px 8px; border: 2px solid ${isSelected ? config.color : '#e5e7eb'}; border-radius: 8px; cursor: pointer; text-align: center; transition: all 0.15s; background: ${isSelected ? config.color + '10' : '#fff'};">
-                                <div style="font-size: 20px; margin-bottom: 4px;">${config.icon}</div>
-                                <div style="font-weight: 600; font-size: 12px; color: #374151;">${config.name}</div>
-                                <div style="font-size: 10px; color: #888; margin-top: 2px;">${config.desc}</div>
+                                <div style="font-weight: 600; font-size: 13px; color: #374151; margin-bottom: 2px;">${config.name}</div>
+                                <div style="font-size: 11px; color: #888;">${config.desc}</div>
                             </div>`;
                         }).join('')}
                     </div>
@@ -410,7 +407,35 @@ You are **PC2 Guide**, a knowledgeable assistant for PC2 (Personal Cloud Compute
             // Handle legacy 'custom' personality - default to 'friendly'
             let selectedPersonality = agent.personality === 'custom' ? 'friendly' : (agent.personality || 'friendly');
             let selectedThinkingLevel = agent.thinkingLevel || 'fast';
-            let selectedEmoji = agent.identity?.emoji || '🤖';
+            let selectedImageUrl = agent.identity?.imageUrl || '';
+            
+            // Load existing image if present
+            if (selectedImageUrl) {
+                const $imagePicker = $win.find('#agent-image-picker-wrapper');
+                const userRoot = window.user?.username || window.user?.wallet_address || '';
+                let imagePath = selectedImageUrl;
+                if (imagePath.startsWith('~')) imagePath = imagePath.replace('~', '/' + userRoot);
+                
+                (async function() {
+                    try {
+                        const signed = await puter.fs.sign(undefined, { path: imagePath, action: 'read' });
+                        let signed_url = null;
+                        if (signed && signed.items && signed.items.read_url) signed_url = signed.items.read_url;
+                        else if (signed && signed.items && signed.items[0] && signed.items[0].read_url) signed_url = signed.items[0].read_url;
+                        
+                        if (signed_url) {
+                            $imagePicker.css({
+                                'background-image': 'url("' + signed_url + '")',
+                                'background-size': 'cover',
+                                'background-position': 'center'
+                            });
+                            $imagePicker.find('#agent-image-icon').hide();
+                        }
+                    } catch (err) {
+                        console.warn('[AgentEditor] Failed to load existing image:', err);
+                    }
+                })();
+            }
             
             // Helper to close window
             function closeWindow() {
@@ -444,24 +469,85 @@ You are **PC2 Guide**, a knowledgeable assistant for PC2 (Personal Cloud Compute
                 });
             });
             
-            // Emoji picker toggle
-            $win.find('#emoji-btn').on('click', function(e) {
+            // Agent image picker - opens PC2 file browser (same pattern as profile picture)
+            const $imagePicker = $win.find('#agent-image-picker-wrapper');
+            
+            $imagePicker.on('click', function(e) {
+                e.preventDefault();
                 e.stopPropagation();
-                const $dropdown = $win.find('#emoji-dropdown');
-                $dropdown.toggle();
+                
+                const userRoot = window.user?.username || window.user?.wallet_address || '';
+                
+                // Open PC2 file browser
+                UIWindow({
+                    path: '/' + userRoot + '/Desktop',
+                    parent_uuid: $win.attr('data-element_uuid'),
+                    allowed_file_types: ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', 'image/*'],
+                    show_maximize_button: false,
+                    show_minimize_button: false,
+                    title: 'Select Agent Image',
+                    is_dir: true,
+                    is_openFileDialog: true,
+                    selectable_body: false,
+                });
             });
             
-            // Emoji selection
-            $win.find('.emoji-option').on('click', function() {
-                selectedEmoji = $(this).data('emoji');
-                $win.find('#emoji-btn').text(selectedEmoji);
-                $win.find('#emoji-dropdown').hide();
-            });
-            
-            // Close emoji dropdown when clicking outside
-            $(document).on('click.emojiDropdown', function() {
-                $win.find('#emoji-dropdown').hide();
-            });
+            // Handle file selection (same pattern as profile picture in UITabAccount.js)
+            const windowElement = $win.get(0);
+            if (windowElement) {
+                windowElement.addEventListener('file_opened', async function(e) {
+                    const selected_file = Array.isArray(e.detail) ? e.detail[0] : e.detail;
+                    if (!selected_file || !selected_file.path) return;
+                    
+                    const userRoot = window.user?.username || window.user?.wallet_address || '';
+                    let signed_url = selected_file.read_url || selected_file.readURL || selected_file.url;
+                    
+                    // Try to sign the file if no URL
+                    if (!signed_url && selected_file.path) {
+                        try {
+                            let filePath = selected_file.path;
+                            if (filePath.startsWith('~')) filePath = filePath.replace('~', '/' + userRoot);
+                            const signed = await puter.fs.sign(undefined, { path: filePath, action: 'read' });
+                            if (signed && signed.items && signed.items.read_url) signed_url = signed.items.read_url;
+                            else if (signed && signed.items && signed.items[0] && signed.items[0].read_url) signed_url = signed.items[0].read_url;
+                        } catch (err) {
+                            console.warn('[AgentEditor] Sign failed:', err);
+                        }
+                    }
+                    
+                    if (signed_url) {
+                        const imagePath = selected_file.path;
+                        const publicFolder = '/' + userRoot + '/Public';
+                        const fileName = imagePath.split('/').pop();
+                        const targetFileName = 'agent-image-' + Date.now() + '-' + fileName;
+                        
+                        let sourcePath = imagePath;
+                        if (sourcePath.startsWith('~')) sourcePath = sourcePath.replace('~', '/' + userRoot);
+                        
+                        let savedPath = imagePath;
+                        try {
+                            try { await puter.fs.mkdir(publicFolder); } catch (mkdirErr) { /* may exist */ }
+                            const copyResult = await puter.fs.copy(sourcePath, publicFolder, { newName: targetFileName, overwrite: true });
+                            savedPath = publicFolder + '/' + targetFileName;
+                            if (copyResult && copyResult[0] && copyResult[0].copied && copyResult[0].copied.path) {
+                                savedPath = copyResult[0].copied.path;
+                            }
+                        } catch (copyErr) {
+                            console.warn('[AgentEditor] Copy failed, using original path:', copyErr);
+                        }
+                        
+                        // Update UI
+                        $imagePicker.css({
+                            'background-image': 'url("' + signed_url + '")',
+                            'background-size': 'cover',
+                            'background-position': 'center'
+                        });
+                        $imagePicker.find('#agent-image-icon').hide();
+                        $win.find('#agent-image-url').val(savedPath);
+                        selectedImageUrl = savedPath;
+                    }
+                });
+            }
             
             // Thinking level selection
             $win.find('.thinking-option').on('click', function() {
@@ -562,7 +648,7 @@ You are **PC2 Guide**, a knowledgeable assistant for PC2 (Personal Cloud Compute
                         description: $win.find('#agent-description').val(),
                         identity: {
                             displayName: name,
-                            emoji: selectedEmoji,
+                            imageUrl: selectedImageUrl,
                         },
                         provider: $win.find('#agent-provider').val(),
                         model: $win.find('#agent-model').val(),

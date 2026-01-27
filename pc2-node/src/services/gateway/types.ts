@@ -130,7 +130,7 @@ export interface SavedChannel {
  */
 export interface AgentIdentity {
   displayName?: string;     // Friendly name (vs internal id)
-  emoji?: string;           // Visual identifier (e.g., '🤖')
+  imageUrl?: string;        // Path to agent image in PC2 filesystem
   color?: string;           // Optional accent color (hex)
 }
 
@@ -321,7 +321,6 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     workspace: '~/pc2/personal',
     identity: {
       displayName: 'Personal Assistant',
-      emoji: '🤖',
     },
     thinkingLevel: 'fast',
     permissions: {

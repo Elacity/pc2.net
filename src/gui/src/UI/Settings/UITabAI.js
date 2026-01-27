@@ -10,6 +10,8 @@
  * - Test API key connections
  */
 
+import UIAgentEditor from '../Channels/UIAgentEditor.js';
+
 export default {
     id: 'ai',
     title_i18n_key: 'AI Assistant',
@@ -1146,7 +1148,6 @@ export default {
 
         // Agent handlers
         $el_window.find('#create-agent-btn').off('click').on('click', async function() {
-            const { default: UIAgentEditor } = await import('../Channels/UIAgentEditor.js');
             UIAgentEditor({
                 onSave: async () => {
                     await loadAgents();
@@ -1156,7 +1157,6 @@ export default {
 
         $el_window.find('.agent-edit-btn').off('click').on('click', async function() {
             const agentId = $(this).closest('.agent-row').data('agent-id');
-            const { default: UIAgentEditor } = await import('../Channels/UIAgentEditor.js');
             UIAgentEditor({
                 agentId,
                 onSave: async () => {
@@ -1228,6 +1228,7 @@ export default {
                         const initial = (agent.name || 'A').charAt(0).toUpperCase();
                         const color = personalityColors[agent.personality] || '#667eea';
                         const isDefault = agent.id === 'personal';
+                        const imageUrl = agent.identity?.imageUrl || '';
                         
                         // Get tethered channels
                         const tethered = (agent.tetheredChannels || [])
@@ -1243,8 +1244,8 @@ export default {
                             <div class="ai-group-row agent-row" data-agent-id="${agent.id}">
                                 <div class="ai-card-row">
                                     <div style="display: flex; align-items: center; gap: 10px; flex: 1;">
-                                        <div class="agent-avatar" style="width: 36px; height: 36px; border-radius: 8px; background: linear-gradient(135deg, ${color} 0%, ${color}99 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 600; font-size: 14px;">
-                                            ${initial}
+                                        <div class="agent-avatar" data-image-url="${imageUrl}" style="width: 36px; height: 36px; border-radius: 8px; background: linear-gradient(135deg, ${color} 0%, ${color}99 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 600; font-size: 14px; background-size: cover; background-position: center;">
+                                            <span class="agent-initial">${initial}</span>
                                         </div>
                                         <div style="flex: 1;">
                                             <div style="display: flex; align-items: center; gap: 6px;">
@@ -1269,10 +1270,38 @@ export default {
                     
                     $list.html(html);
                     
+                    // Load agent images asynchronously
+                    const userRoot = window.user?.username || window.user?.wallet_address || '';
+                    $list.find('.agent-avatar[data-image-url]').each(function() {
+                        const $avatar = $(this);
+                        let imagePath = $avatar.data('image-url');
+                        if (!imagePath) return;
+                        
+                        if (imagePath.startsWith('~')) imagePath = imagePath.replace('~', '/' + userRoot);
+                        
+                        (async function() {
+                            try {
+                                const signed = await puter.fs.sign(undefined, { path: imagePath, action: 'read' });
+                                let signed_url = null;
+                                if (signed && signed.items && signed.items.read_url) signed_url = signed.items.read_url;
+                                else if (signed && signed.items && signed.items[0] && signed.items[0].read_url) signed_url = signed.items[0].read_url;
+                                
+                                if (signed_url) {
+                                    $avatar.css({
+                                        'background-image': 'url("' + signed_url + '")',
+                                        'background': 'url("' + signed_url + '") center/cover no-repeat'
+                                    });
+                                    $avatar.find('.agent-initial').hide();
+                                }
+                            } catch (err) {
+                                // Keep fallback initial
+                            }
+                        })();
+                    });
+                    
                     // Re-bind edit handlers
                     $list.find('.agent-edit-btn').off('click').on('click', async function() {
                         const agentId = $(this).closest('.agent-row').data('agent-id');
-                        const { default: UIAgentEditor } = await import('../Channels/UIAgentEditor.js');
                         UIAgentEditor({
                             agentId,
                             onSave: async () => {

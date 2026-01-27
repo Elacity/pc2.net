@@ -32,15 +32,37 @@ curl -fsSL https://raw.githubusercontent.com/Elacity/pc2.net/main/scripts/start-
 
 ### Windows Users
 
-Use WSL2 (Windows Subsystem for Linux):
+Windows needs a one-time setup (5 minutes), then it works just like Mac.
 
-1. Install WSL2: Open PowerShell as Admin and run:
-   ```powershell
-   wsl --install
-   ```
-2. Restart your computer
-3. Open "Ubuntu" from Start menu
-4. Run the one-liner above
+**Step 1: Install Ubuntu App (One-Time Only)**
+
+1. Click the Windows Start button
+2. Search for "PowerShell"
+3. Right-click "Windows PowerShell" → "Run as administrator"
+4. Paste this command and press Enter:
+
+```powershell
+wsl --install
+```
+
+5. Wait for it to complete (downloads Ubuntu)
+6. **Restart your computer**
+
+**Step 2: Run PC2 (Every Time)**
+
+1. Click the Windows Start button
+2. Search for "Ubuntu" and click it
+3. A terminal window opens (just like Mac Terminal)
+4. Paste this command and press Enter:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Elacity/pc2.net/main/scripts/start-local.sh | bash
+```
+
+5. Wait for the ElastOS banner and setup to complete
+6. Open your browser to `http://localhost:4200`
+
+**That's it!** From now on, just open "Ubuntu" from Start menu and run the command.
 
 ### What to Expect
 

@@ -183,7 +183,8 @@ main() {
     GUI_DIR="$(dirname "$PC2_DIR")/src/gui"
     if [[ -d "$GUI_DIR" ]]; then
         cd "$GUI_DIR"
-        if ! npm install --legacy-peer-deps 2>&1; then
+        # Use --ignore-scripts to skip husky prepare hook, --legacy-peer-deps for conflicts
+        if ! npm install --legacy-peer-deps --ignore-scripts 2>&1; then
             echo -e "${RED}❌ Failed to install frontend dependencies${NC}"
             exit 1
         fi
@@ -193,7 +194,7 @@ main() {
     
     # Install dependencies for pc2-node
     echo -e "${CYAN}Installing backend dependencies...${NC}"
-    if ! npm install --legacy-peer-deps 2>&1; then
+    if ! npm install --legacy-peer-deps --ignore-scripts 2>&1; then
         echo -e "${RED}❌ Failed to install backend dependencies${NC}"
         exit 1
     fi

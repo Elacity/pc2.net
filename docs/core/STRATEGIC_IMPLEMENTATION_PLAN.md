@@ -121,6 +121,50 @@ npm start
 
 ## 📊 Current State Assessment
 
+### 🎯 Recent Progress (2026-01-27)
+
+**Clawdbot Multi-Channel Messaging Integration - Phase 1 ✅ COMPLETE**
+
+PC2 nodes can now be accessed via Telegram (and soon WhatsApp/Discord) with full agent personality isolation.
+
+**Core Backend:**
+- ✅ `GatewayService` - Channel lifecycle, config persistence (`~/.pc2/gateway-config.json`)
+- ✅ `ChannelBridge` - Routes messages to AIChatService with agent-specific prompts
+- ✅ `TelegramChannel` - Full Telegram bot support via grammY library
+- ✅ `WhatsAppChannel` - QR code pairing via Baileys (needs UI polish)
+- ✅ Auto-reconnect on server restart
+
+**Agent-Centric Architecture:**
+- ✅ Agents own personalities (SOUL.md), not channels
+- ✅ `SavedChannels` - Store bot credentials separately from agents
+- ✅ `tetheredChannels` - Link specific bots to specific agents
+- ✅ Per-agent permissions: fileRead, fileWrite, walletAccess
+- ✅ Tools disabled when permissions unchecked
+- ✅ Multi-model support per agent (Claude, OpenAI, Gemini, Ollama)
+
+**Frontend UI:**
+- ✅ `UITabAI.js` - Enhanced with "Messaging Channels" summary and "Agents" section
+- ✅ `UIChannelManager.js` - Manage saved channel credentials
+- ✅ `UIAgentEditor.js` - Full agent configuration with SOUL.md, personality presets
+- ✅ `UITelegramConnect.js` - Bot token input modal
+- ✅ Markdown conversion for Telegram (headers, bold, dividers)
+
+**Files Created/Modified:**
+- `pc2-node/src/services/gateway/GatewayService.ts` - Core gateway service
+- `pc2-node/src/services/gateway/ChannelBridge.ts` - Message router
+- `pc2-node/src/services/gateway/channels/TelegramChannel.ts` - Telegram adapter
+- `pc2-node/src/services/gateway/channels/WhatsAppChannel.ts` - WhatsApp adapter
+- `pc2-node/src/services/gateway/types.ts` - Type definitions
+- `pc2-node/src/api/gateway.ts` - REST API endpoints
+- `src/gui/src/UI/Channels/UIChannelManager.js` - Channel management UI
+- `src/gui/src/UI/Channels/UIAgentEditor.js` - Agent editor UI
+- `src/gui/src/UI/Channels/UITelegramConnect.js` - Telegram connect modal
+- `src/gui/src/UI/Settings/UITabAI.js` - Settings tab enhancement
+
+**Branch:** `feature/clawdbot-integration`
+
+---
+
 ### 🎯 Recent Progress (2026-01-25)
 
 **DAO Dashboard & App Center UX Improvements - Complete**

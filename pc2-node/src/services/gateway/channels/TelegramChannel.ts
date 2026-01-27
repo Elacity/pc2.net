@@ -261,9 +261,12 @@ export class TelegramChannel extends EventEmitter {
         let text = reply.content.text;
         
         // Try sending with Markdown parse mode first
-        // Telegram's Markdown uses *bold* not **bold**, so convert
+        // Telegram's Markdown uses *bold* not **bold**, and doesn't support headers
         const markdownText = text
-          .replace(/\*\*(.+?)\*\*/g, '*$1*')  // **bold** -> *bold*
+          .replace(/^### (.+)$/gm, '*$1*')     // ### Header -> *Header* (bold)
+          .replace(/^## (.+)$/gm, '*$1*')      // ## Header -> *Header* (bold)
+          .replace(/^# (.+)$/gm, '*$1*')       // # Header -> *Header* (bold)
+          .replace(/\*\*(.+?)\*\*/g, '*$1*')   // **bold** -> *bold*
           .replace(/__(.+?)__/g, '_$1_');      // __italic__ -> _italic_
         
         try {

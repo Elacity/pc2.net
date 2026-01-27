@@ -43,16 +43,34 @@
 | **Tools Isolation** | ✅ Complete | Disabled tools when permissions unchecked |
 | **Multi-Model Support** | ✅ Complete | Claude, OpenAI, Gemini, Ollama per agent |
 
-### 🔄 IN PROGRESS - Next Steps
+### 🔄 Phase 2: Planned Enhancements
 
 | Feature | Priority | Description |
 |---------|----------|-------------|
-| **WhatsApp QR Modal** | High | Improve QR display in UI |
-| **Discord Integration** | Medium | Add Discord.js channel |
-| **Public Bot Rate Limiting** | Medium | Rate limits for public access |
-| **Agent Allowlist** | Medium | Specific users only per agent |
+| **X/Twitter Integration** | High | Users @ the bot, it replies publicly - viral potential |
+| **Discord Integration** | High | Discord.js for Web3/crypto communities |
+| **DM Pairing Security** | High | Pairing codes for unknown senders |
+| **Public Bot Rate Limiting** | Medium | Per-user rate limits for public agents |
+| **Agent Allowlist** | Medium | Restrict agent access to specific users |
+| **Cron Jobs** | Medium | Scheduled agent tasks (daily summaries, etc.) |
+| **Webhooks** | Medium | Trigger agent from external events |
+
+### 📋 Phase 3: Future Opportunities
+
+| Feature | Priority | Description |
+|---------|----------|-------------|
+| **Skills/Plugins System** | Low | Installable agent skills (like ClawdHub) |
+| **Browser Control** | Low | Agent browses web via CDP |
 | **Chat History Sync** | Low | View channel chats in PC2 desktop |
 | **Multiple Agents Per Channel** | Low | Command-based agent switching |
+| **Slack Integration** | Low | Enterprise messaging |
+| **Signal Integration** | Low | Privacy-focused channel |
+
+### ⏸️ Deprioritized
+
+| Feature | Reason |
+|---------|--------|
+| **WhatsApp** | Not bot-based (links personal number), less valuable for PC2 use case |
 
 ---
 

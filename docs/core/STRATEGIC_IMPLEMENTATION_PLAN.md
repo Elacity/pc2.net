@@ -163,6 +163,33 @@ PC2 nodes can now be accessed via Telegram (and soon WhatsApp/Discord) with full
 
 **Branch:** `feature/clawdbot-integration`
 
+**Clawdbot Audit Findings (2026-01-27):**
+
+Compared PC2's implementation against the open-source Clawdbot project (53k+ GitHub stars). Key findings:
+
+| What PC2 Has That Clawdbot Has | Status |
+|-------------------------------|--------|
+| Multi-Agent Routing | ✅ Implemented |
+| SOUL.md Personalities | ✅ Implemented |
+| Telegram Integration | ✅ Implemented |
+| Permission System | ✅ Implemented |
+| Config Persistence | ✅ Implemented |
+
+| Opportunities (Neither Has) | Priority |
+|-----------------------------|----------|
+| **X/Twitter Integration** | High - Viral potential, public replies |
+
+| What Clawdbot Has That PC2 Doesn't (Yet) | Priority |
+|------------------------------------------|----------|
+| Discord Integration | High |
+| DM Pairing Security | High |
+| Cron Jobs / Scheduled Tasks | Medium |
+| Webhooks | Medium |
+| Skills/Plugin Marketplace | Low |
+| Browser Control (CDP) | Low |
+
+**Deprioritized:** WhatsApp (links personal number, not bot-based like Telegram)
+
 ---
 
 ### 🎯 Recent Progress (2026-01-25)

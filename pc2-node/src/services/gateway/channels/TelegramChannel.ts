@@ -256,9 +256,26 @@ export class TelegramChannel extends EventEmitter {
         options.reply_to_message_id = parseInt(reply.content.replyToId);
       }
       
-      // Send text message
+      // Send text message with markdown support
       if (reply.content.text) {
-        await this.bot.api.sendMessage(chatId, reply.content.text, options);
+        let text = reply.content.text;
+        
+        // Try sending with Markdown parse mode first
+        // Telegram's Markdown uses *bold* not **bold**, so convert
+        const markdownText = text
+          .replace(/\*\*(.+?)\*\*/g, '*$1*')  // **bold** -> *bold*
+          .replace(/__(.+?)__/g, '_$1_');      // __italic__ -> _italic_
+        
+        try {
+          await this.bot.api.sendMessage(chatId, markdownText, { 
+            ...options, 
+            parse_mode: 'Markdown' 
+          });
+        } catch (parseError: any) {
+          // If markdown parsing fails, send as plain text
+          logger.warn('[TelegramChannel] Markdown parse failed, sending as plain text:', parseError.message);
+          await this.bot.api.sendMessage(chatId, text, options);
+        }
       }
       
       logger.info('[TelegramChannel] Reply sent successfully');

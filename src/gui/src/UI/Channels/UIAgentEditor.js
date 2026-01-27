@@ -265,15 +265,11 @@ Always cite sources for market data. Warn about risks clearly."
                 <!-- Channel Connections -->
                 <div class="editor-section" style="margin-bottom: 24px;">
                     <h3 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600; color: #374151;">Tethered Channels</h3>
-                    <p style="margin: 0 0 12px 0; font-size: 12px; color: #666;">Select which messaging bots this agent responds to</p>
+                    <p style="margin: 0 0 12px 0; font-size: 12px; color: #666;">Select existing channels or add a new Telegram bot</p>
                     
-                    ${savedChannels.length === 0 ? `
-                        <div style="text-align: center; padding: 20px; background: #f9fafb; border-radius: 8px; border: 1px dashed #d1d5db;">
-                            <div style="font-size: 11px; color: #888;">No channels configured yet</div>
-                            <div style="font-size: 10px; color: #666; margin-top: 4px;">Add bots in Settings > AI Assistant > Messaging Channels > Manage</div>
-                        </div>
-                    ` : `
-                        <div id="channel-checkboxes" style="display: flex; flex-direction: column; gap: 8px;">
+                    <!-- Existing Saved Channels -->
+                    ${savedChannels.length > 0 ? `
+                        <div id="channel-checkboxes" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px;">
                             ${savedChannels.map(ch => {
                                 const isChecked = (agent.tetheredChannels || []).includes(ch.id);
                                 const icon = ch.type === 'telegram' 
@@ -294,7 +290,20 @@ Always cite sources for market data. Warn about risks clearly."
                                 `;
                             }).join('')}
                         </div>
-                    `}
+                    ` : ''}
+                    
+                    <!-- Add New Telegram Bot -->
+                    <div style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px;">
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="#0088cc"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
+                            <span style="font-size: 12px; font-weight: 500;">Add New Telegram Bot</span>
+                        </div>
+                        <input type="text" id="new-telegram-token" placeholder="Paste bot token from @BotFather (e.g., 123456789:ABC...)"
+                            style="width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 12px; font-family: monospace; box-sizing: border-box;">
+                        <p style="margin: 6px 0 0 0; font-size: 10px; color: #888;">
+                            If provided, this bot will be saved and tethered to this agent
+                        </p>
+                    </div>
                 </div>
                 
             </div>
@@ -420,36 +429,61 @@ Always cite sources for market data. Warn about risks clearly."
                     soulContent = preset?.soul || '';
                 }
                 
-                const newAgent = {
-                    id: agentId && agentId !== 'new' ? agentId : name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
-                    name,
-                    description: $win.find('#agent-description').val(),
-                    provider: $win.find('#agent-provider').val(),
-                    model: $win.find('#agent-model').val(),
-                    personality: selectedPersonality,
-                    customSoul: selectedPersonality === 'custom' ? $win.find('#agent-soul').val() : '',
-                    soulContent,
-                    permissions: {
-                        fileRead: $win.find('#perm-file-read').is(':checked'),
-                        fileWrite: $win.find('#perm-file-write').is(':checked'),
-                        walletAccess: $win.find('#perm-wallet').is(':checked'),
-                        webBrowsing: false,
-                        codeExecution: false,
-                        reminders: false,
-                    },
-                    accessControl: {
-                        mode: $win.find('input[name="access-mode"]:checked').val(),
-                        rateLimit: {
-                            perMinute: parseInt($win.find('#rate-per-minute').val()) || 10,
-                            perDay: parseInt($win.find('#rate-per-day').val()) || 100,
-                        },
-                    },
-                    tetheredChannels: $win.find('.tether-checkbox:checked').map(function() {
-                        return $(this).val();
-                    }).get(),
-                };
+                // Gather tethered channels from checkboxes
+                let tetheredChannels = $win.find('.tether-checkbox:checked').map(function() {
+                    return $(this).val();
+                }).get();
+                
+                // Check if new telegram token was provided
+                const newTelegramToken = $win.find('#new-telegram-token').val().trim();
                 
                 try {
+                    // If new token, create saved channel first
+                    if (newTelegramToken && /^\d+:[A-Za-z0-9_-]+$/.test(newTelegramToken)) {
+                        const saveResponse = await $.ajax({
+                            url: '/api/gateway/saved-channels',
+                            method: 'POST',
+                            headers: { 'Authorization': `Bearer ${window.auth_token}` },
+                            contentType: 'application/json',
+                            data: JSON.stringify({
+                                type: 'telegram',
+                                name: 'Telegram Bot',
+                                telegram: { botToken: newTelegramToken }
+                            })
+                        });
+                        
+                        if (saveResponse.success && saveResponse.data?.id) {
+                            tetheredChannels.push(saveResponse.data.id);
+                        }
+                    }
+                    
+                    const newAgent = {
+                        id: agentId && agentId !== 'new' ? agentId : name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+                        name,
+                        description: $win.find('#agent-description').val(),
+                        provider: $win.find('#agent-provider').val(),
+                        model: $win.find('#agent-model').val(),
+                        personality: selectedPersonality,
+                        customSoul: selectedPersonality === 'custom' ? $win.find('#agent-soul').val() : '',
+                        soulContent,
+                        permissions: {
+                            fileRead: $win.find('#perm-file-read').is(':checked'),
+                            fileWrite: $win.find('#perm-file-write').is(':checked'),
+                            walletAccess: $win.find('#perm-wallet').is(':checked'),
+                            webBrowsing: false,
+                            codeExecution: false,
+                            reminders: false,
+                        },
+                        accessControl: {
+                            mode: $win.find('input[name="access-mode"]:checked').val(),
+                            rateLimit: {
+                                perMinute: parseInt($win.find('#rate-per-minute').val()) || 10,
+                                perDay: parseInt($win.find('#rate-per-day').val()) || 100,
+                            },
+                        },
+                        tetheredChannels,
+                    };
+                    
                     await $.ajax({
                         url: `/api/gateway/agents/${newAgent.id}`,
                         method: 'PUT',

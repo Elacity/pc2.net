@@ -156,7 +156,7 @@ const UIChannelManager = async function(options = {}) {
         allow_user_select: false,
         backdrop: true,
         width: 520,
-        height: 500,
+        height: 'auto',
         dominant: false,
         show_in_taskbar: false,
         onAppend: function(el_window) {

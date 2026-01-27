@@ -552,6 +552,14 @@ router.delete('/agents/:agentId', authenticate, async (req: AuthenticatedRequest
   try {
     const agentId = sanitizeAgentId(req.params.agentId);
     
+    // Protect default agent from deletion
+    if (agentId === 'personal') {
+      return res.status(400).json({
+        success: false,
+        error: 'Cannot delete the default personal agent',
+      });
+    }
+    
     const gateway = getGatewayService(req.app.locals.db);
     const deleted = await gateway.removeAgent(agentId);
     
@@ -695,122 +703,6 @@ router.post('/channels/:channel/settings', authenticate, async (req: Authenticat
     });
   } catch (error: any) {
     logger.error('[Gateway API] Error saving channel settings:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message,
-    });
-  }
-});
-
-// =====================
-// AGENT ENDPOINTS
-// =====================
-
-/**
- * GET /api/gateway/agents
- * Get all configured agents
- */
-router.get('/agents', authenticate, async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const gateway = getGatewayService(req.app.locals.db);
-    const config = gateway.getConfig();
-    
-    res.json({
-      success: true,
-      data: config.agents || [],
-    });
-  } catch (error: any) {
-    logger.error('[Gateway API] Error getting agents:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message,
-    });
-  }
-});
-
-/**
- * GET /api/gateway/agents/:agentId
- * Get a specific agent
- */
-router.get('/agents/:agentId', authenticate, async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const agentId = sanitizeAgentId(req.params.agentId);
-    const gateway = getGatewayService(req.app.locals.db);
-    const agent = gateway.getAgent(agentId);
-    
-    if (!agent) {
-      return res.status(404).json({
-        success: false,
-        error: 'Agent not found',
-      });
-    }
-    
-    res.json({
-      success: true,
-      data: agent,
-    });
-  } catch (error: any) {
-    logger.error('[Gateway API] Error getting agent:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message,
-    });
-  }
-});
-
-/**
- * PUT /api/gateway/agents/:agentId
- * Create or update an agent
- */
-router.put('/agents/:agentId', authenticate, async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const { agentId } = req.params;
-    const agentData = req.body;
-    
-    const gateway = getGatewayService(req.app.locals.db);
-    await gateway.updateAgent(agentId, agentData);
-    
-    logger.info(`[Gateway API] Agent ${agentId} updated`);
-    
-    res.json({
-      success: true,
-      data: { agentId, updated: true },
-    });
-  } catch (error: any) {
-    logger.error('[Gateway API] Error updating agent:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message,
-    });
-  }
-});
-
-/**
- * DELETE /api/gateway/agents/:agentId
- * Delete an agent
- */
-router.delete('/agents/:agentId', authenticate, async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const { agentId } = req.params;
-    
-    if (agentId === 'personal') {
-      return res.status(400).json({
-        success: false,
-        error: 'Cannot delete the default personal agent',
-      });
-    }
-    
-    const gateway = getGatewayService(req.app.locals.db);
-    await gateway.deleteAgent(agentId);
-    
-    logger.info(`[Gateway API] Agent ${agentId} deleted`);
-    
-    res.json({
-      success: true,
-      data: { agentId, deleted: true },
-    });
-  } catch (error: any) {
-    logger.error('[Gateway API] Error deleting agent:', error);
     res.status(500).json({
       success: false,
       error: error.message,

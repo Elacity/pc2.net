@@ -14,6 +14,8 @@ import { Server as SocketIOServer } from 'socket.io';
 import crypto from 'crypto';
 import { AIChatService } from '../services/ai/AIChatService.js';
 import { getBaseUrl } from '../utils/urlUtils.js';
+import { getGatewayService } from '../services/gateway/GatewayService.js';
+import type { AgentConfig } from '../services/gateway/types.js';
 import * as pdfjsLib from 'pdfjs-dist';
 import fs from 'fs/promises';
 import path from 'path';
@@ -713,12 +715,55 @@ export function handleDriversCall(req: AuthenticatedRequest, res: Response): voi
         try {
           if (method === 'complete') {
             const args = body.args || {};
-            const messages = args.messages || [];
+            let messages = args.messages || [];
             let model = args.model;
             const stream = args.stream || false;
             const tools = args.tools;
             const max_tokens = args.max_tokens;
-            const temperature = args.temperature;
+            let temperature = args.temperature;
+            const agentId = args.agentId; // Optional agent ID for agent-specific config
+            
+            // If agentId is provided, load agent config and apply its settings
+            let agentConfig: AgentConfig | undefined;
+            if (agentId) {
+              try {
+                const gateway = getGatewayService();
+                agentConfig = gateway.getAgent(agentId);
+                
+                if (agentConfig && agentConfig.enabled) {
+                  logger.info('[Drivers] Using agent config:', agentConfig.id, agentConfig.name);
+                  
+                  // Apply agent's model if not explicitly set in request
+                  if (!model && agentConfig.model) {
+                    const provider = agentConfig.provider || 'ollama';
+                    model = provider !== 'ollama' ? `${provider}:${agentConfig.model}` : agentConfig.model;
+                    logger.info('[Drivers] Using agent model:', model);
+                  }
+                  
+                  // Apply agent's thinking level (maps to temperature)
+                  if (temperature === undefined && agentConfig.thinkingLevel) {
+                    const tempMap: Record<string, number> = { fast: 0.3, balanced: 0.7, deep: 0.9 };
+                    temperature = tempMap[agentConfig.thinkingLevel] || 0.3;
+                    logger.info('[Drivers] Using agent thinking level:', agentConfig.thinkingLevel, '-> temperature:', temperature);
+                  }
+                  
+                  // Apply agent's soul content as system prompt
+                  const soulContent = agentConfig.soulContent || agentConfig.customSoul;
+                  if (soulContent) {
+                    // Prepend system message with soul content if not already present
+                    const hasSystemMessage = messages.some((m: any) => m.role === 'system');
+                    if (!hasSystemMessage) {
+                      messages = [{ role: 'system', content: soulContent }, ...messages];
+                      logger.info('[Drivers] Prepended agent soul content as system message');
+                    }
+                  }
+                } else if (agentId) {
+                  logger.warn('[Drivers] Agent not found or disabled:', agentId);
+                }
+              } catch (e) {
+                logger.warn('[Drivers] Error loading agent config:', e);
+              }
+            }
             
             // Get user's AI config to use default model/provider if not specified
             const db = (req.app.locals.db as any);

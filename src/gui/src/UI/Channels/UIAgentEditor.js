@@ -27,6 +27,11 @@ const UIAgentEditor = async function(options = {}) {
         personality: 'friendly',
         customSoul: '',
         workspace: '~/pc2/agents/default',
+        identity: {
+            displayName: '',
+            emoji: '🤖',
+        },
+        thinkingLevel: 'fast', // fast, balanced, deep - maps to temperature
         permissions: {
             fileRead: true,
             fileWrite: false,
@@ -128,14 +133,30 @@ const UIAgentEditor = async function(options = {}) {
             <!-- Scrollable Content -->
             <div class="agent-editor-content" style="flex: 1; overflow-y: auto; padding: 20px;">
                 
-                <!-- Basic Info -->
+                <!-- Basic Info with Identity -->
                 <div class="editor-section" style="margin-bottom: 24px;">
-                    <h3 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600; color: #374151;">Basic Info</h3>
+                    <h3 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600; color: #374151;">Agent Identity</h3>
                     <div style="display: grid; gap: 12px;">
-                        <div>
-                            <label style="display: block; font-size: 12px; font-weight: 500; margin-bottom: 4px; color: #555;">Agent Name *</label>
-                            <input type="text" id="agent-name" value="${agent.name}" placeholder="e.g., Support Bot, Trading Assistant"
-                                style="width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; box-sizing: border-box;">
+                        <!-- Emoji and Name Row -->
+                        <div style="display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: end;">
+                            <div>
+                                <label style="display: block; font-size: 12px; font-weight: 500; margin-bottom: 4px; color: #555;">Emoji</label>
+                                <div id="emoji-picker-container" style="position: relative;">
+                                    <button type="button" id="emoji-btn" style="width: 48px; height: 42px; padding: 0; border: 1px solid #d1d5db; border-radius: 6px; font-size: 24px; cursor: pointer; background: #fff; display: flex; align-items: center; justify-content: center;">${agent.identity?.emoji || '🤖'}</button>
+                                    <div id="emoji-dropdown" style="display: none; position: absolute; top: 100%; left: 0; z-index: 1000; background: #fff; border: 1px solid #d1d5db; border-radius: 8px; padding: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin-top: 4px;">
+                                        <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px;">
+                                            ${['🤖', '💬', '🧠', '💡', '🔧', '💼', '🎯', '📊', '🚀', '⭐', '🔮', '🎨', '📚', '🛡️', '🌟', '🦾', '👾', '🤝'].map(e => 
+                                                `<button type="button" class="emoji-option" data-emoji="${e}" style="width: 32px; height: 32px; padding: 0; border: none; background: none; font-size: 20px; cursor: pointer; border-radius: 4px; transition: background 0.15s;" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background='none'">${e}</button>`
+                                            ).join('')}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div>
+                                <label style="display: block; font-size: 12px; font-weight: 500; margin-bottom: 4px; color: #555;">Agent Name *</label>
+                                <input type="text" id="agent-name" value="${agent.name}" placeholder="e.g., Support Bot, Trading Assistant"
+                                    style="width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; box-sizing: border-box;">
+                            </div>
                         </div>
                         <div>
                             <label style="display: block; font-size: 12px; font-weight: 500; margin-bottom: 4px; color: #555;">Description</label>
@@ -165,6 +186,29 @@ const UIAgentEditor = async function(options = {}) {
                     <p style="margin: 8px 0 0 0; font-size: 11px; color: #888;">
                         Add API keys in Settings > AI Assistant to enable more providers
                     </p>
+                </div>
+                
+                <!-- Response Mode (Thinking Level) -->
+                <div class="editor-section" style="margin-bottom: 24px;">
+                    <h3 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600; color: #374151;">Response Mode</h3>
+                    <p style="margin: 0 0 12px 0; font-size: 12px; color: #666;">Controls how the AI responds - Fast is cheaper, Deep is more thorough</p>
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;" id="thinking-level-grid">
+                        ${['fast', 'balanced', 'deep'].map(level => {
+                            const isSelected = (agent.thinkingLevel || 'fast') === level;
+                            const config = {
+                                fast: { name: 'Fast', desc: 'Quick & efficient', icon: '⚡', color: '#10b981' },
+                                balanced: { name: 'Balanced', desc: 'Default reasoning', icon: '⚖️', color: '#3b82f6' },
+                                deep: { name: 'Deep', desc: 'Thorough analysis', icon: '🧠', color: '#8b5cf6' },
+                            }[level];
+                            return `
+                            <div class="thinking-option ${isSelected ? 'selected' : ''}" data-level="${level}"
+                                style="padding: 12px 8px; border: 2px solid ${isSelected ? config.color : '#e5e7eb'}; border-radius: 8px; cursor: pointer; text-align: center; transition: all 0.15s; background: ${isSelected ? config.color + '10' : '#fff'};">
+                                <div style="font-size: 20px; margin-bottom: 4px;">${config.icon}</div>
+                                <div style="font-weight: 600; font-size: 12px; color: #374151;">${config.name}</div>
+                                <div style="font-size: 10px; color: #888; margin-top: 2px;">${config.desc}</div>
+                            </div>`;
+                        }).join('')}
+                    </div>
                 </div>
                 
                 <!-- Personality -->
@@ -365,6 +409,8 @@ You are **PC2 Guide**, a knowledgeable assistant for PC2 (Personal Cloud Compute
             const $win = $(el_window);
             // Handle legacy 'custom' personality - default to 'friendly'
             let selectedPersonality = agent.personality === 'custom' ? 'friendly' : (agent.personality || 'friendly');
+            let selectedThinkingLevel = agent.thinkingLevel || 'fast';
+            let selectedEmoji = agent.identity?.emoji || '🤖';
             
             // Helper to close window
             function closeWindow() {
@@ -395,6 +441,42 @@ You are **PC2 Guide**, a knowledgeable assistant for PC2 (Personal Cloud Compute
                 $modelSelect.empty();
                 models.forEach(m => {
                     $modelSelect.append(`<option value="${m}">${m}</option>`);
+                });
+            });
+            
+            // Emoji picker toggle
+            $win.find('#emoji-btn').on('click', function(e) {
+                e.stopPropagation();
+                const $dropdown = $win.find('#emoji-dropdown');
+                $dropdown.toggle();
+            });
+            
+            // Emoji selection
+            $win.find('.emoji-option').on('click', function() {
+                selectedEmoji = $(this).data('emoji');
+                $win.find('#emoji-btn').text(selectedEmoji);
+                $win.find('#emoji-dropdown').hide();
+            });
+            
+            // Close emoji dropdown when clicking outside
+            $(document).on('click.emojiDropdown', function() {
+                $win.find('#emoji-dropdown').hide();
+            });
+            
+            // Thinking level selection
+            $win.find('.thinking-option').on('click', function() {
+                const level = $(this).data('level');
+                selectedThinkingLevel = level;
+                
+                const colors = { fast: '#10b981', balanced: '#3b82f6', deep: '#8b5cf6' };
+                $win.find('.thinking-option').each(function() {
+                    const thisLevel = $(this).data('level');
+                    const isSelected = thisLevel === level;
+                    $(this).css({
+                        'border-color': isSelected ? colors[thisLevel] : '#e5e7eb',
+                        'background': isSelected ? colors[thisLevel] + '10' : '#fff'
+                    });
+                    $(this).toggleClass('selected', isSelected);
                 });
             });
             
@@ -478,8 +560,13 @@ You are **PC2 Guide**, a knowledgeable assistant for PC2 (Personal Cloud Compute
                         id: agentId && agentId !== 'new' ? agentId : name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
                         name,
                         description: $win.find('#agent-description').val(),
+                        identity: {
+                            displayName: name,
+                            emoji: selectedEmoji,
+                        },
                         provider: $win.find('#agent-provider').val(),
                         model: $win.find('#agent-model').val(),
+                        thinkingLevel: selectedThinkingLevel,
                         personality: selectedPersonality,
                         customSoul: customSoul, // Always save custom SOUL content
                         soulContent,

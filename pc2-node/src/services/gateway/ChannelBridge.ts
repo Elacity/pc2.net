@@ -209,8 +209,22 @@ export class ChannelBridge {
     const channelConfig = this.gateway.getChannelConfig(session.channel);
     const channelModel = channelConfig?.settings?.model;
     
-    // Build messages array for AI
-    const messages = this.buildMessages(session, agent, content.text || '');
+    // Load persistent memory for the agent if filesystem is available
+    let memoryContent: string | undefined;
+    if (this.filesystem && this.ownerWalletAddress) {
+      try {
+        const memoryPath = `/${this.ownerWalletAddress}/pc2/agents/MEMORY.md`;
+        memoryContent = await this.filesystem.readFile(memoryPath, this.ownerWalletAddress);
+        if (memoryContent) {
+          logger.info('[ChannelBridge] Loaded agent memory:', memoryContent.length, 'chars');
+        }
+      } catch {
+        // Memory file doesn't exist yet - this is fine
+      }
+    }
+    
+    // Build messages array for AI with memory context
+    const messages = this.buildMessages(session, agent, content.text || '', memoryContent);
     
     // Get tool filter based on agent permissions
     const toolFilter = this.getToolFilter(agent.permissions);
@@ -235,6 +249,13 @@ export class ChannelBridge {
     const hasAnyFilePermission = toolFilter.allowFilesystemRead || toolFilter.allowFilesystemWrite;
     const hasWalletPermission = toolFilter.allowWalletRead;
     
+    // Map thinking level to temperature
+    // fast = 0.3 (quick, deterministic, cheaper)
+    // balanced = 0.7 (default)
+    // deep = 0.9 (thorough, creative, costlier)
+    const temperatureMap: Record<string, number> = { fast: 0.3, balanced: 0.7, deep: 0.9 };
+    const temperature = temperatureMap[agent.thinkingLevel || 'fast'];
+    
     // For tools to work, AIChatService requires both filesystem AND walletAddress
     // So we control tools by controlling whether we pass filesystem
     const request: CompleteRequest = {
@@ -246,11 +267,14 @@ export class ChannelBridge {
       filesystem: (hasAnyFilePermission || hasWalletPermission) ? this.filesystem : undefined,
       io: this.io,
       model: modelToUse,
+      temperature,
     };
     
     logger.info(`[ChannelBridge] Sending to AI`, {
       agent: agent.id,
       model: modelToUse,
+      thinkingLevel: agent.thinkingLevel || 'fast',
+      temperature,
       permissions: agent.permissions,
       toolFilter,
       hasFilesystem: !!request.filesystem,
@@ -273,12 +297,13 @@ export class ChannelBridge {
   private buildMessages(
     session: SessionContext,
     agent: AgentConfig,
-    currentMessage: string
+    currentMessage: string,
+    memoryContent?: string
   ): Array<{ role: 'system' | 'user' | 'assistant'; content: string }> {
     const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [];
     
-    // System prompt with agent context
-    const systemPrompt = this.buildSystemPrompt(session, agent);
+    // System prompt with agent context and memory
+    const systemPrompt = this.buildSystemPrompt(session, agent, memoryContent);
     messages.push({ role: 'system', content: systemPrompt });
     
     // Add history (excluding the current message which is added separately)
@@ -299,7 +324,7 @@ export class ChannelBridge {
   /**
    * Build system prompt for the agent
    */
-  private buildSystemPrompt(session: SessionContext, agent: AgentConfig): string {
+  private buildSystemPrompt(session: SessionContext, agent: AgentConfig, memoryContent?: string): string {
     const parts: string[] = [];
     
     // Get soul content from agent configuration (not channel settings)
@@ -320,6 +345,14 @@ export class ChannelBridge {
       parts.push(`This is a group chat.`);
     }
     
+    // Inject persistent memory if available
+    if (memoryContent && memoryContent.trim()) {
+      parts.push(`\n## Your Memory`);
+      parts.push(`The following are things you've learned about this user from previous conversations:`);
+      parts.push(memoryContent);
+      parts.push(`\nYou can use the update_memory tool to save new important facts about the user.`);
+    }
+    
     // Permissions context
     const perms = agent.permissions;
     parts.push(`\n## Your Capabilities`);
@@ -329,6 +362,7 @@ export class ChannelBridge {
     }
     if (perms.fileWrite) {
       parts.push(`- You can create and modify files in the user's PC2 storage`);
+      parts.push(`- You can save important facts to persistent memory using update_memory`);
     }
     if (perms.walletAccess) {
       parts.push(`- You can check wallet balances across all chains (get_wallet_balance, get_multi_chain_balances)`);

@@ -325,6 +325,28 @@ export const filesystemTools: NormalizedTool[] = [
         required: ['path']
       }
     }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'update_memory',
+      description: 'Save important facts about the user to persistent memory for future conversations. Use this to remember user preferences, important facts, ongoing tasks, or anything the user asks you to remember. The memory persists across sessions and helps maintain continuity.',
+      parameters: {
+        type: 'object',
+        properties: {
+          fact: {
+            type: 'string',
+            description: 'The fact, preference, or information to remember about the user. Be concise but include relevant context. Examples: "User prefers Claude over GPT for coding tasks", "User timezone is UTC+8", "User is building a DeFi application". REQUIRED.'
+          },
+          category: {
+            type: 'string',
+            enum: ['preference', 'fact', 'task', 'note'],
+            description: 'Category of the memory: preference (user likes/dislikes), fact (information about user), task (ongoing work), note (general notes). Defaults to "fact".'
+          }
+        },
+        required: ['fact']
+      }
+    }
   }
 ];
 

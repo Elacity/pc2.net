@@ -36,6 +36,22 @@ let currentWalletAddress = null;
 let currentAIAbortController = null;
 let currentAIRequestState = 'idle'; // 'idle' | 'connecting' | 'thinking' | 'executing' | 'generating'
 
+// Selected agent (set by UIAgentSelector in taskbar)
+// When set, all AI requests use this agent's config (model, personality, permissions)
+window.selectedAgentId = null;
+
+// Function to update the selected agent (called by UIAgentSelector)
+window.updateAIChatAgent = function(agentId) {
+    window.selectedAgentId = agentId;
+    
+    // Update the AI chat header to show selected agent if the chat window is open
+    const $chatHeader = $('.ai-chat-header');
+    if ($chatHeader.length > 0) {
+        // Could update header to show agent name/emoji here
+        console.log('[UIAIChat] Agent switched to:', agentId || 'default');
+    }
+};
+
 // Update loading state and UI
 function updateLoadingState(state, details = null) {
     currentAIRequestState = state;
@@ -2579,6 +2595,10 @@ async function sendAIMessage($container) {
     }
     
     const authToken = window.auth_token || localStorage.getItem('puter_auth_token') || localStorage.getItem('auth_token') || '';
+    
+    // Get selected agent (if any) - set by UIAgentSelector
+    const selectedAgentId = window.selectedAgentId || null;
+    
     const requestBody = {
         interface: 'puter-chat-completion',
         method: 'complete',
@@ -2587,7 +2607,9 @@ async function sendAIMessage($container) {
             model: selectedModel,
             stream: true,  // Enable streaming
             // Pass app tools if available, otherwise undefined (backend will auto-inject filesystem tools)
-            tools: allTools.length > 0 ? allTools : undefined
+            tools: allTools.length > 0 ? allTools : undefined,
+            // Pass selected agent ID if one is selected (from UIAgentSelector)
+            agentId: selectedAgentId
         }
     };
     

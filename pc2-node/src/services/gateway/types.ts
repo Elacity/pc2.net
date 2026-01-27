@@ -126,6 +126,20 @@ export interface SavedChannel {
 }
 
 /**
+ * Agent identity for display purposes
+ */
+export interface AgentIdentity {
+  displayName?: string;     // Friendly name (vs internal id)
+  emoji?: string;           // Visual identifier (e.g., '🤖')
+  color?: string;           // Optional accent color (hex)
+}
+
+/**
+ * Thinking level controls AI response depth (maps to temperature)
+ */
+export type ThinkingLevel = 'fast' | 'balanced' | 'deep';
+
+/**
  * Agent configuration for multi-agent support
  */
 export interface AgentConfig {
@@ -135,9 +149,13 @@ export interface AgentConfig {
   enabled: boolean;
   workspace: string;        // Path to agent workspace
   
+  // Identity (for UI display)
+  identity?: AgentIdentity;
+  
   // AI model settings
   provider?: string;        // e.g., 'ollama', 'openai', 'claude'
   model?: string;           // e.g., 'llama3.2', 'gpt-4o'
+  thinkingLevel?: ThinkingLevel;  // Controls response depth (fast=0.3, balanced=0.7, deep=0.9)
   
   // Personality
   personality?: string;     // Preset ID: 'professional', 'friendly', etc.
@@ -301,6 +319,11 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     name: 'Personal Assistant',
     enabled: true,
     workspace: '~/pc2/personal',
+    identity: {
+      displayName: 'Personal Assistant',
+      emoji: '🤖',
+    },
+    thinkingLevel: 'fast',
     permissions: {
       fileRead: true,
       fileWrite: true,

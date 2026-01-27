@@ -970,6 +970,80 @@ export class ToolExecutor {
           }
         }
 
+        case 'update_memory': {
+          // Validate required parameters
+          if (!args.fact) {
+            throw new Error('update_memory requires "fact" parameter');
+          }
+          
+          const fact = args.fact as string;
+          const category = (args.category as string) || 'fact';
+          const timestamp = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+          
+          // Memory is stored per-user in their workspace
+          const memoryPath = this.resolvePath('~/pc2/agents/MEMORY.md');
+          
+          // Ensure directory exists
+          const memoryDir = memoryPath.substring(0, memoryPath.lastIndexOf('/'));
+          try {
+            await this.filesystem.mkdir(memoryDir, this.walletAddress, true);
+          } catch {
+            // Directory may already exist
+          }
+          
+          // Read existing memory or create new
+          let existingContent = '';
+          try {
+            existingContent = await this.filesystem.readFile(memoryPath, this.walletAddress) || '';
+          } catch {
+            // File doesn't exist yet, start fresh
+            existingContent = '# Agent Memory\n\nThis file stores persistent memories across conversations.\n\n';
+          }
+          
+          // Format the new memory entry
+          const categoryHeader = `## ${category.charAt(0).toUpperCase() + category.slice(1)}s\n`;
+          const newEntry = `- [${timestamp}] ${fact}\n`;
+          
+          // Check if category section exists, add to it or create it
+          let newContent: string;
+          if (existingContent.includes(categoryHeader)) {
+            // Add entry to existing category section
+            const lines = existingContent.split('\n');
+            const categoryIndex = lines.findIndex(line => line === categoryHeader.trim());
+            if (categoryIndex !== -1) {
+              // Find the next section header or end of file
+              let insertIndex = categoryIndex + 1;
+              while (insertIndex < lines.length && !lines[insertIndex].startsWith('## ')) {
+                insertIndex++;
+              }
+              // Insert before next section or at end
+              lines.splice(insertIndex, 0, newEntry.trim());
+              newContent = lines.join('\n');
+            } else {
+              newContent = existingContent + newEntry;
+            }
+          } else {
+            // Add new category section at end
+            newContent = existingContent + '\n' + categoryHeader + newEntry;
+          }
+          
+          // Write updated memory
+          await this.filesystem.writeFile(memoryPath, newContent, this.walletAddress, {
+            mimeType: 'text/markdown'
+          });
+          
+          logger.info('[ToolExecutor] Updated agent memory:', { category, fact: fact.substring(0, 50) });
+          
+          return {
+            success: true,
+            result: {
+              message: `Memory saved: ${fact}`,
+              category,
+              path: memoryPath
+            }
+          };
+        }
+
         // ==================== WALLET TOOLS ====================
         
         case 'get_wallet_info': {

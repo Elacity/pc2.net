@@ -228,11 +228,22 @@ export class ChannelBridge {
       }
     }
     
-    // Build request - use owner wallet for API key lookup (not session user)
+    // Build request based on agent permissions
+    // Always pass walletAddress for API key lookup (Claude, OpenAI, etc.)
+    // But only provide filesystem when file permissions allow
+    // Tools are only enabled when BOTH filesystem AND walletAddress are provided
+    const hasAnyFilePermission = toolFilter.allowFilesystemRead || toolFilter.allowFilesystemWrite;
+    const hasWalletPermission = toolFilter.allowWalletRead;
+    
+    // For tools to work, AIChatService requires both filesystem AND walletAddress
+    // So we control tools by controlling whether we pass filesystem
     const request: CompleteRequest = {
       messages,
+      // Always pass owner wallet for API key lookup (required for Claude, etc.)
       walletAddress: this.ownerWalletAddress || session.walletAddress,
-      filesystem: this.filesystem,
+      // Only provide filesystem if file OR wallet permissions are enabled
+      // (filesystem is the gate for enabling any tools in AIChatService)
+      filesystem: (hasAnyFilePermission || hasWalletPermission) ? this.filesystem : undefined,
       io: this.io,
       model: modelToUse,
     };
@@ -240,9 +251,11 @@ export class ChannelBridge {
     logger.info(`[ChannelBridge] Sending to AI`, {
       agent: agent.id,
       model: modelToUse,
-      channelModel,
-      messageCount: messages.length,
+      permissions: agent.permissions,
       toolFilter,
+      hasFilesystem: !!request.filesystem,
+      hasWallet: !!request.walletAddress,
+      toolsEnabled: !!request.filesystem && !!request.walletAddress,
     });
     
     // Get AI response
@@ -289,18 +302,16 @@ export class ChannelBridge {
   private buildSystemPrompt(session: SessionContext, agent: AgentConfig): string {
     const parts: string[] = [];
     
-    // Get channel settings for personality
-    const channelConfig = this.gateway.getChannelConfig(session.channel);
-    const settings = channelConfig?.settings;
-    const soulContent = settings?.soulContent;
+    // Get soul content from agent configuration (not channel settings)
+    const soulContent = agent.soulContent || agent.customSoul;
     
     // Agent identity with soul/personality
     if (soulContent) {
-      // Use custom soul content from settings
+      // Use custom soul content from agent
       parts.push(soulContent);
       parts.push(`\nYou are running on a PC2 sovereign node, messaging via ${session.channel}.`);
     } else {
-      // Default identity
+      // Default identity based on agent name
       parts.push(`You are ${agent.name}, an AI assistant running on a PC2 sovereign node.`);
       parts.push(`\nThe user is messaging you via ${session.channel}.`);
     }

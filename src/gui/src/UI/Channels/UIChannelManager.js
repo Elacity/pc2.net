@@ -43,6 +43,35 @@ const UIChannelManager = async function(options = {}) {
         console.warn('[ChannelManager] Could not fetch gateway status:', e);
     }
     
+    // Update saved channels with bot username if missing (from active connection)
+    for (const ch of savedChannels) {
+        if (ch.type === 'telegram') {
+            const statusData = gatewayStatus.telegram;
+            const activeBotUsername = typeof statusData === 'object' ? statusData?.botUsername : null;
+            // If saved channel is missing username but active connection has it, update the saved channel
+            if (!ch.telegram?.botUsername && activeBotUsername) {
+                try {
+                    await $.ajax({
+                        url: `/api/gateway/saved-channels/${ch.id}`,
+                        method: 'PUT',
+                        headers: { 'Authorization': `Bearer ${window.auth_token}` },
+                        contentType: 'application/json',
+                        data: JSON.stringify({
+                            name: `@${activeBotUsername}`,
+                            telegram: { ...ch.telegram, botUsername: activeBotUsername }
+                        })
+                    });
+                    // Update local reference
+                    ch.name = `@${activeBotUsername}`;
+                    if (ch.telegram) ch.telegram.botUsername = activeBotUsername;
+                    else ch.telegram = { botUsername: activeBotUsername };
+                } catch (e) {
+                    console.warn('[ChannelManager] Could not update saved channel with username:', e);
+                }
+            }
+        }
+    }
+    
     // Channel type icons
     const channelIcons = {
         telegram: `<svg width="16" height="16" viewBox="0 0 24 24" fill="#0088cc"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>`,
@@ -64,21 +93,41 @@ const UIChannelManager = async function(options = {}) {
         
         return savedChannels.map(ch => {
             const icon = channelIcons[ch.type] || '';
-            const isConnected = gatewayStatus[ch.type] === 'connected';
+            const channelStatusData = gatewayStatus[ch.type];
+            // Handle both old format (string) and new format (object with status)
+            const statusStr = typeof channelStatusData === 'object' ? channelStatusData?.status : channelStatusData;
+            const activeBotUsername = typeof channelStatusData === 'object' ? channelStatusData?.botUsername : null;
+            const isConnected = statusStr === 'connected';
             const statusColor = isConnected ? '#10b981' : '#999';
             const statusText = isConnected ? 'Connected' : 'Disconnected';
             
-            // Get bot username for display
-            const botUsername = ch.telegram?.botUsername 
-                ? `@${ch.telegram.botUsername}` 
-                : ch.name;
+            // Get bot username for display - try saved channel first, then active connection
+            let displayName = '';
+            if (ch.type === 'telegram') {
+                // Try saved channel botUsername first
+                if (ch.telegram?.botUsername) {
+                    displayName = `@${ch.telegram.botUsername}`;
+                } 
+                // Fall back to active connection's username
+                else if (activeBotUsername) {
+                    displayName = `@${activeBotUsername}`;
+                }
+                // Last resort: generic name
+                else {
+                    displayName = ch.name || 'Telegram Bot';
+                }
+            } else if (ch.type === 'discord') {
+                displayName = ch.discord?.botUsername ? `@${ch.discord.botUsername}` : (ch.name || 'Discord Bot');
+            } else {
+                displayName = ch.name;
+            }
             
             return `
                 <div class="saved-channel-row" data-channel-id="${ch.id}" style="display: flex; align-items: center; justify-content: space-between; padding: 12px; background: #f9fafb; border-radius: 8px; margin-bottom: 8px;">
                     <div style="display: flex; align-items: center; gap: 10px;">
                         ${icon}
                         <div>
-                            <div style="font-weight: 500; font-size: 13px;">${botUsername}</div>
+                            <div style="font-weight: 500; font-size: 13px;">${displayName}</div>
                             <div style="font-size: 10px; color: #666; display: flex; align-items: center; gap: 4px; margin-top: 2px;">
                                 <span style="width: 6px; height: 6px; border-radius: 50%; background: ${statusColor}; display: inline-block;"></span>
                                 <span>${statusText}</span>

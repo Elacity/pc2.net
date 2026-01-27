@@ -278,12 +278,20 @@ Always cite sources for market data. Warn about risks clearly."
                                     ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="#5865F2"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152z"/></svg>`
                                     : `<svg width="16" height="16" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382z"/></svg>`;
                                 
+                                // Get display name - use bot username if available
+                                let displayName = ch.name;
+                                if (ch.type === 'telegram' && ch.telegram?.botUsername) {
+                                    displayName = `@${ch.telegram.botUsername}`;
+                                } else if (ch.type === 'discord' && ch.discord?.botUsername) {
+                                    displayName = `@${ch.discord.botUsername}`;
+                                }
+                                
                                 return `
                                     <label class="channel-checkbox" data-channel-id="${ch.id}" style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid ${isChecked ? '#3b82f6' : '#e5e7eb'}; border-radius: 8px; cursor: pointer; background: ${isChecked ? '#eff6ff' : '#fff'}; transition: all 0.15s;">
                                         <input type="checkbox" class="tether-checkbox" value="${ch.id}" ${isChecked ? 'checked' : ''} style="width: 16px; height: 16px;">
                                         ${icon}
                                         <div style="flex: 1;">
-                                            <div style="font-size: 13px; font-weight: 500;">${ch.name}</div>
+                                            <div style="font-size: 13px; font-weight: 500;">${displayName}</div>
                                             <div style="font-size: 10px; color: #888; text-transform: capitalize;">${ch.type}</div>
                                         </div>
                                     </label>

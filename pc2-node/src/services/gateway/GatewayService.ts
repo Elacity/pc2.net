@@ -771,9 +771,14 @@ export class GatewayService extends EventEmitter {
    * Get gateway status
    */
   getStatus(): GatewayStatus {
-    const channelStatuses: Record<ChannelType, ChannelStatus> = {} as any;
+    // Build detailed channel status including bot usernames
+    const channelStatuses: Record<string, any> = {};
     for (const [channel, status] of this.channelStatus) {
-      channelStatuses[channel] = status;
+      const config = this.config.channels[channel];
+      channelStatuses[channel] = {
+        status,
+        botUsername: config?.telegram?.botUsername || config?.discord?.botUsername || undefined,
+      };
     }
     
     return {

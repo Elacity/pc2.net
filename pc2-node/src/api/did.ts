@@ -86,24 +86,35 @@ export async function handleTetherRequest(req: AuthenticatedRequest, res: Respon
       // Production: use configured public URL
       callbackUrl = `${nodeConfig.publicUrl}/api/did/callback`;
     } else {
-      // Development: use local network IP so phone can reach us
-      const host = req.get('host') || 'localhost:4200';
-      const isLocalhost = host.includes('localhost') || host.includes('127.0.0.1');
+      // Check for x-forwarded-host first (when behind a proxy like ela.city gateway)
+      const forwardedHost = req.headers['x-forwarded-host'];
+      const forwardedProto = req.headers['x-forwarded-proto'];
       
-      if (isLocalhost) {
-        const localIP = getLocalNetworkIP();
-        const port = host.split(':')[1] || '4200';
-        if (localIP) {
-          callbackUrl = `http://${localIP}:${port}/api/did/callback`;
-          logger.info('[DID] Using local network IP for callback:', callbackUrl);
-        } else {
-          // Fallback - will only work if phone is on same machine (unlikely)
-          callbackUrl = `http://localhost:${port}/api/did/callback`;
-          logger.warn('[DID] Could not detect local IP, callback may not work from mobile');
-        }
+      if (forwardedHost && typeof forwardedHost === 'string') {
+        // Behind a proxy - use forwarded values
+        const proto = (typeof forwardedProto === 'string' ? forwardedProto : 'https');
+        callbackUrl = `${proto}://${forwardedHost}/api/did/callback`;
+        logger.info('[DID] Using forwarded host for callback:', callbackUrl);
       } else {
-        // Already using a reachable host (maybe behind proxy)
-        callbackUrl = `${req.protocol}://${host}/api/did/callback`;
+        // Development: use local network IP so phone can reach us
+        const host = req.get('host') || 'localhost:4200';
+        const isLocalhost = host.includes('localhost') || host.includes('127.0.0.1');
+        
+        if (isLocalhost) {
+          const localIP = getLocalNetworkIP();
+          const port = host.split(':')[1] || '4200';
+          if (localIP) {
+            callbackUrl = `http://${localIP}:${port}/api/did/callback`;
+            logger.info('[DID] Using local network IP for callback:', callbackUrl);
+          } else {
+            // Fallback - will only work if phone is on same machine (unlikely)
+            callbackUrl = `http://localhost:${port}/api/did/callback`;
+            logger.warn('[DID] Could not detect local IP, callback may not work from mobile');
+          }
+        } else {
+          // Already using a reachable host (maybe behind proxy)
+          callbackUrl = `${req.protocol}://${host}/api/did/callback`;
+        }
       }
     }
     

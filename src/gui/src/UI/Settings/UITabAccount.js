@@ -154,15 +154,18 @@ async function initElastosIdentity($el_window) {
     });
     
     // Copy DID button
-    $el_window.find('.copy-did-btn').on('click', function() {
+    $el_window.find('.copy-did-btn').on('click', async function() {
         const did = walletService.getTetheredDID()?.did;
         if (did) {
-            navigator.clipboard.writeText(did).then(() => {
+            const success = await window.copy_to_clipboard(did);
+            if (success) {
                 $(this).html('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>');
-                setTimeout(() => {
-                    $(this).html('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>');
-                }, 2000);
-            });
+            } else {
+                $(this).html('<span style="font-size:10px;color:#ef4444;">!</span>');
+            }
+            setTimeout(() => {
+                $(this).html('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>');
+            }, 2000);
         }
     });
 }
@@ -809,7 +812,7 @@ export default {
         });
         
         // Copy handlers
-        $el_window.find('.copy-address-btn, .copy-node-btn').on('click', function() {
+        $el_window.find('.copy-address-btn, .copy-node-btn').on('click', async function() {
             const $btn = $(this);
             let value = $btn.data('address');
             if (!value) {
@@ -817,9 +820,15 @@ export default {
                 value = $el_window.find('#' + targetId).val();
             }
             if (value) {
-                navigator.clipboard.writeText(value);
-                $btn.html(checkIcon).css('opacity', '1');
-                setTimeout(() => $btn.html(copyIcon).css('opacity', '0.5'), 1500);
+                const success = await window.copy_to_clipboard(value);
+                if (success) {
+                    $btn.html(checkIcon).css('opacity', '1');
+                    setTimeout(() => $btn.html(copyIcon).css('opacity', '0.5'), 1500);
+                } else {
+                    // Show brief error then reset
+                    $btn.html('<span style="font-size:10px;color:#ef4444;">!</span>').css('opacity', '1');
+                    setTimeout(() => $btn.html(copyIcon).css('opacity', '0.5'), 1500);
+                }
             }
         });
 

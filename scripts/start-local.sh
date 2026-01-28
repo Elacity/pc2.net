@@ -219,6 +219,26 @@ main() {
     fi
     echo -e "${GREEN}✓ Build complete${NC}"
     
+    # Detect if running on VPS (no DISPLAY) or local machine
+    # Also get public IP for VPS users
+    LOCAL_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "")
+    PUBLIC_IP=$(curl -s --max-time 3 ifconfig.me 2>/dev/null || curl -s --max-time 3 icanhazip.com 2>/dev/null || echo "")
+    
+    # Determine the best URL to show
+    if [[ -z "$DISPLAY" ]] && [[ -n "$SSH_CONNECTION" ]]; then
+        # Running on VPS via SSH - show public IP
+        ACCESS_URL="http://${PUBLIC_IP}:4200"
+        ACCESS_NOTE="(your VPS public IP)"
+    elif [[ -n "$LOCAL_IP" ]] && [[ "$LOCAL_IP" != "127."* ]]; then
+        # Has a local network IP - show both localhost and LAN
+        ACCESS_URL="http://localhost:4200"
+        ACCESS_NOTE="or http://${LOCAL_IP}:4200 (LAN)"
+    else
+        # Default to localhost
+        ACCESS_URL="http://localhost:4200"
+        ACCESS_NOTE=""
+    fi
+    
     echo ""
     echo ""
     echo -e "${GREEN}╔═══════════════════════════════════════════════════════════════════╗${NC}"
@@ -237,7 +257,10 @@ main() {
     echo -e "${GREEN}║                                                                   ║${NC}"
     echo -e "${GREEN}║   ${NC}2. Go to this address:${GREEN}                                         ║${NC}"
     echo -e "${GREEN}║                                                                   ║${NC}"
-    echo -e "${GREEN}║      ${YELLOW}➜  http://localhost:4200${GREEN}                                  ║${NC}"
+    echo -e "${GREEN}║      ${YELLOW}➜  ${ACCESS_URL}${GREEN}                                  ║${NC}"
+    if [[ -n "$ACCESS_NOTE" ]]; then
+    echo -e "${GREEN}║         ${NC}${ACCESS_NOTE}${GREEN}                                    ║${NC}"
+    fi
     echo -e "${GREEN}║                                                                   ║${NC}"
     echo -e "${GREEN}║   ${NC}3. Connect your wallet to claim your personal cloud${GREEN}            ║${NC}"
     echo -e "${GREEN}║                                                                   ║${NC}"

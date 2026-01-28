@@ -1831,7 +1831,14 @@ async function UIWindow(options) {
     // Minimize button
     // --------------------------------------------------------
     if (el_window_head_minimize_btn) {
-        $(el_window_head_minimize_btn).click(function () {
+        // Use mousedown to stop propagation before focusWindow can interfere
+        $(el_window_head_minimize_btn).on('mousedown', function (e) {
+            e.stopPropagation();
+            e.preventDefault();
+        });
+        $(el_window_head_minimize_btn).on('click', function (e) {
+            e.stopPropagation();
+            e.preventDefault();
             $(el_window).hideWindow();
         });
     }
@@ -3788,21 +3795,55 @@ $.fn.showWindow = async function(options) {
         if($(this).hasClass('window')){
             // show window
             const el_window = this;
+            const wasMaximized = $(el_window).attr('data-was_maximized') === '1';
+            
+            // First, make the window visible again (it was hidden after minimize animation)
             $(el_window).css({
-                'transition': `top 0.2s, left 0.2s, bottom 0.2s, right 0.2s, width 0.2s, height 0.2s`,
-                top: $(el_window).attr('data-orig-top') + 'px',
-                left: $(el_window).attr('data-orig-left') + 'px',
-                width: $(el_window).attr('data-orig-width') + 'px',
-                height: $(el_window).attr('data-orig-height') + 'px',
+                'display': 'block',
+                'opacity': '0',
             });
+            
+            // Force a reflow to ensure display: block takes effect before animation
+            el_window.offsetHeight;
+            
+            if (wasMaximized) {
+                // Restore maximized state - re-apply maximized attribute and CSS
+                $(el_window).attr('data-is_maximized', '1');
+                $(el_window).css({
+                    'transition': `top 0.2s, left 0.2s, bottom 0.2s, right 0.2s, width 0.2s, height 0.2s, opacity 0.2s`,
+                    'position': 'fixed',
+                    'top': '0',
+                    'left': '0',
+                    'right': '0',
+                    'bottom': '0',
+                    'width': '100vw',
+                    'height': '100vh',
+                    'opacity': '1',
+                });
+            } else {
+                // Restore normal window
+                $(el_window).css({
+                    'transition': `top 0.2s, left 0.2s, bottom 0.2s, right 0.2s, width 0.2s, height 0.2s, opacity 0.2s`,
+                    top: $(el_window).attr('data-orig-top') + 'px',
+                    left: $(el_window).attr('data-orig-left') + 'px',
+                    width: $(el_window).attr('data-orig-width') + 'px',
+                    height: $(el_window).attr('data-orig-height') + 'px',
+                    'opacity': '1',
+                });
+            }
+            
             $(el_window).css('z-index', ++window.last_window_zindex);
 
             $(el_window).attr({
-                'data-is_minimized': true, 
-            })
+                'data-is_minimized': false, 
+            });
 
             setTimeout(() => {
                 $(this).focusWindow();
+                // If was maximized, apply the maximized window styles
+                if (wasMaximized) {
+                    window.update_maximized_window_for_taskbar(el_window);
+                }
             }, 80);
 
             // remove `transitions` a good while after setting css to make sure 
@@ -3866,6 +3907,12 @@ $.fn.focusWindow = function(event) {
             $app_iframe.get(0)?.blur();
             $app_iframe.get(0)?.contentWindow?.blur();
         }
+        // if window action buttons (minimize, maximize, close) are clicked, don't focus the iframe
+        // This ensures the button click handlers fire properly without iframe interference
+        else if($(event?.target).hasClass('window-action-btn') || $(event?.target).closest('.window-action-btn').length > 0){
+            $($app_iframe).css('pointer-events', 'none');
+            // Don't focus iframe when action buttons are clicked
+        }
         // if this has an iframe
         else if(!$(this).hasClass('window-disabled') && $app_iframe.length > 0){
             $($app_iframe).css('pointer-events', 'all');
@@ -3910,55 +3957,91 @@ $.fn.focusWindow = function(event) {
 $.fn.hideWindow = async function(options) {
     $(this).each(async function() {
         if($(this).hasClass('window')){
-            // get taskbar item location
-            let taskbar_item_pos = $(`.taskbar .taskbar-item[data-app="${$(this).attr('data-app')}"]`).position();
+            // Check if window is maximized - we need to temporarily remove maximized state
+            // because the CSS !important rules for maximized windows override our animation
+            const wasMaximized = $(this).attr('data-is_maximized') === '1' || $(this).attr('data-is_maximized') === 'true';
+            
+            // get taskbar item location using offset() for absolute document position
+            const appName = $(this).attr('data-app');
+            const $taskbarItem = $(`.taskbar .taskbar-item[data-app="${appName}"]`);
+            let taskbar_item_offset = $taskbarItem.length > 0 ? $taskbarItem.offset() : null;
             
             // Calculate animation target based on taskbar position
             let animationTarget = {};
             const taskbarPosition = window.taskbar_position || 'bottom';
             
+            // Default position if no taskbar item exists - animate to center of taskbar
+            if (!taskbar_item_offset) {
+                if (taskbarPosition === 'bottom') {
+                    taskbar_item_offset = { left: $(window).width() / 2, top: $(window).height() - 30 };
+                } else if (taskbarPosition === 'left') {
+                    taskbar_item_offset = { left: 20, top: $(window).height() / 2 };
+                } else if (taskbarPosition === 'right') {
+                    taskbar_item_offset = { left: $(window).width() - 20, top: $(window).height() / 2 };
+                }
+            }
+            
             if (taskbarPosition === 'bottom') {
-                // taskbar position is center of window minus half of taskbar item width  
-                taskbar_item_pos.left = taskbar_item_pos.left + ($( window ).width()/ 2) - ($(`.taskbar`).width() / 2);
+                // Use the absolute offset position directly - add half item width (20px) for center
                 animationTarget = {
-                    top: 'calc(100% - 60px)',
-                    left: taskbar_item_pos.left + 14.5,
+                    top: $(window).height() - 40,
+                    left: taskbar_item_offset.left + 20,
                 };
             } else if (taskbarPosition === 'left') {
                 animationTarget = {
-                    top: taskbar_item_pos.top + ($( window ).height()/ 2) - ($(`.taskbar`).height() / 2) + 14.5,
-                    left: '5px',
+                    top: taskbar_item_offset.top + 20,
+                    left: 20,
                 };
             } else if (taskbarPosition === 'right') {
                 animationTarget = {
-                    top: taskbar_item_pos.top + ($( window ).height()/ 2) - ($(`.taskbar`).height() / 2) + 14.5,
-                    left: 'calc(100% - 60px)',
+                    top: taskbar_item_offset.top + 20,
+                    left: $(window).width() - 40,
                 };
             }
 
+            // Store original state BEFORE removing maximized attribute
             $(this).attr({
-                'data-orig-width': $(this).width(), 
-                'data-orig-height': $(this).height(), 
-                'data-orig-top': $(this).position().top, 
-                'data-orig-left': $(this).position().left, 
-                'data-is_minimized': true, 
-            })
+                'data-orig-width': wasMaximized ? '100vw' : $(this).width(), 
+                'data-orig-height': wasMaximized ? '100vh' : $(this).height(), 
+                'data-orig-top': wasMaximized ? 0 : $(this).position().top, 
+                'data-orig-left': wasMaximized ? 0 : $(this).position().left, 
+                'data-is_minimized': true,
+                'data-was_maximized': wasMaximized ? '1' : '0',
+            });
+            
+            // Remove maximized state so CSS !important rules don't block our animation
+            if (wasMaximized) {
+                $(this).attr('data-is_maximized', '0');
+                // Clear any inline styles that might have been set by maximize
+                $(this).css({
+                    'position': 'absolute',
+                    'top': '0',
+                    'left': '0',
+                    'right': 'auto',
+                    'bottom': 'auto',
+                    'width': '100vw',
+                    'height': '100vh',
+                });
+            }
 
-            $(this).css({
+            // Now apply the minimize animation
+            const $thisWindow = $(this);
+            $thisWindow.css({
                 ...(!isMobile.phone ? { 
-                    'transition': `top 0.2s, left 0.2s, bottom 0.2s, right 0.2s, width 0.2s, height 0.2s`,
+                    'transition': `top 0.2s, left 0.2s, bottom 0.2s, right 0.2s, width 0.2s, height 0.2s, opacity 0.2s`,
                 } : {}),
                 width: `0`,
                 height: `0`,
+                opacity: `0`,
                 ...animationTarget,
             });
 
-            // remove transitions a good while after setting css to make sure 
-            // it doesn't interfere with an ongoing animation
+            // After animation completes, hide the window completely
             setTimeout(() => {
-                $(this).css({
+                $thisWindow.css({
                     'transition': 'none', 
-                    'transform': 'none'
+                    'transform': 'none',
+                    'display': 'none',
                 });
             }, 250);
 
@@ -4212,6 +4295,13 @@ window.update_maximized_window_for_taskbar = (el_window) => {
 window.fixAllMaximizedWindows = () => {
     $('.window[data-is_maximized="1"]').each(function() {
         const el_window = this;
+        
+        // Skip windows that are minimized - don't interfere with minimize animation
+        const isMinimized = $(el_window).attr('data-is_minimized');
+        if (isMinimized === 'true' || isMinimized === '1' || isMinimized === true) {
+            return; // Skip this window, it's minimized
+        }
+        
         const currentHeight = el_window.style.height;
         if (currentHeight && (currentHeight.includes('calc') || currentHeight !== '100vh')) {
             console.log('[fixAllMaximizedWindows] Fixing window height:', currentHeight, '-> 100vh');

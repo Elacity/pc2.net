@@ -7,7 +7,7 @@
  */
 
 import { execSync } from 'child_process';
-import { existsSync, mkdirSync, cpSync, rmSync, readdirSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, cpSync, rmSync, readdirSync, writeFileSync, readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -549,7 +549,7 @@ async function main() {
     
     <div id="app"></div>
     <script src="/bundle.min.js"></script>
-    <script src="/gui.js"></script>
+    <!-- NOTE: gui.js is already bundled into bundle.min.js - do NOT include separately -->
     
     <!-- Initialize GUI -->
     <script type="text/javascript">
@@ -633,6 +633,30 @@ async function main() {
       // Copy fresh build
       cpSync(PARTICLE_AUTH_SOURCE, PARTICLE_AUTH_TARGET, { recursive: true });
       console.log(`   ✅ Synced particle-auth: ${PARTICLE_AUTH_SOURCE} → ${PARTICLE_AUTH_TARGET}`);
+      
+      // CRITICAL: Inject PUTER_API_ORIGIN script into particle-auth index.html
+      // This ensures auth requests work on both local dev AND VPS deployments
+      // Without this, particle-auth defaults to localhost:4200 which fails on VPS
+      const particleIndexPath = join(PARTICLE_AUTH_TARGET, 'index.html');
+      if (existsSync(particleIndexPath)) {
+        let particleHtml = readFileSync(particleIndexPath, 'utf8');
+        const apiOriginScript = `
+    <script>
+      // CRITICAL: Set PUTER_API_ORIGIN before any modules load
+      // This ensures auth requests go to the correct backend:
+      // - Local dev: window.location.origin = http://localhost:4200 (or puter.localhost)
+      // - VPS deployment: window.location.origin = https://your-domain.com
+      // Without this, the particle-auth defaults to localhost:4200 which fails on VPS
+      window.PUTER_API_ORIGIN = window.location.origin;
+    </script>`;
+        
+        // Insert after </style> and before any <script> tags
+        if (!particleHtml.includes('PUTER_API_ORIGIN')) {
+          particleHtml = particleHtml.replace('</style>', '</style>' + apiOriginScript);
+          writeFileSync(particleIndexPath, particleHtml);
+          console.log('   ✅ Injected PUTER_API_ORIGIN fix into particle-auth');
+        }
+      }
     } else {
       console.warn(`\n⚠️  particle-auth dist not found: ${PARTICLE_AUTH_SOURCE}`);
       console.warn('   Run: cd packages/particle-auth && npm run build');

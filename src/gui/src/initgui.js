@@ -1497,12 +1497,16 @@ window.initgui = async function(options){
             return;
         }
         // if mouse is clicked on a window, activate it
-        if(window.mouseover_window !== undefined){
+        if(window.mouseover_window !== undefined && window.mouseover_window !== null){
             // if popover clicked on, don't activate window. This is because if an app 
             // is using the popover API to show a popover, the popover will be closed if the window is activated
             if($(e.target).hasClass('popover') || $(e.target).parents('.popover').length > 0)
                 return;
-            $(window.mouseover_window).focusWindow(e);
+            const $win = $(window.mouseover_window);
+            // Defensive check: ensure jQuery plugin is available before calling
+            if ($win.length > 0 && typeof $win.focusWindow === 'function') {
+                $win.focusWindow(e);
+            }
         }
     })
 

@@ -469,8 +469,11 @@ window.refresh_user_data = async (auth_token)=>{
 }
 
 window.update_auth_data = async (auth_token, user)=>{
+    console.log('[update_auth_data] Called with token:', auth_token ? auth_token.substring(0, 16) + '...' : 'NULL/UNDEFINED');
+    console.log('[update_auth_data] User:', user ? JSON.stringify({username: user.username, wallet: user.wallet_address?.substring(0, 10)}) : 'NULL');
     window.auth_token = auth_token;
     localStorage.setItem('auth_token', auth_token);
+    console.log('[update_auth_data] Saved to localStorage, verifying:', localStorage.getItem('auth_token')?.substring(0, 16) || 'NULL');
 
     // Has username changed?
     if(window.user?.username !== user.username)

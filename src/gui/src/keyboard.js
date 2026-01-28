@@ -452,8 +452,11 @@ $(document).bind('keydown', async function (e) {
         // either don't close if an input is focused or if the input is the filename input
         ((!$(focused_el).is('input') && !$(focused_el).is('textarea')) || $(focused_el).hasClass('savefiledialog-filename'))
     ) {
-        // close the FileDialog
-        $('.window-active').close();
+        // close the FileDialog - with defensive check
+        const $activeWindow = $('.window-active');
+        if ($activeWindow.length > 0 && typeof $activeWindow.close === 'function') {
+            $activeWindow.close();
+        }
     }
     //-----------------------------------------------------------------------
     // if the Esc key is pressed on a Window Navbar Editor, deactivate the editor
@@ -467,7 +470,10 @@ $(document).bind('keydown', async function (e) {
     // if the Esc key is pressed on a Search Window, close the Search Window
     //-----------------------------------------------------------------------
     else if ( e.which === 27 && $('.window-search').length > 0 ) {
-        $('.window-search').close();
+        const $searchWindow = $('.window-search');
+        if ($searchWindow.length > 0 && typeof $searchWindow.close === 'function') {
+            $searchWindow.close();
+        }
     }
 
     //-----------------------------------------------------------------------
@@ -717,8 +723,9 @@ $(document).bind('keyup keydown', async function (e) {
             $parent_window = $(window.active_element).find('.window');
         }
 
-        if ( $parent_window !== null ) {
-            $($parent_window).close();
+        // Defensive check: ensure jQuery plugin is available before calling
+        if ( $parent_window !== null && $parent_window.length > 0 && typeof $parent_window.close === 'function' ) {
+            $parent_window.close();
         }
     }
 

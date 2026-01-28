@@ -257,3 +257,21 @@ window.file_templates = []
 
 // default language
 window.locale = 'en';
+
+// Safe wrapper functions for jQuery window plugins
+// These prevent cascading errors when plugins become temporarily unavailable
+window.safeCloseWindow = function($el) {
+    if ($el && $el.length > 0 && typeof $el.close === 'function') {
+        $el.close();
+        return true;
+    }
+    return false;
+};
+
+window.safeFocusWindow = function($el, event) {
+    if ($el && $el.length > 0 && typeof $el.focusWindow === 'function') {
+        $el.focusWindow(event);
+        return true;
+    }
+    return false;
+};

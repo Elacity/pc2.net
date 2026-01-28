@@ -1040,6 +1040,38 @@
     </div>
 
     <script>
+        // ==================== IFRAME COMMUNICATION ====================
+        // Required for proper window controls (minimize, maximize, close)
+        
+        // Get appInstanceID from URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const appInstanceID = urlParams.get('puter.app_instance_id') || 
+                              urlParams.get('puter.appInstanceID') || 
+                              urlParams.get('appInstanceID');
+        
+        // Send READY message to parent window
+        if (appInstanceID) {
+            window.parent.postMessage({
+                msg: 'READY',
+                appInstanceID: appInstanceID,
+                env: 'app'
+            }, '*');
+            console.log('[dApp Centre] Sent READY message to parent');
+        }
+        
+        // Handle windowWillClose from parent - MUST respond for window to close
+        window.addEventListener('message', (event) => {
+            if (event.data.msg === 'windowWillClose') {
+                console.log('[dApp Centre] Received windowWillClose, responding...');
+                window.parent.postMessage({
+                    msg: 'windowWillCloseAck',
+                    original_msg_id: event.data.msg_id
+                }, '*');
+            }
+        });
+        
+        // ==================== END IFRAME COMMUNICATION ====================
+        
         // SVG Icons
         const icons = {
             play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>',

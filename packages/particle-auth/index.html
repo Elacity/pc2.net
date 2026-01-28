@@ -10,6 +10,14 @@
         overflow: hidden;
       }
     </style>
+    <script>
+      // CRITICAL: Set PUTER_API_ORIGIN before any modules load
+      // This ensures auth requests go to the correct backend:
+      // - Local dev: window.location.origin = http://localhost:4200 (or puter.localhost)
+      // - VPS deployment: window.location.origin = https://your-domain.com
+      // Without this, the particle-auth defaults to localhost:4200 which fails on VPS
+      window.PUTER_API_ORIGIN = window.location.origin;
+    </script>
   </head>
   <body>
     <div id="root"></div>

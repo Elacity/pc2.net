@@ -281,10 +281,15 @@ async function UIWindowParticleLogin(options = {}) {
             if(options.reload_on_success){
                 sessionStorage.setItem('playChimeNextUpdate', 'yes');
                 window.onbeforeunload = null;
-                console.log('About to redirect, checking URL parameters:', window.location.search);
+                console.log('[Particle Auth]: Token saved, preparing redirect...');
+                console.log('[Particle Auth]: Verifying token in localStorage:', localStorage.getItem('auth_token')?.substring(0, 16) + '...');
                 // Replace with a clean URL to prevent password leakage
                 const cleanUrl = window.location.origin + window.location.pathname;
-                window.location.replace(cleanUrl);
+                // Small delay to ensure localStorage is fully synced before navigation
+                setTimeout(() => {
+                    console.log('[Particle Auth]: Redirecting to:', cleanUrl);
+                    window.location.replace(cleanUrl);
+                }, 100);
             }else{
                 // Trigger login event FIRST to load desktop
                 document.dispatchEvent(new Event("login", { bubbles: true }));

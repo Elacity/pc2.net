@@ -89,7 +89,7 @@ async function UIWindowSettings (options) {
             width: 800,
             height: 'auto',
             dominant: true,
-            show_in_taskbar: false,
+            show_in_taskbar: true,
             draggable_body: false,
             onAppend: function (this_window) {
                 // send event settings-window-opened

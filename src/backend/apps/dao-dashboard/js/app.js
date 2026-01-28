@@ -2,6 +2,38 @@
  * Elastos DAO Dashboard - Main Application
  */
 
+// ==================== IFRAME COMMUNICATION ====================
+// Required for proper window controls (minimize, maximize, close)
+
+// Get appInstanceID from URL parameters
+const urlParams = new URLSearchParams(window.location.search);
+const appInstanceID = urlParams.get('puter.app_instance_id') || 
+                      urlParams.get('puter.appInstanceID') || 
+                      urlParams.get('appInstanceID');
+
+// Send READY message to parent window
+if (appInstanceID) {
+    window.parent.postMessage({
+        msg: 'READY',
+        appInstanceID: appInstanceID,
+        env: 'app'
+    }, '*');
+    console.log('[DAO Dashboard] Sent READY message to parent');
+}
+
+// Handle windowWillClose from parent - MUST respond for window to close
+window.addEventListener('message', (event) => {
+    if (event.data.msg === 'windowWillClose') {
+        console.log('[DAO Dashboard] Received windowWillClose, responding...');
+        window.parent.postMessage({
+            msg: 'windowWillCloseAck',
+            original_msg_id: event.data.msg_id
+        }, '*');
+    }
+});
+
+// ==================== END IFRAME COMMUNICATION ====================
+
 class DAODashboard {
     constructor() {
         this.currentTab = 'suggestions';

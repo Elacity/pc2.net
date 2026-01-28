@@ -26,21 +26,12 @@ interface BosonServiceLike {
  * @returns The base URL (e.g., "https://test7.ela.city")
  */
 export function getBaseUrl(req: Request, bosonService?: BosonServiceLike): string {
-  const host = req.get('host') || 'localhost';
+  // Prefer x-forwarded-host (set by reverse proxies like our ela.city gateway)
+  // over the Host header (which may be changed by changeOrigin: true)
+  const forwardedHost = req.headers['x-forwarded-host'];
+  const host = (typeof forwardedHost === 'string' ? forwardedHost : req.get('host')) || 'localhost';
   
-  // Check for Active Proxy header - only use Boson URL when explicitly proxied
-  // The Active Proxy sets x-boson-proxy header when routing through it
-  const isBosonProxy = req.headers['x-boson-proxy'] === 'true' || 
-                       req.headers['x-forwarded-by']?.toString().includes('boson');
-  
-  if (isBosonProxy && bosonService?.getPublicUrl) {
-    const publicUrl = bosonService.getPublicUrl();
-    if (publicUrl) {
-      return publicUrl;
-    }
-  }
-  
-  // Check x-forwarded-proto header (set by reverse proxies like Nginx)
+  // Check x-forwarded-proto header (set by reverse proxies like Nginx and our gateway)
   const forwardedProto = req.headers['x-forwarded-proto'];
   if (forwardedProto === 'https') {
     return `https://${host}`;

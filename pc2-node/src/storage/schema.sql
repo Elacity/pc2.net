@@ -159,13 +159,13 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 );
 
 -- FTS5 Full-Text Search for files
+-- Note: We don't use content='files' because the files table doesn't have a 'name' column
+-- Instead, we use triggers to keep FTS5 in sync (defined below)
 CREATE VIRTUAL TABLE IF NOT EXISTS files_fts USING fts5(
   path,
   name,
   content,
-  mime_type,
-  content='files',
-  content_rowid='rowid'
+  mime_type
 );
 
 -- Indexes for performance

@@ -121,6 +121,7 @@ const elastosPgp = /* #__PURE__ */ defineChain({
   name: 'Elastos (PGP)',
   network: 'elastos-pgp',
   nativeCurrency: { name: 'PanGu Asset', symbol: 'PGA', decimals: 18 },
+  iconUrl: 'https://icons.llamao.fi/icons/chains/rsz_elastos.jpg',
   rpcUrls: {
     default: {
       http: [

@@ -28,11 +28,12 @@ interface BosonServiceLike {
 export function getBaseUrl(req: Request, bosonService?: BosonServiceLike): string {
   const host = req.get('host') || 'localhost';
   
-  // If host contains an IP address with port (e.g., "38.242.211.112:4200"),
-  // it's likely coming through Active Proxy without proper Host header.
-  // In this case, try to use the Boson service's public URL.
-  const isIpWithPort = /^\d+\.\d+\.\d+\.\d+:\d+$/.test(host);
-  if (isIpWithPort && bosonService?.getPublicUrl) {
+  // Check for Active Proxy header - only use Boson URL when explicitly proxied
+  // The Active Proxy sets x-boson-proxy header when routing through it
+  const isBosonProxy = req.headers['x-boson-proxy'] === 'true' || 
+                       req.headers['x-forwarded-by']?.toString().includes('boson');
+  
+  if (isBosonProxy && bosonService?.getPublicUrl) {
     const publicUrl = bosonService.getPublicUrl();
     if (publicUrl) {
       return publicUrl;
@@ -51,6 +52,6 @@ export function getBaseUrl(req: Request, bosonService?: BosonServiceLike): strin
     return `https://${host}`;
   }
   
-  // Fallback to req.protocol
+  // Fallback to req.protocol - this works correctly for direct IP access
   return `${req.protocol}://${host}`;
 }

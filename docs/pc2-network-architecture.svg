@@ -1,0 +1,221 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" style="background: #1a1a2e">
+  <defs>
+    <linearGradient id="supernode-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ff6b35"/>
+      <stop offset="100%" style="stop-color:#f7931a"/>
+    </linearGradient>
+    <linearGradient id="node-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4a90d9"/>
+      <stop offset="100%" style="stop-color:#2563eb"/>
+    </linearGradient>
+    <linearGradient id="gateway-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#10b981"/>
+      <stop offset="100%" style="stop-color:#059669"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Title -->
+  <text x="600" y="50" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="32" font-weight="bold">ElastOS PC2 Network Architecture</text>
+  <text x="600" y="80" text-anchor="middle" fill="#8b8b9a" font-family="Arial, sans-serif" font-size="16">Your Data. Your Servers. Your Identity.</text>
+
+  <!-- SUPERNODES SECTION -->
+  <text x="600" y="130" text-anchor="middle" fill="#ff6b35" font-family="Arial, sans-serif" font-size="20" font-weight="bold">SUPERNODES (Council Infrastructure)</text>
+  
+  <!-- Supernode A -->
+  <g transform="translate(150, 160)">
+    <rect x="0" y="0" width="220" height="180" rx="15" fill="#252542" stroke="#ff6b35" stroke-width="2"/>
+    <rect x="0" y="0" width="220" height="40" rx="15" fill="url(#supernode-grad)"/>
+    <text x="110" y="28" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="16" font-weight="bold">SUPERNODE A</text>
+    <text x="110" y="65" text-anchor="middle" fill="#8b8b9a" font-family="Arial, sans-serif" font-size="12">69.164.241.210</text>
+    
+    <!-- Services -->
+    <rect x="20" y="80" width="180" height="25" rx="5" fill="#3d3d5c"/>
+    <circle cx="35" cy="92" r="8" fill="#ff6b35"/>
+    <text x="50" y="97" fill="#ffffff" font-family="Arial, sans-serif" font-size="12">Boson DHT</text>
+    
+    <rect x="20" y="110" width="180" height="25" rx="5" fill="#3d3d5c"/>
+    <circle cx="35" cy="122" r="8" fill="#4a90d9"/>
+    <text x="50" y="127" fill="#ffffff" font-family="Arial, sans-serif" font-size="12">Active Proxy</text>
+    
+    <rect x="20" y="140" width="180" height="25" rx="5" fill="#3d3d5c"/>
+    <circle cx="35" cy="152" r="8" fill="#10b981"/>
+    <text x="50" y="157" fill="#ffffff" font-family="Arial, sans-serif" font-size="12">Web Gateway</text>
+    
+    <text x="110" y="178" text-anchor="middle" fill="#10b981" font-family="Arial, sans-serif" font-size="14" font-weight="bold">*.ela.city</text>
+  </g>
+
+  <!-- Supernode B -->
+  <g transform="translate(490, 160)">
+    <rect x="0" y="0" width="220" height="180" rx="15" fill="#252542" stroke="#ff6b35" stroke-width="2"/>
+    <rect x="0" y="0" width="220" height="40" rx="15" fill="url(#supernode-grad)"/>
+    <text x="110" y="28" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="16" font-weight="bold">SUPERNODE B</text>
+    <text x="110" y="65" text-anchor="middle" fill="#8b8b9a" font-family="Arial, sans-serif" font-size="12">38.242.211.112</text>
+    
+    <!-- Services -->
+    <rect x="20" y="80" width="180" height="25" rx="5" fill="#3d3d5c"/>
+    <circle cx="35" cy="92" r="8" fill="#ff6b35"/>
+    <text x="50" y="97" fill="#ffffff" font-family="Arial, sans-serif" font-size="12">Boson DHT</text>
+    
+    <rect x="20" y="110" width="180" height="25" rx="5" fill="#3d3d5c"/>
+    <circle cx="35" cy="122" r="8" fill="#4a90d9"/>
+    <text x="50" y="127" fill="#ffffff" font-family="Arial, sans-serif" font-size="12">Active Proxy</text>
+    
+    <rect x="20" y="140" width="180" height="25" rx="5" fill="#3d3d5c"/>
+    <circle cx="35" cy="152" r="8" fill="#10b981"/>
+    <text x="50" y="157" fill="#ffffff" font-family="Arial, sans-serif" font-size="12">Web Gateway</text>
+    
+    <text x="110" y="178" text-anchor="middle" fill="#10b981" font-family="Arial, sans-serif" font-size="14" font-weight="bold">*.pc2.net</text>
+  </g>
+
+  <!-- Supernode C (Future) -->
+  <g transform="translate(830, 160)">
+    <rect x="0" y="0" width="220" height="180" rx="15" fill="#252542" stroke="#ff6b35" stroke-width="2" stroke-dasharray="5,5"/>
+    <rect x="0" y="0" width="220" height="40" rx="15" fill="#3d3d5c"/>
+    <text x="110" y="28" text-anchor="middle" fill="#8b8b9a" font-family="Arial, sans-serif" font-size="16" font-weight="bold">YOUR SUPERNODE</text>
+    <text x="110" y="65" text-anchor="middle" fill="#8b8b9a" font-family="Arial, sans-serif" font-size="12">Your Server IP</text>
+    
+    <!-- Services -->
+    <rect x="20" y="80" width="180" height="25" rx="5" fill="#3d3d5c"/>
+    <circle cx="35" cy="92" r="8" fill="#ff6b35" opacity="0.5"/>
+    <text x="50" y="97" fill="#8b8b9a" font-family="Arial, sans-serif" font-size="12">Boson DHT</text>
+    
+    <rect x="20" y="110" width="180" height="25" rx="5" fill="#3d3d5c"/>
+    <circle cx="35" cy="122" r="8" fill="#4a90d9" opacity="0.5"/>
+    <text x="50" y="127" fill="#8b8b9a" font-family="Arial, sans-serif" font-size="12">Active Proxy</text>
+    
+    <rect x="20" y="140" width="180" height="25" rx="5" fill="#3d3d5c"/>
+    <circle cx="35" cy="152" r="8" fill="#10b981" opacity="0.5"/>
+    <text x="50" y="157" fill="#8b8b9a" font-family="Arial, sans-serif" font-size="12">Web Gateway</text>
+    
+    <text x="110" y="178" text-anchor="middle" fill="#8b8b9a" font-family="Arial, sans-serif" font-size="14" font-weight="bold">*.ela.net</text>
+  </g>
+
+  <!-- DHT Mesh connections -->
+  <path d="M 370 250 L 490 250" stroke="#ff6b35" stroke-width="2" stroke-dasharray="8,4" fill="none"/>
+  <path d="M 710 250 L 830 250" stroke="#ff6b35" stroke-width="2" stroke-dasharray="8,4" fill="none"/>
+  <text x="430" y="245" fill="#ff6b35" font-family="Arial, sans-serif" font-size="10">DHT Mesh</text>
+  <text x="770" y="245" fill="#ff6b35" font-family="Arial, sans-serif" font-size="10">DHT Mesh</text>
+
+  <!-- CONNECTION TYPES SECTION -->
+  <text x="600" y="400" text-anchor="middle" fill="#4a90d9" font-family="Arial, sans-serif" font-size="20" font-weight="bold">CONNECTION TYPES</text>
+  
+  <!-- Direct Connection -->
+  <g transform="translate(200, 420)">
+    <rect x="0" y="0" width="300" height="100" rx="10" fill="#252542" stroke="#10b981" stroke-width="2"/>
+    <text x="150" y="30" text-anchor="middle" fill="#10b981" font-family="Arial, sans-serif" font-size="16" font-weight="bold">DIRECT ACCESS</text>
+    <text x="150" y="55" text-anchor="middle" fill="#8b8b9a" font-family="Arial, sans-serif" font-size="12">VPS with Public IP</text>
+    <text x="150" y="75" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="11">User � Gateway � Your Server</text>
+    <text x="150" y="92" text-anchor="middle" fill="#10b981" font-family="Arial, sans-serif" font-size="10">Fastest - No relay needed</text>
+  </g>
+
+  <!-- NAT Traversal -->
+  <g transform="translate(700, 420)">
+    <rect x="0" y="0" width="300" height="100" rx="10" fill="#252542" stroke="#4a90d9" stroke-width="2"/>
+    <text x="150" y="30" text-anchor="middle" fill="#4a90d9" font-family="Arial, sans-serif" font-size="16" font-weight="bold">NAT TRAVERSAL</text>
+    <text x="150" y="55" text-anchor="middle" fill="#8b8b9a" font-family="Arial, sans-serif" font-size="12">Home/RaspberryPi behind Firewall</text>
+    <text x="150" y="75" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="11">User � Gateway � Active Proxy � Your Server</text>
+    <text x="150" y="92" text-anchor="middle" fill="#4a90d9" font-family="Arial, sans-serif" font-size="10">Works everywhere - Encrypted tunnel</text>
+  </g>
+
+  <!-- PERSONAL NODES SECTION -->
+  <text x="600" y="580" text-anchor="middle" fill="#4a90d9" font-family="Arial, sans-serif" font-size="20" font-weight="bold">PERSONAL NODES (Users)</text>
+
+  <!-- VPS Node -->
+  <g transform="translate(100, 610)">
+    <rect x="0" y="0" width="180" height="120" rx="10" fill="#252542" stroke="#4a90d9" stroke-width="2"/>
+    <rect x="60" y="15" width="60" height="40" rx="5" fill="url(#node-grad)"/>
+    <text x="90" y="40" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="20"></text>
+    <text x="90" y="75" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="14" font-weight="bold">VPS Node</text>
+    <text x="90" y="92" text-anchor="middle" fill="#8b8b9a" font-family="Arial, sans-serif" font-size="11">Direct Connection</text>
+    <text x="90" y="110" text-anchor="middle" fill="#10b981" font-family="Arial, sans-serif" font-size="12">alice.ela.city</text>
+  </g>
+
+  <!-- Home Node -->
+  <g transform="translate(320, 610)">
+    <rect x="0" y="0" width="180" height="120" rx="10" fill="#252542" stroke="#4a90d9" stroke-width="2"/>
+    <rect x="60" y="15" width="60" height="40" rx="5" fill="url(#node-grad)"/>
+    <text x="90" y="40" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="20"><�</text>
+    <text x="90" y="75" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="14" font-weight="bold">Home Node</text>
+    <text x="90" y="92" text-anchor="middle" fill="#8b8b9a" font-family="Arial, sans-serif" font-size="11">NAT Traversal</text>
+    <text x="90" y="110" text-anchor="middle" fill="#10b981" font-family="Arial, sans-serif" font-size="12">bob.pc2.net</text>
+  </g>
+
+  <!-- RaspberryPi -->
+  <g transform="translate(540, 610)">
+    <rect x="0" y="0" width="180" height="120" rx="10" fill="#252542" stroke="#4a90d9" stroke-width="2"/>
+    <rect x="60" y="15" width="60" height="40" rx="5" fill="url(#node-grad)"/>
+    <text x="90" y="40" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="20"><S</text>
+    <text x="90" y="75" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="14" font-weight="bold">Raspberry Pi</text>
+    <text x="90" y="92" text-anchor="middle" fill="#8b8b9a" font-family="Arial, sans-serif" font-size="11">NAT Traversal</text>
+    <text x="90" y="110" text-anchor="middle" fill="#10b981" font-family="Arial, sans-serif" font-size="12">carol.ela.net</text>
+  </g>
+
+  <!-- Local Dev -->
+  <g transform="translate(760, 610)">
+    <rect x="0" y="0" width="180" height="120" rx="10" fill="#252542" stroke="#4a90d9" stroke-width="2"/>
+    <rect x="60" y="15" width="60" height="40" rx="5" fill="url(#node-grad)"/>
+    <text x="90" y="40" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="20">=�</text>
+    <text x="90" y="75" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="14" font-weight="bold">Local Dev</text>
+    <text x="90" y="92" text-anchor="middle" fill="#8b8b9a" font-family="Arial, sans-serif" font-size="11">Direct Access</text>
+    <text x="90" y="110" text-anchor="middle" fill="#10b981" font-family="Arial, sans-serif" font-size="12">localhost:4200</text>
+  </g>
+
+  <!-- Connection arrows from nodes to supernodes -->
+  <path d="M 190 610 L 260 380" stroke="#4a90d9" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+  <path d="M 410 610 L 600 380" stroke="#4a90d9" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+  <path d="M 630 610 L 600 380" stroke="#4a90d9" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+  <path d="M 850 610 L 940 380" stroke="#4a90d9" stroke-width="2" stroke-dasharray="5,5" fill="none"/>
+
+  <!-- Arrowhead marker -->
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#4a90d9"/>
+    </marker>
+  </defs>
+
+  <!-- Key Features Box -->
+  <g transform="translate(980, 600)">
+    <rect x="0" y="0" width="200" height="140" rx="10" fill="#252542" stroke="#ff6b35" stroke-width="2"/>
+    <text x="100" y="25" text-anchor="middle" fill="#ff6b35" font-family="Arial, sans-serif" font-size="14" font-weight="bold">KEY FEATURES</text>
+    <text x="15" y="50" fill="#ffffff" font-family="Arial, sans-serif" font-size="11">= DID Identity</text>
+    <text x="25" y="68" fill="#8b8b9a" font-family="Arial, sans-serif" font-size="10">did:boson:NodeId</text>
+    <text x="15" y="88" fill="#ffffff" font-family="Arial, sans-serif" font-size="11">= 24-Word Recovery</text>
+    <text x="15" y="108" fill="#ffffff" font-family="Arial, sans-serif" font-size="11">< Global Access</text>
+    <text x="15" y="128" fill="#ffffff" font-family="Arial, sans-serif" font-size="11">=� Self-Sovereign Data</text>
+  </g>
+
+  <!-- How it Scales Box -->
+  <g transform="translate(980, 160)">
+    <rect x="0" y="0" width="200" height="180" rx="10" fill="#252542" stroke="#10b981" stroke-width="2"/>
+    <text x="100" y="25" text-anchor="middle" fill="#10b981" font-family="Arial, sans-serif" font-size="14" font-weight="bold">HOW IT SCALES</text>
+    <text x="15" y="50" fill="#ffffff" font-family="Arial, sans-serif" font-size="11">1� Council runs Supernodes</text>
+    <text x="15" y="72" fill="#ffffff" font-family="Arial, sans-serif" font-size="11">2� Supernodes form DHT mesh</text>
+    <text x="15" y="94" fill="#ffffff" font-family="Arial, sans-serif" font-size="11">3� Users connect via any</text>
+    <text x="25" y="110" fill="#8b8b9a" font-family="Arial, sans-serif" font-size="10">supernode</text>
+    <text x="15" y="130" fill="#ffffff" font-family="Arial, sans-serif" font-size="11">4� Load distributed across</text>
+    <text x="25" y="146" fill="#8b8b9a" font-family="Arial, sans-serif" font-size="10">all supernodes</text>
+    <text x="15" y="168" fill="#ffffff" font-family="Arial, sans-serif" font-size="11">5� No single point of failure</text>
+  </g>
+
+  <!-- Flow arrows showing user access -->
+  <g transform="translate(0, 780)">
+    <rect x="100" y="0" width="1000" height="80" rx="10" fill="#252542" stroke="#8b8b9a" stroke-width="1"/>
+    <text x="600" y="25" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="16" font-weight="bold">USER ACCESS FLOW</text>
+    <text x="600" y="50" text-anchor="middle" fill="#8b8b9a" font-family="Arial, sans-serif" font-size="12">
+      User visits alice.ela.city � DNS resolves to Supernode � Gateway routes to Alice's Node � Content served
+    </text>
+    <text x="600" y="70" text-anchor="middle" fill="#10b981" font-family="Arial, sans-serif" font-size="11">
+      Works for any *.ela.city, *.pc2.net, or *.ela.net subdomain registered to the network
+    </text>
+  </g>
+
+  <!-- Footer -->
+  <text x="600" y="880" text-anchor="middle" fill="#8b8b9a" font-family="Arial, sans-serif" font-size="12">Presented by Elacity Labs | ElastOS: The World Computer</text>
+</svg>

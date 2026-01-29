@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ElastOS PC2 Network Architecture</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #fff;
+            min-height: 100vh;
+            padding: 40px;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        h1 {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            background: linear-gradient(90deg, #ff6b35, #f7931a);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .subtitle {
+            text-align: center;
+            color: #8b8b9a;
+            margin-bottom: 40px;
+            font-size: 1.1rem;
+        }
+        .section-title {
+            text-align: center;
+            font-size: 1.3rem;
+            margin: 30px 0 20px;
+            padding: 10px 20px;
+            display: inline-block;
+            border-radius: 25px;
+        }
+        .section-title.orange { background: linear-gradient(90deg, #ff6b35, #f7931a); }
+        .section-title.blue { background: linear-gradient(90deg, #4a90d9, #2563eb); }
+        .section-title.green { background: linear-gradient(90deg, #10b981, #059669); }
+        
+        .section-container { text-align: center; margin-bottom: 20px; }
+        
+        /* Supernodes */
+        .supernodes {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+        .supernode {
+            background: #252542;
+            border: 2px solid #ff6b35;
+            border-radius: 15px;
+            padding: 0;
+            width: 280px;
+            overflow: hidden;
+        }
+        .supernode.future {
+            border-style: dashed;
+            opacity: 0.7;
+        }
+        .supernode-header {
+            background: linear-gradient(90deg, #ff6b35, #f7931a);
+            padding: 15px;
+            text-align: center;
+        }
+        .supernode.future .supernode-header {
+            background: #3d3d5c;
+        }
+        .supernode-header h3 { font-size: 1.1rem; }
+        .supernode-ip { color: #8b8b9a; font-size: 0.85rem; padding: 10px; }
+        .services { padding: 0 15px 15px; }
+        .service {
+            background: #3d3d5c;
+            border-radius: 8px;
+            padding: 10px 15px;
+            margin: 8px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .service-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+        .service-dot.orange { background: #ff6b35; }
+        .service-dot.blue { background: #4a90d9; }
+        .service-dot.green { background: #10b981; }
+        .domain {
+            text-align: center;
+            color: #10b981;
+            font-weight: bold;
+            padding: 10px;
+            font-size: 1.1rem;
+        }
+        
+        /* DHT Mesh */
+        .dht-mesh {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+            margin: 20px 0;
+            color: #ff6b35;
+            font-size: 0.9rem;
+        }
+        .dht-line {
+            width: 100px;
+            height: 2px;
+            background: repeating-linear-gradient(90deg, #ff6b35 0, #ff6b35 10px, transparent 10px, transparent 15px);
+        }
+        
+        /* Connection Types */
+        .connection-types {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            flex-wrap: wrap;
+            margin: 20px 0;
+        }
+        .connection-type {
+            background: #252542;
+            border-radius: 15px;
+            padding: 25px;
+            width: 400px;
+            text-align: center;
+        }
+        .connection-type.direct { border: 2px solid #10b981; }
+        .connection-type.nat { border: 2px solid #4a90d9; }
+        .connection-type h4 {
+            font-size: 1.2rem;
+            margin-bottom: 10px;
+        }
+        .connection-type.direct h4 { color: #10b981; }
+        .connection-type.nat h4 { color: #4a90d9; }
+        .connection-type p { color: #8b8b9a; margin: 5px 0; }
+        .connection-type .flow { 
+            background: #1a1a2e; 
+            padding: 10px; 
+            border-radius: 8px; 
+            margin: 10px 0;
+            font-family: monospace;
+            font-size: 0.9rem;
+        }
+        .connection-type .note {
+            font-size: 0.85rem;
+            margin-top: 10px;
+        }
+        .connection-type.direct .note { color: #10b981; }
+        .connection-type.nat .note { color: #4a90d9; }
+        
+        /* Personal Nodes */
+        .personal-nodes {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin: 20px 0;
+        }
+        .personal-node {
+            background: #252542;
+            border: 2px solid #4a90d9;
+            border-radius: 15px;
+            padding: 20px;
+            width: 200px;
+            text-align: center;
+        }
+        .node-icon {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+        .node-name { font-weight: bold; margin-bottom: 5px; }
+        .node-type { color: #8b8b9a; font-size: 0.85rem; margin-bottom: 10px; }
+        .node-url { color: #10b981; font-size: 0.9rem; }
+        
+        /* Info Boxes */
+        .info-boxes {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            flex-wrap: wrap;
+            margin: 30px 0;
+        }
+        .info-box {
+            background: #252542;
+            border-radius: 15px;
+            padding: 20px;
+            width: 300px;
+        }
+        .info-box.scale { border: 2px solid #10b981; }
+        .info-box.features { border: 2px solid #ff6b35; }
+        .info-box h4 {
+            margin-bottom: 15px;
+            font-size: 1.1rem;
+        }
+        .info-box.scale h4 { color: #10b981; }
+        .info-box.features h4 { color: #ff6b35; }
+        .info-box ul {
+            list-style: none;
+            padding: 0;
+        }
+        .info-box li {
+            padding: 8px 0;
+            border-bottom: 1px solid #3d3d5c;
+            font-size: 0.95rem;
+        }
+        .info-box li:last-child { border-bottom: none; }
+        
+        /* Flow */
+        .user-flow {
+            background: #252542;
+            border: 1px solid #8b8b9a;
+            border-radius: 15px;
+            padding: 25px;
+            margin: 30px auto;
+            max-width: 1000px;
+            text-align: center;
+        }
+        .user-flow h4 { margin-bottom: 15px; }
+        .user-flow .flow-text { color: #8b8b9a; margin: 10px 0; }
+        .user-flow .flow-highlight { color: #10b981; }
+        
+        /* Footer */
+        .footer {
+            text-align: center;
+            color: #8b8b9a;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #3d3d5c;
+        }
+        
+        /* Arrows */
+        .arrows {
+            text-align: center;
+            font-size: 2rem;
+            color: #4a90d9;
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ElastOS PC2 Network Architecture</h1>
+        <p class="subtitle">Your Data. Your Servers. Your Identity.</p>
+        
+        <!-- SUPERNODES -->
+        <div class="section-container">
+            <span class="section-title orange">SUPERNODES (Council Infrastructure)</span>
+        </div>
+        
+        <div class="supernodes">
+            <div class="supernode">
+                <div class="supernode-header">
+                    <h3>SUPERNODE A</h3>
+                </div>
+                <div class="supernode-ip">69.164.241.210</div>
+                <div class="services">
+                    <div class="service"><span class="service-dot orange"></span> Boson DHT</div>
+                    <div class="service"><span class="service-dot blue"></span> Active Proxy</div>
+                    <div class="service"><span class="service-dot green"></span> Web Gateway</div>
+                </div>
+                <div class="domain">*.ela.city</div>
+            </div>
+            
+            <div class="supernode">
+                <div class="supernode-header">
+                    <h3>SUPERNODE B</h3>
+                </div>
+                <div class="supernode-ip">38.242.211.112</div>
+                <div class="services">
+                    <div class="service"><span class="service-dot orange"></span> Boson DHT</div>
+                    <div class="service"><span class="service-dot blue"></span> Active Proxy</div>
+                    <div class="service"><span class="service-dot green"></span> Web Gateway</div>
+                </div>
+                <div class="domain">*.pc2.net</div>
+            </div>
+            
+            <div class="supernode future">
+                <div class="supernode-header">
+                    <h3>YOUR SUPERNODE</h3>
+                </div>
+                <div class="supernode-ip">Your Server IP</div>
+                <div class="services">
+                    <div class="service"><span class="service-dot orange"></span> Boson DHT</div>
+                    <div class="service"><span class="service-dot blue"></span> Active Proxy</div>
+                    <div class="service"><span class="service-dot green"></span> Web Gateway</div>
+                </div>
+                <div class="domain" style="color: #8b8b9a;">*.ela.net</div>
+            </div>
+        </div>
+        
+        <div class="dht-mesh">
+            <span class="dht-line"></span>
+            <span>DHT Mesh Network</span>
+            <span class="dht-line"></span>
+        </div>
+        
+        <div class="arrows">↕</div>
+        
+        <!-- CONNECTION TYPES -->
+        <div class="section-container">
+            <span class="section-title blue">CONNECTION TYPES</span>
+        </div>
+        
+        <div class="connection-types">
+            <div class="connection-type direct">
+                <h4>DIRECT ACCESS</h4>
+                <p>VPS with Public IP</p>
+                <div class="flow">User → Gateway → Your Server</div>
+                <p class="note">Fastest - No relay needed</p>
+            </div>
+            
+            <div class="connection-type nat">
+                <h4>NAT TRAVERSAL</h4>
+                <p>Home / Raspberry Pi behind Firewall</p>
+                <div class="flow">User → Gateway → Active Proxy → Your Server</div>
+                <p class="note">Works everywhere - Encrypted tunnel</p>
+            </div>
+        </div>
+        
+        <div class="arrows">↕</div>
+        
+        <!-- PERSONAL NODES -->
+        <div class="section-container">
+            <span class="section-title green">PERSONAL NODES (Users)</span>
+        </div>
+        
+        <div class="personal-nodes">
+            <div class="personal-node">
+                <div class="node-icon">☁️</div>
+                <div class="node-name">VPS Node</div>
+                <div class="node-type">Direct Connection</div>
+                <div class="node-url">alice.ela.city</div>
+            </div>
+            
+            <div class="personal-node">
+                <div class="node-icon">🏠</div>
+                <div class="node-name">Home Node</div>
+                <div class="node-type">NAT Traversal</div>
+                <div class="node-url">bob.pc2.net</div>
+            </div>
+            
+            <div class="personal-node">
+                <div class="node-icon">🍓</div>
+                <div class="node-name">Raspberry Pi</div>
+                <div class="node-type">NAT Traversal</div>
+                <div class="node-url">carol.ela.net</div>
+            </div>
+            
+            <div class="personal-node">
+                <div class="node-icon">💻</div>
+                <div class="node-name">Local Dev</div>
+                <div class="node-type">Direct Access</div>
+                <div class="node-url">localhost:4200</div>
+            </div>
+        </div>
+        
+        <!-- INFO BOXES -->
+        <div class="info-boxes">
+            <div class="info-box scale">
+                <h4>HOW IT SCALES</h4>
+                <ul>
+                    <li>1️⃣ Council runs Supernodes</li>
+                    <li>2️⃣ Supernodes form DHT mesh</li>
+                    <li>3️⃣ Users connect via any supernode</li>
+                    <li>4️⃣ Load distributed across network</li>
+                    <li>5️⃣ No single point of failure</li>
+                </ul>
+            </div>
+            
+            <div class="info-box features">
+                <h4>KEY FEATURES</h4>
+                <ul>
+                    <li>🔐 DID Identity (did:boson:NodeId)</li>
+                    <li>🔑 24-Word Recovery Phrase</li>
+                    <li>🌐 Global Access via Friendly URLs</li>
+                    <li>🛡️ Self-Sovereign Data</li>
+                    <li>🤖 AI Agents & Telegram Bots</li>
+                </ul>
+            </div>
+        </div>
+        
+        <!-- USER FLOW -->
+        <div class="user-flow">
+            <h4>USER ACCESS FLOW</h4>
+            <p class="flow-text">
+                User visits <strong>alice.ela.city</strong> → 
+                DNS resolves to Supernode → 
+                Gateway routes request → 
+                Content served from Alice's Node
+            </p>
+            <p class="flow-highlight">
+                Works for any *.ela.city, *.pc2.net, or *.ela.net subdomain
+            </p>
+        </div>
+        
+        <div class="footer">
+            <p>Presented by Elacity Labs | ElastOS: The World Computer</p>
+        </div>
+    </div>
+</body>
+</html>

@@ -4,8 +4,17 @@
  * Binary packet encoder/decoder for Active Proxy communication.
  * Implements the protocol used by the Java Active Proxy server.
  * 
- * Packet Format:
- * - 4 bytes: Length (big-endian, includes type + payload)
+ * Protocol compatibility:
+ * - Server: Boson.Java boson-active-proxy-2.0.8-SNAPSHOT
+ * - Uses NaCl CryptoBox for encrypted communication
+ * - May require updates for Boson V2 (expected Feb 2026)
+ * 
+ * Encrypted Packet Format (after handshake):
+ * - 2 bytes: Length (big-endian, includes length field itself)
+ * - 24 bytes: Nonce
+ * - N bytes: Encrypted payload (includes packet type + data)
+ * 
+ * Plaintext Packet Format (inside encrypted envelope):
  * - 1 byte: Packet type
  * - N bytes: Payload
  */
@@ -88,9 +97,24 @@ export interface DataPayload {
 }
 
 /**
- * Header size: 4 bytes length + 1 byte type
+ * Length field size: 2 bytes (encrypted protocol)
  */
-const HEADER_SIZE = 5;
+export const LENGTH_FIELD_SIZE = 2;
+
+/**
+ * Nonce size for encrypted packets
+ */
+export const NONCE_SIZE = 24;
+
+/**
+ * Minimum encrypted packet header: 2 (length) + 24 (nonce)
+ */
+export const ENCRYPTED_HEADER_SIZE = LENGTH_FIELD_SIZE + NONCE_SIZE;
+
+/**
+ * Header size for plaintext packet inside envelope: 1 byte type
+ */
+const PLAINTEXT_HEADER_SIZE = 1;
 
 /**
  * Maximum packet size (1MB)
@@ -98,60 +122,133 @@ const HEADER_SIZE = 5;
 const MAX_PACKET_SIZE = 1024 * 1024;
 
 /**
- * Encode a packet for transmission
+ * Maximum encrypted packet size (1MB + crypto overhead)
+ */
+const MAX_ENCRYPTED_PACKET_SIZE = MAX_PACKET_SIZE + NONCE_SIZE + 16; // 16 = auth tag
+
+/**
+ * Encode a plaintext packet (to be encrypted before transmission)
+ * 
+ * This creates the inner packet format: [1-byte type][payload]
+ * The result should be encrypted with CryptoBox before sending.
  * 
  * @param type - Packet type
  * @param payload - Packet payload
- * @returns Encoded packet buffer
+ * @returns Encoded plaintext packet (ready for encryption)
  */
-export function encodePacket(type: PacketType, payload: Buffer = Buffer.alloc(0)): Buffer {
-  const length = 1 + payload.length; // type (1) + payload
-  const packet = Buffer.alloc(4 + length);
-  
-  // Write length as big-endian 32-bit integer
-  packet.writeUInt32BE(length, 0);
+export function encodePlaintextPacket(type: PacketType, payload: Buffer = Buffer.alloc(0)): Buffer {
+  const packet = Buffer.alloc(1 + payload.length);
   
   // Write packet type
-  packet.writeUInt8(type, 4);
+  packet.writeUInt8(type, 0);
   
   // Write payload
   if (payload.length > 0) {
-    payload.copy(packet, 5);
+    payload.copy(packet, 1);
   }
   
   return packet;
 }
 
 /**
- * Decode a packet from a buffer
- * 
- * @param data - Buffer containing packet data
- * @returns Decoded packet or null if incomplete
+ * Legacy encode function for backward compatibility
+ * @deprecated Use encodePlaintextPacket with CryptoBox encryption
  */
-export function decodePacket(data: Buffer): { packet: Packet; bytesConsumed: number } | null {
-  // Need at least header size
-  if (data.length < HEADER_SIZE) {
+export function encodePacket(type: PacketType, payload: Buffer = Buffer.alloc(0)): Buffer {
+  return encodePlaintextPacket(type, payload);
+}
+
+/**
+ * Decode a plaintext packet (after decryption)
+ * 
+ * This decodes the inner packet format: [1-byte type][payload]
+ * Use this after decrypting received data with CryptoBox.
+ * 
+ * @param data - Decrypted plaintext data
+ * @returns Decoded packet or null if invalid
+ */
+export function decodePlaintextPacket(data: Buffer): Packet | null {
+  if (data.length < 1) {
     return null;
   }
   
-  // Read length
-  const length = data.readUInt32BE(0);
+  const type = data.readUInt8(0) as PacketType;
+  const payload = data.length > 1 ? data.slice(1) : Buffer.alloc(0);
+  
+  return { type, payload };
+}
+
+/**
+ * Read an encrypted packet from a buffer
+ * 
+ * Encrypted packet format: [2-byte length][24-byte nonce][encrypted data]
+ * 
+ * @param data - Buffer containing encrypted packet data
+ * @returns Encrypted packet components or null if incomplete
+ */
+export function readEncryptedPacket(data: Buffer): { 
+  nonce: Buffer; 
+  ciphertext: Buffer; 
+  bytesConsumed: number;
+} | null {
+  // Need at least length field
+  if (data.length < LENGTH_FIELD_SIZE) {
+    return null;
+  }
+  
+  // Read 2-byte length (includes itself)
+  const messageLength = data.readUInt16BE(0);
   
   // Validate length
+  if (messageLength > MAX_ENCRYPTED_PACKET_SIZE) {
+    throw new Error(`Encrypted packet too large: ${messageLength} bytes`);
+  }
+  
+  // Check if we have the full packet
+  if (data.length < messageLength) {
+    return null;
+  }
+  
+  // Minimum valid: 2 (len) + 24 (nonce) + 16 (min ciphertext)
+  if (messageLength < ENCRYPTED_HEADER_SIZE + 16) {
+    throw new Error(`Encrypted packet too short: ${messageLength} bytes`);
+  }
+  
+  // Extract nonce and ciphertext (after length field)
+  const nonce = data.slice(LENGTH_FIELD_SIZE, ENCRYPTED_HEADER_SIZE);
+  const ciphertext = data.slice(ENCRYPTED_HEADER_SIZE, messageLength);
+  
+  return {
+    nonce,
+    ciphertext,
+    bytesConsumed: messageLength,
+  };
+}
+
+/**
+ * Legacy decode function - for testing only
+ * @deprecated Use readEncryptedPacket + CryptoBox decryption + decodePlaintextPacket
+ */
+export function decodePacket(data: Buffer): { packet: Packet; bytesConsumed: number } | null {
+  // This legacy function expected 4-byte length + 1-byte type
+  // It's kept for backward compatibility but shouldn't be used with the real server
+  
+  if (data.length < 5) {
+    return null;
+  }
+  
+  const length = data.readUInt32BE(0);
+  
   if (length > MAX_PACKET_SIZE) {
     throw new Error(`Packet too large: ${length} bytes`);
   }
   
-  // Check if we have the full packet
   const totalLength = 4 + length;
   if (data.length < totalLength) {
     return null;
   }
   
-  // Read type
   const type = data.readUInt8(4) as PacketType;
-  
-  // Extract payload
   const payload = Buffer.alloc(length - 1);
   if (length > 1) {
     data.copy(payload, 0, 5, totalLength);
@@ -328,7 +425,72 @@ export function getPacketTypeName(type: PacketType): string {
 }
 
 /**
- * Packet buffer for handling partial reads
+ * Encrypted packet buffer for handling partial reads
+ * 
+ * Handles the encrypted protocol format: [2-byte length][24-byte nonce][ciphertext]
+ */
+export class EncryptedPacketBuffer {
+  private buffer: Buffer = Buffer.alloc(0);
+  
+  /**
+   * Append data to the buffer
+   */
+  append(data: Buffer): void {
+    this.buffer = Buffer.concat([this.buffer, data]);
+  }
+  
+  /**
+   * Try to extract a complete encrypted packet from the buffer
+   * 
+   * @returns Encrypted packet components or null if incomplete
+   */
+  extractEncryptedPacket(): { nonce: Buffer; ciphertext: Buffer } | null {
+    const result = readEncryptedPacket(this.buffer);
+    
+    if (result) {
+      // Remove consumed bytes from buffer
+      this.buffer = this.buffer.slice(result.bytesConsumed);
+      return {
+        nonce: result.nonce,
+        ciphertext: result.ciphertext,
+      };
+    }
+    
+    return null;
+  }
+  
+  /**
+   * Get the raw buffer for handshake processing
+   */
+  getBuffer(): Buffer {
+    return this.buffer;
+  }
+  
+  /**
+   * Consume bytes from the buffer (for handshake)
+   */
+  consume(bytes: number): void {
+    this.buffer = this.buffer.slice(bytes);
+  }
+  
+  /**
+   * Get remaining buffer length
+   */
+  get length(): number {
+    return this.buffer.length;
+  }
+  
+  /**
+   * Clear the buffer
+   */
+  clear(): void {
+    this.buffer = Buffer.alloc(0);
+  }
+}
+
+/**
+ * Legacy packet buffer - for backward compatibility
+ * @deprecated Use EncryptedPacketBuffer with CryptoBox
  */
 export class PacketBuffer {
   private buffer: Buffer = Buffer.alloc(0);
@@ -342,12 +504,12 @@ export class PacketBuffer {
   
   /**
    * Try to extract a complete packet from the buffer
+   * @deprecated This uses legacy 4-byte length format
    */
   extractPacket(): Packet | null {
     const result = decodePacket(this.buffer);
     
     if (result) {
-      // Remove consumed bytes from buffer
       this.buffer = this.buffer.slice(result.bytesConsumed);
       return result.packet;
     }

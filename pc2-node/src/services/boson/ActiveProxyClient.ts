@@ -4,6 +4,11 @@
  * TCP client for connecting to Active Proxy on super nodes.
  * Enables NAT traversal by maintaining a persistent connection
  * that relays incoming HTTP/WebSocket requests.
+ * 
+ * Protocol compatibility:
+ * - Server: Boson.Java boson-active-proxy-2.0.8-SNAPSHOT
+ * - Uses NaCl CryptoBox for encrypted communication
+ * - May require updates for Boson V2 (expected Feb 2026)
  */
 
 import net from 'net';
@@ -12,20 +17,34 @@ import { EventEmitter } from 'events';
 import { logger } from '../../utils/logger.js';
 import {
   PacketType,
-  PacketBuffer,
-  encodePacket,
+  EncryptedPacketBuffer,
+  encodePlaintextPacket,
   encodeAuthPayload,
   encodeDataPayload,
   encodeDisconnectPayload,
+  decodePlaintextPacket,
   decodeAuthAckPayload,
   decodeConnectPayload,
   decodeDataPayload,
   getPacketTypeName,
+  LENGTH_FIELD_SIZE,
+  NONCE_SIZE,
   type Packet,
   type AuthAckPayload,
   type ConnectPayload,
   type DataPayload,
 } from './ProxyProtocol.js';
+import {
+  generateKeyPair,
+  computeSharedSecret,
+  generateNonce,
+  encrypt,
+  decrypt,
+  parseServerHello,
+  CRYPTO_CONSTANTS,
+  type KeyPair,
+  type CryptoSession,
+} from './CryptoBox.js';
 
 /**
  * Connection state machine
@@ -33,7 +52,8 @@ import {
 export enum ConnectionState {
   DISCONNECTED = 'disconnected',
   CONNECTING = 'connecting',
-  AUTHENTICATING = 'authenticating',
+  HANDSHAKING = 'handshaking',      // Waiting for ServerHello
+  AUTHENTICATING = 'authenticating', // Sending encrypted auth
   CONNECTED = 'connected',
   RECONNECTING = 'reconnecting',
 }
@@ -88,11 +108,13 @@ const DEFAULT_CONFIG: Partial<ActiveProxyConfig> = {
  * 
  * Maintains a persistent TCP connection to an Active Proxy server,
  * enabling NAT traversal for PC2 nodes behind firewalls.
+ * 
+ * Uses NaCl CryptoBox for encrypted communication with the server.
  */
 export class ActiveProxyClient extends EventEmitter {
   private config: ActiveProxyConfig;
   private socket: net.Socket | null = null;
-  private packetBuffer: PacketBuffer;
+  private packetBuffer: EncryptedPacketBuffer;
   private state: ConnectionState = ConnectionState.DISCONNECTED;
   private sessionId: string | null = null;
   private allocatedPort: number | null = null;
@@ -102,11 +124,15 @@ export class ActiveProxyClient extends EventEmitter {
   private reconnectAttempts: number = 0;
   private activeConnections: Map<number, ProxyConnection> = new Map();
   private isShuttingDown: boolean = false;
+  
+  // CryptoBox session state
+  private cryptoSession: CryptoSession | null = null;
+  private clientKeyPair: KeyPair | null = null;
 
   constructor(config: Partial<ActiveProxyConfig> & Pick<ActiveProxyConfig, 'host' | 'port' | 'nodeId' | 'publicKey' | 'privateKey' | 'localPort'>) {
     super();
     this.config = { ...DEFAULT_CONFIG, ...config } as ActiveProxyConfig;
-    this.packetBuffer = new PacketBuffer();
+    this.packetBuffer = new EncryptedPacketBuffer();
   }
 
   /**
@@ -139,6 +165,14 @@ export class ActiveProxyClient extends EventEmitter {
 
   /**
    * Connect to the Active Proxy server
+   * 
+   * Connection flow:
+   * 1. TCP connect
+   * 2. Wait for ServerHello (server's public key + nonce + encrypted challenge)
+   * 3. Generate client keypair, derive shared secret
+   * 4. Send ClientHello with encrypted auth data
+   * 5. Receive encrypted AUTH_ACK
+   * 6. All subsequent communication is encrypted
    */
   async connect(): Promise<void> {
     if (this.state !== ConnectionState.DISCONNECTED) {
@@ -149,24 +183,29 @@ export class ActiveProxyClient extends EventEmitter {
     this.isShuttingDown = false;
     this.state = ConnectionState.CONNECTING;
     
+    // Generate ephemeral keypair for this connection
+    this.clientKeyPair = generateKeyPair();
+    logger.debug(`[ActiveProxy] Generated ephemeral keypair: ${Buffer.from(this.clientKeyPair.publicKey).toString('hex').slice(0, 16)}...`);
+    
     return new Promise((resolve, reject) => {
       logger.info(`[ActiveProxy] Connecting to ${this.config.host}:${this.config.port}...`);
       
       this.socket = new net.Socket();
       
-      // Connection timeout
+      // Connection timeout (includes handshake)
       const connectionTimeout = setTimeout(() => {
-        if (this.state === ConnectionState.CONNECTING) {
+        if (this.state === ConnectionState.CONNECTING || 
+            this.state === ConnectionState.HANDSHAKING ||
+            this.state === ConnectionState.AUTHENTICATING) {
           this.socket?.destroy();
           reject(new Error('Connection timeout'));
         }
-      }, 10000);
+      }, 15000);
       
       this.socket.connect(this.config.port, this.config.host, () => {
-        clearTimeout(connectionTimeout);
-        logger.info('[ActiveProxy] TCP connection established');
-        this.state = ConnectionState.AUTHENTICATING;
-        this.authenticate();
+        logger.info('[ActiveProxy] TCP connection established, waiting for ServerHello...');
+        this.state = ConnectionState.HANDSHAKING;
+        // Don't send auth yet - wait for ServerHello
       });
       
       this.socket.on('data', (data: Buffer) => {
@@ -178,7 +217,8 @@ export class ActiveProxyClient extends EventEmitter {
         logger.error(`[ActiveProxy] Socket error: ${error.message}`);
         this.emit('error', error);
         
-        if (this.state === ConnectionState.CONNECTING) {
+        if (this.state === ConnectionState.CONNECTING ||
+            this.state === ConnectionState.HANDSHAKING) {
           reject(error);
         }
       });
@@ -190,11 +230,14 @@ export class ActiveProxyClient extends EventEmitter {
       
       // Resolve once authenticated (handled in handleAuthAck)
       this.once('connected', () => {
+        clearTimeout(connectionTimeout);
         resolve();
       });
       
       this.once('error', (error) => {
-        if (this.state === ConnectionState.AUTHENTICATING) {
+        if (this.state === ConnectionState.AUTHENTICATING ||
+            this.state === ConnectionState.HANDSHAKING) {
+          clearTimeout(connectionTimeout);
           reject(error);
         }
       });
@@ -226,64 +269,40 @@ export class ActiveProxyClient extends EventEmitter {
    * Send data to a proxied connection
    */
   sendData(connectionId: number, data: Buffer): boolean {
-    if (!this.isConnected() || !this.socket) {
-      logger.warn('[ActiveProxy] Cannot send data: not connected');
+    if (!this.isConnected() || !this.socket || !this.cryptoSession) {
+      logger.warn('[ActiveProxy] Cannot send data: not connected or no crypto session');
       return false;
     }
     
     const payload = encodeDataPayload(connectionId, data);
-    const packet = encodePacket(PacketType.DATA, payload);
+    const plaintextPacket = encodePlaintextPacket(PacketType.DATA, payload);
     
-    try {
-      this.socket.write(packet);
-      return true;
-    } catch (error) {
-      logger.error(`[ActiveProxy] Failed to send data: ${error}`);
-      return false;
-    }
+    return this.sendEncryptedPacket(plaintextPacket);
   }
 
   /**
    * Close a proxied connection
    */
   closeConnection(connectionId: number): void {
-    if (!this.isConnected() || !this.socket) {
+    if (!this.isConnected() || !this.socket || !this.cryptoSession) {
       return;
     }
     
     const payload = encodeDisconnectPayload(connectionId);
-    const packet = encodePacket(PacketType.DISCONNECT, payload);
+    const plaintextPacket = encodePlaintextPacket(PacketType.DISCONNECT, payload);
     
-    try {
-      this.socket.write(packet);
+    if (this.sendEncryptedPacket(plaintextPacket)) {
       this.activeConnections.delete(connectionId);
-    } catch (error) {
-      logger.error(`[ActiveProxy] Failed to close connection: ${error}`);
     }
   }
 
   /**
-   * Send AUTH packet to authenticate with the server
+   * Send AUTH packet - now handled by sendEncryptedAuth()
+   * @deprecated Use the CryptoBox handshake flow
    */
   private authenticate(): void {
-    if (!this.socket) return;
-    
-    logger.info('[ActiveProxy] Sending AUTH packet...');
-    
-    // Create a simple signature (in production, sign a server challenge)
-    // For now, sign the node ID as a placeholder
-    const signatureData = Buffer.from(this.config.nodeId, 'utf8');
-    const signature = this.sign(signatureData);
-    
-    const payload = encodeAuthPayload(
-      this.config.nodeId,
-      this.config.publicKey,
-      signature,
-      this.config.localPort
-    );
-    
-    const packet = encodePacket(PacketType.AUTH, payload);
-    this.socket.write(packet);
+    // This is now handled by sendEncryptedAuth() called from processServerHello()
+    logger.warn('[ActiveProxy] authenticate() called but using CryptoBox flow');
   }
 
   /**
@@ -307,14 +326,22 @@ export class ActiveProxyClient extends EventEmitter {
 
   /**
    * Handle incoming data from socket
+   * 
+   * Behavior depends on connection state:
+   * - HANDSHAKING: Process ServerHello
+   * - AUTHENTICATING/CONNECTED: Decrypt and process packets
    */
   private handleData(data: Buffer): void {
     try {
       this.packetBuffer.append(data);
       
-      let packet: Packet | null;
-      while ((packet = this.packetBuffer.extractPacket()) !== null) {
-        this.handlePacket(packet);
+      if (this.state === ConnectionState.HANDSHAKING) {
+        // Process ServerHello
+        this.processServerHello();
+      } else if (this.state === ConnectionState.AUTHENTICATING || 
+                 this.state === ConnectionState.CONNECTED) {
+        // Process encrypted packets
+        this.processEncryptedPackets();
       }
     } catch (error) {
       // Log the raw data for debugging protocol mismatches
@@ -322,6 +349,175 @@ export class ActiveProxyClient extends EventEmitter {
       logger.error(`[ActiveProxy] Protocol error: ${error}. Data preview: ${preview}`);
       this.emit('error', error instanceof Error ? error : new Error(String(error)));
       this.handleDisconnect('Protocol error');
+    }
+  }
+  
+  /**
+   * Process ServerHello message
+   * 
+   * ServerHello format: [2-byte length][32-byte pubkey][24-byte nonce][encrypted payload]
+   */
+  private processServerHello(): void {
+    const buffer = this.packetBuffer.getBuffer();
+    
+    // Need at least length field to check message size
+    if (buffer.length < LENGTH_FIELD_SIZE) {
+      return;
+    }
+    
+    // Read message length
+    const messageLength = buffer.readUInt16BE(0);
+    
+    // Wait for complete message
+    if (buffer.length < messageLength) {
+      logger.debug(`[ActiveProxy] Waiting for complete ServerHello: have ${buffer.length}, need ${messageLength}`);
+      return;
+    }
+    
+    logger.info(`[ActiveProxy] Received ServerHello: ${messageLength} bytes`);
+    
+    // Parse ServerHello
+    const serverHello = parseServerHello(buffer);
+    if (!serverHello) {
+      throw new Error('Failed to parse ServerHello');
+    }
+    
+    // Consume the ServerHello from buffer
+    this.packetBuffer.consume(messageLength);
+    
+    // Store server's public key
+    this.serverPublicKey = Buffer.from(serverHello.serverPublicKey);
+    
+    // Compute shared secret
+    if (!this.clientKeyPair) {
+      throw new Error('Client keypair not initialized');
+    }
+    
+    const sharedKey = computeSharedSecret(
+      this.clientKeyPair.secretKey,
+      serverHello.serverPublicKey
+    );
+    
+    // Create crypto session
+    this.cryptoSession = {
+      sharedKey,
+      serverPublicKey: serverHello.serverPublicKey,
+      clientKeyPair: this.clientKeyPair,
+      nonceCounter: BigInt(0),
+    };
+    
+    logger.debug(`[ActiveProxy] Computed shared secret, session established`);
+    
+    // Decrypt the challenge/welcome from ServerHello (optional, for verification)
+    const decryptedChallenge = decrypt(
+      serverHello.encryptedPayload,
+      serverHello.nonce,
+      sharedKey
+    );
+    
+    if (decryptedChallenge) {
+      logger.debug(`[ActiveProxy] Decrypted ServerHello payload: ${decryptedChallenge.length} bytes`);
+    } else {
+      logger.warn('[ActiveProxy] Failed to decrypt ServerHello payload (may be expected)');
+    }
+    
+    // Send ClientHello with encrypted auth
+    this.state = ConnectionState.AUTHENTICATING;
+    this.sendEncryptedAuth();
+  }
+  
+  /**
+   * Process encrypted packets after handshake
+   */
+  private processEncryptedPackets(): void {
+    if (!this.cryptoSession) {
+      throw new Error('No crypto session - handshake not complete');
+    }
+    
+    let encryptedPacket;
+    while ((encryptedPacket = this.packetBuffer.extractEncryptedPacket()) !== null) {
+      // Decrypt the packet
+      const plaintext = decrypt(
+        new Uint8Array(encryptedPacket.ciphertext),
+        new Uint8Array(encryptedPacket.nonce),
+        this.cryptoSession.sharedKey
+      );
+      
+      if (!plaintext) {
+        logger.warn('[ActiveProxy] Failed to decrypt packet - authentication error');
+        continue;
+      }
+      
+      // Decode plaintext packet (type + payload)
+      const packet = decodePlaintextPacket(Buffer.from(plaintext));
+      if (packet) {
+        this.handlePacket(packet);
+      }
+    }
+  }
+  
+  /**
+   * Send encrypted AUTH packet
+   */
+  private sendEncryptedAuth(): void {
+    if (!this.socket || !this.cryptoSession) {
+      logger.error('[ActiveProxy] Cannot send auth - no socket or session');
+      return;
+    }
+    
+    logger.info('[ActiveProxy] Sending encrypted AUTH packet...');
+    
+    // Create AUTH payload
+    const signatureData = Buffer.from(this.config.nodeId, 'utf8');
+    const signature = this.sign(signatureData);
+    
+    const authPayload = encodeAuthPayload(
+      this.config.nodeId,
+      this.config.publicKey,
+      signature,
+      this.config.localPort
+    );
+    
+    // Create plaintext packet: [type][payload]
+    const plaintextPacket = encodePlaintextPacket(PacketType.AUTH, authPayload);
+    
+    // Encrypt and send
+    this.sendEncryptedPacket(plaintextPacket);
+  }
+  
+  /**
+   * Send an encrypted packet
+   */
+  private sendEncryptedPacket(plaintext: Buffer): boolean {
+    if (!this.socket || !this.cryptoSession) {
+      logger.warn('[ActiveProxy] Cannot send encrypted packet - no socket or session');
+      return false;
+    }
+    
+    // Generate nonce
+    const nonce = generateNonce();
+    
+    // Encrypt
+    const ciphertext = encrypt(
+      new Uint8Array(plaintext),
+      nonce,
+      this.cryptoSession.sharedKey
+    );
+    
+    // Build packet: [2-byte length][24-byte nonce][ciphertext]
+    const packetLength = LENGTH_FIELD_SIZE + NONCE_SIZE + ciphertext.length;
+    const packet = Buffer.alloc(packetLength);
+    
+    packet.writeUInt16BE(packetLength, 0);
+    Buffer.from(nonce).copy(packet, LENGTH_FIELD_SIZE);
+    Buffer.from(ciphertext).copy(packet, LENGTH_FIELD_SIZE + NONCE_SIZE);
+    
+    try {
+      this.socket.write(packet);
+      return true;
+    } catch (error) {
+      logger.error(`[ActiveProxy] Failed to send encrypted packet: ${error}`);
+      return false;
     }
   }
 
@@ -416,12 +612,12 @@ export class ActiveProxyClient extends EventEmitter {
       // Emit connection event
       this.emit('connection', conn);
       
-      // Send CONNECT_ACK
-      if (this.socket) {
+      // Send encrypted CONNECT_ACK
+      if (this.socket && this.cryptoSession) {
         const ackPayload = Buffer.alloc(4);
         ackPayload.writeUInt32BE(conn.connectionId, 0);
-        const packet = encodePacket(PacketType.CONNECT_ACK, ackPayload);
-        this.socket.write(packet);
+        const plaintextPacket = encodePlaintextPacket(PacketType.CONNECT_ACK, ackPayload);
+        this.sendEncryptedPacket(plaintextPacket);
       }
     } catch (error) {
       logger.error(`[ActiveProxy] Failed to handle CONNECT: ${error}`);
@@ -474,6 +670,10 @@ export class ActiveProxyClient extends EventEmitter {
     this.activeConnections.clear();
     this.packetBuffer.clear();
     
+    // Clear crypto session
+    this.cryptoSession = null;
+    this.clientKeyPair = null;
+    
     if (this.socket) {
       this.socket.destroy();
       this.socket = null;
@@ -494,13 +694,12 @@ export class ActiveProxyClient extends EventEmitter {
     this.stopKeepalive();
     
     this.keepaliveTimer = setInterval(() => {
-      if (this.isConnected() && this.socket) {
-        const packet = encodePacket(PacketType.PING);
-        try {
-          this.socket.write(packet);
-          logger.debug('[ActiveProxy] Sent PING');
-        } catch (error) {
-          logger.error(`[ActiveProxy] Failed to send PING: ${error}`);
+      if (this.isConnected() && this.socket && this.cryptoSession) {
+        const plaintextPacket = encodePlaintextPacket(PacketType.PING);
+        if (this.sendEncryptedPacket(plaintextPacket)) {
+          logger.debug('[ActiveProxy] Sent encrypted PING');
+        } else {
+          logger.error('[ActiveProxy] Failed to send PING');
         }
       }
     }, this.config.keepaliveIntervalMs);

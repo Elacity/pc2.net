@@ -52,6 +52,18 @@ export class FilesystemManager {
   }
 
   /**
+   * Check if a path is in the Public folder
+   * Returns true for paths like /Public/*, /wallet/Public/*, etc.
+   */
+  private isInPublicFolder(normalizedPath: string): boolean {
+    // Match paths that are exactly /Public or inside /Public/
+    // Also match /wallet/Public/ patterns
+    return normalizedPath === '/Public' || 
+           normalizedPath.startsWith('/Public/') ||
+           /^\/[^/]+\/Public(\/|$)/.test(normalizedPath);
+  }
+
+  /**
    * Write file (store in IPFS and save metadata in database)
    */
   async writeFile(
@@ -64,6 +76,10 @@ export class FilesystemManager {
     }
   ): Promise<FileMetadata> {
     const normalizedPath = this.normalizePath(path);
+    
+    // Auto-detect if file is in Public folder
+    const isInPublicFolder = this.isInPublicFolder(normalizedPath);
+    const isPublic = options?.isPublic ?? isInPublicFolder;
     
     // Ensure parent directory exists in database
     const parentPath = dirname(normalizedPath);
@@ -150,12 +166,28 @@ export class FilesystemManager {
       thumbnail: thumbnail,
       content_text: null, // Will be populated by indexer
       is_dir: false,
-      is_public: options?.isPublic || false,
+      is_public: isPublic, // Auto-detected from path or explicitly set
       created_at: existing?.created_at || Date.now(), // Preserve original creation time
       updated_at: Date.now()
     };
+    
+    if (isPublic) {
+      logger.info(`[Filesystem] File marked as public: ${normalizedPath}`);
+    }
 
     this.db.createOrUpdateFile(metadata);
+
+    // Announce public files to IPFS DHT for discoverability
+    if (isPublic && this.ipfs && this.ipfs.canAnnounce()) {
+      // Run announcement in background (don't block file write)
+      this.ipfs.announceCID(ipfsHash).then(announced => {
+        if (announced) {
+          logger.info(`[Filesystem] 📡 Announced public file CID to DHT: ${ipfsHash}`);
+        }
+      }).catch(err => {
+        logger.warn(`[Filesystem] Failed to announce CID to DHT: ${err.message}`);
+      });
+    }
 
     return metadata;
   }
@@ -297,18 +329,8 @@ export class FilesystemManager {
     }
 
     // Determine if directory should be public (only folders in /Public directory)
-    // Match mock server logic: only set is_public for folders actually inside /Public directory
-    // Examples:
-    //   /Public -> is_public = true
-    //   /Public/MyFolder -> is_public = true
-    //   /MyPublicFolder -> is_public = false (folder name contains "Public" but not in /Public directory)
-    //   /wallet/Public -> is_public = true
-    //   /wallet/Public/SubFolder -> is_public = true
-    // Check if path is exactly /Public or is a direct child of /Public
-    // Use more precise matching to avoid false positives
-    const isPublic = normalizedPath === '/Public' || 
-                     normalizedPath.startsWith('/Public/') ||
-                     (normalizedPath.includes('/Public/') && !normalizedPath.match(/\/Public[^/]/));
+    // Uses shared isInPublicFolder helper for consistency with file detection
+    const isPublic = this.isInPublicFolder(normalizedPath);
     
     // Create directory metadata (no IPFS hash for directories)
     const metadata: FileMetadata = {

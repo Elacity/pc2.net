@@ -219,6 +219,7 @@ async function main() {
     isProduction: IS_PRODUCTION,
     database: db,
     filesystem: filesystem || undefined,
+    ipfs: ipfs || undefined,
     config: config,
     aiService: aiService || undefined
   });
@@ -233,6 +234,58 @@ async function main() {
     logger.info(`   Health check: http://localhost:${PORT}/health`);
     logger.info(`   API: http://localhost:${PORT}/api`);
   });
+
+  // ============================================================================
+  // Periodic IPFS DHT Re-announcement
+  // DHT provider records expire after ~24 hours, so we re-announce periodically
+  // ============================================================================
+  
+  const RE_ANNOUNCE_INTERVAL = 12 * 60 * 60 * 1000; // 12 hours in milliseconds
+  
+  const runPeriodicAnnouncement = async () => {
+    if (!ipfs || !db) return;
+    
+    // Check if IPFS can announce (not in private mode, DHT available)
+    if (!ipfs.canAnnounce()) {
+      logger.debug('[IPFS] Skipping periodic announcement (DHT not available)');
+      return;
+    }
+    
+    // Get IPFS config to check if auto-announce is enabled
+    const ipfsConfig = (config as any).ipfs || {};
+    if (ipfsConfig.auto_announce_public === false) {
+      logger.debug('[IPFS] Skipping periodic announcement (auto_announce_public disabled)');
+      return;
+    }
+    
+    try {
+      const publicCIDs = db.getPublicCIDs();
+      if (publicCIDs.length === 0) {
+        logger.debug('[IPFS] No public CIDs to announce');
+        return;
+      }
+      
+      logger.info(`[IPFS] Starting periodic re-announcement of ${publicCIDs.length} public CIDs...`);
+      const result = await ipfs.announceMultipleCIDs(publicCIDs);
+      logger.info(`[IPFS] Periodic announcement complete: ${result.success} success, ${result.failed} failed`);
+    } catch (error) {
+      logger.error('[IPFS] Periodic announcement failed:', error);
+    }
+  };
+  
+  // Run initial announcement after a delay (let IPFS connect to peers first)
+  if (ipfs && ipfs.getNetworkMode() !== 'private') {
+    setTimeout(() => {
+      runPeriodicAnnouncement().catch(e => logger.error('[IPFS] Initial announcement error:', e));
+    }, 60 * 1000); // Wait 1 minute after startup
+    
+    // Schedule periodic re-announcement
+    const announcementInterval = setInterval(() => {
+      runPeriodicAnnouncement().catch(e => logger.error('[IPFS] Periodic announcement error:', e));
+    }, RE_ANNOUNCE_INTERVAL);
+    
+    logger.info(`[IPFS] Scheduled periodic DHT re-announcement every ${RE_ANNOUNCE_INTERVAL / 1000 / 60 / 60} hours`);
+  }
 
   // Graceful shutdown
   const shutdown = async () => {

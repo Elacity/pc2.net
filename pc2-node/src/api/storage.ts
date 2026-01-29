@@ -244,5 +244,184 @@ router.post('/limit', authenticate, async (req: AuthenticatedRequest, res: Respo
   }
 });
 
+// ============================================================================
+// IPFS Settings & Sharing Endpoints
+// ============================================================================
+
+/**
+ * GET /api/ipfs/settings
+ * Returns IPFS network settings and sharing statistics
+ */
+router.get('/ipfs/settings', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const db = req.app.locals.db;
+    const ipfs = req.app.locals.ipfs;
+    const walletAddress = req.user?.wallet_address;
+
+    if (!walletAddress) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    // Get IPFS settings from database (defaults: hybrid mode, auto-announce enabled)
+    const settings = {
+      mode: db?.getSetting(`${walletAddress}:ipfs_mode`) || 'hybrid',
+      autoAnnouncePublic: db?.getSetting(`${walletAddress}:ipfs_auto_announce`) !== 'false',
+      enableBootstrap: db?.getSetting(`${walletAddress}:ipfs_bootstrap`) !== 'false',
+    };
+
+    // Get IPFS stats if available
+    let ipfsStats = null;
+    if (ipfs) {
+      const announcementStats = ipfs.getAnnouncementStats();
+      const networkStats = await ipfs.getNetworkStats();
+      
+      ipfsStats = {
+        ...announcementStats,
+        peerId: networkStats.peerId,
+        addresses: networkStats.addresses,
+      };
+    }
+
+    // Get public file statistics
+    const publicCIDCount = db?.getPublicCIDCount() || 0;
+
+    res.json({
+      settings,
+      ipfs: ipfsStats,
+      publicFiles: {
+        uniqueCIDs: publicCIDCount,
+      },
+    });
+  } catch (error) {
+    logger.error('[Storage API]: Error getting IPFS settings:', error);
+    res.status(500).json({ error: 'Failed to get IPFS settings' });
+  }
+});
+
+/**
+ * POST /api/ipfs/settings
+ * Update IPFS network settings
+ */
+router.post('/ipfs/settings', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const db = req.app.locals.db;
+    const walletAddress = req.user?.wallet_address;
+
+    if (!walletAddress) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const { mode, autoAnnouncePublic, enableBootstrap } = req.body;
+
+    // Validate mode
+    if (mode !== undefined) {
+      const validModes = ['private', 'hybrid', 'public'];
+      if (!validModes.includes(mode)) {
+        return res.status(400).json({ error: 'Invalid mode', validValues: validModes });
+      }
+      db?.setSetting(`${walletAddress}:ipfs_mode`, mode);
+    }
+
+    // Save other settings
+    if (autoAnnouncePublic !== undefined) {
+      db?.setSetting(`${walletAddress}:ipfs_auto_announce`, String(autoAnnouncePublic));
+    }
+
+    if (enableBootstrap !== undefined) {
+      db?.setSetting(`${walletAddress}:ipfs_bootstrap`, String(enableBootstrap));
+    }
+
+    logger.info(`[Storage API]: IPFS settings updated for ${walletAddress}`);
+    res.json({ success: true });
+  } catch (error) {
+    logger.error('[Storage API]: Error updating IPFS settings:', error);
+    res.status(500).json({ error: 'Failed to update IPFS settings' });
+  }
+});
+
+/**
+ * POST /api/ipfs/announce
+ * Manually trigger announcement of all public CIDs to DHT
+ */
+router.post('/ipfs/announce', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const db = req.app.locals.db;
+    const ipfs = req.app.locals.ipfs;
+    const walletAddress = req.user?.wallet_address;
+
+    if (!walletAddress) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    if (!ipfs) {
+      return res.status(503).json({ error: 'IPFS not available' });
+    }
+
+    if (!ipfs.canAnnounce()) {
+      return res.status(400).json({ 
+        error: 'DHT announcement not available',
+        reason: ipfs.getNetworkMode() === 'private' 
+          ? 'IPFS is in private mode' 
+          : 'DHT service not initialized'
+      });
+    }
+
+    // Get all public CIDs
+    const publicCIDs = db?.getPublicCIDs() || [];
+
+    if (publicCIDs.length === 0) {
+      return res.json({ 
+        success: true, 
+        message: 'No public files to announce',
+        announced: 0,
+        failed: 0
+      });
+    }
+
+    // Announce all public CIDs
+    logger.info(`[Storage API]: Starting announcement of ${publicCIDs.length} public CIDs`);
+    const result = await ipfs.announceMultipleCIDs(publicCIDs);
+
+    res.json({
+      success: true,
+      message: `Announced ${result.success} CIDs to DHT`,
+      announced: result.success,
+      failed: result.failed,
+      total: publicCIDs.length
+    });
+  } catch (error) {
+    logger.error('[Storage API]: Error announcing CIDs:', error);
+    res.status(500).json({ error: 'Failed to announce CIDs' });
+  }
+});
+
+/**
+ * GET /api/ipfs/network
+ * Get IPFS network status and peer information
+ */
+router.get('/ipfs/network', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const ipfs = req.app.locals.ipfs;
+
+    if (!ipfs) {
+      return res.status(503).json({ error: 'IPFS not available' });
+    }
+
+    const networkStats = await ipfs.getNetworkStats();
+    const peers = await ipfs.getConnectedPeers();
+
+    res.json({
+      mode: networkStats.mode,
+      peerId: networkStats.peerId,
+      addresses: networkStats.addresses,
+      connectedPeers: networkStats.connectedPeers,
+      peerList: peers.slice(0, 20), // Limit to 20 peers for display
+    });
+  } catch (error) {
+    logger.error('[Storage API]: Error getting IPFS network status:', error);
+    res.status(500).json({ error: 'Failed to get IPFS network status' });
+  }
+});
+
 export default router;
 

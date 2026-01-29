@@ -110,7 +110,7 @@ export interface IdentityConfig {
 /**
  * Convert bytes to Base58 encoding
  */
-function toBase58(bytes: Buffer): string {
+export function toBase58(bytes: Buffer): string {
   let num = BigInt('0x' + bytes.toString('hex'));
   let result = '';
   
@@ -130,6 +130,50 @@ function toBase58(bytes: Buffer): string {
   }
   
   return result || '1';
+}
+
+/**
+ * Convert Base58 string back to bytes
+ */
+export function fromBase58(str: string): Buffer {
+  if (!str || str.length === 0) {
+    return Buffer.alloc(0);
+  }
+  
+  let num = BigInt(0);
+  
+  for (const char of str) {
+    const index = BASE58_ALPHABET.indexOf(char);
+    if (index === -1) {
+      throw new Error(`Invalid Base58 character: ${char}`);
+    }
+    num = num * 58n + BigInt(index);
+  }
+  
+  // Convert to hex string
+  let hex = num.toString(16);
+  // Pad to even length
+  if (hex.length % 2 !== 0) {
+    hex = '0' + hex;
+  }
+  
+  // Handle leading '1's (zeros)
+  let leadingZeros = 0;
+  for (const char of str) {
+    if (char === '1') {
+      leadingZeros++;
+    } else {
+      break;
+    }
+  }
+  
+  // Create buffer with leading zeros
+  const dataBytes = Buffer.from(hex, 'hex');
+  if (leadingZeros > 0) {
+    return Buffer.concat([Buffer.alloc(leadingZeros), dataBytes]);
+  }
+  
+  return dataBytes;
 }
 
 /**

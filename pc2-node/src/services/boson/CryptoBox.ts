@@ -7,10 +7,29 @@
  * Protocol compatibility:
  * - Server: Boson.Java boson-active-proxy-2.0.8-SNAPSHOT
  * - May require updates for Boson V2 (expected Feb 2026)
+ * 
+ * Key types:
+ * - Ed25519: Used for node identity and signing challenges
+ * - X25519: Used for CryptoBox encryption (derived from Ed25519)
  */
 
 import nacl from 'tweetnacl';
+// @ts-ignore - no types available
+import ed25519ToX25519 from 'ed25519-to-x25519.wasm';
 import { logger } from '../../utils/logger.js';
+
+// Initialize the wasm module
+let wasmReady = false;
+let convertPublicKey: (ed25519PubKey: Uint8Array) => Uint8Array;
+let convertPrivateKey: (ed25519PrivKey: Uint8Array) => Uint8Array;
+
+// Initialize on module load
+ed25519ToX25519.ready(() => {
+  wasmReady = true;
+  convertPublicKey = ed25519ToX25519.convert_public_key;
+  convertPrivateKey = ed25519ToX25519.convert_private_key;
+  logger.debug('[CryptoBox] ed25519-to-x25519 WASM module ready');
+});
 
 /**
  * Key pair for X25519 key exchange
@@ -46,6 +65,12 @@ export const CRYPTO_CONSTANTS = {
   PUBLIC_KEY_SIZE: 32,
   /** X25519 secret key size */
   SECRET_KEY_SIZE: 32,
+  /** Ed25519 public key size */
+  ED25519_PUBLIC_KEY_SIZE: 32,
+  /** Ed25519 secret key size (seed + public) */
+  ED25519_SECRET_KEY_SIZE: 64,
+  /** Ed25519 signature size */
+  ED25519_SIGNATURE_SIZE: 64,
   /** XSalsa20 nonce size */
   NONCE_SIZE: 24,
   /** Poly1305 authentication tag size */
@@ -53,6 +78,106 @@ export const CRYPTO_CONSTANTS = {
   /** CryptoBox overhead (nonce + auth tag for box.open) */
   BOX_OVERHEAD: nacl.box.overheadLength, // 16 bytes
 };
+
+/**
+ * Wait for the WASM module to be ready
+ * Call this before using Ed25519 to X25519 conversion
+ */
+export async function ensureWasmReady(): Promise<void> {
+  if (wasmReady) return;
+  
+  // Wait up to 5 seconds for WASM to initialize
+  for (let i = 0; i < 50; i++) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+    if (wasmReady) return;
+  }
+  
+  throw new Error('WASM module failed to initialize within timeout');
+}
+
+/**
+ * Check if WASM module is ready
+ */
+export function isWasmReady(): boolean {
+  return wasmReady;
+}
+
+/**
+ * Convert Ed25519 public key to X25519 public key
+ * Required for CryptoBox encryption with Ed25519 identity keys
+ * 
+ * @param ed25519PublicKey - 32-byte Ed25519 public key
+ * @returns 32-byte X25519 public key
+ */
+export function ed25519PublicKeyToX25519(ed25519PublicKey: Uint8Array): Uint8Array {
+  if (!wasmReady) {
+    throw new Error('WASM module not ready - call ensureWasmReady() first');
+  }
+  
+  if (ed25519PublicKey.length !== 32) {
+    throw new Error(`Invalid Ed25519 public key length: ${ed25519PublicKey.length}, expected 32`);
+  }
+  
+  return convertPublicKey(ed25519PublicKey);
+}
+
+/**
+ * Convert Ed25519 private key to X25519 private key
+ * Required for CryptoBox encryption with Ed25519 identity keys
+ * 
+ * @param ed25519PrivateKey - 64-byte Ed25519 private key (seed + public)
+ * @returns 32-byte X25519 private key
+ */
+export function ed25519PrivateKeyToX25519(ed25519PrivateKey: Uint8Array): Uint8Array {
+  if (!wasmReady) {
+    throw new Error('WASM module not ready - call ensureWasmReady() first');
+  }
+  
+  if (ed25519PrivateKey.length !== 64) {
+    throw new Error(`Invalid Ed25519 private key length: ${ed25519PrivateKey.length}, expected 64`);
+  }
+  
+  return convertPrivateKey(ed25519PrivateKey);
+}
+
+/**
+ * Sign data with Ed25519 private key
+ * Used for signing the server's challenge during handshake
+ * 
+ * @param message - Data to sign
+ * @param privateKey - 64-byte Ed25519 private key
+ * @returns 64-byte signature
+ */
+export function signEd25519(message: Uint8Array, privateKey: Uint8Array): Uint8Array {
+  if (privateKey.length !== 64) {
+    throw new Error(`Invalid Ed25519 private key length: ${privateKey.length}, expected 64`);
+  }
+  
+  return nacl.sign.detached(message, privateKey);
+}
+
+/**
+ * Verify Ed25519 signature
+ * 
+ * @param message - Original message
+ * @param signature - 64-byte signature
+ * @param publicKey - 32-byte Ed25519 public key
+ * @returns true if valid, false otherwise
+ */
+export function verifyEd25519(
+  message: Uint8Array,
+  signature: Uint8Array,
+  publicKey: Uint8Array
+): boolean {
+  if (signature.length !== 64) {
+    return false;
+  }
+  if (publicKey.length !== 32) {
+    return false;
+  }
+  
+  return nacl.sign.detached.verify(message, signature, publicKey);
+}
 
 /**
  * Generate a new X25519 key pair for the handshake
@@ -85,6 +210,56 @@ export function computeSharedSecret(
  */
 export function generateNonce(): Uint8Array {
   return nacl.randomBytes(CRYPTO_CONSTANTS.NONCE_SIZE);
+}
+
+/**
+ * Derive a nonce from two X25519 public keys using XOR distance
+ * 
+ * This is how Boson CryptoContext computes the initial nonce:
+ * nonce = XOR(sender_x25519_pubkey, receiver_x25519_pubkey), taking first 24 bytes
+ * 
+ * From Photon crypto_context.cc:
+ *   auto receiver = Id(pk.blob());  // X25519 public key
+ *   auto sender = Id(keypair.publicKey().blob());  // X25519 public key  
+ *   auto dist = Id::distance(sender, receiver);  // XOR
+ *   nonce = CryptoBox::Nonce({(uint8_t*)dist.data(), CryptoBox::Nonce::BYTES});
+ * 
+ * NOTE: This uses X25519 keys (NOT Ed25519). Convert Ed25519 to X25519 first!
+ * 
+ * @param senderX25519Pubkey - Sender's 32-byte X25519 public key
+ * @param receiverX25519Pubkey - Receiver's 32-byte X25519 public key
+ * @returns 24-byte nonce derived from XOR of the two X25519 keys
+ */
+export function deriveNonceFromX25519Keys(
+  senderX25519Pubkey: Uint8Array,
+  receiverX25519Pubkey: Uint8Array
+): Uint8Array {
+  if (senderX25519Pubkey.length !== 32) {
+    throw new Error(`Invalid sender X25519 key length: ${senderX25519Pubkey.length}, expected 32`);
+  }
+  if (receiverX25519Pubkey.length !== 32) {
+    throw new Error(`Invalid receiver X25519 key length: ${receiverX25519Pubkey.length}, expected 32`);
+  }
+  
+  // XOR the two X25519 public keys
+  const xorResult = new Uint8Array(32);
+  for (let i = 0; i < 32; i++) {
+    xorResult[i] = senderX25519Pubkey[i] ^ receiverX25519Pubkey[i];
+  }
+  
+  // Take first 24 bytes as nonce
+  return xorResult.slice(0, CRYPTO_CONSTANTS.NONCE_SIZE);
+}
+
+/**
+ * @deprecated Use deriveNonceFromX25519Keys instead (requires X25519 keys, not Ed25519)
+ */
+export function deriveNonceFromIds(
+  senderId: Uint8Array,
+  receiverId: Uint8Array
+): Uint8Array {
+  logger.warn('[CryptoBox] deriveNonceFromIds is deprecated - use deriveNonceFromX25519Keys with converted keys');
+  return deriveNonceFromX25519Keys(senderId, receiverId);
 }
 
 /**
@@ -453,17 +628,28 @@ export default {
   generateKeyPair,
   computeSharedSecret,
   generateNonce,
+  deriveNonceFromX25519Keys,
+  deriveNonceFromIds,
   incrementNonce,
   encrypt,
   decrypt,
   encryptFull,
   decryptFull,
   parseServerHello,
+  parseServerChallenge,
   buildClientHello,
+  buildAuthPacket,
+  buildAuthPayload,
   encryptPacket,
   decryptPacket,
   createSession,
   bufferToUint8Array,
   uint8ArrayToBuffer,
+  ensureWasmReady,
+  isWasmReady,
+  ed25519PublicKeyToX25519,
+  ed25519PrivateKeyToX25519,
+  signEd25519,
+  verifyEd25519,
   CRYPTO_CONSTANTS,
 };

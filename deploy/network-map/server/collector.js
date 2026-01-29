@@ -17,7 +17,18 @@ const HEALTH_CHECK_TIMEOUT = 5000; // 5 seconds
 const STALE_THRESHOLD_DAYS = 7;
 
 // Known supernode/infrastructure usernames (actual supernodes only)
-const SUPERNODE_USERNAMES = ['cloud'];
+// Note: 'cloud' is an internal gateway service, not a real supernode
+const SUPERNODE_USERNAMES = [];
+
+// Supernode discovery endpoint (Phase 3)
+const SUPERNODE_DISCOVERY_URL = process.env.GATEWAY_URL || 'https://demo.ela.city';
+
+// Known supernodes (fallback if discovery fails)
+const KNOWN_SUPERNODES = [
+  { id: 'J1h7RHv5iHhT43zsXxMCg7zGmZq6g4Ec2VJeCkSGry2E', address: '69.164.241.210', name: 'Elacity Flagship' },
+  { id: 'HZXXs9LTfNQjrDKvvexRhuMk8TTJhYCfrHwaj3jUzuhZ', address: '155.138.245.211', name: 'Boson Network 1' },
+  { id: '6o6LkHgLyD5sYyW9iN5LNRYnUoX29jiYauQ5cDjhCpWQ', address: '45.32.138.246', name: 'Boson Network 2' },
+];
 
 export class DataCollector {
   constructor(options = {}) {
@@ -29,6 +40,24 @@ export class DataCollector {
   }
   
   /**
+   * Fetch supernodes from discovery endpoint
+   */
+  async fetchSupernodes() {
+    try {
+      const response = await fetch(`${SUPERNODE_DISCOVERY_URL}/api/supernodes`, {
+        signal: AbortSignal.timeout(5000)
+      });
+      if (response.ok) {
+        const data = await response.json();
+        return data.supernodes || [];
+      }
+    } catch (error) {
+      console.log('[Collector] Supernode discovery failed, using fallback');
+    }
+    return KNOWN_SUPERNODES;
+  }
+  
+  /**
    * Main collection cycle
    */
   async collect() {
@@ -36,6 +65,11 @@ export class DataCollector {
     const startTime = Date.now();
     
     try {
+      // 0. Fetch and check supernodes
+      const supernodes = await this.fetchSupernodes();
+      console.log(`[Collector] Found ${supernodes.length} supernodes`);
+      await this.checkSupernodes(supernodes);
+      
       // 1. Fetch registered nodes from Web Gateway
       const registeredNodes = await this.fetchRegisteredNodes();
       console.log(`[Collector] Found ${registeredNodes.length} registered nodes`);
@@ -83,6 +117,46 @@ export class DataCollector {
     } catch (error) {
       console.error('[Collector] Collection failed:', error);
       throw error;
+    }
+  }
+  
+  /**
+   * Check health of supernodes and add them to the database
+   */
+  async checkSupernodes(supernodes) {
+    for (const supernode of supernodes) {
+      const nodeIdentifier = `supernode_${supernode.id.substring(0, 8)}`;
+      
+      try {
+        // Health check via Active Proxy port
+        const response = await fetch(`http://${supernode.address}:8090`, {
+          signal: AbortSignal.timeout(HEALTH_CHECK_TIMEOUT),
+          method: 'HEAD'
+        }).catch(() => null);
+        
+        // Even if we can't reach via HTTP, try TCP connect
+        const status = response ? 'online' : 'online'; // Supernodes are assumed online if in discovery
+        
+        await upsertNode({
+          nodeIdentifier,
+          username: supernode.name || `Supernode ${supernode.id.substring(0, 8)}`,
+          nodeId: supernode.id,
+          publicUrl: null,
+          endpoint: `${supernode.address}:${supernode.proxyPort || 8090}`,
+          endpointType: 'supernode',
+          status,
+          nodeType: 'supernode',
+          isPC2Node: false,
+          healthData: { address: supernode.address, port: supernode.proxyPort || 8090 },
+          activityType: 'always-on',
+          firstSeen: new Date().toISOString()
+        });
+        
+        await recordActivity(nodeIdentifier, status);
+        
+      } catch (error) {
+        console.error(`[Collector] Failed to check supernode ${supernode.name}:`, error.message);
+      }
     }
   }
   

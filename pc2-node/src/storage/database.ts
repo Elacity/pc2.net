@@ -461,6 +461,39 @@ export class DatabaseManager {
     return !!row;
   }
 
+  /**
+   * Get all public CIDs for DHT announcement
+   * Returns distinct CIDs from files marked as public (is_public=1) or in /Public folders
+   */
+  getPublicCIDs(): string[] {
+    const db = this.getDB();
+    const rows = db.prepare(`
+      SELECT DISTINCT ipfs_hash 
+      FROM files 
+      WHERE ipfs_hash IS NOT NULL 
+        AND is_dir = 0
+        AND (is_public = 1 OR path LIKE '%/Public/%')
+    `).all() as { ipfs_hash: string }[];
+    
+    return rows.map(r => r.ipfs_hash);
+  }
+
+  /**
+   * Get public CID count for statistics
+   */
+  getPublicCIDCount(): number {
+    const db = this.getDB();
+    const row = db.prepare(`
+      SELECT COUNT(DISTINCT ipfs_hash) as count
+      FROM files 
+      WHERE ipfs_hash IS NOT NULL 
+        AND is_dir = 0
+        AND (is_public = 1 OR path LIKE '%/Public/%')
+    `).get() as { count: number };
+    
+    return row?.count || 0;
+  }
+
   // ============================================================================
   // Settings Operations
   // ============================================================================

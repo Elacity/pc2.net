@@ -1,0 +1,92 @@
+# PC2 Multi-Gateway Deployment
+# 
+# This docker-compose file sets up multiple gateway instances
+# behind a load balancer for high availability.
+#
+# Usage:
+#   docker-compose up -d              # Start all services
+#   docker-compose logs -f gateway1   # View logs for gateway1
+#   docker-compose scale gateway=3    # Scale to 3 gateway instances
+
+version: '3.8'
+
+services:
+  # Load balancer (Nginx)
+  loadbalancer:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+    depends_on:
+      - gateway1
+      - gateway2
+    restart: unless-stopped
+    networks:
+      - gateway-net
+
+  # Gateway instance 1
+  gateway1:
+    build: .
+    environment:
+      - NODE_ENV=production
+      - GATEWAY_ID=gateway-1
+      - DHT_ENABLED=true
+      - REGISTRY_SYNC=true
+    volumes:
+      - gateway1-data:/app/data
+      - ./certs:/app/certs:ro
+    restart: unless-stopped
+    networks:
+      - gateway-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Gateway instance 2
+  gateway2:
+    build: .
+    environment:
+      - NODE_ENV=production
+      - GATEWAY_ID=gateway-2
+      - DHT_ENABLED=true
+      - REGISTRY_SYNC=true
+    volumes:
+      - gateway2-data:/app/data
+      - ./certs:/app/certs:ro
+    restart: unless-stopped
+    networks:
+      - gateway-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Gateway instance 3 (optional, uncomment to enable)
+  # gateway3:
+  #   build: .
+  #   environment:
+  #     - NODE_ENV=production
+  #     - GATEWAY_ID=gateway-3
+  #     - DHT_ENABLED=true
+  #     - REGISTRY_SYNC=true
+  #   volumes:
+  #     - gateway3-data:/app/data
+  #     - ./certs:/app/certs:ro
+  #   restart: unless-stopped
+  #   networks:
+  #     - gateway-net
+
+volumes:
+  gateway1-data:
+  gateway2-data:
+  # gateway3-data:
+
+networks:
+  gateway-net:
+    driver: bridge

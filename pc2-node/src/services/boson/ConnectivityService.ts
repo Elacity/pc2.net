@@ -12,6 +12,7 @@ import { logger } from '../../utils/logger.js';
 import { UsernameService } from './UsernameService.js';
 import { NetworkDetector, type NATType } from './NetworkDetector.js';
 import { ActiveProxyClient, ConnectionState, type ProxyConnection } from './ActiveProxyClient.js';
+import { fromBase58 } from './IdentityService.js';
 import net, { type Server, type Socket } from 'net';
 import { request as httpRequest } from 'http';
 
@@ -41,6 +42,7 @@ export interface ConnectionStatus {
 }
 
 // Default super nodes - multiple nodes for failover
+// These are fallbacks; prefer dynamic discovery via fetchSuperNodes()
 const DEFAULT_SUPER_NODES: SuperNode[] = [
   {
     id: 'J1h7RHv5iHhT43zsXxMCg7zGmZq6g4Ec2VJeCkSGry2E',
@@ -58,6 +60,52 @@ const DEFAULT_SUPER_NODES: SuperNode[] = [
     gatewayUrl: 'https://38.242.211.112',
   },
 ];
+
+// Well-known endpoint for dynamic supernode discovery
+const SUPERNODE_DISCOVERY_URLS = [
+  'https://demo.ela.city/api/supernodes',
+  'https://api.ela.city/supernodes',
+];
+
+// Cache for discovered supernodes
+let cachedSuperNodes: SuperNode[] | null = null;
+let cacheTimestamp: number = 0;
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Fetch the list of active supernodes from the network
+ * Falls back to defaults if fetch fails
+ */
+export async function fetchSuperNodes(): Promise<SuperNode[]> {
+  // Return cached if still valid
+  if (cachedSuperNodes && Date.now() - cacheTimestamp < CACHE_TTL_MS) {
+    return cachedSuperNodes;
+  }
+  
+  for (const url of SUPERNODE_DISCOVERY_URLS) {
+    try {
+      const response = await fetch(url, { 
+        signal: AbortSignal.timeout(5000) 
+      });
+      
+      if (response.ok) {
+        const data = await response.json() as { supernodes: SuperNode[] };
+        if (data.supernodes && data.supernodes.length > 0) {
+          cachedSuperNodes = data.supernodes;
+          cacheTimestamp = Date.now();
+          logger.info(`[Connectivity] Discovered ${data.supernodes.length} supernodes from ${url}`);
+          return data.supernodes;
+        }
+      }
+    } catch (error) {
+      logger.debug(`[Connectivity] Failed to fetch supernodes from ${url}: ${error}`);
+    }
+  }
+  
+  // Fallback to defaults
+  logger.info('[Connectivity] Using default supernode list');
+  return DEFAULT_SUPER_NODES;
+}
 
 export class ConnectivityService {
   private config: ConnectivityConfig;
@@ -165,68 +213,133 @@ export class ConnectivityService {
 
   /**
    * Connect via Active Proxy for NAT traversal
+   * 
+   * Phase 1 Optimization: Parallel supernode queries
+   * Tries all supernodes simultaneously and uses the first successful connection.
+   * This significantly reduces connection time when some supernodes are slow/down.
    */
   private async connectViaActiveProxy(): Promise<boolean> {
-    for (const superNode of this.config.superNodes) {
+    const validSuperNodes = this.config.superNodes.filter(superNode => {
       try {
-        logger.info(`🔗 Connecting to Active Proxy at ${superNode.address}:${superNode.proxyPort}...`);
-
-        this.activeProxyClient = new ActiveProxyClient({
-          host: superNode.address,
-          port: superNode.proxyPort,
-          nodeId: this.nodeId!,
-          publicKey: this.publicKey!,
-          privateKey: this.privateKey!,
-          localPort: this.config.localPort,
-          keepaliveIntervalMs: 30000,
-          reconnectIntervalMs: this.config.reconnectIntervalMs,
-          maxReconnectAttempts: 10,
-        });
-
-        // Set up event handlers
-        this.activeProxyClient.on('connected', (sessionId: string, allocatedPort: number) => {
-          this.status.connected = true;
-          this.status.superNode = superNode;
-          this.status.connectedAt = new Date().toISOString();
-          
-          logger.info(`✅ Active Proxy connected! Session: ${sessionId}, Port: ${allocatedPort}`);
-          
-          // Register proxy endpoint with gateway
-          this.registerProxyEndpoint(superNode, sessionId);
-        });
-
-        this.activeProxyClient.on('disconnected', (reason: string) => {
-          logger.warn(`⚠️ Active Proxy disconnected: ${reason}`);
-          this.status.connected = false;
-        });
-
-        this.activeProxyClient.on('error', (error: Error) => {
-          logger.error(`❌ Active Proxy error: ${error.message}`);
-        });
-
-        this.activeProxyClient.on('connection', (conn: ProxyConnection) => {
-          this.handleProxyConnection(conn);
-        });
-
-        this.activeProxyClient.on('data', (connectionId: number, data: Buffer) => {
-          this.handleProxyData(connectionId, data);
-        });
-
-        this.activeProxyClient.on('connectionClosed', (connectionId: number) => {
-          this.handleProxyConnectionClosed(connectionId);
-        });
-
-        // Connect
-        await this.activeProxyClient.connect();
-        return true;
-      } catch (error) {
-        logger.warn(`Failed to connect via Active Proxy to ${superNode.address}: ${error}`);
+        const serverPublicKey = fromBase58(superNode.id);
+        return serverPublicKey.length === 32;
+      } catch {
+        logger.warn(`[Connectivity] Invalid supernode ID '${superNode.id}', skipping`);
+        return false;
       }
+    });
+
+    if (validSuperNodes.length === 0) {
+      logger.error('No valid supernodes available');
+      return false;
+    }
+
+    logger.info(`🔗 Connecting to Active Proxy (parallel: ${validSuperNodes.length} supernodes)...`);
+
+    // Create connection attempts for all supernodes in parallel
+    const connectionAttempts = validSuperNodes.map(superNode => 
+      this.tryConnectToSuperNode(superNode)
+    );
+
+    // Race: use first successful connection
+    try {
+      const result = await Promise.any(connectionAttempts);
+      if (result.success) {
+        this.activeProxyClient = result.client;
+        this.setupClientEventHandlers(result.superNode);
+        return true;
+      }
+    } catch (error) {
+      // All connections failed (Promise.any throws AggregateError)
+      logger.warn('⚠️ All parallel supernode connections failed');
     }
 
     logger.warn('⚠️ Could not connect via Active Proxy to any super node');
     this.scheduleReconnect();
     return false;
+  }
+
+  /**
+   * Try to connect to a single supernode
+   * Returns a promise that resolves with connection result
+   */
+  private async tryConnectToSuperNode(superNode: SuperNode): Promise<{
+    success: boolean;
+    client: ActiveProxyClient | null;
+    superNode: SuperNode;
+  }> {
+    const startTime = Date.now();
+    
+    try {
+      logger.debug(`[Connectivity] Trying ${superNode.address}:${superNode.proxyPort}...`);
+
+      const serverPublicKey = fromBase58(superNode.id);
+      
+      const client = new ActiveProxyClient({
+        host: superNode.address,
+        port: superNode.proxyPort,
+        nodeId: this.nodeId!,
+        publicKey: this.publicKey!,
+        privateKey: this.privateKey!,
+        serverPublicKey: serverPublicKey,
+        localPort: this.config.localPort,
+        keepaliveIntervalMs: 30000,
+        reconnectIntervalMs: this.config.reconnectIntervalMs,
+        maxReconnectAttempts: 10,
+      });
+
+      await client.connect();
+      
+      const elapsed = Date.now() - startTime;
+      logger.info(`✅ Connected to ${superNode.address} in ${elapsed}ms`);
+      
+      return { success: true, client, superNode };
+    } catch (error) {
+      const elapsed = Date.now() - startTime;
+      logger.debug(`[Connectivity] Failed to connect to ${superNode.address} after ${elapsed}ms: ${error}`);
+      
+      // Throw to signal failure to Promise.any
+      throw error;
+    }
+  }
+
+  /**
+   * Set up event handlers for the active proxy client
+   */
+  private setupClientEventHandlers(superNode: SuperNode): void {
+    if (!this.activeProxyClient) return;
+
+    this.activeProxyClient.on('connected', (sessionId: string, allocatedPort: number) => {
+      this.status.connected = true;
+      this.status.superNode = superNode;
+      this.status.connectedAt = new Date().toISOString();
+      
+      logger.info(`✅ Active Proxy connected! Session: ${sessionId}, Port: ${allocatedPort}`);
+      
+      // Register proxy endpoint with gateway
+      this.registerProxyEndpoint(superNode, sessionId);
+    });
+
+    this.activeProxyClient.on('disconnected', (reason: string) => {
+      logger.warn(`⚠️ Active Proxy disconnected: ${reason}`);
+      this.status.connected = false;
+    });
+
+    this.activeProxyClient.on('error', (error: Error) => {
+      logger.error(`❌ Active Proxy error: ${error.message}`);
+    });
+
+    this.activeProxyClient.on('connection', (conn: ProxyConnection) => {
+      this.handleProxyConnection(conn);
+    });
+
+    this.activeProxyClient.on('data', (connectionId: number, data: Buffer) => {
+      this.handleProxyData(connectionId, data);
+    });
+
+    this.activeProxyClient.on('connectionClosed', (connectionId: number) => {
+      this.handleProxyConnectionClosed(connectionId);
+    });
   }
 
   /**

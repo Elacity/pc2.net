@@ -101,7 +101,27 @@ Super Nodes:
 
 ## Quick Start (Experienced Operators)
 
-For operators who want to get running quickly:
+### Option A: Automated Script (Recommended)
+
+The fastest way to get running:
+
+```bash
+# Download and run the setup script
+curl -sL https://raw.githubusercontent.com/elastos/pc2.net/main/scripts/setup-supernode.sh -o setup-supernode.sh
+chmod +x setup-supernode.sh
+./setup-supernode.sh --public-ip YOUR_PUBLIC_IP --name "My Supernode"
+```
+
+The script handles:
+- Java 17 installation
+- Building Boson.Core and Active Proxy
+- Firewall configuration
+- Systemd service creation
+- Node registration
+
+### Option B: Manual Setup
+
+For operators who want full control:
 
 ```bash
 # 1. Create isolated directory (won't affect existing Elastos nodes)

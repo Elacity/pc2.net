@@ -17,6 +17,7 @@ import { noise } from '@chainsafe/libp2p-noise';
 import { yamux } from '@chainsafe/libp2p-yamux';
 import { kadDHT } from '@libp2p/kad-dht';
 import { identify } from '@libp2p/identify';
+import { ping } from '@libp2p/ping';
 import { bootstrap } from '@libp2p/bootstrap';
 import { FsBlockstore } from 'blockstore-fs';
 import { FsDatastore } from 'datastore-fs';
@@ -142,6 +143,9 @@ export class IPFSStorage {
 
         // Add identify service (required for DHT)
         (libp2pConfig.services as any).identify = identify();
+        
+        // Add ping service (required for DHT)
+        (libp2pConfig.services as any).ping = ping();
 
         // Add DHT for content discovery
         if (enableDHT) {
@@ -509,6 +513,114 @@ export class IPFSStorage {
       return [];
     }
     return this.helia.libp2p.getMultiaddrs().map(addr => addr.toString());
+  }
+
+  // ============================================================================
+  // DHT Announcement Methods (for IPFS Public Folder Sharing)
+  // ============================================================================
+
+  /**
+   * Announce a single CID to the DHT network
+   * This makes the CID discoverable by other IPFS nodes
+   */
+  async announceCID(cid: string): Promise<boolean> {
+    if (this.networkMode === 'private') {
+      console.log(`[IPFS] Skipping DHT announcement (private mode): ${cid}`);
+      return false;
+    }
+
+    if (!this.helia || !this.isInitialized) {
+      console.warn(`[IPFS] Cannot announce CID - IPFS not initialized`);
+      return false;
+    }
+
+    try {
+      const dht = (this.helia.libp2p.services as any).dht;
+      if (!dht) {
+        console.warn(`[IPFS] DHT service not available`);
+        return false;
+      }
+
+      const { CID } = await import('multiformats/cid');
+      const cidObj = CID.parse(cid);
+      
+      console.log(`[IPFS] Announcing CID to DHT: ${cid}`);
+      
+      // Use the DHT provide method to announce we have this content
+      await dht.provide(cidObj);
+      
+      console.log(`[IPFS] ✅ Successfully announced CID to DHT: ${cid}`);
+      return true;
+    } catch (error) {
+      console.error(`[IPFS] Failed to announce CID ${cid}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Announce multiple CIDs to the DHT network
+   * Used for batch announcement of public files
+   */
+  async announceMultipleCIDs(cids: string[]): Promise<{ success: number; failed: number }> {
+    if (this.networkMode === 'private') {
+      console.log(`[IPFS] Skipping batch DHT announcement (private mode)`);
+      return { success: 0, failed: 0 };
+    }
+
+    let success = 0;
+    let failed = 0;
+
+    console.log(`[IPFS] Starting batch announcement of ${cids.length} CIDs...`);
+
+    for (const cid of cids) {
+      try {
+        const announced = await this.announceCID(cid);
+        if (announced) {
+          success++;
+        } else {
+          failed++;
+        }
+        // Small delay between announcements to avoid overwhelming DHT
+        await new Promise(resolve => setTimeout(resolve, 100));
+      } catch (error) {
+        failed++;
+        console.error(`[IPFS] Failed to announce CID ${cid}:`, error);
+      }
+    }
+
+    console.log(`[IPFS] Batch announcement complete: ${success} success, ${failed} failed`);
+    return { success, failed };
+  }
+
+  /**
+   * Get DHT announcement statistics
+   */
+  getAnnouncementStats(): {
+    mode: IPFSNetworkMode;
+    dhtEnabled: boolean;
+    canAnnounce: boolean;
+    connectedPeers: number;
+  } {
+    const dhtEnabled = this.networkMode !== 'private' && 
+                       this.helia !== null && 
+                       (this.helia.libp2p.services as any).dht !== undefined;
+    
+    return {
+      mode: this.networkMode,
+      dhtEnabled,
+      canAnnounce: dhtEnabled && this.isInitialized,
+      connectedPeers: this.helia ? this.helia.libp2p.getConnections().length : 0
+    };
+  }
+
+  /**
+   * Check if DHT is available for announcements
+   */
+  canAnnounce(): boolean {
+    return this.networkMode !== 'private' && 
+           this.isInitialized && 
+           this.helia !== null &&
+           (this.helia.libp2p.services as any).dht !== undefined;
   }
 
   /**

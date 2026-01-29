@@ -59,6 +59,44 @@ export default {
                 </div>
             </div>
             
+            <!-- IPFS Sharing -->
+            <div class="storage-section">
+                <div class="storage-section-title">IPFS Sharing</div>
+                <div class="storage-group">
+                    <div class="storage-group-row">
+                        <div class="storage-card-row">
+                            <span class="storage-card-label">Network Mode <span class="tooltip-icon" title="Private: Your files stay on your device only, no network connection. Hybrid (Recommended): Only files in your /Public folder are shared with the network. Private files stay private. Public: All files are shared with the IPFS network.">?</span></span>
+                            <select id="ipfs-mode-select" class="storage-select">
+                                <option value="private">Private</option>
+                                <option value="hybrid" selected>Hybrid</option>
+                                <option value="public">Public</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="storage-group-row">
+                        <div class="storage-card-row">
+                            <span class="storage-card-label">Auto-Share Public Folder <span class="tooltip-icon" title="When enabled, files you add to your /Public folder are automatically announced to the IPFS network, making them discoverable and downloadable by other PC2 nodes and the wider IPFS network.">?</span></span>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="ipfs-auto-announce-toggle" checked>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="storage-group-row">
+                        <div class="storage-card-row">
+                            <span class="storage-card-label">Shared CIDs <span class="tooltip-icon" title="Number of unique content identifiers (CIDs) from your /Public folder that have been announced to the IPFS network.">?</span></span>
+                            <span id="ipfs-shared-cids" class="storage-card-value">-</span>
+                        </div>
+                    </div>
+                    <div class="storage-group-row">
+                        <div class="storage-card-row">
+                            <span class="storage-card-label">Announce Now <span class="tooltip-icon" title="Manually announce all your public files to the IPFS DHT right now. This makes your content discoverable by others on the network.">?</span></span>
+                            <button id="ipfs-announce-btn" class="button storage-btn">Announce All</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
             <!-- Visibility -->
             <div class="storage-section">
                 <div class="storage-section-title">By Visibility</div>
@@ -113,6 +151,14 @@ export default {
                 .storage-file-meta { font-size: 9px; color: #999; display: flex; gap: 6px; }
                 .storage-file-cid { font-family: monospace; font-size: 8px; color: #667eea; background: #f0f4ff; padding: 1px 4px; border-radius: 2px; }
                 .storage-file-size { font-weight: 600; color: #3b82f6; font-size: 10px; min-width: 50px; text-align: right; }
+                /* Toggle switch styles - simple iOS style */
+                .toggle-switch { position: relative; display: inline-block; width: 42px; height: 24px; }
+                .toggle-switch input { display: none; }
+                .toggle-switch .toggle-slider { position: absolute; top: 0; left: 0; width: 42px; height: 24px; background: #ccc; border-radius: 12px; cursor: pointer; transition: background 0.2s; }
+                .toggle-switch .toggle-slider:before { display: none !important; }
+                .toggle-switch .toggle-slider:after { content: ""; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; background: #fff; border-radius: 50%; box-shadow: 0 1px 2px rgba(0,0,0,0.2); transition: left 0.2s; }
+                .toggle-switch input:checked + .toggle-slider { background: #22c55e; }
+                .toggle-switch input:checked + .toggle-slider:after { left: 20px; }
             </style>
         `;
     },
@@ -462,6 +508,143 @@ export default {
             }
         }
         
+        // Load IPFS Sharing settings
+        async function loadIPFSSharingSettings() {
+            try {
+                const apiOrigin = window.api_origin || window.location.origin;
+                const authToken = getAuthToken();
+                
+                const response = await fetch(`${apiOrigin}/api/storage/ipfs/settings`, {
+                    method: 'GET',
+                    headers: authToken ? { 'Authorization': `Bearer ${authToken}` } : {}
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('[Storage] IPFS settings loaded:', data);
+                    
+                    // Update mode select
+                    $el_window.find('#ipfs-mode-select').val(data.settings?.mode || 'hybrid');
+                    
+                    // Update auto-announce toggle - use native DOM for reliable :checked CSS
+                    const isAutoAnnounce = data.settings?.autoAnnouncePublic === true;
+                    const toggleInput = document.getElementById('ipfs-auto-announce-toggle');
+                    if (toggleInput) {
+                        toggleInput.checked = isAutoAnnounce;
+                        console.log('[Storage] Auto-announce toggle set to:', isAutoAnnounce, 'element:', toggleInput);
+                    } else {
+                        console.warn('[Storage] Toggle element not found!');
+                    }
+                    
+                    // Update shared CIDs count
+                    $el_window.find('#ipfs-shared-cids').text(data.publicFiles?.uniqueCIDs || 0);
+                }
+            } catch (error) {
+                console.error('[Storage] Failed to load IPFS sharing settings:', error);
+            }
+        }
+        
+        // IPFS mode change handler
+        $el_window.find('#ipfs-mode-select').on('change', async function() {
+            const newMode = $(this).val();
+            const select = $(this);
+            select.prop('disabled', true);
+            
+            try {
+                const apiOrigin = window.api_origin || window.location.origin;
+                const authToken = getAuthToken();
+                
+                const response = await fetch(`${apiOrigin}/api/storage/ipfs/settings`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {})
+                    },
+                    body: JSON.stringify({ mode: newMode })
+                });
+                
+                if (response.ok) {
+                    puter.ui.toast(`IPFS mode set to ${newMode}`, { type: 'success' });
+                    // Note: Mode change requires node restart to take effect
+                    if (newMode !== 'private') {
+                        puter.ui.toast('Restart node for mode change to take effect', { type: 'info' });
+                    }
+                } else {
+                    throw new Error('Failed to save');
+                }
+            } catch (error) {
+                console.error('[Storage] Failed to save IPFS mode:', error);
+                puter.ui.toast('Failed to update IPFS mode', { type: 'error' });
+            } finally {
+                select.prop('disabled', false);
+            }
+        });
+        
+        // Auto-announce toggle handler
+        $el_window.find('#ipfs-auto-announce-toggle').on('change', async function() {
+            const enabled = $(this).prop('checked');
+            const toggle = $(this);
+            toggle.prop('disabled', true);
+            
+            try {
+                const apiOrigin = window.api_origin || window.location.origin;
+                const authToken = getAuthToken();
+                
+                const response = await fetch(`${apiOrigin}/api/storage/ipfs/settings`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {})
+                    },
+                    body: JSON.stringify({ autoAnnouncePublic: enabled })
+                });
+                
+                if (response.ok) {
+                    puter.ui.toast(enabled ? 'Auto-share enabled' : 'Auto-share disabled', { type: 'success' });
+                } else {
+                    throw new Error('Failed to save');
+                }
+            } catch (error) {
+                console.error('[Storage] Failed to save auto-announce setting:', error);
+                puter.ui.toast('Failed to update setting', { type: 'error' });
+                // Revert toggle
+                toggle.prop('checked', !enabled);
+            } finally {
+                toggle.prop('disabled', false);
+            }
+        });
+        
+        // Announce button handler
+        $el_window.find('#ipfs-announce-btn').on('click', async function() {
+            const btn = $(this);
+            btn.prop('disabled', true).text('Announcing...');
+            
+            try {
+                const apiOrigin = window.api_origin || window.location.origin;
+                const authToken = getAuthToken();
+                
+                const response = await fetch(`${apiOrigin}/api/storage/ipfs/announce`, {
+                    method: 'POST',
+                    headers: authToken ? { 'Authorization': `Bearer ${authToken}` } : {}
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    puter.ui.toast(`Announced ${result.announced || 0} CIDs to DHT`, { type: 'success' });
+                    // Refresh stats
+                    await loadIPFSSharingSettings();
+                } else {
+                    throw new Error(result.error || 'Failed to announce');
+                }
+            } catch (error) {
+                console.error('[Storage] Announce failed:', error);
+                puter.ui.toast('Announce failed: ' + error.message, { type: 'error' });
+            } finally {
+                btn.prop('disabled', false).text('Announce All');
+            }
+        });
+        
         // Copy button handlers
         const copyIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
         const checkIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
@@ -708,6 +891,7 @@ export default {
         this._loadStorageData = loadStorageData;
         this._loadIPFSNetworkInfo = loadIPFSNetworkInfo;
         this._loadStorageLimitSetting = loadStorageLimitSetting;
+        this._loadIPFSSharingSettings = loadIPFSSharingSettings;
         
         // Initial load - run in parallel with timeout protection
         try {
@@ -715,7 +899,8 @@ export default {
                 Promise.all([
                     loadStorageData().catch(e => console.error('[Storage] loadStorageData error:', e)),
                     loadIPFSNetworkInfo().catch(e => console.error('[Storage] loadIPFSNetworkInfo error:', e)),
-                    loadStorageLimitSetting().catch(e => console.error('[Storage] loadStorageLimitSetting error:', e))
+                    loadStorageLimitSetting().catch(e => console.error('[Storage] loadStorageLimitSetting error:', e)),
+                    loadIPFSSharingSettings().catch(e => console.error('[Storage] loadIPFSSharingSettings error:', e))
                 ]),
                 new Promise((_, reject) => setTimeout(() => reject(new Error('Storage tab load timeout')), 15000))
             ]);
@@ -730,7 +915,8 @@ export default {
                 await Promise.race([
                     Promise.all([
                         this._loadStorageData().catch(e => console.error('[Storage] loadStorageData error:', e)),
-                        this._loadIPFSNetworkInfo().catch(e => console.error('[Storage] loadIPFSNetworkInfo error:', e))
+                        this._loadIPFSNetworkInfo().catch(e => console.error('[Storage] loadIPFSNetworkInfo error:', e)),
+                        this._loadIPFSSharingSettings ? this._loadIPFSSharingSettings().catch(e => console.error('[Storage] loadIPFSSharingSettings error:', e)) : Promise.resolve()
                     ]),
                     new Promise((_, reject) => setTimeout(() => reject(new Error('Storage refresh timeout')), 10000))
                 ]);

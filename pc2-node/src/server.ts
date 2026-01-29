@@ -5,7 +5,7 @@ import cookieParser from 'cookie-parser';
 import { setupStaticServing } from './static.js';
 import { setupAPI } from './api/index.js';
 import { setupWebSocket, setGlobalIO } from './websocket/server.js';
-import { DatabaseManager, FilesystemManager } from './storage/index.js';
+import { DatabaseManager, FilesystemManager, IPFSStorage } from './storage/index.js';
 import { Config } from './config/loader.js';
 import { IndexingWorker } from './storage/indexer.js';
 import { AIChatService } from './services/ai/AIChatService.js';
@@ -17,6 +17,7 @@ export interface ServerOptions {
   isProduction: boolean;
   database?: DatabaseManager;
   filesystem?: FilesystemManager;
+  ipfs?: IPFSStorage;
   config?: Config;
   aiService?: AIChatService;
 }
@@ -98,7 +99,7 @@ export function createServer(options: ServerOptions): { app: Express; server: Se
   }));
   app.use(express.urlencoded({ extended: true }));
   
-  // Make database, filesystem, config, and AI service available to routes via app.locals
+  // Make database, filesystem, ipfs, config, and AI service available to routes via app.locals
   if (options.database) {
     app.locals.db = options.database;
   }
@@ -109,6 +110,10 @@ export function createServer(options: ServerOptions): { app: Express; server: Se
     logger.info('[Server] ✅ Filesystem stored in app.locals and global');
   } else {
     logger.warn('[Server] ⚠️ No filesystem provided - tool execution will be disabled');
+  }
+  if (options.ipfs) {
+    app.locals.ipfs = options.ipfs;
+    logger.info('[Server] ✅ IPFS storage available in app.locals');
   }
   if (options.config) {
     app.locals.config = options.config;

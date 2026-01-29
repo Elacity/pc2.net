@@ -111,7 +111,7 @@
     <rect x="0" y="0" width="300" height="100" rx="10" fill="#252542" stroke="#10b981" stroke-width="2"/>
     <text x="150" y="30" text-anchor="middle" fill="#10b981" font-family="Arial, sans-serif" font-size="16" font-weight="bold">DIRECT ACCESS</text>
     <text x="150" y="55" text-anchor="middle" fill="#8b8b9a" font-family="Arial, sans-serif" font-size="12">VPS with Public IP</text>
-    <text x="150" y="75" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="11">User � Gateway � Your Server</text>
+    <text x="150" y="75" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="11">User → Gateway → Your Server</text>
     <text x="150" y="92" text-anchor="middle" fill="#10b981" font-family="Arial, sans-serif" font-size="10">Fastest - No relay needed</text>
   </g>
 
@@ -120,7 +120,7 @@
     <rect x="0" y="0" width="300" height="100" rx="10" fill="#252542" stroke="#4a90d9" stroke-width="2"/>
     <text x="150" y="30" text-anchor="middle" fill="#4a90d9" font-family="Arial, sans-serif" font-size="16" font-weight="bold">NAT TRAVERSAL</text>
     <text x="150" y="55" text-anchor="middle" fill="#8b8b9a" font-family="Arial, sans-serif" font-size="12">Home/RaspberryPi behind Firewall</text>
-    <text x="150" y="75" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="11">User � Gateway � Active Proxy � Your Server</text>
+    <text x="150" y="75" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="11">User → Gateway → Active Proxy → Your Server</text>
     <text x="150" y="92" text-anchor="middle" fill="#4a90d9" font-family="Arial, sans-serif" font-size="10">Works everywhere - Encrypted tunnel</text>
   </g>
 
@@ -131,7 +131,7 @@
   <g transform="translate(100, 610)">
     <rect x="0" y="0" width="180" height="120" rx="10" fill="#252542" stroke="#4a90d9" stroke-width="2"/>
     <rect x="60" y="15" width="60" height="40" rx="5" fill="url(#node-grad)"/>
-    <text x="90" y="40" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="20"></text>
+    <text x="90" y="40" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="20">☁️</text>
     <text x="90" y="75" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="14" font-weight="bold">VPS Node</text>
     <text x="90" y="92" text-anchor="middle" fill="#8b8b9a" font-family="Arial, sans-serif" font-size="11">Direct Connection</text>
     <text x="90" y="110" text-anchor="middle" fill="#10b981" font-family="Arial, sans-serif" font-size="12">alice.ela.city</text>
@@ -141,7 +141,7 @@
   <g transform="translate(320, 610)">
     <rect x="0" y="0" width="180" height="120" rx="10" fill="#252542" stroke="#4a90d9" stroke-width="2"/>
     <rect x="60" y="15" width="60" height="40" rx="5" fill="url(#node-grad)"/>
-    <text x="90" y="40" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="20"><�</text>
+    <text x="90" y="40" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="20">🏠</text>
     <text x="90" y="75" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="14" font-weight="bold">Home Node</text>
     <text x="90" y="92" text-anchor="middle" fill="#8b8b9a" font-family="Arial, sans-serif" font-size="11">NAT Traversal</text>
     <text x="90" y="110" text-anchor="middle" fill="#10b981" font-family="Arial, sans-serif" font-size="12">bob.pc2.net</text>
@@ -151,7 +151,7 @@
   <g transform="translate(540, 610)">
     <rect x="0" y="0" width="180" height="120" rx="10" fill="#252542" stroke="#4a90d9" stroke-width="2"/>
     <rect x="60" y="15" width="60" height="40" rx="5" fill="url(#node-grad)"/>
-    <text x="90" y="40" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="20"><S</text>
+    <text x="90" y="40" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="20">🍓</text>
     <text x="90" y="75" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="14" font-weight="bold">Raspberry Pi</text>
     <text x="90" y="92" text-anchor="middle" fill="#8b8b9a" font-family="Arial, sans-serif" font-size="11">NAT Traversal</text>
     <text x="90" y="110" text-anchor="middle" fill="#10b981" font-family="Arial, sans-serif" font-size="12">carol.ela.net</text>
@@ -161,7 +161,7 @@
   <g transform="translate(760, 610)">
     <rect x="0" y="0" width="180" height="120" rx="10" fill="#252542" stroke="#4a90d9" stroke-width="2"/>
     <rect x="60" y="15" width="60" height="40" rx="5" fill="url(#node-grad)"/>
-    <text x="90" y="40" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="20">=�</text>
+    <text x="90" y="40" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="20">💻</text>
     <text x="90" y="75" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="14" font-weight="bold">Local Dev</text>
     <text x="90" y="92" text-anchor="middle" fill="#8b8b9a" font-family="Arial, sans-serif" font-size="11">Direct Access</text>
     <text x="90" y="110" text-anchor="middle" fill="#10b981" font-family="Arial, sans-serif" font-size="12">localhost:4200</text>
@@ -184,24 +184,24 @@
   <g transform="translate(980, 600)">
     <rect x="0" y="0" width="200" height="140" rx="10" fill="#252542" stroke="#ff6b35" stroke-width="2"/>
     <text x="100" y="25" text-anchor="middle" fill="#ff6b35" font-family="Arial, sans-serif" font-size="14" font-weight="bold">KEY FEATURES</text>
-    <text x="15" y="50" fill="#ffffff" font-family="Arial, sans-serif" font-size="11">= DID Identity</text>
+    <text x="15" y="50" fill="#ffffff" font-family="Arial, sans-serif" font-size="11">🔐 DID Identity</text>
     <text x="25" y="68" fill="#8b8b9a" font-family="Arial, sans-serif" font-size="10">did:boson:NodeId</text>
-    <text x="15" y="88" fill="#ffffff" font-family="Arial, sans-serif" font-size="11">= 24-Word Recovery</text>
-    <text x="15" y="108" fill="#ffffff" font-family="Arial, sans-serif" font-size="11">< Global Access</text>
-    <text x="15" y="128" fill="#ffffff" font-family="Arial, sans-serif" font-size="11">=� Self-Sovereign Data</text>
+    <text x="15" y="88" fill="#ffffff" font-family="Arial, sans-serif" font-size="11">🔑 24-Word Recovery</text>
+    <text x="15" y="108" fill="#ffffff" font-family="Arial, sans-serif" font-size="11">🌐 Global Access</text>
+    <text x="15" y="128" fill="#ffffff" font-family="Arial, sans-serif" font-size="11">🛡️ Self-Sovereign Data</text>
   </g>
 
   <!-- How it Scales Box -->
   <g transform="translate(980, 160)">
     <rect x="0" y="0" width="200" height="180" rx="10" fill="#252542" stroke="#10b981" stroke-width="2"/>
     <text x="100" y="25" text-anchor="middle" fill="#10b981" font-family="Arial, sans-serif" font-size="14" font-weight="bold">HOW IT SCALES</text>
-    <text x="15" y="50" fill="#ffffff" font-family="Arial, sans-serif" font-size="11">1� Council runs Supernodes</text>
-    <text x="15" y="72" fill="#ffffff" font-family="Arial, sans-serif" font-size="11">2� Supernodes form DHT mesh</text>
-    <text x="15" y="94" fill="#ffffff" font-family="Arial, sans-serif" font-size="11">3� Users connect via any</text>
+    <text x="15" y="50" fill="#ffffff" font-family="Arial, sans-serif" font-size="11">1️⃣ Council runs Supernodes</text>
+    <text x="15" y="72" fill="#ffffff" font-family="Arial, sans-serif" font-size="11">2️⃣ Supernodes form DHT mesh</text>
+    <text x="15" y="94" fill="#ffffff" font-family="Arial, sans-serif" font-size="11">3️⃣ Users connect via any</text>
     <text x="25" y="110" fill="#8b8b9a" font-family="Arial, sans-serif" font-size="10">supernode</text>
-    <text x="15" y="130" fill="#ffffff" font-family="Arial, sans-serif" font-size="11">4� Load distributed across</text>
+    <text x="15" y="130" fill="#ffffff" font-family="Arial, sans-serif" font-size="11">4️⃣ Load distributed across</text>
     <text x="25" y="146" fill="#8b8b9a" font-family="Arial, sans-serif" font-size="10">all supernodes</text>
-    <text x="15" y="168" fill="#ffffff" font-family="Arial, sans-serif" font-size="11">5� No single point of failure</text>
+    <text x="15" y="168" fill="#ffffff" font-family="Arial, sans-serif" font-size="11">5️⃣ No single point of failure</text>
   </g>
 
   <!-- Flow arrows showing user access -->
@@ -209,7 +209,7 @@
     <rect x="100" y="0" width="1000" height="80" rx="10" fill="#252542" stroke="#8b8b9a" stroke-width="1"/>
     <text x="600" y="25" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="16" font-weight="bold">USER ACCESS FLOW</text>
     <text x="600" y="50" text-anchor="middle" fill="#8b8b9a" font-family="Arial, sans-serif" font-size="12">
-      User visits alice.ela.city � DNS resolves to Supernode � Gateway routes to Alice's Node � Content served
+      User visits alice.ela.city → DNS resolves to Supernode → Gateway routes to Alice's Node → Content served
     </text>
     <text x="600" y="70" text-anchor="middle" fill="#10b981" font-family="Arial, sans-serif" font-size="11">
       Works for any *.ela.city, *.pc2.net, or *.ela.net subdomain registered to the network

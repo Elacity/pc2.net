@@ -7,6 +7,12 @@
     "ipfs_repo_path": "./data/ipfs",
     "database_path": "./data/pc2.db"
   },
+  "ipfs": {
+    "mode": "hybrid",
+    "enable_dht": true,
+    "enable_bootstrap": true,
+    "auto_announce_public": true
+  },
   "owner": {
     "wallet_address": null,
     "tethered_wallets": []

@@ -980,9 +980,7 @@ export default {
             
             $list.find('.delete-model-btn').off('click').on('click', async function() {
                 const model = $(this).data('model');
-                if (confirm(`Delete model "${model}"?`)) {
-                    await deleteModel(model);
-                }
+                showDeleteConfirmDialog(model);
             });
         }
         
@@ -1125,6 +1123,76 @@ export default {
                     $progressBar.css('background', '#3b82f6');
                 }, 3000);
             }
+        }
+        
+        // Show delete confirmation dialog as a proper UI window
+        function showDeleteConfirmDialog(modelName) {
+            // Remove any existing dialog
+            $('#ai-delete-confirm-overlay').remove();
+            
+            const overlay = $(`
+                <div id="ai-delete-confirm-overlay" style="
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background: rgba(0, 0, 0, 0.5);
+                    z-index: 999999;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                ">
+                    <div style="
+                        background: white;
+                        border-radius: 8px;
+                        padding: 20px;
+                        min-width: 300px;
+                        max-width: 400px;
+                        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+                    ">
+                        <h3 style="margin: 0 0 12px; font-size: 16px; color: #333;">Delete Model</h3>
+                        <p style="margin: 0 0 20px; color: #666; font-size: 14px;">
+                            Are you sure you want to delete <strong>${modelName}</strong>?<br>
+                            <span style="font-size: 12px; color: #999;">This cannot be undone.</span>
+                        </p>
+                        <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                            <button id="ai-delete-cancel" class="button" style="padding: 8px 16px; border-radius: 4px;">Cancel</button>
+                            <button id="ai-delete-confirm" class="button" style="padding: 8px 16px; border-radius: 4px; background: #dc2626; color: white; border: none;">Delete</button>
+                        </div>
+                    </div>
+                </div>
+            `);
+            
+            $('body').append(overlay);
+            
+            // Focus the dialog
+            overlay.find('#ai-delete-cancel').focus();
+            
+            // Cancel handler
+            overlay.find('#ai-delete-cancel').on('click', function() {
+                overlay.remove();
+            });
+            
+            // Confirm handler
+            overlay.find('#ai-delete-confirm').on('click', async function() {
+                overlay.remove();
+                await deleteModel(modelName);
+            });
+            
+            // Close on escape
+            $(document).one('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    overlay.remove();
+                }
+            });
+            
+            // Close on overlay click (but not dialog click)
+            overlay.on('click', function(e) {
+                if (e.target === overlay[0]) {
+                    overlay.remove();
+                }
+            });
         }
         
         // Delete a model

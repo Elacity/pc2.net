@@ -1532,8 +1532,36 @@ async function loadAIConfigForChat() {
             // Clear existing options and add available models
             $modelSelect.empty();
             
-            // Always add local DeepSeek first
-            $modelSelect.append(`<option value="ollama:deepseek-r1:1.5b">Local DeepSeek</option>`);
+            // Fetch and add installed Ollama models
+            try {
+                const installedResponse = await fetch(`${apiOrigin}/api/ai/installed-models`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+                
+                if (installedResponse.ok) {
+                    const installedData = await installedResponse.json();
+                    if (installedData.success && installedData.result?.models?.length > 0) {
+                        $modelSelect.append(`<option disabled>── Local ──</option>`);
+                        installedData.result.models.forEach(model => {
+                            const displayName = model.catalogName || model.name;
+                            $modelSelect.append(`<option value="ollama:${model.name}">${displayName}</option>`);
+                        });
+                    } else {
+                        // No installed models - show placeholder
+                        $modelSelect.append(`<option value="ollama:deepseek-r1:1.5b">Local (no models installed)</option>`);
+                    }
+                } else {
+                    // API error - fallback to default
+                    $modelSelect.append(`<option value="ollama:deepseek-r1:1.5b">Local DeepSeek</option>`);
+                }
+            } catch (e) {
+                // Network error - fallback
+                $modelSelect.append(`<option value="ollama:deepseek-r1:1.5b">Local DeepSeek</option>`);
+            }
             
             // Add all models for each configured provider
             if (config.api_keys?.claude) {

@@ -2797,16 +2797,35 @@ $(document).on('click', '.user-options-menu-btn', async function (e) {
                     UIWindowTaskManager();
                 }
             },
+            // -------------------------------------------
+            // System Section Separator
+            // -------------------------------------------
+            '-',
             //--------------------------------------------------
-            // Contact Us
+            // Check for Updates / Update Available
             //--------------------------------------------------
-            /* {
-                html: i18n('contact_us'),
-                id: 'contact_us',
+            {
+                html: window.pc2UpdateAvailable ? '<span style="color: #16a34a;">Update Available</span>' : 'Check for Updates',
+                id: 'check_for_updates',
+                icon: window.pc2UpdateAvailable 
+                    ? `<svg style="width:16px;height:16px;vertical-align:middle;color:#16a34a;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v8"/><path d="M8 12l4 4 4-4"/></svg>`
+                    : `<svg style="width:16px;height:16px;vertical-align:middle;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-3-6.7"/><polyline points="21 3 21 9 15 9"/></svg>`,
                 onClick: async function () {
-                    UIWindowFeedback();
+                    // Open Settings to System tab
+                    UIWindowSettings({ tab: 'system' });
                 }
-            },*/
+            },
+            //--------------------------------------------------
+            // Restart PC2
+            //--------------------------------------------------
+            {
+                html: 'Restart PC2',
+                id: 'restart_pc2',
+                icon: `<svg style="width:16px;height:16px;vertical-align:middle;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>`,
+                onClick: async function () {
+                    window.showRestartConfirmation && window.showRestartConfirmation();
+                }
+            },
             // -------------------------------------------
             // -
             // -------------------------------------------

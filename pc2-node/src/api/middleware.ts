@@ -396,6 +396,43 @@ export function errorHandler(
 }
 
 /**
+ * Require owner middleware
+ * Ensures the authenticated user is the node owner
+ * Must be used after authenticate middleware
+ */
+export function requireOwner(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): void {
+  const config = (req.app.locals.config as Config | undefined);
+  
+  if (!config) {
+    res.status(500).json({ error: 'Configuration not available' });
+    return;
+  }
+  
+  if (!req.user) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
+  
+  const userWallet = req.user.wallet_address.toLowerCase();
+  const ownerWallet = config.owner?.wallet_address?.toLowerCase();
+  
+  if (!ownerWallet || userWallet !== ownerWallet) {
+    logger.warn('[Auth] Non-owner attempted restricted action', {
+      userWallet: userWallet.substring(0, 10) + '...',
+      ownerWallet: ownerWallet ? ownerWallet.substring(0, 10) + '...' : 'not set'
+    });
+    res.status(403).json({ error: 'Owner access required' });
+    return;
+  }
+  
+  next();
+}
+
+/**
  * CORS middleware (already handled by Express, but for consistency)
  */
 export function corsMiddleware(

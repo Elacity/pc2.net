@@ -325,11 +325,16 @@ export class UpdateService {
       setTimeout(() => {
         try {
           // Try systemctl first (Linux with systemd)
-          execSync('systemctl restart pc2-node', { stdio: 'ignore' });
+          execSync('systemctl restart pc2', { stdio: 'ignore' });
         } catch {
-          // Fallback: exit and let process manager restart
-          logger.info('[UpdateService] Exiting for restart...');
-          process.exit(0);
+          try {
+            // Try pm2 as fallback
+            execSync('pm2 restart pc2', { stdio: 'ignore' });
+          } catch {
+            // Fallback: exit and let process manager restart
+            logger.info('[UpdateService] Exiting for restart...');
+            process.exit(0);
+          }
         }
       }, 1000);
 

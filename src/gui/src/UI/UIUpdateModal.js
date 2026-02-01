@@ -34,6 +34,9 @@ async function checkForUpdates() {
 
         const data = await response.json();
         window.latestVersionInfo = data;
+        
+        // Set global flag for dropdown menu
+        window.pc2UpdateAvailable = data.updateAvailable || false;
 
         if (data.updateAvailable) {
             const lastDismissed = localStorage.getItem('updateDismissed');
@@ -442,9 +445,108 @@ async function waitForRestart($progressText) {
     $progressText.html('<span style="color: #f0ad4e;">Restart taking longer than expected. Please refresh manually.</span>');
 }
 
+/**
+ * Show restart confirmation dialog
+ */
+function showRestartConfirmation() {
+    // Remove any existing dialog
+    $('#restart-confirm-overlay').remove();
+    
+    const apiOrigin = window.api_origin || window.location.origin;
+    
+    const $overlay = $(`
+        <div id="restart-confirm-overlay" style="
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 999999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        ">
+            <div style="
+                background: white;
+                border-radius: 8px;
+                padding: 20px;
+                min-width: 300px;
+                max-width: 400px;
+                box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            ">
+                <h3 style="margin: 0 0 12px; font-size: 16px; color: #333;">Restart PC2</h3>
+                <p style="margin: 0 0 20px; color: #666; font-size: 14px;">
+                    Are you sure you want to restart PC2?<br>
+                    <span style="font-size: 12px; color: #999;">All active sessions will be temporarily disconnected.</span>
+                </p>
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                    <button id="restart-cancel" class="button" style="height: 32px; line-height: 32px; padding: 0 16px; border-radius: 4px;">Cancel</button>
+                    <button id="restart-confirm" class="button" style="height: 32px; line-height: 32px; padding: 0 16px; border-radius: 4px; background: #dc2626; color: white; border: none;">Restart</button>
+                </div>
+            </div>
+        </div>
+    `);
+    
+    $('body').append($overlay);
+    
+    $overlay.find('#restart-cancel').on('click', function() {
+        $overlay.remove();
+    });
+    
+    $overlay.find('#restart-confirm').on('click', async function() {
+        const $btn = $(this);
+        $btn.prop('disabled', true).text('Restarting...');
+        
+        try {
+            const response = await fetch(`${apiOrigin}/api/system/restart`, {
+                method: 'POST',
+                headers: { 
+                    'Authorization': `Bearer ${puter.authToken}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (response.ok) {
+                $overlay.find('p').html('<span style="color: #16a34a;">Restart initiated. Please wait...</span><br><span style="font-size: 12px; color: #999;">The page will reload automatically.</span>');
+                $overlay.find('#restart-cancel').hide();
+                $btn.hide();
+                
+                // Wait and reload
+                setTimeout(() => {
+                    window.location.reload();
+                }, 5000);
+            } else {
+                const data = await response.json();
+                $overlay.find('p').html(`<span style="color: #dc2626;">Failed to restart: ${data.error || 'Unknown error'}</span>`);
+                $btn.prop('disabled', false).text('Try Again');
+            }
+        } catch (error) {
+            console.error('[System] Restart error:', error);
+            $overlay.find('p').html('<span style="color: #dc2626;">Network error. Is the server running?</span>');
+            $btn.prop('disabled', false).text('Try Again');
+        }
+    });
+    
+    // Close on overlay click
+    $overlay.on('click', function(e) {
+        if (e.target === $overlay[0]) {
+            $overlay.remove();
+        }
+    });
+    
+    // Close on escape
+    $(document).one('keydown', function(e) {
+        if (e.key === 'Escape') {
+            $overlay.remove();
+        }
+    });
+}
+
 // Export to window for global access
 window.checkForUpdates = checkForUpdates;
 window.showUpdateToast = showUpdateToast;
 window.showUpdateModal = showUpdateModal;
+window.showRestartConfirmation = showRestartConfirmation;
 
-export { checkForUpdates, showUpdateToast, showUpdateModal };
+export { checkForUpdates, showUpdateToast, showUpdateModal, showRestartConfirmation };

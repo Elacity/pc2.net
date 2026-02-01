@@ -49,6 +49,9 @@ export default {
                     .check-updates-btn { background: #3b82f6; color: white; border: none; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 11px; display: inline-flex; align-items: center; gap: 6px; }
                     .check-updates-btn:disabled { opacity: 0.6; }
                     .check-updates-btn svg { width: 12px; height: 12px; }
+                    .restart-btn { background: #dc2626; color: white; border: none; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 11px; display: inline-flex; align-items: center; gap: 6px; margin-left: 8px; }
+                    .restart-btn:disabled { opacity: 0.6; }
+                    .restart-btn svg { width: 12px; height: 12px; }
                 </style>
                 
                 <!-- Header -->
@@ -72,9 +75,10 @@ export default {
                     </div>
                 </div>
                 
-                <!-- Check Updates -->
+                <!-- Check Updates & Restart -->
                 <div style="text-align: center; margin-bottom: 16px;">
                     <button id="check-updates-btn" class="check-updates-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-3-6.7"/><polyline points="21 3 21 9 15 9"/></svg><span>Check for Updates</span></button>
+                    <button id="restart-pc2-btn" class="restart-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg><span>Restart PC2</span></button>
                     <div id="update-check-status" style="margin-top: 6px; font-size: 10px; color: #666;"></div>
                 </div>
                 
@@ -279,6 +283,91 @@ export default {
             
             // Initial check
             await checkAndDisplayUpdate();
+            
+            // Restart PC2 button handler
+            $el_window.find('#restart-pc2-btn').on('click', async function() {
+                // Show confirmation dialog
+                const $overlay = $(`
+                    <div id="restart-confirm-overlay" style="
+                        position: fixed;
+                        top: 0;
+                        left: 0;
+                        right: 0;
+                        bottom: 0;
+                        background: rgba(0, 0, 0, 0.5);
+                        z-index: 999999;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                    ">
+                        <div style="
+                            background: white;
+                            border-radius: 8px;
+                            padding: 20px;
+                            min-width: 300px;
+                            max-width: 400px;
+                            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+                        ">
+                            <h3 style="margin: 0 0 12px; font-size: 16px; color: #333;">Restart PC2</h3>
+                            <p style="margin: 0 0 20px; color: #666; font-size: 14px;">
+                                Are you sure you want to restart PC2?<br>
+                                <span style="font-size: 12px; color: #999;">All active sessions will be temporarily disconnected.</span>
+                            </p>
+                            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                                <button id="restart-cancel" class="button" style="height: 32px; line-height: 32px; padding: 0 16px; border-radius: 4px;">Cancel</button>
+                                <button id="restart-confirm" class="button" style="height: 32px; line-height: 32px; padding: 0 16px; border-radius: 4px; background: #dc2626; color: white; border: none;">Restart</button>
+                            </div>
+                        </div>
+                    </div>
+                `);
+                
+                $('body').append($overlay);
+                
+                $overlay.find('#restart-cancel').on('click', function() {
+                    $overlay.remove();
+                });
+                
+                $overlay.find('#restart-confirm').on('click', async function() {
+                    const $btn = $(this);
+                    $btn.prop('disabled', true).text('Restarting...');
+                    
+                    try {
+                        const response = await fetch(`${apiOrigin}/api/system/restart`, {
+                            method: 'POST',
+                            headers: { 
+                                'Authorization': `Bearer ${puter.authToken}`,
+                                'Content-Type': 'application/json'
+                            }
+                        });
+                        
+                        if (response.ok) {
+                            $overlay.find('p').html('<span style="color: #16a34a;">Restart initiated. Please wait...</span><br><span style="font-size: 12px; color: #999;">The page will reload automatically.</span>');
+                            $overlay.find('#restart-cancel').hide();
+                            $btn.hide();
+                            
+                            // Wait and reload
+                            setTimeout(() => {
+                                window.location.reload();
+                            }, 5000);
+                        } else {
+                            const data = await response.json();
+                            $overlay.find('p').html(`<span style="color: #dc2626;">Failed to restart: ${data.error || 'Unknown error'}</span>`);
+                            $btn.prop('disabled', false).text('Try Again');
+                        }
+                    } catch (error) {
+                        console.error('[System] Restart error:', error);
+                        $overlay.find('p').html('<span style="color: #dc2626;">Network error. Is the server running?</span>');
+                        $btn.prop('disabled', false).text('Try Again');
+                    }
+                });
+                
+                // Close on overlay click
+                $overlay.on('click', function(e) {
+                    if (e.target === $overlay[0]) {
+                        $overlay.remove();
+                    }
+                });
+            });
             
             // Check for Updates button handler
             $el_window.find('#check-updates-btn').on('click', async function() {

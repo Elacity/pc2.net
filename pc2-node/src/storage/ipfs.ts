@@ -401,48 +401,430 @@ export class IPFSStorage {
   }
 
   /**
+   * Error types for remote pinning operations
+   */
+  static readonly PinErrorType = {
+    PRIVATE_MODE: 'PRIVATE_MODE',
+    INVALID_CID: 'INVALID_CID',
+    TIMEOUT: 'TIMEOUT',
+    NOT_FOUND: 'NOT_FOUND',
+    NETWORK_ERROR: 'NETWORK_ERROR',
+    DIRECTORY_TOO_LARGE: 'DIRECTORY_TOO_LARGE',
+  } as const;
+
+  /**
    * Pin a remote CID from the IPFS network
    * Fetches content from other nodes and stores locally
+   * Handles both files and directories with timeout support
    * Used for marketplace purchases and network participation
+   * 
+   * @param cidString - The CID to fetch and pin
+   * @param options - Optional configuration
+   * @param options.timeoutMs - Timeout in milliseconds (default: 60000)
+   * @param options.maxFiles - Maximum files to fetch for directories (default: 1000)
    */
-  async pinRemoteCID(cidString: string): Promise<{
+  async pinRemoteCID(cidString: string, options?: {
+    timeoutMs?: number;
+    maxFiles?: number;
+  }): Promise<{
     success: boolean;
+    cid: string;
+    type: 'file' | 'directory' | 'raw';
     size: number;
-    chunks: number;
+    files?: number;
+    timeMs: number;
+    content?: Uint8Array; // Content bytes when fetched via gateway
+    actualCid?: string; // Actual CID in local store (may differ due to v0/v1)
   }> {
+    const startTime = Date.now();
+    const timeoutMs = options?.timeoutMs ?? 60000; // 60 second default
+    const maxFiles = options?.maxFiles ?? 1000;
+
     if (this.networkMode === 'private') {
-      throw new Error('Remote pinning requires public or hybrid network mode');
+      throw Object.assign(
+        new Error('Remote pinning requires public or hybrid network mode'),
+        { type: IPFSStorage.PinErrorType.PRIVATE_MODE }
+      );
     }
 
     const fs = this.getUnixFS();
 
+    // Parse CID
+    let cid: any;
     try {
       const { CID } = await import('multiformats/cid');
-      const cid = CID.parse(cidString);
+      cid = CID.parse(cidString);
+    } catch (error) {
+      throw Object.assign(
+        new Error(`Invalid CID format: ${cidString}`),
+        { type: IPFSStorage.PinErrorType.INVALID_CID }
+      );
+    }
 
-      console.log(`[IPFS] Fetching remote CID from network: ${cidString}`);
+    // Create abort controller for timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, timeoutMs);
 
-      // Fetch content from the network using UnixFS cat
-      // This will query DHT and retrieve from peers
-      const chunks: Uint8Array[] = [];
-      let totalSize = 0;
+    try {
+      console.log(`[IPFS] Fetching remote CID from network: ${cidString} (timeout: ${timeoutMs}ms)`);
 
-      for await (const chunk of fs.cat(cid)) {
-        chunks.push(chunk);
-        totalSize += chunk.length;
+      // Helper to wrap operations with timeout check
+      const checkAbort = () => {
+        if (controller.signal.aborted) {
+          throw Object.assign(new Error('Aborted'), { name: 'AbortError' });
+        }
+      };
+
+      // Try quick local fetch first (2s timeout) - skips DHT if content is cached
+      const quickLocalTimeoutMs = 2000;
+      let localContent: Uint8Array | null = null;
+      
+      try {
+        console.log(`[IPFS] Trying quick local fetch for ${cidString}...`);
+        const chunks: Uint8Array[] = [];
+        let totalSize = 0;
+        
+        const catPromise = (async () => {
+          for await (const chunk of fs.cat(cid)) {
+            chunks.push(chunk);
+            totalSize += chunk.length;
+            checkAbort();
+          }
+          return chunks;
+        })();
+        
+        const timeoutPromise = new Promise<null>((resolve) => 
+          setTimeout(() => resolve(null), quickLocalTimeoutMs)
+        );
+        
+        const result = await Promise.race([catPromise, timeoutPromise]);
+        
+        if (result && chunks.length > 0) {
+          // Content found locally!
+          const combined = new Uint8Array(totalSize);
+          let offset = 0;
+          for (const chunk of chunks) {
+            combined.set(chunk, offset);
+            offset += chunk.length;
+          }
+          localContent = combined;
+          console.log(`[IPFS] ✅ Found locally: ${cidString} (${totalSize} bytes)`);
+          
+          const timeMs = Date.now() - startTime;
+          return {
+            success: true,
+            cid: cidString,
+            type: 'file' as const,
+            size: totalSize,
+            timeMs,
+            content: localContent,
+            actualCid: cidString
+          };
+        }
+      } catch (localError: any) {
+        console.log(`[IPFS] Quick local fetch failed: ${localError.message}`);
+      }
+      
+      // Not found locally, try gateway directly (skip slow DHT stat)
+      console.log(`[IPFS] Content not cached locally, trying gateways...`);
+      try {
+        const gatewayResult = await this.fetchViaGateway(cidString, timeoutMs - (Date.now() - startTime));
+        if (gatewayResult.success) {
+          const timeMs = Date.now() - startTime;
+          console.log(`[IPFS] ✅ Fetched via gateway: ${cidString} (${gatewayResult.size} bytes, ${timeMs}ms)`);
+          return {
+            success: true,
+            cid: cidString,
+            type: 'file' as const,
+            size: gatewayResult.size,
+            timeMs,
+            content: gatewayResult.content,
+            actualCid: gatewayResult.actualCid
+          };
+        }
+      } catch (gatewayError: any) {
+        console.log(`[IPFS] Gateway fallback failed: ${gatewayError.message}`);
+      }
+      
+      // Last resort: try stat + cat with remaining timeout (for directories or special cases)
+      const statTimeoutMs = Math.min(timeoutMs - (Date.now() - startTime), 15000);
+      let stats: any;
+      
+      try {
+        checkAbort();
+        console.log(`[IPFS] Trying DHT stat for ${cidString}...`);
+        
+        const statPromise = fs.stat(cid);
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('stat_timeout')), statTimeoutMs)
+        );
+        
+        stats = await Promise.race([statPromise, timeoutPromise]);
+        console.log(`[IPFS] CID type: ${stats.type}`);
+      } catch (error: any) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        console.log(`[IPFS] DHT stat failed: ${errorMsg}`);
+        
+        throw Object.assign(
+          new Error(`Content not found: Could not retrieve from local cache, gateways, or DHT`),
+          { type: IPFSStorage.PinErrorType.NOT_FOUND }
+        );
       }
 
-      console.log(`[IPFS] ✅ Pinned remote CID: ${cidString} (${totalSize} bytes, ${chunks.length} chunks)`);
+      let totalSize = 0;
+      let fileCount = 0;
+
+      if (stats.type === 'directory') {
+        // Handle directory: recursively fetch all files
+        console.log(`[IPFS] Fetching directory contents...`);
+        const result = await this.fetchDirectoryRecursive(fs, cid, controller.signal, maxFiles, 0);
+        totalSize = result.size;
+        fileCount = result.files;
+
+        if (result.truncated) {
+          console.warn(`[IPFS] ⚠️ Directory fetch truncated at ${maxFiles} files`);
+        }
+
+        console.log(`[IPFS] ✅ Pinned remote directory: ${cidString} (${fileCount} files, ${totalSize} bytes)`);
+      } else {
+        // Handle file or raw: use cat() without signal
+        const chunks: Uint8Array[] = [];
+
+        for await (const chunk of fs.cat(cid)) {
+          chunks.push(chunk);
+          totalSize += chunk.length;
+          checkAbort(); // Check abort between chunks
+        }
+
+        fileCount = 1;
+        console.log(`[IPFS] ✅ Pinned remote file: ${cidString} (${totalSize} bytes, ${chunks.length} chunks)`);
+      }
+
+      const timeMs = Date.now() - startTime;
 
       return {
         success: true,
+        cid: cidString,
+        type: stats.type,
         size: totalSize,
-        chunks: chunks.length
+        files: stats.type === 'directory' ? fileCount : undefined,
+        timeMs
       };
-    } catch (error) {
+    } catch (error: any) {
+      // Re-throw typed errors as-is
+      if (error.type) {
+        // Try gateway fallback for NOT_FOUND and NETWORK_ERROR
+        if (error.type === IPFSStorage.PinErrorType.NOT_FOUND || 
+            error.type === IPFSStorage.PinErrorType.NETWORK_ERROR) {
+          console.log(`[IPFS] DHT fetch failed, trying gateway fallback...`);
+          try {
+            const gatewayResult = await this.fetchViaGateway(cidString, timeoutMs - (Date.now() - startTime));
+            if (gatewayResult.success) {
+              const timeMs = Date.now() - startTime;
+              return {
+                success: true,
+                cid: cidString,
+                type: 'file' as const,
+                size: gatewayResult.size,
+                timeMs,
+                content: gatewayResult.content,
+                actualCid: gatewayResult.actualCid
+              };
+            }
+          } catch (gatewayError: any) {
+            console.log(`[IPFS] Gateway fallback also failed: ${gatewayError.message}`);
+          }
+        }
+        throw error;
+      }
+
+      // Handle abort/timeout
+      if (error.name === 'AbortError' || controller.signal.aborted) {
+        throw Object.assign(
+          new Error(`Timeout: Could not fetch content within ${timeoutMs / 1000}s`),
+          { type: IPFSStorage.PinErrorType.TIMEOUT }
+        );
+      }
+
+      // Handle other errors - try gateway fallback
       console.error(`[IPFS] Failed to pin remote CID ${cidString}:`, error);
-      throw new Error(`Failed to pin remote CID: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.log(`[IPFS] Trying gateway fallback...`);
+      
+      try {
+        const gatewayResult = await this.fetchViaGateway(cidString, timeoutMs - (Date.now() - startTime));
+        if (gatewayResult.success) {
+          const timeMs = Date.now() - startTime;
+          return {
+            success: true,
+            cid: cidString,
+            type: 'file' as const,
+            size: gatewayResult.size,
+            timeMs,
+            content: gatewayResult.content,
+            actualCid: gatewayResult.actualCid
+          };
+        }
+      } catch (gatewayError: any) {
+        console.log(`[IPFS] Gateway fallback also failed: ${gatewayError.message}`);
+      }
+      
+      throw Object.assign(
+        new Error(`Network error: ${error instanceof Error ? error.message : 'Unknown error'}`),
+        { type: IPFSStorage.PinErrorType.NETWORK_ERROR }
+      );
+    } finally {
+      clearTimeout(timeoutId);
     }
+  }
+
+  /**
+   * Fetch content via public IPFS gateway and add to local node
+   * Used as fallback when DHT fetching fails
+   * @private
+   */
+  private async fetchViaGateway(cidString: string, remainingTimeoutMs: number): Promise<{
+    success: boolean;
+    size: number;
+    content?: Uint8Array;
+    actualCid?: string;
+  }> {
+    // Extended list of public IPFS gateways (ordered by reliability)
+    const GATEWAYS = [
+      'https://ipfs.io/ipfs/',
+      'https://dweb.link/ipfs/',
+      'https://w3s.link/ipfs/',
+      'https://nftstorage.link/ipfs/',
+      'https://gateway.pinata.cloud/ipfs/',
+      'https://4everland.io/ipfs/',
+      'https://cloudflare-ipfs.com/ipfs/',
+    ];
+
+    const fs = this.getUnixFS();
+    // Generous timeout for gateway fetches - large files need time
+    const timeoutMs = Math.max(remainingTimeoutMs, 60000); // At least 60s for gateway
+
+    // Try each gateway with retries
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (attempt > 0) {
+        console.log(`[IPFS] Gateway retry attempt ${attempt + 1}...`);
+        await new Promise(r => setTimeout(r, 2000)); // Wait 2s before retry
+      }
+
+      for (const gateway of GATEWAYS) {
+        try {
+          console.log(`[IPFS] Trying gateway: ${gateway}${cidString}`);
+          
+          const response = await fetch(`${gateway}${cidString}`, {
+            signal: AbortSignal.timeout(timeoutMs),
+            headers: {
+              'Accept': '*/*',
+            },
+          });
+
+          if (!response.ok) {
+            console.log(`[IPFS] Gateway ${gateway} returned ${response.status}`);
+            continue;
+          }
+
+          // Read content
+          const buffer = await response.arrayBuffer();
+          const content = new Uint8Array(buffer);
+          
+          console.log(`[IPFS] ✅ Fetched ${content.length} bytes from gateway ${gateway}`);
+
+          // Add to local IPFS
+          const addedCid = await fs.addBytes(content);
+          console.log(`[IPFS] ✅ Added to local IPFS: ${addedCid.toString()}`);
+
+          // CID version may differ (v0 vs v1), but content is the same
+          if (addedCid.toString() !== cidString) {
+            console.log(`[IPFS] CID versions differ: requested ${cidString.substring(0, 12)}..., stored as ${addedCid.toString().substring(0, 12)}...`);
+          }
+
+          return {
+            success: true,
+            size: content.length,
+            content: content, // Return content so caller can save it directly
+            actualCid: addedCid.toString()
+          };
+        } catch (error: any) {
+          const errMsg = error.message || 'Unknown error';
+          // Only log brief error for cleaner output
+          if (errMsg.includes('timeout') || errMsg.includes('abort')) {
+            console.log(`[IPFS] Gateway ${gateway} timed out`);
+          } else {
+            console.log(`[IPFS] Gateway ${gateway} failed: ${errMsg.substring(0, 100)}`);
+          }
+          continue;
+        }
+      }
+    }
+
+    throw new Error('All gateways failed after retries');
+  }
+
+  /**
+   * Recursively fetch all files in a directory
+   * Note: Signal checking is done manually to work around Helia async iterator issues
+   * @private
+   */
+  private async fetchDirectoryRecursive(
+    fs: UnixFS,
+    cid: any,
+    signal: AbortSignal,
+    maxFiles: number,
+    currentCount: number
+  ): Promise<{ size: number; files: number; truncated: boolean }> {
+    let totalSize = 0;
+    let fileCount = 0;
+    let truncated = false;
+
+    // Check for abort before starting
+    if (signal.aborted) {
+      throw Object.assign(new Error('Aborted'), { name: 'AbortError' });
+    }
+
+    // Note: Not passing signal to ls() due to Helia async iterator compatibility issues
+    // Instead, we check signal.aborted manually between operations
+    for await (const entry of fs.ls(cid)) {
+      // Check for abort between files
+      if (signal.aborted) {
+        throw Object.assign(new Error('Aborted'), { name: 'AbortError' });
+      }
+
+      if (currentCount + fileCount >= maxFiles) {
+        truncated = true;
+        break;
+      }
+
+      if (entry.type === 'directory') {
+        // Recurse into subdirectory
+        const subResult = await this.fetchDirectoryRecursive(
+          fs,
+          entry.cid,
+          signal,
+          maxFiles,
+          currentCount + fileCount
+        );
+        totalSize += subResult.size;
+        fileCount += subResult.files;
+        truncated = truncated || subResult.truncated;
+      } else {
+        // Fetch file content (no signal to avoid iterator issues)
+        for await (const chunk of fs.cat(entry.cid)) {
+          totalSize += chunk.length;
+          // Check for abort during large file fetch
+          if (signal.aborted) {
+            throw Object.assign(new Error('Aborted'), { name: 'AbortError' });
+          }
+        }
+        fileCount++;
+      }
+    }
+
+    return { size: totalSize, files: fileCount, truncated };
   }
 
   /**

@@ -134,6 +134,13 @@ Please try recreating the link.`);
         UIAlert('This item can\'t be opened because it\'s in the trash. To use this item, first drag it out of the Trash.');
     }
     //----------------------------------------------------------------
+    // Is this a .zip file? Unzip it (don't open in editor)
+    //----------------------------------------------------------------
+    else if ( !is_dir && path.extname(item_path).toLowerCase() === '.zip' ) {
+        window.unzipItem(item_path);
+        return;
+    }
+    //----------------------------------------------------------------
     // Is this a file (no dir) on a SaveFileDialog?
     //----------------------------------------------------------------
     else if ( $el_parent_window.attr('data-is_saveFileDialog') === 'true' && !is_dir ) {

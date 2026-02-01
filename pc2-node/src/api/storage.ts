@@ -7,6 +7,7 @@
 import { Router, Response } from 'express';
 import { authenticate, AuthenticatedRequest } from './middleware.js';
 import { logger } from '../utils/logger.js';
+import { getEffectiveStorageLimit } from './info.js';
 
 const router = Router();
 
@@ -132,11 +133,20 @@ router.get('/usage', authenticate, async (req: AuthenticatedRequest, res: Respon
       return parts[parts.length - 1] || path;
     };
 
+    const totalSize = totalResult.total_size || 0;
+    const storageLimit = getEffectiveStorageLimit(db);
+
     res.json({
       total: {
-        size: totalResult.total_size || 0,
+        size: totalSize,
         files: totalResult.file_count || 0,
         filesWithCID: totalResult.files_with_cid || 0
+      },
+      storageLimit,
+      storage: {
+        used: totalSize,
+        limit: storageLimit,
+        available: storageLimit === Number.MAX_SAFE_INTEGER ? storageLimit : Math.max(0, storageLimit - totalSize)
       },
       byType: byTypeResult.map(row => ({
         type: row.type || 'unknown',

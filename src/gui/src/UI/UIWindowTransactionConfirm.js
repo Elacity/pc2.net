@@ -29,6 +29,7 @@ const TOKEN_ICONS = {
     'USDT': 'https://assets.coingecko.com/coins/images/325/small/Tether.png',
     'BTC': 'https://assets.coingecko.com/coins/images/1/small/bitcoin.png',
     'WBTC': 'https://assets.coingecko.com/coins/images/7598/small/wrapped_bitcoin_wbtc.png',
+    'GOLD': '/images/tokens/GOLD.webp',
     'BNB': 'https://assets.coingecko.com/coins/images/825/small/bnb-icon2_2x.png',
     'MATIC': 'https://assets.coingecko.com/coins/images/4713/small/polygon.png',
     'AVAX': 'https://assets.coingecko.com/coins/images/12559/small/Avalanche_Circle_RedWhite_Trans.png',

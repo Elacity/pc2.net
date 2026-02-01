@@ -317,7 +317,7 @@ export function handleReaddir(req: AuthenticatedRequest, res: Response): void {
         id: Math.floor(Math.random() * 10000), // Mock server includes id
         uid: `uuid-${metadata.path.replace(/\//g, '-')}`,
         uuid: `uuid-${metadata.path.replace(/\//g, '-')}`,
-        name: metadata.path.split('/').pop() || '/',
+        name: metadata.path.replace(/\/+$/, '').split('/').pop() || '/',
         path: metadata.path,
         is_dir: metadata.is_dir,
         is_empty: is_empty,

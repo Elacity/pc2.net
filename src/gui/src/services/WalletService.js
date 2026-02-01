@@ -640,10 +640,17 @@ class WalletService {
                         window.user.solana_smart_account_address = payload.solanaSmartAccountAddress;
                         logger.log('Stored Solana Smart Account:', payload.solanaSmartAccountAddress);
                     }
-                    // Store wallet address in window.user for auto-authentication
-                    if (payload?.address && !window.user) {
+                    // Store EOA in window.user.wallet_address (NFTs/tokens use EOA; in Universal mode payload.address can be Smart Account)
+                    const eoa = payload?.eoaAddress || payload?.ownerAddress || (!payload?.smartAccountAddress && payload?.address ? payload.address : null);
+                    if (eoa) {
+                        if (!window.user) {
+                            window.user = { wallet_address: eoa };
+                        } else {
+                            window.user.wallet_address = eoa;
+                        }
+                    } else if (payload?.address && !window.user) {
                         window.user = { wallet_address: payload.address };
-                    } else if (payload?.address && window.user) {
+                    } else if (payload?.address && window.user && !window.user.wallet_address) {
                         window.user.wallet_address = payload.address;
                     }
                     // Dispatch DOM event for auto-authentication listeners
@@ -1747,6 +1754,7 @@ class WalletService {
                 { symbol: 'USDC', name: 'USD Coin', address: '0xA06be0F5950781cE28D965E5EFc6996e88a8C141', decimals: 6 },
                 { symbol: 'ETH', name: 'Ethereum', address: '0x802c3e839E4fDb10aF583E3E759239ec7703501e', decimals: 18 },
                 { symbol: 'GLIDE', name: 'Glide', address: '0xd39eC832FF1CaaFAb2729c76dDeac967ABcA8F27', decimals: 18 },
+                { symbol: 'GOLD', name: 'Gold Token', address: '0xaA9691BcE68ee83De7B518DfCBBfb62C04B1C0BA', decimals: 18, alwaysShow: true, icon: '/images/tokens/GOLD.webp' },
             ],
             // Elastos EID Chain (chainId 22) - No major stablecoins yet
             22: [],
@@ -2612,6 +2620,261 @@ class WalletService {
             logger.error('Fetch pending proposals failed:', error);
             return [];
         }
+    }
+    
+    // ============================================
+    // NFT FUNCTIONALITY
+    // ============================================
+    
+    /**
+     * Known NFT collections on ESC to query
+     */
+    static NFT_COLLECTIONS = {
+        20: [ // Elastos Smart Chain
+            {
+                name: 'Bella Series',
+                address: '0xef5f768618139d0f5fa3bcbbbcaaf09fe9d7a07d',
+                icon: '/images/tokens/ELA.png',
+            },
+        ],
+    };
+    
+    /**
+     * Fetch user's NFTs from known collections
+     * @param {string} userAddress - User's wallet address
+     * @param {number} chainId - Chain ID (default: 20 for ESC)
+     * @returns {Promise<Array>} List of NFTs with metadata
+     */
+    async fetchUserNFTs(userAddress, chainId = 20) {
+        console.log('[NFT Service] fetchUserNFTs called with:', { userAddress, chainId });
+        const collections = WalletService.NFT_COLLECTIONS[chainId] || [];
+        console.log('[NFT Service] Collections for chainId', chainId, ':', collections);
+        const rpcUrl = this._getPublicRpcUrl(chainId) || 'https://api.elastos.io/esc';
+        console.log('[NFT Service] Using RPC URL:', rpcUrl);
+        const allNFTs = [];
+        
+        for (const collection of collections) {
+            try {
+                console.log('[NFT Service] Fetching from collection:', collection.name, collection.address);
+                const nfts = await this._fetchNFTsFromCollection(
+                    rpcUrl,
+                    userAddress,
+                    collection.address,
+                    collection.name
+                );
+                console.log('[NFT Service] Got', nfts.length, 'NFTs from', collection.name);
+                allNFTs.push(...nfts);
+            } catch (error) {
+                console.error('[NFT Service] Failed to fetch NFTs from', collection.name, ':', error);
+                logger.warn(`Failed to fetch NFTs from ${collection.name}:`, error.message);
+            }
+        }
+        
+        console.log('[NFT Service] Total NFTs found:', allNFTs.length);
+        logger.log(`Fetched ${allNFTs.length} NFTs for ${userAddress}`);
+        return allNFTs;
+    }
+    
+    /**
+     * Fetch NFTs from a specific collection
+     * @private
+     */
+    async _fetchNFTsFromCollection(rpcUrl, userAddress, contractAddress, collectionName) {
+        console.log('[NFT Service] _fetchNFTsFromCollection:', { rpcUrl, userAddress, contractAddress, collectionName });
+        const nfts = [];
+        
+        // Get balance (how many NFTs user owns)
+        const balanceCallData = '0x70a08231000000000000000000000000' + userAddress.slice(2).toLowerCase();
+        console.log('[NFT Service] Calling balanceOf with data:', balanceCallData);
+        const balanceData = await this._rpcCall(rpcUrl, {
+            to: contractAddress,
+            data: balanceCallData,
+        });
+        console.log('[NFT Service] balanceOf response:', balanceData);
+        
+        const balance = parseInt(balanceData, 16);
+        console.log('[NFT Service] Parsed balance:', balance);
+        if (balance === 0) {
+            console.log('[NFT Service] Balance is 0, returning empty');
+            return [];
+        }
+        
+        logger.log(`User owns ${balance} NFTs from ${collectionName}`);
+        
+        // Get each token ID using tokenOfOwnerByIndex
+        for (let i = 0; i < balance && i < 50; i++) { // Limit to 50 NFTs
+            try {
+                const indexHex = i.toString(16).padStart(64, '0');
+                const tokenIdData = await this._rpcCall(rpcUrl, {
+                    to: contractAddress,
+                    data: '0x2f745c59000000000000000000000000' + userAddress.slice(2).toLowerCase() + indexHex,
+                });
+                
+                const tokenId = parseInt(tokenIdData, 16);
+                
+                // Get tokenURI
+                const tokenIdHex = tokenId.toString(16).padStart(64, '0');
+                const tokenURIData = await this._rpcCall(rpcUrl, {
+                    to: contractAddress,
+                    data: '0xc87b56dd' + tokenIdHex,
+                });
+                
+                // Decode tokenURI from ABI-encoded string
+                const tokenURI = this._decodeABIString(tokenURIData);
+                
+                if (tokenURI) {
+                    // Extract CID from tokenURI
+                    const metadataCID = this._extractCIDFromURI(tokenURI);
+                    
+                    // Fetch metadata
+                    const metadata = await this._fetchNFTMetadata(tokenURI);
+                    
+                    if (metadata) {
+                        const imageCID = this._extractCIDFromURI(metadata.image || '');
+                        
+                        nfts.push({
+                            contractAddress,
+                            collectionName,
+                            tokenId,
+                            name: metadata.name || `#${tokenId}`,
+                            description: metadata.description || '',
+                            image: metadata.image || '',
+                            imageCID,
+                            metadataCID,
+                            tokenURI,
+                            properties: metadata.properties || {},
+                        });
+                    }
+                }
+            } catch (error) {
+                logger.warn(`Failed to fetch NFT #${i} from ${collectionName}:`, error.message);
+            }
+        }
+        
+        return nfts;
+    }
+    
+    /**
+     * Make an eth_call RPC request
+     * @private
+     */
+    async _rpcCall(rpcUrl, callParams) {
+        const response = await fetch(rpcUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                jsonrpc: '2.0',
+                method: 'eth_call',
+                params: [callParams, 'latest'],
+                id: Date.now(),
+            }),
+        });
+        
+        const result = await response.json();
+        if (result.error) throw new Error(result.error.message);
+        return result.result;
+    }
+    
+    /**
+     * Decode ABI-encoded string
+     * @private
+     */
+    _decodeABIString(hexData) {
+        if (!hexData || hexData === '0x') return null;
+        
+        try {
+            // Remove 0x prefix
+            const data = hexData.slice(2);
+            
+            // Skip offset (first 32 bytes) and get length (next 32 bytes)
+            const length = parseInt(data.slice(64, 128), 16);
+            
+            // Get the actual string data
+            const stringHex = data.slice(128, 128 + length * 2);
+            
+            // Convert hex to string
+            let str = '';
+            for (let i = 0; i < stringHex.length; i += 2) {
+                str += String.fromCharCode(parseInt(stringHex.slice(i, i + 2), 16));
+            }
+            
+            return str;
+        } catch (error) {
+            logger.warn('Failed to decode ABI string:', error.message);
+            return null;
+        }
+    }
+    
+    /**
+     * Extract IPFS CID from URI
+     * @private
+     */
+    _extractCIDFromURI(uri) {
+        if (!uri) return null;
+        
+        // Match ipfs:// or /ipfs/ or gateway URLs
+        const patterns = [
+            /ipfs:\/\/([a-zA-Z0-9]+)/,
+            /\/ipfs\/([a-zA-Z0-9]+)/,
+            /ipfs\/([a-zA-Z0-9]+)/,
+        ];
+        
+        for (const pattern of patterns) {
+            const match = uri.match(pattern);
+            if (match) return match[1];
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Fetch NFT metadata from tokenURI
+     * @private
+     */
+    async _fetchNFTMetadata(tokenURI) {
+        try {
+            // Convert ipfs:// to gateway URL
+            let url = tokenURI;
+            if (tokenURI.startsWith('ipfs://')) {
+                url = `https://gateway.pinata.cloud/ipfs/${tokenURI.slice(7)}`;
+            }
+            
+            const response = await fetch(url, {
+                signal: AbortSignal.timeout(10000),
+            });
+            
+            if (!response.ok) return null;
+            return await response.json();
+        } catch (error) {
+            logger.warn('Failed to fetch NFT metadata:', error.message);
+            return null;
+        }
+    }
+    
+    /**
+     * Download NFT image via IPFS pinning
+     * @param {string} imageCID - The IPFS CID of the image
+     * @param {string} filename - Desired filename
+     * @returns {Promise<Object>} Pin result with savedPath
+     */
+    async downloadNFTImage(imageCID, filename, folder = 'Pictures') {
+        if (!imageCID) throw new Error('No image CID provided');
+        
+        // Save to Pictures folder by default for NFTs
+        // Content is still pinned in IPFS cache and accessible via CID
+        const response = await fetch(`${window.api_origin}/api/pin/${imageCID}?timeout=180&filename=${encodeURIComponent(filename)}&folder=${encodeURIComponent(folder)}`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${puter.authToken}`,
+            },
+        });
+        
+        const result = await response.json();
+        if (!result.success) {
+            throw new Error(result.message || 'Failed to download NFT image');
+        }
+        
+        return result;
     }
 }
 

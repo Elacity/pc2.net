@@ -564,17 +564,17 @@ export default {
                 });
                 
                 if (response.ok) {
-                    puter.ui.toast(`IPFS mode set to ${newMode}`, { type: 'success' });
+                    console.log(`[Storage] IPFS mode set to ${newMode}`);
                     // Note: Mode change requires node restart to take effect
                     if (newMode !== 'private') {
-                        puter.ui.toast('Restart node for mode change to take effect', { type: 'info' });
+                        console.log('[Storage] Restart node for mode change to take effect');
                     }
                 } else {
                     throw new Error('Failed to save');
                 }
             } catch (error) {
                 console.error('[Storage] Failed to save IPFS mode:', error);
-                puter.ui.toast('Failed to update IPFS mode', { type: 'error' });
+                alert('Failed to update IPFS mode: ' + error.message);
             } finally {
                 select.prop('disabled', false);
             }
@@ -600,13 +600,13 @@ export default {
                 });
                 
                 if (response.ok) {
-                    puter.ui.toast(enabled ? 'Auto-share enabled' : 'Auto-share disabled', { type: 'success' });
+                    console.log(`[Storage] Auto-share ${enabled ? 'enabled' : 'disabled'}`);
                 } else {
                     throw new Error('Failed to save');
                 }
             } catch (error) {
                 console.error('[Storage] Failed to save auto-announce setting:', error);
-                puter.ui.toast('Failed to update setting', { type: 'error' });
+                alert('Failed to update setting: ' + error.message);
                 // Revert toggle
                 toggle.prop('checked', !enabled);
             } finally {
@@ -631,7 +631,7 @@ export default {
                 const result = await response.json();
                 
                 if (response.ok) {
-                    puter.ui.toast(`Announced ${result.announced || 0} CIDs to DHT`, { type: 'success' });
+                    console.log(`[Storage] Announced ${result.announced || 0} CIDs to DHT`);
                     // Refresh stats
                     await loadIPFSSharingSettings();
                 } else {
@@ -639,7 +639,7 @@ export default {
                 }
             } catch (error) {
                 console.error('[Storage] Announce failed:', error);
-                puter.ui.toast('Announce failed: ' + error.message, { type: 'error' });
+                alert('Announce failed: ' + error.message);
             } finally {
                 btn.prop('disabled', false).text('Announce All');
             }
@@ -675,7 +675,7 @@ export default {
                     const files = data.files || [];
                     
                     if (files.length === 0) {
-                        puter.ui.toast('No public files to export', { type: 'info' });
+                        alert('No public files to export');
                         return;
                     }
                     
@@ -695,13 +695,13 @@ export default {
                     a.click();
                     URL.revokeObjectURL(url);
                     
-                    puter.ui.toast(`Exported ${files.length} public files`, { type: 'success' });
+                    console.log(`[Storage] Exported ${files.length} public files`);
                 } else {
                     throw new Error('Failed to fetch public files');
                 }
             } catch (error) {
                 console.error('Export failed:', error);
-                puter.ui.toast('Export failed: ' + error.message, { type: 'error' });
+                alert('Export failed: ' + error.message);
             } finally {
                 btn.prop('disabled', false).text('Export');
             }
@@ -766,11 +766,27 @@ export default {
                     
                     if (response.ok && result.success) {
                         statusEl.style.color = '#16a34a';
-                        statusEl.textContent = `Successfully pinned! Size: ${formatBytes(result.size || 0)}`;
-                        puter.ui.toast('Content pinned successfully', { type: 'success' });
-                        setTimeout(closeModal, 2000);
+                        const sizeInfo = formatBytes(result.size || 0);
+                        const typeInfo = result.type === 'directory' ? ` (${result.files} files)` : '';
+                        const mimeInfo = result.mimeType ? ` • ${result.mimeType.split('/')[1] || result.mimeType}` : '';
+                        if (result.savedPath) {
+                            const filename = result.savedPath.split('/').pop();
+                            statusEl.innerHTML = `✓ Downloaded! ${sizeInfo}${mimeInfo}${typeInfo}<br><small style="color:#666;">Saved as: <strong>${filename}</strong></small>`;
+                            // Refresh the Public folder to show the new file
+                            const folderPath = result.savedPath.substring(0, result.savedPath.lastIndexOf('/'));
+                            if (window.refresh_item_container) {
+                                // Find any open file explorer windows showing this folder
+                                document.querySelectorAll(`.item-container[data-path="${folderPath}"]`).forEach(container => {
+                                    window.refresh_item_container(container);
+                                });
+                            }
+                        } else {
+                            statusEl.textContent = `✓ Pinned to IPFS cache! ${sizeInfo}${typeInfo}`;
+                        }
+                        console.log('[Storage] Content pinned successfully:', result);
+                        setTimeout(closeModal, 3000);
                     } else {
-                        throw new Error(result.error || 'Failed to pin content');
+                        throw new Error(result.message || result.error || 'Failed to pin content');
                     }
                 } catch (error) {
                     statusEl.style.color = '#dc2626';
@@ -873,7 +889,7 @@ export default {
                 });
                 
                 if (response.ok) {
-                    puter.ui.toast('Storage limit updated', { type: 'success' });
+                    console.log('[Storage] Storage limit updated');
                     // Refresh to show new limit
                     await loadStorageData();
                 } else {
@@ -881,7 +897,7 @@ export default {
                 }
             } catch (error) {
                 console.error('[Storage] Failed to save limit:', error);
-                puter.ui.toast('Failed to update storage limit', { type: 'error' });
+                alert('Failed to update storage limit: ' + error.message);
             } finally {
                 select.prop('disabled', false);
             }

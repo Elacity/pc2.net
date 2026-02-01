@@ -41,8 +41,8 @@ export async function handleParticleAuth(req: Request, res: Response): Promise<v
 
   try {
     const body = req.body as any; // Accept flexible field names from Particle Auth
-    // Particle Auth may send: address, walletAddress, eoaAddress, or wallet_address
-    const wallet_address = body.wallet_address || body.address || body.walletAddress || body.eoaAddress;
+    // Prefer EOA so sessions and whoami use EOA (NFTs/tokens are held by EOA; address may be Smart Account in Universal mode)
+    const wallet_address = body.eoaAddress || body.ownerAddress || body.wallet_address || body.walletAddress || body.address;
     // Smart account may be: smartAccountAddress or smart_account_address
     const smart_account_address = body.smart_account_address || body.smartAccountAddress;
 

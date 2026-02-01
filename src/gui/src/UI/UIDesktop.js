@@ -423,63 +423,31 @@ async function UIDesktop(options) {
             current_socket_id: window.socket.id
         });
         
-        // For thumbnail updates (image saves), always update regardless of socket ID
-        // This ensures thumbnails refresh immediately after save
         const isThumbnailUpdate = item.thumbnail && !item.is_dir;
-        
-        // Don't update if this is the original client that initiated the action (unless it's a thumbnail update)
-        if (!isThumbnailUpdate && item.original_client_socket_id === window.socket.id) {
-            false && console.log('[UIDesktop] Skipping item.updated - same client');
+        let itemElements = $(`.item[data-uid='${item.uid}']`);
+        const isNewFile = itemElements.length === 0;
+
+        // New file (e.g. zip just created): refresh container so it appears live (even for same client)
+        if (isNewFile && item.path) {
+            const containerPath = path.dirname(item.path);
+            const containers = $(`.item-container[data-path="${html_encode(containerPath)}" i]`);
+            if (containers.length > 0) {
+                await refresh_item_container(containers[0], { consistency: 'strong' });
+                itemElements = $(`.item[data-uid='${item.uid}']`);
+            }
+            if (itemElements.length === 0) return;
+        } else if (!isNewFile && !isThumbnailUpdate && item.original_client_socket_id === window.socket.id) {
+            // Don't update existing item if this is the original client (unless thumbnail update)
             return;
         }
 
-        // Update matching items
-        // set new item name
+        // Update matching items: name and icon
         $(`.item[data-uid='${html_encode(item.uid)}'] .item-name`).html(html_encode(truncate_filename(item.name)));
+        let new_icon = (item.thumbnail && !item.is_dir) ? item.thumbnail : (item.is_dir ? window.icons['folder.svg'] : (await item_icon(item)).image);
 
-        // Set new icon - use thumbnail directly if provided (for live updates), otherwise generate via item_icon
-        let new_icon;
-        if (item.thumbnail && !item.is_dir) {
-            // Use provided thumbnail URL directly (includes cache-busting for live updates)
-            new_icon = item.thumbnail;
-            false && console.log('[UIDesktop] Using provided thumbnail');
-        } else {
-            // Generate icon via item_icon (for non-image files or when thumbnail not provided)
-            new_icon = (item.is_dir ? window.icons['folder.svg'] : (await item_icon(item)).image);
-            false && console.log('[UIDesktop] Generated icon via item_icon');
-        }
-        
-        // Find elements and force reload
-        let itemElements = $(`.item[data-uid='${item.uid}']`);
-        if (itemElements.length === 0) {
-            console.warn('[UIDesktop] No item elements found for uid:', item.uid, '- attempting to create item or refresh container');
-            
-            // If this is a thumbnail update and item doesn't exist, try to find/create it
-            if (isThumbnailUpdate && item.path) {
-                // Try to find the container for this path
-                const containerPath = path.dirname(item.path);
-                const containers = $(`.item-container[data-path="${html_encode(containerPath)}" i]`);
-                
-                if (containers.length > 0) {
-                    // Refresh the container to ensure the item is created
-                    false && console.log('[UIDesktop] Refreshing container:', containerPath);
-                    await refresh_item_container(containers[0], { consistency: 'strong' });
-                    
-                    // Try to find the item again after refresh
-                    itemElements = $(`.item[data-uid='${item.uid}']`);
-                    if (itemElements.length === 0) {
-                        console.warn('[UIDesktop] Item still not found after container refresh');
-                        return;
-                    }
-                } else {
-                    console.warn('[UIDesktop] Container not found for path:', containerPath);
-                    return;
-                }
-            } else {
-                return;
-            }
-        }
-        
+        if (itemElements.length === 0) itemElements = $(`.item[data-uid='${item.uid}']`);
+        if (itemElements.length === 0) return;
+
         const thumbElement = itemElements.find('.item-icon-thumb');
         const iconElement = itemElements.find('.item-icon-icon');
         

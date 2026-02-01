@@ -2505,6 +2505,124 @@ window.checkUserSiteRelationship = async function(origin) {
 }
 
 // Converts a Blob to a Uint8Array [local helper module]
+/**
+ * True when running against the local PC2 node (same-origin or localhost api_origin).
+ */
+function isPC2ZipMode() {
+    const origin = window.api_origin || '';
+    if (!origin) return false;
+    try {
+        const u = new URL(origin);
+        if (u.hostname === 'localhost' || u.hostname === '127.0.0.1') return true;
+        if (window.location.origin === origin) return true;
+    } catch (e) { /* ignore */ }
+    return false;
+}
+
+function getAuthTokenForAPI() {
+    return window.auth_token || (typeof puter !== 'undefined' && puter.authToken) || '';
+}
+
+/**
+ * Read file via PC2 node API (used for zip/unzip when Puter SDK may not match node routes).
+ * Uses POST so path is in body (avoids URL length/encoding issues).
+ */
+async function pc2FsRead(filePath) {
+    const apiOrigin = window.api_origin || window.location.origin;
+    const token = getAuthTokenForAPI();
+    const res = await fetch(`${apiOrigin}/read`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ path: filePath })
+    });
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Read failed: ${res.status} ${res.statusText} - ${errText}`);
+    }
+    return res.blob();
+}
+
+/**
+ * List directory via PC2 node API.
+ */
+async function pc2FsReaddir(dirPath) {
+    const apiOrigin = window.api_origin || window.location.origin;
+    const token = getAuthTokenForAPI();
+    const res = await fetch(`${apiOrigin}/readdir`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ path: dirPath })
+    });
+    if (!res.ok) throw new Error(`Readdir failed: ${res.status} ${res.statusText}`);
+    return res.json();
+}
+
+function arrayBufferToBase64Chunked(buffer) {
+    const bytes = new Uint8Array(buffer);
+    const chunkSize = 8192;
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+        const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
+        binary += String.fromCharCode.apply(null, chunk);
+    }
+    return btoa(binary);
+}
+
+/**
+ * Write file via PC2 node API. Content is sent as base64 in JSON.
+ */
+async function pc2FsWrite(filePath, blob, opts = {}) {
+    const apiOrigin = window.api_origin || window.location.origin;
+    const token = getAuthTokenForAPI();
+    const buf = await blob.arrayBuffer();
+    const base64 = arrayBufferToBase64Chunked(buf);
+    const res = await fetch(`${apiOrigin}/write`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+            path: filePath,
+            content: base64,
+            encoding: 'base64',
+            mime_type: opts.mime_type || 'application/zip'
+        })
+    });
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Write failed: ${res.status} ${res.statusText} - ${errText}`);
+    }
+}
+
+/**
+ * Create directory via PC2 node API.
+ */
+async function pc2FsMkdir(dirPath) {
+    const apiOrigin = window.api_origin || window.location.origin;
+    const token = getAuthTokenForAPI();
+    const pathNoTrailing = (dirPath && typeof dirPath === 'string') ? dirPath.replace(/\/+$/, '') || dirPath : dirPath;
+    const res = await fetch(`${apiOrigin}/mkdir`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ path: pathNoTrailing })
+    });
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Mkdir failed: ${res.status} ${res.statusText} - ${errText}`);
+    }
+    return res.json();
+}
+
 async function blobToUint8Array(blob) {
     const totalLength = blob.size;
     const reader = blob.stream().getReader();
@@ -2587,16 +2705,21 @@ window.zipItems = async function(el_items, targetDirPath, download = true) {
                     else
                         relativePath = path.basename(targetPath) + '/' + child.relativePath;
 
-                    // read file content
                     progwin?.set_status(i18n('sequencing', child.relativePath));
-                    let content = await puter.fs.read(child.path);
+                    const readFile = isPC2ZipMode() ? pc2FsRead : (p) => puter.fs.read(p);
                     try {
+                        let content = await readFile(child.path);
                         toBeZipped = {
                             ...toBeZipped,
                             [relativePath]: [await blobToUint8Array(content), { level: 9 }]
-                        }
+                        };
                     } catch (e) {
-                        console.error(e);
+                        console.error('[Zip] Failed to read file:', child.path, e);
+                        if (isPC2ZipMode()) {
+                            UIAlert(i18n('error_reading_file') || 'Could not read file: ' + (child.relativePath || child.path) + '. Check that you are logged in.');
+                            return;
+                        }
+                        throw e;
                     }
                 }
                 currentProgress += perItemAdditionProgress / children.length;
@@ -2606,7 +2729,8 @@ window.zipItems = async function(el_items, targetDirPath, download = true) {
         // if item is a file, add the file to be zipped
         else{
             progwin?.set_status(i18n('reading', path.basename($(el_items[0]).attr('data-path'))));
-            let content = await puter.fs.read(targetPath)
+            const readFile = isPC2ZipMode() ? pc2FsRead : (p) => puter.fs.read(p);
+            let content = await readFile(targetPath);
             toBeZipped = {
                 ...toBeZipped,
                 [path.basename(targetPath)]: [await blobToUint8Array(content), {level: 9}]
@@ -2657,7 +2781,12 @@ window.zipItems = async function(el_items, targetDirPath, download = true) {
                 progwin?.set_status(i18n('writing', zipName + ".zip"));
                 currentProgress += window.zippingProgressConfig.WRITING;
                 progwin?.set_progress(currentProgress.toPrecision(2));
-                await puter.fs.write(targetDirPath + '/' + zipName + ".zip", zippedBlob, { overwrite: false, dedupeName: true })
+                const zipPath = targetDirPath.replace(/\/?$/, '') + '/' + zipName + ".zip";
+                if (isPC2ZipMode()) {
+                    await pc2FsWrite(zipPath, zippedBlob, { mime_type: 'application/zip' });
+                } else {
+                    await puter.fs.write(zipPath, zippedBlob, { overwrite: false, dedupeName: true });
+                }
                 progwin?.set_progress(window.zippingProgressConfig.TOTAL);
             }
 
@@ -2671,28 +2800,23 @@ window.zipItems = async function(el_items, targetDirPath, download = true) {
 }
 
 async function readDirectoryRecursive(path, baseDir = '') {
+    const usePC2 = isPC2ZipMode();
+    const entries = usePC2 ? await pc2FsReaddir(path) : await puter.fs.readdir(path);
+
     let allFiles = [];
-
-    // Read the directory
-    const entries = await puter.fs.readdir(path);
-
     if (entries.length === 0) {
         allFiles.push({ path });
     } else {
-        // Process each entry
         for (const entry of entries) {
-            const fullPath = `${path}/${entry.name}`;
+            const fullPath = entry.path || `${path.replace(/\/?$/, '')}/${entry.name}`;
             if (entry.is_dir) {
-                // If entry is a directory, recursively read it
                 const subDirFiles = await readDirectoryRecursive(fullPath, `${baseDir}${entry.name}/`);
                 allFiles = allFiles.concat(subDirFiles);
             } else {
-                // If entry is a file, add it to the list
                 allFiles.push({ path: fullPath, relativePath: `${baseDir}${entry.name}` });
             }
         }
     }
-
     return allFiles;
 }
 
@@ -2736,7 +2860,8 @@ window.unzipItem = async function(itemPath) {
     let currentProgress = window.zippingProgressConfig.SEQUENCING;
 
     progwin?.set_status(i18n('sequencing', path.basename(filePath)));
-    let file = await blobToUint8Array(await puter.fs.read(filePath));
+    const readFile = isPC2ZipMode() ? pc2FsRead : (p) => puter.fs.read(p);
+    let file = await blobToUint8Array(await readFile(filePath));
     progwin?.set_progress(currentProgress.toPrecision(2));
 
     progwin?.set_status(i18n('unzipping', path.basename(filePath)));
@@ -2744,12 +2869,46 @@ window.unzipItem = async function(itemPath) {
         currentProgress += window.zippingProgressConfig.ZIPPING;
         progwin?.set_progress(currentProgress.toPrecision(2));
         if(err) {
-            UIAlert(e.message);
-            // close progress window
+            UIAlert(err.message);
             clearTimeout(progwin_timeout);
-            setTimeout(() => {
-                progwin?.close();
-            }, Math.max(0, window.copy_progress_hide_delay - (Date.now() - start_ts)));
+            setTimeout(() => progwin?.close(), Math.max(0, window.copy_progress_hide_delay - (Date.now() - start_ts)));
+        } else if (isPC2ZipMode()) {
+            const rootdirPath = path.dirname(filePath).replace(/\/?$/, '') + '/' + path.basename(filePath, '.zip');
+            try { await pc2FsMkdir(rootdirPath); } catch (e) { /* may already exist */ }
+            const keys = Object.keys(unzipped).filter(k => k && k !== '/' && !/^\/+$/.test(k));
+            const fileKeys = keys.filter(k => !k.endsWith('/'));
+            let perItemProgress = window.zippingProgressConfig.WRITING / Math.max(keys.length, 1);
+            let writeFailed = [];
+            for (const fileItem of keys) {
+                const normalized = fileItem.replace(/^\/+/, '');
+                if (!normalized) continue;
+                progwin?.set_status(i18n('writing', normalized));
+                if (fileItem.endsWith('/')) {
+                    const dirPath = rootdirPath + '/' + normalized.replace(/\/+$/, '');
+                    if (dirPath !== rootdirPath) {
+                        try { await pc2FsMkdir(dirPath); } catch (e) { /* ignore */ }
+                    }
+                } else {
+                    try {
+                        const fileData = new Blob([new Uint8Array(unzipped[fileItem], unzipped[fileItem].byteOffset, unzipped[fileItem].length)]);
+                        await pc2FsWrite(rootdirPath + '/' + normalized, fileData, { mime_type: 'application/octet-stream' });
+                    } catch (e) {
+                        console.error('[Unzip] Failed to write:', normalized, e);
+                        writeFailed.push(normalized);
+                    }
+                }
+                currentProgress += perItemProgress;
+                progwin?.set_progress(currentProgress.toPrecision(2));
+            }
+            if (writeFailed.length > 0) {
+                UIAlert((i18n('error_writing_files') || 'Could not write some files') + ': ' + writeFailed.slice(0, 3).join(', ') + (writeFailed.length > 3 ? '...' : '') + '. Check that you are logged in.');
+            }
+            if (fileKeys.length === 0 && keys.length > 0) {
+                UIAlert(i18n('zip_contained_no_files') || 'This zip contained only folders (no files). Try zipping again after refreshing the page.');
+            }
+            progwin?.set_progress(window.zippingProgressConfig.TOTAL.toPrecision(2));
+            clearTimeout(progwin_timeout);
+            setTimeout(() => progwin?.close(), Math.max(0, window.unzip_progress_hide_delay - (Date.now() - start_ts)));
         } else {
             const rootdir = await puter.fs.mkdir(path.dirname(filePath) + '/' + path.basename(filePath, '.zip'), { dedupeName: true });
             let perItemProgress = window.zippingProgressConfig.WRITING / Object.keys(unzipped).length;
@@ -2766,27 +2925,18 @@ window.unzipItem = async function(itemPath) {
                 }
             });
             queuedFileWrites.length && puter.fs.upload(
-                // what to upload
-                queuedFileWrites, 
-                // where to upload
+                queuedFileWrites,
                 rootdir.path + '/',
-                // options
                 {
                     createFileParent: true,
                     progress: async function(operation_id, op_progress){
                         progwin.set_progress(op_progress);
-                        // update title if window is not visible
-                        if(document.visibilityState !== "visible"){
-                            update_title_based_on_uploads();
-                        }
+                        if(document.visibilityState !== "visible") update_title_based_on_uploads();
                     },
                     success: async function(items){
                         progwin?.set_progress(window.zippingProgressConfig.TOTAL.toPrecision(2));
-                        // close progress window
                         clearTimeout(progwin_timeout);
-                        setTimeout(() => {
-                            progwin?.close();
-                        }, Math.max(0, window.unzip_progress_hide_delay - (Date.now() - start_ts)));
+                        setTimeout(() => progwin?.close(), Math.max(0, window.unzip_progress_hide_delay - (Date.now() - start_ts)));
                     }
                 }
             );

@@ -43,12 +43,12 @@ export class FilesystemManager {
   }
 
   /**
-   * Normalize file path
+   * Normalize file path (strip trailing slashes so we never store .../ElastOS/ which would display as "/")
    */
   private normalizePath(path: string): string {
-    // Ensure path starts with /
     const normalized = normalize(path);
-    return normalized.startsWith('/') ? normalized : '/' + normalized;
+    const withLeading = normalized.startsWith('/') ? normalized : '/' + normalized;
+    return withLeading.replace(/\/+$/, '') || '/';
   }
 
   /**
@@ -297,8 +297,9 @@ export class FilesystemManager {
     const pathPrefix = normalizedPath === '/' ? '/' : normalizedPath + '/';
     
     for (const file of allFiles) {
-      // Skip the directory itself
-      if (file.path === normalizedPath) {
+      // Skip the directory itself and trailing-slash duplicate (e.g. .../ElastOS and .../ElastOS/)
+      const filePathNorm = file.path.replace(/\/+$/, '') || file.path;
+      if (filePathNorm === normalizedPath || file.path === normalizedPath) {
         continue;
       }
       

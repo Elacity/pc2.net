@@ -21,6 +21,7 @@ import UIComponentWindow from '../UIComponentWindow.js';
 import UIWindow from '../UIWindow.js';
 import UIAlert from '../UIAlert.js';
 import UIWindow2FASetup from '../UIWindow2FASetup.js';
+import UINotification from '../UINotification.js';
 
 export default {
     id: 'security',
@@ -240,6 +241,43 @@ export default {
             h += `</div>`;
             h += `</div>`;
             
+            // WALLETCONNECT CONFIGURATION
+            h += `<div class="security-section">`;
+            h += `<div class="security-section-title">WalletConnect Configuration</div>`;
+            h += `<div class="security-group">`;
+            h += `<div class="security-group-row">`;
+            h += `<p style="color: #6b7280; font-size: 12px; margin: 0 0 12px 0;">`;
+            h += `If wallet login doesn't work (especially for IP addresses or custom domains), `;
+            h += `you can configure your own WalletConnect project.`;
+            h += `</p>`;
+            
+            // Current origin display
+            h += `<div style="background: #f3f4f6; padding: 10px 12px; border-radius: 6px; margin-bottom: 12px;">`;
+            h += `<div style="font-size: 11px; color: #6b7280; margin-bottom: 4px;">Your current origin (add to WalletConnect allowlist):</div>`;
+            h += `<div style="display: flex; align-items: center; justify-content: space-between;">`;
+            h += `<code style="font-size: 12px; color: #059669;">${window.location.origin}</code>`;
+            h += `<button id="wc-settings-copy-origin" class="button security-btn" style="font-size: 10px; padding: 3px 8px;">Copy</button>`;
+            h += `</div>`;
+            h += `</div>`;
+            
+            // Project ID input
+            h += `<div style="margin-bottom: 8px;">`;
+            h += `<label style="font-size: 12px; color: #374151; display: block; margin-bottom: 4px;">Custom WalletConnect Project ID</label>`;
+            h += `</div>`;
+            h += `<div style="display: flex; gap: 8px;">`;
+            h += `<input type="text" id="wc-settings-project-id" class="security-input" `;
+            h += `placeholder="e.g., 0d1ac2ba93587a74b54f92189bdc341e" style="flex: 1; font-family: monospace; font-size: 12px;">`;
+            h += `<button id="wc-settings-save" class="button security-btn">Save</button>`;
+            h += `<button id="wc-settings-clear" class="button security-btn">Clear</button>`;
+            h += `</div>`;
+            h += `<p style="color: #9ca3af; font-size: 11px; margin: 8px 0 0 0;">`;
+            h += `Create a project at <a href="https://cloud.reown.com" target="_blank" style="color: #3b82f6;">cloud.reown.com</a> `;
+            h += `and add your origin to the allowlist. Changes take ~15 minutes to apply.`;
+            h += `</p>`;
+            h += `</div>`;
+            h += `</div>`;
+            h += `</div>`;
+            
             // API Key styles
             h += `<style>
                 .api-key-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #f3f4f6; }
@@ -402,7 +440,7 @@ export default {
             
             // Create API Key
             $el_window.find('.api-keys-create-btn').on('click', async () => {
-                let h = '<div style="padding: 16px; max-width: 380px;">';
+                let h = '<div style="padding: 16px 16px 8px 16px; max-width: 380px;">';
                 h += '<h3 style="margin: 0 0 12px; font-size: 15px;">Create API Key</h3>';
                 h += '<input type="text" id="api-key-name-input" placeholder="Key name (e.g., claude-agent)" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 10px; box-sizing: border-box; font-size: 13px;">';
                 h += '<div style="margin-bottom: 10px; font-size: 12px;"><strong>Permissions:</strong><br>';
@@ -411,12 +449,12 @@ export default {
                 h += '<label style="display: block; margin: 4px 0;"><input type="checkbox" class="scope-cb" value="execute" checked> Execute</label>';
                 h += '</div>';
                 h += '<div id="create-key-error" style="display: none; color: #dc2626; font-size: 12px; margin-bottom: 8px;"></div>';
-                h += '<div style="display: flex; gap: 6px; justify-content: flex-end;">';
+                h += '<div style="display: flex; gap: 6px; justify-content: flex-end; margin-bottom: 0;">';
                 h += '<button class="button cancel-btn">Cancel</button>';
                 h += '<button class="button create-btn" style="background: #3b82f6; color: white;">Create</button>';
                 h += '</div></div>';
                 
-                const win = await UIWindow({ body_content: h, width: 400, backdrop: true, is_resizable: false, has_head: false, body_css: { 'background-color': '#fff', padding: '0', 'border-radius': '8px' } });
+                const win = await UIWindow({ body_content: h, width: 400, height: 220, backdrop: true, is_resizable: false, has_head: false, body_css: { 'background-color': '#fff', padding: '0', 'border-radius': '8px' } });
                 const $win = $(win);
                 
                 $win.find('.cancel-btn').on('click', () => $win.close());
@@ -562,6 +600,48 @@ Capabilities: files, terminal, git, http, scheduler`;
             loadOwnerInfo();
             loadAllowedWallets();
             loadApiKeys();
+            
+            // WalletConnect Configuration handlers
+            // Load existing custom project ID if any
+            const existingWcProjectId = localStorage.getItem('pc2_custom_wc_project_id') || '';
+            $el_window.find('#wc-settings-project-id').val(existingWcProjectId);
+            
+            // Copy origin button
+            $el_window.find('#wc-settings-copy-origin').on('click', function() {
+                navigator.clipboard.writeText(window.location.origin);
+                $(this).text('Copied!');
+                setTimeout(() => $(this).text('Copy'), 2000);
+            });
+            
+            // Save WalletConnect project ID
+            $el_window.find('#wc-settings-save').on('click', function() {
+                const projectId = $el_window.find('#wc-settings-project-id').val().trim();
+                if (projectId && projectId.length > 20) {
+                    localStorage.setItem('pc2_custom_wc_project_id', projectId);
+                    UINotification && new UINotification({
+                        type: 'success',
+                        message: 'WalletConnect project ID saved. Refresh the page to apply.',
+                        autoHide: true,
+                    });
+                } else if (projectId.length > 0) {
+                    UINotification && new UINotification({
+                        type: 'error',
+                        message: 'Please enter a valid project ID (32+ characters)',
+                        autoHide: true,
+                    });
+                }
+            });
+            
+            // Clear WalletConnect project ID
+            $el_window.find('#wc-settings-clear').on('click', function() {
+                localStorage.removeItem('pc2_custom_wc_project_id');
+                $el_window.find('#wc-settings-project-id').val('');
+                UINotification && new UINotification({
+                    type: 'success',
+                    message: 'Using default WalletConnect project. Refresh the page to apply.',
+                    autoHide: true,
+                });
+            });
         }
     },
 };

@@ -480,19 +480,19 @@ async function UIWindow(options) {
     // backdrop
     if(options.backdrop){
         let backdrop_zindex;
-        // backdrop should also cover over taskbar
+        // Backdrop modals must sit above other windows; on mobile .device-phone .window gets z-index: 9999999 !important,
+        // so use a higher value so the modal appears in front (e.g. Create API Key in front of Settings).
+        const mobileWindowZ = 9999999;
+        const modalAboveAll = 100000000;
         let taskbar_zindex = $('.taskbar').css('z-index');
-        if(taskbar_zindex === null || taskbar_zindex === undefined)
-            backdrop_zindex = zindex;
-        else{
-            taskbar_zindex = parseInt(taskbar_zindex);
-            backdrop_zindex = taskbar_zindex > zindex ? taskbar_zindex : zindex;
-        }
-
-        // dominant backdrop will cover over toolbar as well
         if(options.backdrop_covers_toolbar)
-            backdrop_zindex = 999999;
-        
+            backdrop_zindex = modalAboveAll;
+        else if(taskbar_zindex !== null && taskbar_zindex !== undefined){
+            taskbar_zindex = parseInt(taskbar_zindex, 10);
+            backdrop_zindex = Math.max(zindex, taskbar_zindex + 1, mobileWindowZ + 1);
+        } else
+            backdrop_zindex = Math.max(zindex, mobileWindowZ + 1);
+
         h = `<div class="window-backdrop"  style="z-index:${backdrop_zindex};">` + h + `</div>`;
     }
 

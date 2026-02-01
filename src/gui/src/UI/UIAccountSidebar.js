@@ -758,6 +758,7 @@ async function UIAccountSidebar(options = {}) {
             <!-- Tab Navigation -->
             <div class="account-sidebar-tabs" role="tablist" aria-label="Wallet sections">
                 <div class="sidebar-tab active" data-tab="tokens" role="tab" aria-selected="true" tabindex="0">${i18n('tokens') || 'Tokens'}</div>
+                <div class="sidebar-tab" data-tab="nfts" role="tab" aria-selected="false" tabindex="-1">NFTs</div>
                 <div class="sidebar-tab" data-tab="activity" role="tab" aria-selected="false" tabindex="-1">
                     Activity
                     <span class="activity-pending-badge" style="display:none;"></span>
@@ -770,6 +771,13 @@ async function UIAccountSidebar(options = {}) {
                 <div class="tab-content active" data-tab="tokens">
                     <div class="tokens-list">
                         ${renderTokensList(walletData.tokens)}
+                    </div>
+                </div>
+                <div class="tab-content" data-tab="nfts">
+                    <div class="nfts-list" id="nfts-list">
+                        <div class="nft-initial-state" style="padding:20px;text-align:center;color:#9ca3af;font-size:13px;">
+                            Click to load NFTs
+                        </div>
                     </div>
                 </div>
                 <div class="tab-content" data-tab="activity">
@@ -877,7 +885,219 @@ async function UIAccountSidebar(options = {}) {
                 $sidebar.find('.activity-list').html(renderActivityList(walletService.getPendingProposals()));
             }).catch(() => {});
         }
+        if (tab === 'nfts') {
+            // Load NFTs for user
+            loadUserNFTs($sidebar);
+        }
     });
+    
+    // NFT loading function - always use EOA for ESC NFTs (Bella etc.); Smart Account holds 0
+    let nftsLoaded = false;
+    async function loadUserNFTs($sidebar) {
+        const $nftsList = $sidebar.find('#nfts-list');
+        function getEOAForNFTs() {
+            return walletService.getEOAAddress() || (window.user && window.user.username && String(window.user.username).startsWith('0x') ? window.user.username : null) || (window.user && window.user.wallet_address ? window.user.wallet_address : null);
+        }
+        // EOA only: whoami sets username = wallet address; getAddress() can be Smart Account in UA mode
+        let userAddress = getEOAForNFTs();
+        
+        // If no EOA yet (whoami or Particle not ready), wait briefly and retry so we don't show "No NFTs" by mistake
+        if (!userAddress) {
+            $nftsList.html(`
+                <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px;color:#9ca3af;">
+                    <div class="spinner" style="width:24px;height:24px;border:2px solid rgba(255,255,255,0.1);border-top-color:#F6921A;border-radius:50%;animation:spin 1s linear infinite;"></div>
+                    <span style="margin-top:12px;font-size:13px;">Waiting for wallet...</span>
+                </div>
+            `);
+            for (let i = 0; i < 6; i++) {
+                await new Promise(r => setTimeout(r, 500));
+                userAddress = getEOAForNFTs();
+                if (userAddress) break;
+            }
+        }
+        
+        if (!userAddress) {
+            $nftsList.html('<div style="padding:20px;text-align:center;color:#9ca3af;">Connect wallet to view NFTs</div>');
+            return;
+        }
+        
+        // Show loading state
+        $nftsList.html(`
+            <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px;color:#9ca3af;">
+                <div class="spinner" style="width:24px;height:24px;border:2px solid rgba(255,255,255,0.1);border-top-color:#F6921A;border-radius:50%;animation:spin 1s linear infinite;"></div>
+                <span style="margin-top:12px;font-size:13px;">Loading NFTs from ESC...</span>
+                <span style="margin-top:4px;font-size:11px;color:#666;">Fetching metadata from IPFS</span>
+            </div>
+        `);
+        
+        try {
+            const nfts = await walletService.fetchUserNFTs(userAddress, 20); // ESC chainId
+            console.log('[NFT] Result:', nfts);
+            nftsLoaded = true;
+            
+            if (nfts.length === 0) {
+                $nftsList.html('<div style="padding:20px;text-align:center;color:#9ca3af;">No NFTs found on ESC</div>');
+                return;
+            }
+            
+            const downloadedSet = getDownloadedNFTCIDs(userAddress);
+            $nftsList.html(renderNFTsList(nfts, downloadedSet));
+            
+            // Attach download handlers
+            $nftsList.find('.nft-download-btn').on('click', async function(e) {
+                e.stopPropagation();
+                const $btn = $(this);
+                const cid = $btn.data('cid');
+                const name = $btn.data('name');
+                
+                if (!cid) {
+                    alert('No IPFS CID available for this NFT');
+                    return;
+                }
+                
+                if ($btn.data('downloading')) return; // Prevent double-click
+                $btn.data('downloading', true);
+                
+                let seconds = 0;
+                $btn.prop('disabled', true)
+                    .css('width', 'auto')
+                    .css('min-width', '32px')
+                    .css('padding', '0 8px')
+                    .css('font-size', '11px')
+                    .html('0s');
+                
+                // Show elapsed time every second
+                const timer = setInterval(() => {
+                    seconds += 1;
+                    $btn.html(`${seconds}s`);
+                }, 1000);
+                
+                try {
+                    const result = await walletService.downloadNFTImage(cid, name);
+                    clearInterval(timer);
+                    markNFTDownloaded(userAddress, cid);
+                    $btn.prop('disabled', true).removeClass('nft-download-btn').addClass('nft-saved-badge')
+                        .html('✓').css({ width: '32px', minWidth: '', padding: '', fontSize: '14px' })
+                        .css('background', 'rgba(34,197,94,0.2)').css('border-color', 'rgba(34,197,94,0.4)').css('color', '#22c55e')
+                        .attr('title', 'Saved to Pictures folder').data('downloading', false).css('cursor', 'default');
+                } catch (error) {
+                    clearInterval(timer);
+                    $btn.html('✕').css('background', 'rgba(239,68,68,0.2)').css('color', '#ef4444').prop('disabled', false).data('downloading', false).attr('title', error.message || 'Download failed');
+                    console.error('Download failed:', error.message);
+                    setTimeout(() => {
+                        $btn.html('↓').css('width', '32px').css('min-width', '').css('padding', '').css('font-size', '14px').css('background', 'rgba(246,146,26,0.15)').css('border-color', 'rgba(246,146,26,0.3)').css('color', '#F6921A').attr('title', 'Download to PC2 via IPFS');
+                    }, 3000);
+                }
+            });
+        } catch (error) {
+            console.error('Failed to load NFTs:', error);
+            $nftsList.html('<div style="padding:20px;text-align:center;color:#ef4444;">Failed to load NFTs<br><small style="color:#666;">Check console for details</small></div>');
+        }
+    }
+    
+    // Persist which NFT image CIDs this wallet has downloaded (so we show "Saved" instead of download button)
+    function getDownloadedNFTCIDs(wallet) {
+        if (!wallet) return new Set();
+        try {
+            const key = 'pc2_nft_downloaded_' + (wallet || '').toLowerCase();
+            const raw = localStorage.getItem(key);
+            const arr = raw ? JSON.parse(raw) : [];
+            return new Set(Array.isArray(arr) ? arr : []);
+        } catch (e) {
+            return new Set();
+        }
+    }
+    function markNFTDownloaded(wallet, cid) {
+        if (!wallet || !cid) return;
+        try {
+            const key = 'pc2_nft_downloaded_' + (wallet || '').toLowerCase();
+            const set = getDownloadedNFTCIDs(wallet);
+            set.add(cid);
+            localStorage.setItem(key, JSON.stringify([...set]));
+        } catch (e) {}
+    }
+    // Render NFTs list (compact list view); downloadedSet = Set of image CIDs already saved to Pictures
+    function renderNFTsList(nfts, downloadedSet) {
+        const downloaded = downloadedSet || new Set();
+        return `<div style="padding:8px 0;">${nfts.map(nft => {
+            const imageUrl = nft.image || '';
+            const imageCID = nft.imageCID || '';
+            const isDownloaded = imageCID && downloaded.has(imageCID);
+            const safeName = html_encode(nft.name || 'Unknown');
+            const safeCollection = html_encode(nft.collectionName || 'Unknown Collection');
+            const tokenId = nft.tokenId || '';
+            
+            return `
+                <div class="nft-row" style="
+                    display: flex;
+                    align-items: center;
+                    padding: 10px 16px;
+                    border-bottom: 1px solid rgba(255,255,255,0.06);
+                    gap: 12px;
+                ">
+                    <div class="nft-thumb" style="
+                        width: 48px;
+                        height: 48px;
+                        border-radius: 8px;
+                        background: #1a1a1a;
+                        flex-shrink: 0;
+                        overflow: hidden;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                    ">
+                        ${imageUrl ? `
+                            <img src="${html_encode(imageUrl)}" 
+                                 style="width:100%;height:100%;object-fit:cover;" 
+                                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+                            <div style="display:none;width:100%;height:100%;align-items:center;justify-content:center;color:#666;font-size:16px;">🖼️</div>
+                        ` : `
+                            <div style="color:#666;font-size:16px;">🖼️</div>
+                        `}
+                    </div>
+                    <div class="nft-info" style="flex:1;min-width:0;">
+                        <div style="font-weight:600;font-size:13px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${safeName}</div>
+                        <div style="font-size:11px;color:#9ca3af;">${safeCollection}</div>
+                    </div>
+                    ${imageCID ? (isDownloaded ? `
+                        <span class="nft-saved-badge" title="Saved to Pictures"
+                                style="
+                                    width:32px;
+                                    height:32px;
+                                    font-size:14px;
+                                    background:rgba(34,197,94,0.2);
+                                    border:1px solid rgba(34,197,94,0.4);
+                                    color:#22c55e;
+                                    border-radius:6px;
+                                    flex-shrink:0;
+                                    display:flex;
+                                    align-items:center;
+                                    justify-content:center;
+                                ">✓</span>
+                    ` : `
+                        <button class="nft-download-btn" 
+                                data-cid="${html_encode(imageCID)}" 
+                                data-name="${safeName}"
+                                title="Download to PC2 via IPFS"
+                                style="
+                                    width:32px;
+                                    height:32px;
+                                    font-size:14px;
+                                    background:rgba(246,146,26,0.15);
+                                    border:1px solid rgba(246,146,26,0.3);
+                                    color:#F6921A;
+                                    border-radius:6px;
+                                    cursor:pointer;
+                                    flex-shrink:0;
+                                    display:flex;
+                                    align-items:center;
+                                    justify-content:center;
+                                ">↓</button>
+                    `) : ''}
+                </div>
+            `;
+        }).join('')}</div>`;
+    }
     
     // Activity item click - show proposal details
     $sidebar.on('click', '.activity-item', async function() {
@@ -1482,6 +1702,7 @@ function renderTokensList(tokens) {
         'USDT': '/images/tokens/USDT.png',
         'BNB': '/images/tokens/BNB.png',
         'SOL': '/images/tokens/Sol.webp',
+        'GOLD': '/images/tokens/GOLD.webp',
         'BTC': '/images/tokens/BTC.svg',
         'PGA': '/images/tokens/PGP.webp',
         'BTCD': '/images/tokens/BTCD.webp',
@@ -1591,6 +1812,7 @@ function renderHistoryList(transactions) {
             'bnb': '/images/tokens/BNB.png',
             'mnt': '/images/tokens/MNT.webp',
             'ela': '/images/tokens/ELA.png',
+            'gold': '/images/tokens/GOLD.webp',
         };
         
         // Use local icon if available, otherwise skip blocked URLs

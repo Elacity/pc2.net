@@ -7114,3 +7114,19 @@ fieldset[name=number-code] {
     text-overflow: ellipsis; 
     white-space: nowrap;
 }
+
+/* Upload/progress modal: ensure text and spinner are readable in dark mode */
+.window-progress .window-body,
+.window-progress .window-body .progress-msg,
+.window-progress .window-body .progress-percent,
+.window-progress .window-body .progress-report,
+.window-progress .progress-error .progress-error-title,
+.window-progress .progress-error .progress-error-message {
+    color: #ffffff;
+}
+.window-progress .window-body svg path {
+    fill: #ffffff;
+}
+.window-progress .window-body svg path[opacity] {
+    fill: rgba(255, 255, 255, 0.5);
+}

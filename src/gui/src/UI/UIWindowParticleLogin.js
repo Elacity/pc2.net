@@ -101,6 +101,15 @@ async function UIWindowParticleLogin(options = {}) {
         const apiOrigin = window.api_origin || window.location.origin;
         const iframeUrl = new URL('/particle-auth', window.location.origin);
         iframeUrl.searchParams.set('api_origin', apiOrigin);
+        
+        // Pass custom WalletConnect project ID if configured by user
+        // This allows users with IP addresses or custom domains to use their own WalletConnect project
+        const customWcProjectId = localStorage.getItem('pc2_custom_wc_project_id');
+        if (customWcProjectId) {
+            iframeUrl.searchParams.set('wc_project_id', customWcProjectId);
+            console.log('[UIWindowParticleLogin]: Using custom WalletConnect project ID');
+        }
+        
         iframe.src = iframeUrl.toString();
         console.log('[UIWindowParticleLogin]: Creating iframe with src:', iframe.src);
         console.log('[UIWindowParticleLogin]: API origin passed to iframe:', apiOrigin);
@@ -167,7 +176,189 @@ async function UIWindowParticleLogin(options = {}) {
         // Clean up event listener when window is closed
         $(el_window).on('remove', function() {
             window.removeEventListener('message', messageHandler);
+            // Remove the trouble link when window closes
+            $('#wc-trouble-link-container').remove();
         });
+        
+        // Add "Having trouble?" link at bottom-left (opposite to "Presented by ElacityLabs")
+        // Remove any existing one first
+        $('#wc-trouble-link-container').remove();
+        const troubleLinkHtml = `
+            <div id="wc-trouble-link-container" style="
+                position: fixed;
+                bottom: 12px;
+                left: 16px;
+                z-index: 2147483647;
+            ">
+                <a href="#" id="wc-trouble-link" style="
+                    color: #6b7280;
+                    font-size: 12px;
+                    text-decoration: none;
+                    opacity: 0.7;
+                    transition: opacity 0.2s;
+                " onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'">
+                    Having trouble connecting your wallet?
+                </a>
+            </div>
+        `;
+        $('body').append(troubleLinkHtml);
+        
+        // Set up "Having trouble?" link click handler
+        document.getElementById('wc-trouble-link').addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            showWalletConnectSetupModal(iframe, iframeUrl);
+        });
+        
+        // Function to show the WalletConnect setup modal - using direct DOM overlay for highest z-index
+        function showWalletConnectSetupModal(iframe, baseIframeUrl) {
+            const currentOrigin = window.location.origin;
+            const existingProjectId = localStorage.getItem('pc2_custom_wc_project_id') || '';
+            
+            // Remove any existing modal
+            $('#wc-setup-modal-overlay').remove();
+            
+            // Create overlay with highest possible z-index
+            const overlayHtml = `
+                <div id="wc-setup-modal-overlay" style="
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background: rgba(0,0,0,0.7);
+                    z-index: 2147483647;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                ">
+                    <div id="wc-setup-modal" style="
+                        background: #fff;
+                        border-radius: 12px;
+                        width: 480px;
+                        max-width: 90vw;
+                        max-height: 90vh;
+                        overflow: auto;
+                        box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+                    ">
+                        <div style="padding: 20px 24px; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center;">
+                            <h2 style="margin: 0; font-size: 18px; color: #111;">Custom WalletConnect Setup</h2>
+                            <button id="wc-modal-close" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #6b7280; line-height: 1;">&times;</button>
+                        </div>
+                        <div style="padding: 24px;">
+                            <p style="color: #6b7280; font-size: 13px; margin: 0 0 20px 0;">
+                                If wallet connection doesn't work (especially for IP addresses or custom domains), 
+                                you can configure your own WalletConnect project.
+                            </p>
+                            
+                            <div style="margin-bottom: 20px;">
+                                <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                                    <span style="background: #3b82f6; color: #fff; border-radius: 50%; min-width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 12px; margin-right: 10px;">1</span>
+                                    <span style="color: #111; font-size: 14px; font-weight: 500;">Create a WalletConnect Project</span>
+                                </div>
+                                <p style="color: #6b7280; font-size: 12px; margin: 0 0 0 34px;">
+                                    Go to <a href="https://cloud.reown.com" target="_blank" style="color: #3b82f6;">cloud.reown.com</a> and create a free project.
+                                </p>
+                            </div>
+                            
+                            <div style="margin-bottom: 20px;">
+                                <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                                    <span style="background: #3b82f6; color: #fff; border-radius: 50%; min-width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 12px; margin-right: 10px;">2</span>
+                                    <span style="color: #111; font-size: 14px; font-weight: 500;">Add Your Origin to Allowlist</span>
+                                </div>
+                                <div style="margin-left: 34px;">
+                                    <div style="background: #f3f4f6; padding: 10px 12px; border-radius: 6px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                        <code style="color: #059669; font-size: 13px;">${currentOrigin}</code>
+                                        <button id="wc-copy-origin" style="background: #e5e7eb; border: none; color: #374151; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px;">Copy</button>
+                                    </div>
+                                    <p style="color: #6b7280; font-size: 12px; margin: 0;">
+                                        Add this URL to your project's allowlist. Changes take ~15 min.
+                                    </p>
+                                </div>
+                            </div>
+                            
+                            <div style="margin-bottom: 24px;">
+                                <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                                    <span style="background: #3b82f6; color: #fff; border-radius: 50%; min-width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 12px; margin-right: 10px;">3</span>
+                                    <span style="color: #111; font-size: 14px; font-weight: 500;">Enter Your Project ID</span>
+                                </div>
+                                <div style="margin-left: 34px;">
+                                    <input type="text" id="wc-project-id-input" value="${existingProjectId}" 
+                                        placeholder="e.g., 0d1ac2ba93587a74b54f92189bdc341e" 
+                                        style="width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 6px; background: #fff; color: #111; font-size: 13px; box-sizing: border-box;">
+                                </div>
+                            </div>
+                            
+                            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                                <button id="wc-clear-btn" style="background: #f3f4f6; border: 1px solid #d1d5db; color: #374151; padding: 10px 16px; border-radius: 6px; cursor: pointer; font-size: 13px;">Clear & Use Default</button>
+                                <button id="wc-save-btn" style="background: #3b82f6; border: none; color: #fff; padding: 10px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500;">Save & Reload</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Append to body
+            $('body').append(overlayHtml);
+            
+            // Close button
+            $('#wc-modal-close').on('click', function() {
+                $('#wc-setup-modal-overlay').remove();
+            });
+            
+            // Click outside to close
+            $('#wc-setup-modal-overlay').on('click', function(e) {
+                if (e.target === this) {
+                    $(this).remove();
+                }
+            });
+            
+            // Copy origin button
+            $('#wc-copy-origin').on('click', function() {
+                navigator.clipboard.writeText(currentOrigin);
+                $(this).text('Copied!');
+                setTimeout(() => $(this).text('Copy'), 2000);
+            });
+            
+            // Save button
+            $('#wc-save-btn').on('click', function() {
+                const projectId = $('#wc-project-id-input').val().trim();
+                if (projectId && projectId.length > 20) {
+                    localStorage.setItem('pc2_custom_wc_project_id', projectId);
+                    $('#wc-setup-modal-overlay').remove();
+                    // Update iframe URL and reload
+                    const newUrl = new URL(baseIframeUrl);
+                    newUrl.searchParams.set('wc_project_id', projectId);
+                    iframe.src = newUrl.toString();
+                    new UINotification({
+                        type: 'success',
+                        message: 'WalletConnect project ID saved. Reloading...',
+                        autoHide: true,
+                    });
+                } else {
+                    new UINotification({
+                        type: 'error',
+                        message: 'Please enter a valid project ID (32+ characters)',
+                        autoHide: true,
+                    });
+                }
+            });
+            
+            // Clear button
+            $('#wc-clear-btn').on('click', function() {
+                localStorage.removeItem('pc2_custom_wc_project_id');
+                $('#wc-setup-modal-overlay').remove();
+                // Reload iframe without custom project ID
+                const newUrl = new URL('/particle-auth', window.location.origin);
+                newUrl.searchParams.set('api_origin', window.api_origin || window.location.origin);
+                iframe.src = newUrl.toString();
+                new UINotification({
+                    type: 'success',
+                    message: 'Using default WalletConnect project. Reloading...',
+                    autoHide: true,
+                });
+            });
+        }
         
         // Set up message handler function that has access to options and resolve
         async function handleAuthSuccess(authData, container, el_window) {

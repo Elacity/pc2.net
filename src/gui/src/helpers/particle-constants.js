@@ -238,6 +238,24 @@ export const TOKEN_ICONS = {
     'ela': '/images/tokens/ELA.png',
     'pga': '/images/tokens/PGP.webp',
     'btcd': '/images/tokens/BTCD.webp',
+    'gold': '/images/tokens/GOLD.webp',
+};
+
+/**
+ * Custom tokens to always show in wallet (ESC network)
+ * These are added to the token list even if the user has 0 balance
+ */
+export const CUSTOM_TOKENS = {
+    // ESC (Elastos Smart Chain) - chainId 20
+    20: [
+        {
+            address: '0xaA9691BcE68ee83De7B518DfCBBfb62C04B1C0BA',
+            symbol: 'GOLD',
+            name: 'Gold Token',
+            decimals: 18,
+            icon: '/images/tokens/GOLD.webp',
+        },
+    ],
 };
 
 // ============================================

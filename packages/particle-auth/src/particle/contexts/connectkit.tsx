@@ -30,6 +30,26 @@ import elastosLogo from '../../assets/Elastos_Logo_Dark_-_1.svg';
 import './style.css';
 
 /**
+ * Get WalletConnect project ID from URL param (custom) or fall back to built-in default.
+ * This allows users with IP addresses or custom domains to configure their own
+ * WalletConnect project when the default allowlist doesn't cover their origin.
+ */
+const getWalletConnectProjectId = (): string => {
+  // Check URL params first (custom project ID from user)
+  const urlParams = new URLSearchParams(window.location.search);
+  const customProjectId = urlParams.get('wc_project_id');
+  if (customProjectId && customProjectId.length > 20) {
+    console.log('[WalletConnect]: Using custom project ID from URL param');
+    return customProjectId;
+  }
+  // Fall back to built-in default
+  return import.meta.env.VITE_WALLETCONNECT_PROJECT_ID as string;
+};
+
+// Get the WalletConnect project ID (custom or default)
+const wcProjectId = getWalletConnectProjectId();
+
+/**
  * Context interface for Particle Network ConnectKit configuration
  */
 interface ParticleConnectkitContextProps {
@@ -237,7 +257,7 @@ const config = createConfig({
         })] : [],
         walletConnect({
           showQrModal: true,
-          projectId: import.meta.env.VITE_WALLETCONNECT_PROJECT_ID as string,
+          projectId: wcProjectId,
           qrModalOptions: {
             themeVariables: {
               '--wcm-z-index': '2147483647',

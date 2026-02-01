@@ -140,6 +140,11 @@ async function UIWindowSettings (options) {
             $container.find('.settings-content').removeClass('active');
             $content.addClass('active');
 
+            // Scroll to top when switching tabs so the new tab is shown from the top
+            // Scroll both: window body (whole panel) and content container (right-hand area has overflow-y: auto)
+            $el_window.find('.window-body').scrollTop(0);
+            $container.scrollTop(0);
+
             // Run on_show handlers
             const tab = tabs.find((tab) => tab.id === settings);
             if ( tab?.on_show ) {

@@ -648,6 +648,8 @@ async function main() {
       // - VPS deployment: window.location.origin = https://your-domain.com
       // Without this, the particle-auth defaults to localhost:4200 which fails on VPS
       window.PUTER_API_ORIGIN = window.location.origin;
+      // Debug: expose origin for "Invalid App Configuration" on mobile (must match Particle + WalletConnect allowlists)
+      window.__PC2_PARTICLE_ORIGIN = window.location.origin;
     </script>`;
         
         // Insert after </style> and before any <script> tags

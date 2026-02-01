@@ -1157,8 +1157,8 @@ export default {
                             <span style="font-size: 12px; color: #999;">This cannot be undone.</span>
                         </p>
                         <div style="display: flex; gap: 10px; justify-content: flex-end;">
-                            <button id="ai-delete-cancel" class="button" style="padding: 8px 16px; border-radius: 4px;">Cancel</button>
-                            <button id="ai-delete-confirm" class="button" style="padding: 8px 16px; border-radius: 4px; background: #dc2626; color: white; border: none;">Delete</button>
+                            <button id="ai-delete-cancel" class="button" style="height: 32px; line-height: 32px; padding: 0 16px; border-radius: 4px;">Cancel</button>
+                            <button id="ai-delete-confirm" class="button" style="height: 32px; line-height: 32px; padding: 0 16px; border-radius: 4px; background: #dc2626; color: white; border: none;">Delete</button>
                         </div>
                     </div>
                 </div>

@@ -405,12 +405,10 @@ export function requireOwner(
   res: Response,
   next: NextFunction
 ): void {
+  // Import getNodeConfig dynamically to avoid circular dependency
+  const { getNodeConfig } = require('./setup.js');
+  const nodeConfig = getNodeConfig();
   const config = (req.app.locals.config as Config | undefined);
-  
-  if (!config) {
-    res.status(500).json({ error: 'Configuration not available' });
-    return;
-  }
   
   if (!req.user) {
     res.status(401).json({ error: 'Authentication required' });
@@ -418,7 +416,9 @@ export function requireOwner(
   }
   
   const userWallet = req.user.wallet_address.toLowerCase();
-  const ownerWallet = config.owner?.wallet_address?.toLowerCase();
+  
+  // Check dynamic node config first (ownerWallet), then static config
+  const ownerWallet = nodeConfig.ownerWallet?.toLowerCase() || config?.owner?.wallet_address?.toLowerCase();
   
   if (!ownerWallet || userWallet !== ownerWallet) {
     logger.warn('[Auth] Non-owner attempted restricted action', {

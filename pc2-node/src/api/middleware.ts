@@ -10,6 +10,7 @@ import { Config } from '../config/loader.js';
 import { verifyOwner } from '../auth/owner.js';
 import { logger } from '../utils/logger.js';
 import { createHash } from 'crypto';
+import { getNodeConfig } from './setup.js';
 
 export interface AuthenticatedRequest extends Request {
   user?: {
@@ -405,8 +406,6 @@ export function requireOwner(
   res: Response,
   next: NextFunction
 ): void {
-  // Import getNodeConfig dynamically to avoid circular dependency
-  const { getNodeConfig } = require('./setup.js');
   const nodeConfig = getNodeConfig();
   const config = (req.app.locals.config as Config | undefined);
   

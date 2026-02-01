@@ -116,13 +116,32 @@ install_pc2() {
         cd "$PC2_DIR"
     fi
     
-    # Install dependencies and build
+    # Create particle-auth .env if it doesn't exist (required for build)
+    PARTICLE_ENV="$PC2_DIR/packages/particle-auth/.env"
+    if [[ ! -f "$PARTICLE_ENV" ]]; then
+        echo -e "${CYAN}Setting up Particle Network configuration...${NC}"
+        mkdir -p "$PC2_DIR/packages/particle-auth"
+        cat > "$PARTICLE_ENV" << 'PARTICLE_EOF'
+VITE_PARTICLE_PROJECT_ID=01cdbdd6-b07e-45b5-81ca-7036e45dff0d
+VITE_PARTICLE_CLIENT_KEY=cMSSRMUCgciyuStuvPg2FSLKSovXDmrbvknJJnLU
+VITE_PARTICLE_APP_ID=1567a90d-9ff3-459a-bca8-d264685482cb
+VITE_WALLETCONNECT_PROJECT_ID=0d1ac2ba93587a74b54f92189bdc341e
+VITE_PUTER_API_URL=http://localhost:4200
+PARTICLE_EOF
+        echo -e "${GREEN}✓ Particle Network configured${NC}"
+    fi
+    
+    # Install dependencies and build from root
     echo -e "${CYAN}Installing dependencies...${NC}"
+    npm install --legacy-peer-deps --ignore-scripts || true
+    
+    # Also install pc2-node dependencies
     cd pc2-node
-    npm install
+    npm install --legacy-peer-deps --ignore-scripts || true
+    cd ..
     
     echo -e "${CYAN}Building PC2...${NC}"
-    npm run build
+    npm run build:pc2
     
     echo -e "${GREEN}✓ PC2 installed${NC}"
 }

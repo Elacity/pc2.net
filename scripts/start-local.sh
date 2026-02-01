@@ -190,6 +190,20 @@ main() {
     echo -e "${CYAN}Installing all dependencies (this takes a few minutes)...${NC}"
     ROOT_DIR="$(dirname "$PC2_DIR")"
     cd "$ROOT_DIR"
+    
+    # Create particle-auth .env if it doesn't exist (required for build)
+    PARTICLE_ENV="$ROOT_DIR/packages/particle-auth/.env"
+    if [[ ! -f "$PARTICLE_ENV" ]]; then
+        echo -e "${CYAN}Setting up Particle Network configuration...${NC}"
+        cat > "$PARTICLE_ENV" << 'PARTICLE_EOF'
+VITE_PARTICLE_PROJECT_ID=01cdbdd6-b07e-45b5-81ca-7036e45dff0d
+VITE_PARTICLE_CLIENT_KEY=cMSSRMUCgciyuStuvPg2FSLKSovXDmrbvknJJnLU
+VITE_PARTICLE_APP_ID=1567a90d-9ff3-459a-bca8-d264685482cb
+VITE_WALLETCONNECT_PROJECT_ID=0d1ac2ba93587a74b54f92189bdc341e
+VITE_PUTER_API_URL=http://localhost:4200
+PARTICLE_EOF
+        echo -e "${GREEN}✓ Particle Network configured${NC}"
+    fi
     # Use --ignore-scripts to skip husky prepare hook, --legacy-peer-deps for conflicts
     if ! npm install --legacy-peer-deps --ignore-scripts 2>&1; then
         echo -e "${YELLOW}⚠ Root install had issues, trying individual installs...${NC}"

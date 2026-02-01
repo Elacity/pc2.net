@@ -36,13 +36,14 @@
       "parameters": "4B",
       "size": "2.5GB",
       "sizeBytes": 2684354560,
-      "description": "Community recommended sweet spot - excellent balance of speed and quality",
+      "description": "Community pick - supports file/wallet tools, excellent balance",
       "categories": ["recommended", "medium"],
       "recommended": true,
       "communityPick": true,
-      "capabilities": ["chat", "instruction-following"],
+      "supportsTools": true,
+      "capabilities": ["chat", "instruction-following", "tools"],
       "minVRAM": "4GB",
-      "tags": ["fast", "efficient", "general-purpose"]
+      "tags": ["fast", "efficient", "general-purpose", "function-calling"]
     },
     {
       "id": "gemma3:1b",
@@ -52,11 +53,12 @@
       "parameters": "1B",
       "size": "0.8GB",
       "sizeBytes": 858993459,
-      "description": "Ultra-fast lightweight model, works on any hardware",
+      "description": "Supports file/wallet tools - ultra-fast lightweight",
       "categories": ["small"],
-      "capabilities": ["chat"],
+      "supportsTools": true,
+      "capabilities": ["chat", "tools"],
       "minVRAM": "2GB",
-      "tags": ["ultra-fast", "lightweight"]
+      "tags": ["ultra-fast", "lightweight", "function-calling"]
     },
     {
       "id": "gemma3:12b",
@@ -66,11 +68,12 @@
       "parameters": "12B",
       "size": "7.3GB",
       "sizeBytes": 7838318592,
-      "description": "High quality responses, needs more VRAM",
+      "description": "Supports file/wallet tools - high quality model",
       "categories": ["large"],
-      "capabilities": ["chat", "instruction-following", "reasoning"],
+      "supportsTools": true,
+      "capabilities": ["chat", "instruction-following", "reasoning", "tools"],
       "minVRAM": "12GB",
-      "tags": ["high-quality", "reasoning"]
+      "tags": ["high-quality", "reasoning", "function-calling"]
     },
     {
       "id": "qwen3:4b",
@@ -80,12 +83,13 @@
       "parameters": "4B",
       "size": "2.6GB",
       "sizeBytes": 2791728742,
-      "description": "Excellent multilingual support, great for international users",
+      "description": "Supports file/wallet tools, excellent multilingual",
       "categories": ["recommended", "medium"],
       "recommended": true,
-      "capabilities": ["chat", "multilingual"],
+      "supportsTools": true,
+      "capabilities": ["chat", "multilingual", "tools"],
       "minVRAM": "4GB",
-      "tags": ["multilingual", "fast"]
+      "tags": ["multilingual", "fast", "function-calling"]
     },
     {
       "id": "qwen3:8b",
@@ -95,11 +99,12 @@
       "parameters": "8B",
       "size": "5.2GB",
       "sizeBytes": 5583457484,
-      "description": "Balanced model with strong reasoning capabilities",
+      "description": "Supports file/wallet tools - strong reasoning",
       "categories": ["medium"],
-      "capabilities": ["chat", "multilingual", "reasoning"],
+      "supportsTools": true,
+      "capabilities": ["chat", "multilingual", "reasoning", "tools"],
       "minVRAM": "8GB",
-      "tags": ["balanced", "multilingual"]
+      "tags": ["balanced", "multilingual", "function-calling"]
     },
     {
       "id": "qwen2.5-coder:7b",
@@ -109,11 +114,12 @@
       "parameters": "7B",
       "size": "4.7GB",
       "sizeBytes": 5046586573,
-      "description": "Specialized for code generation and programming",
+      "description": "Supports file/wallet tools - specialized for code",
       "categories": ["coding", "medium"],
-      "capabilities": ["chat", "code-generation"],
+      "supportsTools": true,
+      "capabilities": ["chat", "code-generation", "tools"],
       "minVRAM": "8GB",
-      "tags": ["coding", "programming"]
+      "tags": ["coding", "programming", "function-calling"]
     },
     {
       "id": "llama3.2:3b",
@@ -123,12 +129,13 @@
       "parameters": "3B",
       "size": "2.0GB",
       "sizeBytes": 2147483648,
-      "description": "Meta's latest small model, excellent efficiency",
+      "description": "Supports file/wallet tools, Meta's efficient model",
       "categories": ["recommended", "small"],
       "recommended": true,
-      "capabilities": ["chat", "instruction-following"],
+      "supportsTools": true,
+      "capabilities": ["chat", "instruction-following", "tools"],
       "minVRAM": "4GB",
-      "tags": ["efficient", "meta"]
+      "tags": ["efficient", "meta", "function-calling"]
     },
     {
       "id": "llama3.2:1b",
@@ -138,11 +145,12 @@
       "parameters": "1B",
       "size": "1.3GB",
       "sizeBytes": 1395864371,
-      "description": "Smallest Llama model, very fast",
+      "description": "Supports file/wallet tools - smallest Llama, very fast",
       "categories": ["small"],
-      "capabilities": ["chat"],
+      "supportsTools": true,
+      "capabilities": ["chat", "tools"],
       "minVRAM": "2GB",
-      "tags": ["ultra-fast", "meta"]
+      "tags": ["ultra-fast", "meta", "function-calling"]
     },
     {
       "id": "llama3.1:8b",
@@ -152,11 +160,12 @@
       "parameters": "8B",
       "size": "4.7GB",
       "sizeBytes": 5046586573,
-      "description": "Very capable general-purpose model",
+      "description": "Supports file/wallet tools - versatile general-purpose",
       "categories": ["medium"],
-      "capabilities": ["chat", "instruction-following", "reasoning"],
+      "supportsTools": true,
+      "capabilities": ["chat", "instruction-following", "reasoning", "tools"],
       "minVRAM": "8GB",
-      "tags": ["versatile", "meta"]
+      "tags": ["versatile", "meta", "function-calling"]
     },
     {
       "id": "deepseek-r1:1.5b",
@@ -166,12 +175,13 @@
       "parameters": "1.5B",
       "size": "1.1GB",
       "sizeBytes": 1181116006,
-      "description": "Reasoning-focused small model (PC2 default)",
+      "description": "Reasoning only - no file/wallet tools support",
       "categories": ["small"],
       "default": true,
+      "supportsTools": false,
       "capabilities": ["chat", "reasoning"],
       "minVRAM": "2GB",
-      "tags": ["reasoning", "default"]
+      "tags": ["reasoning", "default", "no-tools"]
     },
     {
       "id": "deepseek-r1:7b",
@@ -181,11 +191,12 @@
       "parameters": "7B",
       "size": "4.7GB",
       "sizeBytes": 5046586573,
-      "description": "Strong reasoning capabilities",
+      "description": "Reasoning only - no file/wallet tools support",
       "categories": ["medium"],
+      "supportsTools": false,
       "capabilities": ["chat", "reasoning"],
       "minVRAM": "8GB",
-      "tags": ["reasoning"]
+      "tags": ["reasoning", "no-tools"]
     },
     {
       "id": "deepseek-r1:8b",
@@ -195,11 +206,12 @@
       "parameters": "8B",
       "size": "4.9GB",
       "sizeBytes": 5261334937,
-      "description": "Enhanced reasoning model",
+      "description": "Reasoning only - no file/wallet tools support",
       "categories": ["medium"],
+      "supportsTools": false,
       "capabilities": ["chat", "reasoning"],
       "minVRAM": "8GB",
-      "tags": ["reasoning"]
+      "tags": ["reasoning", "no-tools"]
     },
     {
       "id": "deepseek-r1:14b",
@@ -209,11 +221,12 @@
       "parameters": "14B",
       "size": "9.0GB",
       "sizeBytes": 9663676416,
-      "description": "Large reasoning model for complex tasks",
+      "description": "Reasoning only - no file/wallet tools support",
       "categories": ["large"],
+      "supportsTools": false,
       "capabilities": ["chat", "reasoning"],
       "minVRAM": "16GB",
-      "tags": ["reasoning", "complex-tasks"]
+      "tags": ["reasoning", "complex-tasks", "no-tools"]
     },
     {
       "id": "mistral:7b",
@@ -223,11 +236,12 @@
       "parameters": "7B",
       "size": "4.1GB",
       "sizeBytes": 4402341478,
-      "description": "Fast, efficient general-purpose model",
+      "description": "Supports file/wallet tools, fast general-purpose",
       "categories": ["medium"],
-      "capabilities": ["chat", "instruction-following"],
+      "supportsTools": true,
+      "capabilities": ["chat", "instruction-following", "tools"],
       "minVRAM": "8GB",
-      "tags": ["fast", "general-purpose"]
+      "tags": ["fast", "general-purpose", "function-calling"]
     },
     {
       "id": "phi4:14b",
@@ -237,11 +251,12 @@
       "parameters": "14B",
       "size": "9.1GB",
       "sizeBytes": 9770529792,
-      "description": "Microsoft's latest, excellent for reasoning tasks",
+      "description": "Supports file/wallet tools - Microsoft's powerful model",
       "categories": ["large"],
-      "capabilities": ["chat", "reasoning", "code-generation"],
+      "supportsTools": true,
+      "capabilities": ["chat", "reasoning", "code-generation", "tools"],
       "minVRAM": "16GB",
-      "tags": ["reasoning", "microsoft"]
+      "tags": ["reasoning", "microsoft", "function-calling"]
     },
     {
       "id": "phi3:3.8b",
@@ -251,11 +266,12 @@
       "parameters": "3.8B",
       "size": "2.2GB",
       "sizeBytes": 2362232012,
-      "description": "Compact but capable Microsoft model",
+      "description": "Supports file/wallet tools - compact Microsoft model",
       "categories": ["small", "recommended"],
-      "capabilities": ["chat", "reasoning"],
+      "supportsTools": true,
+      "capabilities": ["chat", "reasoning", "tools"],
       "minVRAM": "4GB",
-      "tags": ["efficient", "microsoft"]
+      "tags": ["efficient", "microsoft", "function-calling"]
     },
     {
       "id": "codellama:7b",
@@ -265,11 +281,12 @@
       "parameters": "7B",
       "size": "3.8GB",
       "sizeBytes": 4080218931,
-      "description": "Specialized for code generation",
+      "description": "Supports file/wallet tools - specialized for code",
       "categories": ["coding", "medium"],
-      "capabilities": ["code-generation", "chat"],
+      "supportsTools": true,
+      "capabilities": ["code-generation", "chat", "tools"],
       "minVRAM": "8GB",
-      "tags": ["coding", "meta"]
+      "tags": ["coding", "meta", "function-calling"]
     },
     {
       "id": "llava:7b",
@@ -279,11 +296,12 @@
       "parameters": "7B",
       "size": "4.5GB",
       "sizeBytes": 4831838208,
-      "description": "Vision model - can analyze images",
+      "description": "Vision/image analysis - no file/wallet tools",
       "categories": ["vision", "medium"],
+      "supportsTools": false,
       "capabilities": ["chat", "vision"],
       "minVRAM": "8GB",
-      "tags": ["vision", "multimodal"]
+      "tags": ["vision", "multimodal", "no-tools"]
     },
     {
       "id": "llava:13b",
@@ -293,11 +311,12 @@
       "parameters": "13B",
       "size": "8.0GB",
       "sizeBytes": 8589934592,
-      "description": "Larger vision model with better accuracy",
+      "description": "Vision/image analysis - no file/wallet tools",
       "categories": ["vision", "large"],
+      "supportsTools": false,
       "capabilities": ["chat", "vision"],
       "minVRAM": "16GB",
-      "tags": ["vision", "multimodal", "high-quality"]
+      "tags": ["vision", "multimodal", "high-quality", "no-tools"]
     },
     {
       "id": "llama3.2-claude3.7:latest",
@@ -307,12 +326,13 @@
       "parameters": "8B",
       "size": "4.9GB",
       "sizeBytes": 5261334937,
-      "description": "Community hybrid model - Llama with Claude-style fine-tuning",
+      "description": "Supports file/wallet tools - community hybrid model",
       "categories": ["recommended", "medium"],
       "communityPick": true,
-      "capabilities": ["chat", "instruction-following"],
+      "supportsTools": true,
+      "capabilities": ["chat", "instruction-following", "tools"],
       "minVRAM": "8GB",
-      "tags": ["community", "hybrid"]
+      "tags": ["community", "hybrid", "function-calling"]
     },
     {
       "id": "llama3.2:3b-instruct-q4_K_M",
@@ -322,12 +342,13 @@
       "parameters": "3B",
       "size": "2.0GB",
       "sizeBytes": 2147483648,
-      "description": "Quantized instruction-tuned model, efficient for chat",
+      "description": "Supports file/wallet tools - efficient quantized model",
       "categories": ["recommended", "small"],
       "communityPick": true,
-      "capabilities": ["chat", "instruction-following"],
+      "supportsTools": true,
+      "capabilities": ["chat", "instruction-following", "tools"],
       "minVRAM": "4GB",
-      "tags": ["quantized", "efficient", "community"]
+      "tags": ["quantized", "efficient", "community", "function-calling"]
     },
     {
       "id": "qwen3-4b-q4_k_m:latest",
@@ -337,12 +358,13 @@
       "parameters": "4B",
       "size": "2.5GB",
       "sizeBytes": 2684354560,
-      "description": "Quantized Qwen model, great balance of speed and quality",
+      "description": "Supports file/wallet tools - efficient quantized model",
       "categories": ["recommended", "medium"],
       "communityPick": true,
-      "capabilities": ["chat", "multilingual"],
+      "supportsTools": true,
+      "capabilities": ["chat", "multilingual", "tools"],
       "minVRAM": "4GB",
-      "tags": ["quantized", "multilingual", "community"]
+      "tags": ["quantized", "multilingual", "community", "function-calling"]
     }
   ]
 }

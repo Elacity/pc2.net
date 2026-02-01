@@ -9,8 +9,53 @@ import { Router, Response } from 'express';
 import { authenticate, AuthenticatedRequest } from './middleware.js';
 import { logger } from '../utils/logger.js';
 import { AIChatService } from '../services/ai/AIChatService.js';
+import { readFileSync, existsSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 
 const router = Router();
+
+// Load models catalog
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const catalogPath = join(__dirname, '../../config/models-catalog.json');
+
+interface ModelCatalogEntry {
+  id: string;
+  name: string;
+  family: string;
+  provider: string;
+  parameters: string;
+  size: string;
+  sizeBytes: number;
+  description: string;
+  categories: string[];
+  recommended?: boolean;
+  communityPick?: boolean;
+  default?: boolean;
+  capabilities: string[];
+  minVRAM: string;
+  tags: string[];
+}
+
+interface ModelsCatalog {
+  version: string;
+  lastUpdated: string;
+  categories: Record<string, { title: string; description: string }>;
+  models: ModelCatalogEntry[];
+}
+
+function loadModelsCatalog(): ModelsCatalog | null {
+  try {
+    if (existsSync(catalogPath)) {
+      const data = readFileSync(catalogPath, 'utf-8');
+      return JSON.parse(data);
+    }
+  } catch (error) {
+    logger.error('[AI API] Failed to load models catalog:', error);
+  }
+  return null;
+}
 
 /**
  * GET /api/ai/config
@@ -975,6 +1020,343 @@ router.post('/install-ollama', authenticate, async (req: AuthenticatedRequest, r
   } catch (error: any) {
     logger.error('[AI API] Error in Ollama installation:', error);
     res.status(500).json({ success: false, error: error.message || 'Installation failed' });
+  }
+});
+
+// ============================================================================
+// MODEL LIBRARY (Browse, Pull, Delete models)
+// ============================================================================
+
+/**
+ * GET /api/ai/model-library
+ * Get curated model library with installed status
+ */
+router.get('/model-library', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const catalog = loadModelsCatalog();
+    
+    if (!catalog) {
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Models catalog not available' 
+      });
+    }
+    
+    // Get installed models from Ollama
+    let installedModels: string[] = [];
+    try {
+      const { exec } = await import('child_process');
+      const { promisify } = await import('util');
+      const execAsync = promisify(exec);
+      
+      const { stdout } = await execAsync('ollama list 2>/dev/null');
+      const lines = stdout.trim().split('\n').slice(1); // Skip header
+      installedModels = lines.map(line => {
+        const parts = line.split(/\s+/);
+        return parts[0]; // Model name with tag
+      }).filter(Boolean);
+    } catch {
+      // Ollama not available or not running
+    }
+    
+    // Merge installed status into catalog
+    const modelsWithStatus = catalog.models.map(model => {
+      // Check if this model is installed (match by base name or full name)
+      const modelBase = model.id.split(':')[0];
+      const isInstalled = installedModels.some(installed => 
+        installed === model.id || 
+        installed.startsWith(modelBase + ':') ||
+        installed === modelBase
+      );
+      
+      return {
+        ...model,
+        installed: isInstalled
+      };
+    });
+    
+    res.json({
+      success: true,
+      result: {
+        version: catalog.version,
+        lastUpdated: catalog.lastUpdated,
+        categories: catalog.categories,
+        models: modelsWithStatus,
+        installedModels
+      }
+    });
+  } catch (error: any) {
+    logger.error('[AI API] Error getting model library:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to get model library' });
+  }
+});
+
+/**
+ * GET /api/ai/installed-models
+ * Get list of currently installed Ollama models with details
+ */
+router.get('/installed-models', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { exec } = await import('child_process');
+    const { promisify } = await import('util');
+    const execAsync = promisify(exec);
+    
+    let models: Array<{ name: string; size: string; modified: string }> = [];
+    
+    try {
+      const { stdout } = await execAsync('ollama list 2>/dev/null');
+      const lines = stdout.trim().split('\n').slice(1); // Skip header
+      
+      models = lines.map(line => {
+        const parts = line.split(/\s+/);
+        return {
+          name: parts[0] || '',
+          size: parts[2] || '',
+          modified: parts[3] || ''
+        };
+      }).filter(m => m.name);
+    } catch {
+      // Ollama not running
+    }
+    
+    // Load catalog to get additional info
+    const catalog = loadModelsCatalog();
+    const modelsWithInfo = models.map(model => {
+      const catalogEntry = catalog?.models.find(m => 
+        m.id === model.name || 
+        m.id.split(':')[0] === model.name.split(':')[0]
+      );
+      
+      return {
+        ...model,
+        description: catalogEntry?.description || '',
+        capabilities: catalogEntry?.capabilities || [],
+        family: catalogEntry?.family || 'unknown'
+      };
+    });
+    
+    res.json({
+      success: true,
+      result: modelsWithInfo
+    });
+  } catch (error: any) {
+    logger.error('[AI API] Error getting installed models:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to get installed models' });
+  }
+});
+
+/**
+ * POST /api/ai/models/pull
+ * Pull/download a model from Ollama with streaming progress
+ */
+router.post('/models/pull', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { model } = req.body;
+    
+    if (!model) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Model name is required' 
+      });
+    }
+    
+    logger.info(`[AI API] Starting model pull: ${model}`);
+    
+    // Get Ollama base URL from user config or default
+    const walletAddress = req.user!.wallet_address;
+    const db = req.app.locals.db;
+    const config = db?.getAIConfig?.(walletAddress);
+    const ollamaBaseUrl = config?.ollama_base_url || 'http://localhost:11434';
+    
+    // Set up SSE for streaming progress
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
+    
+    // Make request to Ollama API
+    try {
+      const response = await fetch(`${ollamaBaseUrl}/api/pull`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, stream: true })
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        res.write(`data: ${JSON.stringify({ error: errorText, status: 'error' })}\n\n`);
+        res.end();
+        return;
+      }
+      
+      // Stream the response
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      
+      if (!reader) {
+        res.write(`data: ${JSON.stringify({ error: 'No response body', status: 'error' })}\n\n`);
+        res.end();
+        return;
+      }
+      
+      let buffer = '';
+      
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) {
+          // Send completion event
+          res.write(`data: ${JSON.stringify({ status: 'success', message: 'Model downloaded successfully' })}\n\n`);
+          break;
+        }
+        
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || ''; // Keep incomplete line in buffer
+        
+        for (const line of lines) {
+          if (line.trim()) {
+            try {
+              const data = JSON.parse(line);
+              // Forward progress to client
+              res.write(`data: ${JSON.stringify(data)}\n\n`);
+            } catch {
+              // Non-JSON line, ignore
+            }
+          }
+        }
+      }
+      
+    } catch (fetchError: any) {
+      logger.error('[AI API] Ollama pull fetch error:', fetchError);
+      res.write(`data: ${JSON.stringify({ 
+        error: fetchError.message || 'Failed to connect to Ollama', 
+        status: 'error' 
+      })}\n\n`);
+    }
+    
+    res.end();
+    
+  } catch (error: any) {
+    logger.error('[AI API] Error pulling model:', error);
+    // For SSE, we need to send error as event
+    try {
+      res.write(`data: ${JSON.stringify({ error: error.message, status: 'error' })}\n\n`);
+      res.end();
+    } catch {
+      // Response might already be sent
+      res.status(500).json({ success: false, error: error.message || 'Failed to pull model' });
+    }
+  }
+});
+
+/**
+ * DELETE /api/ai/models/:modelName
+ * Delete an installed model
+ */
+router.delete('/models/:modelName', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const modelName = decodeURIComponent(req.params.modelName);
+    
+    if (!modelName) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Model name is required' 
+      });
+    }
+    
+    logger.info(`[AI API] Deleting model: ${modelName}`);
+    
+    // Get Ollama base URL from user config or default
+    const walletAddress = req.user!.wallet_address;
+    const db = req.app.locals.db;
+    const config = db?.getAIConfig?.(walletAddress);
+    const ollamaBaseUrl = config?.ollama_base_url || 'http://localhost:11434';
+    
+    // Call Ollama API to delete model
+    const response = await fetch(`${ollamaBaseUrl}/api/delete`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: modelName })
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      return res.status(response.status).json({ 
+        success: false, 
+        error: errorText || 'Failed to delete model' 
+      });
+    }
+    
+    logger.info(`[AI API] Successfully deleted model: ${modelName}`);
+    
+    res.json({
+      success: true,
+      result: {
+        message: `Model ${modelName} deleted successfully`
+      }
+    });
+  } catch (error: any) {
+    logger.error('[AI API] Error deleting model:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to delete model' });
+  }
+});
+
+/**
+ * GET /api/ai/models/:modelName/info
+ * Get information about a specific model
+ */
+router.get('/models/:modelName/info', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const modelName = decodeURIComponent(req.params.modelName);
+    
+    if (!modelName) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Model name is required' 
+      });
+    }
+    
+    // Get info from catalog
+    const catalog = loadModelsCatalog();
+    const catalogEntry = catalog?.models.find(m => 
+      m.id === modelName || 
+      m.id.split(':')[0] === modelName.split(':')[0]
+    );
+    
+    // Get Ollama base URL
+    const walletAddress = req.user!.wallet_address;
+    const db = req.app.locals.db;
+    const config = db?.getAIConfig?.(walletAddress);
+    const ollamaBaseUrl = config?.ollama_base_url || 'http://localhost:11434';
+    
+    // Try to get live info from Ollama
+    let ollamaInfo: any = null;
+    try {
+      const response = await fetch(`${ollamaBaseUrl}/api/show`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: modelName })
+      });
+      
+      if (response.ok) {
+        ollamaInfo = await response.json();
+      }
+    } catch {
+      // Model might not be installed
+    }
+    
+    res.json({
+      success: true,
+      result: {
+        catalog: catalogEntry || null,
+        ollama: ollamaInfo,
+        installed: !!ollamaInfo
+      }
+    });
+  } catch (error: any) {
+    logger.error('[AI API] Error getting model info:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to get model info' });
   }
 });
 

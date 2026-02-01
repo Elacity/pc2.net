@@ -43,7 +43,70 @@ export default {
                 </div>
             </div>
             
-            <!-- Local AI Setup -->
+            <!-- Model Library Section -->
+            <div class="ai-section">
+                <div class="ai-section-title" style="display: flex; justify-content: space-between; align-items: center;">
+                    <span>Model Library</span>
+                    <button class="button ai-btn" id="ai-refresh-models-btn" style="font-size: 10px; padding: 2px 8px;">↻ Refresh</button>
+                </div>
+                
+                <!-- Installed Models -->
+                <div class="ai-group" id="ai-installed-models-section">
+                    <div class="ai-group-row" style="background: #f0fdf4;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span class="ai-card-label" style="color: #166534;">Installed Models</span>
+                            <span id="ai-installed-count" style="font-size: 10px; color: #15803d;">Loading...</span>
+                        </div>
+                    </div>
+                    <div id="ai-installed-models-list" style="max-height: 150px; overflow-y: auto;">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+                
+                <!-- Download New Model -->
+                <div class="ai-group" style="margin-top: 8px;">
+                    <div class="ai-group-row" style="background: #eff6ff;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span class="ai-card-label" style="color: #1e40af;">Download New Model</span>
+                            <select id="ai-model-category-filter" class="ai-select" style="font-size: 10px; padding: 2px 6px;">
+                                <option value="all">All Models</option>
+                                <option value="recommended">⭐ Recommended</option>
+                                <option value="small">Lightweight (&lt;2GB)</option>
+                                <option value="medium">Balanced (2-6GB)</option>
+                                <option value="large">Powerful (6GB+)</option>
+                                <option value="coding">Code Generation</option>
+                                <option value="vision">Vision Models</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="ai-available-models-list" style="max-height: 200px; overflow-y: auto;">
+                        <!-- Populated dynamically -->
+                    </div>
+                    
+                    <!-- Custom Model Input -->
+                    <div class="ai-group-row" style="border-top: 1px solid #e5e5e5;">
+                        <div style="display: flex; gap: 6px; align-items: center;">
+                            <input type="text" id="ai-custom-model-input" placeholder="Custom model (e.g. codellama:7b)" style="flex: 1; padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 11px;">
+                            <button class="button ai-btn" id="ai-pull-custom-btn" style="background: #3b82f6; color: white; font-size: 10px;">Pull</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Download Progress -->
+                <div id="ai-download-progress" class="ai-card" style="display: none; background: #f0f9ff; border-left: 3px solid #3b82f6; margin-top: 8px;">
+                    <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+                        <span class="ai-spinner"></span>
+                        <strong id="ai-download-model-name" style="font-size: 12px;">Downloading...</strong>
+                        <button id="ai-cancel-download-btn" class="button ai-btn" style="margin-left: auto; font-size: 9px; padding: 2px 6px; background: #dc2626; color: white;">Cancel</button>
+                    </div>
+                    <div style="background: #e5e7eb; border-radius: 4px; height: 8px; overflow: hidden;">
+                        <div id="ai-download-progress-bar" style="background: #3b82f6; height: 100%; width: 0%; transition: width 0.3s;"></div>
+                    </div>
+                    <p id="ai-download-status" style="font-size: 10px; color: #666; margin: 4px 0 0;"></p>
+                </div>
+            </div>
+            
+            <!-- Local AI Setup (Legacy - hidden, kept for compatibility) -->
             <div id="ai-local-setup-section" class="ai-card" style="display: none; background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%); border: 1px solid #86efac;">
                 <div style="margin-bottom: 8px;"><strong style="color: #166534; font-size: 12px;">Setup Local AI</strong><span style="font-size: 10px; color: #15803d; margin-left: 8px;">No cloud, no API keys</span></div>
                 <div style="display: flex; align-items: center; gap: 6px;">
@@ -826,6 +889,367 @@ export default {
         $el_window.find('#ai-setup-local-btn').off('click').on('click', () => {
             setupLocalAI();
         });
+
+        // ============================================================
+        // MODEL LIBRARY HANDLERS
+        // ============================================================
+        
+        let modelLibraryCache = null;
+        let currentDownloadController = null;
+        
+        // Load model library
+        async function loadModelLibrary() {
+            try {
+                const apiOrigin = getAPIOrigin();
+                const url = new URL('/api/ai/model-library', apiOrigin);
+                const authToken = getAuthToken();
+                
+                const headers = { 'Content-Type': 'application/json' };
+                if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+                
+                const response = await fetch(url.toString(), { method: 'GET', headers });
+                
+                if (!response.ok) {
+                    throw new Error(`Failed to load model library: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                if (!data.success) {
+                    throw new Error(data.error || 'Failed to load model library');
+                }
+                
+                modelLibraryCache = data.result;
+                renderInstalledModels(data.result.installedModels, data.result.models);
+                renderAvailableModels(data.result.models, 'all');
+                
+            } catch (error) {
+                console.error('[AI Settings] Error loading model library:', error);
+                $el_window.find('#ai-installed-count').text('Error loading');
+                $el_window.find('#ai-installed-models-list').html(
+                    '<div class="ai-group-row" style="color: #666; font-size: 11px;">Unable to load models. Is Ollama running?</div>'
+                );
+            }
+        }
+        
+        // Render installed models
+        function renderInstalledModels(installedModels, catalogModels) {
+            const $list = $el_window.find('#ai-installed-models-list');
+            $el_window.find('#ai-installed-count').text(`${installedModels.length} installed`);
+            
+            if (installedModels.length === 0) {
+                $list.html('<div class="ai-group-row" style="color: #666; font-size: 11px; text-align: center;">No models installed yet. Download one below!</div>');
+                return;
+            }
+            
+            const html = installedModels.map(modelName => {
+                const catalogEntry = catalogModels.find(m => 
+                    m.id === modelName || 
+                    m.id.split(':')[0] === modelName.split(':')[0]
+                );
+                
+                const displayName = catalogEntry?.name || modelName;
+                const description = catalogEntry?.description || '';
+                const isDefault = catalogEntry?.default || false;
+                const isRecommended = catalogEntry?.recommended || catalogEntry?.communityPick || false;
+                
+                return `
+                    <div class="ai-group-row installed-model-row" data-model="${modelName}" style="padding: 8px 12px;">
+                        <div class="ai-card-row">
+                            <div style="flex: 1;">
+                                <div style="display: flex; align-items: center; gap: 6px;">
+                                    <span style="font-size: 12px; font-weight: 500;">${displayName}</span>
+                                    ${isDefault ? '<span style="font-size: 8px; padding: 1px 4px; background: #10b981; color: white; border-radius: 2px;">Default</span>' : ''}
+                                    ${isRecommended ? '<span style="font-size: 8px; padding: 1px 4px; background: #f59e0b; color: white; border-radius: 2px;">⭐ Recommended</span>' : ''}
+                                </div>
+                                ${description ? `<div style="font-size: 10px; color: #666; margin-top: 2px;">${description}</div>` : ''}
+                            </div>
+                            <div style="display: flex; gap: 4px;">
+                                <button class="button ai-btn set-default-btn" data-model="${modelName}" style="font-size: 9px; padding: 2px 6px;">Set Default</button>
+                                <button class="button ai-btn delete-model-btn" data-model="${modelName}" style="font-size: 9px; padding: 2px 6px; background: #dc2626; color: white;">×</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            $list.html(html);
+            
+            // Bind handlers
+            $list.find('.set-default-btn').off('click').on('click', async function() {
+                const model = $(this).data('model');
+                await setDefaultModel(model);
+            });
+            
+            $list.find('.delete-model-btn').off('click').on('click', async function() {
+                const model = $(this).data('model');
+                if (confirm(`Delete model "${model}"? This cannot be undone.`)) {
+                    await deleteModel(model);
+                }
+            });
+        }
+        
+        // Render available models
+        function renderAvailableModels(models, category) {
+            const $list = $el_window.find('#ai-available-models-list');
+            
+            // Filter by category
+            let filtered = models;
+            if (category && category !== 'all') {
+                filtered = models.filter(m => m.categories && m.categories.includes(category));
+            }
+            
+            // Sort: recommended first, then by name
+            filtered.sort((a, b) => {
+                if (a.recommended && !b.recommended) return -1;
+                if (!a.recommended && b.recommended) return 1;
+                if (a.communityPick && !b.communityPick) return -1;
+                if (!a.communityPick && b.communityPick) return 1;
+                return a.name.localeCompare(b.name);
+            });
+            
+            if (filtered.length === 0) {
+                $list.html('<div class="ai-group-row" style="color: #666; font-size: 11px; text-align: center;">No models in this category</div>');
+                return;
+            }
+            
+            const html = filtered.map(model => {
+                const badges = [];
+                if (model.communityPick) badges.push('<span style="font-size: 8px; padding: 1px 4px; background: #f59e0b; color: white; border-radius: 2px;">⭐ Community Pick</span>');
+                if (model.recommended && !model.communityPick) badges.push('<span style="font-size: 8px; padding: 1px 4px; background: #10b981; color: white; border-radius: 2px;">Recommended</span>');
+                
+                const isInstalled = model.installed;
+                const actionBtn = isInstalled 
+                    ? '<span style="font-size: 10px; color: #10b981;">✓ Installed</span>'
+                    : `<button class="button ai-btn download-model-btn" data-model="${model.id}" data-name="${model.name}" style="font-size: 9px; padding: 2px 8px; background: #3b82f6; color: white;">Download</button>`;
+                
+                return `
+                    <div class="ai-group-row available-model-row" data-model="${model.id}" style="padding: 8px 12px;">
+                        <div class="ai-card-row">
+                            <div style="flex: 1;">
+                                <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                                    <span style="font-size: 12px; font-weight: 500;">${model.name}</span>
+                                    <span style="font-size: 9px; color: #666; background: #f3f4f6; padding: 1px 4px; border-radius: 2px;">${model.parameters}</span>
+                                    <span style="font-size: 9px; color: #666;">${model.size}</span>
+                                    ${badges.join('')}
+                                </div>
+                                <div style="font-size: 10px; color: #666; margin-top: 2px;">${model.description}</div>
+                                <div style="font-size: 9px; color: #999; margin-top: 2px;">
+                                    ${model.provider} • Min VRAM: ${model.minVRAM}
+                                </div>
+                            </div>
+                            <div style="display: flex; align-items: center;">
+                                ${actionBtn}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            $list.html(html);
+            
+            // Bind download handlers
+            $list.find('.download-model-btn').off('click').on('click', async function() {
+                const model = $(this).data('model');
+                const name = $(this).data('name');
+                await downloadModel(model, name);
+            });
+        }
+        
+        // Download a model with progress
+        async function downloadModel(modelId, modelName) {
+            const $progress = $el_window.find('#ai-download-progress');
+            const $progressBar = $el_window.find('#ai-download-progress-bar');
+            const $modelName = $el_window.find('#ai-download-model-name');
+            const $status = $el_window.find('#ai-download-status');
+            
+            $progress.show();
+            $modelName.text(`Downloading ${modelName || modelId}...`);
+            $progressBar.css('width', '0%');
+            $status.text('Starting download...');
+            
+            try {
+                const apiOrigin = getAPIOrigin();
+                const url = new URL('/api/ai/models/pull', apiOrigin);
+                const authToken = getAuthToken();
+                
+                const headers = { 'Content-Type': 'application/json' };
+                if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+                
+                // Use EventSource for SSE
+                const response = await fetch(url.toString(), {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify({ model: modelId })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                
+                while (true) {
+                    const { done, value } = await reader.read();
+                    
+                    if (done) break;
+                    
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
+                    
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.slice(6));
+                                
+                                if (data.error) {
+                                    throw new Error(data.error);
+                                }
+                                
+                                if (data.status === 'success') {
+                                    $progressBar.css('width', '100%');
+                                    $status.text('Download complete!');
+                                    setTimeout(() => {
+                                        $progress.hide();
+                                        loadModelLibrary(); // Refresh
+                                    }, 1500);
+                                    return;
+                                }
+                                
+                                // Update progress
+                                if (data.total && data.completed) {
+                                    const percent = Math.round((data.completed / data.total) * 100);
+                                    $progressBar.css('width', `${percent}%`);
+                                    const completedMB = (data.completed / 1024 / 1024).toFixed(1);
+                                    const totalMB = (data.total / 1024 / 1024).toFixed(1);
+                                    $status.text(`${completedMB}MB / ${totalMB}MB (${percent}%)`);
+                                } else if (data.status) {
+                                    $status.text(data.status);
+                                }
+                                
+                            } catch (parseError) {
+                                // Ignore parse errors for incomplete data
+                            }
+                        }
+                    }
+                }
+                
+                // If we get here without success, assume completion
+                $progressBar.css('width', '100%');
+                $status.text('Download complete!');
+                setTimeout(() => {
+                    $progress.hide();
+                    loadModelLibrary();
+                }, 1500);
+                
+            } catch (error) {
+                console.error('[AI Settings] Download error:', error);
+                $status.text(`Error: ${error.message}`);
+                $progressBar.css('width', '0%').css('background', '#dc2626');
+                setTimeout(() => {
+                    $progress.hide();
+                    $progressBar.css('background', '#3b82f6');
+                }, 3000);
+            }
+        }
+        
+        // Delete a model
+        async function deleteModel(modelName) {
+            try {
+                const apiOrigin = getAPIOrigin();
+                const url = new URL(`/api/ai/models/${encodeURIComponent(modelName)}`, apiOrigin);
+                const authToken = getAuthToken();
+                
+                const headers = { 'Content-Type': 'application/json' };
+                if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+                
+                const response = await fetch(url.toString(), {
+                    method: 'DELETE',
+                    headers
+                });
+                
+                const data = await response.json();
+                
+                if (!data.success) {
+                    throw new Error(data.error || 'Failed to delete model');
+                }
+                
+                // Refresh model list
+                await loadModelLibrary();
+                
+            } catch (error) {
+                console.error('[AI Settings] Error deleting model:', error);
+                alert('Failed to delete model: ' + error.message);
+            }
+        }
+        
+        // Set default model
+        async function setDefaultModel(modelName) {
+            try {
+                const apiOrigin = getAPIOrigin();
+                const url = new URL('/api/ai/config', apiOrigin);
+                const authToken = getAuthToken();
+                
+                const headers = { 'Content-Type': 'application/json' };
+                if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+                
+                const response = await fetch(url.toString(), {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify({ model: modelName, provider: 'ollama' })
+                });
+                
+                const data = await response.json();
+                
+                if (!data.success) {
+                    throw new Error(data.error || 'Failed to set default model');
+                }
+                
+                // Refresh
+                await loadAIConfig();
+                await loadModelLibrary();
+                
+                // Notify AI chat
+                $(document).trigger('ai-config-updated');
+                
+            } catch (error) {
+                console.error('[AI Settings] Error setting default model:', error);
+                alert('Failed to set default model: ' + error.message);
+            }
+        }
+        
+        // Model library event handlers
+        $el_window.find('#ai-refresh-models-btn').off('click').on('click', () => {
+            loadModelLibrary();
+        });
+        
+        $el_window.find('#ai-model-category-filter').off('change').on('change', function() {
+            const category = $(this).val();
+            if (modelLibraryCache) {
+                renderAvailableModels(modelLibraryCache.models, category);
+            }
+        });
+        
+        $el_window.find('#ai-pull-custom-btn').off('click').on('click', async function() {
+            const customModel = $el_window.find('#ai-custom-model-input').val().trim();
+            if (customModel) {
+                await downloadModel(customModel, customModel);
+                $el_window.find('#ai-custom-model-input').val('');
+            }
+        });
+        
+        $el_window.find('#ai-cancel-download-btn').off('click').on('click', function() {
+            if (currentDownloadController) {
+                currentDownloadController.abort();
+                currentDownloadController = null;
+            }
+            $el_window.find('#ai-download-progress').hide();
+        });
+        
+        // Load model library on init
+        loadModelLibrary();
 
         // ============================================================
         // MESSAGING CHANNELS HANDLERS

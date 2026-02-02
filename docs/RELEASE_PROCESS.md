@@ -218,16 +218,16 @@ Once the GitHub Release exists, your VPS will auto-detect it:
 4. **Progress**: Watch the status: Downloading → Installing → Building → Restarting
 5. **Done**: Page auto-refreshes with new version
 
-**What happens during install (v2.6.2+):**
+**What happens during install (v2.6.5+):**
 ```bash
 # The server automatically runs:
-git checkout -- .                    # Reset local changes
-git clean -fd src/particle-auth/     # Clean untracked particle-auth files
-git pull origin main                 # Download latest code
-npm install --legacy-peer-deps       # Install dependencies
-npm run build:gui                    # Rebuild frontend
-npm run build:backend                # Rebuild backend
-systemctl restart pc2-node           # Restart the service
+git checkout -- .                              # Reset local changes
+git clean -fd src/particle-auth/               # Clean untracked particle-auth files
+git pull origin main                           # Download latest code
+npm install --legacy-peer-deps --include=dev   # Install ALL dependencies (including @types)
+npm run build:gui                              # Rebuild frontend
+npm run build:backend                          # Rebuild backend (TypeScript)
+systemctl restart pc2-node                     # Restart the service
 ```
 
 ---
@@ -275,20 +275,25 @@ git commit -m "chore: rebuild particle-auth"
 - Check the release is visible at: https://github.com/Elacity/pc2.net/releases/latest
 - Manual check: `curl -s https://api.github.com/repos/Elacity/pc2.net/releases/latest | jq .tag_name`
 
-#### UI "Install Update" button fails (versions < 2.6.2)
+#### UI "Install Update" button fails (versions < 2.6.5)
 
-> ⚠️ **IMPORTANT**: Versions before 2.6.2 have a broken auto-update service.
+> ⚠️ **IMPORTANT**: Versions before 2.6.5 have a broken auto-update service.
 > Users on these versions need **ONE manual update** to get the fixed UpdateService.
 
 **Symptoms:**
 - Clicking "Install" shows an error or nothing happens
-- Server shows npm install errors in logs
+- Server shows npm install errors or TypeScript build errors in logs
 - Update seems to complete but version doesn't change
+- Service doesn't restart after update
 
-**Root Cause (fixed in v2.6.2):**
-- `npm install` failed without `--legacy-peer-deps`
-- Git pull failed when local files were modified (particle-auth assets)
-- Wrong systemctl service name was used
+**Root Causes (fixed across versions):**
+
+| Version | Issue Fixed |
+|---------|-------------|
+| v2.6.2 | `npm install` failing without `--legacy-peer-deps` |
+| v2.6.2 | Git pull blocked by local particle-auth asset changes |
+| v2.6.2 | Wrong systemctl service name (`pc2` instead of `pc2-node`) |
+| v2.6.5 | TypeScript build failing (missing `@types/*` packages) |
 
 **Manual Update for Stuck Users:**
 
@@ -298,27 +303,34 @@ cd ~/pc2.net
 
 # Reset any local changes
 git checkout -- .
-git clean -fd src/particle-auth/assets/
+git clean -fd src/particle-auth/assets/ 2>/dev/null
 
 # Pull latest code
 git pull origin main
 
-# Install dependencies (MUST use --legacy-peer-deps)
+# Install ALL dependencies (including @types for TypeScript)
 cd pc2-node
-npm install --legacy-peer-deps
+npm install --legacy-peer-deps --include=dev
 
-# Build (skip particle-auth - it's pre-built in repo)
+# Build backend and frontend
 npm run build:backend
 cd ..
 npm run build:gui
 
 # Restart the service
-systemctl restart pc2-node   # Note: service name is pc2-node, not pc2
+sudo systemctl restart pc2-node
+
 # OR if using PM2:
-pm2 restart all
+# pm2 restart all
 ```
 
-After this manual update to v2.6.2+, all future updates via the UI will work.
+**After this manual update to v2.6.5+, all future updates via the UI will work automatically.**
+
+**To find your PC2 installation path (if not in ~/pc2.net):**
+```bash
+find /root /home -name "pc2-node" -type d 2>/dev/null | head -1
+# Then cd to the PARENT of that directory
+```
 
 ---
 

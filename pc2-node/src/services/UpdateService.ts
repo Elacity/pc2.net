@@ -331,25 +331,31 @@ export class UpdateService {
       logger.info('[UpdateService] Update complete, scheduling restart...');
 
       // Return success before restarting
-      setTimeout(() => {
-        try {
-          // Try systemctl first with pc2-node service name (Linux with systemd)
-          execSync('systemctl restart pc2-node', { stdio: 'ignore' });
-        } catch {
+      setTimeout(async () => {
+        logger.info('[UpdateService] Attempting restart...');
+        
+        // Try multiple restart methods in order
+        const restartCommands = [
+          { cmd: 'systemctl restart pc2-node', name: 'systemctl pc2-node' },
+          { cmd: 'systemctl restart pc2', name: 'systemctl pc2' },
+          { cmd: 'pm2 restart all', name: 'pm2' },
+        ];
+
+        for (const { cmd, name } of restartCommands) {
           try {
-            // Try pc2 service name as fallback
-            execSync('systemctl restart pc2', { stdio: 'ignore' });
-          } catch {
-            try {
-              // Try pm2 as fallback
-              execSync('pm2 restart all', { stdio: 'ignore' });
-            } catch {
-              // Fallback: exit and let process manager restart
-              logger.info('[UpdateService] Exiting for restart...');
-              process.exit(0);
-            }
+            logger.info(`[UpdateService] Trying ${name}...`);
+            execSync(cmd, { timeout: 30000 }); // 30 second timeout
+            logger.info(`[UpdateService] Restart successful via ${name}`);
+            return; // Success, don't try other methods
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            logger.warn(`[UpdateService] ${name} failed: ${errorMessage}`);
           }
         }
+
+        // If all restart methods failed, exit and let process manager restart
+        logger.info('[UpdateService] All restart methods failed, exiting for external restart...');
+        process.exit(0);
       }, 1000);
 
       return { success: true, message: 'Update complete, server is restarting...' };

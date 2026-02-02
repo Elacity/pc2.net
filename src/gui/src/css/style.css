@@ -10885,7 +10885,6 @@ fieldset[name=number-code] {
 }
 
 /* Channel badges (telegram tags) */
-.agent-channels span,
 .channel-badge {
     display: inline-flex;
     align-items: center;
@@ -10898,7 +10897,28 @@ fieldset[name=number-code] {
     color: #d0d0d0;
 }
 
-[data-theme="light"] .agent-channels span,
+/* Inner span for channel name - should NOT have its own background */
+.channel-badge > span {
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+}
+
+/* Ensure SVGs and images inside channel badge don't have white backgrounds */
+.channel-badge svg,
+.channel-badge img {
+    background: transparent !important;
+    border-radius: 2px;
+    flex-shrink: 0;
+}
+
+.channel-badge img {
+    width: 12px;
+    height: 12px;
+    object-fit: contain;
+}
+
 [data-theme="light"] .channel-badge {
     background: #f3f4f6;
     color: #374151;

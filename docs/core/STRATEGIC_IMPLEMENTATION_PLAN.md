@@ -184,6 +184,72 @@ npm run dev          # Development with hot reload
 
 ## 📊 Current State Assessment
 
+### 🎯 Recent Progress (2026-02-01) - SYSTEM MANAGEMENT & RESTART FEATURE
+
+**Server Restart & Update System Enhancements - ✅ COMPLETE**
+
+Branch: `feature/active-proxy-cryptobox`
+
+**Features Implemented:**
+
+1. **UI Restart Feature**
+   - Added "Restart PC2" option to user dropdown menu
+   - Confirmation dialog before restart
+   - Auto-detects environment (pm2, systemctl, or dev mode)
+   - Shows appropriate messaging based on deployment type
+
+2. **Smart Environment Detection**
+   - `GET /api/system/restart-mode` - Checks for process manager
+   - `POST /api/system/restart` - Triggers graceful restart
+   - Detects systemctl (VPS), pm2 (local install), or dev mode
+   - Shows "Restart PC2" vs "Shut Down PC2" based on auto-restart capability
+
+3. **Local Install PM2 Integration**
+   - `start-local.sh` updated to use PM2 process manager
+   - Enables auto-restart from UI for local installs
+   - Shows helpful PM2 commands in success banner
+   - Server keeps running after terminal closes
+
+4. **Shutdown UX for Dev Mode**
+   - When no process manager detected, shows "Shut Down" instead of "Restart"
+   - Provides copy-to-clipboard command with exact path
+   - Terminal-style code block with copy button
+   - Command is customized to user's PC2 installation path
+
+**Files Modified:**
+- `pc2-node/src/api/system.ts` - New restart-mode and restart endpoints
+- `src/gui/src/UI/UIUpdateModal.js` - Restart confirmation dialog
+- `src/gui/src/UI/UIDesktop.js` - Dropdown menu items
+- `scripts/start-local.sh` - PM2 integration
+
+**Documentation Updated:**
+- `docs/QUICKSTART.md` - PM2 commands, restart from UI
+- `docs/deployment/VPS_GUIDE.md` - Restart commands section
+
+---
+
+### 🚨 TESTING REQUIRED: Branch Merge to Main
+
+**Before merging `feature/active-proxy-cryptobox` to `main`, test these install scripts:**
+
+| Script | Command | What to Test |
+|--------|---------|--------------|
+| Local Install | `curl -fsSL https://raw.githubusercontent.com/Elacity/pc2.net/main/scripts/start-local.sh \| bash` | PM2 installs, server starts via PM2, restart from UI works |
+| VPS Docker | `curl -sSL https://raw.githubusercontent.com/Elacity/pc2.net/main/scripts/install-pc2.sh \| bash` | Docker pulls, containers start, restart from UI works |
+| ARM Devices | `curl -sSL https://raw.githubusercontent.com/Elacity/pc2.net/main/scripts/install-arm.sh \| bash` | systemd service created, restart from UI works |
+
+**Test Procedure:**
+1. Fresh install (delete any existing `~/pc2.net` folder)
+2. Run install script
+3. Access UI and login
+4. Test restart from dropdown menu
+5. Verify server comes back automatically
+6. Test update check (if update available)
+
+**Note:** Install scripts pull from `main` branch, so test with a local modified script or after merge.
+
+---
+
 ### 🎯 Recent Progress (2026-01-27) - CLAWDBOT INTEGRATION MERGED TO MAIN
 
 **Full AI Agent System - ✅ COMPLETE & MERGED**
@@ -241,7 +307,8 @@ The `feature/clawdbot-integration` branch has been merged to `main`. PC2 now has
 - `/api/gateway/*` - Channels, agents CRUD (9 endpoints)
 - `/api/ai/*` - Chat, config, API keys (6 endpoints)
 - `/api/boson/*` - Identity, username, connectivity (12 endpoints)
-- `/api/update/*` - Version, install, progress (5 endpoints)
+- `/api/update/*` - Version, install, progress (6 endpoints)
+- `/api/system/*` - Restart, info, restart-mode (3 endpoints)
 - `/stat`, `/readdir`, `/read`, `/write`, `/mkdir`, `/delete`, `/move`, `/copy` - Filesystem (15+ endpoints)
 - `/api/backups/*` - Backup/restore (5 endpoints)
 - `/api/terminal/*` - Terminal management (5 endpoints)
@@ -607,25 +674,35 @@ Significant progress on the unified MVP plan. The first four sprints are complet
    - Wallet-based encryption for recovery phrase
    - Manual mnemonic entry for late encryption
 
-3. **Update System (Sprint 4) - Enhanced with Auto-Update (2026-01-22)**
+3. **Update System (Sprint 4) - Enhanced with Auto-Update (2026-01-22) + Restart (2026-02-01)**
    - UpdateService for periodic version checking (6-hour intervals)
    - GitHub releases API integration (`checkGitHubReleases()`)
    - **Auto-Update Feature (macOS-style)**:
      - `performUpdate()` - Executes git pull, npm install, npm build, restart
      - Progress tracking with real-time status updates
-     - Automatic server restart via systemctl or process exit
+     - Automatic server restart via systemctl, pm2, or process exit
+   - **Server Restart Feature (2026-02-01)**:
+     - Dropdown menu: "Restart PC2" / "Update Available" items
+     - Smart detection of process manager (systemctl, pm2, or none)
+     - Auto-restart when pm2/systemctl available
+     - Manual restart instructions with copy button when in dev mode
    - API endpoints:
      - `GET /api/update/status` - Version info and update availability
      - `POST /api/update/check` - Trigger version check
      - `GET /api/update/version` - Get current version
-     - `POST /api/update/install` - **NEW: Trigger auto-update**
-     - `GET /api/update/progress` - **NEW: Get update progress**
-     - `POST /api/update/check-github` - **NEW: Check GitHub releases**
+     - `POST /api/update/install` - Trigger auto-update
+     - `GET /api/update/progress` - Get update progress
+     - `POST /api/update/check-github` - Check GitHub releases
+     - `GET /api/system/restart-mode` - **NEW: Check restart capability**
+     - `POST /api/system/restart` - **NEW: Trigger server restart**
+     - `GET /api/system/info` - **NEW: System uptime, memory, version**
    - Frontend components:
-     - `UIUpdateModal.js` - Toast notification + modal with progress UI
+     - `UIUpdateModal.js` - Toast notification + modal with progress UI + restart dialog
      - Settings > About banner when update available
+     - User dropdown: "Restart PC2" and "Check for Updates" items
      - Auto-reconnect loop after server restart
      - Page auto-refresh when update complete
+     - Copy-to-clipboard restart command for dev mode
 
 4. **API Endpoints Added**
    - `GET /api/setup/status` - Check setup state

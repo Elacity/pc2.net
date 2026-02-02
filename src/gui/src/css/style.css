@@ -22,19 +22,8 @@
  * Based on Puter's UIAIChat component design
  */
 
-/* CSS Variables for Theming */
+/* CSS Variables for Theming - Dark mode is default for PC2 */
 :root {
-    --ai-bg-color: #ffffff;
-    --ai-text-color: #1f2937;
-    --ai-border-color: #e5e7eb;
-    --ai-message-user-bg: #e5e7eb;
-    --ai-message-ai-bg: transparent;
-    --ai-input-bg: #ffffff;
-    --ai-header-border: #e5e7eb;
-    --ai-shadow: rgba(0, 0, 0, 0.1);
-}
-
-[data-theme="dark"] {
     --ai-bg-color: #2f2f30;
     --ai-text-color: #ffffff;
     --ai-border-color: #3a3a3a;
@@ -43,6 +32,18 @@
     --ai-input-bg: #2f2f30;
     --ai-header-border: #3a3a3a;
     --ai-shadow: rgba(0, 0, 0, 0.3);
+}
+
+/* Light mode overrides for AI panel */
+[data-theme="light"] {
+    --ai-bg-color: #ffffff;
+    --ai-text-color: #1f2937;
+    --ai-border-color: #e5e7eb;
+    --ai-message-user-bg: #e5e7eb;
+    --ai-message-ai-bg: transparent;
+    --ai-input-bg: #ffffff;
+    --ai-header-border: #e5e7eb;
+    --ai-shadow: rgba(0, 0, 0, 0.1);
 }
 
 /* AI Button (Sparkles Icon) */
@@ -2004,7 +2005,12 @@ pre {
     font-family: 'PP Telegraf',system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue,Arial,sans-serif;
 }
 
+/*****************************************************
+ * Theme System - Dark Mode (Default)
+ * PC2 uses dark mode as default
+ *****************************************************/
 :root {
+    /* Primary HSLA values - Dark Mode */
     --primary-hue: 43;
     --primary-saturation: 0%;
     --primary-lightness: 13%;
@@ -2012,6 +2018,8 @@ pre {
     --primary-color: #ffffff;
     --primary-color-icon: invert(1);
     --primary-color-sidebar-item: #5a5d61aa;
+    
+    /* Window variables (derived from primary) */
     --window-head-hue: var(--primary-hue);
     --window-head-saturation: var(--primary-saturation);
     --window-head-lightness: var(--primary-lightness);
@@ -2022,15 +2030,2624 @@ pre {
     --window-sidebar-lightness: var(--primary-lightness);
     --window-sidebar-alpha: calc(min(1, 0.11 + var(--primary-alpha)));
     --window-sidebar-color: var(--primary-color);
+    
+    /* Taskbar variables (derived from primary) */
     --taskbar-hue: var(--primary-hue);
     --taskbar-saturation: var(--primary-saturation);
     --taskbar-lightness: var(--primary-lightness);
     --taskbar-alpha: calc(0.73 * var(--primary-alpha));
     --taskbar-color: var(--primary-color);
+    
+    /* Selection color */
     --select-hue: 213.05;
     --select-saturation: 74.22%;
     --select-lightness: 55.88%;
     --select-color: hsl(var(--select-hue), var(--select-saturation), var(--select-lightness));
+    
+    /* Semantic colors - Dark Mode */
+    --color-bg-body: #171717;
+    --color-bg-primary: #1a1a1e;
+    --color-bg-secondary: #232324;
+    --color-bg-tertiary: #2f2f30;
+    --color-bg-surface: rgba(35, 35, 36, 0.95);
+    --color-window-bg: #2a2a2c;
+    --color-text-primary: #ffffff;
+    --color-text-secondary: #9ca3af;
+    --color-text-muted: #6b7280;
+    --color-border: #3a3a3c;
+    --color-border-light: #4a4a4c;
+    
+    /* Input colors - Dark Mode */
+    --color-input-bg: #2f2f30;
+    --color-input-border: #4a4a4c;
+    --color-input-text: #ffffff;
+    --color-input-placeholder: #6b7280;
+    
+    /* Context menu / popover - Dark Mode */
+    --color-menu-bg: rgba(35, 35, 36, 0.98);
+    --color-menu-hover: #3a3a3c;
+    --color-menu-text: #ffffff;
+    
+    /* Window body - Dark Mode */
+    --color-window-body: #2a2a2b;
+    --color-window-navbar: #232324;
+    
+    /* Item names on desktop - Dark Mode */
+    --color-item-name: #ffffff;
+    --color-item-name-shadow: 0px 0px 3px #00000082, 0px 0px 3px #00000082, 0px 0px 3px #00000082;
+    --color-item-name-window: rgb(200, 200, 200);
+    
+    /* Settings panel - Dark Mode */
+    --color-settings-bg: #1a1a1e;
+    --color-settings-sidebar: #232324;
+    --color-settings-card: #2a2a2b;
+    
+    /* Status colors (same for both themes) */
+    --color-success: #22c55e;
+    --color-success-bg: #166534;
+    --color-warning: #f59e0b;
+    --color-warning-bg: #92400e;
+    --color-error: #ef4444;
+    --color-error-bg: #991b1b;
+    --color-info: #3b82f6;
+    --color-info-bg: #1e40af;
+}
+
+/*****************************************************
+ * Theme System - Light Mode
+ * Based on Puter's official light theme
+ *****************************************************/
+[data-theme="light"] {
+    /* Primary HSLA values - Light Mode (Puter defaults) */
+    --primary-hue: 210;
+    --primary-saturation: 41.18%;
+    --primary-lightness: 93.33%;
+    --primary-alpha: 0.8;
+    --primary-color: #373e44;
+    --primary-color-icon: invert(0);
+    --primary-color-sidebar-item: #fefeff;
+    
+    /* Semantic colors - Light Mode */
+    --color-bg-body: #e8e8e8;
+    --color-bg-primary: #ffffff;
+    --color-bg-secondary: #f9f9f9;
+    --color-bg-tertiary: #f3f4f6;
+    --color-bg-surface: rgba(231, 238, 245, 0.92);
+    --color-window-bg: #ffffff;
+    --color-text-primary: #1f2937;
+    --color-text-secondary: #4b5563;
+    --color-text-muted: #6b7280;
+    --color-border: #e5e7eb;
+    --color-border-light: #d1d5db;
+    
+    /* Input colors - Light Mode */
+    --color-input-bg: #ffffff;
+    --color-input-border: #d1d5db;
+    --color-input-text: #1f2937;
+    --color-input-placeholder: #9ca3af;
+    
+    /* Context menu / popover - Light Mode */
+    --color-menu-bg: rgba(255, 255, 255, 0.98);
+    --color-menu-hover: #e5e7eb;
+    --color-menu-text: #1f2937;
+    
+    /* Window body - Light Mode */
+    --color-window-body: #ffffff;
+    --color-window-navbar: #fafafa;
+    
+    /* Item names on desktop - Light Mode */
+    --color-item-name: #ffffff;
+    --color-item-name-shadow: 0px 0px 3px #00000082, 0px 0px 3px #00000082, 0px 0px 3px #00000082;
+    --color-item-name-window: rgb(73, 73, 73);
+    
+    /* Settings panel - Light Mode */
+    --color-settings-bg: #ffffff;
+    --color-settings-sidebar: #f9f9f9;
+    --color-settings-card: #ffffff;
+    
+    /* Status colors - Light Mode backgrounds */
+    --color-success-bg: #dcfce7;
+    --color-warning-bg: #fef3c7;
+    --color-error-bg: #fee2e2;
+    --color-info-bg: #dbeafe;
+}
+
+/* Light mode - Toolbar stays dark (like Puter), Taskbar gets light frosted glass */
+/* Puter's toolbar uses dark semi-transparent for both modes */
+/* But Puter's taskbar uses HSLA variables that create light appearance */
+
+[data-theme="light"] .taskbar {
+    background-color: rgba(231, 238, 245, 0.85) !important;
+}
+
+@supports ((backdrop-filter: blur())) {
+    [data-theme="light"] .taskbar {
+        background-color: rgba(231, 238, 245, 0.75) !important;
+        backdrop-filter: blur(10px);
+    }
+}
+
+[data-theme="light"] .taskbar .active-taskbar-indicator {
+    background-color: #373e44;
+}
+
+[data-theme="light"] .taskbar .taskbar-item:hover .taskbar-icon {
+    background-color: rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="light"] .taskbar .taskbar-item.active .taskbar-icon,
+[data-theme="light"] .taskbar .taskbar-item:active .taskbar-icon {
+    background-color: rgba(255, 255, 255, 0.8) !important;
+}
+
+/* Settings content background override */
+.settings-content {
+    background-color: var(--color-settings-bg);
+    color: var(--color-text-primary);
+}
+
+/*****************************************************
+ * Settings Tabs - Dark Mode Overrides
+ * Force theme colors on inline styles
+ *****************************************************/
+
+/* Override ALL white backgrounds in settings */
+.settings-content div[style*="background: #fff"],
+.settings-content div[style*="background-color: #fff"],
+.settings-content div[style*="background:#fff"],
+.settings-content div[style*="background: white"],
+.settings-content div[style*="background-color: white"],
+.settings-content div[style*="background: #f9f9f9"],
+.settings-content div[style*="background-color: #f9f9f9"],
+.settings-content div[style*="background: #f3f4f6"],
+.settings-content div[style*="background-color: #f3f4f6"],
+.settings-content div[style*="background: #fafafa"],
+.settings-content div[style*="background-color: #fafafa"],
+.settings-content div[style*="background: #ffffff"],
+.settings-content div[style*="background-color: #ffffff"] {
+    background-color: var(--color-settings-card) !important;
+    color: var(--color-text-primary) !important;
+}
+
+/* Override dark text colors in settings */
+.settings-content div[style*="color: #333"],
+.settings-content div[style*="color: #1f2937"],
+.settings-content div[style*="color: #374151"],
+.settings-content div[style*="color: #4b5563"],
+.settings-content span[style*="color: #333"],
+.settings-content span[style*="color: #1f2937"],
+.settings-content p[style*="color: #333"],
+.settings-content p[style*="color: #1f2937"],
+.settings-content label[style*="color: #333"],
+.settings-content label[style*="color: #1f2937"] {
+    color: var(--color-text-primary) !important;
+}
+
+/* Override gray text */
+.settings-content div[style*="color: #666"],
+.settings-content div[style*="color: #64748b"],
+.settings-content div[style*="color: #6b7280"],
+.settings-content span[style*="color: #666"],
+.settings-content span[style*="color: #64748b"],
+.settings-content p[style*="color: #666"],
+.settings-content p[style*="color: #64748b"] {
+    color: var(--color-text-secondary) !important;
+}
+
+/* Override borders */
+.settings-content div[style*="border: 1px solid #e"],
+.settings-content div[style*="border: 1px solid #d"],
+.settings-content div[style*="border-color: #e"],
+.settings-content div[style*="border-color: #d"] {
+    border-color: var(--color-border) !important;
+}
+
+/* Security section cards */
+.security-card {
+    background-color: var(--color-settings-card) !important;
+    border-color: var(--color-border) !important;
+    color: var(--color-text-primary) !important;
+}
+
+.security-section {
+    background-color: transparent !important;
+    color: var(--color-text-primary) !important;
+}
+
+.security-card-label {
+    color: var(--color-text-primary) !important;
+}
+
+/*****************************************************
+ * Settings Tabs - Override ALL inline <style> classes
+ * Pattern: account-, pers-, pc2-, security-, sys-, storage-
+ *****************************************************/
+
+/* Cards and Groups - All tabs */
+.settings-content .account-card,
+.settings-content .account-group,
+.settings-content .pers-card,
+.settings-content .pers-group,
+.settings-content .pc2-card,
+.settings-content .pc2-group,
+.settings-content .pc2-backup-card,
+.settings-content .pc2-gauge-card,
+.settings-content .security-card,
+.settings-content .security-group,
+.settings-content .sys-card,
+.settings-content .sys-group,
+.settings-content .storage-card,
+.settings-content .storage-group {
+    background: var(--color-settings-card) !important;
+    border-color: var(--color-border) !important;
+}
+
+/* Group rows - borders */
+.settings-content .account-group-row,
+.settings-content .pers-group-row,
+.settings-content .pc2-group-row,
+.settings-content .security-group-row,
+.settings-content .sys-group-row,
+.settings-content .storage-group-row {
+    border-bottom-color: var(--color-border) !important;
+}
+
+/* Section titles - All tabs */
+.settings-content .account-section-title,
+.settings-content .pers-section-title,
+.settings-content .pc2-section-title,
+.settings-content .security-section-title,
+.settings-content .sys-section-title,
+.settings-content .storage-section-title {
+    color: var(--color-text-primary) !important;
+}
+
+/* Card labels - All tabs */
+.settings-content .account-card-label,
+.settings-content .pers-card-label,
+.settings-content .pc2-card-label,
+.settings-content .security-card-label,
+.settings-content .sys-card-label,
+.settings-content .storage-card-label {
+    color: var(--color-text-primary) !important;
+}
+
+/* Card values - All tabs */
+.settings-content .account-card-value,
+.settings-content .pers-card-value,
+.settings-content .pc2-card-value,
+.settings-content .security-card-value,
+.settings-content .sys-card-value,
+.settings-content .storage-card-value {
+    color: var(--color-text-secondary) !important;
+}
+
+/* Sublabels - All tabs */
+.settings-content .account-card-sublabel,
+.settings-content .pers-card-sublabel,
+.settings-content .pc2-card-sublabel,
+.settings-content .security-card-sublabel,
+.settings-content .sys-card-sublabel,
+.settings-content .storage-card-sublabel {
+    color: var(--color-text-muted) !important;
+}
+
+/* Profile display name */
+.settings-content #profile-display-name {
+    color: var(--color-text-primary) !important;
+}
+
+/* Input fields - All tabs */
+.settings-content .account-input,
+.settings-content .pers-input,
+.settings-content .pc2-input,
+.settings-content .security-input,
+.settings-content .sys-input,
+.settings-content .storage-input {
+    background-color: var(--color-input-bg) !important;
+    border-color: var(--color-input-border) !important;
+    color: var(--color-input-text) !important;
+}
+
+/* Select dropdowns - All tabs */
+.settings-content .account-select,
+.settings-content .pers-select,
+.settings-content .pc2-select,
+.settings-content .security-select,
+.settings-content .sys-select,
+.settings-content .storage-select,
+.settings-content .ai-select {
+    background-color: var(--color-input-bg) !important;
+    border-color: var(--color-input-border) !important;
+    color: var(--color-input-text) !important;
+}
+
+/* AI Tab specific */
+.settings-content .ai-card,
+.settings-content .ai-group {
+    background: var(--color-settings-card) !important;
+    border-color: var(--color-border) !important;
+}
+
+.settings-content .ai-group-row {
+    border-bottom-color: var(--color-border) !important;
+}
+
+.settings-content .ai-section-title {
+    color: var(--color-text-primary) !important;
+}
+
+.settings-content .ai-card-label {
+    color: var(--color-text-primary) !important;
+}
+
+.settings-content .ai-card-value {
+    color: var(--color-text-secondary) !important;
+}
+
+/* AI installed models row - keep green tint but darken for dark mode */
+.settings-content .ai-group-row[style*="background: #f0fdf4"] {
+    background: rgba(34, 197, 94, 0.15) !important;
+}
+
+.settings-content .ai-group-row[style*="background: #f0fdf4"] .ai-card-label {
+    color: #4ade80 !important;
+}
+
+/* AI download progress cards */
+.settings-content #ai-download-progress,
+.settings-content #ai-install-progress {
+    background: rgba(59, 130, 246, 0.15) !important;
+}
+
+/* Storage Tab specific */
+.settings-content .storage-card,
+.settings-content .storage-group {
+    background: var(--color-settings-card) !important;
+    border-color: var(--color-border) !important;
+}
+
+.settings-content .storage-group-row {
+    border-bottom-color: var(--color-border) !important;
+}
+
+.settings-content .storage-section-title {
+    color: var(--color-text-primary) !important;
+}
+
+.settings-content .storage-card-label {
+    color: var(--color-text-primary) !important;
+}
+
+.settings-content .storage-card-value {
+    color: var(--color-text-secondary) !important;
+}
+
+/* Storage type items */
+.settings-content .storage-type-item {
+    border-bottom-color: var(--color-border) !important;
+}
+
+.settings-content .storage-type-name {
+    color: var(--color-text-primary) !important;
+}
+
+.settings-content .storage-type-value {
+    color: var(--color-text-secondary) !important;
+}
+
+/* Storage file items */
+.settings-content .storage-file-item {
+    border-bottom-color: var(--color-border) !important;
+}
+
+.settings-content .storage-file-item:hover {
+    background: var(--color-bg-hover) !important;
+}
+
+.settings-content .storage-file-name {
+    color: var(--color-text-primary) !important;
+}
+
+.settings-content .storage-file-meta {
+    color: var(--color-text-muted) !important;
+}
+
+/* Visibility badges - dark mode */
+.settings-content .visibility-badge.private {
+    background: rgba(128, 128, 128, 0.3) !important;
+    color: var(--color-text-secondary) !important;
+}
+
+.settings-content .visibility-badge.public {
+    background: rgba(34, 197, 94, 0.2) !important;
+    color: #4ade80 !important;
+}
+
+/* Progress bars in storage - track only, not the fill */
+.settings-content .storage-type-bar {
+    background: rgba(128, 128, 128, 0.3) !important;
+}
+
+/* Tooltip icons */
+.settings-content .tooltip-icon {
+    background: var(--color-bg-tertiary) !important;
+    color: var(--color-text-secondary) !important;
+}
+
+/* Security Tab - Wallet Authentication row */
+.settings-content .security-group-row[style*="background: #f0fdf4"] {
+    background: rgba(34, 197, 94, 0.15) !important;
+}
+
+.settings-content .security-group-row[style*="background: #f0fdf4"] .security-card-label {
+    color: #4ade80 !important;
+}
+
+.settings-content .security-group-row[style*="background: #f0fdf4"] .security-card-sublabel {
+    color: #22c55e !important;
+}
+
+/* Security - API keys list */
+.settings-content #security-api-keys-list {
+    border-top-color: var(--color-border) !important;
+    color: var(--color-text-primary) !important;
+}
+
+.settings-content .api-key-item {
+    border-bottom-color: var(--color-border) !important;
+}
+
+.settings-content .api-key-name {
+    color: var(--color-text-primary) !important;
+}
+
+.settings-content .api-key-meta {
+    color: var(--color-text-secondary) !important;
+}
+
+.settings-content .api-key-scope {
+    background: rgba(99, 102, 241, 0.2) !important;
+    color: #818cf8 !important;
+}
+
+.settings-content .api-key-scope.revoked {
+    background: rgba(239, 68, 68, 0.2) !important;
+    color: #f87171 !important;
+}
+
+/* Security - AI Agent Integration card */
+.settings-content .security-card[style*="linear-gradient"] {
+    background: rgba(59, 130, 246, 0.1) !important;
+    border-color: rgba(59, 130, 246, 0.3) !important;
+}
+
+.settings-content .security-card[style*="linear-gradient"] .security-card-label {
+    color: #60a5fa !important;
+}
+
+/* Security - inner white boxes */
+.settings-content .security-card[style*="linear-gradient"] div[style*="background: #fff"] {
+    background: var(--color-bg-tertiary) !important;
+}
+
+/* Security - WalletConnect config box */
+.settings-content div[style*="background: #f3f4f6"] {
+    background: var(--color-bg-tertiary) !important;
+}
+
+.settings-content div[style*="background: #f3f4f6"] div[style*="color: #6b7280"] {
+    color: var(--color-text-secondary) !important;
+}
+
+/* Security - allowed wallets list */
+.settings-content div[style*="border-bottom: 1px solid #eee"] {
+    border-bottom-color: var(--color-border) !important;
+}
+
+/* Security - login history items */
+.settings-content #security-login-history div[style*="border-bottom"] {
+    border-bottom-color: var(--color-border) !important;
+}
+
+.settings-content #security-login-history div[style*="color: #666"] {
+    color: var(--color-text-secondary) !important;
+}
+
+/*****************************************************
+ * Tooltips - Dark Mode
+ *****************************************************/
+.storage-tooltip-popup,
+.account-tooltip-popup,
+.settings-content [class*="-tooltip-popup"] {
+    background: #333 !important;
+    color: #fff !important;
+}
+
+/* Native title tooltips - can't style directly, but custom tooltips */
+[data-tooltip],
+.tooltip {
+    color: #fff !important;
+}
+
+/*****************************************************
+ * Pop-up Windows from Settings - Dark Mode
+ *****************************************************/
+
+/* Generic window body in dark mode */
+.window-body {
+    background-color: var(--color-window-bg);
+    color: var(--color-text-primary);
+}
+
+/* Override white backgrounds in popup windows */
+.window-body[style*="background-color: #fff"],
+.window-body[style*="background-color: white"],
+.window-body[style*="background: #fff"],
+.window-body[style*="background: white"] {
+    background-color: var(--color-window-bg) !important;
+}
+
+/* Popup window content areas */
+.window-body div[style*="background: white"],
+.window-body div[style*="background: #fff"],
+.window-body div[style*="background-color: white"],
+.window-body div[style*="background-color: #fff"] {
+    background-color: var(--color-settings-card) !important;
+}
+
+/* Text colors in popup windows */
+.window-body h3[style*="color: #333"],
+.window-body p[style*="color: #333"],
+.window-body div[style*="color: #333"],
+.window-body span[style*="color: #333"] {
+    color: var(--color-text-primary) !important;
+}
+
+.window-body p[style*="color: #666"],
+.window-body div[style*="color: #666"],
+.window-body span[style*="color: #666"] {
+    color: var(--color-text-secondary) !important;
+}
+
+/* Code blocks in popups */
+.window-body div[style*="background: #f3f4f6"] {
+    background: var(--color-bg-tertiary) !important;
+}
+
+/* Input fields in popups */
+.window-body input[style*="border: 1px solid #ddd"] {
+    background-color: var(--color-input-bg) !important;
+    border-color: var(--color-input-border) !important;
+    color: var(--color-input-text) !important;
+}
+
+/*****************************************************
+ * Dividers / Break Lines - Dark Mode
+ *****************************************************/
+.settings-content hr,
+.settings-content [style*="border-top: 1px solid #e"],
+.settings-content [style*="border-bottom: 1px solid #e"] {
+    border-color: var(--color-border) !important;
+}
+
+/* Generic border overrides */
+.settings-content div[style*="border: 1px solid #d"],
+.settings-content div[style*="border: 1px solid #e"] {
+    border-color: var(--color-border) !important;
+}
+
+/* IPFS mode badges */
+.settings-content #ipfs-network-mode[style*="background: #e2e3e5"] {
+    background: var(--color-bg-tertiary) !important;
+    color: var(--color-text-secondary) !important;
+}
+
+/* Copy buttons */
+.settings-content .copy-icon-btn {
+    background: var(--color-bg-tertiary) !important;
+    border-color: var(--color-border) !important;
+}
+
+/*****************************************************
+ * PC2 Tab - System Gauges
+ *****************************************************/
+.settings-content .pc2-gauge-card {
+    background: var(--color-settings-card) !important;
+}
+
+.settings-content .pc2-gauge-value {
+    color: var(--color-text-primary) !important;
+}
+
+.settings-content .pc2-gauge-label {
+    color: var(--color-text-secondary) !important;
+}
+
+.settings-content .pc2-system-gauges {
+    border-bottom-color: var(--color-border) !important;
+}
+
+/* PC2 backup card */
+.settings-content .pc2-backup-card {
+    background: var(--color-settings-card) !important;
+    border-color: var(--color-border) !important;
+}
+
+/*****************************************************
+ * System Tab (UITabAbout) - Dark Mode
+ *****************************************************/
+.settings-content .sys-card,
+.settings-content .sys-group {
+    background: var(--color-settings-card) !important;
+    border-color: var(--color-border) !important;
+}
+
+.settings-content .sys-group-row {
+    border-bottom-color: var(--color-border) !important;
+}
+
+.settings-content .sys-section-title {
+    color: var(--color-text-primary) !important;
+}
+
+.settings-content .sys-card-label {
+    color: var(--color-text-primary) !important;
+}
+
+.settings-content .sys-card-value {
+    color: var(--color-text-secondary) !important;
+}
+
+/* System header text */
+.settings-content h1 {
+    color: var(--color-text-primary) !important;
+}
+
+.settings-content p[style*="color: #666"] {
+    color: var(--color-text-secondary) !important;
+}
+
+/*****************************************************
+ * Personalization Tab - Dark Mode
+ *****************************************************/
+.settings-content .pers-card,
+.settings-content .pers-group {
+    background: var(--color-settings-card) !important;
+    border-color: var(--color-border) !important;
+}
+
+.settings-content .pers-group-row {
+    border-bottom-color: var(--color-border) !important;
+}
+
+.settings-content .pers-section-title {
+    color: var(--color-text-primary) !important;
+}
+
+.settings-content .pers-card-label {
+    color: var(--color-text-primary) !important;
+}
+
+.settings-content .pers-card-sublabel {
+    color: var(--color-text-muted) !important;
+}
+
+/*****************************************************
+ * Language Tab - Dark Mode (uses pers- classes too)
+ *****************************************************/
+.settings-content[data-settings="language"] h1 {
+    color: var(--color-text-primary) !important;
+}
+
+/*****************************************************
+ * All inline element color overrides in settings
+ *****************************************************/
+.settings-content span[style*="color: #1f2937"],
+.settings-content span[style*="color: #333"],
+.settings-content span[style*="color: #374151"],
+.settings-content div[style*="color: #1f2937"],
+.settings-content div[style*="color: #333"],
+.settings-content div[style*="color: #374151"],
+.settings-content label[style*="color: #333"],
+.settings-content label[style*="color: #374151"] {
+    color: var(--color-text-primary) !important;
+}
+
+.settings-content span[style*="color: #666"],
+.settings-content span[style*="color: #6b7280"],
+.settings-content span[style*="color: #64748b"],
+.settings-content span[style*="color: #999"],
+.settings-content span[style*="color: #9ca3af"],
+.settings-content div[style*="color: #666"],
+.settings-content div[style*="color: #6b7280"],
+.settings-content div[style*="color: #64748b"],
+.settings-content div[style*="color: #999"] {
+    color: var(--color-text-secondary) !important;
+}
+
+/*****************************************************
+ * All inline background overrides in settings
+ *****************************************************/
+.settings-content div[style*="background: #f9f9f9"],
+.settings-content div[style*="background: #f5f5f5"],
+.settings-content div[style*="background: #f3f4f6"],
+.settings-content div[style*="background: #fafafa"],
+.settings-content div[style*="background-color: #f9f9f9"],
+.settings-content div[style*="background-color: #f5f5f5"],
+.settings-content div[style*="background-color: #f3f4f6"] {
+    background: var(--color-settings-card) !important;
+}
+
+/*****************************************************
+ * All inline border overrides in settings
+ *****************************************************/
+.settings-content div[style*="border-bottom: 1px solid #e5e5e5"],
+.settings-content div[style*="border-bottom: 1px solid #e5e7eb"],
+.settings-content div[style*="border-bottom: 1px solid #eee"],
+.settings-content div[style*="border-top: 1px solid #e5e5e5"],
+.settings-content div[style*="border-top: 1px solid #e5e7eb"],
+.settings-content div[style*="border: 1px solid #d0d0d0"],
+.settings-content div[style*="border: 1px solid #ddd"] {
+    border-color: var(--color-border) !important;
+}
+
+/*****************************************************
+ * Modal/Dialog Windows - Dark Mode
+ *****************************************************/
+/* Delete confirmation modal */
+#ai-delete-modal h3,
+#ai-delete-modal p {
+    color: var(--color-text-primary) !important;
+}
+
+/* API Key creation modal */
+.window-body h3[style*="font-size: 15px"],
+.window-body h3[style*="font-size: 16px"] {
+    color: var(--color-text-primary) !important;
+}
+
+/* Warning text - keep colors */
+.window-body p[style*="color: #92400e"] {
+    color: #fbbf24 !important;
+}
+
+/* Success text - keep colors but adjust for dark */
+.window-body h3[style*="color: #166534"] {
+    color: #4ade80 !important;
+}
+
+/* Storage tab - exclude bar fills which need their inline colors */
+.settings-content[data-settings="storage"] div[style*="background"]:not(.storage-type-bar-fill):not(#storage-quota-bar):not([style*="background: #3b82f6"]):not([style*="background: #22c55e"]):not([style*="background:#3b82f6"]):not([style*="background:#22c55e"]):not([style*="background: #dc2626"]):not([style*="background: #f59e0b"]) {
+    background-color: var(--color-settings-card) !important;
+}
+
+/* Explicitly ensure bar fills keep their colors */
+.settings-content .storage-type-bar-fill[style*="background: #3b82f6"],
+.settings-content .storage-type-bar-fill[style*="background:#3b82f6"],
+.settings-content #storage-quota-bar[style*="background: #3b82f6"],
+.settings-content #storage-quota-bar[style*="background:#3b82f6"] {
+    background: #3b82f6 !important;
+    background-color: #3b82f6 !important;
+}
+
+.settings-content .storage-type-bar-fill[style*="background: #22c55e"],
+.settings-content .storage-type-bar-fill[style*="background:#22c55e"] {
+    background: #22c55e !important;
+    background-color: #22c55e !important;
+}
+
+/* Quota bar warning/danger colors */
+.settings-content #storage-quota-bar[style*="background: #f59e0b"],
+.settings-content #storage-quota-bar[style*="background:#f59e0b"] {
+    background: #f59e0b !important;
+    background-color: #f59e0b !important;
+}
+
+.settings-content #storage-quota-bar[style*="background: #dc2626"],
+.settings-content #storage-quota-bar[style*="background:#dc2626"] {
+    background: #dc2626 !important;
+    background-color: #dc2626 !important;
+}
+
+/* PC2 tab */
+.settings-content[data-settings="pc2"] div[style*="background"] {
+    background-color: var(--color-settings-card) !important;
+}
+
+/* AI tab */
+.settings-content[data-settings="ai"] div[style*="background"] {
+    background-color: var(--color-settings-card) !important;
+}
+
+/* Input fields in settings */
+.settings-content input[type="text"],
+.settings-content input[type="password"],
+.settings-content input[type="email"],
+.settings-content select,
+.settings-content textarea {
+    background-color: var(--color-input-bg) !important;
+    border-color: var(--color-input-border) !important;
+    color: var(--color-input-text) !important;
+}
+
+/*****************************************************
+ * Copy Icons - Dark Mode
+ *****************************************************/
+.settings-content .copy-icon-btn svg,
+.settings-content .copy-btn svg,
+.copy-did-btn svg,
+.settings-content button svg {
+    stroke: var(--color-text-primary);
+}
+
+/*****************************************************
+ * Button Class - Dark Mode Override
+ *****************************************************/
+:root .settings-content .button,
+:root .window-body .button {
+    background-color: #3a3a3c !important;
+    border-color: #4a4a4c !important;
+    color: #ffffff !important;
+}
+
+:root .settings-content .button:hover,
+:root .window-body .button:hover {
+    background-color: #4a4a4c !important;
+}
+
+/* Light mode - restore original button style */
+[data-theme="light"] .settings-content .button,
+[data-theme="light"] .window-body .button {
+    background-color: #eeeeee !important;
+    background: linear-gradient(#f6f6f6, #e1e1e1) !important;
+    border-color: #b9b9b9 !important;
+    color: #666666 !important;
+}
+
+[data-theme="light"] .settings-content .button:hover,
+[data-theme="light"] .window-body .button:hover {
+    background-color: #e0e0e0 !important;
+    background: linear-gradient(#e8e8e8, #d5d5d5) !important;
+}
+
+/* Keep colored buttons as-is - more specific selectors */
+.settings-content .button[style*="background: #3b82f6"],
+.settings-content .button[style*="background:#3b82f6"],
+.settings-content .button[style*="background: #dc2626"],
+.settings-content .button[style*="background:#dc2626"],
+.settings-content .button[style*="background: #22c55e"],
+.settings-content .button[style*="background:#22c55e"],
+.window-body .button[style*="background: #3b82f6"],
+.window-body .button[style*="background:#3b82f6"],
+.window-body .button[style*="background: #dc2626"],
+.window-body .button[style*="background:#dc2626"],
+.window-body .button[style*="background: #22c55e"],
+.window-body .button[style*="background:#22c55e"],
+.settings-content button[style*="background: #3b82f6"],
+.settings-content button[style*="background: #dc2626"],
+.window-body button[style*="background: #3b82f6"],
+.window-body button[style*="background: #dc2626"] {
+    background-color: inherit !important;
+    border-color: inherit !important;
+    color: white !important;
+}
+
+/*****************************************************
+ * Language Selection - Dark Mode
+ *****************************************************/
+.language-item {
+    color: var(--color-text-primary);
+}
+
+.language-item.active {
+    background: var(--color-bg-tertiary) !important;
+    color: var(--color-text-primary);
+}
+
+.language-item:hover {
+    background: var(--color-bg-hover);
+}
+
+/* Language checkmark icon - invert in dark mode */
+.language-item .checkmark {
+    filter: var(--primary-color-icon);
+}
+
+/*****************************************************
+ * Channel Manager Window - Dark Mode
+ *****************************************************/
+.channel-manager {
+    background: var(--color-window-bg) !important;
+}
+
+.channel-manager div[style*="background: #f9fafb"],
+.channel-manager div[style*="background: #fff"],
+.channel-manager div[style*="background: white"] {
+    background: var(--color-settings-card) !important;
+}
+
+.channel-manager .saved-channel-row,
+.saved-channel-row {
+    background: var(--color-settings-card) !important;
+}
+
+/* Channel manager text colors */
+.channel-manager div[style*="color: #888"],
+.channel-manager div[style*="color: #666"] {
+    color: var(--color-text-secondary) !important;
+}
+
+/* Channel manager borders */
+.channel-manager div[style*="border-bottom: 1px solid #e5e7eb"] {
+    border-bottom-color: var(--color-border) !important;
+}
+
+/* Channel type buttons (Telegram Bot, WhatsApp, Discord) - dark mode */
+:root .channel-manager button[style*="background: white"],
+:root .channel-manager button[style*="background: #f3f4f6"],
+:root .channel-manager button[style*="background:#fff"] {
+    background: #3a3a3c !important;
+    border-color: #4a4a4c !important;
+    color: #ffffff !important;
+}
+
+/* Channel manager section headers - "Add New Channel", "Your Channels" */
+:root .channel-manager div[style*="font-weight: 600"],
+:root .channel-manager div[style*="font-weight:600"],
+:root .channel-manager h3,
+:root .channel-manager h4 {
+    color: #e5e7eb !important;
+}
+
+/* Channel manager separators */
+:root .channel-manager hr,
+:root .channel-manager div[style*="border-bottom"] {
+    border-color: #4a4a4c !important;
+}
+
+/* Light mode - restore original channel manager styling */
+[data-theme="light"] .channel-manager button[style*="background: white"],
+[data-theme="light"] .channel-manager button[style*="background: #f3f4f6"] {
+    background: white !important;
+    border-color: #e5e7eb !important;
+    color: #374151 !important;
+}
+
+/*****************************************************
+ * Change Desktop Background Window - Dark Mode
+ *****************************************************/
+:root .window[data-app="change-desktop-background"] .window-body,
+:root .window-change-background .window-body {
+    background: var(--color-window-bg) !important;
+}
+
+:root .window[data-app="change-desktop-background"] label,
+:root .window-change-background label {
+    color: var(--color-text-primary) !important;
+}
+
+:root .window[data-app="change-desktop-background"] select,
+:root .window-change-background select {
+    background: var(--color-input-bg) !important;
+    border-color: var(--color-border) !important;
+    color: var(--color-text-primary) !important;
+}
+
+/*****************************************************
+ * Model Download Progress - Dark Mode
+ *****************************************************/
+:root .model-download-progress,
+:root div[style*="Downloading"][style*="background"] {
+    background: var(--color-settings-card) !important;
+    color: var(--color-text-primary) !important;
+}
+
+/*****************************************************
+ * Encrypt Recovery Phrase Modal - Dark Mode
+ *****************************************************/
+:root .window[data-app*="encrypt"] .window-body,
+:root .window[data-app*="recovery"] .window-body {
+    background: var(--color-window-bg) !important;
+}
+
+:root .window[data-app*="encrypt"] label,
+:root .window[data-app*="encrypt"] p,
+:root .window[data-app*="recovery"] label,
+:root .window[data-app*="recovery"] p {
+    color: var(--color-text-primary) !important;
+}
+
+:root .window[data-app*="encrypt"] textarea,
+:root .window[data-app*="encrypt"] input,
+:root .window[data-app*="recovery"] textarea,
+:root .window[data-app*="recovery"] input {
+    background: var(--color-input-bg) !important;
+    border-color: var(--color-border) !important;
+    color: var(--color-text-primary) !important;
+}
+
+/*****************************************************
+ * Session Manager Popup - Dark Mode
+ *****************************************************/
+:root .window[data-app*="session"] .window-body {
+    background: var(--color-window-bg) !important;
+}
+
+:root .window[data-app*="session"] .window-body > div {
+    background: var(--color-settings-card) !important;
+    color: var(--color-text-primary) !important;
+}
+
+:root .window[data-app*="session"] div[style*="background: #fff"],
+:root .window[data-app*="session"] div[style*="background: white"],
+:root .window[data-app*="session"] div[style*="background:#fff"] {
+    background: var(--color-settings-card) !important;
+}
+
+:root .window[data-app*="session"] span,
+:root .window[data-app*="session"] div {
+    color: var(--color-text-primary) !important;
+}
+
+/* Light mode - restore session manager styling */
+[data-theme="light"] .window[data-app*="session"] .window-body > div {
+    background: #ffffff !important;
+}
+
+/*****************************************************
+ * Backup Download/Delete Buttons - Dark Mode
+ *****************************************************/
+:root .settings-content button[style*="color: #3b82f6"],
+:root .settings-content button[style*="color:#3b82f6"] {
+    color: #60a5fa !important;
+    border-color: #60a5fa !important;
+}
+
+:root .settings-content button[style*="color: #ef4444"],
+:root .settings-content button[style*="color:#ef4444"] {
+    color: #f87171 !important;
+    border-color: #f87171 !important;
+}
+
+/* Light mode - keep original button colors */
+[data-theme="light"] .settings-content button[style*="color: #3b82f6"],
+[data-theme="light"] .settings-content button[style*="color:#3b82f6"] {
+    color: #3b82f6 !important;
+    border-color: #3b82f6 !important;
+}
+
+[data-theme="light"] .settings-content button[style*="color: #ef4444"],
+[data-theme="light"] .settings-content button[style*="color:#ef4444"] {
+    color: #ef4444 !important;
+    border-color: #ef4444 !important;
+}
+
+/*****************************************************
+ * Help Popup - Colored Tag Headers (Keep colors readable in all modes)
+ *****************************************************/
+/* Yellow/Warning tags (#fef3c7) - ALWAYS dark text on yellow background */
+:root .settings-content div[style*="background: #fef3c7"],
+:root .settings-content div[style*="background:#fef3c7"],
+:root .settings-content div[style*="background: #fff3cd"],
+:root .settings-content div[style*="background:#fff3cd"] {
+    background: #fef3c7 !important;
+    color: #92400e !important;
+}
+
+:root .settings-content div[style*="background: #fef3c7"] strong,
+:root .settings-content div[style*="background:#fef3c7"] strong,
+:root .settings-content div[style*="background: #fff3cd"] strong {
+    color: #92400e !important;
+}
+
+:root .settings-content div[style*="background: #fef3c7"] p,
+:root .settings-content div[style*="background:#fef3c7"] p,
+:root .settings-content div[style*="background: #fff3cd"] p {
+    color: #78350f !important;
+}
+
+/* Blue/Info tags - ALWAYS dark text on blue background */
+:root .settings-content div[style*="background: #cce5ff"],
+:root .settings-content div[style*="background: #e0f2fe"],
+:root .settings-content div[style*="background: #dbeafe"] {
+    background: #dbeafe !important;
+    color: #1e40af !important;
+}
+
+:root .settings-content div[style*="background: #cce5ff"] strong,
+:root .settings-content div[style*="background: #e0f2fe"] strong,
+:root .settings-content div[style*="background: #dbeafe"] strong {
+    color: #1e40af !important;
+}
+
+:root .settings-content div[style*="background: #cce5ff"] p,
+:root .settings-content div[style*="background: #e0f2fe"] p,
+:root .settings-content div[style*="background: #dbeafe"] p {
+    color: #1e3a8a !important;
+}
+
+/* Green/Success tags - ALWAYS dark text on green background */
+:root .settings-content div[style*="background: #d4edda"],
+:root .settings-content div[style*="background: #dcfce7"],
+:root .settings-content div[style*="background: #d1fae5"] {
+    background: #dcfce7 !important;
+    color: #166534 !important;
+}
+
+:root .settings-content div[style*="background: #d4edda"] strong,
+:root .settings-content div[style*="background: #dcfce7"] strong,
+:root .settings-content div[style*="background: #d1fae5"] strong {
+    color: #166534 !important;
+}
+
+:root .settings-content div[style*="background: #d4edda"] p,
+:root .settings-content div[style*="background: #dcfce7"] p,
+:root .settings-content div[style*="background: #d1fae5"] p {
+    color: #14532d !important;
+}
+
+/* Light mode - restore original help tag colors */
+[data-theme="light"] .window[data-app*="help"] div[style*="background: #fff3cd"],
+[data-theme="light"] .settings-content div[style*="background: #fff3cd"] {
+    background: #fff3cd !important;
+    color: #856404 !important;
+}
+
+[data-theme="light"] .window[data-app*="help"] div[style*="background: #fff3cd"] strong,
+[data-theme="light"] .settings-content div[style*="background: #fff3cd"] strong {
+    color: #856404 !important;
+}
+
+[data-theme="light"] .window[data-app*="help"] div[style*="background: #cce5ff"],
+[data-theme="light"] .window[data-app*="help"] div[style*="background: #e0f2fe"],
+[data-theme="light"] .settings-content div[style*="background: #cce5ff"],
+[data-theme="light"] .settings-content div[style*="background: #e0f2fe"] {
+    background: #e0f2fe !important;
+    color: #0369a1 !important;
+}
+
+[data-theme="light"] .window[data-app*="help"] div[style*="background: #d4edda"],
+[data-theme="light"] .window[data-app*="help"] div[style*="background: #dcfce7"],
+[data-theme="light"] .settings-content div[style*="background: #d4edda"],
+[data-theme="light"] .settings-content div[style*="background: #dcfce7"] {
+    background: #dcfce7 !important;
+    color: #166534 !important;
+}
+
+/*****************************************************
+ * Storage Tab - CID Tags Dark Mode
+ *****************************************************/
+:root .settings-content .storage-file-cid {
+    background: rgba(102, 126, 234, 0.2) !important;
+    color: #a5b4fc !important;
+}
+
+/* Light mode - keep original CID styling */
+[data-theme="light"] .settings-content .storage-file-cid {
+    background: #f0f4ff !important;
+    color: #667eea !important;
+}
+
+/*****************************************************
+ * Agent Editor Window - Dark Mode
+ *****************************************************/
+:root .agent-editor {
+    background: var(--color-window-bg) !important;
+}
+
+:root .agent-editor div[style*="background: #fff"],
+:root .agent-editor div[style*="background: #f9fafb"],
+:root .agent-editor div[style*="background: white"] {
+    background: var(--color-settings-card) !important;
+}
+
+/* Agent editor header and footer */
+:root .agent-editor > div[style*="border-bottom"],
+:root .agent-editor > div[style*="border-top"] {
+    background: var(--color-bg-tertiary) !important;
+    border-color: var(--color-border) !important;
+}
+
+/* Agent editor section titles */
+:root .agent-editor h2,
+:root .agent-editor h3 {
+    color: var(--color-text-primary) !important;
+}
+
+:root .agent-editor p,
+:root .agent-editor label,
+:root .agent-editor span {
+    color: var(--color-text-secondary) !important;
+}
+
+:root .agent-editor div[style*="font-weight: 500"],
+:root .agent-editor div[style*="font-weight: 600"] {
+    color: var(--color-text-primary) !important;
+}
+
+/* Agent editor inputs */
+:root .agent-editor input[type="text"],
+:root .agent-editor input[type="number"],
+:root .agent-editor select,
+:root .agent-editor textarea {
+    background: var(--color-input-bg) !important;
+    border-color: var(--color-border) !important;
+    color: var(--color-text-primary) !important;
+}
+
+:root .agent-editor input::placeholder,
+:root .agent-editor textarea::placeholder {
+    color: var(--color-text-muted) !important;
+}
+
+/* Agent editor personality/thinking options */
+:root .agent-editor .personality-option,
+:root .agent-editor .thinking-option {
+    background: var(--color-settings-card) !important;
+}
+
+:root .agent-editor .personality-option:not(.selected),
+:root .agent-editor .thinking-option:not(.selected) {
+    border-color: var(--color-border) !important;
+}
+
+/* Agent editor channel checkboxes */
+:root .agent-editor .channel-checkbox {
+    background: var(--color-settings-card) !important;
+    border-color: var(--color-border) !important;
+}
+
+:root .agent-editor .channel-checkbox:has(input:checked) {
+    background: rgba(59, 130, 246, 0.15) !important;
+    border-color: #3b82f6 !important;
+}
+
+/* Agent editor permissions section */
+:root .agent-editor div[style*="background: #f9fafb"][style*="border-radius: 8px"] {
+    background: var(--color-bg-tertiary) !important;
+}
+
+/* Agent editor access control radio buttons */
+:root .agent-editor label[style*="border: 1px solid #e5e7eb"] {
+    border-color: var(--color-border) !important;
+    background: var(--color-settings-card) !important;
+}
+
+/* Agent editor buttons - Cancel button in dark mode */
+:root .agent-editor .cancel-btn {
+    background: var(--color-settings-card) !important;
+    border-color: var(--color-border) !important;
+    color: var(--color-text-primary) !important;
+}
+
+/* Agent editor Save/Create button - always blue */
+:root .agent-editor .save-btn {
+    background: #3b82f6 !important;
+    color: white !important;
+    border: none !important;
+}
+
+:root .agent-editor .save-btn:hover {
+    background: #2563eb !important;
+}
+
+/* Light mode - restore original agent editor styling */
+[data-theme="light"] .agent-editor {
+    background: #fff !important;
+}
+
+[data-theme="light"] .agent-editor div[style*="background: #fff"],
+[data-theme="light"] .agent-editor div[style*="background: #f9fafb"],
+[data-theme="light"] .agent-editor div[style*="background: white"] {
+    background: inherit !important;
+}
+
+[data-theme="light"] .agent-editor > div[style*="border-bottom"],
+[data-theme="light"] .agent-editor > div[style*="border-top"] {
+    background: #f9fafb !important;
+    border-color: #e5e7eb !important;
+}
+
+[data-theme="light"] .agent-editor h2,
+[data-theme="light"] .agent-editor h3 {
+    color: #374151 !important;
+}
+
+[data-theme="light"] .agent-editor p,
+[data-theme="light"] .agent-editor label,
+[data-theme="light"] .agent-editor span {
+    color: inherit !important;
+}
+
+[data-theme="light"] .agent-editor input[type="text"],
+[data-theme="light"] .agent-editor input[type="number"],
+[data-theme="light"] .agent-editor select,
+[data-theme="light"] .agent-editor textarea {
+    background: #fff !important;
+    border-color: #d1d5db !important;
+    color: #374151 !important;
+}
+
+[data-theme="light"] .agent-editor .personality-option,
+[data-theme="light"] .agent-editor .thinking-option {
+    background: #fff !important;
+}
+
+[data-theme="light"] .agent-editor .channel-checkbox {
+    background: #fff !important;
+}
+
+[data-theme="light"] .agent-editor .channel-checkbox:has(input:checked) {
+    background: #eff6ff !important;
+}
+
+[data-theme="light"] .agent-editor div[style*="background: #f9fafb"][style*="border-radius: 8px"] {
+    background: #f9fafb !important;
+}
+
+[data-theme="light"] .agent-editor label[style*="border: 1px solid #e5e7eb"] {
+    border-color: #e5e7eb !important;
+    background: #fff !important;
+}
+
+[data-theme="light"] .agent-editor .cancel-btn {
+    background: #fff !important;
+    border-color: #d1d5db !important;
+    color: #374151 !important;
+}
+
+/* Image picker in dark mode */
+:root .agent-editor #agent-image-picker-wrapper {
+    background-color: var(--color-bg-tertiary) !important;
+    border-color: var(--color-border) !important;
+}
+
+/*****************************************************
+ * PC2 Tab - System Gauge Cards
+ * Make gauge cards blend with parent container
+ *****************************************************/
+/* Dark mode - gauge cards should be transparent/dark */
+:root .settings-content .pc2-gauge-card {
+    background: transparent !important;
+}
+
+:root .settings-content .pc2-system-gauges {
+    background: var(--color-settings-card) !important;
+}
+
+/* Light mode - keep original styling */
+[data-theme="light"] .settings-content .pc2-system-gauges {
+    background: #f9f9f9 !important;
+}
+
+[data-theme="light"] .settings-content .pc2-gauge-card {
+    background: transparent !important;
+}
+
+/*****************************************************
+ * System Tab - Check for Updates & Restart buttons
+ * Icons should stay white in both modes
+ *****************************************************/
+.settings-content .check-updates-btn svg,
+.settings-content .restart-btn svg {
+    stroke: white !important;
+    color: white !important;
+}
+
+.settings-content .check-updates-btn,
+.settings-content .restart-btn {
+    color: white !important;
+}
+
+/*****************************************************
+ * PC2 Cloud Status Dropdown - Light Mode Fix
+ *****************************************************/
+/* In light mode, the dropdown has white background, so ALL text needs to be dark */
+[data-theme="light"] .popover span[style*="color: #fff"],
+[data-theme="light"] .popover span[style*="color:#fff"],
+[data-theme="light"] .popover span {
+    color: #374151 !important;
+}
+
+[data-theme="light"] .popover span[style*="color: #aaa"],
+[data-theme="light"] .popover span[style*="color:#aaa"] {
+    color: #666 !important;
+}
+
+/* Fix PC2 dropdown icons in light mode - ALL SVG icons need dark colors */
+[data-theme="light"] .popover svg,
+[data-theme="light"] .popover svg[fill="#fff"],
+[data-theme="light"] .popover svg[style*="fill:#fff"],
+[data-theme="light"] .popover svg[style*="fill: #fff"] {
+    fill: #374151 !important;
+}
+
+[data-theme="light"] .popover svg path {
+    fill: #374151 !important;
+    stroke: #374151 !important;
+}
+
+[data-theme="light"] .popover svg circle,
+[data-theme="light"] .popover svg rect,
+[data-theme="light"] .popover svg line,
+[data-theme="light"] .popover svg polyline,
+[data-theme="light"] .popover svg polygon {
+    fill: #374151 !important;
+    stroke: #374151 !important;
+}
+
+[data-theme="light"] .popover svg[stroke="#fff"],
+[data-theme="light"] .popover svg[style*="stroke:#fff"],
+[data-theme="light"] .popover svg[style*="stroke: #fff"],
+[data-theme="light"] .popover svg[stroke="currentColor"] {
+    stroke: #374151 !important;
+}
+
+/* Force all SVG elements in popover to have visible stroke in light mode */
+[data-theme="light"] .popover svg * {
+    stroke: #374151 !important;
+}
+
+/* Ensure popover menu items text is dark in light mode */
+[data-theme="light"] .popover .popover-item,
+[data-theme="light"] .popover .popover-content,
+[data-theme="light"] .popover div {
+    color: #374151 !important;
+}
+
+/*****************************************************
+ * Upload Window - Dark Mode Fix
+ *****************************************************/
+:root .window-filedialog .button-primary,
+:root .window-filedialog button[type="submit"],
+:root .window .button-primary {
+    color: #ffffff !important;
+}
+
+/* Upload text and icon in dark mode - MUST be white/light */
+:root .window-filedialog-upload-here {
+    color: #ffffff !important;
+}
+
+:root .window-filedialog-upload-here svg {
+    fill: #ffffff !important;
+    color: #ffffff !important;
+}
+
+/* Light mode - keep upload text dark */
+[data-theme="light"] .window-filedialog-upload-here {
+    color: #374151 !important;
+}
+
+[data-theme="light"] .window-filedialog-upload-here svg {
+    fill: #374151 !important;
+    color: #374151 !important;
+}
+
+/*****************************************************
+ * Window Sidebar Dividers - Dark Mode Fix
+ *****************************************************/
+/* Sidebar border in dark mode should be grey, not white */
+:root .window-sidebar {
+    border-right-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+[data-theme="light"] .window-sidebar {
+    border-right-color: #CCC !important;
+}
+
+/*****************************************************
+ * Settings Sublabels - Dark Mode Fix
+ *****************************************************/
+/* Sublabels like "Reduce eye strain" should be visible in dark mode */
+:root .pers-card-sublabel,
+:root .settings-content .pers-card-sublabel,
+:root .settings-content .account-card-sublabel,
+:root .settings-content .pc2-card-sublabel,
+:root .settings-content .security-card-sublabel,
+:root .settings-content .sys-card-sublabel,
+:root .settings-content .storage-card-sublabel {
+    color: rgba(255, 255, 255, 0.7) !important;
+}
+
+/* Light mode - keep sublabels subtle grey */
+[data-theme="light"] .pers-card-sublabel,
+[data-theme="light"] .settings-content .pers-card-sublabel,
+[data-theme="light"] .settings-content .account-card-sublabel,
+[data-theme="light"] .settings-content .pc2-card-sublabel,
+[data-theme="light"] .settings-content .security-card-sublabel,
+[data-theme="light"] .settings-content .sys-card-sublabel,
+[data-theme="light"] .settings-content .storage-card-sublabel {
+    color: #6b7280 !important;
+}
+
+[data-theme="light"] .agent-editor #agent-image-picker-wrapper {
+    background-color: #f9fafb !important;
+    border-color: #d1d5db !important;
+}
+
+/*****************************************************
+ * File Dialog - Dark Mode
+ *****************************************************/
+:root .window-filedialog-prompt {
+    background-color: var(--color-settings-card) !important;
+    border-top-color: var(--color-border) !important;
+}
+
+:root .window-filedialog-prompt input {
+    background-color: var(--color-input-bg) !important;
+    border-color: var(--color-border) !important;
+    color: var(--color-text-primary) !important;
+}
+
+:root .window-filedialog .window-sidebar {
+    background-color: var(--color-bg-secondary) !important;
+}
+
+:root .window-filedialog .window-body {
+    background-color: var(--color-window-bg) !important;
+}
+
+/* Light mode - keep original file dialog styling */
+[data-theme="light"] .window-filedialog-prompt {
+    background-color: #f3f5f9 !important;
+    border-top-color: #dbdee3 !important;
+}
+
+[data-theme="light"] .window-filedialog-prompt input {
+    background-color: #fff !important;
+    border-color: #d1d5db !important;
+    color: #374151 !important;
+}
+
+[data-theme="light"] .window-filedialog .window-sidebar {
+    background-color: #f3f5f9 !important;
+}
+
+[data-theme="light"] .window-filedialog .window-body {
+    background-color: #fff !important;
+}
+
+/*****************************************************
+ * AI Loading Animation - Light Mode Fix
+ *****************************************************/
+/* In light mode, make loading dots dark so they're visible */
+[data-theme="light"] .ai-loading-grid span {
+    background-color: #374151 !important;
+}
+
+/*****************************************************
+ * Send/Receive Token Windows - Z-Index & Dark Mode
+ *****************************************************/
+/* Ensure Send/Receive modals appear above wallet panel (sidebar is z-index 9998) */
+.window[data-app="account-send"],
+.window[data-app="account-receive"],
+.window[data-app="transaction-confirm"] {
+    z-index: 99999999 !important;
+}
+
+/* Dark mode for Send/Receive modals */
+:root .send-modal-container,
+:root .receive-modal-container {
+    background: var(--color-window-bg) !important;
+    color: var(--color-text-primary) !important;
+}
+
+:root .send-modal-container .form-label,
+:root .receive-modal-container .form-label {
+    color: var(--color-text-primary) !important;
+}
+
+:root .send-modal-container .form-input,
+:root .receive-modal-container .form-input,
+:root .send-modal-container .amount-input,
+:root .receive-modal-container input {
+    background: var(--color-input-bg) !important;
+    border-color: var(--color-border) !important;
+    color: var(--color-text-primary) !important;
+}
+
+:root .send-modal-container .custom-dropdown .dropdown-selected,
+:root .receive-modal-container .custom-dropdown .dropdown-selected,
+:root .send-modal-container .dropdown-options,
+:root .receive-modal-container .dropdown-options {
+    background: var(--color-settings-card) !important;
+    border-color: var(--color-border) !important;
+    color: var(--color-text-primary) !important;
+}
+
+:root .send-modal-container .dropdown-options .token-option,
+:root .send-modal-container .dropdown-options .network-option,
+:root .receive-modal-container .dropdown-options .network-option {
+    background: var(--color-settings-card) !important;
+    color: var(--color-text-primary) !important;
+}
+
+:root .send-modal-container .dropdown-options .token-option:hover,
+:root .send-modal-container .dropdown-options .network-option:hover,
+:root .receive-modal-container .dropdown-options .network-option:hover {
+    background: var(--color-bg-tertiary) !important;
+}
+
+:root .send-modal-container .token-balance-display,
+:root .receive-modal-container .token-balance-display {
+    color: var(--color-text-secondary) !important;
+}
+
+/* Network card in receive modal */
+:root .receive-modal-container .network-card,
+:root .receive-modal-container div[style*="border: 1px solid #e5e7eb"],
+:root .receive-modal-container div[style*="border: 2px solid"] {
+    background: var(--color-settings-card) !important;
+    border-color: var(--color-border) !important;
+}
+
+:root .receive-modal-container .network-card span,
+:root .receive-modal-container div[style*="color: #666"],
+:root .receive-modal-container div[style*="color: #374151"],
+:root .receive-modal-container div[style*="color: #6b7280"] {
+    color: var(--color-text-secondary) !important;
+}
+
+/* Address display box */
+:root .receive-modal-container .address-box,
+:root .receive-modal-container div[style*="background: #f9fafb"],
+:root .receive-modal-container div[style*="background: white"],
+:root .receive-modal-container div[style*="background: #fff"] {
+    background: var(--color-bg-tertiary) !important;
+    border-color: var(--color-border) !important;
+}
+
+/* Send button should stay orange */
+:root .send-modal-container .send-submit-btn {
+    background: #f5a623 !important;
+    color: white !important;
+}
+
+/* Fee estimation row */
+:root .send-modal-container .fee-row,
+:root .send-modal-container div[style*="Estimated Fee"] {
+    background: var(--color-bg-tertiary) !important;
+    color: var(--color-text-secondary) !important;
+}
+
+/* Fee section in Send modal - dark mode */
+:root .send-modal-container .fee-section {
+    background: var(--color-bg-tertiary) !important;
+}
+
+:root .send-modal-container .fee-label {
+    color: var(--color-text-secondary) !important;
+}
+
+:root .send-modal-container #fee-estimate {
+    color: var(--color-text-primary) !important;
+}
+
+/* Receive modal - network cards and address boxes */
+:root .receive-modal-container .network-card,
+:root .receive-modal-container [class*="network-option"],
+:root .window[data-app="account-receive"] .network-option {
+    background: var(--color-settings-card) !important;
+    color: var(--color-text-primary) !important;
+}
+
+:root .receive-modal-container .address-box,
+:root .receive-modal-container input[readonly] {
+    background: var(--color-input-bg) !important;
+    border-color: var(--color-border) !important;
+    color: var(--color-text-primary) !important;
+}
+
+/* Token badges in receive modal */
+:root .receive-modal-container .token-badge,
+:root .receive-modal-container [style*="background: #f9fafb"],
+:root .receive-modal-container [style*="background: white"],
+:root .receive-modal-container [style*="background:#f9fafb"],
+:root .receive-modal-container [style*="background: #fff"] {
+    background: var(--color-bg-tertiary) !important;
+    color: var(--color-text-primary) !important;
+}
+
+/*****************************************************
+ * Transaction Confirm Modal - Dark Mode
+ *****************************************************/
+:root .tx-confirm-container {
+    background: var(--color-window-bg) !important;
+    color: var(--color-text-primary) !important;
+}
+
+:root .tx-confirm-container .tx-confirm-header {
+    color: var(--color-text-primary) !important;
+}
+
+:root .tx-confirm-container .ai-badge,
+:root .tx-confirm-container .tx-type-badge {
+    background: var(--color-bg-tertiary) !important;
+    color: var(--color-text-secondary) !important;
+}
+
+:root .tx-confirm-container .tx-summary-card {
+    background: var(--color-bg-tertiary) !important;
+    border-color: var(--color-border) !important;
+}
+
+:root .tx-confirm-container .amount-number {
+    color: var(--color-text-primary) !important;
+}
+
+:root .tx-confirm-container .amount-symbol {
+    color: var(--color-text-secondary) !important;
+}
+
+:root .tx-confirm-container .tx-chain-badge {
+    background: var(--color-settings-card) !important;
+    color: var(--color-text-secondary) !important;
+}
+
+:root .tx-confirm-container .tx-details-section {
+    background: var(--color-bg-tertiary) !important;
+    border-color: var(--color-border) !important;
+}
+
+:root .tx-confirm-container .tx-detail-row {
+    border-bottom-color: var(--color-border) !important;
+}
+
+:root .tx-confirm-container .detail-label {
+    color: var(--color-text-muted) !important;
+}
+
+:root .tx-confirm-container .detail-value {
+    color: var(--color-text-primary) !important;
+}
+
+:root .tx-confirm-container .tx-expiration {
+    background: var(--color-bg-tertiary) !important;
+    border-color: var(--color-border) !important;
+    color: var(--color-text-secondary) !important;
+}
+
+:root .tx-confirm-container .btn-reject {
+    background: var(--color-settings-card) !important;
+    color: var(--color-text-primary) !important;
+    border-color: var(--color-border) !important;
+}
+
+:root .tx-confirm-container .btn-reject:hover {
+    background: var(--color-bg-tertiary) !important;
+}
+
+/* Status badges - keep their colors */
+:root .tx-confirm-container .tx-status-badge {
+    background: inherit !important;
+}
+
+/* Close button in read-only mode */
+:root .tx-confirm-container .btn-close-readonly {
+    background: var(--color-settings-card) !important;
+    color: var(--color-text-primary) !important;
+    border-color: var(--color-border) !important;
+}
+
+/* Light mode - keep original Send/Receive styling */
+[data-theme="light"] .send-modal-container,
+[data-theme="light"] .receive-modal-container {
+    background: #fff !important;
+    color: #374151 !important;
+}
+
+[data-theme="light"] .send-modal-container .form-input,
+[data-theme="light"] .receive-modal-container .form-input,
+[data-theme="light"] .send-modal-container .amount-input {
+    background: #fff !important;
+    border-color: #d1d5db !important;
+    color: #374151 !important;
+}
+
+[data-theme="light"] .send-modal-container .custom-dropdown .dropdown-selected,
+[data-theme="light"] .receive-modal-container .custom-dropdown .dropdown-selected,
+[data-theme="light"] .send-modal-container .dropdown-options,
+[data-theme="light"] .receive-modal-container .dropdown-options {
+    background: #fff !important;
+    border-color: #e5e7eb !important;
+}
+
+[data-theme="light"] .send-modal-container .fee-section {
+    background: #f9fafb !important;
+}
+
+[data-theme="light"] .receive-modal-container div[style*="background: #f9fafb"],
+[data-theme="light"] .receive-modal-container div[style*="background: white"] {
+    background: inherit !important;
+}
+
+/* Light mode - Transaction Confirm */
+[data-theme="light"] .tx-confirm-container {
+    background: #ffffff !important;
+    color: #1f2937 !important;
+}
+
+[data-theme="light"] .tx-confirm-container .ai-badge,
+[data-theme="light"] .tx-confirm-container .tx-type-badge {
+    background: #f3f4f6 !important;
+    color: #6b7280 !important;
+}
+
+[data-theme="light"] .tx-confirm-container .tx-summary-card,
+[data-theme="light"] .tx-confirm-container .tx-details-section {
+    background: #f9fafb !important;
+    border-color: #e5e7eb !important;
+}
+
+[data-theme="light"] .tx-confirm-container .btn-reject {
+    background: #f3f4f6 !important;
+    color: #4b5563 !important;
+    border-color: #d1d5db !important;
+}
+
+/*****************************************************
+ * Wallet Sidebar - Light Mode
+ *****************************************************/
+[data-theme="light"] .account-sidebar {
+    background: #ffffff !important;
+    border-left-color: #e5e7eb !important;
+    box-shadow: -4px 0 20px rgba(0, 0, 0, 0.1) !important;
+    color: #374151 !important;
+}
+
+[data-theme="light"] .account-sidebar-close,
+[data-theme="light"] .refresh-btn {
+    background: rgba(0, 0, 0, 0.05) !important;
+    color: #374151 !important;
+}
+
+[data-theme="light"] .account-sidebar-close:hover,
+[data-theme="light"] .refresh-btn:hover {
+    background: rgba(0, 0, 0, 0.1) !important;
+}
+
+[data-theme="light"] .account-sidebar-close svg,
+[data-theme="light"] .refresh-btn svg {
+    stroke: #374151 !important;
+}
+
+[data-theme="light"] .account-address {
+    background: rgba(0, 0, 0, 0.05) !important;
+    color: #374151 !important;
+}
+
+[data-theme="light"] .account-address:hover {
+    background: rgba(0, 0, 0, 0.1) !important;
+}
+
+[data-theme="light"] .balance-amount {
+    color: #1f2937 !important;
+}
+
+[data-theme="light"] .balance-label {
+    color: #6b7280 !important;
+}
+
+[data-theme="light"] .wallet-mode-toggle .mode-btn {
+    border-color: #e5e7eb !important;
+    color: #6b7280 !important;
+    background: transparent !important;
+}
+
+[data-theme="light"] .wallet-mode-toggle .mode-btn:hover {
+    border-color: #d1d5db !important;
+    color: #374151 !important;
+}
+
+[data-theme="light"] .wallet-mode-toggle .mode-btn.active {
+    background: rgba(99, 102, 241, 0.1) !important;
+    border-color: rgba(99, 102, 241, 0.3) !important;
+    color: #374151 !important;
+}
+
+[data-theme="light"] .network-dropdown-btn {
+    border-color: #e5e7eb !important;
+    color: #6b7280 !important;
+    background: transparent !important;
+}
+
+[data-theme="light"] .network-dropdown-btn:hover {
+    border-color: #d1d5db !important;
+}
+
+[data-theme="light"] .network-dropdown-btn.active {
+    background: rgba(34, 197, 94, 0.1) !important;
+    border-color: rgba(34, 197, 94, 0.3) !important;
+    color: #374151 !important;
+}
+
+[data-theme="light"] .network-dropdown-menu {
+    background: #ffffff !important;
+    border-color: #e5e7eb !important;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15) !important;
+}
+
+[data-theme="light"] .network-dropdown-item {
+    color: #374151 !important;
+}
+
+[data-theme="light"] .network-dropdown-item:hover {
+    background: #f3f4f6 !important;
+    color: #374151 !important;
+}
+
+[data-theme="light"] .network-dropdown-item.selected {
+    background: rgba(34, 197, 94, 0.1) !important;
+}
+
+/* ESC button hover - keep text dark in light mode */
+[data-theme="light"] .network-dropdown-btn:hover,
+[data-theme="light"] .network-dropdown-btn:hover span,
+[data-theme="light"] .network-dropdown-btn:hover .network-name {
+    color: #374151 !important;
+}
+
+[data-theme="light"] .network-arrow-btn {
+    background: rgba(0, 0, 0, 0.05) !important;
+}
+
+[data-theme="light"] .network-arrow-btn:hover {
+    background: rgba(0, 0, 0, 0.1) !important;
+}
+
+[data-theme="light"] .account-sidebar-actions {
+    border-bottom-color: #e5e7eb !important;
+}
+
+[data-theme="light"] .action-btn {
+    background: #f3f4f6 !important;
+    color: #374151 !important;
+    border: 1px solid #e5e7eb !important;
+}
+
+[data-theme="light"] .action-btn:hover {
+    background: #e5e7eb !important;
+}
+
+[data-theme="light"] .action-btn svg {
+    stroke: #374151 !important;
+}
+
+[data-theme="light"] .account-sidebar-tabs {
+    border-bottom-color: #e5e7eb !important;
+}
+
+[data-theme="light"] .sidebar-tab {
+    color: #6b7280 !important;
+}
+
+[data-theme="light"] .sidebar-tab:hover {
+    color: #374151 !important;
+}
+
+[data-theme="light"] .sidebar-tab.active {
+    color: #F6921A !important;
+}
+
+[data-theme="light"] .token-row:hover,
+[data-theme="light"] .history-row:hover {
+    background: #f3f4f6 !important;
+}
+
+[data-theme="light"] .token-symbol,
+[data-theme="light"] .tx-type {
+    color: #1f2937 !important;
+}
+
+[data-theme="light"] .token-network,
+[data-theme="light"] .tx-time {
+    color: #6b7280 !important;
+}
+
+[data-theme="light"] .token-amount {
+    color: #1f2937 !important;
+}
+
+[data-theme="light"] .token-usd {
+    color: #6b7280 !important;
+}
+
+[data-theme="light"] .token-icon {
+    background: #f3f4f6 !important;
+}
+
+[data-theme="light"] .empty-state {
+    color: #6b7280 !important;
+}
+
+[data-theme="light"] .empty-state svg {
+    stroke: #9ca3af !important;
+}
+
+[data-theme="light"] .account-sidebar-backdrop {
+    background: rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Solana badge light mode */
+[data-theme="light"] .solana-address-badge {
+    background: linear-gradient(135deg, rgba(153, 69, 255, 0.15), rgba(20, 241, 149, 0.15)) !important;
+    color: #374151 !important;
+}
+
+/* Activity items light mode */
+[data-theme="light"] .activity-item {
+    background: #f9fafb !important;
+    border-color: #e5e7eb !important;
+}
+
+[data-theme="light"] .activity-item.clickable:hover {
+    background: rgba(251, 191, 36, 0.05) !important;
+}
+
+/* Light mode - Activity tab headers/empty state text should be dark */
+[data-theme="light"] .activity-list .empty-state div {
+    color: #374151 !important;
+}
+
+[data-theme="light"] .activity-list .empty-state svg {
+    stroke: #6b7280 !important;
+}
+
+/* Light mode - Activity items text */
+[data-theme="light"] .activity-item span,
+[data-theme="light"] .activity-item div {
+    color: #374151 !important;
+}
+
+[data-theme="light"] .activity-item div[style*="color:#6b7280"],
+[data-theme="light"] .activity-item span[style*="color:#6b7280"] {
+    color: #6b7280 !important;
+}
+
+/*****************************************************
+ * Receive Modal - Dark Mode Fix for Containers
+ *****************************************************/
+/* Token badges in receive modal - dark mode */
+:root .receive-modal-container span[style*="background:#f3f4f6"],
+:root .receive-modal-container span[style*="background: #f3f4f6"] {
+    background: var(--color-bg-tertiary) !important;
+    color: var(--color-text-primary) !important;
+}
+
+/* Address sections with light backgrounds */
+:root .receive-modal-container .address-section,
+:root .receive-modal-container div[style*="background: #f9fafb"],
+:root .receive-modal-container div[style*="background:#f9fafb"] {
+    background: var(--color-settings-card) !important;
+    border-color: var(--color-border) !important;
+}
+
+/* Address display boxes with white background */
+:root .receive-modal-container .address-display,
+:root .receive-modal-container div[style*="background:white"],
+:root .receive-modal-container div[style*="background: white"] {
+    background: var(--color-input-bg) !important;
+    border-color: var(--color-border) !important;
+    color: var(--color-text-primary) !important;
+}
+
+/* Text colors in receive modal */
+:root .receive-modal-container div[style*="color:#1f2937"],
+:root .receive-modal-container div[style*="color: #1f2937"] {
+    color: var(--color-text-primary) !important;
+}
+
+:root .receive-modal-container div[style*="color:#374151"],
+:root .receive-modal-container div[style*="color: #374151"],
+:root .receive-modal-container span[style*="color:#374151"],
+:root .receive-modal-container span[style*="color: #374151"] {
+    color: var(--color-text-primary) !important;
+}
+
+:root .receive-modal-container div[style*="color:#6b7280"],
+:root .receive-modal-container div[style*="color: #6b7280"] {
+    color: var(--color-text-secondary) !important;
+}
+
+/* Network dropdown in receive modal */
+:root .receive-modal-container #network-selected,
+:root .receive-modal-container #network-options {
+    background: var(--color-settings-card) !important;
+    border-color: var(--color-border) !important;
+    color: var(--color-text-primary) !important;
+}
+
+/* Loading Solana address text - should be visible in dark mode */
+:root .receive-modal-container div[style*="border: 1px dashed"],
+:root .receive-modal-container div[style*="border:1px dashed"],
+:root .receive-modal-container div[style*="dashed #e9d5ff"] {
+    background: rgba(255, 255, 255, 0.1) !important;
+    color: #e5e7eb !important;
+    border-color: rgba(233, 213, 255, 0.3) !important;
+}
+
+:root .receive-modal-container .network-option {
+    background: var(--color-settings-card) !important;
+    color: var(--color-text-primary) !important;
+}
+
+:root .receive-modal-container .network-option:hover {
+    background: var(--color-bg-tertiary) !important;
+}
+
+:root .receive-modal-container .network-option.selected {
+    background: var(--color-bg-tertiary) !important;
+}
+
+/* Light mode - restore original receive modal styling */
+[data-theme="light"] .receive-modal-container span[style*="background:#f3f4f6"],
+[data-theme="light"] .receive-modal-container span[style*="background: #f3f4f6"] {
+    background: #f3f4f6 !important;
+    color: #374151 !important;
+}
+
+[data-theme="light"] .receive-modal-container .address-section,
+[data-theme="light"] .receive-modal-container div[style*="background: #f9fafb"] {
+    background: #f9fafb !important;
+    border-color: #e5e7eb !important;
+}
+
+[data-theme="light"] .receive-modal-container .address-display,
+[data-theme="light"] .receive-modal-container div[style*="background:white"],
+[data-theme="light"] .receive-modal-container div[style*="background: white"] {
+    background: white !important;
+    border-color: #e5e7eb !important;
+    color: #374151 !important;
+}
+
+[data-theme="light"] .receive-modal-container #network-selected,
+[data-theme="light"] .receive-modal-container #network-options {
+    background: white !important;
+    border-color: #d1d5db !important;
+}
+
+/*****************************************************
+ * Launch Popover (Start Menu) - Light Mode
+ *****************************************************/
+/* Search bar wrapper background in light mode */
+[data-theme="light"] .launch-search-wrapper {
+    background: #ffffff !important;
+}
+
+/* Search input in light mode */
+[data-theme="light"] .launch-search {
+    background-color: #ffffff !important;
+    border-color: #d1d5db !important;
+    color: #374151 !important;
+}
+
+[data-theme="light"] .launch-search::placeholder {
+    color: #9ca3af !important;
+}
+
+[data-theme="light"] .launch-search::placeholder {
+    color: #9ca3af !important;
+}
+
+/* App hover state in light mode - should be lighter and readable */
+[data-theme="light"] .popover-apps-item:hover {
+    background-color: rgba(59, 130, 246, 0.15) !important;
+}
+
+[data-theme="light"] .start-app:hover,
+[data-theme="light"] .launch-app-selected .start-app {
+    background-color: rgba(59, 130, 246, 0.15) !important;
+}
+
+[data-theme="light"] .start-app:active {
+    background-color: rgba(59, 130, 246, 0.25) !important;
+}
+
+/* Make sure app titles are readable in light mode */
+[data-theme="light"] .start-app-title {
+    color: #374151 !important;
+}
+
+[data-theme="light"] .popover-apps-item span {
+    color: #374151 !important;
+}
+
+/*****************************************************
+ * Search Popup (Toolbar) - Dark Mode (Default)
+ *****************************************************/
+/* Search results dark mode */
+.search-results {
+    background: #2a2a2c !important;
+}
+
+.search-result {
+    color: #ffffff !important;
+}
+
+/* Search input dark mode - dark background, white text, white icon */
+.search-input {
+    background-color: #3a3a3c !important;
+    color: #ffffff !important;
+    border-color: #4a4a4c !important;
+    /* Make the icon white in dark mode */
+    filter: none !important;
+}
+
+/* Hide the original inline background-image icon on search input */
+.search-input {
+    background-image: none !important;
+    padding-left: 36px !important;
+    position: relative;
+}
+
+/* Dark mode search icon - positioned inside the input */
+.search-input-wrapper {
+    position: relative;
+}
+
+.search-input-wrapper::before {
+    content: '';
+    position: absolute;
+    left: 24px;
+    bottom: 17px;
+    width: 18px;
+    height: 18px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23ffffff'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z'/%3E%3C/svg%3E");
+    background-size: contain;
+    background-repeat: no-repeat;
+    pointer-events: none;
+    z-index: 2;
+}
+
+/* Search window body dark mode */
+.window-search .window-body {
+    background-color: #2a2a2c !important;
+}
+
+/*****************************************************
+ * Search Popup (Toolbar) - Light Mode
+ *****************************************************/
+/* Search input wrapper light mode */
+[data-theme="light"] .search-input-wrapper {
+    background: #ffffff !important;
+}
+
+/* Search input light mode - white background, dark text, dark icon */
+[data-theme="light"] .search-input {
+    background-color: #ffffff !important;
+    color: #374151 !important;
+    border-color: #d1d5db !important;
+}
+
+/* Light mode search icon - dark magnifier */
+[data-theme="light"] .search-input-wrapper::before {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23374151'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z'/%3E%3C/svg%3E");
+}
+
+/* Search results light mode */
+[data-theme="light"] .search-results {
+    background: #ffffff !important;
+}
+
+[data-theme="light"] .search-result {
+    color: #374151 !important;
+}
+
+[data-theme="light"] .search-result-active {
+    background-color: #3b82f6 !important;
+    color: #ffffff !important;
+}
+
+/* Search window body in light mode */
+[data-theme="light"] .window-search .window-body {
+    background-color: #f9fafb !important;
+}
+
+/*****************************************************
+ * Launch Search (Start Menu) - Dark Mode (Default)
+ *****************************************************/
+/* Dark mode - dark background, white text, white icon */
+.launch-search {
+    background-color: #3a3a3c !important;
+    color: #ffffff !important;
+    border-color: #4a4a4c !important;
+    background-image: none !important; /* Hide original inline icon */
+}
+
+/* Dark mode launch search icon - white magnifier */
+.launch-search-wrapper {
+    position: relative;
+}
+
+.launch-search-wrapper::before {
+    content: '';
+    position: absolute;
+    left: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 16px;
+    height: 16px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23ffffff'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z'/%3E%3C/svg%3E");
+    background-size: contain;
+    background-repeat: no-repeat;
+    pointer-events: none;
+    z-index: 1;
+}
+
+/*****************************************************
+ * Launch Search (Start Menu) - Light Mode
+ *****************************************************/
+/* Light mode - white background, dark text, dark icon */
+[data-theme="light"] .launch-search {
+    background-color: #ffffff !important;
+    color: #374151 !important;
+    border-color: #d1d5db !important;
+}
+
+[data-theme="light"] .launch-search::placeholder {
+    color: #9ca3af !important;
+}
+
+/* Light mode launch search icon - dark magnifier */
+[data-theme="light"] .launch-search-wrapper::before {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23374151'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z'/%3E%3C/svg%3E");
+}
+
+/*****************************************************
+ * Send/Receive Action Buttons - Light Mode
+ *****************************************************/
+/* In light mode, keep buttons light gray with dark text, NO hover effects */
+[data-theme="light"] .account-sidebar-actions .action-btn {
+    background: #f3f4f6 !important;
+    color: #374151 !important;
+    border: 1px solid #e5e7eb !important;
+    box-shadow: none !important;
+}
+
+[data-theme="light"] .account-sidebar-actions .action-btn:hover {
+    background: #f3f4f6 !important;
+    box-shadow: none !important;
+    transform: none !important;
+}
+
+[data-theme="light"] .account-sidebar-actions .action-btn:focus {
+    box-shadow: none !important;
+    outline: none !important;
+}
+
+[data-theme="light"] .account-sidebar-actions .action-btn svg {
+    stroke: #374151 !important;
+}
+
+/* Dark mode - also remove hover effects */
+:root .account-sidebar-actions .action-btn:hover {
+    box-shadow: none !important;
+    transform: none !important;
+}
+
+:root .account-sidebar-actions .action-btn:focus {
+    box-shadow: none !important;
+    outline: none !important;
+}
+
+/*****************************************************
+ * NFT Tab - Light Mode Fix
+ *****************************************************/
+/* NFT row text should be dark in light mode */
+[data-theme="light"] .nfts-list .nft-row div[style*="color:#fff"],
+[data-theme="light"] .nfts-list .nft-row div[style*="color: #fff"] {
+    color: #1f2937 !important;
+}
+
+[data-theme="light"] .nfts-list .nft-row div[style*="color:#9ca3af"] {
+    color: #6b7280 !important;
+}
+
+/* NFT thumbnail background */
+[data-theme="light"] .nfts-list .nft-thumb,
+[data-theme="light"] .nfts-list div[style*="background: #1a1a1a"],
+[data-theme="light"] .nfts-list div[style*="background:#1a1a1a"] {
+    background: #f3f4f6 !important;
+}
+
+/* NFT row border */
+[data-theme="light"] .nfts-list .nft-row {
+    border-bottom-color: #e5e7eb !important;
+}
+
+/* NFT initial/empty state text */
+[data-theme="light"] .nfts-list .nft-initial-state,
+[data-theme="light"] .nfts-list div[style*="color:#9ca3af"] {
+    color: #6b7280 !important;
+}
+
+/* Loading spinner in light mode */
+[data-theme="light"] .nfts-list .spinner {
+    border-color: rgba(0, 0, 0, 0.1) !important;
+    border-top-color: #F6921A !important;
+}
+
+/*****************************************************
+ * Receive Modal - Dark Mode Containers Fix
+ * The Base/Solana address sections need dark backgrounds
+ *****************************************************/
+/* Address sections with inline light backgrounds in dark mode */
+:root .receive-modal-container div[style*="background: linear-gradient"],
+:root .receive-modal-container .address-section {
+    border-color: var(--color-border) !important;
+}
+
+:root .receive-modal-container div[style*="background: #f9fafb"],
+:root .receive-modal-container div[style*="background:#f9fafb"],
+:root .receive-modal-container div[style*="background: white"],
+:root .receive-modal-container div[style*="background:white"] {
+    background: var(--color-settings-card) !important;
+}
+
+/* Network dropdown and address displays with white backgrounds */
+:root .receive-modal-container #network-selected,
+:root .receive-modal-container #network-options,
+:root .receive-modal-container div[style*="background:white"][style*="border-radius:8px"],
+:root .receive-modal-container div[style*="background: white"][style*="border-radius:8px"] {
+    background: var(--color-input-bg) !important;
+    border-color: var(--color-border) !important;
+    color: var(--color-text-primary) !important;
+}
+
+/* Network options hover */
+:root .receive-modal-container .network-option {
+    background: var(--color-settings-card) !important;
+    color: var(--color-text-primary) !important;
+}
+
+:root .receive-modal-container .network-option:hover,
+:root .receive-modal-container .network-option.selected {
+    background: var(--color-bg-tertiary) !important;
+}
+
+/* QR code container white background */
+:root .receive-modal-container div[style*="background:white"][style*="border-radius:8px"][style*="padding:8px"],
+:root .receive-modal-container #evm-qr-code,
+:root .receive-modal-container #eoa-qr-code,
+:root .receive-modal-container #solana-qr-code {
+    background: #ffffff !important;
+}
+
+/*****************************************************
+ * Send/Receive/Activity Windows - Z-Index Fix
+ * These must appear ABOVE the wallet sidebar AND its backdrop
+ *****************************************************/
+.window[data-app="account-send"],
+.window[data-app="account-receive"],
+.window[data-app="transaction-confirm"] {
+    z-index: 2147483646 !important;
+}
+
+/* Ensure the window-active class boosts z-index even higher */
+.window[data-app="account-send"].window-active,
+.window[data-app="account-receive"].window-active,
+.window[data-app="transaction-confirm"].window-active {
+    z-index: 2147483647 !important;
+}
+
+/*****************************************************
+ * Light Mode - Activity Tab Headers/Text Dark
+ *****************************************************/
+[data-theme="light"] .activity-list .empty-state div[style*="color:#9ca3af"],
+[data-theme="light"] .activity-list .empty-state div[style*="color: #9ca3af"] {
+    color: #374151 !important;
+}
+
+[data-theme="light"] .activity-list .empty-state div[style*="color:#6b7280"],
+[data-theme="light"] .activity-list .empty-state div[style*="color: #6b7280"] {
+    color: #6b7280 !important;
+}
+
+[data-theme="light"] .activity-list .empty-state svg {
+    stroke: #6b7280 !important;
+}
+
+/* Activity items in light mode - make text dark */
+[data-theme="light"] .activity-item {
+    background: #f9fafb !important;
+    border-color: #e5e7eb !important;
+}
+
+[data-theme="light"] .activity-item span,
+[data-theme="light"] .activity-item div {
+    color: #374151 !important;
+}
+
+[data-theme="light"] .activity-item .activity-countdown {
+    color: #f59e0b !important;
+}
+
+[data-theme="light"] .activity-item div[style*="background: rgba(255, 255, 255"] {
+    background: #f3f4f6 !important;
+}
+
+/*****************************************************
+ * Light Mode - Start Popup App Hover Fix
+ *****************************************************/
+/* Make app hover state lighter and readable in light mode */
+[data-theme="light"] .popover-apps-item:hover {
+    background-color: rgba(59, 130, 246, 0.12) !important;
+}
+
+[data-theme="light"] .popover-apps-item:hover span {
+    color: #1f2937 !important;
+}
+
+[data-theme="light"] .start-app:hover,
+[data-theme="light"] .launch-app-selected .start-app {
+    background-color: rgba(59, 130, 246, 0.12) !important;
+}
+
+[data-theme="light"] .start-app:hover .start-app-title,
+[data-theme="light"] .launch-app-selected .start-app .start-app-title {
+    color: #1f2937 !important;
+}
+
+[data-theme="light"] .start-app:active {
+    background-color: rgba(59, 130, 246, 0.2) !important;
+}
+
+/* Light Mode search overrides consolidated in earlier sections */
+
+/*****************************************************
+ * Storage Bars - Track Background (works in both modes)
+ *****************************************************/
+.settings-content .storage-type-bar,
+.settings-content .storage-quota-track {
+    background: rgba(128, 128, 128, 0.3) !important;
+}
+
+/* DO NOT override .storage-type-bar-fill - let inline styles work */
+
+/*****************************************************
+ * Theme Utility Classes
+ * Use these classes for theme-aware styling in JS components
+ *****************************************************/
+/* Background utilities */
+.theme-bg-primary { background-color: var(--color-bg-primary) !important; }
+.theme-bg-secondary { background-color: var(--color-bg-secondary) !important; }
+.theme-bg-tertiary { background-color: var(--color-bg-tertiary) !important; }
+.theme-bg-surface { background-color: var(--color-bg-surface) !important; }
+.theme-bg-card { background-color: var(--color-settings-card) !important; }
+
+/* Text utilities */
+.theme-text-primary { color: var(--color-text-primary) !important; }
+.theme-text-secondary { color: var(--color-text-secondary) !important; }
+.theme-text-muted { color: var(--color-text-muted) !important; }
+
+/* Border utilities */
+.theme-border { border-color: var(--color-border) !important; }
+.theme-border-light { border-color: var(--color-border-light) !important; }
+
+/* Status utilities */
+.theme-success { color: var(--color-success) !important; }
+.theme-success-bg { background-color: var(--color-success-bg) !important; }
+.theme-warning { color: var(--color-warning) !important; }
+.theme-warning-bg { background-color: var(--color-warning-bg) !important; }
+.theme-error { color: var(--color-error) !important; }
+.theme-error-bg { background-color: var(--color-error-bg) !important; }
+.theme-info { color: var(--color-info) !important; }
+.theme-info-bg { background-color: var(--color-info-bg) !important; }
+
+/* Input styling for settings panels */
+.theme-input {
+    background-color: var(--color-input-bg) !important;
+    border-color: var(--color-input-border) !important;
+    color: var(--color-input-text) !important;
+}
+
+/* Card styling for settings panels */
+.theme-card {
+    background-color: var(--color-settings-card) !important;
+    border-color: var(--color-border) !important;
+    color: var(--color-text-primary) !important;
 }
 
 html, body {
@@ -2042,8 +4659,7 @@ body {
     background: no-repeat center center fixed;
     background-position: center;
     background-size: cover;
-    /* background-color: #3d4c74; */
-    background-color: #171717;
+    background-color: var(--color-bg-body);
     overflow: hidden;
 }
 
@@ -2084,12 +4700,13 @@ body {
 input[type=text], input[type=password], input[type=email], select {
     width: 100%;
     padding: 8px;
-    border: 1px solid #ccc;
+    border: 1px solid var(--color-input-border);
     border-radius: 4px;
     box-sizing: border-box;
     outline: none;
     -webkit-font-smoothing: antialiased;
-    color: #393f46;
+    color: var(--color-input-text);
+    background-color: var(--color-input-bg);
     font-size: 14px;
 }
 
@@ -2161,6 +4778,158 @@ input[type=text]:focus, input[type=password]:focus, input[type=email]:focus, sel
     cursor: default !important;
     appearance: none !important;
     pointer-events: none;
+}
+
+/*****************************************************
+ * Button - Dark Mode Override (must come after base styles)
+ *****************************************************/
+:root .settings-content .button,
+:root .settings-content button.button,
+:root .window-body .button,
+:root .window-body button.button {
+    background: #3a3a3c !important;
+    background-image: none !important;
+    border-color: #555 !important;
+    color: #fff !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+}
+
+:root .settings-content .button:hover,
+:root .window-body .button:hover {
+    background: #4a4a4c !important;
+}
+
+/*****************************************************
+ * Button - Light Mode (restore original Puter style)
+ *****************************************************/
+[data-theme="light"] .settings-content .button,
+[data-theme="light"] .settings-content button.button,
+[data-theme="light"] .window-body .button,
+[data-theme="light"] .window-body button.button {
+    background: linear-gradient(#f6f6f6, #e1e1e1) !important;
+    background-image: linear-gradient(#f6f6f6, #e1e1e1) !important;
+    border-color: #b9b9b9 !important;
+    color: #666666 !important;
+    box-shadow: inset 0px 1px 0px rgb(255 255 255 / 30%), 0 1px 2px rgb(0 0 0 / 15%) !important;
+    text-shadow: none !important;
+}
+
+[data-theme="light"] .settings-content .button:hover,
+[data-theme="light"] .window-body .button:hover {
+    background: linear-gradient(#e8e8e8, #d5d5d5) !important;
+}
+
+/*****************************************************
+ * Modal/Dialog Windows - Dark Mode
+ *****************************************************/
+/* API Key Configuration Modal */
+.ai-key-modal-content {
+    background: var(--color-window-bg) !important;
+    color: var(--color-text-primary) !important;
+}
+
+.ai-key-modal-title {
+    color: var(--color-text-primary) !important;
+}
+
+.ai-key-modal-desc {
+    color: var(--color-text-secondary) !important;
+}
+
+.ai-key-modal-input {
+    background: var(--color-input-bg) !important;
+    border-color: var(--color-input-border) !important;
+    color: var(--color-input-text) !important;
+}
+
+/* Generic window body with white background override */
+.window-body[style*="background-color: #fff"],
+.window-body[style*="background-color: rgb(255, 255, 255)"],
+.window-body[style*="background-color:rgb(255, 255, 255)"] {
+    background-color: var(--color-window-bg) !important;
+    color: var(--color-text-primary) !important;
+}
+
+/* Window body h3 titles */
+.window-body h3 {
+    color: var(--color-text-primary) !important;
+}
+
+/* Window body paragraphs */
+.window-body p {
+    color: var(--color-text-secondary) !important;
+}
+
+/* Window body labels */
+.window-body label {
+    color: var(--color-text-primary) !important;
+}
+
+/* Window body strong text */
+.window-body strong {
+    color: var(--color-text-primary) !important;
+}
+
+/* Window body inputs */
+.window-body input[type="text"],
+.window-body input[type="password"],
+.window-body input[type="email"] {
+    background: var(--color-input-bg) !important;
+    border-color: var(--color-input-border) !important;
+    color: var(--color-input-text) !important;
+}
+
+/* Window body code blocks */
+.window-body div[style*="background: #f3f4f6"],
+.window-body div[style*="background:#f3f4f6"] {
+    background: var(--color-bg-tertiary) !important;
+}
+
+.window-body code {
+    color: var(--color-text-primary) !important;
+}
+
+/* API Key list styles in Security */
+.api-key-item {
+    border-bottom-color: var(--color-border) !important;
+}
+
+.api-key-name {
+    color: var(--color-text-primary) !important;
+}
+
+.api-key-meta {
+    color: var(--color-text-secondary) !important;
+}
+
+/* Success message in key created modal */
+.window-body h3[style*="color: #166534"] {
+    color: #4ade80 !important;
+}
+
+/* Warning message */
+.window-body p[style*="color: #92400e"] {
+    color: #fbbf24 !important;
+}
+
+/* API Key Modal window class */
+.api-key-modal .window-body {
+    background: var(--color-window-bg) !important;
+    color: var(--color-text-primary) !important;
+}
+
+/* Key Created modal styles */
+.key-created-title {
+    color: #4ade80 !important;
+}
+
+.key-created-warning {
+    color: #fbbf24 !important;
+}
+
+.key-created-box {
+    background: var(--color-bg-tertiary) !important;
 }
 
 .button-action.disabled, .button-action.is-disabled, .button-action:disabled {
@@ -2387,7 +5156,8 @@ input[type=text]:focus, input[type=password]:focus, input[type=email]:focus, sel
     width: 100%;
     min-width: 795px;
     height: 25px;
-    border-bottom: 1px solid rgb(226, 226, 226);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+    background-color: var(--color-bg-tertiary, #2f2f30);
     background-color: #fff;
     margin-left: -10px;
     padding-top: 0;
@@ -2416,8 +5186,18 @@ span.header-sort-icon img {
     font-size: 12px;
     line-height: 25px;
     margin-left: 15px;
-    color: #555c61;
+    color: rgba(255, 255, 255, 0.7);
     display: inline-block;
+}
+
+/* Light mode - explore table headers */
+[data-theme="light"] .explore-table-headers {
+    background-color: #f9fafb !important;
+    border-bottom-color: rgb(226, 226, 226) !important;
+}
+
+[data-theme="light"] .explore-table-headers .explore-table-headers-th {
+    color: #555c61 !important;
 }
 
 .explore-table-headers-th-active {
@@ -2732,7 +5512,7 @@ span.header-sort-icon img {
 }
 
 .window-body .item .item-name {
-    color: rgb(73, 73, 73);
+    color: var(--color-item-name-window);
     text-shadow: none;
     font-weight: 500;
     font-size: 13px;
@@ -2750,7 +5530,7 @@ span.header-sort-icon img {
 
 .device-phone .item-container-list .item .item-name {
     line-height: 42px;
-    border-bottom: 1px solid #e3e3e3;
+    border-bottom: 1px solid var(--color-border);
     padding-bottom: 15px;
     width: calc(100% - 75px);
     text-align: left;
@@ -2790,8 +5570,8 @@ span.header-sort-icon img {
     display: flex;
     box-sizing: border-box;
     overflow: hidden;
-    border-bottom: 1px solid #e3e3e3;
-    background-color: #fafafa;
+    border-bottom: 1px solid var(--color-border);
+    background-color: var(--color-window-navbar);
     --scale: 2pt;
     padding: 2px 5px;
 }
@@ -3018,9 +5798,9 @@ span.header-sort-icon img {
 
 .window-navbar {
     overflow: hidden;
-    border-bottom: 1px solid #ffffff;
+    border-bottom: 1px solid var(--color-border);
     padding: 5px 0 5px 1px;
-    background-color: #ffffff;
+    background-color: var(--color-window-navbar);
     height: 48px;
     box-sizing: border-box;
 }
@@ -3035,7 +5815,7 @@ span.header-sort-icon img {
 }
 
 .window-navbar-btn:hover, .window-navbar-btn.has-open-contextmenu {
-    background-color: #dfdfdf;
+    background-color: var(--color-bg-tertiary);
 }
 
 .window-navbar-btn-disabled {
@@ -3043,19 +5823,42 @@ span.header-sort-icon img {
     opacity: 0.5;
 }
 
+/* Explorer navbar icons - make them very light/white in dark mode */
+.window-navbar-btn {
+    filter: invert(1) brightness(1.2) !important;
+    opacity: 0.9;
+}
+
+/* Light mode - keep icons dark */
+[data-theme="light"] .window-navbar-btn {
+    filter: none !important;
+    opacity: 1;
+}
+
+/* Layout settings icon in explorer also needs to be white in dark mode */
+.window-navbar-layout-settings img {
+    filter: invert(1) brightness(1.2) !important;
+    opacity: 0.9;
+}
+
+[data-theme="light"] .window-navbar-layout-settings img {
+    filter: none !important;
+    opacity: 1;
+}
+
 .window-navbar-path {
     overflow: hidden;
     line-height: 35px;
     padding-left: 10px;
     font-size: 14px;
-    color: #41484c;
+    color: var(--color-text-primary);
     text-overflow: ellipsis;
     white-space: nowrap;
     overflow: hidden;
     -webkit-font-smoothing: antialiased;
-    border: 1px solid #e3e3e3;
+    border: 1px solid var(--color-border);
     border-radius: 3px;
-    background: #f1f3f4;
+    background: var(--color-bg-tertiary);
     box-sizing: border-box;
 
     user-select: none !important;
@@ -3132,7 +5935,7 @@ span.header-sort-icon img {
 .window-body {
     width: 100%;
     height: calc(100% - 77px);
-    background-color: #ffffff;
+    background-color: var(--color-window-body);
     overflow: auto;
 }
 
@@ -3294,15 +6097,14 @@ span.header-sort-icon img {
 }
 
 .explorer-footer {
-    background: white;
     overflow: auto;
     height: 30px;
     font-size: 13px;
     line-height: 28px;
     padding-left: 10px;
-    background-color: #fafafa;
-    border-top: 1px solid #e3e3e35c;
-    color: #505050;
+    background-color: var(--color-window-navbar);
+    border-top: 1px solid var(--color-border);
+    color: var(--color-text-secondary);
     user-select: none !important;
     -moz-user-select: none !important;
     -webkit-user-select: none !important;
@@ -3465,8 +6267,8 @@ span.header-sort-icon img {
     font-size: 15px;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    color: #414650;
-    text-shadow: 1px 1px #ffffff52;
+    color: #ffffff;
+    text-shadow: 1px 1px rgba(0, 0, 0, 0.3);
     margin-top: 10px;
     word-break: break-word;
 }
@@ -3570,13 +6372,12 @@ span.header-sort-icon img {
     overflow: hidden;
     white-space: nowrap;
     font-family: 'PP Telegraf';
-    background: #232324;
-    color: #ffffff;
+    background-color: var(--color-menu-bg);
+    color: var(--color-menu-text);
     border-radius: 2px;
     padding: 3px 0;
     min-width: 200px;
-    background-color: rgba(231, 238, 245, .98);
-    border: 1px solid #e6e4e466;
+    border: 1px solid var(--color-border);
     box-shadow: 0px 0px 15px #00000066;
     padding-left: 6px;
     padding-right: 6px;
@@ -3595,6 +6396,58 @@ span.header-sort-icon img {
     margin-bottom: 0;
     border-bottom: none;
     border-top: 1px solid #00000033;
+}
+
+/* Dark mode - context menu dividers should be grey not white */
+:root .context-menu .context-menu-divider>hr {
+    border-top-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+/* Light mode - restore normal dividers */
+[data-theme="light"] .context-menu .context-menu-divider>hr {
+    border-top-color: rgba(0, 0, 0, 0.2) !important;
+}
+
+/*****************************************************
+ * PC2 Cloud Dropdown (Context Menu) - Light Mode Fix
+ *****************************************************/
+/* Force ALL text in context menu to be dark in light mode */
+[data-theme="light"] .context-menu span,
+[data-theme="light"] .context-menu span[style*="color: #fff"],
+[data-theme="light"] .context-menu span[style*="color:#fff"],
+[data-theme="light"] .context-menu span[style*="color: white"],
+[data-theme="light"] .context-menu span[style*="color:white"] {
+    color: #374151 !important;
+}
+
+[data-theme="light"] .context-menu span[style*="color: #aaa"],
+[data-theme="light"] .context-menu span[style*="color:#aaa"] {
+    color: #6b7280 !important;
+}
+
+/* Force ALL SVG icons in context menu to be dark in light mode */
+[data-theme="light"] .context-menu svg,
+[data-theme="light"] .context-menu svg[fill="#fff"],
+[data-theme="light"] .context-menu svg[fill="white"] {
+    fill: #374151 !important;
+}
+
+[data-theme="light"] .context-menu svg path,
+[data-theme="light"] .context-menu svg rect,
+[data-theme="light"] .context-menu svg circle,
+[data-theme="light"] .context-menu svg line {
+    fill: #374151 !important;
+    stroke: #374151 !important;
+}
+
+[data-theme="light"] .context-menu svg[stroke="#fff"],
+[data-theme="light"] .context-menu svg[stroke="white"] {
+    stroke: #374151 !important;
+}
+
+/* Force context menu background to be light in light mode */
+[data-theme="light"] .context-menu {
+    background-color: rgba(255, 255, 255, 0.98) !important;
 }
 
 .context-menu .context-menu-divider {
@@ -4927,15 +7780,16 @@ label {
     display: none;
     z-index: 9999999;
     box-sizing: border-box;
-    border-radius: 4px;
+    border-radius: 16px;
     overflow: hidden;
-    box-shadow: 0px 0px 15px #00000066;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    background: transparent;
 }
 
 @supports ((backdrop-filter: blur())) {
     .launch-popover {
-        background-color: rgba(231, 238, 245, .92);
-        backdrop-filter: blur(3px);
+        background-color: var(--color-bg-surface);
+        backdrop-filter: blur(10px);
     }
 }
 
@@ -4986,16 +7840,16 @@ label {
 
 .notification {
     min-height: 54px;
-    background: #232324;
+    background: var(--color-bg-secondary);
     backdrop-filter: blur(5px);
     z-index: 99999999;
     box-shadow: 0px 0px 17px -9px #000;
-    border: 1px solid #3a3a3a;
+    border: 1px solid var(--color-border);
     margin-bottom: 10px;
     display: flex;
     flex-direction: row;
     pointer-events: all;
-    color: #ffffff;
+    color: var(--color-text-primary);
 }
 
 .notification-wrapper {
@@ -5094,16 +7948,17 @@ label {
  * Start
  *****************************************************/
 .launch-popover {
-    color: #ffffff;
+    color: var(--color-text-primary);
     width: 530px;
     height: 500px;
     padding: 20px 20px 20px;
-    border: 1px solid #232324;
-    border-radius: 4px;
-    background-color: #232324;
-    backdrop-filter: blur(3px);
+    border: 1px solid var(--color-border);
+    border-radius: 16px;
+    background-color: var(--color-bg-secondary);
+    backdrop-filter: blur(10px);
     box-sizing: border-box;
     overflow-y: scroll;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
 
 .close-launch-popover {
@@ -5121,7 +7976,7 @@ label {
     width: 100vw;
     height: 100vh;
     height: 100dvh;
-    background-color: rgba(231, 238, 245);
+    background-color: var(--color-bg-secondary);
 }
 
 .start-section-heading {
@@ -5470,7 +8325,7 @@ fieldset[name=number-code] {
     }
 
     .device-phone .window-head {
-        background-color: rgba(231, 238, 245);
+        background-color: var(--color-bg-surface);
         backdrop-filter: blur(10px);
     }
 
@@ -5488,12 +8343,12 @@ fieldset[name=number-code] {
     }
 
     .context-menu {
-        background-color: #232324;
+        background-color: var(--color-menu-bg);
         backdrop-filter: blur(3px);
     }
 
     .popover:not(.device-phone .popover) {
-        background-color: rgb(238, 243, 248);
+        background-color: var(--color-bg-surface);
         backdrop-filter: blur(10px);
     }
 }
@@ -5565,14 +8420,19 @@ fieldset[name=number-code] {
     background-repeat: no-repeat;
     width: 100%;
     box-sizing: border-box;
-    background-color: white;
+    background-color: #3a3a3c;
+    color: #ffffff;
     padding: 5px;
     background-size: 20px;
     background-position-y: center;
     background-position-x: 5px;
     padding-left: 35px;
     padding-right: 35px;
-    border: 2px solid #CCC;
+    border: 2px solid #4a4a4c;
+}
+
+.launch-search::placeholder {
+    color: #9ca3af;
 }
 
 .launch-search-wrapper {
@@ -6120,8 +8980,8 @@ fieldset[name=number-code] {
 
 .settings-sidebar {
     width: 200px;
-    background-color: #f9f9f9;
-    border-right: 1px solid #e0e0e0;
+    background-color: var(--color-settings-sidebar);
+    border-right: 1px solid var(--color-border);
     padding: 20px;
     position: fixed;
     margin-top: 1px;
@@ -6135,7 +8995,7 @@ fieldset[name=number-code] {
     font-weight: bold;
     -webkit-font-smoothing: antialiased;
     margin-top: 15px;
-    color: #8c8c8c;
+    color: var(--color-text-secondary);
     font-size: 19px;
 }
 
@@ -6144,19 +9004,34 @@ fieldset[name=number-code] {
     border-radius: 4px;
     padding: 8px 10px;
     margin-bottom: 4px;
-    background-repeat: no-repeat;
-    background-position: 10px center;
-    background-size: 22px;
-    padding-left: 42px;
+    padding-left: 10px;
     font-size: 14px;
+    color: var(--color-text-primary);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.settings-sidebar-icon {
+    width: 22px;
+    height: 22px;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
+    flex-shrink: 0;
+    filter: var(--primary-color-icon);
+}
+
+.settings-sidebar-text {
+    flex-grow: 1;
 }
 
 .settings-sidebar-item:hover {
-    background-color: #e8e8e8;
+    background-color: var(--color-bg-tertiary);
 }
 
 .settings-sidebar-item.active {
-    background-color: #e0e0e0;
+    background-color: var(--color-border);
 }
 
 .settings-content-container {
@@ -6164,6 +9039,7 @@ fieldset[name=number-code] {
     padding: 20px 30px;
     overflow-y: auto;
     margin-left: 240px;
+    background-color: var(--color-settings-bg);
 }
 
 .device-phone .settings-content-container {
@@ -6184,10 +9060,11 @@ fieldset[name=number-code] {
 .settings-content h1 {
     font-size: 24px;
     margin-bottom: 20px;
-    border-bottom: 1px solid #e0e0e0;
+    border-bottom: 1px solid var(--color-border);
     padding-bottom: 10px;
     padding-left: 5px;
     font-weight: 500;
+    color: var(--color-text-primary);
 }
 
 .settings-content.active {
@@ -6317,6 +9194,25 @@ fieldset[name=number-code] {
     border: 1px solid #bfbfbf;
     box-shadow: 1px 1px 10px 0px #8a8a8a;
     width: 400px;
+    background-color: var(--color-window-bg);
+    color: var(--color-text-primary);
+}
+
+/* Dark mode credits dialog */
+:root .credits {
+    background-color: #2a2a2c;
+    border-color: #4a4a4c;
+    color: #ffffff;
+}
+
+:root .credits::backdrop {
+    background: rgba(0, 0, 0, 0.5);
+}
+
+[data-theme="light"] .credits {
+    background-color: #ffffff;
+    border-color: #bfbfbf;
+    color: #333333;
 }
 
 .credit-content a {
@@ -6325,6 +9221,18 @@ fieldset[name=number-code] {
 
 .credits .credit-content {
     padding: 20px;
+}
+
+.credits .credit-content p {
+    color: var(--color-text-muted);
+}
+
+:root .credits .credit-content p {
+    color: #9ca3af;
+}
+
+[data-theme="light"] .credits .credit-content p {
+    color: #666666;
 }
 
 .credit-content {
@@ -6448,6 +9356,16 @@ fieldset[name=number-code] {
 
 .language-item:hover {
     background-color: #f6f6f6;
+}
+
+/* Dark mode - language item hover should be darker */
+:root .language-item:hover {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Light mode - keep original hover */
+[data-theme="light"] .language-item:hover {
+    background-color: #f6f6f6 !important;
 }
 
 .language-item .checkmark {
@@ -6617,6 +9535,273 @@ fieldset[name=number-code] {
     justify-content: flex-end;
 }
 
+/*****************************************************
+ * Session Manager - Dark Mode
+ *****************************************************/
+:root .window-session-manager .window-body {
+    background: var(--color-window-bg) !important;
+}
+
+:root .session-widget {
+    background: var(--color-settings-card) !important;
+    border-color: var(--color-border) !important;
+}
+
+:root .current-session.session-widget {
+    background: var(--color-bg-tertiary) !important;
+}
+
+:root .session-widget-uuid {
+    color: #f472b6 !important;
+}
+
+:root .session-widget-meta-key,
+:root .session-widget-meta-value {
+    color: var(--color-text-secondary) !important;
+}
+
+/* Light mode - restore original session widget styling */
+[data-theme="light"] .session-widget {
+    background: #f0f0f0 !important;
+    border-color: #e0e0e0 !important;
+}
+
+[data-theme="light"] .current-session.session-widget {
+    background: #e8e8e8 !important;
+}
+
+[data-theme="light"] .session-widget-uuid {
+    color: #9c185b !important;
+}
+
+[data-theme="light"] .session-widget-meta-key,
+[data-theme="light"] .session-widget-meta-value {
+    color: #666 !important;
+}
+
+/*****************************************************
+ * Desktop Background Settings - Dark Mode
+ *****************************************************/
+:root .window-give-access .window-body {
+    background: var(--color-window-bg) !important;
+}
+
+:root .window-give-access .window-body > div {
+    background: var(--color-window-bg) !important;
+    border-color: var(--color-border) !important;
+}
+
+:root .window-give-access label {
+    color: var(--color-text-primary) !important;
+}
+
+:root .window-give-access select {
+    background: var(--color-input-bg) !important;
+    border-color: var(--color-border) !important;
+    color: var(--color-text-primary) !important;
+}
+
+:root .window-give-access div[style*="border-bottom"],
+:root .window-give-access div[style*="border-top"] {
+    border-color: var(--color-border) !important;
+}
+
+/* Light mode - restore original desktop bg styling */
+[data-theme="light"] .window-give-access .window-body {
+    background: #ffffff !important;
+}
+
+[data-theme="light"] .window-give-access .window-body > div {
+    background: #ffffff !important;
+}
+
+[data-theme="light"] .window-give-access label {
+    color: #374151 !important;
+}
+
+[data-theme="light"] .window-give-access select {
+    background: #ffffff !important;
+    border-color: #d1d5db !important;
+    color: #374151 !important;
+}
+
+/*****************************************************
+ * Backup Download/Delete Buttons - Dark Mode Fix
+ *****************************************************/
+:root .settings-content button[style*="border: 1px solid"][style*="background: transparent"],
+:root .settings-content button[style*="border:1px solid"][style*="background:transparent"] {
+    background: transparent !important;
+}
+
+/* Blue Download buttons in dark mode - make brighter */
+:root .settings-content button[style*="color: #3b82f6"],
+:root .settings-content button[style*="color:#3b82f6"],
+:root .settings-content button[style*="border-color: #3b82f6"],
+:root .settings-content button[style*="border-color:#3b82f6"] {
+    color: #93c5fd !important;
+    border-color: #93c5fd !important;
+}
+
+/* Red Delete buttons in dark mode - make brighter */
+:root .settings-content button[style*="color: #ef4444"],
+:root .settings-content button[style*="color:#ef4444"],
+:root .settings-content button[style*="border-color: #ef4444"],
+:root .settings-content button[style*="border-color:#ef4444"] {
+    color: #fca5a5 !important;
+    border-color: #fca5a5 !important;
+}
+
+/* Light mode - keep original button colors */
+[data-theme="light"] .settings-content button[style*="color: #3b82f6"],
+[data-theme="light"] .settings-content button[style*="color:#3b82f6"] {
+    color: #3b82f6 !important;
+    border-color: #3b82f6 !important;
+}
+
+[data-theme="light"] .settings-content button[style*="color: #ef4444"],
+[data-theme="light"] .settings-content button[style*="color:#ef4444"] {
+    color: #ef4444 !important;
+    border-color: #ef4444 !important;
+}
+
+/*****************************************************
+ * Help Popup Colored Tags - Dark Mode Fix
+ *****************************************************/
+/* Yellow/Warning boxes (#fef3c7) - keep text DARK and readable in dark mode */
+:root div[style*="background: #fef3c7"],
+:root div[style*="background:#fef3c7"],
+:root div[style*="background: #fff3cd"],
+:root div[style*="background:#fff3cd"] {
+    background: #fef3c7 !important;
+    color: #92400e !important;
+}
+
+:root div[style*="background: #fef3c7"] strong,
+:root div[style*="background:#fef3c7"] strong,
+:root div[style*="background: #fff3cd"] strong,
+:root div[style*="background:#fff3cd"] strong {
+    color: #92400e !important;
+}
+
+:root div[style*="background: #fef3c7"] p,
+:root div[style*="background:#fef3c7"] p,
+:root div[style*="background: #fff3cd"] p,
+:root div[style*="background:#fff3cd"] p {
+    color: #78350f !important;
+}
+
+/* Blue/Info boxes - keep text DARK */
+:root div[style*="background: #e0f2fe"],
+:root div[style*="background:#e0f2fe"],
+:root div[style*="background: #cce5ff"],
+:root div[style*="background:#cce5ff"],
+:root div[style*="background: #dbeafe"],
+:root div[style*="background:#dbeafe"] {
+    background: #dbeafe !important;
+    color: #1e40af !important;
+}
+
+:root div[style*="background: #e0f2fe"] strong,
+:root div[style*="background:#e0f2fe"] strong,
+:root div[style*="background: #cce5ff"] strong,
+:root div[style*="background:#cce5ff"] strong,
+:root div[style*="background: #dbeafe"] strong,
+:root div[style*="background:#dbeafe"] strong {
+    color: #1e40af !important;
+}
+
+:root div[style*="background: #e0f2fe"] p,
+:root div[style*="background:#e0f2fe"] p,
+:root div[style*="background: #cce5ff"] p,
+:root div[style*="background:#cce5ff"] p,
+:root div[style*="background: #dbeafe"] p,
+:root div[style*="background:#dbeafe"] p {
+    color: #1e3a8a !important;
+}
+
+/* Green/Success boxes - keep text DARK */
+:root div[style*="background: #dcfce7"],
+:root div[style*="background:#dcfce7"],
+:root div[style*="background: #d4edda"],
+:root div[style*="background:#d4edda"],
+:root div[style*="background: #d1fae5"],
+:root div[style*="background:#d1fae5"] {
+    background: #dcfce7 !important;
+    color: #166534 !important;
+}
+
+:root div[style*="background: #dcfce7"] strong,
+:root div[style*="background:#dcfce7"] strong,
+:root div[style*="background: #d4edda"] strong,
+:root div[style*="background:#d4edda"] strong,
+:root div[style*="background: #d1fae5"] strong,
+:root div[style*="background:#d1fae5"] strong {
+    color: #166534 !important;
+}
+
+:root div[style*="background: #dcfce7"] p,
+:root div[style*="background:#dcfce7"] p,
+:root div[style*="background: #d4edda"] p,
+:root div[style*="background:#d4edda"] p,
+:root div[style*="background: #d1fae5"] p,
+:root div[style*="background:#d1fae5"] p {
+    color: #14532d !important;
+}
+
+/* Also target li elements inside these colored boxes */
+:root div[style*="background: #fef3c7"] li,
+:root div[style*="background: #fff3cd"] li {
+    color: #78350f !important;
+}
+
+:root div[style*="background: #e0f2fe"] li,
+:root div[style*="background: #dbeafe"] li {
+    color: #1e3a8a !important;
+}
+
+:root div[style*="background: #dcfce7"] li,
+:root div[style*="background: #d1fae5"] li {
+    color: #14532d !important;
+}
+
+/* Light mode - restore original help tag colors */
+[data-theme="light"] div[style*="background: #fff3cd"],
+[data-theme="light"] div[style*="background:#fff3cd"] {
+    background: #fff3cd !important;
+    color: #856404 !important;
+}
+
+[data-theme="light"] div[style*="background: #fff3cd"] *,
+[data-theme="light"] div[style*="background:#fff3cd"] * {
+    color: #856404 !important;
+}
+
+[data-theme="light"] div[style*="background: #e0f2fe"],
+[data-theme="light"] div[style*="background:#e0f2fe"],
+[data-theme="light"] div[style*="background: #cce5ff"] {
+    background: #e0f2fe !important;
+    color: #0369a1 !important;
+}
+
+[data-theme="light"] div[style*="background: #e0f2fe"] *,
+[data-theme="light"] div[style*="background:#e0f2fe"] *,
+[data-theme="light"] div[style*="background: #cce5ff"] * {
+    color: #0369a1 !important;
+}
+
+[data-theme="light"] div[style*="background: #dcfce7"],
+[data-theme="light"] div[style*="background:#dcfce7"],
+[data-theme="light"] div[style*="background: #d4edda"] {
+    background: #dcfce7 !important;
+    color: #166534 !important;
+}
+
+[data-theme="light"] div[style*="background: #dcfce7"] *,
+[data-theme="light"] div[style*="background:#dcfce7"] *,
+[data-theme="light"] div[style*="background: #d4edda"] * {
+    color: #166534 !important;
+}
+
 /* Extra small devices (phones, less than 576px) */
 @media (max-width: 575.98px) {
     .hidden-xs {
@@ -6765,7 +9950,13 @@ fieldset[name=number-code] {
     padding-left: 15px;
     padding-right: 15px;
     box-sizing: border-box;
-    background: #f1f6fc;
+    background: #2a2a2c;
+}
+
+.search-input {
+    background-color: #3a3a3c !important;
+    color: #ffffff !important;
+    border: 1px solid #4a4a4c !important;
 }
 
 .search-input {

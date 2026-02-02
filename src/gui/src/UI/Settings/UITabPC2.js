@@ -1518,11 +1518,13 @@ export default {
             }
         }
         
-        // Create backup button
-        $el_window.find('#pc2-create-backup-btn').on('click', createBackup);
+        // Create backup button - use off().on() to prevent duplicate handlers
+        $el_window.find('#pc2-create-backup-btn').off('click').on('click', createBackup);
         
-        // Backup help dialog
-        $el_window.find('#pc2-backup-help').on('click', function() {
+        // Backup help dialog - use off().on() to prevent duplicate windows
+        $el_window.find('#pc2-backup-help').off('click').on('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
             const helpContent = `
                 <div style="padding: 20px; max-width: 500px;">
                     <h3 style="margin-top: 0; margin-bottom: 15px;">Backup & Restore Help</h3>

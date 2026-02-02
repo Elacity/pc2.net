@@ -119,70 +119,87 @@ function initKeyboardShortcuts() {
         // Cmd+C / Ctrl+C: Copy selected items
         if (e.key === 'c' && (e.metaKey || e.ctrlKey) && !e.shiftKey) {
             const activeWindow = $('.window-active');
-            if (activeWindow.length > 0) {
-                const selectedItems = activeWindow.find('.item-selected, .item.item-selected');
-                if (selectedItems.length > 0) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    // Copy to clipboard - manually set clipboard array
-                    window.clipboard = [];
-                    selectedItems.each(function() {
-                        const path = $(this).attr('data-path');
-                        if (path) {
-                            window.clipboard.push({ path: path });
-                        }
-                    });
-                    window.clipboard_is_cut = false; // Mark as copy, not cut
-                }
+            // Also check desktop items if no active window
+            let selectedItems = activeWindow.length > 0 
+                ? activeWindow.find('.item-selected, .item.item-selected')
+                : $('#desktop .item-selected');
+            
+            if (selectedItems.length > 0) {
+                e.preventDefault();
+                e.stopPropagation();
+                // Set clipboard - use object format for copy_clipboard_items
+                window.clipboard = [];
+                window.clipboard_op = 'copy';
+                selectedItems.each(function() {
+                    const itemPath = $(this).attr('data-path');
+                    if (itemPath) {
+                        window.clipboard.push({ path: itemPath });
+                    }
+                });
+                console.log('[Keyboard] Copied', window.clipboard.length, 'items');
             }
             return;
         }
 
         // Cmd+V / Ctrl+V: Paste from clipboard
         if (e.key === 'v' && (e.metaKey || e.ctrlKey) && !e.shiftKey) {
+            if (!window.clipboard || window.clipboard.length === 0) {
+                return;
+            }
+            
             const activeWindow = $('.window-active');
+            let targetPath = window.desktop_path;
+            let targetContainer = $('#desktop');
+            
             if (activeWindow.length > 0) {
                 const itemContainer = activeWindow.find('.item-container, .window-body.item-container').first();
-                if (itemContainer.length > 0 && window.clipboard && window.clipboard.length > 0) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const currentPath = itemContainer.attr('data-path') || window.home_path || '/';
-                    // Check if this is a cut or copy operation
-                    if (window.clipboard_is_cut) {
-                        // Move items (cut)
-                        if (window.move_clipboard_items) {
-                            window.move_clipboard_items(itemContainer, currentPath);
-                        }
-                    } else {
-                        // Copy items
-                        if (window.copy_clipboard_items) {
-                            await window.copy_clipboard_items(currentPath, itemContainer);
-                        }
-                    }
+                if (itemContainer.length > 0) {
+                    targetPath = itemContainer.attr('data-path') || window.desktop_path;
+                    targetContainer = itemContainer;
                 }
             }
+            
+            e.preventDefault();
+            e.stopPropagation();
+            
+            // Use clipboard_op to determine operation (consistent with right-click menu)
+            if (window.clipboard_op === 'move') {
+                // Move items (cut)
+                if (window.move_clipboard_items) {
+                    window.move_clipboard_items(targetContainer, targetPath);
+                }
+            } else {
+                // Copy items
+                if (window.copy_clipboard_items) {
+                    await window.copy_clipboard_items(targetPath, targetContainer);
+                }
+            }
+            console.log('[Keyboard] Pasted to', targetPath);
             return;
         }
 
         // Cmd+X / Ctrl+X: Cut selected items
         if (e.key === 'x' && (e.metaKey || e.ctrlKey) && !e.shiftKey) {
             const activeWindow = $('.window-active');
-            if (activeWindow.length > 0) {
-                const selectedItems = activeWindow.find('.item-selected, .item.item-selected');
-                if (selectedItems.length > 0) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    // Copy to clipboard (cut is copy + delete)
-                    window.clipboard = [];
-                    selectedItems.each(function() {
-                        const path = $(this).attr('data-path');
-                        if (path) {
-                            window.clipboard.push({ path: path });
-                        }
-                    });
-                    // Mark as cut operation (we'll handle move on paste)
-                    window.clipboard_is_cut = true;
-                }
+            // Also check desktop items if no active window
+            let selectedItems = activeWindow.length > 0 
+                ? activeWindow.find('.item-selected, .item.item-selected')
+                : $('#desktop .item-selected');
+            
+            if (selectedItems.length > 0) {
+                e.preventDefault();
+                e.stopPropagation();
+                // Set clipboard - store paths for move operation
+                window.clipboard = [];
+                window.clipboard_op = 'move';
+                selectedItems.each(function() {
+                    const itemPath = $(this).attr('data-path');
+                    if (itemPath) {
+                        // Store as object for consistency, will convert on paste
+                        window.clipboard.push({ path: itemPath });
+                    }
+                });
+                console.log('[Keyboard] Cut', window.clipboard.length, 'items');
             }
             return;
         }

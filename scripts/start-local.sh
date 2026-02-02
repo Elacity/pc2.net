@@ -138,6 +138,24 @@ install_git() {
     echo -e "${GREEN}✓ Git installed${NC}"
 }
 
+# Check for pm2
+check_pm2() {
+    if command -v pm2 &> /dev/null; then
+        echo -e "${GREEN}✓ PM2 process manager installed${NC}"
+        return 0
+    else
+        echo -e "${YELLOW}⚠ PM2 not found${NC}"
+        return 1
+    fi
+}
+
+# Install pm2
+install_pm2() {
+    echo -e "${CYAN}Installing PM2 process manager...${NC}"
+    npm install -g pm2
+    echo -e "${GREEN}✓ PM2 installed${NC}"
+}
+
 # Main installation
 main() {
     echo -e "${CYAN}Checking requirements...${NC}"
@@ -154,6 +172,11 @@ main() {
         # Refresh PATH
         export PATH="/usr/local/bin:/opt/homebrew/bin:$PATH"
         hash -r 2>/dev/null || true
+    fi
+    
+    # Check and install PM2
+    if ! check_pm2; then
+        install_pm2
     fi
     
     echo ""
@@ -253,6 +276,16 @@ PARTICLE_EOF
         ACCESS_NOTE=""
     fi
     
+    # Stop any existing pc2 process
+    pm2 delete pc2 2>/dev/null || true
+    
+    # Start with pm2
+    echo -e "${CYAN}Starting PC2 with PM2 process manager...${NC}"
+    pm2 start npm --name "pc2" -- start
+    
+    # Wait a moment for server to start
+    sleep 3
+    
     echo ""
     echo ""
     echo -e "${GREEN}╔═══════════════════════════════════════════════════════════════════╗${NC}"
@@ -282,15 +315,21 @@ PARTICLE_EOF
     echo -e "${GREEN}║                                                                   ║${NC}"
     echo -e "${GREEN}║   ${NC}Your data. Your AI. Your sovereignty.${GREEN}                         ║${NC}"
     echo -e "${GREEN}║                                                                   ║${NC}"
-    echo -e "${GREEN}║   ${NC}Keep this terminal open. Press ${YELLOW}Ctrl+C${NC} to stop.${GREEN}                ║${NC}"
+    echo -e "${GREEN}║   ${YELLOW}USEFUL COMMANDS:${GREEN}                                              ║${NC}"
+    echo -e "${GREEN}║     ${NC}pm2 logs pc2${GREEN}      - View server logs                         ║${NC}"
+    echo -e "${GREEN}║     ${NC}pm2 restart pc2${GREEN}   - Restart the server                       ║${NC}"
+    echo -e "${GREEN}║     ${NC}pm2 stop pc2${GREEN}      - Stop the server                          ║${NC}"
+    echo -e "${GREEN}║     ${NC}pm2 status${GREEN}        - Check server status                      ║${NC}"
     echo -e "${GREEN}║                                                                   ║${NC}"
     echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
     echo -e "${YELLOW}   ⬆️  SCROLL UP if you don't see the instructions above ⬆️${NC}"
     echo ""
     
-    # Start the server
-    npm start
+    # Show logs (follow mode)
+    echo -e "${CYAN}Showing server logs (Ctrl+C to exit logs, server keeps running):${NC}"
+    echo ""
+    pm2 logs pc2
 }
 
 # Run

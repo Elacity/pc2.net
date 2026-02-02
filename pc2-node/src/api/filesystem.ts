@@ -509,13 +509,14 @@ export async function handleRead(req: AuthenticatedRequest, res: Response): Prom
     const metadata = filesystem.getFileMetadata(resolvedPath, walletAddress);
     const mimeType = metadata?.mime_type || 'application/octet-stream';
     
-    // Determine if file is binary (video, image, audio, etc.)
-    const isBinary = mimeType.startsWith('video/') || 
-                     mimeType.startsWith('image/') || 
-                     mimeType.startsWith('audio/') ||
-                     mimeType === 'application/octet-stream' ||
-                     mimeType === 'application/pdf' ||
-                     encoding === 'base64';
+    // Determine if file is binary (video, image, audio, archives, etc.)
+    // Default to binary for safety - only treat explicitly text types as text
+    const isTextFile = mimeType.startsWith('text/') || 
+                       mimeType === 'application/json' ||
+                       mimeType === 'application/xml' ||
+                       mimeType === 'application/javascript' ||
+                       mimeType === 'application/x-javascript';
+    const isBinary = !isTextFile || encoding === 'base64';
 
     // Set CORS headers for video/image/audio files (needed for player/viewer apps)
     if (isBinary) {
@@ -648,7 +649,45 @@ export async function handleWrite(req: AuthenticatedRequest, res: Response): Pro
     return;
   }
 
+  // Check for overwrite option (default: true for backward compatibility)
+  const overwrite = body.overwrite !== false;
+  const dedupeName = body.dedupe_name === true || body.dedupeName === true;
+
   try {
+    // If overwrite is false, check if file already exists
+    if (!overwrite) {
+      const existingFile = filesystem.getFileMetadata(body.path, req.user.wallet_address);
+      if (existingFile) {
+        const fileName = body.path.split('/').pop() || 'file';
+        if (dedupeName) {
+          // Auto-deduplicate the name
+          const parentDir = body.path.substring(0, body.path.lastIndexOf('/'));
+          const extIndex = fileName.lastIndexOf('.');
+          const baseName = extIndex > 0 ? fileName.substring(0, extIndex) : fileName;
+          const ext = extIndex > 0 ? fileName.substring(extIndex) : '';
+          
+          let counter = 1;
+          let newPath = body.path;
+          while (filesystem.getFileMetadata(newPath, req.user.wallet_address)) {
+            newPath = `${parentDir}/${baseName} (${counter})${ext}`;
+            counter++;
+            if (counter > 100) break;
+          }
+          body.path = newPath;
+          logger.info('[Write] Deduplicated path', { newPath });
+        } else {
+          // Return conflict error
+          res.status(409).json({
+            error: 'File already exists',
+            code: 'item_with_same_name_exists',
+            entry_name: fileName,
+            message: `A file with name "${fileName}" already exists at this location`
+          });
+          return;
+        }
+      }
+    }
+
     // Decode content if base64
     let content: Buffer | string = body.content;
     if (body.encoding === 'base64') {
@@ -972,6 +1011,9 @@ export async function handleDelete(req: AuthenticatedRequest, res: Response): Pr
     return;
   }
 
+  // Parse descendants_only parameter (empty the folder without deleting the folder itself)
+  const descendantsOnly = body.descendants_only === true || body.descendantsOnly === true;
+
   try {
     const deleted: Array<{ path: string; success: boolean; error?: string }> = [];
     const walletAddress = req.user.wallet_address;
@@ -1070,24 +1112,69 @@ export async function handleDelete(req: AuthenticatedRequest, res: Response): Pr
           logger.info('[Delete] File is in Trash, permanently deleting', { 
             path, 
             normalizedPath,
-            isInTrash 
+            isInTrash,
+            descendantsOnly
           });
           
-          // Permanently delete from Trash (recursively for directories)
-          await filesystem.deleteFile(path, walletAddress, true); // true = recursive
-          deleted.push({ path, success: true });
-
-          // Broadcast item.removed event
-          if (io) {
-            const fileUid = `uuid-${path.replace(/\//g, '-')}`;
-            broadcastItemRemoved(io, walletAddress, {
-              path: path,
-              uid: fileUid,
-              original_client_socket_id: null
-            });
-          }
+          // Check if this is the Trash folder itself and descendantsOnly is true
+          const isTrashFolder = normalizedPath.endsWith('/Trash') || normalizedPath.endsWith('/.Trash');
           
-          logger.info('[Delete] Permanently deleted from Trash', { path });
+          if (isTrashFolder && descendantsOnly) {
+            // Only delete contents of Trash, not the Trash folder itself
+            logger.info('[Delete] Emptying Trash folder (descendants only)', { path });
+            
+            try {
+              const trashContents = filesystem.listDirectory(path, walletAddress);
+              
+              for (const item of trashContents) {
+                try {
+                  await filesystem.deleteFile(item.path, walletAddress, true);
+                  
+                  // Broadcast item.removed for each deleted item
+                  if (io) {
+                    const fileUid = `uuid-${item.path.replace(/\//g, '-')}`;
+                    broadcastItemRemoved(io, walletAddress, {
+                      path: item.path,
+                      uid: fileUid,
+                      descendants_only: true,
+                      original_client_socket_id: null
+                    });
+                  }
+                  
+                  logger.info('[Delete] Deleted item from Trash', { itemPath: item.path });
+                } catch (itemError) {
+                  logger.warn('[Delete] Failed to delete item from Trash', { 
+                    itemPath: item.path, 
+                    error: itemError instanceof Error ? itemError.message : 'Unknown' 
+                  });
+                }
+              }
+              
+              deleted.push({ path, success: true });
+              logger.info('[Delete] Trash emptied successfully (folder preserved)', { path });
+            } catch (error) {
+              logger.warn('[Delete] Failed to list Trash contents', { 
+                error: error instanceof Error ? error.message : 'Unknown' 
+              });
+              deleted.push({ path, success: true }); // Trash was probably already empty
+            }
+          } else {
+            // Permanently delete from Trash (recursively for directories)
+            await filesystem.deleteFile(path, walletAddress, true); // true = recursive
+            deleted.push({ path, success: true });
+
+            // Broadcast item.removed event
+            if (io) {
+              const fileUid = `uuid-${path.replace(/\//g, '-')}`;
+              broadcastItemRemoved(io, walletAddress, {
+                path: path,
+                uid: fileUid,
+                original_client_socket_id: null
+              });
+            }
+            
+            logger.info('[Delete] Permanently deleted from Trash', { path });
+          }
         } else {
           // Move to Trash (not permanently delete)
           const metadata = filesystem.getFileMetadata(path, walletAddress);
@@ -1836,9 +1923,14 @@ export async function handleCopy(req: AuthenticatedRequest, res: Response): Prom
   // 1. { source: "/path", destination: "/path" } - Standard format
   // 2. { source: "/path", destination: "/path", new_name: "..." } - With rename
   // 3. { from: "/path", to: "/path" } - Alternative format
+  // Options:
+  // - dedupeName: boolean - If true, auto-rename to avoid conflicts (e.g., "file (1).txt")
+  // - overwrite: boolean - If true, overwrite existing file
   let sourcePath: string | undefined;
   let destPath: string | undefined;
   let newName: string | undefined;
+  const dedupeName = body.dedupeName === true || body.dedupe_name === true;
+  const overwrite = body.overwrite === true;
 
   if (body.source) {
     sourcePath = body.source;
@@ -1884,10 +1976,35 @@ export async function handleCopy(req: AuthenticatedRequest, res: Response): Prom
   logger.info('[Copy] Copying file/directory', {
     source: sourcePath,
     destination: finalDestPath,
+    dedupeName,
+    overwrite,
     wallet: req.user.wallet_address
   });
 
   try {
+    // If dedupeName is true, check for conflicts and generate unique name
+    if (dedupeName) {
+      const existingFile = filesystem.getFileMetadata(finalDestPath, req.user.wallet_address);
+      if (existingFile) {
+        // Generate unique name
+        const destDir = finalDestPath.substring(0, finalDestPath.lastIndexOf('/'));
+        const fileName = finalDestPath.split('/').pop() || 'file';
+        const extIndex = fileName.lastIndexOf('.');
+        const baseName = extIndex > 0 ? fileName.substring(0, extIndex) : fileName;
+        const ext = extIndex > 0 ? fileName.substring(extIndex) : '';
+        
+        let counter = 1;
+        let newDestPath = finalDestPath;
+        while (filesystem.getFileMetadata(newDestPath, req.user.wallet_address)) {
+          newDestPath = `${destDir}/${baseName} (${counter})${ext}`;
+          counter++;
+          if (counter > 100) break; // Safety limit
+        }
+        finalDestPath = newDestPath;
+        logger.info('[Copy] Deduplicated destination path', { newPath: finalDestPath });
+      }
+    }
+    
     const metadata = await filesystem.copyFile(sourcePath, finalDestPath, req.user.wallet_address);
 
     logger.info('[Copy] File/directory copied successfully', {
@@ -1895,26 +2012,50 @@ export async function handleCopy(req: AuthenticatedRequest, res: Response): Prom
       destination: finalDestPath
     });
 
-    // Broadcast item.created event for the new copy
+    // Broadcast item.added event for the new copy (frontend expects item.added)
     if (io) {
-      const socketId = req.headers['x-socket-id'] as string || 'unknown';
       const pathParts = finalDestPath.split('/');
       pathParts.pop(); // Remove filename
-      const parentPath = pathParts.join('/') || '/';
+      const dirpath = pathParts.join('/') || '/';
+      const fileUid = `uuid-${finalDestPath.replace(/\//g, '-')}`;
       
-      io.emit('item.created', {
-        uid: `uuid-${finalDestPath.replace(/\//g, '-')}`,
-        name: metadata.path.split('/').pop(),
-        is_dir: metadata.is_dir,
+      // Generate thumbnail URL for image files using /file endpoint
+      // Note: Videos can't use this approach since browsers can't display video as <img> src
+      let thumbnail: string | undefined = undefined;
+      const mimeType = metadata.mime_type || '';
+      if (mimeType.startsWith('image/')) {
+        const origin = req.headers.origin || req.headers.host;
+        const isHttps = origin && typeof origin === 'string' && origin.startsWith('https://');
+        const baseUrl = isHttps 
+          ? `https://${req.get('host')}`
+          : `http://${req.get('host')}`;
+        const expires = Math.ceil(Date.now() / 1000) + 999999999; // Long expiry
+        const signature = `sig-${fileUid}-${expires}`;
+        thumbnail = `${baseUrl}/file?uid=${encodeURIComponent(fileUid)}&expires=${expires}&signature=${encodeURIComponent(signature)}`;
+        logger.info('[Copy] Generated thumbnail URL', { thumbnail, fileUid, mimeType });
+      }
+      
+      // Don't send original_client_socket_id so ALL clients (including initiator) add the item
+      // The copy operation doesn't pre-add items to DOM, so we need the event to create them
+      broadcastItemAdded(io, req.user.wallet_address, {
+        uid: fileUid,
+        uuid: fileUid,
+        name: metadata.path.split('/').pop() || '',
         path: finalDestPath,
-        parent_path: parentPath,
+        dirpath: dirpath,
+        size: metadata.size || 0,
         type: metadata.mime_type || null,
-        original_client_socket_id: socketId
+        mime_type: metadata.mime_type || undefined,
+        is_dir: metadata.is_dir,
+        thumbnail: thumbnail,
+        created: new Date(metadata.created_at).toISOString(),
+        modified: new Date(metadata.updated_at).toISOString(),
+        original_client_socket_id: null // Don't skip any clients
       });
     }
 
-    // Return format matching other filesystem operations
-    const response = {
+    // Return format matching Puter SDK expectations (array with copied object)
+    const copiedItem = {
       uid: `uuid-${finalDestPath.replace(/\//g, '-')}`,
       name: metadata.path.split('/').pop(),
       is_dir: metadata.is_dir,
@@ -1924,13 +2065,21 @@ export async function handleCopy(req: AuthenticatedRequest, res: Response): Prom
       size: metadata.size || 0
     };
 
-    res.json(response);
+    // Puter SDK expects: [{ copied: {...}, overwritten: null|{...} }]
+    res.json([{ copied: copiedItem, overwritten: null }]);
   } catch (error) {
     logger.error('Copy error:', error instanceof Error ? error.message : 'Unknown error');
     if (error instanceof Error && error.message.includes('not found')) {
       res.status(404).json({ error: 'Source file not found' });
     } else if (error instanceof Error && error.message.includes('already exists')) {
-      res.status(409).json({ error: 'Destination already exists' });
+      // Return error in format that matches Puter SDK expectations
+      const fileName = finalDestPath.split('/').pop() || 'file';
+      res.status(409).json({ 
+        error: 'Destination already exists',
+        code: 'item_with_same_name_exists',
+        entry_name: fileName,
+        message: `An item with name "${fileName}" already exists at this location`
+      });
     } else {
       res.status(500).json({
         error: 'Failed to copy file',

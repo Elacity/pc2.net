@@ -448,11 +448,29 @@ async function waitForRestart($progressText) {
 /**
  * Show restart confirmation dialog
  */
-function showRestartConfirmation() {
+async function showRestartConfirmation() {
     // Remove any existing dialog
     $('#restart-confirm-overlay').remove();
     
     const apiOrigin = window.api_origin || window.location.origin;
+    
+    // Check restart mode first
+    let restartMode = { autoRestart: true, processManager: 'unknown', restartCommand: 'npm start' };
+    try {
+        const modeResponse = await fetch(`${apiOrigin}/api/system/restart-mode`, {
+            headers: { 'Authorization': `Bearer ${puter.authToken}` }
+        });
+        if (modeResponse.ok) {
+            const modeData = await modeResponse.json();
+            restartMode = modeData.result || restartMode;
+        }
+    } catch (e) {
+        console.log('[System] Could not check restart mode:', e);
+    }
+    
+    const warningText = restartMode.autoRestart
+        ? 'All active sessions will be temporarily disconnected.'
+        : 'Running in local mode. The server will shut down and you will need to restart it manually.';
     
     const $overlay = $(`
         <div id="restart-confirm-overlay" style="
@@ -472,21 +490,28 @@ function showRestartConfirmation() {
                 border-radius: 8px;
                 padding: 20px;
                 min-width: 300px;
-                max-width: 400px;
+                max-width: 450px;
                 box-shadow: 0 4px 20px rgba(0,0,0,0.3);
             ">
-                <h3 style="margin: 0 0 12px; font-size: 16px; color: #333;">Restart PC2</h3>
+                <h3 style="margin: 0 0 12px; font-size: 16px; color: #333;">
+                    ${restartMode.autoRestart ? 'Restart PC2' : 'Shut Down PC2'}
+                </h3>
                 <p style="margin: 0 0 20px; color: #666; font-size: 14px;">
-                    Are you sure you want to restart PC2?<br>
-                    <span style="font-size: 12px; color: #999;">All active sessions will be temporarily disconnected.</span>
+                    Are you sure you want to ${restartMode.autoRestart ? 'restart' : 'shut down'} PC2?<br>
+                    <span style="font-size: 12px; color: ${restartMode.autoRestart ? '#999' : '#dc2626'};">${warningText}</span>
                 </p>
                 <div style="display: flex; gap: 10px; justify-content: flex-end;">
                     <button id="restart-cancel" class="button" style="height: 32px; line-height: 32px; padding: 0 16px; border-radius: 4px;">Cancel</button>
-                    <button id="restart-confirm" class="button" style="height: 32px; line-height: 32px; padding: 0 16px; border-radius: 4px; background: #dc2626; color: white; border: none;">Restart</button>
+                    <button id="restart-confirm" class="button" style="height: 32px; line-height: 32px; padding: 0 16px; border-radius: 4px; background: #dc2626; color: white; border: none;">
+                        ${restartMode.autoRestart ? 'Restart' : 'Shut Down'}
+                    </button>
                 </div>
             </div>
         </div>
     `);
+    
+    // Store restart command for later use
+    $overlay.data('restartCommand', restartMode.restartCommand);
     
     $('body').append($overlay);
     
@@ -496,7 +521,7 @@ function showRestartConfirmation() {
     
     $overlay.find('#restart-confirm').on('click', async function() {
         const $btn = $(this);
-        $btn.prop('disabled', true).text('Restarting...');
+        $btn.prop('disabled', true).text(restartMode.autoRestart ? 'Restarting...' : 'Shutting down...');
         
         try {
             const response = await fetch(`${apiOrigin}/api/system/restart`, {
@@ -508,14 +533,84 @@ function showRestartConfirmation() {
             });
             
             if (response.ok) {
-                $overlay.find('p').html('<span style="color: #16a34a;">Restart initiated. Please wait...</span><br><span style="font-size: 12px; color: #999;">The page will reload automatically.</span>');
-                $overlay.find('#restart-cancel').hide();
-                $btn.hide();
+                const data = await response.json();
                 
-                // Wait and reload
-                setTimeout(() => {
-                    window.location.reload();
-                }, 5000);
+                if (data.autoRestart) {
+                    // Server will auto-restart
+                    $overlay.find('p').html('<span style="color: #16a34a;">Restart initiated. Please wait...</span><br><span style="font-size: 12px; color: #999;">The page will reload automatically.</span>');
+                    $overlay.find('#restart-cancel').hide();
+                    $btn.hide();
+                    
+                    // Wait and reload
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 5000);
+                } else {
+                    // Local mode - server won't auto-restart
+                    const restartCmd = $overlay.data('restartCommand') || 'cd ~/pc2.net/pc2-node && npm start';
+                    const escapedCmd = window.html_encode(restartCmd);
+                    
+                    $overlay.find('p').html(`
+                        <span style="color: #16a34a; font-weight: 500;">Server shut down successfully.</span>
+                        <div style="margin-top: 16px; font-size: 13px; color: #666;">
+                            To restart, run this command in your terminal:
+                        </div>
+                        <div style="
+                            margin-top: 10px;
+                            background: #1e1e1e;
+                            border-radius: 6px;
+                            padding: 12px 14px;
+                            display: flex;
+                            align-items: center;
+                            gap: 10px;
+                        ">
+                            <code id="restart-cmd" style="
+                                flex: 1;
+                                font-family: 'SF Mono', Monaco, Consolas, monospace;
+                                font-size: 12px;
+                                color: #e0e0e0;
+                                word-break: break-all;
+                            ">${escapedCmd}</code>
+                            <button id="copy-restart-cmd" style="
+                                background: #3b82f6;
+                                color: white;
+                                border: none;
+                                padding: 6px 12px;
+                                border-radius: 4px;
+                                cursor: pointer;
+                                font-size: 11px;
+                                font-weight: 500;
+                                white-space: nowrap;
+                            ">Copy</button>
+                        </div>
+                    `);
+                    
+                    // Copy button handler
+                    $overlay.find('#copy-restart-cmd').on('click', function() {
+                        const cmd = restartCmd;
+                        navigator.clipboard.writeText(cmd).then(() => {
+                            $(this).text('Copied!').css('background', '#16a34a');
+                            setTimeout(() => {
+                                $(this).text('Copy').css('background', '#3b82f6');
+                            }, 2000);
+                        }).catch(() => {
+                            // Fallback for older browsers
+                            const textarea = document.createElement('textarea');
+                            textarea.value = cmd;
+                            document.body.appendChild(textarea);
+                            textarea.select();
+                            document.execCommand('copy');
+                            document.body.removeChild(textarea);
+                            $(this).text('Copied!').css('background', '#16a34a');
+                            setTimeout(() => {
+                                $(this).text('Copy').css('background', '#3b82f6');
+                            }, 2000);
+                        });
+                    });
+                    
+                    $btn.hide();
+                    $overlay.find('#restart-cancel').text('Close');
+                }
             } else {
                 const data = await response.json();
                 $overlay.find('p').html(`<span style="color: #dc2626;">Failed to restart: ${data.error || 'Unknown error'}</span>`);

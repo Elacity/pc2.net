@@ -47,7 +47,11 @@ async function UIWindowSettings (options) {
         // sidebar items
         h += `<div class="settings-sidebar-burger disable-context-menu disable-user-select" style="background-image: url(${window.icons['menu']});"></div>`;
         tabs.forEach((tab, i) => {
-            h += `<div class="settings-sidebar-item disable-context-menu disable-user-select ${i === 0 ? 'active' : ''}" data-settings="${tab.id}" style="background-image: url(${window.icons[tab.icon]});">${i18n(tab.title_i18n_key)}</div>`;
+            // Icon uses filter for dark mode, text remains separate
+            h += `<div class="settings-sidebar-item disable-context-menu disable-user-select ${i === 0 ? 'active' : ''}" data-settings="${tab.id}">`;
+            h += `<span class="settings-sidebar-icon" style="background-image: url(${window.icons[tab.icon]});"></span>`;
+            h += `<span class="settings-sidebar-text">${i18n(tab.title_i18n_key)}</span>`;
+            h += `</div>`;
         });
         h += '</div>';
 

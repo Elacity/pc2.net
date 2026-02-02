@@ -26,9 +26,10 @@ curl -fsSL https://raw.githubusercontent.com/Elacity/pc2.net/main/scripts/start-
 
 **That's it!** The script automatically:
 - Installs Node.js if needed (via nvm)
+- Installs PM2 process manager (enables auto-restart)
 - Downloads PC2
 - Installs all dependencies
-- Builds and starts the server
+- Builds and starts the server with PM2
 
 ### Windows Users
 
@@ -79,20 +80,34 @@ curl -fsSL https://raw.githubusercontent.com/Elacity/pc2.net/main/scripts/start-
 
 ### Useful Commands
 
-```bash
-# Stop PC2
-Ctrl+C
+PC2 runs with PM2 process manager, which keeps the server running in the background:
 
-# Restart (after stopping)
-cd ~/pc2.net/pc2-node && npm start
+```bash
+# View live logs
+pm2 logs pc2
+
+# Stop PC2
+pm2 stop pc2
+
+# Start PC2 (if stopped)
+pm2 start pc2
+
+# Restart PC2
+pm2 restart pc2
+
+# Check status
+pm2 status
 
 # Restart from scratch
+pm2 delete pc2
 rm -rf ~/pc2.net
 # Then run the one-liner again
 
-# Development mode (hot reload)
+# Development mode (hot reload, without pm2)
 cd ~/pc2.net/pc2-node && npm run dev
 ```
+
+**Note:** You can also restart PC2 from the UI via the user dropdown menu (click your avatar > Restart PC2).
 
 ---
 
@@ -176,7 +191,9 @@ curl -sSL https://raw.githubusercontent.com/Elacity/pc2.net/main/scripts/install
 1. Node.js 20
 2. Build tools
 3. PC2 from source
-4. systemd service for auto-start
+4. **systemd service for auto-start** (keeps running when you close SSH)
+
+**Important:** Always use the install script above. It creates a systemd service that keeps PC2 running even when you close your terminal or disconnect SSH. If you run PC2 manually (`npm start`), it will stop when you disconnect.
 
 ### Access Your PC2
 
@@ -275,8 +292,21 @@ npm run build
 
 PC2 checks for updates automatically. When available:
 
-1. Go to Settings → About
-2. Click "Install Update"
-3. PC2 restarts with new version
+1. Click your avatar in the top-right corner
+2. You'll see "Update Available" in the dropdown (or go to Settings → System)
+3. Click "Update Now" to see version details and release notes
+4. Click "Install Update" to apply
+
+PC2 restarts automatically after updates (when running with PM2 or systemctl).
 
 Your data is **always safe** during updates.
+
+## Restart PC2
+
+To restart the server from the UI:
+
+1. Click your avatar in the top-right corner
+2. Click "Restart PC2"
+3. Confirm in the dialog
+
+If running with PM2 (local install script) or systemctl (VPS), the server restarts automatically. If running directly via `npm start` (dev mode), you'll see instructions to restart manually.

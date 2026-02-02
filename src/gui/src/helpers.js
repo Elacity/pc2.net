@@ -39,6 +39,16 @@ window.is_auth = ()=>{
 }
 
 /**
+ * Get MIME type from file extension
+ * Used for proper file handling during unzip operations
+ */
+function getMimeTypeFromExtension(filename) {
+    const mimeType = mime.getType(filename);
+    return mimeType || 'application/octet-stream';
+}
+window.getMimeTypeFromExtension = getMimeTypeFromExtension;
+
+/**
  * Get user-specific localStorage key for profile picture cache
  * Ensures each user's profile picture is isolated from others
  */
@@ -957,27 +967,65 @@ window.create_file = async(options)=>{
     let dirname = options.dirname;
     let appendto_element = options.append_to_element;
     let filename = options.name;
-    let content = options.content ? [options.content] : [];
+    let content = options.content ? options.content : '';
 
-    // create file
-    try{
-        puter.fs.upload(new File(content, filename),  dirname,
-        {
-            success: async function (data){
-                const created_file = $(appendto_element).find('.item[data-path="'+html_encode(dirname)+'/'+html_encode(data.name)+'"]');
-                if(created_file.length > 0){
-                    window.activate_item_name_editor(created_file);
+    // Ensure dirname starts with user's home path
+    if (!dirname || dirname === '/') {
+        dirname = window.desktop_path || `/${window.user?.username}/Desktop`;
+    }
 
-                    // Add action to actions_history for undo ability
-                    window.actions_history.push({
-                        operation: 'create_file',
-                        data: created_file
-                    });
-                }
+    const fullPath = dirname.replace(/\/?$/, '') + '/' + filename;
+    console.log('[create_file] Creating file:', fullPath, 'content length:', typeof content === 'string' ? content.length : (content?.size || 0));
+
+    // Use PC2 write endpoint for reliability in PC2 mode
+    if (isPC2ZipMode()) {
+        try {
+            // Convert content to blob if it's a string
+            const blob = content instanceof Blob ? content : new Blob([content], { type: 'text/plain' });
+            await pc2FsWrite(fullPath, blob, { mime_type: getMimeTypeFromExtension(filename) });
+            console.log('[create_file] File created successfully via PC2:', fullPath);
+            
+            // Refresh the container to show the new file
+            if (appendto_element && $(appendto_element).length > 0) {
+                await window.refresh_item_container(appendto_element, { consistency: 'strong' });
+                
+                // Find and activate name editor for the new file
+                setTimeout(() => {
+                    const created_file = $(appendto_element).find('.item[data-path="'+html_encode(fullPath)+'" i]');
+                    if(created_file.length > 0){
+                        window.activate_item_name_editor(created_file);
+                        window.actions_history.push({
+                            operation: 'create_file',
+                            data: created_file
+                        });
+                    }
+                }, 100);
             }
-        });
-    }catch(err){
-        console.log(err);
+        } catch(err) {
+            console.error('[create_file] PC2 error:', err);
+            UIAlert('Failed to create file: ' + (err.message || err));
+        }
+    } else {
+        // Original Puter SDK approach
+        try{
+            puter.fs.upload(new File([content], filename),  dirname,
+            {
+                success: async function (data){
+                    const created_file = $(appendto_element).find('.item[data-path="'+html_encode(dirname)+'/'+html_encode(data.name)+'"]');
+                    if(created_file.length > 0){
+                        window.activate_item_name_editor(created_file);
+
+                        // Add action to actions_history for undo ability
+                        window.actions_history.push({
+                            operation: 'create_file',
+                            data: created_file
+                        });
+                    }
+                }
+            });
+        }catch(err){
+            console.log(err);
+        }
     }
 }
 
@@ -1078,7 +1126,10 @@ window.copy_clipboard_items = async function(dest_path, dest_container_element){
         const copied_item_paths = []
 
         for(let i=0; i<window.clipboard.length; i++){
-            let copy_path = window.clipboard[i].path;
+            // Handle both object format { path: '...' } and string format
+            let copy_path = typeof window.clipboard[i] === 'object' 
+                ? window.clipboard[i].path 
+                : window.clipboard[i];
             let item_with_same_name_already_exists = true;
             let overwrite = overwrite_all;
             progwin?.set_status(i18n('copying_file', copy_path));
@@ -1093,21 +1144,33 @@ window.copy_clipboard_items = async function(dest_path, dest_container_element){
 
                 // perform copy
                 try{
-                    let resp = await puter.fs.copy({
+                    let resp;
+                    // Use PC2-specific copy in PC2 mode for reliability
+                    if (isPC2ZipMode()) {
+                        resp = await pc2FsCopy({
                             source: copy_path,
                             destination: dest_path,
                             overwrite: overwrite || overwrite_all,
-                            // if user is copying an item to where its source is, change the name so there is no conflict
                             dedupeName: dest_path === path.dirname(copy_path),
-                    });
+                        });
+                        console.log('[PC2 Copy] Success:', resp);
+                    } else {
+                        resp = await puter.fs.copy({
+                            source: copy_path,
+                            destination: dest_path,
+                            overwrite: overwrite || overwrite_all,
+                            dedupeName: dest_path === path.dirname(copy_path),
+                        });
+                    }
 
                     // remove overwritten item from the DOM
-                    if(resp[0].overwritten?.id){
+                    if(resp[0]?.overwritten?.id){
                         $(`.item[data-uid=${resp[0].overwritten.id}]`).removeItems();
                     }
 
                     // copy new path for undo copy
-                    copied_item_paths.push(resp[0].copied.path);
+                    const copiedPath = resp[0]?.copied?.path || resp[0]?.path;
+                    if (copiedPath) copied_item_paths.push(copiedPath);
 
                     // skips next loop iteration
                     break;
@@ -1202,21 +1265,33 @@ window.copy_items = function(el_items, dest_path){
                 if(window.operation_cancelled[copy_op_id])
                     return;
                 try{
-                    let resp = await puter.fs.copy({
+                    let resp;
+                    // Use PC2-specific copy in PC2 mode for reliability
+                    if (isPC2ZipMode()) {
+                        resp = await pc2FsCopy({
                             source: copy_path,
                             destination: dest_path,
                             overwrite: overwrite || overwrite_all,
-                            // if user is copying an item to where the source is, automatically change the name so there is no conflict
                             dedupeName: dest_path === path.dirname(copy_path),
-                    })
+                        });
+                        console.log('[PC2 Copy] Success:', resp);
+                    } else {
+                        resp = await puter.fs.copy({
+                            source: copy_path,
+                            destination: dest_path,
+                            overwrite: overwrite || overwrite_all,
+                            dedupeName: dest_path === path.dirname(copy_path),
+                        });
+                    }
 
                     // remove overwritten item from the DOM
-                    if(resp[0].overwritten?.id){
-                        $(`.item[data-uid=${resp.overwritten.id}]`).removeItems();
+                    if(resp[0]?.overwritten?.id){
+                        $(`.item[data-uid=${resp[0].overwritten.id}]`).removeItems();
                     }
 
                     // copy new path for undo copy
-                    copied_item_paths.push(resp[0].copied.path);
+                    const copiedPath = resp[0]?.copied?.path || resp[0]?.path;
+                    if (copiedPath) copied_item_paths.push(copiedPath);
 
                     // skips next loop iteration
                     item_with_same_name_already_exists = false;
@@ -1390,13 +1465,18 @@ window.move_clipboard_items = function (el_target_container, target_path){
     let el_items = [];
     if(window.clipboard.length > 0){
         for(let i=0; i<window.clipboard.length; i++){
-            el_items.push($(`.item[data-path="${html_encode(window.clipboard[i])}" i]`));
+            // Handle both object format { path: '...' } and string format
+            const itemPath = typeof window.clipboard[i] === 'object' 
+                ? window.clipboard[i].path 
+                : window.clipboard[i];
+            el_items.push($(`.item[data-path="${html_encode(itemPath)}" i]`));
         }
         if(el_items.length > 0)
             window.move_items(el_items, dest_path);
     }
 
     window.clipboard = [];
+    window.clipboard_op = null;
 }
 
 function downloadFile(url, postData = {}) {
@@ -2576,6 +2656,10 @@ function arrayBufferToBase64Chunked(buffer) {
 
 /**
  * Write file via PC2 node API. Content is sent as base64 in JSON.
+ * Options:
+ * - mime_type: MIME type of the file (default: 'application/octet-stream')
+ * - overwrite: If false, fail if file exists (default: true)
+ * - dedupeName: If true and file exists, auto-rename (default: false)
  */
 async function pc2FsWrite(filePath, blob, opts = {}) {
     const apiOrigin = window.api_origin || window.location.origin;
@@ -2592,7 +2676,9 @@ async function pc2FsWrite(filePath, blob, opts = {}) {
             path: filePath,
             content: base64,
             encoding: 'base64',
-            mime_type: opts.mime_type || 'application/zip'
+            mime_type: opts.mime_type || 'application/octet-stream',
+            overwrite: opts.overwrite !== false, // default true for backward compatibility
+            dedupe_name: opts.dedupeName === true
         })
     });
     if (!res.ok) {
@@ -2600,6 +2686,43 @@ async function pc2FsWrite(filePath, blob, opts = {}) {
         throw new Error(`Write failed: ${res.status} ${res.statusText} - ${errText}`);
     }
 }
+
+/**
+ * Copy file via PC2 node API.
+ * Options:
+ * - source: Source path
+ * - destination: Destination directory path
+ * - newName: Optional new filename
+ * - overwrite: If true, overwrite existing file
+ * - dedupeName: If true, auto-rename on conflict
+ */
+async function pc2FsCopy(opts) {
+    const apiOrigin = window.api_origin || window.location.origin;
+    const token = getAuthTokenForAPI();
+    const res = await fetch(`${apiOrigin}/copy`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+            source: opts.source,
+            destination: opts.destination,
+            newName: opts.newName,
+            overwrite: opts.overwrite === true,
+            dedupeName: opts.dedupeName === true
+        })
+    });
+    if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        const error = new Error(errData.message || `Copy failed: ${res.status}`);
+        error.code = errData.code;
+        error.entry_name = errData.entry_name;
+        throw error;
+    }
+    return res.json();
+}
+window.pc2FsCopy = pc2FsCopy;
 
 /**
  * Create directory via PC2 node API.
@@ -2781,10 +2904,39 @@ window.zipItems = async function(el_items, targetDirPath, download = true) {
                 progwin?.set_status(i18n('writing', zipName + ".zip"));
                 currentProgress += window.zippingProgressConfig.WRITING;
                 progwin?.set_progress(currentProgress.toPrecision(2));
-                const zipPath = targetDirPath.replace(/\/?$/, '') + '/' + zipName + ".zip";
+                
                 if (isPC2ZipMode()) {
-                    await pc2FsWrite(zipPath, zippedBlob, { mime_type: 'application/zip' });
+                    // Deduplicate zip filename if it already exists
+                    let finalZipName = zipName;
+                    let zipPath = targetDirPath.replace(/\/?$/, '') + '/' + finalZipName + ".zip";
+                    let counter = 1;
+                    
+                    // Check if file exists and deduplicate name
+                    while (counter < 100) {
+                        try {
+                            // Try to write with overwrite: false - will fail if exists
+                            await pc2FsWrite(zipPath, zippedBlob, { 
+                                mime_type: 'application/zip', 
+                                overwrite: false,
+                                dedupeName: false 
+                            });
+                            console.log('[Zip] Successfully wrote:', zipPath);
+                            break;
+                        } catch (e) {
+                            const errMsg = e.message || '';
+                            if (errMsg.includes('exists') || errMsg.includes('409') || errMsg.includes('Conflict')) {
+                                finalZipName = zipName + ' (' + counter + ')';
+                                zipPath = targetDirPath.replace(/\/?$/, '') + '/' + finalZipName + ".zip";
+                                console.log('[Zip] File exists, trying:', zipPath);
+                                counter++;
+                            } else {
+                                // Other error, throw it
+                                throw e;
+                            }
+                        }
+                    }
                 } else {
+                    const zipPath = targetDirPath.replace(/\/?$/, '') + '/' + zipName + ".zip";
                     await puter.fs.write(zipPath, zippedBlob, { overwrite: false, dedupeName: true });
                 }
                 progwin?.set_progress(window.zippingProgressConfig.TOTAL);
@@ -2869,14 +3021,58 @@ window.unzipItem = async function(itemPath) {
         currentProgress += window.zippingProgressConfig.ZIPPING;
         progwin?.set_progress(currentProgress.toPrecision(2));
         if(err) {
-            UIAlert(err.message);
+            // Provide a more helpful error message for unsupported compression
+            let errorMsg = err.message;
+            if (errorMsg.includes('unknown compression type') || errorMsg.includes('compression')) {
+                errorMsg = 'This ZIP file uses an unsupported compression format (LZMA or similar). Try re-creating the ZIP file using standard compression, or use a different ZIP utility.';
+            }
+            UIAlert(errorMsg);
             clearTimeout(progwin_timeout);
             setTimeout(() => progwin?.close(), Math.max(0, window.copy_progress_hide_delay - (Date.now() - start_ts)));
         } else if (isPC2ZipMode()) {
-            const rootdirPath = path.dirname(filePath).replace(/\/?$/, '') + '/' + path.basename(filePath, '.zip');
-            try { await pc2FsMkdir(rootdirPath); } catch (e) { /* may already exist */ }
+            const parentDir = path.dirname(filePath).replace(/\/?$/, '');
             const keys = Object.keys(unzipped).filter(k => k && k !== '/' && !/^\/+$/.test(k));
             const fileKeys = keys.filter(k => !k.endsWith('/'));
+            
+            // Determine if this is a single-file zip or multi-file/folder zip
+            // Single file: extract directly to parent dir with deduplication
+            // Multi-file/folder: create a subfolder
+            const isSingleFileZip = fileKeys.length === 1 && keys.length === 1 && !keys[0].includes('/');
+            
+            let rootdirPath;
+            if (isSingleFileZip) {
+                // Single file zip - extract directly to parent directory
+                rootdirPath = parentDir;
+                console.log('[Unzip] Single file zip, extracting to:', rootdirPath);
+            } else {
+                // Multi-file zip - create a subfolder
+                let baseName = path.basename(filePath, '.zip');
+                rootdirPath = parentDir + '/' + baseName;
+                
+                // Try to create the directory, handle conflicts by deduplicating name
+                let attempts = 0;
+                let dirCreated = false;
+                while (!dirCreated && attempts < 100) {
+                    try {
+                        await pc2FsMkdir(rootdirPath);
+                        dirCreated = true;
+                        console.log('[Unzip] Created output directory:', rootdirPath);
+                    } catch (e) {
+                        const errMsg = e.message || '';
+                        // If path exists as a file or directory already exists, deduplicate name
+                        if (errMsg.includes('exists') || errMsg.includes('500')) {
+                            attempts++;
+                            rootdirPath = parentDir + '/' + baseName + ' (' + attempts + ')';
+                            console.log('[Unzip] Directory conflict, trying:', rootdirPath);
+                        } else {
+                            // Other errors - just continue (might already exist as a dir)
+                            console.warn('[Unzip] mkdir warning:', errMsg);
+                            dirCreated = true;
+                        }
+                    }
+                }
+            }
+            
             let perItemProgress = window.zippingProgressConfig.WRITING / Math.max(keys.length, 1);
             let writeFailed = [];
             for (const fileItem of keys) {
@@ -2891,10 +3087,48 @@ window.unzipItem = async function(itemPath) {
                 } else {
                     try {
                         const fileData = new Blob([new Uint8Array(unzipped[fileItem], unzipped[fileItem].byteOffset, unzipped[fileItem].length)]);
-                        await pc2FsWrite(rootdirPath + '/' + normalized, fileData, { mime_type: 'application/octet-stream' });
+                        
+                        // For single-file zips, use dedupeName to avoid conflicts with original
+                        let targetPath = rootdirPath + '/' + normalized;
+                        const mimeType = window.getMimeTypeFromExtension ? 
+                            window.getMimeTypeFromExtension(normalized) : 
+                            getMimeTypeFromExtension(normalized);
+                        
+                        if (isSingleFileZip) {
+                            // Deduplicate filename for single-file extracts
+                            const fileName = normalized;
+                            const extIndex = fileName.lastIndexOf('.');
+                            const nameBase = extIndex > 0 ? fileName.substring(0, extIndex) : fileName;
+                            const ext = extIndex > 0 ? fileName.substring(extIndex) : '';
+                            let counter = 0;
+                            
+                            while (counter < 100) {
+                                try {
+                                    await pc2FsWrite(targetPath, fileData, { 
+                                        mime_type: mimeType, 
+                                        overwrite: false 
+                                    });
+                                    console.log('[Unzip] Successfully wrote:', targetPath);
+                                    break;
+                                } catch (e) {
+                                    const errMsg = e.message || '';
+                                    if (errMsg.includes('exists') || errMsg.includes('409')) {
+                                        counter++;
+                                        targetPath = rootdirPath + '/' + nameBase + ' (' + counter + ')' + ext;
+                                        console.log('[Unzip] File exists, trying:', targetPath);
+                                    } else {
+                                        throw e;
+                                    }
+                                }
+                            }
+                        } else {
+                            console.log('[Unzip] Writing file:', targetPath, 'size:', fileData.size, 'mime:', mimeType);
+                            await pc2FsWrite(targetPath, fileData, { mime_type: mimeType });
+                            console.log('[Unzip] Successfully wrote:', targetPath);
+                        }
                     } catch (e) {
-                        console.error('[Unzip] Failed to write:', normalized, e);
-                        writeFailed.push(normalized);
+                        console.error('[Unzip] Failed to write:', normalized, 'Error:', e.message || e);
+                        writeFailed.push(normalized + ' (' + (e.message || 'unknown error') + ')');
                     }
                 }
                 currentProgress += perItemProgress;

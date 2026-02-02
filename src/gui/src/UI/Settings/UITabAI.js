@@ -435,22 +435,21 @@ export default {
                     justify-content: center;
                     z-index: 999999999;
                 ">
-                    <div style="
-                        background: white;
+                    <div class="ai-key-modal-content" style="
+                        background: var(--color-window-bg);
                         padding: 24px;
                         border-radius: 8px;
                         max-width: 500px;
                         width: 90%;
-                        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
                     ">
-                        <h3 style="margin: 0 0 16px 0;">Configure ${providerName} API Key</h3>
-                        <p style="font-size: 13px; color: #666; margin: 0 0 16px 0;">
+                        <h3 class="ai-key-modal-title" style="margin: 0 0 16px 0;">Configure ${providerName} API Key</h3>
+                        <p class="ai-key-modal-desc" style="font-size: 13px; margin: 0 0 16px 0;">
                             Enter your ${providerName} API key. It will be stored securely and encrypted.
                         </p>
-                        <input type="password" id="ai-key-input" placeholder="Enter API key..." style="
+                        <input type="password" id="ai-key-input" class="ai-key-modal-input" placeholder="Enter API key..." style="
                             width: 100%;
                             padding: 8px 12px;
-                            border: 1px solid #ddd;
                             border-radius: 4px;
                             font-size: 14px;
                             margin-bottom: 16px;

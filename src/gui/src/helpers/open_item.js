@@ -312,13 +312,7 @@ Please try recreating the link.`);
                 window.unzipItem(item_path);
                 return;
             }
-            //---------------------------------------------
-            // If .tar file, untar it
-            //---------------------------------------------
-            if ( path.extname(item_path) === '.tar' ) {
-                window.untarItem(item_path);
-                return;
-            }
+            // PC2: Tar handling removed - unnecessary complexity
             const alert_resp = await UIAlert('Found no suitable apps to open this file with. Would you like to download it instead?',
                             [
                                 {

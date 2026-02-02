@@ -33,7 +33,7 @@ export default {
                 <div class="storage-group">
                     <div class="storage-group-row">
                         <div class="storage-card-row"><span class="storage-card-label">Used</span><span id="storage-quota-text" class="storage-card-value">Loading...</span></div>
-                        <div style="height: 5px; background: #e5e7eb; border-radius: 3px; overflow: hidden; margin: 6px 0;">
+                        <div class="storage-quota-track" style="height: 5px; border-radius: 3px; overflow: hidden; margin: 6px 0;">
                             <div id="storage-quota-bar" style="height: 100%; background: #3b82f6; width: 0%; transition: width 0.3s;"></div>
                         </div>
                         <div style="display: flex; justify-content: space-between; font-size: 10px; color: #999;">
@@ -138,7 +138,7 @@ export default {
                 .storage-type-item:last-child { border-bottom: none; }
                 .storage-type-label { display: flex; align-items: center; gap: 4px; flex-shrink: 0; width: 70px; }
                 .storage-type-name { font-weight: 500; font-size: 11px; text-transform: capitalize; }
-                .storage-type-bar { flex: 1; height: 5px; background: #e5e7eb; border-radius: 3px; overflow: hidden; }
+                .storage-type-bar { flex: 1; height: 5px; border-radius: 3px; overflow: hidden; }
                 .storage-type-bar-fill { height: 100%; background: #3b82f6; }
                 .storage-type-value { font-size: 10px; color: #666; width: 90px; text-align: right; flex-shrink: 0; }
                 .storage-file-item { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #eee; cursor: pointer; }
@@ -307,7 +307,7 @@ export default {
                         </span>
                     </div>
                     <div class="storage-type-bar">
-                        <div class="storage-type-bar-fill" style="width: ${privatePercentage}%; background: #6b7280;"></div>
+                        <div class="storage-type-bar-fill" style="width: ${privatePercentage}%; background: #3b82f6;"></div>
                     </div>
                     <div class="storage-type-value">
                         ${formatBytes(privateSize)} (${privateFiles} files)

@@ -295,15 +295,18 @@ async function UIAccountSidebar(options = {}) {
                 font-weight: 500;
                 cursor: pointer;
                 box-sizing: border-box;
+                transition: none;
             }
             .action-btn:hover {
-                background: #e5e5e5;
+                background: #ffffff;
+                box-shadow: none;
             }
             .action-btn.action-receive {
                 background: #ffffff;
             }
             .action-btn.action-receive:hover {
-                background: #e5e5e5;
+                background: #ffffff;
+                box-shadow: none;
             }
             .account-sidebar-tabs {
                 display: flex;
@@ -1682,8 +1685,9 @@ function renderTokensList(tokens) {
         return `
             <div class="empty-state">
                 <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#4b5563" stroke-width="1.5" style="display:block;margin:0 auto 16px;">
-                    <circle cx="9" cy="9" r="7"/>
-                    <path d="M17.5 12.5a7 7 0 1 1-5-12"/>
+                    <rect x="2" y="6" width="20" height="12" rx="2"/>
+                    <path d="M22 10H18a2 2 0 0 0 0 4h4"/>
+                    <circle cx="18" cy="12" r="1" fill="#4b5563"/>
                 </svg>
                 <div style="font-size:14px;font-weight:500;color:#9ca3af;margin-bottom:4px;">${i18n('no_tokens') || 'No Tokens Found'}</div>
                 <div style="font-size:12px;color:#6b7280;">${i18n('tokens_will_appear') || 'Your tokens will appear here'}</div>
@@ -2149,6 +2153,7 @@ window.UIAccountSidebar = UIAccountSidebar;
 window.toggleAccountSidebar = toggleAccountSidebar;
 window.isAccountSidebarOpen = isAccountSidebarOpen;
 window.initEdgeHoverTrigger = initEdgeHoverTrigger;
+window.closeSidebar = closeSidebar;
 
 export default UIAccountSidebar;
 export { toggleAccountSidebar, isAccountSidebarOpen, closeSidebar, initEdgeHoverTrigger };

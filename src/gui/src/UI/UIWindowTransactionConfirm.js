@@ -607,7 +607,7 @@ async function UIWindowTransactionConfirm(options = {}) {
             init_center: true,
             allow_native_ctxmenu: true,
             allow_user_select: true,
-            backdrop: true,
+            backdrop: false,
             width: 380,
             height: 'auto',
             dominant: true,
@@ -621,6 +621,12 @@ async function UIWindowTransactionConfirm(options = {}) {
                 overflow: 'auto',
                 padding: '0',
                 background: '#ffffff',
+            },
+            on_close: () => {
+                // Close the wallet sidebar when this window closes
+                if (typeof window.closeSidebar === 'function') {
+                    window.closeSidebar();
+                }
             },
             ...options.window_options,
         });

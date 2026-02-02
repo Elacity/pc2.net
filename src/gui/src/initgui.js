@@ -28,6 +28,32 @@ if (window._initgui_js_loaded) {
 }
 window._initgui_js_loaded = true;
 
+// ============================================================
+// Theme Initialization - Apply IMMEDIATELY to prevent flash
+// PC2 defaults to dark mode. Light mode only if explicitly set.
+// ============================================================
+(function initTheme() {
+    try {
+        const savedDarkMode = localStorage.getItem('pc2_dark_mode');
+        console.log('[initgui.js] Theme check - localStorage pc2_dark_mode:', savedDarkMode);
+        
+        // Dark mode is default (null/undefined/'true' all mean dark)
+        // Only light mode if explicitly set to 'false'
+        const isLightMode = savedDarkMode === 'false';
+        
+        if (isLightMode) {
+            document.documentElement.setAttribute('data-theme', 'light');
+            console.log('[initgui.js] Applied LIGHT theme');
+        } else {
+            // Explicitly remove any stale light theme attribute to ensure dark mode
+            document.documentElement.removeAttribute('data-theme');
+            console.log('[initgui.js] Applied DARK theme (default)');
+        }
+    } catch (e) {
+        console.warn('[initgui.js] Theme initialization failed:', e);
+    }
+})();
+
 import UIDesktop from './UI/UIDesktop.js'
 import UIWindow from './UI/UIWindow.js'
 import UIAlert from './UI/UIAlert.js'

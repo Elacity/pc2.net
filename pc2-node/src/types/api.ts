@@ -80,6 +80,9 @@ export interface WriteFileRequest {
   content: string;
   encoding?: 'utf8' | 'base64';
   mime_type?: string;
+  overwrite?: boolean;
+  dedupe_name?: boolean;
+  dedupeName?: boolean;
 }
 
 export interface CreateDirectoryRequest {

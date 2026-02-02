@@ -908,39 +908,7 @@ function UIItem (options) {
                 menu_items.push('-');
             }
             if ( ! are_trashed ) {
-                menu_items.push({
-                    html: i18n('Share With…'),
-                    onClick: async function () {
-                        if ( window.user.is_temp &&
-                            !await UIWindowSaveAccount({
-                                send_confirmation_code: true,
-                                message: 'Please create an account to proceed.',
-                                window_options: {
-                                    backdrop: true,
-                                    close_on_backdrop_click: false,
-                                },
-                            }) )
-                        {
-                            return;
-                        }
-                        else if ( !window.user.email_confirmed && !await UIWindowEmailConfirmationRequired() )
-                        {
-                            return;
-                        }
-
-                        let items = [];
-                        $selected_items.each(function () {
-                            const ell = this;
-                            items.push({ uid: $(ell).attr('data-uid'), path: $(ell).attr('data-path'), icon: $(ell).find('.item-icon img').attr('src'), name: $(ell).attr('data-name') });
-                        });
-                        UIWindowShare(items);
-                    },
-                });
-                // -------------------------------------------
-                // -
-                // -------------------------------------------
-                menu_items.push({ is_divider: true });
-
+                // PC2: Share With removed - PC2 is single-user, self-hosted
                 // -------------------------------------------
                 // Donwload
                 // -------------------------------------------
@@ -970,34 +938,6 @@ function UIItem (options) {
                     },
                 });
                 // -------------------------------------------
-                // Download as Tar
-                // -------------------------------------------
-                menu_items.push({
-                    html: i18n('download_as_tar'),
-                    onClick: async function () {
-                        let items = [];
-                        for ( let index = 0; index < $selected_items.length; index++ ) {
-                            items.push($selected_items[index]);
-                        }
-
-                        window.tarItems(items, path.dirname($(el_item).attr('data-path')), true);
-                    },
-                });
-                // -------------------------------------------
-                // Tar
-                // -------------------------------------------
-                menu_items.push({
-                    html: i18n('tar'),
-                    onClick: async function () {
-                        let items = [];
-                        for ( let index = 0; index < $selected_items.length; index++ ) {
-                            items.push($selected_items[index]);
-                        }
-
-                        window.tarItems(items, path.dirname($(el_item).attr('data-path')), false);
-                    },
-                });
-                // -------------------------------------------
                 // -
                 // -------------------------------------------
                 menu_items.push('-');
@@ -1012,7 +952,8 @@ function UIItem (options) {
                     window.clipboard = [];
                     $selected_items.each(function () {
                         const ell = this;
-                        window.clipboard.push($(ell).attr('data-path'));
+                        // Use consistent object format { path: '...' } like copy does
+                        window.clipboard.push({ path: $(ell).attr('data-path') });
                     });
                 },
             });
@@ -1244,34 +1185,7 @@ function UIItem (options) {
                     menu_items.push('-');
                 }
             }
-            // -------------------------------------------
-            // Share With…
-            // -------------------------------------------
-            if ( !is_trashed && !is_trash ) {
-                menu_items.push({
-                    html: i18n('Share With…'),
-                    onClick: async function () {
-                        if ( window.user.is_temp &&
-                            !await UIWindowSaveAccount({
-                                send_confirmation_code: true,
-                                message: 'Please create an account to proceed.',
-                                window_options: {
-                                    backdrop: true,
-                                    close_on_backdrop_click: false,
-                                },
-                            }) )
-                        {
-                            return;
-                        }
-                        else if ( !window.user.email_confirmed && !await UIWindowEmailConfirmationRequired() )
-                        {
-                            return;
-                        }
-
-                        UIWindowShare([{ uid: $(el_item).attr('data-uid'), path: $(el_item).attr('data-path'), name: $(el_item).attr('data-name'), icon: $(el_item_icon).find('img').attr('src') }]);
-                    },
-                });
-            }
+            // PC2: Share With removed - PC2 is single-user, self-hosted
 
             // -------------------------------------------
             // Publish As Website
@@ -1448,29 +1362,7 @@ function UIItem (options) {
                     },
                 });
             }
-            // -------------------------------------------
-            // Tar
-            // -------------------------------------------
-            if ( !is_trash && !is_trashed && !$(el_item).attr('data-path').endsWith('.tar') ) {
-                menu_items.push({
-                    html: i18n('tar'),
-                    onClick: function () {
-                        window.tarItems(el_item, path.dirname($(el_item).attr('data-path')), false);
-                    },
-                });
-            }
-            // -------------------------------------------
-            // Untar
-            // -------------------------------------------
-            if ( !is_trash && !is_trashed && $(el_item).attr('data-path').endsWith('.tar') ) {
-                menu_items.push({
-                    html: i18n('untar'),
-                    onClick: async function () {
-                        let filePath = $(el_item).attr('data-path');
-                        window.untarItem(filePath);
-                    },
-                });
-            }
+            // PC2: Tar/Untar removed - unnecessary complexity for most users
             // -------------------------------------------
             // Restore
             // -------------------------------------------
@@ -1498,7 +1390,8 @@ function UIItem (options) {
                     html: i18n('cut'),
                     onClick: function () {
                         window.clipboard_op = 'move';
-                        window.clipboard = [options.path];
+                        // Use consistent object format { path: '...' } like copy does
+                        window.clipboard = [{ path: options.path }];
                     },
                 });
             }

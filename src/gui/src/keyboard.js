@@ -781,7 +781,8 @@ $(document).bind('keyup keydown', async function (e) {
                 window.clipboard = [];
                 window.clipboard_op = 'move';
                 $selected_items.each(function () {
-                    window.clipboard.push($(this).attr('data-path'));
+                    // Use consistent object format { path: '...' } like copy does
+                    window.clipboard.push({ path: $(this).attr('data-path') });
                 });
             }
         }

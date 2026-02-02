@@ -122,7 +122,7 @@ export default {
                 
                 <!-- Links -->
                 <div style="text-align: center; font-size: 11px; margin-top: 16px;">
-                    <a href="https://elastos.info" target="_blank">ElastOS</a> · <a href="https://github.com/Elacity/pc2.net" target="_blank">GitHub</a> · <a href="https://discord.gg/elastos" target="_blank">Discord</a> · <a href="#" class="show-credits">Credits</a>
+                    <a href="#" class="show-credits">Credits</a>
                 </div>
                 
                 <dialog class="credits"><div class="credit-content" style="padding: 16px;"><p style="margin: 0 0 10px; font-size: 14px; text-align: center;">Open Source Credits</p><ul style="padding-left: 20px; font-size: 12px; line-height: 1.8;"><li>Puter - Desktop environment</li><li>Helia - IPFS</li><li>libp2p - P2P networking</li><li>Express.js - HTTP server</li></ul></div></dialog>`;

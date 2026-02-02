@@ -167,9 +167,40 @@ certbot certonly --standalone -d your-domain.com
 cd ~/pc2 && docker compose logs -f
 ```
 
-**Native:**
+**Native (systemd):**
 ```bash
 journalctl -u pc2 -f
+```
+
+**Native (pm2):**
+```bash
+pm2 logs pc2
+```
+
+### Restart PC2
+
+You can restart from the UI or command line:
+
+**From UI (Recommended):**
+1. Click your avatar in the top-right corner
+2. Click "Restart PC2"
+3. Server restarts automatically (with systemd or pm2)
+
+**From Command Line:**
+
+**Docker:**
+```bash
+docker compose restart
+```
+
+**Native (systemd):**
+```bash
+sudo systemctl restart pc2
+```
+
+**Native (pm2):**
+```bash
+pm2 restart pc2
 ```
 
 ### Update PC2

@@ -98,6 +98,7 @@ curl -sSL https://raw.githubusercontent.com/Elacity/pc2.net/main/scripts/install
 - GPU is not utilized by PC2 (future feature)
 - Works great for AI agent workloads with Ollama
 - Use barrel jack power for stability
+- **Important:** Use the install script above - it creates a systemd service that keeps PC2 running even when you close SSH. If you run manually (`npm start`), PC2 will stop when you disconnect.
 
 ---
 
@@ -221,6 +222,81 @@ sudo systemctl restart pc2
 ---
 
 ## Troubleshooting
+
+### PC2 Dies When Closing SSH/Terminal
+
+**Problem:** PC2 stops when you close the terminal or disconnect SSH.
+
+**Cause:** You're running PC2 manually (`npm start`) instead of via systemd service.
+
+**Solution 1: Use Our Official Install Script (Recommended)**
+
+Our install script creates a systemd service that keeps PC2 running:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/Elacity/pc2.net/main/scripts/install-arm.sh | bash
+```
+
+**Solution 2: Manually Create systemd Service**
+
+If you already installed manually, create the service:
+
+```bash
+sudo tee /etc/systemd/system/pc2.service > /dev/null << EOF
+[Unit]
+Description=PC2 Personal Cloud Computer
+After=network.target
+
+[Service]
+Type=simple
+User=$USER
+WorkingDirectory=$HOME/pc2.net/pc2-node
+ExecStart=/usr/bin/npm start
+Restart=always
+RestartSec=10
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable pc2
+sudo systemctl start pc2
+```
+
+**Solution 3: Use screen (Quick Workaround)**
+
+If you can't use systemd:
+
+```bash
+# Install screen
+sudo apt-get install screen
+
+# Start a screen session
+screen -S pc2
+
+# Run PC2
+cd ~/pc2.net/pc2-node && npm start
+
+# Detach from screen: Press Ctrl+A, then D
+# Reattach later: screen -r pc2
+```
+
+**Solution 4: Use PM2 (Alternative Process Manager)**
+
+```bash
+# Install PM2
+npm install -g pm2
+
+# Start PC2 with PM2
+cd ~/pc2.net/pc2-node
+pm2 start npm --name "pc2" -- start
+
+# Save PM2 process list (survives reboot)
+pm2 save
+pm2 startup  # Follow the command it outputs
+```
 
 ### Service Won't Start
 

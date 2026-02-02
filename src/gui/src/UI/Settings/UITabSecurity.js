@@ -34,6 +34,18 @@ export default {
         // Compact styles
         h += `<style>
             .security-section { margin-bottom: 16px; }
+            .security-tooltip-popup {
+                position: fixed;
+                background: #333;
+                color: white;
+                padding: 8px 12px;
+                border-radius: 6px;
+                font-size: 12px;
+                max-width: 280px;
+                z-index: 999999;
+                line-height: 1.5;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            }
             .security-section-title {
                 font-size: 11px;
                 font-weight: 700;
@@ -79,18 +91,21 @@ export default {
             }
             .security-btn {
                 font-size: 12px;
-                padding: 5px 12px;
+                padding: 6px 12px;
                 border-radius: 4px;
                 cursor: pointer;
                 line-height: 1.2;
-                height: auto;
+                height: 30px;
                 margin: 0;
+                box-sizing: border-box;
             }
             .security-input {
                 padding: 6px 10px;
                 border: 1px solid #ddd;
                 border-radius: 4px;
                 font-size: 12px;
+                height: 30px;
+                box-sizing: border-box;
             }
         </style>`;
 
@@ -162,12 +177,16 @@ export default {
             // ACCESS CONTROL
             h += `<div class="security-section">`;
             h += `<div class="security-section-title">Access Control</div>`;
+            h += `<div style="font-size: 12px; color: #6b7280; margin-bottom: 12px; line-height: 1.5;">
+                As the node owner, you can allow other wallet addresses to create their own accounts on this PC2 node. 
+                Each account has its own separate files, settings, and data.
+            </div>`;
             h += `<div class="security-group">`;
             
             // Owner info
             h += `<div class="security-group-row">`;
             h += `<div class="security-card-row">`;
-            h += `<span class="security-card-label">Node Owner</span>`;
+            h += `<span class="security-card-label">Node Owner (Admin)</span>`;
             h += `<span id="owner-wallet" style="font-size: 11px; font-family: monospace; color: #666;">Loading...</span>`;
             h += `</div></div>`;
 
@@ -175,7 +194,7 @@ export default {
             h += `<div class="security-group-row">`;
             h += `<div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">`;
             h += `<span class="security-card-label">Add Wallet Account</span>`;
-            h += `<span style="cursor: help; color: #9ca3af; font-size: 12px;" title="This wallet will be able to create an account on this PC2 node with its own files and settings.">ⓘ</span>`;
+            h += `<span class="access-control-tooltip" style="cursor: help; color: #9ca3af; font-size: 12px; position: relative;">ⓘ</span>`;
             h += `</div>`;
             h += `<div style="display: flex; gap: 6px; align-items: center;">`;
             h += `<input type="text" id="add-wallet-address" class="security-input" placeholder="0x..." style="flex: 1; font-family: monospace;">`;
@@ -454,7 +473,7 @@ export default {
                 h += '<button class="button create-btn" style="background: #3b82f6; color: white;">Create</button>';
                 h += '</div></div>';
                 
-                const win = await UIWindow({ body_content: h, width: 400, height: 220, backdrop: true, is_resizable: false, has_head: false, body_css: { 'background-color': '#fff', padding: '0', 'border-radius': '8px' } });
+                const win = await UIWindow({ body_content: h, width: 400, height: 220, backdrop: true, is_resizable: false, has_head: false, body_css: { 'background-color': 'var(--color-window-bg)', padding: '0', 'border-radius': '8px' } });
                 const $win = $(win);
                 
                 $win.find('.cancel-btn').on('click', () => $win.close());
@@ -477,8 +496,8 @@ export default {
                         
                         // Show key
                         const keyWin = await UIWindow({
-                            body_content: `<div style="padding: 16px;"><h3 style="margin: 0 0 8px; font-size: 15px; color: #166534;">Key Created!</h3><p style="font-size: 12px; color: #92400e; margin-bottom: 10px;">Save this key now - it won't be shown again.</p><div style="background: #f3f4f6; padding: 10px; border-radius: 4px; margin-bottom: 10px;"><code style="font-size: 11px; word-break: break-all;">${data.key.api_key}</code></div><button class="button copy-key-btn" style="width: 100%;">Copy Key</button></div>`,
-                            width: 380, backdrop: true, is_resizable: false, has_head: false, body_css: { 'background-color': '#fff', padding: '0', 'border-radius': '8px' }
+                            body_content: `<div style="padding: 16px;"><h3 class="key-created-title" style="margin: 0 0 8px; font-size: 15px;">Key Created!</h3><p class="key-created-warning" style="font-size: 12px; margin-bottom: 10px;">Save this key now - it won't be shown again.</p><div class="key-created-box" style="padding: 10px; border-radius: 4px; margin-bottom: 10px;"><code style="font-size: 11px; word-break: break-all;">${data.key.api_key}</code></div><button class="button copy-key-btn" style="width: 100%;">Copy Key</button></div>`,
+                            width: 380, backdrop: true, is_resizable: false, has_head: false, body_css: { 'background-color': 'var(--color-window-bg)', padding: '0', 'border-radius': '8px' }
                         });
                         $(keyWin).find('.copy-key-btn').on('click', function() {
                             navigator.clipboard.writeText(data.key.api_key);
@@ -596,6 +615,39 @@ Capabilities: files, terminal, git, http, scheduler`;
             });
             
             $el_window.find('#btn-refresh-wallets').on('click', loadAllowedWallets);
+            
+            // Access Control tooltip
+            let accessTooltipEl = null;
+            const tooltipText = 'Add other wallet addresses that can log in to this PC2 node and create their own account. Each account is separate with its own files and settings. As the owner, you control who can access this node.';
+            
+            $el_window.find('.access-control-tooltip').on('mouseenter', function(e) {
+                // Create tooltip element
+                accessTooltipEl = document.createElement('div');
+                accessTooltipEl.className = 'security-tooltip-popup';
+                accessTooltipEl.textContent = tooltipText;
+                document.body.appendChild(accessTooltipEl);
+                
+                // Position below the icon
+                const rect = this.getBoundingClientRect();
+                accessTooltipEl.style.left = (rect.left + rect.width / 2 - accessTooltipEl.offsetWidth / 2) + 'px';
+                accessTooltipEl.style.top = (rect.bottom + 8) + 'px';
+                
+                // Adjust if off-screen
+                const tooltipRect = accessTooltipEl.getBoundingClientRect();
+                if (tooltipRect.right > window.innerWidth - 10) {
+                    accessTooltipEl.style.left = (window.innerWidth - tooltipRect.width - 10) + 'px';
+                }
+                if (tooltipRect.left < 10) {
+                    accessTooltipEl.style.left = '10px';
+                }
+            });
+            
+            $el_window.find('.access-control-tooltip').on('mouseleave', function() {
+                if (accessTooltipEl && accessTooltipEl.parentNode) {
+                    accessTooltipEl.parentNode.removeChild(accessTooltipEl);
+                    accessTooltipEl = null;
+                }
+            });
             
             loadOwnerInfo();
             loadAllowedWallets();

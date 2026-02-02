@@ -461,15 +461,18 @@ export default {
                 border-radius: 4px;
                 font-size: 13px;
                 width: 160px;
+                height: 30px;
+                box-sizing: border-box;
             }
             .account-btn {
                 font-size: 12px;
-                padding: 5px 12px;
+                padding: 6px 12px;
                 border-radius: 4px;
                 cursor: pointer;
                 line-height: 1.2;
-                height: auto;
+                height: 30px;
                 margin: 0;
+                box-sizing: border-box;
             }
             .recovery-word {
                 background: #2a2a3e;
@@ -1080,17 +1083,25 @@ export default {
         
         // Open encrypt modal
         $el_window.find('#open-encrypt-modal-btn').on('click', function() {
+            // Check if dark mode (no data-theme attribute or data-theme !== 'light')
+            const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+            const bgColor = isDark ? '#2a2a2c' : 'white';
+            const textColor = isDark ? '#ffffff' : '#333';
+            const mutedColor = isDark ? '#9ca3af' : '#666';
+            const borderColor = isDark ? '#4a4a4c' : '#ddd';
+            const inputBg = isDark ? '#1a1a1c' : '#ffffff';
+            
             const modalHtml = `
                 <div id="encrypt-modal-overlay" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 999999;">
-                    <div style="background: white; border-radius: 8px; padding: 20px; max-width: 400px; width: 90%;">
+                    <div style="background: ${bgColor}; border-radius: 8px; padding: 20px; max-width: 400px; width: 90%;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                            <h3 style="margin: 0; font-size: 15px;">Encrypt Recovery Phrase</h3>
-                            <button id="close-encrypt-modal" style="background: none; border: none; font-size: 18px; cursor: pointer;">&times;</button>
+                            <h3 style="margin: 0; font-size: 15px; color: ${textColor};">Encrypt Recovery Phrase</h3>
+                            <button id="close-encrypt-modal" style="background: none; border: none; font-size: 18px; cursor: pointer; color: ${textColor};">&times;</button>
                         </div>
-                        <p style="font-size: 12px; color: #666; margin-bottom: 12px;">Enter your 24-word recovery phrase.</p>
-                        <textarea id="modal-mnemonic-input" placeholder="word1 word2 word3..." style="width: 100%; height: 80px; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-family: monospace; font-size: 11px; resize: none; box-sizing: border-box;"></textarea>
+                        <p style="font-size: 12px; color: ${mutedColor}; margin-bottom: 12px;">Enter your 24-word recovery phrase.</p>
+                        <textarea id="modal-mnemonic-input" placeholder="word1 word2 word3..." style="width: 100%; height: 80px; padding: 10px; border: 1px solid ${borderColor}; border-radius: 6px; font-family: monospace; font-size: 11px; resize: none; box-sizing: border-box; background: ${inputBg}; color: ${textColor};"></textarea>
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
-                            <span id="modal-encrypt-status" style="font-size: 11px; color: #666;"></span>
+                            <span id="modal-encrypt-status" style="font-size: 11px; color: ${mutedColor};"></span>
                             <div style="display: flex; gap: 6px;">
                                 <button id="cancel-encrypt-modal" class="button">Cancel</button>
                                 <button id="confirm-encrypt-btn" class="button button-primary">Encrypt</button>

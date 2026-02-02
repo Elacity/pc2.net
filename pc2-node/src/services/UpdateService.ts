@@ -299,22 +299,31 @@ export class UpdateService {
 
       logger.info(`[UpdateService] Starting update in ${projectRoot}`);
 
-      // Step 1: Git pull
+      // Step 1: Reset any local changes that might block git pull
+      this.updateProgress = 'Preparing for update...';
+      logger.info('[UpdateService] Resetting local changes...');
+      await execAsync('git checkout -- .', { cwd: projectRoot });
+      await execAsync('git clean -fd src/particle-auth/assets/ 2>/dev/null || true', { cwd: projectRoot });
+      logger.info('[UpdateService] Local changes reset');
+
+      // Step 2: Git pull
       this.updateProgress = 'Downloading latest code...';
       logger.info('[UpdateService] Running git pull...');
       await execAsync('git pull origin main', { cwd: projectRoot });
       logger.info('[UpdateService] Git pull complete');
 
-      // Step 2: npm install (in case of new dependencies)
+      // Step 3: npm install (in case of new dependencies)
+      // Using --legacy-peer-deps to avoid dependency conflicts
       this.updateProgress = 'Installing dependencies...';
       logger.info('[UpdateService] Running npm install...');
-      await execAsync('npm install', { cwd: pc2NodeDir });
+      await execAsync('npm install --legacy-peer-deps', { cwd: pc2NodeDir });
       logger.info('[UpdateService] npm install complete');
 
-      // Step 3: Build
+      // Step 4: Build GUI and backend (skip particle-auth rebuild - it's pre-built in repo)
       this.updateProgress = 'Building application...';
-      logger.info('[UpdateService] Running npm build...');
-      await execAsync('npm run build', { cwd: pc2NodeDir });
+      logger.info('[UpdateService] Running builds...');
+      await execAsync('npm run build:gui', { cwd: projectRoot });
+      await execAsync('npm run build:backend', { cwd: pc2NodeDir });
       logger.info('[UpdateService] Build complete');
 
       // Step 4: Schedule restart
@@ -324,16 +333,21 @@ export class UpdateService {
       // Return success before restarting
       setTimeout(() => {
         try {
-          // Try systemctl first (Linux with systemd)
-          execSync('systemctl restart pc2', { stdio: 'ignore' });
+          // Try systemctl first with pc2-node service name (Linux with systemd)
+          execSync('systemctl restart pc2-node', { stdio: 'ignore' });
         } catch {
           try {
-            // Try pm2 as fallback
-            execSync('pm2 restart pc2', { stdio: 'ignore' });
+            // Try pc2 service name as fallback
+            execSync('systemctl restart pc2', { stdio: 'ignore' });
           } catch {
-            // Fallback: exit and let process manager restart
-            logger.info('[UpdateService] Exiting for restart...');
-            process.exit(0);
+            try {
+              // Try pm2 as fallback
+              execSync('pm2 restart all', { stdio: 'ignore' });
+            } catch {
+              // Fallback: exit and let process manager restart
+              logger.info('[UpdateService] Exiting for restart...');
+              process.exit(0);
+            }
           }
         }
       }, 1000);

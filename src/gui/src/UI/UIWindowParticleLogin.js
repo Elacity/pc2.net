@@ -479,7 +479,7 @@ async function UIWindowParticleLogin(options = {}) {
                 // Small delay to ensure localStorage is fully synced before navigation
                 setTimeout(() => {
                     console.log('[Particle Auth]: Redirecting to:', cleanUrl);
-                    window.location.replace(cleanUrl);
+                window.location.replace(cleanUrl);
                 }, 100);
             }else{
                 // Trigger login event FIRST to load desktop

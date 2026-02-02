@@ -9,6 +9,7 @@ import { Router, Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import { logger } from '../utils/logger.js';
+import { normalizeAddress, compareAddresses, isValidAddress, detectAddressType } from '../utils/wallet.js';
 import { getNodeConfig, saveNodeConfig } from './setup.js';
 import { authenticate, AuthenticatedRequest } from './middleware.js';
 import { DatabaseManager } from '../storage/database.js';
@@ -208,6 +209,11 @@ router.post('/claim-ownership', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'Wallet address is required' });
     }
     
+    // Validate address format (EVM or Solana)
+    if (!isValidAddress(walletAddress)) {
+      return res.status(400).json({ success: false, error: 'Invalid wallet address format. Must be EVM (0x...) or Solana address.' });
+    }
+    
     const config = getNodeConfig();
     
     // If owner is already set, reject
@@ -219,8 +225,9 @@ router.post('/claim-ownership', async (req: Request, res: Response) => {
     }
     
     // Set owner and DELETE the anti-snipe password hash
+    // Use normalizeAddress to handle EVM (lowercase) vs Solana (case-sensitive)
     const updatedConfig = { ...config };
-    updatedConfig.ownerWallet = walletAddress.toLowerCase();
+    updatedConfig.ownerWallet = normalizeAddress(walletAddress);
     delete updatedConfig.antiSnipePasswordHash; // PERMANENTLY DELETE
     
     saveNodeConfig(updatedConfig);
@@ -228,7 +235,7 @@ router.post('/claim-ownership', async (req: Request, res: Response) => {
     // Clear all anti-snipe sessions
     antiSnipeSessions.clear();
     
-    logger.info(`[AccessControl] Owner set to ${walletAddress}, anti-snipe password deleted`);
+    logger.info(`[AccessControl] Owner set to ${walletAddress} (type: ${detectAddressType(walletAddress)}), anti-snipe password deleted`);
     
     res.json({ 
       success: true, 
@@ -243,15 +250,18 @@ router.post('/claim-ownership', async (req: Request, res: Response) => {
 
 /**
  * Check if a wallet is allowed to access this node
- * GET /api/access/check?wallet=0x...
+ * GET /api/access/check?wallet=0x... (EVM) or ?wallet=D9nf... (Solana)
  */
 router.get('/check', (req: Request, res: Response) => {
   try {
-    const wallet = (req.query.wallet as string)?.toLowerCase();
+    const walletParam = req.query.wallet as string;
     
-    if (!wallet) {
+    if (!walletParam) {
       return res.status(400).json({ error: 'Wallet address is required' });
     }
+    
+    // Normalize the wallet address (EVM lowercase, Solana as-is)
+    const wallet = normalizeAddress(walletParam);
     
     const config = getNodeConfig();
     
@@ -264,14 +274,14 @@ router.get('/check', (req: Request, res: Response) => {
       });
     }
     
-    // Check if this is the owner
-    if (config.ownerWallet === wallet) {
+    // Check if this is the owner (using proper comparison for address type)
+    if (compareAddresses(config.ownerWallet, wallet)) {
       return res.json({ allowed: true, role: 'owner' });
     }
     
     // Check allowed wallets list
     const allowedWallets = config.allowedWallets || [];
-    const entry = allowedWallets.find((w: { wallet: string }) => w.wallet === wallet);
+    const entry = allowedWallets.find((w: { wallet: string }) => compareAddresses(w.wallet, wallet));
     
     if (entry) {
       return res.json({ allowed: true, role: entry.role });
@@ -335,6 +345,7 @@ router.get('/list', authenticate, (req: AuthenticatedRequest, res: Response) => 
  * POST /api/access/add
  * 
  * Body: { wallet: string, role: 'admin' | 'member' }
+ * Supports both EVM (0x...) and Solana addresses
  */
 router.post('/add', authenticate, (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -346,12 +357,12 @@ router.post('/add', authenticate, (req: AuthenticatedRequest, res: Response) => 
     }
     
     const config = getNodeConfig();
-    const userWallet = req.user.wallet_address.toLowerCase();
+    const userWallet = normalizeAddress(req.user.wallet_address);
     
-    // Check if user is owner or admin
-    const isOwner = config.ownerWallet === userWallet;
+    // Check if user is owner or admin (using proper address comparison)
+    const isOwner = compareAddresses(config.ownerWallet, userWallet);
     const isAdmin = config.allowedWallets?.some((w: { wallet: string; role: string }) => 
-      w.wallet === userWallet && w.role === 'admin'
+      compareAddresses(w.wallet, userWallet) && w.role === 'admin'
     );
     
     if (!isOwner && !isAdmin) {
@@ -362,12 +373,17 @@ router.post('/add', authenticate, (req: AuthenticatedRequest, res: Response) => 
       return res.status(400).json({ success: false, error: 'Wallet address is required' });
     }
     
-    const normalizedWallet = wallet.toLowerCase();
-    
-    // Validate wallet format
-    if (!/^0x[a-f0-9]{40}$/i.test(normalizedWallet)) {
-      return res.status(400).json({ success: false, error: 'Invalid wallet address format' });
+    // Validate wallet format (accept both EVM and Solana)
+    if (!isValidAddress(wallet)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Invalid wallet address format. Must be EVM (0x...) or Solana address.' 
+      });
     }
+    
+    // Normalize wallet (EVM lowercase, Solana as-is)
+    const normalizedWallet = normalizeAddress(wallet);
+    const addressType = detectAddressType(wallet);
     
     // Validate role
     if (!['admin', 'member'].includes(role)) {
@@ -375,7 +391,7 @@ router.post('/add', authenticate, (req: AuthenticatedRequest, res: Response) => 
     }
     
     // Cannot add owner wallet again
-    if (config.ownerWallet === normalizedWallet) {
+    if (compareAddresses(config.ownerWallet, normalizedWallet)) {
       return res.status(400).json({ success: false, error: 'Cannot add owner wallet' });
     }
     
@@ -384,26 +400,30 @@ router.post('/add', authenticate, (req: AuthenticatedRequest, res: Response) => 
       config.allowedWallets = [];
     }
     
-    // Check if already exists
-    const existing = config.allowedWallets.find((w: { wallet: string }) => w.wallet === normalizedWallet);
-    if (existing) {
+    // Check if already exists (using proper comparison)
+    const existingIndex = config.allowedWallets.findIndex((w: { wallet: string }) => 
+      compareAddresses(w.wallet, normalizedWallet)
+    );
+    
+    if (existingIndex >= 0) {
       // Update role
-      existing.role = role;
-      existing.updatedAt = new Date().toISOString();
+      config.allowedWallets[existingIndex].role = role;
+      config.allowedWallets[existingIndex].updatedAt = new Date().toISOString();
     } else {
       // Add new
       config.allowedWallets.push({
         wallet: normalizedWallet,
         role,
+        addressType, // Store address type for reference
         addedAt: new Date().toISOString(),
       });
     }
     
     saveNodeConfig(config);
     
-    logger.info(`[AccessControl] Added wallet ${normalizedWallet} with role ${role}`);
+    logger.info(`[AccessControl] Added wallet ${normalizedWallet} (type: ${addressType}) with role ${role}`);
     
-    res.json({ success: true, wallet: normalizedWallet, role });
+    res.json({ success: true, wallet: normalizedWallet, role, addressType });
   } catch (error) {
     logger.error('[AccessControl] Add wallet error:', error);
     res.status(500).json({ success: false, error: 'Failed to add wallet' });
@@ -424,12 +444,12 @@ router.delete('/remove', authenticate, (req: AuthenticatedRequest, res: Response
     }
     
     const config = getNodeConfig();
-    const userWallet = req.user.wallet_address.toLowerCase();
+    const userWallet = normalizeAddress(req.user.wallet_address);
     
-    // Check if user is owner or admin
-    const isOwner = config.ownerWallet === userWallet;
+    // Check if user is owner or admin (using proper comparison)
+    const isOwner = compareAddresses(config.ownerWallet, userWallet);
     const isAdmin = config.allowedWallets?.some((w: { wallet: string; role: string }) => 
-      w.wallet === userWallet && w.role === 'admin'
+      compareAddresses(w.wallet, userWallet) && w.role === 'admin'
     );
     
     if (!isOwner && !isAdmin) {
@@ -442,10 +462,10 @@ router.delete('/remove', authenticate, (req: AuthenticatedRequest, res: Response
       return res.status(400).json({ success: false, error: 'Wallet address is required' });
     }
     
-    const normalizedWallet = wallet.toLowerCase();
+    const normalizedWallet = normalizeAddress(wallet);
     
     // Cannot remove owner
-    if (config.ownerWallet === normalizedWallet) {
+    if (compareAddresses(config.ownerWallet, normalizedWallet)) {
       return res.status(400).json({ success: false, error: 'Cannot remove owner wallet' });
     }
     
@@ -454,7 +474,9 @@ router.delete('/remove', authenticate, (req: AuthenticatedRequest, res: Response
     }
     
     const initialLength = config.allowedWallets.length;
-    config.allowedWallets = config.allowedWallets.filter((w: { wallet: string }) => w.wallet !== normalizedWallet);
+    config.allowedWallets = config.allowedWallets.filter((w: { wallet: string }) => 
+      !compareAddresses(w.wallet, normalizedWallet)
+    );
     
     if (config.allowedWallets.length === initialLength) {
       return res.status(404).json({ success: false, error: 'Wallet not found' });

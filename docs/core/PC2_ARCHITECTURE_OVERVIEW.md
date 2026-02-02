@@ -480,6 +480,8 @@ PC2 supports multi-user access with wallet-based permissions:
    - ✅ Username selection
    - ✅ Mnemonic backup prompt
    - ✅ Super node registration
+   - ✅ Smart domain redirect (VPS users → ela.city for WalletConnect)
+   - ✅ Always-show welcome screen
 
 ### 🚧 In Progress (Phase 5)
 

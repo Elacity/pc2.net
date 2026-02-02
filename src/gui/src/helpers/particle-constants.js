@@ -110,10 +110,10 @@ export const CHAIN_INFO = {
 };
 
 /**
- * Available networks for Universal Account transfers
+ * Available networks for Universal Account transfers (Particle Network supported)
  */
 export const AVAILABLE_NETWORKS = [
-    { name: 'Elastos Smart Chain', chainId: 20, chainType: 'evm' },
+    { name: 'ESC', chainId: 20, chainType: 'evm' },
     { name: 'Base', chainId: 8453, chainType: 'evm' },
     { name: 'Ethereum', chainId: 1, chainType: 'evm' },
     { name: 'Arbitrum', chainId: 42161, chainType: 'evm' },
@@ -126,11 +126,60 @@ export const AVAILABLE_NETWORKS = [
 ];
 
 /**
+ * EOA Networks - All networks available for EOA wallet mode
+ * Includes Elastos ecosystem chains + major EVM networks
+ */
+export const EOA_NETWORKS = [
+    // Elastos Ecosystem
+    { name: 'ESC', chainId: 20, chainType: 'evm' },
+    { name: 'EID Chain', chainId: 22, chainType: 'evm' },
+    { name: 'ECO Chain', chainId: 12343, chainType: 'evm' },
+    { name: 'PGP Chain', chainId: 860621, chainType: 'evm' },
+    // Major EVM Networks
+    { name: 'Ethereum', chainId: 1, chainType: 'evm' },
+    { name: 'Base', chainId: 8453, chainType: 'evm' },
+    { name: 'Arbitrum', chainId: 42161, chainType: 'evm' },
+    { name: 'Optimism', chainId: 10, chainType: 'evm' },
+    { name: 'Polygon', chainId: 137, chainType: 'evm' },
+    { name: 'BNB Chain', chainId: 56, chainType: 'evm' },
+    { name: 'Avalanche', chainId: 43114, chainType: 'evm' },
+    { name: 'Linea', chainId: 59144, chainType: 'evm' },
+];
+
+/**
+ * ALL_NETWORKS - Combined list of all networks (EOA + Particle unique ones)
+ * Used for EOA mode to show maximum network options
+ */
+export const ALL_NETWORKS = [
+    // Elastos Ecosystem first
+    { name: 'ESC', chainId: 20, chainType: 'evm' },
+    { name: 'EID Chain', chainId: 22, chainType: 'evm' },
+    { name: 'ECO Chain', chainId: 12343, chainType: 'evm' },
+    { name: 'PGP Chain', chainId: 860621, chainType: 'evm' },
+    // Major EVM Networks
+    { name: 'Ethereum', chainId: 1, chainType: 'evm' },
+    { name: 'Base', chainId: 8453, chainType: 'evm' },
+    { name: 'Arbitrum', chainId: 42161, chainType: 'evm' },
+    { name: 'Optimism', chainId: 10, chainType: 'evm' },
+    { name: 'Polygon', chainId: 137, chainType: 'evm' },
+    { name: 'BNB Chain', chainId: 56, chainType: 'evm' },
+    { name: 'Avalanche', chainId: 43114, chainType: 'evm' },
+    { name: 'Linea', chainId: 59144, chainType: 'evm' },
+    // Solana (Universal Account only, not for EOA)
+    { name: 'Solana', chainId: 101, chainType: 'solana' },
+];
+
+/**
  * Particle Network supported tokens per chain
  * Only these token/chain combinations work with Universal Account
  */
 export const PARTICLE_SUPPORTED_TOKENS = {
-    'Elastos Smart Chain': ['ELA'],
+    // Elastos Ecosystem
+    'ESC': ['ELA', 'USDC', 'ETH'],
+    'EID Chain': ['ELA'],
+    'ECO Chain': ['ELA'],
+    'PGP Chain': ['PGP', 'ELA'],
+    // Major Networks
     'Solana': ['USDC', 'USDT', 'SOL'],
     'Ethereum': ['USDC', 'USDT', 'ETH', 'BTC'],
     'Base': ['USDC', 'ETH', 'BTC', 'ELA'],
@@ -148,10 +197,21 @@ export const PARTICLE_SUPPORTED_TOKENS = {
  * Native tokens use 0x0000000000000000000000000000000000000000
  */
 export const PARTICLE_CURRENCY_MAP = {
-    'Elastos Smart Chain': {
+    // Elastos Ecosystem
+    'ESC': {
         'ela': '0x0000000000000000000000000000000000000000', // Native ELA
         'usdc': '0xA06be0F5950781cE28D965E5EFc6996e88a8C141', // USDC on Elastos
         'eth': '0x802c3e839E4fDb10aF583E3E759239ec7703501e', // Wrapped ETH on Elastos
+    },
+    'EID Chain': {
+        'ela': '0x0000000000000000000000000000000000000000', // Native ELA
+    },
+    'ECO Chain': {
+        'ela': '0x0000000000000000000000000000000000000000', // Native ELA
+    },
+    'PGP Chain': {
+        'pgp': '0x0000000000000000000000000000000000000000', // Native PGP
+        'ela': '0x0000000000000000000000000000000000000000', // Bridged ELA (placeholder)
     },
     'Solana': {
         'sol': '0x0000000000000000000000000000000000000000',
@@ -280,26 +340,33 @@ export function getChainInfo(chainId) {
  * Get available networks for a specific token
  * Filters networks based on which chains support the token and wallet mode
  * @param {string} tokenSymbol - Token symbol (e.g., "USDC")
- * @param {string} [mode] - Wallet mode: 'universal' or 'elastos'. If 'elastos', only Elastos chain is shown. If 'universal', Elastos is excluded.
+ * @param {string} [mode] - Wallet mode: 'universal' or 'elastos'. 
+ *                          If 'elastos' (EOA mode), show all EVM networks from combined list.
+ *                          If 'universal', show Particle-supported networks excluding Elastos.
  * @returns {Array} Array of network objects that support this token
  */
 export function getAvailableNetworksForToken(tokenSymbol, mode = null) {
     const tokenUpper = tokenSymbol?.toUpperCase() || '';
     
-    let networks = AVAILABLE_NETWORKS.filter((network) =>
-        PARTICLE_SUPPORTED_TOKENS[network.name]?.includes(tokenUpper)
-    );
-    
     // Filter based on wallet mode
     if (mode === 'elastos') {
-        // Elastos mode: only show Elastos Smart Chain
-        networks = networks.filter(n => n.name === 'Elastos Smart Chain');
+        // EOA mode: show all EVM networks (user can send from any chain they have tokens on)
+        // Use EOA_NETWORKS which includes all supported EVM chains
+        return EOA_NETWORKS.filter(n => n.chainType === 'evm');
     } else if (mode === 'universal') {
-        // Universal mode: exclude Elastos Smart Chain (Universal Account doesn't support it)
-        networks = networks.filter(n => n.name !== 'Elastos Smart Chain');
+        // Universal mode: filter by Particle token support, exclude Elastos chains
+        let networks = AVAILABLE_NETWORKS.filter((network) =>
+            PARTICLE_SUPPORTED_TOKENS[network.name]?.includes(tokenUpper)
+        );
+        // Exclude Elastos chains for Universal Account
+        networks = networks.filter(n => n.name !== 'ESC' && n.chainId !== 20);
+        return networks;
     }
     
-    return networks;
+    // Default: filter by token support from Particle networks
+    return AVAILABLE_NETWORKS.filter((network) =>
+        PARTICLE_SUPPORTED_TOKENS[network.name]?.includes(tokenUpper)
+    );
 }
 
 /**

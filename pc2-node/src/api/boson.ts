@@ -6,6 +6,7 @@
 
 import { Router, Request, Response } from 'express';
 import { BosonService } from '../services/boson/index.js';
+import os from 'os';
 
 const router = Router();
 
@@ -418,12 +419,27 @@ router.get('/full-identity', (req: Request, res: Response) => {
 
   const usernameInfo = usernameService.getInfo();
 
+  // Get local IP address for local network access
+  const networkInterfaces = os.networkInterfaces();
+  let localIp = null;
+  for (const name of Object.keys(networkInterfaces)) {
+    for (const net of networkInterfaces[name] || []) {
+      // Skip internal and IPv6 addresses
+      if (!net.internal && net.family === 'IPv4') {
+        localIp = net.address;
+        break;
+      }
+    }
+    if (localIp) break;
+  }
+
   res.json({
     nodeId: info.nodeId,
     did: info.did,
     createdAt: info.createdAt,
     username: usernameInfo.username,
     publicUrl: usernameInfo.publicUrl,
+    localIp: localIp,
     hasMnemonicBackup: bosonService.hasMnemonicBackup(),
     hasAdminWallet: bosonService.hasAdminWallet(),
     adminWalletAddress: bosonService.getAdminWalletAddress(),

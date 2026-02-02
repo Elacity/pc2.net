@@ -12,6 +12,7 @@ import { AuthRequest, AuthResponse, UserInfo } from '../types/api.js';
 import { AuthenticatedRequest } from './middleware.js';
 import { FilesystemManager } from '../storage/filesystem.js';
 import { logger } from '../utils/logger.js';
+import { normalizeAddress, compareAddresses, detectAddressType } from '../utils/wallet.js';
 import crypto from 'crypto';
 import { getNodeConfig, saveNodeConfig } from './setup.js';
 
@@ -59,17 +60,24 @@ export async function handleParticleAuth(req: Request, res: Response): Promise<v
       return;
     }
 
-    // Normalize wallet address
-    const normalizedWallet = wallet_address.toLowerCase();
+    // Normalize wallet address (EVM lowercased, Solana kept as-is)
+    const normalizedWallet = normalizeAddress(wallet_address);
+    const addressType = detectAddressType(wallet_address);
+    
+    logger.info('🔐 Address type detected', {
+      addressType,
+      original: wallet_address.substring(0, 10) + '...',
+      normalized: normalizedWallet.substring(0, 10) + '...'
+    });
 
     // ACCESS CONTROL: Check if this wallet is allowed to access this node
     const nodeConfig = getNodeConfig();
     
     // If owner is set, verify this wallet is authorized
     if (nodeConfig.ownerWallet) {
-      const isOwner = nodeConfig.ownerWallet === normalizedWallet;
+      const isOwner = compareAddresses(nodeConfig.ownerWallet, normalizedWallet);
       const allowedWallets = nodeConfig.allowedWallets || [];
-      const isAllowed = allowedWallets.some((w: { wallet: string }) => w.wallet === normalizedWallet);
+      const isAllowed = allowedWallets.some((w: { wallet: string }) => compareAddresses(w.wallet, normalizedWallet));
       
       if (!isOwner && !isAllowed) {
         logger.warn('🚫 Access denied for wallet', {

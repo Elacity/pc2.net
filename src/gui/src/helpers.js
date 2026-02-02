@@ -1009,22 +1009,22 @@ window.create_file = async(options)=>{
         // Original Puter SDK approach
         try{
             puter.fs.upload(new File([content], filename),  dirname,
-            {
-                success: async function (data){
-                    const created_file = $(appendto_element).find('.item[data-path="'+html_encode(dirname)+'/'+html_encode(data.name)+'"]');
-                    if(created_file.length > 0){
-                        window.activate_item_name_editor(created_file);
+        {
+            success: async function (data){
+                const created_file = $(appendto_element).find('.item[data-path="'+html_encode(dirname)+'/'+html_encode(data.name)+'"]');
+                if(created_file.length > 0){
+                    window.activate_item_name_editor(created_file);
 
-                        // Add action to actions_history for undo ability
-                        window.actions_history.push({
-                            operation: 'create_file',
-                            data: created_file
-                        });
-                    }
+                    // Add action to actions_history for undo ability
+                    window.actions_history.push({
+                        operation: 'create_file',
+                        data: created_file
+                    });
                 }
-            });
-        }catch(err){
-            console.log(err);
+            }
+        });
+    }catch(err){
+        console.log(err);
         }
     }
 }
@@ -1152,7 +1152,7 @@ window.copy_clipboard_items = async function(dest_path, dest_container_element){
                             destination: dest_path,
                             overwrite: overwrite || overwrite_all,
                             dedupeName: dest_path === path.dirname(copy_path),
-                        });
+                    });
                         console.log('[PC2 Copy] Success:', resp);
                     } else {
                         resp = await puter.fs.copy({
@@ -2462,7 +2462,7 @@ window.copy_to_clipboard = async function(text){
     // Try modern clipboard API first (only works in secure contexts: HTTPS or localhost)
     if (navigator.clipboard && window.isSecureContext) {
         try {
-            await navigator.clipboard.writeText(text);
+        await navigator.clipboard.writeText(text);
             return true;
         } catch (err) {
             console.warn('[clipboard] Clipboard API failed:', err);
@@ -3159,7 +3159,7 @@ window.unzipItem = async function(itemPath) {
                 }
             });
             queuedFileWrites.length && puter.fs.upload(
-                queuedFileWrites,
+                queuedFileWrites, 
                 rootdir.path + '/',
                 {
                     createFileParent: true,

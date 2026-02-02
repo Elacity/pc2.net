@@ -22,6 +22,7 @@ const NODE_CONFIG_FILE = join(DATA_DIR, 'node-config.json');
 interface AllowedWalletEntry {
   wallet: string;
   role: 'admin' | 'member';
+  addressType?: 'evm' | 'solana' | 'unknown'; // Type of wallet address
   addedAt: string;
   updatedAt?: string;
 }

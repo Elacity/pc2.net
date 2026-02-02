@@ -570,10 +570,9 @@
           return;
         }
         
-        // Go to appropriate step
-        if (status.step && status.step !== 'welcome') {
-          goToStep(status.step);
-        }
+        // Always start on welcome step for fresh setup experience
+        // The welcome screen provides important context before setup
+        goToStep('welcome');
       } catch (error) {
         console.error('Failed to check setup status:', error);
       }
@@ -789,6 +788,25 @@
     }
     
     function openDesktop() {
+      const hostname = window.location.hostname;
+      
+      // Check if on localhost - WalletConnect works on localhost
+      if (hostname === 'localhost' || hostname === '127.0.0.1') {
+        console.log('[Setup] On localhost, staying on current origin');
+        window.location.href = '/';
+        return;
+      }
+      
+      // On IP address or other hostname - redirect to ela.city domain for WalletConnect compatibility
+      if (publicUrl && publicUrl.includes('.ela.city')) {
+        console.log('[Setup] Redirecting to ela.city domain for WalletConnect:', publicUrl);
+        window.location.href = publicUrl;
+        return;
+      }
+      
+      // Fallback: no domain configured, stay on current origin
+      // User may need to use injected wallet (MetaMask extension) instead of WalletConnect
+      console.log('[Setup] No ela.city domain configured, staying on current origin');
       window.location.href = '/';
     }
     

@@ -592,10 +592,21 @@ Capabilities: files, terminal, git, http, scheduler`;
             }
             
             $el_window.find('#btn-add-wallet').on('click', async function() {
-                const wallet = $el_window.find('#add-wallet-address').val().trim().toLowerCase();
+                const walletInput = $el_window.find('#add-wallet-address').val().trim();
                 const role = $el_window.find('#add-wallet-role').val();
                 const statusEl = $el_window.find('#add-wallet-status');
-                if (!wallet || !/^0x[a-f0-9]{40}$/i.test(wallet)) { statusEl.html('<span style="color: #ef4444;">Invalid</span>'); return; }
+                
+                // Validate wallet address - accept both EVM (0x...) and Solana (Base58)
+                const isEVM = /^0x[a-fA-F0-9]{40}$/.test(walletInput);
+                const isSolana = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(walletInput);
+                
+                if (!walletInput || (!isEVM && !isSolana)) { 
+                    statusEl.html('<span style="color: #ef4444;">Invalid wallet address</span>'); 
+                    return; 
+                }
+                
+                // Normalize: lowercase EVM, keep Solana as-is (case-sensitive)
+                const wallet = isEVM ? walletInput.toLowerCase() : walletInput;
                 $(this).prop('disabled', true).text('...');
                 try {
                     const resp = await fetch(`${apiOrigin}/api/access/add`, { 

@@ -154,23 +154,68 @@ async function UIWindowSearch (options) {
         try {
             // Detect if input looks like an IPFS CID
             // IPFS CIDs typically start with 'bafkrei', 'Qm', 'bafy', 'bafz', etc.
-            const searchValue = searchInput.val().trim();
+            const searchValue = searchInput.val().trim().toLowerCase();
             const isCID = /^(bafkrei|bafy|bafz|Qm|z[a-z0-9]+)/i.test(searchValue);
             
             // Get filter values
             const searchMode = $(el_window).find('.search-mode-select').val() || 'both';
             const fileType = $(el_window).find('.search-filetype-select').val() || '';
             
+            let h = '';
+            
+            // ==========================================
+            // Search Applications First
+            // ==========================================
+            if (!isCID && !fileType) {
+                const matchingApps = [];
+                
+                // Search in recommended apps
+                if (window.launch_apps?.recommended) {
+                    window.launch_apps.recommended.forEach(app => {
+                        if (app.title?.toLowerCase().includes(searchValue) || 
+                            app.name?.toLowerCase().includes(searchValue) ||
+                            app.description?.toLowerCase().includes(searchValue)) {
+                            matchingApps.push(app);
+                        }
+                    });
+                }
+                
+                // Add app results
+                if (matchingApps.length > 0) {
+                    h += '<div class="search-section-header" style="padding: 8px 12px; font-size: 11px; color: var(--color-text-muted, #888); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--color-border, rgba(0,0,0,0.1));">Applications</div>';
+                    
+                    for (const app of matchingApps) {
+                        const appIcon = app.icon || window.icons['app.svg'] || '';
+                        h += `<div 
+                                class="search-result search-result-app"
+                                data-app-name="${html_encode(app.name)}"
+                                data-type="app"
+                            >`;
+                        h += `<img src="${html_encode(appIcon)}" class="search-result-icon" style="width: 24px; height: 24px; margin-right: 10px; border-radius: 4px;" onerror="this.src='${window.icons['app.svg'] || ''}'">`;
+                        h += `<div style="display: flex; flex-direction: column;">`;
+                        h += `<span style="font-weight: 500;">${html_encode(app.title || app.name)}</span>`;
+                        if (app.description) {
+                            h += `<span style="font-size: 11px; color: var(--color-text-muted, #888); margin-top: 2px;">${html_encode(app.description.substring(0, 60))}${app.description.length > 60 ? '...' : ''}</span>`;
+                        }
+                        h += `</div>`;
+                        h += '</div>';
+                    }
+                }
+            }
+            
+            // ==========================================
+            // Search Files
+            // ==========================================
             // Build search request
             const searchRequest = isCID && searchValue.length >= 10
                 ? { ipfsHash: searchValue }  // CID search
                 : { 
-                    text: searchValue,
+                    text: searchInput.val().trim(),
                     searchMode: searchMode,
                     fileType: fileType || undefined
                   };
             
-            // Perform the search
+            // Perform the file search
             let results = await fetch(`${window.api_origin }/search`, {
                 method: 'POST',
                 headers: {
@@ -182,48 +227,51 @@ async function UIWindowSearch (options) {
 
             results = await results.json();
 
-            // Hide results if there are none
-            if ( results.length === 0 )
-            {
-                resultsContainer.hide();
+            // Add file results
+            if (results.length > 0) {
+                // Only show header if we also have app results
+                if (h.length > 0) {
+                    h += '<div class="search-section-header" style="padding: 8px 12px; font-size: 11px; color: var(--color-text-muted, #888); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--color-border, rgba(0,0,0,0.1));">Files</div>';
+                }
+                
+                for ( let i = 0; i < results.length; i++ ) {
+                    const result = results[i];
+                    // Prepare fsentry object for item_icon (includes thumbnail for proper display)
+                    const fsentry = {
+                        path: result.path,
+                        name: result.name,
+                        type: result.type,
+                        is_dir: result.is_dir,
+                        thumbnail: result.thumbnail || null
+                    };
+                    
+                    const iconResult = await item_icon(fsentry);
+                    const isThumbnail = iconResult.type === 'thumb';
+                    
+                    h += `<div 
+                            class="search-result"
+                            data-path="${html_encode(result.path)}" 
+                            data-uid="${html_encode(result.uid)}"
+                            data-is_dir="${html_encode(result.is_dir)}"
+                        >`;
+                    // Use thumbnail styling if it's a thumbnail, otherwise use icon styling
+                    if (isThumbnail) {
+                        h += `<img src="${html_encode(iconResult.image)}" class="search-result-thumb" style="width: 40px; height: 40px; margin-right: 8px; object-fit: cover; border-radius: 4px;">`;
+                    } else {
+                        h += `<img src="${html_encode(iconResult.image)}" class="search-result-icon" style="width: 20px; height: 20px; margin-right: 8px;">`;
+                    }
+                    h += html_encode(result.name);
+                    h += '</div>';
+                }
             }
-            else
-            {
+
+            // Hide results if there are none
+            if ( h.length === 0 ) {
+                resultsContainer.hide();
+            } else {
                 resultsContainer.show();
             }
-
-            // Build results HTML
-            let h = '';
-
-            for ( let i = 0; i < results.length; i++ ) {
-                const result = results[i];
-                // Prepare fsentry object for item_icon (includes thumbnail for proper display)
-                const fsentry = {
-                    path: result.path,
-                    name: result.name,
-                    type: result.type,
-                    is_dir: result.is_dir,
-                    thumbnail: result.thumbnail || null
-                };
-                
-                const iconResult = await item_icon(fsentry);
-                const isThumbnail = iconResult.type === 'thumb';
-                
-                h += `<div 
-                        class="search-result"
-                        data-path="${html_encode(result.path)}" 
-                        data-uid="${html_encode(result.uid)}"
-                        data-is_dir="${html_encode(result.is_dir)}"
-                    >`;
-                // Use thumbnail styling if it's a thumbnail, otherwise use icon styling
-                if (isThumbnail) {
-                    h += `<img src="${html_encode(iconResult.image)}" class="search-result-thumb" style="width: 40px; height: 40px; margin-right: 8px; object-fit: cover; border-radius: 4px;">`;
-                } else {
-                    h += `<img src="${html_encode(iconResult.image)}" class="search-result-icon" style="width: 20px; height: 20px; margin-right: 8px;">`;
-                }
-                h += html_encode(result.name);
-                h += '</div>';
-            }
+            
             // Only update the inner content, don't replace the entire container
             resultsContainer.html(h);
         } catch ( error ) {
@@ -252,6 +300,17 @@ async function UIWindowSearch (options) {
 }
 
 $(document).on('click', '.search-result', async function (e) {
+    // Check if this is an app result
+    if ($(this).data('type') === 'app') {
+        const appName = $(this).data('app-name');
+        if (appName) {
+            launch_app({ name: appName });
+            // Close search window
+            $(this).closest('.window').close();
+        }
+        return;
+    }
+    
     const fspath = $(this).data('path');
     const fsuid = $(this).data('uid');
     const is_dir = $(this).attr('data-is_dir') === 'true' || $(this).data('is_dir') === '1';

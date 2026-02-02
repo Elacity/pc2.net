@@ -703,6 +703,14 @@ export default {
                     h += `</div>`;
                 h += `</div>`;
                 
+                // Local IP Address
+                h += `<div class="account-group-row">`;
+                    h += `<div class="account-card-row">`;
+                        h += `<span class="account-card-label">Local Access</span>`;
+                        h += `<span id="account-local-ip" style="font-size: 12px; font-family: monospace; color: var(--color-text-secondary);">Detecting...</span>`;
+                    h += `</div>`;
+                h += `</div>`;
+                
                 // Recovery Phrase - inside the group
                 h += `<div class="account-group-row" id="recovery-phrase-card">`;
                     h += `<div class="account-card-row">`;
@@ -932,6 +940,20 @@ export default {
                     
                     if (data.publicUrl) {
                         $el_window.find('#account-public-url').text(data.publicUrl).attr('href', data.publicUrl);
+                    }
+                    
+                    // Display local IP for local network access
+                    if (data.localIp) {
+                        const localUrl = `http://${data.localIp}:${window.location.port || '4200'}`;
+                        $el_window.find('#account-local-ip').html(`<a href="${localUrl}" target="_blank" style="color: #3b82f6;">${localUrl}</a>`);
+                    } else {
+                        // Fallback: show current origin if on local network
+                        const currentHost = window.location.hostname;
+                        if (currentHost !== 'localhost' && currentHost !== '127.0.0.1') {
+                            $el_window.find('#account-local-ip').html(`<a href="${window.location.origin}" target="_blank" style="color: #3b82f6;">${window.location.origin}</a>`);
+                        } else {
+                            $el_window.find('#account-local-ip').text('localhost:' + (window.location.port || '4200'));
+                        }
                     }
                     
                     if (data.hasMnemonicBackup) {

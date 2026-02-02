@@ -1532,9 +1532,9 @@ async function loadAIConfigForChat() {
             // Clear existing options and add available models
             $modelSelect.empty();
             
-            // Fetch and add installed Ollama models
+            // Fetch and add installed Ollama models using model-library endpoint (same as Settings)
             try {
-                const installedResponse = await fetch(`${apiOrigin}/api/ai/installed-models`, {
+                const libraryResponse = await fetch(`${apiOrigin}/api/ai/model-library`, {
                     method: 'GET',
                     headers: {
                         'Content-Type': 'application/json',
@@ -1542,25 +1542,38 @@ async function loadAIConfigForChat() {
                     }
                 });
                 
-                if (installedResponse.ok) {
-                    const installedData = await installedResponse.json();
-                    if (installedData.success && installedData.result?.models?.length > 0) {
-                        $modelSelect.append(`<option disabled>── Local ──</option>`);
-                        installedData.result.models.forEach(model => {
-                            const displayName = model.catalogName || model.name;
-                            $modelSelect.append(`<option value="ollama:${model.name}">${displayName}</option>`);
+                if (libraryResponse.ok) {
+                    const libraryData = await libraryResponse.json();
+                    // model-library returns installedModels as array of model name strings
+                    const installedModelNames = libraryData.result?.installedModels || [];
+                    const catalogModels = libraryData.result?.models || [];
+                    
+                    if (libraryData.success && installedModelNames.length > 0) {
+                        $modelSelect.append(`<option disabled>── Local Models ──</option>`);
+                        installedModelNames.forEach(modelName => {
+                            // Find catalog entry for better display name
+                            const catalogEntry = catalogModels.find(m => 
+                                m.id === modelName || 
+                                m.id.split(':')[0] === modelName.split(':')[0]
+                            );
+                            const displayName = catalogEntry?.name || modelName;
+                            $modelSelect.append(`<option value="ollama:${modelName}">${displayName}</option>`);
                         });
                     } else {
                         // No installed models - show placeholder
-                        $modelSelect.append(`<option value="ollama:deepseek-r1:1.5b">Local (no models installed)</option>`);
+                        $modelSelect.append(`<option value="" disabled>── Local Models ──</option>`);
+                        $modelSelect.append(`<option value="" disabled>No models installed</option>`);
                     }
                 } else {
-                    // API error - fallback to default
-                    $modelSelect.append(`<option value="ollama:deepseek-r1:1.5b">Local DeepSeek</option>`);
+                    // API error - show that local models unavailable
+                    $modelSelect.append(`<option value="" disabled>── Local Models ──</option>`);
+                    $modelSelect.append(`<option value="" disabled>Ollama not available</option>`);
                 }
             } catch (e) {
-                // Network error - fallback
-                $modelSelect.append(`<option value="ollama:deepseek-r1:1.5b">Local DeepSeek</option>`);
+                // Network error - show that local models unavailable
+                console.warn('[AIChat] Failed to fetch installed models:', e);
+                $modelSelect.append(`<option value="" disabled>── Local Models ──</option>`);
+                $modelSelect.append(`<option value="" disabled>Connection error</option>`);
             }
             
             // Add all models for each configured provider
@@ -3687,6 +3700,9 @@ export function initAIChatWindow(container) {
     
     // Load user's AI config and update model selector in this window
     loadAIConfigForChat();
+    
+    // Load agents for the agent selector
+    loadAgentsForChat();
     
     // Initialize history menu for this window
     (async () => {

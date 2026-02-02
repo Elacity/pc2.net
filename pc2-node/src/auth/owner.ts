@@ -2,9 +2,11 @@
  * Owner Wallet Verification
  * 
  * Verifies that a wallet address is the owner or an authorized tethered wallet
+ * Supports both EVM and Solana addresses with proper case handling
  */
 
 import { Config } from '../config/loader.js';
+import { normalizeAddress, compareAddresses } from '../utils/wallet.js';
 
 export interface OwnerVerificationResult {
   isAuthorized: boolean;
@@ -29,8 +31,8 @@ export function verifyOwner(
     };
   }
 
-  // Normalize wallet address (lowercase for comparison)
-  const normalizedWallet = walletAddress.toLowerCase();
+  // Normalize wallet address (EVM lowercase, Solana as-is)
+  const normalizedWallet = normalizeAddress(walletAddress);
 
   // Check if no owner is set (first-time setup)
   if (!config.owner.wallet_address) {
@@ -42,9 +44,8 @@ export function verifyOwner(
     };
   }
 
-  // Check if wallet is the owner
-  const normalizedOwner = config.owner.wallet_address.toLowerCase();
-  if (normalizedWallet === normalizedOwner) {
+  // Check if wallet is the owner (using proper comparison for address type)
+  if (compareAddresses(normalizedWallet, config.owner.wallet_address)) {
     return {
       isAuthorized: true,
       isOwner: true,
@@ -55,7 +56,7 @@ export function verifyOwner(
   // Check if wallet is in tethered wallets list
   const tetheredWallets = config.owner.tethered_wallets || [];
   const isTethered = tetheredWallets.some(
-    tethered => tethered.toLowerCase() === normalizedWallet
+    tethered => compareAddresses(tethered, normalizedWallet)
   );
 
   if (isTethered) {
@@ -127,11 +128,10 @@ export function addTetheredWallet(
     };
   }
 
-  const normalizedWallet = walletAddress.toLowerCase();
-  const normalizedOwner = config.owner.wallet_address?.toLowerCase();
+  const normalizedWallet = normalizeAddress(walletAddress);
 
   // Cannot add owner as tethered wallet
-  if (normalizedWallet === normalizedOwner) {
+  if (compareAddresses(normalizedWallet, config.owner.wallet_address)) {
     return {
       success: false,
       error: 'Cannot add owner as tethered wallet'
@@ -140,7 +140,7 @@ export function addTetheredWallet(
 
   // Check if already in list
   const tetheredWallets = config.owner.tethered_wallets || [];
-  if (tetheredWallets.some(w => w.toLowerCase() === normalizedWallet)) {
+  if (tetheredWallets.some(w => compareAddresses(w, normalizedWallet))) {
     return {
       success: false,
       error: 'Wallet is already in tethered wallets list'
@@ -170,11 +170,11 @@ export function removeTetheredWallet(
     };
   }
 
-  const normalizedWallet = walletAddress.toLowerCase();
+  const normalizedWallet = normalizeAddress(walletAddress);
   const tetheredWallets = config.owner.tethered_wallets || [];
 
   // Check if wallet is in list
-  if (!tetheredWallets.some(w => w.toLowerCase() === normalizedWallet)) {
+  if (!tetheredWallets.some(w => compareAddresses(w, normalizedWallet))) {
     return {
       success: false,
       error: 'Wallet is not in tethered wallets list'

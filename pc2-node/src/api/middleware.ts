@@ -9,6 +9,7 @@ import { DatabaseManager } from '../storage/database.js';
 import { Config } from '../config/loader.js';
 import { verifyOwner } from '../auth/owner.js';
 import { logger } from '../utils/logger.js';
+import { normalizeAddress, compareAddresses } from '../utils/wallet.js';
 import { createHash } from 'crypto';
 import { getNodeConfig } from './setup.js';
 
@@ -400,6 +401,7 @@ export function errorHandler(
  * Require owner middleware
  * Ensures the authenticated user is the node owner
  * Must be used after authenticate middleware
+ * Supports both EVM and Solana addresses
  */
 export function requireOwner(
   req: AuthenticatedRequest,
@@ -414,12 +416,15 @@ export function requireOwner(
     return;
   }
   
-  const userWallet = req.user.wallet_address.toLowerCase();
+  // Normalize user wallet (EVM lowercase, Solana as-is)
+  const userWallet = normalizeAddress(req.user.wallet_address);
   
   // Check dynamic node config first (ownerWallet), then static config
-  const ownerWallet = nodeConfig.ownerWallet?.toLowerCase() || config?.owner?.wallet_address?.toLowerCase();
+  // Owner wallets are already normalized when stored
+  const ownerWallet = nodeConfig.ownerWallet || config?.owner?.wallet_address;
   
-  if (!ownerWallet || userWallet !== ownerWallet) {
+  // Use compareAddresses for proper EVM/Solana comparison
+  if (!ownerWallet || !compareAddresses(userWallet, ownerWallet)) {
     logger.warn('[Auth] Non-owner attempted restricted action', {
       userWallet: userWallet.substring(0, 10) + '...',
       ownerWallet: ownerWallet ? ownerWallet.substring(0, 10) + '...' : 'not set'

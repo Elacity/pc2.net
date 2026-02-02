@@ -184,6 +184,96 @@ npm run dev          # Development with hot reload
 
 ## 📊 Current State Assessment
 
+### 🎯 Recent Progress (2026-02-02) - SETUP WIZARD & WALLETCONNECT FLOW
+
+**Setup Wizard & Domain Redirect - ✅ COMPLETE**
+
+**Problem Solved:**
+Users accessing their PC2 node via raw IP address (e.g., `http://192.168.1.100:4200`) couldn't use WalletConnect for login because:
+1. WalletConnect requires HTTPS or a whitelisted domain
+2. Raw IP addresses aren't whitelisted and can't have SSL easily
+3. localhost is special-cased by WalletConnect to work
+
+**Solution Implemented:**
+
+1. **Always Show Welcome Screen**
+   - Setup wizard now always starts on "Welcome" step regardless of saved state
+   - Ensures users see onboarding context before setup
+
+2. **Smart Domain Redirect**
+   - After setup completion, `openDesktop()` checks current hostname:
+     - `localhost` / `127.0.0.1` → Stay on localhost (WalletConnect works)
+     - Any other hostname → Redirect to `*.ela.city` domain if configured
+   - This ensures VPS/hardware users get redirected to their domain for WalletConnect
+
+**User Flow by Deployment Type:**
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  LOCALHOST USER (Testing on local machine)                          │
+│                                                                     │
+│  1. Run: ./start-local.sh                                           │
+│  2. Open: http://localhost:4200/setup/                              │
+│  3. Complete wizard → Stay on localhost                             │
+│  4. Login with WalletConnect ✅ (works on localhost)                │
+└─────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│  VPS/HARDWARE USER (Remote deployment)                              │
+│                                                                     │
+│  1. Run: curl -sSL .../install-pc2.sh | bash                        │
+│  2. Open: http://IP_ADDRESS:4200/setup/                             │
+│  3. Register username: "alice" → alice.ela.city configured          │
+│  4. Click "Open Desktop" → Redirect to https://alice.ela.city       │
+│  5. Login with WalletConnect ✅ (works on ela.city domain)          │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Technical Details:**
+
+- **File Changed**: `pc2-node/static-assets/setup/index.html`
+- **Key Function**: `openDesktop()` now has hostname detection and redirect logic
+- **DNS Routing**: ela.city has wildcard DNS + Active Proxy for instant subdomain routing
+- **No User Delay**: Domain is immediately usable after registration (no DNS propagation wait)
+
+**Files Modified:**
+- `pc2-node/static-assets/setup/index.html` - Setup wizard flow
+- `pc2-node/frontend/setup/index.html` - Built copy
+
+---
+
+### 🎯 Recent Progress (2026-02-02) - MOBILE UI REFINEMENTS
+
+**Mobile/Tablet Layout Improvements - ✅ COMPLETE**
+
+1. **Access Control - Add Wallet Account**
+   - Input field now full-width on mobile
+   - Dropdown and Add button stack below input
+
+2. **Setup Local AI**
+   - Model dropdown full-width on mobile
+   - Install button wraps below dropdown
+
+3. **Create Agent Window**
+   - Now behaves like Settings on mobile (full-screen modal)
+   - Properly scrollable with touch support
+
+4. **Settings Sidebar**
+   - No longer extends full screen when opened
+   - Now 240px width with max-width: 80%
+   - Box shadow for visual separation
+
+5. **Node Identity**
+   - Added Local Access IP display in Settings
+   - Shows both Public URL and local IP for network access
+
+**Files Modified:**
+- `src/gui/src/css/style.css` - Mobile-specific CSS rules
+- `src/gui/src/UI/Settings/UITabAccount.js` - Local IP display
+- `pc2-node/src/api/boson.ts` - Local IP detection via os.networkInterfaces()
+
+---
+
 ### 🎯 Recent Progress (2026-02-01) - SYSTEM MANAGEMENT & RESTART FEATURE
 
 **Server Restart & Update System Enhancements - ✅ COMPLETE**

@@ -10,6 +10,30 @@
 
 ### 🎉 Major Features
 
+#### Setup Wizard & Login Flow Improvements (2026-02-02)
+- **Always Show Welcome Screen**: Setup wizard now always starts on the Welcome step, ensuring users see the onboarding context before proceeding
+- **Smart Domain Redirect**: After completing setup, users on IP addresses (VPS/hardware deployments) are automatically redirected to their `*.ela.city` domain for WalletConnect compatibility
+- **Seamless WalletConnect Experience**: 
+  - Localhost users: Stay on localhost (WalletConnect works natively)
+  - VPS/Hardware users: Redirect to ela.city domain (instant DNS + Active Proxy routing)
+- **Wallet-Only Authentication**: Removed email/phone login options from Particle ConnectKit for v1 (social login planned post-launch)
+
+#### Mobile/Tablet UI Refinements (2026-02-02)
+- **Access Control Layout**: Add Wallet Account input field now full-width on mobile with stacked dropdown/button
+- **Setup Local AI Layout**: Model dropdown full-width on mobile with Install button below
+- **Create Agent Window**: Now behaves like Settings on mobile - full-screen scrollable modal
+- **Settings Sidebar**: No longer extends full screen when opened on mobile (now 240px with max-width: 80%)
+- **Node Identity**: Added Local Access IP display alongside Public URL in Settings
+
+#### Theme System Refinements (2026-02-01)
+- **Comprehensive Dark Mode**: All UI components properly themed including modals, sidebars, popovers
+- **Light Mode**: Full light theme implementation based on Puter's official theme
+- **Wallet Components**: Send/Receive modals, transaction confirmations properly themed
+- **Search Popups**: Fixed dark containers in dark mode, corrected icon colors in light mode
+- **AI Agent Sidebar**: Fixed white background in dark mode
+
+### 🎉 Previous Major Features
+
 #### Blockchain Authentication (Particle Network)
 - **Wallet Login**: Login with MetaMask, WalletConnect, Coinbase Wallet, or social login
 - **Session Persistence**: Wallet sessions persist across page refreshes and device switches

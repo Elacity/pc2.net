@@ -124,6 +124,8 @@
     background-color: var(--ai-bg-color);
     color: var(--ai-text-color);
     -webkit-font-smoothing: antialiased;
+    position: relative;
+    overflow: hidden; /* Contain history menu within window bounds */
 }
 
 .ai-window-panel {
@@ -131,6 +133,16 @@
     flex-direction: column;
     height: 100%;
     width: 100%;
+    position: relative;
+    overflow: hidden; /* Contain the history menu slide-out */
+}
+
+/* AI Chat Window - proper sizing without extra space or cutting off */
+.window-ai-chat .window-body {
+    height: calc(100% - 30px) !important; /* Account for window header */
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: hidden !important;
 }
 
 .ai-window-panel .ai-panel-header {
@@ -2067,6 +2079,7 @@ pre {
     --color-menu-bg: rgba(35, 35, 36, 0.98);
     --color-menu-hover: #3a3a3c;
     --color-menu-text: #ffffff;
+    --color-bg-hover: #3a3a3c;
     
     /* Window body - Dark Mode */
     --color-window-body: #2a2a2b;
@@ -2130,6 +2143,7 @@ pre {
     --color-menu-bg: rgba(255, 255, 255, 0.98);
     --color-menu-hover: #e5e7eb;
     --color-menu-text: #1f2937;
+    --color-bg-hover: #e5e7eb;
     
     /* Window body - Light Mode */
     --color-window-body: #ffffff;
@@ -4076,6 +4090,19 @@ pre {
     color: #374151 !important;
 }
 
+/* Solana address text - override inline style in light mode */
+[data-theme="light"] .solana-address-badge .sol-addr-text,
+[data-theme="light"] .solana-address-badge span[style*="color"],
+[data-theme="light"] .solana-address-badge span {
+    color: #374151 !important;
+}
+
+[data-theme="light"] .solana-address-badge .copy-btn,
+[data-theme="light"] .solana-address-badge svg {
+    stroke: #374151 !important;
+    color: #374151 !important;
+}
+
 /* Activity items light mode */
 [data-theme="light"] .activity-item {
     background: #f9fafb !important;
@@ -5753,8 +5780,8 @@ span.header-sort-icon img {
 }
 
 .device-phone .window-head {
-    /* not transparent on mobile */
-    background-color: rgba(231, 238, 245);
+    /* not transparent on mobile - use theme variable */
+    background-color: var(--color-window-navbar);
 }
 
 .window-head, .window-head * {
@@ -6425,19 +6452,32 @@ span.header-sort-icon img {
     color: #6b7280 !important;
 }
 
-/* Force ALL SVG icons in context menu to be dark in light mode */
-[data-theme="light"] .context-menu svg,
+/* Force context menu SVG stroke color in light mode - keep fill as-is for outline icons */
+[data-theme="light"] .context-menu svg {
+    stroke: #374151 !important;
+    color: #374151 !important;
+}
+
+/* Only override fill for SVGs that explicitly had white fill */
 [data-theme="light"] .context-menu svg[fill="#fff"],
 [data-theme="light"] .context-menu svg[fill="white"] {
     fill: #374151 !important;
 }
 
+/* Light mode context menu SVG icons - stroke only, no fill to keep outline style */
 [data-theme="light"] .context-menu svg path,
 [data-theme="light"] .context-menu svg rect,
 [data-theme="light"] .context-menu svg circle,
-[data-theme="light"] .context-menu svg line {
-    fill: #374151 !important;
+[data-theme="light"] .context-menu svg line,
+[data-theme="light"] .context-menu svg polyline {
     stroke: #374151 !important;
+}
+
+/* Only fill circles that are meant to be filled (like the settings gear center) */
+[data-theme="light"] .context-menu svg circle[fill="none"],
+[data-theme="light"] .context-menu svg rect[fill="none"],
+[data-theme="light"] .context-menu svg path[fill="none"] {
+    fill: none !important;
 }
 
 [data-theme="light"] .context-menu svg[stroke="#fff"],
@@ -7614,7 +7654,7 @@ label {
  *****************************************************/
 
 .ui-tooltip, .arrow:after {
-    background-color: rgba(231, 238, 245, .92);
+    background-color: var(--color-bg-surface);
     box-shadow: none;
 }
 
@@ -7625,6 +7665,7 @@ label {
     border: none !important;
     backdrop-filter: blur(3px);
     filter: drop-shadow(0 0 3px rgba(0, 0, 0, .455));
+    color: var(--color-text-primary);
 }
 
 /* Base arrow styles */
@@ -7649,7 +7690,7 @@ label {
     -webkit-transform: rotate(45deg);
     -ms-transform: rotate(45deg);
     transform: rotate(45deg);
-    background-color: rgba(231, 238, 245, .92);
+    background-color: var(--color-bg-surface);
 }
 
 /* Arrow pointing up (tooltip below taskbar item) */
@@ -7804,7 +7845,7 @@ label {
 }
 
 .popover-apps-item:hover {
-    background-color: #a5c8f3;
+    background-color: var(--color-bg-hover, #3a3a3c);
     border-radius: 4px;
 }
 
@@ -8041,11 +8082,11 @@ label {
 }
 
 .start-app:hover, .launch-app-selected .start-app {
-    background-color: #2f2f30;
+    background-color: var(--color-bg-hover, #3a3a3c);
 }
 
 .start-app:active {
-    background-color: white;
+    background-color: var(--color-bg-tertiary);
 }
 
 .start-app-title {
@@ -8989,6 +9030,26 @@ fieldset[name=number-code] {
     z-index: 2;
 }
 
+/* Hide sidebar by default on mobile and tablet */
+.device-phone .settings-sidebar,
+.device-tablet .settings-sidebar {
+    display: none;
+    width: 240px;
+    max-width: 80%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    z-index: 100;
+    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.3);
+}
+
+/* Show sidebar when active (toggle clicked) */
+.device-phone .settings-sidebar.active,
+.device-tablet .settings-sidebar.active {
+    display: block;
+}
+
 
 .settings-sidebar-title {
     margin-bottom: 20px;
@@ -9042,7 +9103,8 @@ fieldset[name=number-code] {
     background-color: var(--color-settings-bg);
 }
 
-.device-phone .settings-content-container {
+.device-phone .settings-content-container,
+.device-tablet .settings-content-container {
     margin-left: 0;
 }
 
@@ -9898,6 +9960,14 @@ fieldset[name=number-code] {
     padding-top: 5px;
     padding-bottom: 5px;
     top: 3px;
+    background: transparent;
+}
+
+/* Ensure toggle button is visible on mobile and tablet devices */
+.device-phone .sidebar-toggle,
+.device-tablet .sidebar-toggle {
+    display: block !important;
+    background: transparent !important;
 }
 
 .sidebar-toggle .sidebar-toggle-button {
@@ -9910,10 +9980,15 @@ fieldset[name=number-code] {
 }
 
 .sidebar-toggle span {
-    border-bottom: 2px solid #858585;
+    border-bottom: 2px solid var(--color-text-secondary);
     display: block;
     margin-bottom: 5px;
     width: 100%;
+}
+
+/* Light mode - darker hamburger lines */
+[data-theme="light"] .sidebar-toggle span {
+    border-bottom-color: #374151;
 }
 
 .settings-sidebar.active {
@@ -10075,7 +10150,8 @@ fieldset[name=number-code] {
     border-radius: 0 !important;
 }
 
-.device-phone .window.window-settings {
+.device-phone .window.window-settings,
+.device-tablet .window.window-settings {
     transform: none;
     width: 100% !important;
     left: 0 !important;
@@ -10168,8 +10244,8 @@ fieldset[name=number-code] {
     overflow-y: scroll;
     overflow-x: hidden;
 
-    /* Background and styling */
-    background-color: rgba(231, 238, 245);
+    /* Background and styling - use theme variable */
+    background-color: var(--color-bg-secondary);
     padding: 0;
     margin: 0;
 
@@ -10196,7 +10272,7 @@ fieldset[name=number-code] {
     position: sticky;
     top: -20px;
     z-index: 1;
-    background: #2f2f30;
+    background: var(--color-bg-tertiary);
     padding-top: 7px;
     border-radius: 6px;
 }
@@ -10226,6 +10302,65 @@ fieldset[name=number-code] {
 
 .device-phone .start-app-title {
     margin-top: 5px;
+}
+
+/*****************************************************
+ * Mobile/Tablet Theme Consistency
+ * Ensure mobile devices use the same theme variables as desktop
+ *****************************************************/
+
+/* Mobile popover - ensure theme-aware background */
+.device-phone .popover,
+.device-tablet .popover {
+    background-color: var(--color-bg-secondary);
+}
+
+/* Mobile launch popover - explicit theme styling */
+.device-phone .launch-popover,
+.device-tablet .launch-popover {
+    background-color: var(--color-bg-secondary) !important;
+    color: var(--color-text-primary);
+    border-color: var(--color-border);
+}
+
+/* Mobile popover launcher container */
+.device-phone .popover-launcher,
+.device-tablet .popover-launcher {
+    background-color: var(--color-bg-secondary);
+}
+
+/* Mobile start app hover states - theme aware */
+.device-phone .start-app:hover,
+.device-phone .launch-app-selected .start-app,
+.device-tablet .start-app:hover,
+.device-tablet .launch-app-selected .start-app {
+    background-color: var(--color-bg-hover) !important;
+}
+
+/* Mobile search wrapper - theme aware */
+.device-phone .launch-search-wrapper,
+.device-tablet .launch-search-wrapper {
+    background: var(--color-bg-tertiary) !important;
+}
+
+/* Light mode overrides for mobile - match desktop light mode */
+[data-theme="light"] .device-phone .launch-popover,
+[data-theme="light"] .device-tablet .launch-popover,
+[data-theme="light"] .device-phone .popover-launcher,
+[data-theme="light"] .device-tablet .popover-launcher {
+    background-color: var(--color-bg-secondary) !important;
+}
+
+[data-theme="light"] .device-phone .launch-search-wrapper,
+[data-theme="light"] .device-tablet .launch-search-wrapper {
+    background: #ffffff !important;
+}
+
+[data-theme="light"] .device-phone .start-app:hover,
+[data-theme="light"] .device-phone .launch-app-selected .start-app,
+[data-theme="light"] .device-tablet .start-app:hover,
+[data-theme="light"] .device-tablet .launch-app-selected .start-app {
+    background-color: rgba(59, 130, 246, 0.15) !important;
 }
 
 .device-phone .desktop {
@@ -10320,4 +10455,88 @@ fieldset[name=number-code] {
 }
 .window-progress .window-body svg path[opacity] {
     fill: rgba(255, 255, 255, 0.5);
+}
+
+/*****************************************************
+ * Mobile Settings Layout Fixes
+ *****************************************************/
+
+/* Access Control - Add Wallet Account: Stack vertically on mobile */
+.device-phone .security-group-row > div[style*="display: flex"][style*="gap: 6px"][style*="align-items: center"]:has(#add-wallet-address),
+.device-tablet .security-group-row > div[style*="display: flex"][style*="gap: 6px"][style*="align-items: center"]:has(#add-wallet-address) {
+    flex-wrap: wrap !important;
+}
+
+.device-phone #add-wallet-address,
+.device-tablet #add-wallet-address {
+    width: 100% !important;
+    flex: none !important;
+    margin-bottom: 8px !important;
+}
+
+.device-phone #add-wallet-role,
+.device-tablet #add-wallet-role {
+    flex: 1 !important;
+    width: auto !important;
+}
+
+/* Setup Local AI - Stack dropdown and button on mobile */
+.device-phone .ai-group-row > div[style*="display: flex"][style*="gap"]:has(select):has(button),
+.device-tablet .ai-group-row > div[style*="display: flex"][style*="gap"]:has(select):has(button) {
+    flex-wrap: wrap !important;
+}
+
+.device-phone .ai-group-row select[style*="flex: 1"],
+.device-tablet .ai-group-row select[style*="flex: 1"] {
+    width: 100% !important;
+    flex: none !important;
+    margin-bottom: 8px !important;
+}
+
+.device-phone .ai-group-row button[style*="white-space: nowrap"],
+.device-tablet .ai-group-row button[style*="white-space: nowrap"] {
+    width: 100% !important;
+    white-space: normal !important;
+}
+
+/* Create Agent window - full screen on mobile/tablet like settings */
+.device-phone .window[data-uid*="agent-editor"],
+.device-tablet .window[data-uid*="agent-editor"] {
+    transform: none !important;
+    width: 100% !important;
+    left: 0 !important;
+    height: 100dvh !important;
+    height: 100vh !important;
+    top: 0 !important;
+    border-radius: 0 !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+}
+
+.device-phone .window[data-uid*="agent-editor"] .window-body,
+.device-tablet .window[data-uid*="agent-editor"] .window-body {
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    height: calc(100% - 30px) !important;
+    max-height: none !important;
+}
+
+/* Agent editor container - allow scrolling */
+.device-phone .window[data-uid*="agent-editor"] .agent-editor-container,
+.device-tablet .window[data-uid*="agent-editor"] .agent-editor-container {
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+/* Agent editor content scrollable area */
+.device-phone .window[data-uid*="agent-editor"] .agent-editor-content,
+.device-tablet .window[data-uid*="agent-editor"] .agent-editor-content {
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    flex: 1 !important;
+    min-height: 0 !important;
+    padding-bottom: 80px !important;
 }

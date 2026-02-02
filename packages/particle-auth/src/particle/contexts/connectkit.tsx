@@ -162,23 +162,23 @@ const elastosPgp = /* #__PURE__ */ defineChain({
 });
 
 // Configure supported chains
-// Multi-chain support: Elastos ecosystem + major EVM networks
-// Users can switch between networks in the wallet interface
+// Multi-chain support: Major EVM networks first (for wallet compatibility like Phantom)
+// Then Elastos ecosystem chains. Users can switch between networks after connecting.
 const chains: ConnectKitOptions['chains'] = [
-  // Elastos Ecosystem (grouped together for visibility)
-  elastos,          // Elastos Smart Chain (primary)
-  elastosIdentity,  // Elastos Identity Chain (EID)
-  elastosEco,       // Elastos PGP ECO Chain (12343)
-  elastosPgp,       // PGP Chain (860621)
-  // Major EVM Networks
-  mainnet,          // Ethereum (1)
+  // Major EVM Networks first (universally supported by all wallets including Phantom)
+  mainnet,          // Ethereum (1) - Default for maximum wallet compatibility
   base,             // Base (8453)
+  polygon,          // Polygon (137)
   arbitrum,         // Arbitrum One (42161)
   optimism,         // Optimism (10)
-  polygon,          // Polygon (137)
   bsc,              // BNB Smart Chain (56)
   avalanche,        // Avalanche C-Chain (43114)
   linea,            // Linea (59144)
+  // Elastos Ecosystem
+  elastos,          // Elastos Smart Chain (20)
+  elastosIdentity,  // Elastos Identity Chain (EID - 22)
+  elastosEco,       // Elastos ECO Chain (12343)
+  elastosPgp,       // PGP Chain (860621)
 ];
 
 /**
@@ -210,8 +210,8 @@ const config = createConfig({
     isDismissable: false,
     collapseWalletList: false,
     hideContinueButton: true,
-    // Order of connection methods (no social - requires domain whitelisting)
-    connectorsOrder: ['email', 'phone', 'wallet'],
+    // Only wallet login for v1 - email/phone/social to be added post-launch
+    connectorsOrder: ['wallet'],
     logo: elastosLogo,
     language: 'en-US',
     theme: {
@@ -282,17 +282,16 @@ const config = createConfig({
       multiInjectedProviderDiscovery: true,
     }),
 
-    // Authentication wallet connectors configuration
-    // Only email and phone - social logins require domain whitelisting which 
-    // doesn't work for self-hosted PC2 instances
-    authWalletConnectors({
-      authTypes: ['email', 'phone'],
-      fiatCoin: 'USD',
-      promptSettingConfig: {
-        promptMasterPasswordSettingWhenLogin: 1,
-        promptPaymentPasswordSettingWhenSign: 1,
-      },
-    }),
+    // Email/phone/social login disabled for v1 - to be added post-launch
+    // Social logins require domain whitelisting which doesn't work for self-hosted PC2 instances
+    // authWalletConnectors({
+    //   authTypes: ['email', 'phone'],
+    //   fiatCoin: 'USD',
+    //   promptSettingConfig: {
+    //     promptMasterPasswordSettingWhenLogin: 1,
+    //     promptPaymentPasswordSettingWhenSign: 1,
+    //   },
+    // }),
   ],
 
   // Configure wallet plugins

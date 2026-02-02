@@ -137,8 +137,11 @@ async function extractPDFText(
       return '';
     }
 
+    // Convert Buffer to Uint8Array for pdfjs-dist compatibility
+    const uint8Array = new Uint8Array(content.buffer, content.byteOffset, content.byteLength);
+
     // Load PDF document
-    const pdf = await getDocument({ data: content }).promise;
+    const pdf = await getDocument({ data: uint8Array }).promise;
 
     let fullText = '';
     

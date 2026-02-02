@@ -218,13 +218,16 @@ Once the GitHub Release exists, your VPS will auto-detect it:
 4. **Progress**: Watch the status: Downloading → Installing → Building → Restarting
 5. **Done**: Page auto-refreshes with new version
 
-**What happens during install:**
+**What happens during install (v2.6.2+):**
 ```bash
 # The server automatically runs:
-git pull origin main      # Download latest code
-npm install               # Install any new dependencies
-npm run build             # Rebuild backend + frontend
-systemctl restart pc2     # Restart the service
+git checkout -- .                    # Reset local changes
+git clean -fd src/particle-auth/     # Clean untracked particle-auth files
+git pull origin main                 # Download latest code
+npm install --legacy-peer-deps       # Install dependencies
+npm run build:gui                    # Rebuild frontend
+npm run build:backend                # Rebuild backend
+systemctl restart pc2-node           # Restart the service
 ```
 
 ---
@@ -271,6 +274,51 @@ git commit -m "chore: rebuild particle-auth"
 - Ensure you created a **GitHub Release** (not just pushed to main)
 - Check the release is visible at: https://github.com/Elacity/pc2.net/releases/latest
 - Manual check: `curl -s https://api.github.com/repos/Elacity/pc2.net/releases/latest | jq .tag_name`
+
+#### UI "Install Update" button fails (versions < 2.6.2)
+
+> ⚠️ **IMPORTANT**: Versions before 2.6.2 have a broken auto-update service.
+> Users on these versions need **ONE manual update** to get the fixed UpdateService.
+
+**Symptoms:**
+- Clicking "Install" shows an error or nothing happens
+- Server shows npm install errors in logs
+- Update seems to complete but version doesn't change
+
+**Root Cause (fixed in v2.6.2):**
+- `npm install` failed without `--legacy-peer-deps`
+- Git pull failed when local files were modified (particle-auth assets)
+- Wrong systemctl service name was used
+
+**Manual Update for Stuck Users:**
+
+SSH into the VPS and run:
+```bash
+cd ~/pc2.net
+
+# Reset any local changes
+git checkout -- .
+git clean -fd src/particle-auth/assets/
+
+# Pull latest code
+git pull origin main
+
+# Install dependencies (MUST use --legacy-peer-deps)
+cd pc2-node
+npm install --legacy-peer-deps
+
+# Build (skip particle-auth - it's pre-built in repo)
+npm run build:backend
+cd ..
+npm run build:gui
+
+# Restart the service
+systemctl restart pc2-node   # Note: service name is pc2-node, not pc2
+# OR if using PM2:
+pm2 restart all
+```
+
+After this manual update to v2.6.2+, all future updates via the UI will work.
 
 ---
 

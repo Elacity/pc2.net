@@ -9308,7 +9308,17 @@ fieldset[name=number-code] {
     background: #f4f4f4;
     padding: 10px;
     box-shadow: 2px 2px 5px 2px inset #CCC;
+}
 
+/* Dark mode credits list */
+:root .credit-content ul {
+    background: #1f1f21;
+    box-shadow: 2px 2px 5px 2px inset #0a0a0a;
+}
+
+[data-theme="light"] .credit-content ul {
+    background: #f4f4f4;
+    box-shadow: 2px 2px 5px 2px inset #CCC;
 }
 
 .credit-content li {
@@ -10671,4 +10681,140 @@ fieldset[name=number-code] {
 
 [data-theme="light"] .ai-agent-create-text {
     color: #6b7280;
+}
+
+/*****************************************************
+ * Public Folder Banner - Theme Support
+ *****************************************************/
+.public-folder-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 15px;
+    margin: 10px 10px 0 10px;
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    border-radius: 6px;
+    font-size: 12px;
+    color: #856404;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+/* Light mode - keep the same warm colors but ensure text is readable */
+[data-theme="light"] .public-folder-banner {
+    background: #fff3cd;
+    border-color: #ffc107;
+    color: #856404;
+}
+
+/*****************************************************
+ * Explorer Navbar Buttons - Light Mode Hover Fix
+ *****************************************************/
+/* Light mode - arrows should be dark on hover */
+[data-theme="light"] .window-navbar-btn:hover {
+    background-color: #e5e7eb;
+}
+
+[data-theme="light"] .window-navbar-btn svg,
+[data-theme="light"] .window-navbar-btn img {
+    filter: none !important;
+    opacity: 0.7;
+}
+
+[data-theme="light"] .window-navbar-btn:hover svg,
+[data-theme="light"] .window-navbar-btn:hover img {
+    opacity: 1;
+}
+
+/*****************************************************
+ * Properties Window - Theme Support
+ *****************************************************/
+.window-item-properties .window-body {
+    background-color: var(--color-window-bg) !important;
+}
+
+.item-props-tab-content {
+    background-color: var(--color-window-bg);
+    color: var(--color-text-primary);
+}
+
+.item-prop-label {
+    color: var(--color-text-muted);
+}
+
+.item-prop-val {
+    color: var(--color-text-primary);
+}
+
+/* Light mode properties */
+[data-theme="light"] .window-item-properties .window-body {
+    background-color: rgb(241 242 246) !important;
+}
+
+/*****************************************************
+ * AI Settings - Agent Cards Theme Support
+ *****************************************************/
+/* Agent badge (Default tag) */
+.agent-badge {
+    font-size: 8px;
+    padding: 1px 4px;
+    background: #3a3a3c;
+    color: #a0a0a0;
+    border-radius: 2px;
+}
+
+[data-theme="light"] .agent-badge {
+    background: #e5e7eb;
+    color: #666;
+}
+
+/* Agent personality and model text */
+.agent-personality,
+.agent-model {
+    color: #9ca3af;
+}
+
+[data-theme="light"] .agent-personality,
+[data-theme="light"] .agent-model {
+    color: #666;
+}
+
+/* Channel badges (telegram tags) */
+.agent-channels span,
+.channel-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 6px;
+    background: #3a3a3c;
+    border-radius: 3px;
+    margin-right: 4px;
+    font-size: 9px;
+    color: #d0d0d0;
+}
+
+[data-theme="light"] .agent-channels span,
+[data-theme="light"] .channel-badge {
+    background: #f3f4f6;
+    color: #374151;
+}
+
+/* Agent details row */
+.agent-details {
+    color: #9ca3af;
+}
+
+[data-theme="light"] .agent-details {
+    color: #666;
+}
+
+/* No channels text */
+.agent-row > .ai-card-row > div > div:last-child {
+    color: #6b7280;
+}
+
+[data-theme="light"] .agent-row > .ai-card-row > div > div:last-child {
+    color: #999;
 }

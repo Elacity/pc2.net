@@ -105,7 +105,6 @@ const refresh_item_container = function (el_item_container, options) {
                 if (isPublicFolder) {
                     const banner = document.createElement('div');
                     banner.className = 'public-folder-banner';
-                    banner.style.cssText = 'display: flex; align-items: center; gap: 8px; padding: 10px 15px; margin: 10px 10px 0 10px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; font-size: 12px; color: #856404; position: relative; z-index: 10;';
                     banner.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg><span><strong>Public Folder</strong> - Files here are publicly accessible via IPFS. Anyone with the link can find them.</span>';
                     windowBody.insertBefore(banner, windowBody.firstChild);
                 }

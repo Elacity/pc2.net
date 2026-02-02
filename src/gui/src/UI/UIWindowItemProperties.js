@@ -88,7 +88,7 @@ async function UIWindowItemProperties (item_name, item_path, item_uid, left, top
             padding: '10px',
             width: 'initial',
             height: 'calc(100% - 50px)',
-            'background-color': 'rgb(241 242 246)',
+            'background-color': 'var(--color-window-bg)',
             'backdrop-filter': 'blur(3px)',
             'content-box': 'content-box',
         },

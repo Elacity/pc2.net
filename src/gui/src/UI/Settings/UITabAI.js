@@ -1686,7 +1686,7 @@ export default {
                         
                         const channelBadges = tethered.map(ch => {
                             const icon = channelIcons[ch.type] || '';
-                            return `<span style="display: inline-flex; align-items: center; gap: 3px; padding: 2px 6px; background: #f3f4f6; border-radius: 3px; margin-right: 4px;">${icon} <span style="font-size: 9px;">${ch.name}</span></span>`;
+                            return `<span class="channel-badge">${icon} <span>${ch.name}</span></span>`;
                         }).join('');
                         
                         return `
@@ -1699,9 +1699,9 @@ export default {
                                         <div style="flex: 1;">
                                             <div style="display: flex; align-items: center; gap: 6px;">
                                                 <span class="ai-card-label agent-name">${agent.name || 'Unnamed Agent'}</span>
-                                                ${isDefault ? '<span class="agent-badge" style="font-size: 8px; padding: 1px 4px; background: #e5e7eb; color: #666; border-radius: 2px;">Default</span>' : ''}
+                                                ${isDefault ? '<span class="agent-badge">Default</span>' : ''}
                                             </div>
-                                            <div style="font-size: 10px; color: #666; margin-top: 2px;">
+                                            <div class="agent-details" style="font-size: 10px; margin-top: 2px;">
                                                 <span class="agent-personality">${(agent.personality || 'friendly').charAt(0).toUpperCase() + (agent.personality || 'friendly').slice(1)}</span>
                                                 <span style="margin: 0 4px;">|</span>
                                                 <span class="agent-model">${agent.provider || 'Ollama'} (${agent.model || 'default'})</span>

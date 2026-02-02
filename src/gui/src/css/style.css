@@ -10692,21 +10692,24 @@ fieldset[name=number-code] {
     gap: 8px;
     padding: 10px 15px;
     margin: 10px 10px 0 10px;
-    background: #fff3cd;
-    border: 1px solid #ffc107;
+    background: #fff3cd !important;
+    border: 1px solid #ffc107 !important;
     border-radius: 6px;
     font-size: 12px;
-    color: #856404;
+    color: #856404 !important;
     position: sticky;
     top: 0;
     z-index: 10;
 }
 
-/* Light mode - keep the same warm colors but ensure text is readable */
-[data-theme="light"] .public-folder-banner {
-    background: #fff3cd;
-    border-color: #ffc107;
-    color: #856404;
+.public-folder-banner span,
+.public-folder-banner strong {
+    color: #856404 !important;
+}
+
+.public-folder-banner svg {
+    color: #856404 !important;
+    stroke: #856404 !important;
 }
 
 /*****************************************************
@@ -10751,6 +10754,106 @@ fieldset[name=number-code] {
 /* Light mode properties */
 [data-theme="light"] .window-item-properties .window-body {
     background-color: rgb(241 242 246) !important;
+}
+
+/*****************************************************
+ * Properties Window - Full Dark Mode Support
+ *****************************************************/
+/* Dark mode - tab styling */
+:root .item-props-tab-content {
+    background-color: #2a2a2c;
+    border-color: #4a4a4c;
+    color: #ffffff;
+}
+
+:root .item-props-tab-content-selected {
+    background-color: #2a2a2c;
+}
+
+:root .item-props-tab-btn {
+    color: #9ca3af;
+    border-color: transparent;
+}
+
+:root .item-props-tab-btn:hover {
+    color: #ffffff;
+}
+
+:root .item-props-tab-selected {
+    background-color: #2a2a2c;
+    border-color: #4a4a4c;
+    border-bottom-color: #2a2a2c;
+    color: #ffffff;
+}
+
+:root .item-prop-version-entry {
+    border-bottom-color: #4a4a4c;
+}
+
+/* Light mode - restore original styling */
+[data-theme="light"] .item-props-tab-content {
+    background-color: white;
+    border-color: #CCC;
+    color: #333;
+}
+
+[data-theme="light"] .item-props-tab-content-selected {
+    background-color: white;
+}
+
+[data-theme="light"] .item-props-tab-btn {
+    color: #374653;
+    border-color: transparent;
+}
+
+[data-theme="light"] .item-props-tab-selected {
+    background-color: white;
+    border-color: #CCC;
+    border-bottom-color: white;
+    color: black;
+}
+
+[data-theme="light"] .item-prop-version-entry {
+    border-bottom-color: #CCC;
+}
+
+/* Copy buttons in properties - dark mode */
+:root .copy-cid-btn,
+:root .copy-gateway-btn {
+    background: #3a3a3c !important;
+    border: 1px solid #4a4a4c !important;
+    color: #ffffff !important;
+}
+
+:root .copy-cid-btn svg,
+:root .copy-gateway-btn svg {
+    stroke: #ffffff !important;
+}
+
+:root .copy-cid-btn:hover,
+:root .copy-gateway-btn:hover {
+    background: #4a4a4c !important;
+}
+
+[data-theme="light"] .copy-cid-btn,
+[data-theme="light"] .copy-gateway-btn {
+    background: #ffffff !important;
+    border: 1px solid #d1d5db !important;
+    color: #374151 !important;
+}
+
+[data-theme="light"] .copy-cid-btn svg,
+[data-theme="light"] .copy-gateway-btn svg {
+    stroke: #374151 !important;
+}
+
+[data-theme="light"] .copy-cid-btn:hover,
+[data-theme="light"] .copy-gateway-btn:hover {
+    background: #f3f4f6 !important;
+}
+
+[data-theme="light"] .props-copy-btn.copied svg {
+    stroke: #155724;
 }
 
 /*****************************************************

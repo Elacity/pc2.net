@@ -319,8 +319,8 @@ async function UIWindowItemProperties (item_name, item_path, item_uid, left, top
                 const cidHtml = `
                     <div style="display: flex; align-items: center; gap: 8px;">
                         <code style="font-size: 11px; word-break: break-all; flex: 1;">${html_encode(fsentry.ipfs_hash)}</code>
-                        <button class="copy-cid-btn" data-cid="${html_encode(fsentry.ipfs_hash)}" 
-                                style="padding: 4px 6px; cursor: pointer; border: 1px solid #ccc; border-radius: 3px; background: #fff; display: flex; align-items: center; justify-content: center;"
+                        <button class="copy-cid-btn props-copy-btn" data-cid="${html_encode(fsentry.ipfs_hash)}" 
+                                style="padding: 4px 6px; cursor: pointer; border-radius: 3px; display: flex; align-items: center; justify-content: center;"
                                 title="Copy CID to clipboard">${copyIconSvg}</button>
                     </div>
                 `;
@@ -331,8 +331,8 @@ async function UIWindowItemProperties (item_name, item_path, item_uid, left, top
                     const cid = $(this).attr('data-cid');
                     const btn = $(this);
                     navigator.clipboard.writeText(cid).then(() => {
-                        btn.html(checkIconSvg).css('background', '#d4edda');
-                        setTimeout(() => btn.html(copyIconSvg).css('background', '#fff'), 1500);
+                        btn.html(checkIconSvg).addClass('copied');
+                        setTimeout(() => btn.html(copyIconSvg).removeClass('copied'), 1500);
                     }).catch(err => {
                         console.error('[Properties] Failed to copy CID:', err);
                     });
@@ -364,8 +364,8 @@ async function UIWindowItemProperties (item_name, item_path, item_uid, left, top
                                style="font-size: 11px; word-break: break-all; flex: 1; color: #0066cc;">
                                 ${html_encode(gatewayUrl)}
                             </a>
-                            <button class="copy-gateway-btn" data-url="${html_encode(gatewayUrl)}" 
-                                    style="padding: 4px 6px; cursor: pointer; border: 1px solid #ccc; border-radius: 3px; background: #fff; display: flex; align-items: center; justify-content: center;"
+                            <button class="copy-gateway-btn props-copy-btn" data-url="${html_encode(gatewayUrl)}" 
+                                    style="padding: 4px 6px; cursor: pointer; border-radius: 3px; display: flex; align-items: center; justify-content: center;"
                                     title="Copy Gateway URL">${copyIconSvg}</button>
                         </div>
                     `);
@@ -375,8 +375,8 @@ async function UIWindowItemProperties (item_name, item_path, item_uid, left, top
                         const url = $(this).attr('data-url');
                         const btn = $(this);
                         navigator.clipboard.writeText(url).then(() => {
-                            btn.html(checkIconSvg).css('background', '#d4edda');
-                            setTimeout(() => btn.html(copyIconSvg).css('background', '#fff'), 1500);
+                            btn.html(checkIconSvg).addClass('copied');
+                            setTimeout(() => btn.html(copyIconSvg).removeClass('copied'), 1500);
                         }).catch(err => {
                             console.error('[Properties] Failed to copy gateway URL:', err);
                         });

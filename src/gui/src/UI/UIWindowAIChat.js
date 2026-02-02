@@ -100,7 +100,7 @@ export default async function UIWindowAIChat(options = {}) {
                                         <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
                                     </svg>
                                 </button>
-                                <div class="ai-agent-dropdown" style="display: none; position: absolute; bottom: 100%; left: 0; margin-bottom: 8px; background: #1e1e1e; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; min-width: 220px; max-height: 300px; overflow-y: auto; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 999999;">
+                                <div class="ai-agent-dropdown" style="display: none; position: absolute; bottom: 100%; left: 0; margin-bottom: 8px; border-radius: 8px; min-width: 220px; max-height: 300px; overflow-y: auto; z-index: 999999;">
                                 </div>
                             </div>
                             <select class="ai-model-select">

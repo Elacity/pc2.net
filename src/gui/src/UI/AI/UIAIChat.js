@@ -1202,7 +1202,7 @@ export default function UIAIChat() {
                 h += `<button class="ai-attach-btn" title="Attach file"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></button>`;
                 h += `<div class="ai-agent-selector-wrapper" style="position: relative;">`;
                     h += `<button class="ai-agent-btn" title="Select Agent"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></button>`;
-                    h += `<div class="ai-agent-dropdown" style="display: none; position: absolute; bottom: 100%; left: 0; margin-bottom: 8px; background: #1e1e1e; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; min-width: 220px; max-height: 300px; overflow-y: auto; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 999999;">`;
+                    h += `<div class="ai-agent-dropdown" style="display: none; position: absolute; bottom: 100%; left: 0; margin-bottom: 8px; border-radius: 8px; min-width: 220px; max-height: 300px; overflow-y: auto; z-index: 999999;">`;
                     h += `</div>`;
                 h += `</div>`;
                 h += `<select class="ai-model-select">`;
@@ -1231,8 +1231,8 @@ export default function UIAIChat() {
     // Setup drag and drop
     setupDragAndDrop();
     
-    // Set dark mode as default (no theme toggle in AI chat)
-    document.documentElement.setAttribute('data-theme', 'dark');
+    // Respect user's theme preference - don't override it
+    // Theme is managed by initgui.js and UITabPersonalization.js
     
     // Load user's AI config and update model selector
     loadAIConfigForChat();
@@ -1668,11 +1668,10 @@ async function loadAgentsForChat() {
         const defaultAvatarContent = userProfilePic ? '' : userInitial;
         
         // Default option (no specific agent) - uses user's profile image
-        const defaultSelected = !currentAgent ? 'background: rgba(59, 130, 246, 0.2);' : '';
-        html += `<div class="ai-agent-option${!currentAgent ? ' selected' : ''}" data-agent-id="" data-agent-name="Default" style="padding: 10px 12px; cursor: pointer; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid rgba(255,255,255,0.1); ${defaultSelected}">`;
-        html += `<div style="width: 32px; height: 32px; border-radius: 6px; ${defaultAvatarStyle}">${defaultAvatarContent}</div>`;
-        html += `<div style="flex: 1;"><div style="font-size: 13px; color: white;">Default Assistant</div><div style="font-size: 10px; color: rgba(255,255,255,0.5);">Uses your default AI settings</div></div>`;
-        if (!currentAgent) html += `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>`;
+        html += `<div class="ai-agent-option${!currentAgent ? ' selected' : ''}" data-agent-id="" data-agent-name="Default">`;
+        html += `<div class="ai-agent-avatar" style="${defaultAvatarStyle}">${defaultAvatarContent}</div>`;
+        html += `<div class="ai-agent-info"><div class="ai-agent-name">Default Assistant</div><div class="ai-agent-desc">Uses your default AI settings</div></div>`;
+        if (!currentAgent) html += `<svg class="ai-agent-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>`;
         html += `</div>`;
         
         // Agent options
@@ -1681,33 +1680,23 @@ async function loadAgentsForChat() {
             const initial = (agent.name || 'A').charAt(0).toUpperCase();
             const personality = agent.personality || 'friendly';
             const isSelected = currentAgent === agent.id;
-            const selectedStyle = isSelected ? 'background: rgba(59, 130, 246, 0.2);' : '';
             
-            html += `<div class="ai-agent-option${isSelected ? ' selected' : ''}" data-agent-id="${agent.id}" data-agent-name="${agent.name}" data-image-url="${imageUrl}" style="padding: 10px 12px; cursor: pointer; display: flex; align-items: center; gap: 10px; ${selectedStyle}">`;
-            html += `<div class="agent-avatar-${agent.id}" style="width: 32px; height: 32px; border-radius: 6px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-size: 14px; font-weight: 600; background-size: cover; background-position: center;">${initial}</div>`;
-            html += `<div style="flex: 1;"><div style="font-size: 13px; color: white;">${agent.name || 'Unnamed'}</div><div style="font-size: 10px; color: rgba(255,255,255,0.5);">${personality.charAt(0).toUpperCase() + personality.slice(1)}</div></div>`;
-            if (isSelected) html += `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>`;
+            html += `<div class="ai-agent-option${isSelected ? ' selected' : ''}" data-agent-id="${agent.id}" data-agent-name="${agent.name}" data-image-url="${imageUrl}">`;
+            html += `<div class="ai-agent-avatar agent-avatar-${agent.id}" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">${initial}</div>`;
+            html += `<div class="ai-agent-info"><div class="ai-agent-name">${agent.name || 'Unnamed'}</div><div class="ai-agent-desc">${personality.charAt(0).toUpperCase() + personality.slice(1)}</div></div>`;
+            if (isSelected) html += `<svg class="ai-agent-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>`;
             html += `</div>`;
         }
         
         // Add "Create Agent" button at the bottom
-        html += `<div class="ai-agent-create" style="padding: 10px 12px; cursor: pointer; display: flex; align-items: center; gap: 10px; border-top: 1px solid rgba(255,255,255,0.1); margin-top: 4px;">`;
-        html += `<div style="width: 32px; height: 32px; border-radius: 6px; border: 2px dashed rgba(255,255,255,0.3); display: flex; align-items: center; justify-content: center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></div>`;
-        html += `<div style="font-size: 13px; color: rgba(255,255,255,0.7);">Create New Agent...</div>`;
+        html += `<div class="ai-agent-create">`;
+        html += `<div class="ai-agent-create-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></div>`;
+        html += `<div class="ai-agent-create-text">Create New Agent...</div>`;
         html += `</div>`;
         
         $dropdown.html(html);
         
-        // Add hover effect
-        $dropdown.find('.ai-agent-option').hover(
-            function() { if (!$(this).hasClass('selected')) $(this).css('background', 'rgba(255,255,255,0.1)'); },
-            function() { if (!$(this).hasClass('selected')) $(this).css('background', 'transparent'); }
-        );
-        
-        $dropdown.find('.ai-agent-create').hover(
-            function() { $(this).css('background', 'rgba(255,255,255,0.1)'); },
-            function() { $(this).css('background', 'transparent'); }
-        );
+        // Hover effects are handled by CSS
         
         // Load images for agents asynchronously
         for (const agent of agents) {
@@ -1755,29 +1744,20 @@ function showEmptyAgentDropdown() {
     const defaultAvatarContent = userProfilePic ? '' : userInitial;
     
     // Default option - uses user's profile image
-    html += `<div class="ai-agent-option selected" data-agent-id="" data-agent-name="Default" style="padding: 10px 12px; cursor: pointer; display: flex; align-items: center; gap: 10px; background: rgba(59, 130, 246, 0.2);">`;
-    html += `<div style="width: 32px; height: 32px; border-radius: 6px; ${defaultAvatarStyle}">${defaultAvatarContent}</div>`;
-    html += `<div style="flex: 1;"><div style="font-size: 13px; color: white;">Default Assistant</div><div style="font-size: 10px; color: rgba(255,255,255,0.5);">Uses your default AI settings</div></div>`;
-    html += `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>`;
+    html += `<div class="ai-agent-option selected" data-agent-id="" data-agent-name="Default">`;
+    html += `<div class="ai-agent-avatar" style="${defaultAvatarStyle}">${defaultAvatarContent}</div>`;
+    html += `<div class="ai-agent-info"><div class="ai-agent-name">Default Assistant</div><div class="ai-agent-desc">Uses your default AI settings</div></div>`;
+    html += `<svg class="ai-agent-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>`;
     html += `</div>`;
     
     // Create button
-    html += `<div class="ai-agent-create" style="padding: 10px 12px; cursor: pointer; display: flex; align-items: center; gap: 10px; border-top: 1px solid rgba(255,255,255,0.1); margin-top: 4px;">`;
-    html += `<div style="width: 32px; height: 32px; border-radius: 6px; border: 2px dashed rgba(255,255,255,0.3); display: flex; align-items: center; justify-content: center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></div>`;
-    html += `<div style="font-size: 13px; color: rgba(255,255,255,0.7);">Create New Agent...</div>`;
+    html += `<div class="ai-agent-create">`;
+    html += `<div class="ai-agent-create-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></div>`;
+    html += `<div class="ai-agent-create-text">Create New Agent...</div>`;
     html += `</div>`;
     
     $dropdown.html(html);
-    
-    $dropdown.find('.ai-agent-option').hover(
-        function() { if (!$(this).hasClass('selected')) $(this).css('background', 'rgba(255,255,255,0.1)'); },
-        function() { if (!$(this).hasClass('selected')) $(this).css('background', 'transparent'); }
-    );
-    
-    $dropdown.find('.ai-agent-create').hover(
-        function() { $(this).css('background', 'rgba(255,255,255,0.1)'); },
-        function() { $(this).css('background', 'transparent'); }
-    );
+    // Hover effects are handled by CSS
 }
 
 

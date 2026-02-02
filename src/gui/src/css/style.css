@@ -10540,3 +10540,135 @@ fieldset[name=number-code] {
     min-height: 0 !important;
     padding-bottom: 80px !important;
 }
+
+/*****************************************************
+ * AI Agent Dropdown - Theme Support
+ *****************************************************/
+/* Dark mode (default) */
+.ai-agent-dropdown {
+    background: #1e1e1e !important;
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+}
+
+.ai-agent-option {
+    padding: 10px 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.ai-agent-option:first-child {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.ai-agent-option.selected {
+    background: rgba(59, 130, 246, 0.2);
+}
+
+.ai-agent-option:hover:not(.selected) {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.ai-agent-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 14px;
+    font-weight: 600;
+    background-size: cover;
+    background-position: center;
+}
+
+.ai-agent-info {
+    flex: 1;
+}
+
+.ai-agent-name {
+    font-size: 13px;
+    color: white;
+}
+
+.ai-agent-desc {
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.ai-agent-create {
+    padding: 10px 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    margin-top: 4px;
+}
+
+.ai-agent-create:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.ai-agent-create-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    border: 2px dashed rgba(255, 255, 255, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.ai-agent-create-text {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+/* Light mode */
+[data-theme="light"] .ai-agent-dropdown {
+    background: #ffffff !important;
+    border: 1px solid #e5e7eb !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+}
+
+[data-theme="light"] .ai-agent-option:first-child {
+    border-bottom: 1px solid #e5e7eb;
+}
+
+[data-theme="light"] .ai-agent-option.selected {
+    background: rgba(59, 130, 246, 0.15);
+}
+
+[data-theme="light"] .ai-agent-option:hover:not(.selected) {
+    background: #f3f4f6;
+}
+
+[data-theme="light"] .ai-agent-name {
+    color: #1f2937;
+}
+
+[data-theme="light"] .ai-agent-desc {
+    color: #6b7280;
+}
+
+[data-theme="light"] .ai-agent-create {
+    border-top: 1px solid #e5e7eb;
+}
+
+[data-theme="light"] .ai-agent-create:hover {
+    background: #f3f4f6;
+}
+
+[data-theme="light"] .ai-agent-create-icon {
+    border-color: #d1d5db;
+    color: #6b7280;
+}
+
+[data-theme="light"] .ai-agent-create-text {
+    color: #6b7280;
+}

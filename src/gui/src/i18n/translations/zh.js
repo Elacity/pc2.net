@@ -482,6 +482,151 @@ const zh = {
         'window_folder_empty': '此文件夹为空', // In English: "This folder is empty"
         'manage_your_subdomains': '管理您的子域名', // In English: "Manage Your Subdomains"
         'open_containing_folder': '打开所在文件夹', // In English: "Open Containing Folder"
+        
+        // =====================================================
+        // Settings Tab Names
+        // =====================================================
+        'ai_assistant': 'AI 助手',
+        'storage': '存储',
+        'personal_cloud': '个人云',
+        'system': '系统',
+        
+        // =====================================================
+        // Personal Cloud (PC2) Tab
+        // =====================================================
+        'connection': '连接',
+        'node_info': '节点信息',
+        'compute_limits': '计算限制',
+        'backup_restore': '备份与恢复',
+        'restore': '恢复',
+        'access_control': '访问控制',
+        'actions': '操作',
+        
+        // Connection status
+        'connected': '已连接',
+        'not_connected': '未连接',
+        'disconnected': '已断开',
+        'not_configured': '未配置',
+        'connecting': '连接中...',
+        
+        // Node info
+        'node': '节点',
+        'your_wallet': '您的钱包',
+        'this_pc2_node': '此 PC2 节点',
+        
+        // System resources
+        'cpu': 'CPU',
+        'memory': '内存',
+        'disk': '磁盘',
+        'platform': '平台',
+        'processor': '处理器',
+        'node_uptime': '节点运行时间',
+        
+        // Compute limits
+        'max_concurrent': '最大并发',
+        'memory_limit': '内存限制',
+        'timeout': '超时',
+        'runtime': '运行时',
+        'active': '活跃',
+        'queued': '排队',
+        
+        // Storage
+        'used': '已用',
+        'files': '文件',
+        'encrypted': '已加密',
+        
+        // Backup & Restore
+        'backups': '备份',
+        'create_backup': '创建备份',
+        'no_backups_yet': '暂无备份',
+        'backup_started': '备份已开始',
+        'backup_deleted': '备份已删除',
+        'download_started': '下载已开始',
+        'restore_from_backup': '从备份恢复',
+        'upload_backup_file': '上传备份文件 (.tar.gz) 以恢复您的节点数据。',
+        'click_to_select': '点击选择',
+        'or_drag_drop': '或拖放',
+        'start_restore': '开始恢复',
+        'restore_warning': '警告：这将用备份替换所有当前的 PC2 节点数据。',
+        'server_will_stop': '服务器将在恢复过程中停止。您需要手动重启它。',
+        'restore_started': '恢复过程已成功开始！',
+        'important_backup_warning': '重要：将备份下载到外部设备',
+        'backup_external_warning': '存储在同一服务器上的备份将在服务器故障时丢失。请始终将备份下载到您的笔记本电脑、外部驱动器或其他服务器以确保安全。',
+        
+        // Access control
+        'trusted_wallets': '信任的钱包',
+        'invite': '邀请',
+        'revoke': '撤销',
+        'owner': '所有者',
+        'add_wallet': '添加',
+        'invalid_wallet_format': '无效地址。必须以 0x 开头且为 42 个字符。',
+        
+        // Actions
+        'disconnect': '断开连接',
+        'forget': '忘记',
+        'forget_confirm': '忘记此 PC2 节点？您需要设置令牌才能重新连接。',
+        'connect_to_pc2': '连接到 PC2',
+        'connect_description': '连接到您的个人云节点，将文件存储在您自己的硬件上。',
+        
+        // Misc
+        'loading': '加载中...',
+        'help': '帮助',
+        'compute_limit_updated': '计算限制已更新',
+        'failed_update_compute_limit': '更新计算限制失败',
+        'status': '状态',
+        
+        // Language change
+        'language_change_reload_prompt': '语言已更改。重新加载以在所有地方应用更改？',
+        'reload': '重新加载',
+        'later': '稍后',
+        
+        // Taskbar Menu
+        'check_for_updates': '检查更新',
+        'update_available': '有可用更新',
+        'restart_pc2': '重启 PC2',
+        
+        // PC2 Status Bar
+        'personal_cloud_status': '个人云',
+        'sign_in': '登录',
+        'pc2_settings': 'PC2 设置',
+        'files_count': '文件',
+        'pc2_node': 'PC2 节点',
+        
+        // Wallet
+        'total_balance': '总余额',
+        'universal': '通用',
+        'send': '发送',
+        'receive': '接收',
+        'tokens': '代币',
+        'nfts': 'NFT',
+        'activity': '活动',
+        'history': '历史',
+        'refresh_balances': '刷新余额',
+        'select_network': '选择网络',
+        'no_tokens_found': '未找到代币',
+        'no_transactions': '暂无交易记录',
+        
+        // Send/Receive
+        'send_tokens': '发送代币',
+        'receive_tokens': '接收代币',
+        'recipient_address': '收款地址',
+        'amount': '金额',
+        'estimated_fee': '预估费用',
+        'free_gas': '免费 GAS',
+        'calculating': '计算中...',
+        'insufficient_balance': '余额不足',
+        'transaction_sent': '交易已发送',
+        'transaction_failed': '交易失败',
+        
+        // Transaction Confirm
+        'confirm_transaction': '确认交易',
+        'you_send': '您发送',
+        'you_receive': '您接收',
+        'network_fee': '网络费用',
+        'total': '总计',
+        'approve_send': '批准并发送',
+        'reject': '拒绝',
+        'signing': '签名中...',
     },
 };
 

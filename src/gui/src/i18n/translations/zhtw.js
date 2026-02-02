@@ -494,6 +494,144 @@ const zhtw = {
         'set_as_background': "設為桌面背景", // In English: "Set as Desktop Background"
         'error_user_or_path_not_found': "找不到使用者或路徑。", // In English: "User or path not found."
         'error_invalid_username': "無效的使用者名稱。", // In English: "Invalid username."
+        
+        // =====================================================
+        // Settings Tab Names
+        // =====================================================
+        'ai_assistant': 'AI 助手',
+        'storage': '儲存空間',
+        'personal_cloud': '個人雲',
+        'system': '系統',
+        
+        // =====================================================
+        // Personal Cloud (PC2) Tab
+        // =====================================================
+        'connection': '連線',
+        'node_info': '節點資訊',
+        'compute_limits': '運算限制',
+        'backup_restore': '備份與還原',
+        'restore': '還原',
+        'access_control': '存取控制',
+        'actions': '操作',
+        
+        // Connection status
+        'connected': '已連線',
+        'not_connected': '未連線',
+        'disconnected': '已斷線',
+        'not_configured': '未設定',
+        'connecting': '連線中...',
+        
+        // Node info
+        'node': '節點',
+        'your_wallet': '您的錢包',
+        'this_pc2_node': '此 PC2 節點',
+        
+        // System resources
+        'cpu': 'CPU',
+        'memory': '記憶體',
+        'disk': '磁碟',
+        'platform': '平台',
+        'processor': '處理器',
+        'node_uptime': '節點運行時間',
+        
+        // Compute limits
+        'max_concurrent': '最大並行數',
+        'memory_limit': '記憶體限制',
+        'timeout': '逾時',
+        'runtime': '執行時間',
+        'active': '執行中',
+        'queued': '排隊中',
+        
+        // Storage
+        'used': '已使用',
+        'files': '檔案',
+        'encrypted': '已加密',
+        
+        // Backup & Restore
+        'backups': '備份',
+        'create_backup': '建立備份',
+        'no_backups_yet': '尚無備份',
+        'backup_started': '備份已開始',
+        'backup_deleted': '備份已刪除',
+        'download_started': '下載已開始',
+        'upload_backup_file': '上傳備份檔案 (.tar.gz) 以還原您的節點資料。',
+        'click_to_select': '點擊選擇',
+        'or_drag_drop': '或拖放',
+        'start_restore': '開始還原',
+        'restore_warning': '警告：這將以備份取代所有目前的 PC2 節點資料。',
+        'important_backup_warning': '重要：將備份下載到外部裝置',
+        'backup_external_warning': '儲存在同一伺服器上的備份在伺服器故障時將會遺失。請務必將備份下載到您的筆電、外接硬碟或其他伺服器以確保安全。',
+        
+        // Access control
+        'trusted_wallets': '信任的錢包',
+        'invite': '邀請',
+        'revoke': '撤銷',
+        'owner': '擁有者',
+        'add_wallet': '新增',
+        
+        // Actions
+        'disconnect': '斷開連線',
+        'forget': '忘記',
+        'connect_to_pc2': '連線至 PC2',
+        'connect_description': '連線到您的個人雲節點，將檔案儲存在您自己的硬體上。',
+        
+        // Misc
+        'loading': '載入中...',
+        'help': '說明',
+        'status': '狀態',
+        
+        // Language change
+        'language_change_reload_prompt': '語言已變更。重新載入以套用變更？',
+        'reload': '重新載入',
+        'later': '稍後',
+        
+        // Taskbar Menu
+        'check_for_updates': '檢查更新',
+        'update_available': '有可用更新',
+        'restart_pc2': '重新啟動 PC2',
+        
+        // PC2 Status Bar
+        'personal_cloud_status': '個人雲',
+        'sign_in': '登入',
+        'pc2_settings': 'PC2 設定',
+        'files_count': '檔案',
+        'pc2_node': 'PC2 節點',
+        
+        // Wallet
+        'total_balance': '總餘額',
+        'universal': '通用',
+        'send': '傳送',
+        'receive': '接收',
+        'tokens': '代幣',
+        'nfts': 'NFT',
+        'activity': '活動',
+        'history': '歷史',
+        'refresh_balances': '重新整理餘額',
+        'select_network': '選擇網路',
+        'no_tokens_found': '找不到代幣',
+        'no_transactions': '尚無交易記錄',
+        
+        // Send/Receive
+        'send_tokens': '傳送代幣',
+        'receive_tokens': '接收代幣',
+        'recipient_address': '收款地址',
+        'amount': '金額',
+        'estimated_fee': '預估費用',
+        'free_gas': '免費 GAS',
+        'calculating': '計算中...',
+        'insufficient_balance': '餘額不足',
+        'transaction_sent': '交易已傳送',
+        'transaction_failed': '交易失敗',
+        
+        // Transaction Confirm
+        'confirm_transaction': '確認交易',
+        'you_send': '您傳送',
+        'you_receive': '您接收',
+        'network_fee': '網路費用',
+        'total': '總計',
+        'approve_send': '核准並傳送',
+        'reject': '拒絕',
+        'signing': '簽署中...',
     },
 };
 

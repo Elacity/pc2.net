@@ -255,8 +255,8 @@ window.reset_item_positions = true; // The variable decides if the item position
 
 window.file_templates = []
 
-// default language
-window.locale = 'en';
+// Set language from user preferences, fallback to 'en'
+window.locale = window.user_preferences?.language || 'en';
 
 // Safe wrapper functions for jQuery window plugins
 // These prevent cascading errors when plugins become temporarily unavailable

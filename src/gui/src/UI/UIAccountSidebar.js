@@ -652,7 +652,7 @@ async function UIAccountSidebar(options = {}) {
             </button>
             
             <!-- Refresh Button -->
-            <button class="refresh-btn" title="${i18n('refresh') || 'Refresh balances'}">
+            <button class="refresh-btn" title="${i18n('refresh_balances') || 'Refresh balances'}">
                 ${refreshIcon}
             </button>
             
@@ -668,7 +668,7 @@ async function UIAccountSidebar(options = {}) {
                             <span class="copy-btn" title="Copy address">${copyIcon}</span>
                         </div>
                         <div class="solana-address-badge" id="solana-address-badge" data-address="" data-explorer-type="solana" title="Click to view on Solscan" style="display:none;background:linear-gradient(135deg,rgba(153,69,255,0.25),rgba(20,241,149,0.25));padding:6px 10px;border-radius:16px;font-size:12px;cursor:pointer;font-family:monospace;display:flex;align-items:center;gap:6px;">
-                            <span class="sol-addr-text" style="color:#e5e7eb;">Loading...</span>
+                            <span class="sol-addr-text" style="color:#e5e7eb;">${i18n('loading') || 'Loading...'}</span>
                             <span class="copy-btn" title="Copy address">${copyIcon}</span>
                         </div>
                     </div>
@@ -684,13 +684,13 @@ async function UIAccountSidebar(options = {}) {
             <div class="wallet-mode-toggle" role="group" aria-label="Wallet mode selection">
                 <button class="mode-btn ${currentMode === 'universal' ? 'active' : ''}" data-mode="universal" role="button" aria-pressed="${currentMode === 'universal'}" aria-label="Switch to Universal Account mode for multi-chain tokens">
                     <span class="mode-icon" aria-hidden="true">${universalIcon}</span>
-                    <span class="mode-label">Universal</span>
+                    <span class="mode-label">${i18n('universal') || 'Universal'}</span>
                 </button>
                 <div class="network-dropdown-container">
                     <div class="network-dropdown-btn ${currentMode === 'elastos' ? 'active' : ''}" id="network-dropdown-btn" role="button">
                         <span class="network-main-btn" id="network-main-btn" title="Switch to EOA mode">
                             <img src="${currentNetwork?.icon || ''}" class="network-icon" style="width:18px;height:18px;border-radius:50%;" onerror="this.style.display='none'" />
-                            <span class="network-name">${currentNetwork?.shortName || currentNetwork?.name || 'Select Network'}</span>
+                            <span class="network-name">${currentNetwork?.shortName || currentNetwork?.name || i18n('select_network') || 'Select Network'}</span>
                         </span>
                         <span class="network-arrow-btn" id="network-arrow-btn" title="Select network" aria-haspopup="listbox" aria-expanded="false">
                             ${dropdownArrowIcon}
@@ -761,9 +761,9 @@ async function UIAccountSidebar(options = {}) {
             <!-- Tab Navigation -->
             <div class="account-sidebar-tabs" role="tablist" aria-label="Wallet sections">
                 <div class="sidebar-tab active" data-tab="tokens" role="tab" aria-selected="true" tabindex="0">${i18n('tokens') || 'Tokens'}</div>
-                <div class="sidebar-tab" data-tab="nfts" role="tab" aria-selected="false" tabindex="-1">NFTs</div>
+                <div class="sidebar-tab" data-tab="nfts" role="tab" aria-selected="false" tabindex="-1">${i18n('nfts') || 'NFTs'}</div>
                 <div class="sidebar-tab" data-tab="activity" role="tab" aria-selected="false" tabindex="-1">
-                    Activity
+                    ${i18n('activity') || 'Activity'}
                     <span class="activity-pending-badge" style="display:none;"></span>
                 </div>
                 <div class="sidebar-tab" data-tab="history" role="tab" aria-selected="false" tabindex="-1">${i18n('history') || 'History'}</div>
@@ -1148,7 +1148,7 @@ async function UIAccountSidebar(options = {}) {
         
         // Show loading state
         $sidebar.find('.balance-amount').text('...');
-        $sidebar.find('.tokens-list').html('<div class="empty-state"><p>Loading...</p></div>');
+        $sidebar.find('.tokens-list').html(`<div class="empty-state"><p>${i18n('loading') || 'Loading...'}</p></div>`);
         
         // Switch mode in wallet service
         try {
@@ -1184,7 +1184,7 @@ async function UIAccountSidebar(options = {}) {
             
             // Show loading state
             $sidebar.find('.balance-amount').text('...');
-            $sidebar.find('.tokens-list').html('<div class="empty-state"><p>Loading...</p></div>');
+            $sidebar.find('.tokens-list').html(`<div class="empty-state"><p>${i18n('loading') || 'Loading...'}</p></div>`);
             
             await walletService.setMode('elastos');
             
@@ -1237,7 +1237,7 @@ async function UIAccountSidebar(options = {}) {
         
         // Show loading state
         $sidebar.find('.balance-amount').text('...');
-        $sidebar.find('.tokens-list').html('<div class="empty-state"><p>Loading...</p></div>');
+        $sidebar.find('.tokens-list').html(`<div class="empty-state"><p>${i18n('loading') || 'Loading...'}</p></div>`);
         
         // Switch network in wallet service
         try {

@@ -486,6 +486,18 @@ const nl = {
         'window_folder_empty': 'Deze map is leeg', // In English: "This folder is empty"
         'manage_your_subdomains': 'Beheer uw subdomeinen', // In English: "Manage Your Subdomains"
         'open_containing_folder': 'Bestandslocatie openen', // In English: "Open Containing Folder"
+
+        // Settings Tab Names
+        'ai_assistant': 'AI-assistent',
+        'storage': 'Opslag',
+        'personal_cloud': 'Persoonlijke Cloud',
+        'system': 'Systeem',
+        'connection': 'Verbinding',
+        'node_info': 'Knooppunt info',
+        'connected': 'Verbonden',
+        'not_connected': 'Niet verbonden',
+        'loading': 'Laden...',
+        'status': 'Status',
     },
 };
 

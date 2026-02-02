@@ -484,6 +484,18 @@ const pl = {
         'manage_your_subdomains': 'Zarządzaj swoimi Subdomenami',
         'open_containing_folder': 'Otwórz Lokalizację Pliku',
 
+        // Settings Tab Names
+        'ai_assistant': 'Asystent AI',
+        'storage': 'Pamięć',
+        'personal_cloud': 'Chmura Osobista',
+        'system': 'System',
+        'connection': 'Połączenie',
+        'node_info': 'Info węzła',
+        'connected': 'Połączono',
+        'not_connected': 'Niepołączono',
+        'loading': 'Ładowanie...',
+        'status': 'Status',
+
     },
 };
 

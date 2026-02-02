@@ -1148,8 +1148,12 @@ async function UIDesktop(options) {
     }
 
     // update local user preferences
+    // CRITICAL: Preserve localStorage values if server returns null
+    // This ensures user preferences persist even if server-side KV is unavailable
+    const existingPrefs = window.user_preferences || {};
+    
     const showHiddenFilesVal = await puter.kv.get('user_preferences.show_hidden_files');
-    let showHiddenFiles = false;
+    let showHiddenFiles = existingPrefs.show_hidden_files || false;
     if (showHiddenFilesVal !== null && showHiddenFilesVal !== undefined) {
         try {
             showHiddenFiles = JSON.parse(showHiddenFilesVal);
@@ -1158,10 +1162,14 @@ async function UIDesktop(options) {
         }
     }
     
+    // Fetch from server, but fallback to existing localStorage values if null
+    const serverLanguage = await puter.kv.get('user_preferences.language');
+    const serverClockVisible = await puter.kv.get('user_preferences.clock_visible');
+    
     const user_preferences = {
         show_hidden_files: showHiddenFiles,
-        language: await puter.kv.get('user_preferences.language'),
-        clock_visible: await puter.kv.get('user_preferences.clock_visible'),
+        language: serverLanguage ?? existingPrefs.language ?? 'en',
+        clock_visible: serverClockVisible ?? existingPrefs.clock_visible ?? 'auto',
     };
 
     // update default apps
@@ -2805,7 +2813,7 @@ $(document).on('click', '.user-options-menu-btn', async function (e) {
             // Check for Updates / Update Available
             //--------------------------------------------------
             {
-                html: window.pc2UpdateAvailable ? '<span style="color: #16a34a;">Update Available</span>' : 'Check for Updates',
+                html: window.pc2UpdateAvailable ? `<span style="color: #16a34a;">${i18n('update_available')}</span>` : i18n('check_for_updates'),
                 id: 'check_for_updates',
                 icon: window.pc2UpdateAvailable 
                     ? `<svg style="width:16px;height:16px;vertical-align:middle;color:#16a34a;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v8"/><path d="M8 12l4 4 4-4"/></svg>`
@@ -2819,7 +2827,7 @@ $(document).on('click', '.user-options-menu-btn', async function (e) {
             // Restart PC2
             //--------------------------------------------------
             {
-                html: 'Restart PC2',
+                html: i18n('restart_pc2'),
                 id: 'restart_pc2',
                 icon: `<svg style="width:16px;height:16px;vertical-align:middle;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>`,
                 onClick: async function () {

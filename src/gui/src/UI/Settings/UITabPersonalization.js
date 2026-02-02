@@ -56,17 +56,17 @@ export default {
             
             <!-- Appearance -->
             <div class="pers-section">
-                <div class="pers-section-title">Appearance</div>
+                <div class="pers-section-title">${i18n('appearance')}</div>
                 <div class="pers-group">
                     <div class="pers-group-row"><div class="pers-card-row"><span class="pers-card-label">${i18n('background')}</span><button class="button pers-btn change-background">${i18n('change')}</button></div></div>
                     <div class="pers-group-row"><div class="pers-card-row"><span class="pers-card-label">${i18n('ui_colors')}</span><button class="button pers-btn change-ui-colors">${i18n('change')}</button></div></div>
-                    <div class="pers-group-row"><div class="pers-card-row"><div><span class="pers-card-label">Dark Mode</span><div class="pers-card-sublabel">Reduce eye strain</div></div><label class="toggle-switch"><input type="checkbox" id="dark-mode-toggle" ${darkMode ? 'checked' : ''}><span class="toggle-slider"></span></label></div></div>
+                    <div class="pers-group-row"><div class="pers-card-row"><div><span class="pers-card-label">${i18n('dark_mode')}</span><div class="pers-card-sublabel">${i18n('reduce_eye_strain')}</div></div><label class="toggle-switch"><input type="checkbox" id="dark-mode-toggle" ${darkMode ? 'checked' : ''}><span class="toggle-slider"></span></label></div></div>
                 </div>
             </div>
             
             <!-- Display -->
             <div class="pers-section">
-                <div class="pers-section-title">Display</div>
+                <div class="pers-section-title">${i18n('display')}</div>
                 <div class="pers-group">
                     <div class="pers-group-row"><div class="pers-card-row"><span class="pers-card-label">${i18n('clock_visibility')}</span><select class="pers-select change-clock-visible" style="width: auto; min-width: 100px;"><option value="auto">${i18n('clock_visible_auto')}</option><option value="hide">${i18n('clock_visible_hide')}</option><option value="show">${i18n('clock_visible_show')}</option></select></div></div>
                 </div>
@@ -74,9 +74,9 @@ export default {
             
             <!-- Notifications -->
             <div class="pers-section">
-                <div class="pers-section-title">Notifications</div>
+                <div class="pers-section-title">${i18n('notifications')}</div>
                 <div class="pers-group">
-                    <div class="pers-group-row"><div class="pers-card-row"><div><span class="pers-card-label">Desktop</span><div class="pers-card-sublabel">System notifications</div></div><label class="toggle-switch"><input type="checkbox" id="notify-desktop-toggle" ${notifyDesktop ? 'checked' : ''}><span class="toggle-slider"></span></label></div></div>
+                    <div class="pers-group-row"><div class="pers-card-row"><div><span class="pers-card-label">${i18n('desktop_notifications')}</span><div class="pers-card-sublabel">${i18n('system_notifications')}</div></div><label class="toggle-switch"><input type="checkbox" id="notify-desktop-toggle" ${notifyDesktop ? 'checked' : ''}><span class="toggle-slider"></span></label></div></div>
                 </div>
             </div>
             `;
@@ -125,7 +125,7 @@ export default {
             }
             
             console.log('[Theme] Saved preference:', isDark ? 'dark' : 'light', '| localStorage:', localStorage.getItem('pc2_dark_mode'));
-            puter.ui.toast(isDark ? 'Dark mode enabled' : 'Light mode enabled', { type: 'info' });
+            puter.ui.toast(isDark ? i18n('dark_mode_enabled') : i18n('light_mode_enabled'), { type: 'info' });
         });
         
         // Desktop notifications toggle
@@ -138,7 +138,7 @@ export default {
                 if (permission !== 'granted') {
                     this.checked = false;
                     localStorage.setItem('pc2_notify_desktop', false);
-                    puter.ui.toast('Desktop notifications permission denied', { type: 'warning' });
+                    puter.ui.toast(i18n('notifications_denied'), { type: 'warning' });
                     return;
                 }
             }

@@ -523,6 +523,18 @@ const it = {
         'manage_your_subdomains': 'Gestisci i tuoi sottodomini',
         'open_containing_folder': 'Apri cartella contenente', // In English: "Open Containing Folder"
 
+        // Settings Tab Names
+        'ai_assistant': 'Assistente IA',
+        'storage': 'Archiviazione',
+        'personal_cloud': 'Cloud Personale',
+        'system': 'Sistema',
+        'connection': 'Connessione',
+        'node_info': 'Info nodo',
+        'connected': 'Connesso',
+        'not_connected': 'Non connesso',
+        'loading': 'Caricamento...',
+        'status': 'Stato',
+
     },
 };
 

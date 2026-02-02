@@ -481,6 +481,18 @@ const th = {
         'window_folder_empty': 'โฟลเดอร์นี้ว่างเปล่า',
         'manage_your_subdomains': 'จัดการซับโดเมนของคุณ',
         'open_containing_folder': 'เปิดโฟลเดอร์ที่บรรจุ',
+
+        // Settings Tab Names
+        'ai_assistant': 'ผู้ช่วย AI',
+        'storage': 'พื้นที่เก็บข้อมูล',
+        'personal_cloud': 'คลาวด์ส่วนตัว',
+        'system': 'ระบบ',
+        'connection': 'การเชื่อมต่อ',
+        'node_info': 'ข้อมูลโหนด',
+        'connected': 'เชื่อมต่อแล้ว',
+        'not_connected': 'ไม่ได้เชื่อมต่อ',
+        'loading': 'กำลังโหลด...',
+        'status': 'สถานะ',
     },
 };
 

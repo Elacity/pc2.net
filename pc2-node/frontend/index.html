@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ElastOS - Personal Cloud</title>
-    <link rel="stylesheet" href="/bundle.min.css">
+    <link rel="stylesheet" href="/bundle.min.css?v=20260202g">
     
     <!-- Initialize API origin before SDK loads -->
     <script>
@@ -213,13 +213,46 @@
             <div id="pc2-loading-profile" class="pc2-loading-profile">
                 <span class="pc2-loading-fallback">PC2</span>
             </div>
-            <div class="pc2-loading-title">Personal Cloud</div>
+            <div id="pc2-loading-title" class="pc2-loading-title">Personal Cloud</div>
             <div class="pc2-loading-bar-container">
                 <div id="pc2-loading-bar" class="pc2-loading-bar"></div>
             </div>
             <div id="pc2-loading-status" class="pc2-loading-status">Initializing...</div>
         </div>
     </div>
+    <!-- Pre-i18n: Translate loading screen based on localStorage language preference -->
+    <script>
+    (function() {
+        try {
+            const prefs = JSON.parse(localStorage.getItem('user_preferences') || '{}');
+            const lang = prefs.language || 'en';
+            console.log('[Loading] user_preferences:', prefs);
+            console.log('[Loading] language:', lang);
+            const translations = {
+                'zh': { title: '个人云', status: '初始化中...' },
+                'ja': { title: 'パーソナルクラウド', status: '初期化中...' },
+                'ko': { title: '개인 클라우드', status: '초기화 중...' },
+                'es': { title: 'Nube Personal', status: 'Inicializando...' },
+                'fr': { title: 'Cloud Personnel', status: 'Initialisation...' },
+                'de': { title: 'Persönliche Cloud', status: 'Initialisierung...' },
+                'pt': { title: 'Nuvem Pessoal', status: 'Inicializando...' },
+                'ru': { title: 'Личное облако', status: 'Инициализация...' },
+                'ar': { title: 'السحابة الشخصية', status: 'جاري التهيئة...' },
+            };
+            const titleEl = document.getElementById('pc2-loading-title');
+            const statusEl = document.getElementById('pc2-loading-status');
+            console.log('[Loading] titleEl:', titleEl);
+            console.log('[Loading] statusEl:', statusEl);
+            if (translations[lang] && titleEl && statusEl) {
+                titleEl.textContent = translations[lang].title;
+                statusEl.textContent = translations[lang].status;
+                console.log('[Loading] Applied translation for:', lang);
+            }
+        } catch (e) { 
+            console.error('[Loading] Error:', e);
+        }
+    })();
+    </script>
     <style>
         #pc2-loading-screen {
             position: fixed;
@@ -383,7 +416,7 @@
     </script>
     
     <div id="app"></div>
-    <script src="/bundle.min.js"></script>
+    <script src="/bundle.min.js?v=20260202g"></script>
     <!-- NOTE: gui.js is already bundled into bundle.min.js - do NOT include separately -->
     
     <!-- Initialize GUI -->

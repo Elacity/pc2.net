@@ -17,11 +17,55 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-function changeLanguage (lang) {
+import UIAlert from '../UI/UIAlert.js';
+
+/**
+ * Change the application language and prompt user to reload for full effect
+ * @param {string} lang - Language code (e.g., 'en', 'zh', 'fr')
+ */
+async function changeLanguage (lang) {
+    // Update locale immediately
     window.locale = lang;
-    window.mutate_user_preferences({
-        language: lang,
+    
+    // CRITICAL: Save to localStorage directly as backup
+    // This ensures language persists even if mutate_user_preferences fails
+    try {
+        const prefs = JSON.parse(localStorage.getItem('user_preferences') || '{}');
+        prefs.language = lang;
+        localStorage.setItem('user_preferences', JSON.stringify(prefs));
+        console.log('[i18n] Language saved to localStorage:', lang);
+    } catch (e) {
+        console.error('[i18n] Failed to save language to localStorage:', e);
+    }
+    
+    // Also persist via user preferences API (may use puter.kv)
+    try {
+        await window.mutate_user_preferences({
+            language: lang,
+        });
+        console.log('[i18n] Language saved via mutate_user_preferences:', lang);
+    } catch (e) {
+        console.error('[i18n] mutate_user_preferences failed:', e);
+    }
+    
+    // Show reload prompt for full UI refresh
+    // Use the new locale for the prompt message (will use new language if available)
+    const message = window.i18n('language_change_reload_prompt') || 
+                    'Language changed. Reload to apply changes everywhere?';
+    const reloadLabel = window.i18n('reload') || 'Reload';
+    const laterLabel = window.i18n('later') || 'Later';
+    
+    const shouldReload = await UIAlert({
+        message: message,
+        buttons: [
+            { label: reloadLabel, value: true, type: 'primary' },
+            { label: laterLabel, value: false }
+        ]
     });
+    
+    if (shouldReload) {
+        window.location.reload();
+    }
 }
 
 export default changeLanguage;

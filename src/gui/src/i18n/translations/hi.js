@@ -473,6 +473,18 @@ const hi = {
         'window_folder_empty': 'यह फ़ोल्डर खाली है', // In English: "This folder is empty"
         'manage_your_subdomains': 'अपने सबडोमेन प्रबंधित करें', // In English: "Manage Your Subdomains"
         'open_containing_folder': 'समाहित फ़ोल्डर खोलें', // In English: "Open Containing Folder"
+
+        // Settings Tab Names
+        'ai_assistant': 'AI सहायक',
+        'storage': 'स्टोरेज',
+        'personal_cloud': 'पर्सनल क्लाउड',
+        'system': 'सिस्टम',
+        'connection': 'कनेक्शन',
+        'node_info': 'नोड जानकारी',
+        'connected': 'कनेक्टेड',
+        'not_connected': 'कनेक्ट नहीं है',
+        'loading': 'लोड हो रहा है...',
+        'status': 'स्थिति',
     },
 };
 

@@ -148,7 +148,7 @@ async function UIWindowAccountReceive(options = {}) {
                 ${icon ? `<img src="${icon}" style="width:14px;height:14px;border-radius:50%;" onerror="this.style.display='none'" />` : ''}
                 ${asset}
             </span>`;
-        }).join('') + (warning ? '<span style="display:inline-flex;align-items:center;gap:2px;font-size:10px;color:#dc2626;margin-left:6px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>High gas</span>' : '');
+        }).join('') + (warning ? `<span style="display:inline-flex;align-items:center;gap:2px;font-size:10px;color:#dc2626;margin-left:6px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>${i18n('high_gas')}</span>` : '');
     }
     
     const solanaConfig = NETWORK_ASSET_SUPPORT['Solana'];
@@ -172,13 +172,13 @@ async function UIWindowAccountReceive(options = {}) {
                         <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
                             <img src="/images/tokens/ELA.png" style="width:32px;height:32px;border-radius:50%;" onerror="this.style.display='none'" />
                             <div>
-                                <div style="font-weight:600;font-size:14px;color:#1f2937;">Elastos EOA Address</div>
+                                <div style="font-weight:600;font-size:14px;color:#1f2937;">${i18n('elastos_eoa_address')}</div>
                                 <div style="font-size:10px;color:#6b7280;display:flex;align-items:center;gap:4px;">
-                                    <span>Your wallet address on Elastos Smart Chain</span>
+                                    <span>${i18n('wallet_address_esc')}</span>
                                     <a href="https://esc.elastos.io/address/${html_encode(eoaAddress)}" 
                                        target="_blank" 
                                        rel="noopener noreferrer"
-                                       title="View on Elastos Explorer"
+                                       title="${i18n('view_on_explorer')}"
                                        style="color:#F6921A;text-decoration:none;display:inline-flex;align-items:center;">
                                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                             <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
@@ -201,13 +201,13 @@ async function UIWindowAccountReceive(options = {}) {
                                  word-break:break-all;margin-bottom:10px;
                              ">
                             <span style="flex:1;">${eoaAddress}</span>
-                            <img src="${window.icons?.['copy.svg'] || ''}" class="copy-indicator" style="width:16px;height:16px;opacity:0.5;flex-shrink:0;" onerror="this.outerHTML='<span class=\\'copy-indicator\\' style=\\'opacity:0.5;flex-shrink:0;font-size:14px;\\'>Copy</span>'" />
+                            <img src="${window.icons?.['copy.svg'] || ''}" class="copy-indicator" style="width:16px;height:16px;opacity:0.5;flex-shrink:0;" onerror="this.outerHTML='<span class=\\'copy-indicator\\' style=\\'opacity:0.5;flex-shrink:0;font-size:14px;\\'>${i18n('copy')}</span>'" />
                         </div>
                         
                         <!-- Accepted Tokens on Elastos -->
                         <div>
                             <div style="font-size:11px;color:#6b7280;margin-bottom:6px;">
-                                Tokens Supported:
+                                ${i18n('tokens_supported')}
                             </div>
                             <div style="display:flex;flex-wrap:wrap;gap:6px;">
                                 ${renderAssetBadges(['ELA'])}
@@ -220,7 +220,7 @@ async function UIWindowAccountReceive(options = {}) {
                         <div id="eoa-qr-code" style="
                             padding:8px;background:white;border-radius:8px;border:1px solid rgba(246,146,26,0.3);
                 "></div>
-                        <div style="font-size:9px;color:#9ca3af;margin-top:4px;text-align:center;">Scan QR</div>
+                        <div style="font-size:9px;color:#9ca3af;margin-top:4px;text-align:center;">${i18n('scan_qr')}</div>
                     </div>
                 </div>
             </div>
@@ -241,8 +241,8 @@ async function UIWindowAccountReceive(options = {}) {
                             <div style="display:flex;align-items:center;gap:8px;">
                                 <img src="/images/tokens/ETH.png" style="width:32px;height:32px;border-radius:50%;" onerror="this.style.display='none'" />
                                 <div>
-                                    <div style="font-weight:600;font-size:14px;color:#1f2937;">EVM Address</div>
-                                    <div style="font-size:10px;color:#6b7280;">Same address for all EVM networks</div>
+                                    <div style="font-weight:600;font-size:14px;color:#1f2937;">${i18n('evm_address')}</div>
+                                    <div style="font-size:10px;color:#6b7280;">${i18n('same_address_evm')}</div>
                                 </div>
                             </div>
                         </div>
@@ -295,7 +295,7 @@ async function UIWindowAccountReceive(options = {}) {
                                  word-break:break-all;margin-bottom:10px;
                              ">
                             <span style="flex:1;">${evmAddress}</span>
-                            <img src="${window.icons?.['copy.svg'] || ''}" class="copy-indicator" style="width:16px;height:16px;opacity:0.5;flex-shrink:0;" onerror="this.outerHTML='<span class=\\'copy-indicator\\' style=\\'opacity:0.5;flex-shrink:0;font-size:14px;\\'>Copy</span>'" />
+                            <img src="${window.icons?.['copy.svg'] || ''}" class="copy-indicator" style="width:16px;height:16px;opacity:0.5;flex-shrink:0;" onerror="this.outerHTML='<span class=\\'copy-indicator\\' style=\\'opacity:0.5;flex-shrink:0;font-size:14px;\\'>${i18n('copy')}</span>'" />
                         </div>
                         
                         <!-- Accepted Tokens for Selected Network -->
@@ -314,7 +314,7 @@ async function UIWindowAccountReceive(options = {}) {
                         <div id="evm-qr-code" style="
                             padding:8px;background:white;border-radius:8px;border:1px solid #e5e7eb;
                 "></div>
-                        <div style="font-size:9px;color:#9ca3af;margin-top:4px;text-align:center;">Scan QR</div>
+                        <div style="font-size:9px;color:#9ca3af;margin-top:4px;text-align:center;">${i18n('scan_qr')}</div>
                     </div>
                 </div>
             </div>
@@ -336,8 +336,8 @@ async function UIWindowAccountReceive(options = {}) {
                         <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
                             <img src="/images/tokens/Sol.webp" style="width:32px;height:32px;border-radius:50%;" onerror="this.style.display='none'" />
                             <div>
-                                <div style="font-weight:600;font-size:14px;color:#1f2937;">Solana Address</div>
-                                <div style="font-size:10px;color:#6b7280;">For Solana network only</div>
+                                <div style="font-weight:600;font-size:14px;color:#1f2937;">${i18n('solana_address')}</div>
+                                <div style="font-size:10px;color:#6b7280;">${i18n('solana_only')}</div>
                             </div>
                         </div>
                         
@@ -353,7 +353,7 @@ async function UIWindowAccountReceive(options = {}) {
                                  word-break:break-all;margin-bottom:10px;
                              ">
                             <span style="flex:1;">${solanaAddress}</span>
-                            <img src="${window.icons?.['copy.svg'] || ''}" class="copy-indicator" style="width:16px;height:16px;opacity:0.5;flex-shrink:0;" onerror="this.outerHTML='<span class=\\'copy-indicator\\' style=\\'opacity:0.5;flex-shrink:0;font-size:14px;\\'>Copy</span>'" />
+                            <img src="${window.icons?.['copy.svg'] || ''}" class="copy-indicator" style="width:16px;height:16px;opacity:0.5;flex-shrink:0;" onerror="this.outerHTML='<span class=\\'copy-indicator\\' style=\\'opacity:0.5;flex-shrink:0;font-size:14px;\\'>${i18n('copy')}</span>'" />
                         </div>
                         ` : `
                         <div style="
@@ -361,13 +361,13 @@ async function UIWindowAccountReceive(options = {}) {
                             font-size:12px;color:#6b7280;text-align:center;border:1px dashed #e9d5ff;
                             margin-bottom:10px;
                         ">
-                            Loading Solana address...
+                            ${i18n('loading_solana')}
                         </div>
                         `}
                         
                         <!-- Accepted Tokens on Solana -->
                         <div>
-                            <div style="font-size:11px;color:#6b7280;margin-bottom:6px;">Tokens on Solana:</div>
+                            <div style="font-size:11px;color:#6b7280;margin-bottom:6px;">${i18n('tokens_on_solana')}</div>
                             <div style="display:flex;flex-wrap:wrap;gap:6px;">
                                 ${renderAssetBadges(solanaConfig.assets)}
                             </div>
@@ -380,7 +380,7 @@ async function UIWindowAccountReceive(options = {}) {
                         <div id="solana-qr-code" style="
                             padding:8px;background:white;border-radius:8px;border:1px solid #e9d5ff;
                         "></div>
-                        <div style="font-size:9px;color:#9ca3af;margin-top:4px;text-align:center;">Scan QR</div>
+                        <div style="font-size:9px;color:#9ca3af;margin-top:4px;text-align:center;">${i18n('scan_qr')}</div>
                     </div>
                     ` : ''}
                 </div>
@@ -589,7 +589,7 @@ async function UIWindowAccountReceive(options = {}) {
                 if ($indicator.is('img')) {
                     $indicator.attr('src', window.icons?.['checkmark.svg'] || '');
                 } else {
-                    $indicator.text('Copied');
+                    $indicator.text(i18n('copied'));
                 }
                 
                 UINotification({
@@ -604,7 +604,7 @@ async function UIWindowAccountReceive(options = {}) {
                     if ($indicator.is('img')) {
                         $indicator.attr('src', window.icons?.['copy.svg'] || '');
                     } else {
-                        $indicator.text('Copy');
+                        $indicator.text(i18n('copy'));
                     }
                 }, 2000);
             }
@@ -632,7 +632,7 @@ async function UIWindowAccountReceive(options = {}) {
                     ${icon ? `<img src="${icon}" style="width:14px;height:14px;border-radius:50%;" onerror="this.style.display='none'" />` : ''}
                     ${asset}
                 </span>`;
-            }).join('') + (warning ? '<span style="display:inline-flex;align-items:center;gap:2px;font-size:10px;color:#dc2626;margin-left:6px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>High gas</span>' : '');
+            }).join('') + (warning ? `<span style="display:inline-flex;align-items:center;gap:2px;font-size:10px;color:#dc2626;margin-left:6px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>${i18n('high_gas')}</span>` : '');
         }
         
         // Cleanup

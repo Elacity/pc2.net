@@ -484,6 +484,18 @@ const tr = {
         'window_folder_empty': 'Bu klasör boş',
         'manage_your_subdomains': 'Alt Alan Adlarınızı Yönetin',
         'open_containing_folder': 'İçeren Klasörü Aç',
+
+        // Settings Tab Names
+        'ai_assistant': 'AI Asistanı',
+        'storage': 'Depolama',
+        'personal_cloud': 'Kişisel Bulut',
+        'system': 'Sistem',
+        'connection': 'Bağlantı',
+        'node_info': 'Düğüm Bilgisi',
+        'connected': 'Bağlı',
+        'not_connected': 'Bağlı Değil',
+        'loading': 'Yükleniyor...',
+        'status': 'Durum',
     },
 };
 

@@ -68,13 +68,13 @@ async function UIWindowTransactionConfirm(options = {}) {
     } = proposal;
     
     const displayRecipient = recipient || to;
-    const chainInfo = CHAIN_INFO[chainId] || { name: 'Unknown Chain', icon: '' };
+    const chainInfo = CHAIN_INFO[chainId] || { name: i18n('unknown_chain') || 'Unknown Chain', icon: '' };
     const expiresIn = expiresAt ? Math.max(0, Math.floor((expiresAt - Date.now()) / 1000)) : 300;
     const expiresMinutes = Math.floor(expiresIn / 60);
     const expiresSeconds = expiresIn % 60;
     
-    const typeLabels = { 'transfer': 'Send', 'swap': 'Swap', 'approve': 'Approve' };
-    const typeLabel = typeLabels[type] || 'Transaction';
+    const typeLabels = { 'transfer': i18n('send') || 'Send', 'swap': i18n('swap') || 'Swap', 'approve': i18n('approve') || 'Approve' };
+    const typeLabel = typeLabels[type] || (i18n('transaction') || 'Transaction');
     
     // Swap-specific details (extract first for use in generic fields)
     const swap = proposal.swap || {};
@@ -93,12 +93,12 @@ async function UIWindowTransactionConfirm(options = {}) {
     
     // Status display for read-only mode
     const statusLabels = {
-        'pending_approval': { label: 'Pending', color: '#f59e0b', bg: '#fef3c7' },
-        'approved': { label: 'Approved', color: '#059669', bg: '#d1fae5' },
-        'executed': { label: 'Completed', color: '#059669', bg: '#d1fae5' },
-        'rejected': { label: 'Rejected', color: '#dc2626', bg: '#fee2e2' },
-        'expired': { label: 'Expired', color: '#6b7280', bg: '#f3f4f6' },
-        'failed': { label: 'Failed', color: '#dc2626', bg: '#fee2e2' },
+        'pending_approval': { label: i18n('pending') || 'Pending', color: '#f59e0b', bg: '#fef3c7' },
+        'approved': { label: i18n('approved') || 'Approved', color: '#059669', bg: '#d1fae5' },
+        'executed': { label: i18n('completed') || 'Completed', color: '#059669', bg: '#d1fae5' },
+        'rejected': { label: i18n('rejected') || 'Rejected', color: '#dc2626', bg: '#fee2e2' },
+        'expired': { label: i18n('expired') || 'Expired', color: '#6b7280', bg: '#f3f4f6' },
+        'failed': { label: i18n('failed') || 'Failed', color: '#dc2626', bg: '#fee2e2' },
     };
     const statusInfo = statusLabels[status] || statusLabels['pending_approval'];
     
@@ -113,7 +113,7 @@ async function UIWindowTransactionConfirm(options = {}) {
                         <circle cx="12" cy="20" r="2"/>
                         <path d="M8 12h8"/>
                     </svg>
-                    Agent Request
+                    ${html_encode(i18n('agent_request') || 'Agent Request')}
                 </div>
                 <div class="tx-type-badge">${html_encode(typeLabel)}</div>
             </div>
@@ -182,7 +182,7 @@ async function UIWindowTransactionConfirm(options = {}) {
                 ${isSwap ? `
                 <!-- Swap-specific details -->
                 <div class="tx-detail-row">
-                    <span class="detail-label">You Send</span>
+                    <span class="detail-label">${html_encode(i18n('you_send') || 'You Send')}</span>
                     <span class="detail-value swap-token-value" style="display: flex; align-items: center; gap: 6px;">
                         <img src="${getTokenIconUrl(swapFromSymbol)}" 
                              style="width:18px;height:18px;border-radius:50%;background:#f3f4f6;" 
@@ -192,7 +192,7 @@ async function UIWindowTransactionConfirm(options = {}) {
                 </div>
                 
                 <div class="tx-detail-row">
-                    <span class="detail-label">You Receive</span>
+                    <span class="detail-label">${html_encode(i18n('you_receive') || 'You Receive')}</span>
                     <span class="detail-value swap-token-value" id="swap-expected-output" style="display: flex; align-items: center; gap: 6px;">
                         ${readOnly ? `
                             <img src="${getTokenIconUrl(swapToSymbol)}" 
@@ -202,20 +202,20 @@ async function UIWindowTransactionConfirm(options = {}) {
                         ` : `
                             <span class="fee-loading" style="display: inline-flex; align-items: center; gap: 6px;">
                                 <div class="fee-spinner"></div>
-                                <span>Calculating...</span>
+                                <span>${html_encode(i18n('calculating') || 'Calculating...')}</span>
                             </span>
                         `}
                     </span>
                 </div>
                 
                 <div class="tx-detail-row">
-                    <span class="detail-label">Protocol</span>
+                    <span class="detail-label">${html_encode(i18n('protocol') || 'Protocol')}</span>
                     <span class="detail-value" style="color: #7c3aed;">Particle UniversalX</span>
                 </div>
                 ` : `
                 <!-- Transfer details -->
                 <div class="tx-detail-row">
-                    <span class="detail-label">To</span>
+                    <span class="detail-label">${html_encode(i18n('to') || 'To')}</span>
                     <span class="detail-value address-value" title="${html_encode(displayRecipient || '')}">
                         ${html_encode(truncateAddress(displayRecipient || '', 8, 6))}
                         <span class="copy-hint" data-address="${html_encode(displayRecipient || '')}">
@@ -228,7 +228,7 @@ async function UIWindowTransactionConfirm(options = {}) {
                 </div>
                 
                 <div class="tx-detail-row">
-                    <span class="detail-label">From</span>
+                    <span class="detail-label">${html_encode(i18n('from') || 'From')}</span>
                     <span class="detail-value address-value" title="${html_encode(smartAccountAddress || '')}">
                         ${html_encode(truncateAddress(smartAccountAddress || '', 8, 6))}
                     </span>
@@ -236,7 +236,7 @@ async function UIWindowTransactionConfirm(options = {}) {
                 `}
                 
                 <div class="tx-detail-row">
-                    <span class="detail-label">Network Fee</span>
+                    <span class="detail-label">${html_encode(i18n('network_fee') || 'Network Fee')}</span>
                     <span class="detail-value fee-value">
                         ${readOnly ? `
                             <span id="fee-amount" class="fee-sponsored">~$0.0000</span>
@@ -244,13 +244,13 @@ async function UIWindowTransactionConfirm(options = {}) {
                             <span id="fee-loading" class="fee-loading">
                                 <div class="fee-spinner"></div>
                             </span>
-                            <span id="fee-amount">estimating...</span>
+                            <span id="fee-amount">${html_encode(i18n('calculating') || 'estimating...')}</span>
                         `}
                     </span>
                 </div>
                 
                 <div class="tx-detail-row total-row">
-                    <span class="detail-label">Total</span>
+                    <span class="detail-label">${html_encode(i18n('total') || 'Total')}</span>
                     <span class="detail-value" id="total-cost">${html_encode(amount)} ${html_encode(symbol)}</span>
                 </div>
             </div>
@@ -282,7 +282,7 @@ async function UIWindowTransactionConfirm(options = {}) {
                     background: #f3f4f6;
                     color: #374151;
                     border: 1px solid #d1d5db;
-                ">Close</button>
+                ">${html_encode(i18n('close') || 'Close')}</button>
             </div>
             ` : `
             <!-- Expiration -->
@@ -296,8 +296,8 @@ async function UIWindowTransactionConfirm(options = {}) {
             
             <!-- Action Buttons -->
             <div class="tx-actions">
-                <button class="btn-reject" id="btn-reject">Reject</button>
-                <button class="btn-approve" id="btn-approve">Approve & Send</button>
+                <button class="btn-reject" id="btn-reject">${html_encode(i18n('reject') || 'Reject')}</button>
+                <button class="btn-approve" id="btn-approve">${html_encode(i18n('approve_send') || 'Approve & Send')}</button>
             </div>
             `}
         </div>
@@ -592,7 +592,7 @@ async function UIWindowTransactionConfirm(options = {}) {
     
     return new Promise(async (resolve) => {
         const el_window = await UIWindow({
-            title: 'Confirm Transaction',
+            title: i18n('confirm_transaction') || 'Confirm Transaction',
             app: 'transaction-confirm',
             single_instance: true,
             icon: window.icons['shield.svg'] || window.icons['checkmark.svg'],
@@ -813,7 +813,7 @@ async function UIWindowTransactionConfirm(options = {}) {
             
             $approveBtn.prop('disabled', true).html(`
                 <div class="processing-spinner"></div>
-                Signing...
+                ${html_encode(i18n('signing') || 'Signing...')}
             `);
             $rejectBtn.prop('disabled', true);
             
@@ -886,7 +886,7 @@ async function UIWindowTransactionConfirm(options = {}) {
                     duration: 5000,
                 });
                 
-                $approveBtn.prop('disabled', false).text('Retry');
+                $approveBtn.prop('disabled', false).text(i18n('retry') || 'Retry');
                 $rejectBtn.prop('disabled', false);
             }
         }

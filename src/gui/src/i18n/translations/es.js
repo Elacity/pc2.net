@@ -535,6 +535,66 @@ const es = {
         'window_folder_empty': 'Esta carpeta está vacía', // In English: "This folder is empty"
         'manage_your_subdomains': 'Administra tus sub dominios', // In English: "Manage Your Subdomains"
         'open_containing_folder': 'Abrir carpeta que lo contiene', // In English: "Open Containing Folder"
+
+        // Settings Tab Names
+        'ai_assistant': 'Asistente IA',
+        'storage': 'Almacenamiento',
+        'personal_cloud': 'Nube Personal',
+        'system': 'Sistema',
+        'connection': 'Conexión',
+        'node_info': 'Info del nodo',
+        'connected': 'Conectado',
+        'not_connected': 'No conectado',
+        'loading': 'Cargando...',
+        'status': 'Estado',
+
+        // Taskbar Menu
+        'check_for_updates': 'Buscar actualizaciones',
+        'update_available': 'Actualización disponible',
+        'restart_pc2': 'Reiniciar PC2',
+        
+        // PC2 Status Bar
+        'personal_cloud_status': 'Nube Personal',
+        'sign_in': 'Iniciar sesión',
+        'pc2_settings': 'Configuración de PC2',
+        'files_count': 'Archivos',
+        'pc2_node': 'Nodo PC2',
+        
+        // Wallet
+        'total_balance': 'Saldo total',
+        'universal': 'Universal',
+        'send': 'Enviar',
+        'receive': 'Recibir',
+        'tokens': 'Tokens',
+        'nfts': 'NFTs',
+        'activity': 'Actividad',
+        'history': 'Historial',
+        'refresh_balances': 'Actualizar saldos',
+        'select_network': 'Seleccionar red',
+        'no_tokens_found': 'No se encontraron tokens',
+        'no_transactions': 'Aún no hay transacciones',
+        
+        // Send/Receive
+        'send_tokens': 'Enviar tokens',
+        'receive_tokens': 'Recibir tokens',
+        'recipient_address': 'Dirección del destinatario',
+        'amount': 'Cantidad',
+        'estimated_fee': 'Tarifa estimada',
+        'free_gas': 'GAS GRATIS',
+        'calculating': 'Calculando...',
+        'insufficient_balance': 'Saldo insuficiente',
+        'transaction_sent': 'Transacción enviada',
+        'transaction_failed': 'Transacción fallida',
+        
+        // Transaction Confirm
+        'confirm_transaction': 'Confirmar transacción',
+        'you_send': 'Envías',
+        'you_receive': 'Recibes',
+        'network_fee': 'Tarifa de red',
+        'total': 'Total',
+        'approve_send': 'Aprobar y enviar',
+        'reject': 'Rechazar',
+        'signing': 'Firmando...',
     },
 };
 

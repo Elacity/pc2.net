@@ -481,6 +481,18 @@ const vi = {
         'window_folder_empty': 'Thư mục này trống', // In English: "This folder is empty"
         'manage_your_subdomains': 'Quản lý tên miền phụ', // In English: "Manage Your Subdomains"
         'open_containing_folder': 'Mở thư mục chứa', // In English: "Open Containing Folder"
+
+        // Settings Tab Names
+        'ai_assistant': 'Trợ lý AI',
+        'storage': 'Lưu trữ',
+        'personal_cloud': 'Đám mây Cá nhân',
+        'system': 'Hệ thống',
+        'connection': 'Kết nối',
+        'node_info': 'Thông tin nút',
+        'connected': 'Đã kết nối',
+        'not_connected': 'Chưa kết nối',
+        'loading': 'Đang tải...',
+        'status': 'Trạng thái',
     },
 };
 

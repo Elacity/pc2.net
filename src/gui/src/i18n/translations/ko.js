@@ -518,6 +518,18 @@ const ko = {
         'manage_your_subdomains': '서브도메인 관리',
 
         'open_containing_folder': '포함된 폴더 열기',
+
+        // Settings Tab Names
+        'ai_assistant': 'AI 어시스턴트',
+        'storage': '저장소',
+        'personal_cloud': '개인 클라우드',
+        'system': '시스템',
+        'connection': '연결',
+        'node_info': '노드 정보',
+        'connected': '연결됨',
+        'not_connected': '연결 안됨',
+        'loading': '로딩 중...',
+        'status': '상태',
     },
 };
 

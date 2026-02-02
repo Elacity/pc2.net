@@ -111,7 +111,7 @@ async function UIWindowAccountSend(options = {}) {
                         </svg>
                     </div>
                     <div class="dropdown-options" id="token-options" style="display: none;">
-                        ${tokenOptionsHtml || '<div class="dropdown-empty">No tokens available</div>'}
+                        ${tokenOptionsHtml || `<div class="dropdown-empty">${i18n('no_tokens_available') || 'No tokens available'}</div>`}
                     </div>
                 </div>
                 <div class="token-balance-display">
@@ -123,12 +123,12 @@ async function UIWindowAccountSend(options = {}) {
             
             <!-- Network Selection -->
             <div class="form-group" style="margin-bottom: 20px;">
-                <label class="form-label">Network</label>
+                <label class="form-label">${i18n('network') || 'Network'}</label>
                 <div class="custom-dropdown" id="network-dropdown">
                     <div class="dropdown-selected" id="network-selected">
                         <img src="${html_encode(CHAIN_INFO[defaultNetwork?.chainId]?.icon || '')}" 
                              class="dropdown-icon" onerror="this.style.display='none'" />
-                        <span class="dropdown-text">${html_encode(defaultNetwork?.name || 'Select Network')}</span>
+                        <span class="dropdown-text">${html_encode(defaultNetwork?.name || i18n('select_network') || 'Select Network')}</span>
                         <svg class="dropdown-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <polyline points="6 9 12 15 18 9"></polyline>
                         </svg>
@@ -181,12 +181,12 @@ async function UIWindowAccountSend(options = {}) {
                     <span class="fee-label">${i18n('estimated_fee') || 'Estimated Fee'}</span>
                     <div class="fee-value">
                         <span id="fee-estimate">--</span>
-                        <span id="fee-free" class="fee-free-badge" style="display: none;">FREE GAS</span>
+                        <span id="fee-free" class="fee-free-badge" style="display: none;">${i18n('free_gas') || 'FREE GAS'}</span>
                     </div>
                 </div>
                 <div id="fee-loading" class="fee-loading" style="display: none;">
                     <div class="fee-spinner"></div>
-                    <span>Calculating...</span>
+                    <span>${i18n('calculating') || 'Calculating...'}</span>
                 </div>
                 <div id="fee-error" class="form-error"></div>
             </div>
@@ -200,7 +200,7 @@ async function UIWindowAccountSend(options = {}) {
             <div id="sending-state" class="sending-state" style="display: none;">
                 <div class="loading-spinner"></div>
                 <div class="sending-title">${i18n('sending') || 'Sending...'}</div>
-                <div class="sending-subtitle">${i18n('please_wait') || 'Please wait for confirmation'}</div>
+                <div class="sending-subtitle">${i18n('please_wait_confirmation') || 'Please wait for confirmation'}</div>
             </div>
         </div>
         
@@ -620,7 +620,7 @@ async function UIWindowAccountSend(options = {}) {
                 `;
             }).join('');
             
-            $window.find('#network-options').html(networkOptionsHtml || '<div class="dropdown-empty">No networks available</div>');
+            $window.find('#network-options').html(networkOptionsHtml || `<div class="dropdown-empty">${i18n('no_networks_available') || 'No networks available'}</div>`);
             
             // Check if current network is still valid
             const isCurrentNetworkValid = availableNetworks.find(n => n.name === selectedNetwork?.name);
@@ -813,7 +813,7 @@ async function UIWindowAccountSend(options = {}) {
             $window.find('#send-amount').removeClass('error');
             
             if (amount > 0 && amount > balance) {
-                $window.find('#amount-error').text('Insufficient balance');
+                $window.find('#amount-error').text(i18n('insufficient_balance') || 'Insufficient balance');
                 $window.find('#send-amount').addClass('error');
                 isValid = false;
             } else if (amount > 0 && amount < 0.000001) {

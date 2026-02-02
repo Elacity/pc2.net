@@ -554,6 +554,66 @@ const bg = {
         manage_your_subdomains: 'Управлявайте вашите поддомейни',
         open_containing_folder: 'Отвори съдържащата папка',
         set_as_background: 'Задай като фон на работния плот',
+
+        // Settings Tab Names
+        ai_assistant: 'AI Асистент',
+        storage: 'Съхранение',
+        personal_cloud: 'Личен облак',
+        system: 'Система',
+        connection: 'Връзка',
+        node_info: 'Информация за възел',
+        connected: 'Свързан',
+        not_connected: 'Не е свързан',
+        loading: 'Зареждане...',
+        status: 'Статус',
+
+        // Taskbar Menu
+        check_for_updates: 'Проверка за актуализации',
+        update_available: 'Налична актуализация',
+        restart_pc2: 'Рестартиране на PC2',
+
+        // PC2 Status Bar
+        personal_cloud_status: 'Личен облак',
+        sign_in: 'Вход',
+        pc2_settings: 'Настройки на PC2',
+        files_count: 'Файлове',
+        pc2_node: 'PC2 възел',
+
+        // Wallet
+        total_balance: 'Общ баланс',
+        universal: 'Универсален',
+        send: 'Изпращане',
+        receive: 'Получаване',
+        tokens: 'Токени',
+        nfts: 'NFT-та',
+        activity: 'Активност',
+        history: 'История',
+        refresh_balances: 'Опресняване на баланси',
+        select_network: 'Изберете мрежа',
+        no_tokens_found: 'Няма намерени токени',
+        no_transactions: 'Все още няма транзакции',
+
+        // Send/Receive
+        send_tokens: 'Изпращане на токени',
+        receive_tokens: 'Получаване на токени',
+        recipient_address: 'Адрес на получателя',
+        amount: 'Сума',
+        estimated_fee: 'Прогнозна такса',
+        free_gas: 'БЕЗПЛАТЕН ГАЗ',
+        calculating: 'Изчисляване...',
+        insufficient_balance: 'Недостатъчен баланс',
+        transaction_sent: 'Транзакцията е изпратена',
+        transaction_failed: 'Транзакцията е неуспешна',
+
+        // Transaction Confirm
+        confirm_transaction: 'Потвърждаване на транзакция',
+        you_send: 'Изпращате',
+        you_receive: 'Получавате',
+        network_fee: 'Мрежова такса',
+        total: 'Общо',
+        approve_send: 'Одобряване и изпращане',
+        reject: 'Отхвърляне',
+        signing: 'Подписване...',
     },
 };
 

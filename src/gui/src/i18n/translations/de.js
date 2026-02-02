@@ -154,7 +154,7 @@ const de = {
         license: 'Lizenz',
         lightness: 'Helligkeit',
         link_copied: 'Link kopiert',
-        loading: 'Laden',
+        loading: 'Laden...',
         log_in: 'Anmelden',
         log_into_another_account_anyway: 'Trotzdem bei einem anderen Konto anmelden',
         log_out: 'Abmelden',
@@ -480,6 +480,65 @@ const de = {
         'window_folder_empty': 'Dieser Ordner ist leer', // In English: "This folder is empty"
         'manage_your_subdomains': 'Verwalten Sie Ihre Subdomains', // In English: "Manage Your Subdomains"
         'open_containing_folder': 'Enthaltenen Ordner öffnen', // In English: "Open Containing Folder"
+
+        // Settings Tab Names
+        'ai_assistant': 'KI-Assistent',
+        'storage': 'Speicher',
+        'personal_cloud': 'Persönliche Cloud',
+        'system': 'System',
+        'connection': 'Verbindung',
+        'node_info': 'Knoten-Info',
+        'connected': 'Verbunden',
+        'not_connected': 'Nicht verbunden',
+        'status': 'Status',
+
+        // Taskbar Menu
+        'check_for_updates': 'Nach Updates suchen',
+        'update_available': 'Update verfügbar',
+        'restart_pc2': 'PC2 neu starten',
+        
+        // PC2 Status Bar
+        'personal_cloud_status': 'Persönliche Cloud',
+        'sign_in': 'Anmelden',
+        'pc2_settings': 'PC2-Einstellungen',
+        'files_count': 'Dateien',
+        'pc2_node': 'PC2-Knoten',
+        
+        // Wallet
+        'total_balance': 'Gesamtguthaben',
+        'universal': 'Universal',
+        'send': 'Senden',
+        'receive': 'Empfangen',
+        'tokens': 'Token',
+        'nfts': 'NFTs',
+        'activity': 'Aktivität',
+        'history': 'Verlauf',
+        'refresh_balances': 'Guthaben aktualisieren',
+        'select_network': 'Netzwerk auswählen',
+        'no_tokens_found': 'Keine Token gefunden',
+        'no_transactions': 'Noch keine Transaktionen',
+        
+        // Send/Receive
+        'send_tokens': 'Token senden',
+        'receive_tokens': 'Token empfangen',
+        'recipient_address': 'Empfängeradresse',
+        'amount': 'Betrag',
+        'estimated_fee': 'Geschätzte Gebühr',
+        'free_gas': 'KOSTENLOSE GEBÜHR',
+        'calculating': 'Berechnung...',
+        'insufficient_balance': 'Unzureichendes Guthaben',
+        'transaction_sent': 'Transaktion gesendet',
+        'transaction_failed': 'Transaktion fehlgeschlagen',
+        
+        // Transaction Confirm
+        'confirm_transaction': 'Transaktion bestätigen',
+        'you_send': 'Sie senden',
+        'you_receive': 'Sie erhalten',
+        'network_fee': 'Netzwerkgebühr',
+        'total': 'Gesamt',
+        'approve_send': 'Genehmigen & Senden',
+        'reject': 'Ablehnen',
+        'signing': 'Signieren...',
     },
 };
 

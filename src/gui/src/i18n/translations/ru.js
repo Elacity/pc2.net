@@ -519,6 +519,66 @@ const ru = {
         'manage_your_subdomains': 'Управление вашими поддоменами', // In English: "Manage Your Subdomains"
         'open_containing_folder': 'Открыть содержащую папку', // In English: "Open Containing Folder"
 
+        // Settings Tab Names
+        'ai_assistant': 'ИИ Ассистент',
+        'storage': 'Хранилище',
+        'personal_cloud': 'Личное облако',
+        'system': 'Система',
+        'connection': 'Подключение',
+        'node_info': 'Информация об узле',
+        'connected': 'Подключено',
+        'not_connected': 'Не подключено',
+        'loading': 'Загрузка...',
+        'status': 'Статус',
+
+        // Taskbar Menu
+        'check_for_updates': 'Проверить обновления',
+        'update_available': 'Доступно обновление',
+        'restart_pc2': 'Перезапустить PC2',
+        
+        // PC2 Status Bar
+        'personal_cloud_status': 'Личное облако',
+        'sign_in': 'Войти',
+        'pc2_settings': 'Настройки PC2',
+        'files_count': 'Файлы',
+        'pc2_node': 'Узел PC2',
+        
+        // Wallet
+        'total_balance': 'Общий баланс',
+        'universal': 'Универсальный',
+        'send': 'Отправить',
+        'receive': 'Получить',
+        'tokens': 'Токены',
+        'nfts': 'NFT',
+        'activity': 'Активность',
+        'history': 'История',
+        'refresh_balances': 'Обновить балансы',
+        'select_network': 'Выберите сеть',
+        'no_tokens_found': 'Токены не найдены',
+        'no_transactions': 'Транзакций пока нет',
+        
+        // Send/Receive
+        'send_tokens': 'Отправить токены',
+        'receive_tokens': 'Получить токены',
+        'recipient_address': 'Адрес получателя',
+        'amount': 'Сумма',
+        'estimated_fee': 'Примерная комиссия',
+        'free_gas': 'БЕСПЛАТНЫЙ ГАЗ',
+        'calculating': 'Вычисление...',
+        'insufficient_balance': 'Недостаточный баланс',
+        'transaction_sent': 'Транзакция отправлена',
+        'transaction_failed': 'Транзакция не удалась',
+        
+        // Transaction Confirm
+        'confirm_transaction': 'Подтвердить транзакцию',
+        'you_send': 'Вы отправляете',
+        'you_receive': 'Вы получаете',
+        'network_fee': 'Сетевая комиссия',
+        'total': 'Итого',
+        'approve_send': 'Одобрить и отправить',
+        'reject': 'Отклонить',
+        'signing': 'Подписание...',
+
     },
 };
 

@@ -498,6 +498,66 @@ const fr = {
         // Website Management
         'manage_your_subdomains': 'Gérer vos sous-domaines',
         'open_containing_folder': 'Ouvrir le dossier conteneur',
+
+        // Settings Tab Names
+        'ai_assistant': 'Assistant IA',
+        'storage': 'Stockage',
+        'personal_cloud': 'Cloud Personnel',
+        'system': 'Système',
+        'connection': 'Connexion',
+        'node_info': 'Info du nœud',
+        'connected': 'Connecté',
+        'not_connected': 'Non connecté',
+        'loading': 'Chargement...',
+        'status': 'Statut',
+
+        // Taskbar Menu
+        'check_for_updates': 'Vérifier les mises à jour',
+        'update_available': 'Mise à jour disponible',
+        'restart_pc2': 'Redémarrer PC2',
+        
+        // PC2 Status Bar
+        'personal_cloud_status': 'Cloud Personnel',
+        'sign_in': 'Se connecter',
+        'pc2_settings': 'Paramètres PC2',
+        'files_count': 'Fichiers',
+        'pc2_node': 'Nœud PC2',
+        
+        // Wallet
+        'total_balance': 'Solde total',
+        'universal': 'Universel',
+        'send': 'Envoyer',
+        'receive': 'Recevoir',
+        'tokens': 'Jetons',
+        'nfts': 'NFTs',
+        'activity': 'Activité',
+        'history': 'Historique',
+        'refresh_balances': 'Actualiser les soldes',
+        'select_network': 'Sélectionner le réseau',
+        'no_tokens_found': 'Aucun jeton trouvé',
+        'no_transactions': 'Aucune transaction',
+        
+        // Send/Receive
+        'send_tokens': 'Envoyer des jetons',
+        'receive_tokens': 'Recevoir des jetons',
+        'recipient_address': 'Adresse du destinataire',
+        'amount': 'Montant',
+        'estimated_fee': 'Frais estimés',
+        'free_gas': 'GAZ GRATUIT',
+        'calculating': 'Calcul en cours...',
+        'insufficient_balance': 'Solde insuffisant',
+        'transaction_sent': 'Transaction envoyée',
+        'transaction_failed': 'Transaction échouée',
+        
+        // Transaction Confirm
+        'confirm_transaction': 'Confirmer la transaction',
+        'you_send': 'Vous envoyez',
+        'you_receive': 'Vous recevez',
+        'network_fee': 'Frais de réseau',
+        'total': 'Total',
+        'approve_send': 'Approuver et envoyer',
+        'reject': 'Rejeter',
+        'signing': 'Signature en cours...',
     },
 };
 

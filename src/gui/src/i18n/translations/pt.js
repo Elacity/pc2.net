@@ -483,6 +483,18 @@ const pt = {
         'window_folder_empty': 'Esta pasta está vazia', // In English: "This folder is empty"
         'manage_your_subdomains': 'Gerenciar Seus Subdomínios', // In English: "Manage Your Subdomains"
         'open_containing_folder': 'Abrir Pasta Contenedora', // In English: "Open Containing Folder"
+
+        // Settings Tab Names
+        'ai_assistant': 'Assistente IA',
+        'storage': 'Armazenamento',
+        'personal_cloud': 'Nuvem Pessoal',
+        'system': 'Sistema',
+        'connection': 'Conexão',
+        'node_info': 'Info do nó',
+        'connected': 'Conectado',
+        'not_connected': 'Não conectado',
+        'loading': 'Carregando...',
+        'status': 'Status',
     },
 };
 

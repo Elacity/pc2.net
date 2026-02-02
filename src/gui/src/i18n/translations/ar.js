@@ -512,6 +512,18 @@ const ar = {
         window_folder_empty: 'هذا المجلد فارغ',
         manage_your_subdomains: 'إدارة النطاقات الفرعية الخاصة بك',
         open_containing_folder: 'فتح المجلد المحتوي',
+
+        // Settings Tab Names
+        'ai_assistant': 'مساعد الذكاء الاصطناعي',
+        'storage': 'التخزين',
+        'personal_cloud': 'السحابة الشخصية',
+        'system': 'النظام',
+        'connection': 'الاتصال',
+        'node_info': 'معلومات العقدة',
+        'connected': 'متصل',
+        'not_connected': 'غير متصل',
+        'loading': 'جاري التحميل...',
+        'status': 'الحالة',
     },
 };
 

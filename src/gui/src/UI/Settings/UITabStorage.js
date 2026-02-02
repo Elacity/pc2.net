@@ -9,7 +9,7 @@ import item_icon from '../../helpers/item_icon.js';
 
 export default {
     id: 'storage',
-    title_i18n_key: 'Storage',
+    title_i18n_key: 'storage',
     icon: 'cube-outline.svg',
     html: () => {
         return `

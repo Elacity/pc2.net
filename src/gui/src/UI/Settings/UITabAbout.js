@@ -62,70 +62,70 @@ export default {
                         <path d="M793.218 406.483L705.283 355.397C695.233 349.534 683.508 349.534 673.458 355.397L554.535 424.07C544.486 429.933 532.761 429.933 522.711 424.07L403.788 355.397C393.738 349.534 382.014 349.534 371.964 355.397L285.703 406.483C264.766 419.045 264.766 449.195 285.703 460.919L347.677 496.931L389.551 521.218L524.386 599.104C534.436 604.966 546.16 604.966 556.21 599.104L691.045 521.218L732.92 496.931L794.893 460.919C814.993 449.195 814.993 419.045 793.218 406.483Z" fill="url(#paint1_system)"/>
                         <defs><linearGradient id="paint0_system" x1="539.755" y1="730.757" x2="539.755" y2="477.963" gradientUnits="userSpaceOnUse"><stop stop-color="#F6921A"/><stop offset="1" stop-color="#B04200"/></linearGradient><linearGradient id="paint1_system" x1="539.75" y1="447.142" x2="539.75" y2="604.378" gradientUnits="userSpaceOnUse"><stop stop-color="#FFEEDC"/><stop offset="1" stop-color="#FFC382"/></linearGradient></defs>
                     </svg>
-                    <h1 style="margin: 0; font-size: 18px; font-weight: 600;">ElastOS Personal Cloud</h1>
-                    <p style="color: #666; margin: 4px 0 0; font-size: 12px;">Your Sovereign Cloud Computer</p>
-                    <p style="color: #666; margin: 8px 0 0; font-size: 11px; line-height: 1.5; max-width: 500px; margin-left: auto; margin-right: auto;">One of millions of self-hosted personal clouds running on your own hardware, interconnected above blockchain governance to form the World Computer. Your data, your control, powered by decentralized identity.</p>
+                    <h1 style="margin: 0; font-size: 18px; font-weight: 600;">${i18n('pc2_title')}</h1>
+                    <p style="color: #666; margin: 4px 0 0; font-size: 12px;">${i18n('pc2_tagline')}</p>
+                    <p style="color: #666; margin: 8px 0 0; font-size: 11px; line-height: 1.5; max-width: 500px; margin-left: auto; margin-right: auto;">${i18n('pc2_description')}</p>
                 </div>
                 
                 <!-- Update Banner -->
                 <div id="update-banner" style="display: none; margin-bottom: 12px;">
                     <div style="background: linear-gradient(135deg, #4a90d9 0%, #357abd 100%); color: white; padding: 12px 14px; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; cursor: pointer;" onclick="window.showUpdateModal && window.showUpdateModal(window.latestVersionInfo)">
-                        <div><div style="font-weight: 600; font-size: 12px;">Update Available</div><div id="update-banner-version" style="font-size: 10px; opacity: 0.9;">New version</div></div>
-                        <div style="background: white; color: #357abd; padding: 5px 10px; border-radius: 4px; font-size: 10px; font-weight: 600;">Install</div>
+                        <div><div style="font-weight: 600; font-size: 12px;">${i18n('update_available')}</div><div id="update-banner-version" style="font-size: 10px; opacity: 0.9;">${i18n('new_version')}</div></div>
+                        <div style="background: white; color: #357abd; padding: 5px 10px; border-radius: 4px; font-size: 10px; font-weight: 600;">${i18n('install')}</div>
                     </div>
                 </div>
                 
                 <!-- Check Updates & Restart -->
                 <div style="text-align: center; margin-bottom: 16px;">
-                    <button id="check-updates-btn" class="check-updates-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-3-6.7"/><polyline points="21 3 21 9 15 9"/></svg><span>Check for Updates</span></button>
-                    <button id="restart-pc2-btn" class="restart-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg><span>Restart PC2</span></button>
+                    <button id="check-updates-btn" class="check-updates-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-3-6.7"/><polyline points="21 3 21 9 15 9"/></svg><span>${i18n('check_for_updates')}</span></button>
+                    <button id="restart-pc2-btn" class="restart-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg><span>${i18n('restart_pc2')}</span></button>
                     <div id="update-check-status" style="margin-top: 6px; font-size: 10px; color: #666;"></div>
                 </div>
                 
                 <!-- Version -->
                 <div class="sys-section">
-                    <div class="sys-section-title">Version</div>
+                    <div class="sys-section-title">${i18n('version')}</div>
                     <div class="sys-group">
-                        <div class="sys-group-row"><div class="sys-card-row"><span class="sys-card-label">Current</span><span id="system-current-version" class="sys-card-value">-</span></div></div>
-                        <div class="sys-group-row"><div class="sys-card-row"><span class="sys-card-label">Latest</span><span id="system-latest-version" class="sys-card-value">-</span></div></div>
-                        <div class="sys-group-row"><div class="sys-card-row"><span class="sys-card-label">Last Check</span><span id="system-last-check" class="sys-card-value">Never</span></div></div>
+                        <div class="sys-group-row"><div class="sys-card-row"><span class="sys-card-label">${i18n('current')}</span><span id="system-current-version" class="sys-card-value">-</span></div></div>
+                        <div class="sys-group-row"><div class="sys-card-row"><span class="sys-card-label">${i18n('latest')}</span><span id="system-latest-version" class="sys-card-value">-</span></div></div>
+                        <div class="sys-group-row"><div class="sys-card-row"><span class="sys-card-label">${i18n('last_check')}</span><span id="system-last-check" class="sys-card-value">${i18n('never')}</span></div></div>
                     </div>
                 </div>
                 
                 <!-- Status -->
                 <div class="sys-section">
-                    <div class="sys-section-title">Status</div>
+                    <div class="sys-section-title">${i18n('status')}</div>
                     <div class="sys-group">
-                        <div class="sys-group-row"><div class="sys-card-row"><span class="sys-card-label">Database</span><span id="system-database-status" class="sys-card-value">-</span></div></div>
+                        <div class="sys-group-row"><div class="sys-card-row"><span class="sys-card-label">${i18n('database')}</span><span id="system-database-status" class="sys-card-value">-</span></div></div>
                         <div class="sys-group-row"><div class="sys-card-row"><span class="sys-card-label">IPFS</span><span id="system-ipfs-status" class="sys-card-value">-</span></div></div>
-                        <div class="sys-group-row"><div class="sys-card-row"><span class="sys-card-label">Node ID</span><span id="system-node-id" class="sys-card-value" style="font-family: monospace; font-size: 10px;">-</span></div></div>
+                        <div class="sys-group-row"><div class="sys-card-row"><span class="sys-card-label">${i18n('node_id')}</span><span id="system-node-id" class="sys-card-value" style="font-family: monospace; font-size: 10px;">-</span></div></div>
                     </div>
                 </div>
                 
                 <!-- Network -->
                 <div class="sys-section">
-                    <div class="sys-section-title">Network</div>
+                    <div class="sys-section-title">${i18n('network')}</div>
                     <div class="sys-group">
-                        <div class="sys-group-row"><div class="sys-card-row"><span class="sys-card-label">API</span><span id="system-api-url" class="sys-card-value" style="font-family: monospace; font-size: 10px;">-</span></div></div>
-                        <div class="sys-group-row"><div class="sys-card-row"><span class="sys-card-label">Gateway</span><span id="system-gateway-url" class="sys-card-value" style="font-family: monospace; font-size: 10px;">-</span></div></div>
+                        <div class="sys-group-row"><div class="sys-card-row"><span class="sys-card-label">${i18n('api')}</span><span id="system-api-url" class="sys-card-value" style="font-family: monospace; font-size: 10px;">-</span></div></div>
+                        <div class="sys-group-row"><div class="sys-card-row"><span class="sys-card-label">${i18n('gateway')}</span><span id="system-gateway-url" class="sys-card-value" style="font-family: monospace; font-size: 10px;">-</span></div></div>
                     </div>
                 </div>
                 
                 <!-- Desktop -->
                 <div class="sys-section">
-                    <div class="sys-section-title">Desktop</div>
+                    <div class="sys-section-title">${i18n('pc2_desktop')}</div>
                     <div class="sys-group">
-                        <div class="sys-group-row"><div class="sys-card-row"><span class="sys-card-label">Environment</span><span class="sys-card-value">PC2 Desktop</span></div></div>
-                        <div class="sys-group-row"><div class="sys-card-row"><span class="sys-card-label">Mode</span><span id="system-desktop-mode" class="sys-card-value">Personal Cloud</span></div></div>
+                        <div class="sys-group-row"><div class="sys-card-row"><span class="sys-card-label">${i18n('environment')}</span><span class="sys-card-value">${i18n('pc2_desktop')}</span></div></div>
+                        <div class="sys-group-row"><div class="sys-card-row"><span class="sys-card-label">${i18n('mode')}</span><span id="system-desktop-mode" class="sys-card-value">${i18n('personal_cloud')}</span></div></div>
                     </div>
                 </div>
                 
                 <!-- Links -->
                 <div style="text-align: center; font-size: 11px; margin-top: 16px;">
-                    <a href="#" class="show-credits">Credits</a>
+                    <a href="#" class="show-credits">${i18n('credits')}</a>
                 </div>
                 
-                <dialog class="credits"><div class="credit-content" style="padding: 16px;"><p style="margin: 0 0 10px; font-size: 14px; text-align: center;">Open Source Credits</p><ul style="padding-left: 20px; font-size: 12px; line-height: 1.8;"><li>Puter - Desktop environment</li><li>Helia - IPFS</li><li>libp2p - P2P networking</li><li>Express.js - HTTP server</li></ul></div></dialog>`;
+                <dialog class="credits"><div class="credit-content" style="padding: 16px;"><p style="margin: 0 0 10px; font-size: 14px; text-align: center;">${i18n('open_source_credits')}</p><ul style="padding-left: 20px; font-size: 12px; line-height: 1.8;"><li>Puter - Desktop environment</li><li>Helia - IPFS</li><li>libp2p - P2P networking</li><li>Express.js - HTTP server</li></ul></div></dialog>`;
         }
         
         // Original Puter About for non-PC2 mode
@@ -220,13 +220,13 @@ export default {
                     $el_window.find('#system-current-version').text(health.version || '0.1.0');
                     $el_window.find('#system-database-status').html(
                         health.database === 'connected' 
-                            ? '<span class="status-ok">Connected</span>' 
-                            : '<span class="status-error">Disconnected</span>'
+                            ? `<span class="status-ok">${i18n('connected')}</span>` 
+                            : `<span class="status-error">${i18n('disconnected')}</span>`
                     );
                     $el_window.find('#system-ipfs-status').html(
                         health.ipfs === 'available' 
-                            ? '<span class="status-ok">Available</span>' 
-                            : '<span class="status-error">Unavailable</span>'
+                            ? `<span class="status-ok">${i18n('available_label')}</span>` 
+                            : `<span class="status-error">${i18n('unavailable')}</span>`
                     );
                     $el_window.find('#system-node-id').text(health.nodeId ? health.nodeId.substring(0, 20) + '...' : 'N/A');
                     $el_window.find('#system-api-url').text(apiOrigin);

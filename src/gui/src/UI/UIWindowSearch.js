@@ -39,7 +39,7 @@ async function UIWindowSearch (options) {
     let h = '';
 
     h += '<div class="search-input-wrapper">';
-    h += `<input type="text" class="search-input" placeholder="Search" style="background-image:url('${window.icons['magnifier-outline.svg']}');">`;
+    h += `<input type="text" class="search-input" placeholder="${i18n('search_placeholder')}" style="background-image:url('${window.icons['magnifier-outline.svg']}');">`;
     h += '</div>';
     
     // Search filters UI (collapsible)
@@ -275,7 +275,7 @@ async function UIWindowSearch (options) {
             // Only update the inner content, don't replace the entire container
             resultsContainer.html(h);
         } catch ( error ) {
-            resultsContainer.html('<div class="search-error">Search failed. Please try again.</div>');
+            resultsContainer.html(`<div class="search-error">${i18n('search_failed')}</div>`);
             console.error('Search error:', error);
         } finally {
             isSearching = false;

@@ -69,7 +69,7 @@ function initPC2StatusBar() {
     // Create status bar element - styled to match other toolbar icons (no extra margin since inserted between existing buttons)
     const createStatusBar = () => {
         return $(`
-            <div class="pc2-status-bar toolbar-btn" role="button" aria-label="PC2 Connection Status" tabindex="0" title="Personal Cloud (Not Connected)" style="background-image: url('${cloudIconSvg}'); position: relative;">
+            <div class="pc2-status-bar toolbar-btn" role="button" aria-label="PC2 Connection Status" tabindex="0" title="${i18n('personal_cloud_status')} (${i18n('not_connected')})" style="background-image: url('${cloudIconSvg}'); position: relative;">
                 <div class="pc2-status-indicator disconnected"></div>
             </div>
         `);
@@ -95,18 +95,18 @@ function initPC2StatusBar() {
         
         // In PC2 mode, use authentication status instead of separate connection status
         let effectiveStatus = currentStatus;
-        let effectiveStatusText = currentStatus === 'connected' ? 'Connected' :
-                                 currentStatus === 'connecting' ? 'Connecting...' :
-                                 currentStatus === 'error' ? (currentError || 'Error') : 'Not Connected';
+        let effectiveStatusText = currentStatus === 'connected' ? i18n('connected') :
+                                 currentStatus === 'connecting' ? i18n('connecting') :
+                                 currentStatus === 'error' ? (currentError || i18n('error')) : i18n('not_connected');
         
         if (isPC2Mode) {
             // In PC2 mode: authenticated = connected, not authenticated = not connected
             if (isAuthenticated) {
                 effectiveStatus = 'connected';
-                effectiveStatusText = 'Connected';
+                effectiveStatusText = i18n('connected');
             } else {
                 effectiveStatus = 'disconnected';
-                effectiveStatusText = 'Not Connected';
+                effectiveStatusText = i18n('not_connected');
             }
         }
 
@@ -114,7 +114,7 @@ function initPC2StatusBar() {
         const dotColor = effectiveStatus === 'connected' ? '#22c55e' : '#f59e0b';
 
         items.push({
-            html: `<span style="color: #fff;">Personal Cloud</span>`,
+            html: `<span style="color: #fff;">${i18n('personal_cloud_status')}</span>`,
             icon: `<svg style="width:16px; height:16px; vertical-align:middle; color:#fff;" viewBox="0 0 24 24" fill="#fff"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/></svg>`,
             disabled: true
         });
@@ -126,9 +126,9 @@ function initPC2StatusBar() {
         });
 
         if (effectiveStatus === 'connected' && (session.nodeName || isPC2Mode)) {
-            const nodeName = session.nodeName || (isPC2Mode ? 'This PC2 Node' : 'PC2 Node');
+            const nodeName = session.nodeName || (isPC2Mode ? i18n('this_pc2_node') : i18n('pc2_node'));
             items.push({
-                html: `<span style="color: #fff;">Node: ${nodeName}</span>`,
+                html: `<span style="color: #fff;">${i18n('node')}: ${nodeName}</span>`,
                 icon: `<svg style="width:16px; height:16px; vertical-align:middle;" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>`,
                 disabled: true
             });
@@ -147,12 +147,12 @@ function initPC2StatusBar() {
             };
             
             items.push({
-                html: `<span style="color: #aaa; font-size: 11px;">Storage: ${formatBytes(stats.storage?.used || 0)} / ${formatBytes(stats.storage?.limit || 0)}</span>`,
+                html: `<span style="color: #aaa; font-size: 11px;">${i18n('storage_usage')}: ${formatBytes(stats.storage?.used || 0)} / ${formatBytes(stats.storage?.limit || 0)}</span>`,
                 disabled: true
             });
             
             items.push({
-                html: `<span style="color: #aaa; font-size: 11px;">Files: ${stats.files || 0}</span>`,
+                html: `<span style="color: #aaa; font-size: 11px;">${i18n('files_count')}: ${stats.files || 0}</span>`,
                 disabled: true
             });
         }
@@ -166,7 +166,7 @@ function initPC2StatusBar() {
             if (effectiveStatus !== 'connected') {
                 // Not authenticated - show sign in (triggers Particle Auth)
                 items.push({
-                    html: 'Sign In',
+                    html: i18n('sign_in'),
                     onClick: () => {
                         // Trigger Particle Auth login
                         import('./UIWindowParticleLogin.js').then(({ default: UIWindowParticleLogin }) => {
@@ -181,14 +181,14 @@ function initPC2StatusBar() {
             // Legacy mode: separate PC2 connection
             if (effectiveStatus === 'connected') {
                 items.push({
-                    html: 'Disconnect',
+                    html: i18n('disconnect'),
                     onClick: () => {
                         pc2Service.disconnect?.();
                     }
                 });
             } else if (effectiveStatus !== 'connecting') {
                 items.push({
-                    html: 'Connect to PC2',
+                    html: i18n('connect_to_pc2'),
                     onClick: () => {
                         UIPC2SetupWizard({
                             onSuccess: () => {
@@ -201,7 +201,7 @@ function initPC2StatusBar() {
         }
 
         items.push({
-            html: 'PC2 Settings',
+            html: i18n('pc2_settings'),
             onClick: () => {
                 // Open Settings window with PC2 tab selected
                 import('./Settings/UIWindowSettings.js').then(({ default: UIWindowSettings }) => {
@@ -277,16 +277,16 @@ function initPC2StatusBar() {
             $indicator.addClass(effectiveStatus);
 
             const session = pc2Service.getSession?.() || {};
-            let statusText = effectiveStatus === 'connected' ? (session.nodeName || 'Connected') :
-                            effectiveStatus === 'connecting' ? 'Connecting...' :
-                            effectiveStatus === 'error' ? (error || 'Error') : 'Not Connected';
+            let statusText = effectiveStatus === 'connected' ? (session.nodeName || i18n('connected')) :
+                            effectiveStatus === 'connecting' ? i18n('connecting') :
+                            effectiveStatus === 'error' ? (error || i18n('error')) : i18n('not_connected');
             
             // In PC2 mode, show authentication-based status
             if (isPC2Mode) {
-                statusText = window.is_auth && window.is_auth() ? 'Connected' : 'Not Connected';
+                statusText = window.is_auth && window.is_auth() ? i18n('connected') : i18n('not_connected');
             }
             
-            $statusBar.attr('title', `Personal Cloud (${statusText})`);
+            $statusBar.attr('title', `${i18n('personal_cloud_status')} (${statusText})`);
         };
         
         // Also listen for authentication changes in PC2 mode

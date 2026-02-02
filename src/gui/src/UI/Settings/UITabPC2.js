@@ -99,14 +99,14 @@ export default {
             
             <!-- Connection Status -->
             <div class="pc2-section">
-                <div class="pc2-section-title">Connection</div>
+                <div class="pc2-section-title">${i18n('connection')}</div>
                 <div class="pc2-group">
                     <div class="pc2-group-row">
                         <div class="pc2-card-row">
-                            <span class="pc2-card-label">Status</span>
+                            <span class="pc2-card-label">${i18n('status')}</span>
                             <div style="display: flex; align-items: center; gap: 6px;">
                                 <span class="pc2-status-dot" id="pc2-status-dot"></span>
-                                <span id="pc2-status-text" class="pc2-card-value">Not Connected</span>
+                                <span id="pc2-status-text" class="pc2-card-value">${i18n('not_connected')}</span>
                             </div>
                         </div>
                     </div>
@@ -116,8 +116,8 @@ export default {
             <!-- Not Connected State -->
             <div id="pc2-not-connected" style="display: none;">
                 <div class="pc2-card" style="text-align: center; padding: 16px;">
-                    <p style="margin: 0 0 12px; font-size: 12px; color: #666;">Connect to your Personal Cloud node to store files on your own hardware.</p>
-                    <button class="button pc2-btn pc2-btn-primary" id="pc2-connect-btn">Connect to PC2</button>
+                    <p style="margin: 0 0 12px; font-size: 12px; color: #666;">${i18n('connect_description')}</p>
+                    <button class="button pc2-btn pc2-btn-primary" id="pc2-connect-btn">${i18n('connect_to_pc2')}</button>
                 </div>
             </div>
             
@@ -126,17 +126,17 @@ export default {
                 
                 <!-- Node Info -->
                 <div class="pc2-section">
-                    <div class="pc2-section-title">Node Info</div>
+                    <div class="pc2-section-title">${i18n('node_info')}</div>
                     <div class="pc2-group">
                         <div class="pc2-group-row">
                             <div class="pc2-card-row">
-                                <span class="pc2-card-label">Node</span>
+                                <span class="pc2-card-label">${i18n('node')}</span>
                                 <span id="pc2-node-name" class="pc2-card-value">-</span>
                             </div>
                         </div>
                         <div class="pc2-group-row">
                             <div class="pc2-card-row">
-                                <span class="pc2-card-label">Your Wallet</span>
+                                <span class="pc2-card-label">${i18n('your_wallet')}</span>
                                 <span id="pc2-wallet" class="pc2-card-value" style="font-family: monospace;">-</span>
                             </div>
                         </div>
@@ -145,7 +145,7 @@ export default {
                 
                 <!-- System Resources Section -->
                 <div class="pc2-section" style="margin-top: 16px;">
-                <div class="pc2-section-title">System</div>
+                <div class="pc2-section-title">${i18n('system')}</div>
                 <div class="pc2-group">
                 
                 <!-- Visual Gauges Row -->
@@ -159,7 +159,7 @@ export default {
                             </svg>
                             <div class="pc2-gauge-value" id="cpu-gauge-value">--%</div>
                         </div>
-                        <div class="pc2-gauge-label">CPU</div>
+                        <div class="pc2-gauge-label">${i18n('cpu')}</div>
                     </div>
                     
                     <div class="pc2-gauge-card" title="System memory usage. On macOS, high usage is normal - the OS uses free RAM for caching and releases it when apps need it.">
@@ -171,7 +171,7 @@ export default {
                             </svg>
                             <div class="pc2-gauge-value" id="memory-gauge-value">--%</div>
                         </div>
-                        <div class="pc2-gauge-label">Memory</div>
+                        <div class="pc2-gauge-label">${i18n('memory')}</div>
                     </div>
                     
                     <div class="pc2-gauge-card" title="Disk space used on the volume where PC2 data is stored. Consider freeing space if above 90%.">
@@ -183,27 +183,27 @@ export default {
                             </svg>
                             <div class="pc2-gauge-value" id="disk-gauge-value">--%</div>
                         </div>
-                        <div class="pc2-gauge-label">Disk</div>
+                        <div class="pc2-gauge-label">${i18n('disk')}</div>
                     </div>
                 </div>
                 
                 <!-- System Info Card -->
                 <div style="padding: 0;">
                     <div class="pc2-group-row" style="display: flex; justify-content: space-between;">
-                        <span class="pc2-card-label">Platform</span>
-                        <span class="pc2-card-value" id="system-platform">Loading...</span>
+                        <span class="pc2-card-label">${i18n('platform')}</span>
+                        <span class="pc2-card-value" id="system-platform">${i18n('loading')}</span>
                     </div>
                     <div class="pc2-group-row" style="display: flex; justify-content: space-between;">
-                        <span class="pc2-card-label">Processor</span>
-                        <span class="pc2-card-value" id="system-cpu-model">Loading...</span>
+                        <span class="pc2-card-label">${i18n('processor')}</span>
+                        <span class="pc2-card-value" id="system-cpu-model">${i18n('loading')}</span>
                     </div>
                     <div class="pc2-group-row" style="display: flex; justify-content: space-between;">
-                        <span class="pc2-card-label">Memory</span>
-                        <span class="pc2-card-value" id="system-memory-total">Loading...</span>
+                        <span class="pc2-card-label">${i18n('memory')}</span>
+                        <span class="pc2-card-value" id="system-memory-total">${i18n('loading')}</span>
                     </div>
                     <div class="pc2-group-row" style="display: flex; justify-content: space-between;">
-                        <span class="pc2-card-label">Node Uptime</span>
-                        <span class="pc2-card-value" id="system-uptime">Loading...</span>
+                        <span class="pc2-card-label">${i18n('node_uptime')}</span>
+                        <span class="pc2-card-value" id="system-uptime">${i18n('loading')}</span>
                     </div>
                 </div>
                 </div>
@@ -212,28 +212,28 @@ export default {
                 
                 <!-- Compute Limits Section -->
                 <div class="pc2-section">
-                <div class="pc2-section-title">Compute Limits</div>
+                <div class="pc2-section-title">${i18n('compute_limits')}</div>
                 <div class="pc2-group">
                 
-                <div class="pc2-group-row"><div class="pc2-card-row"><span class="pc2-card-label">Max Concurrent</span><select id="pc2-wasm-concurrent-select" class="pc2-select"><option value="1">1</option><option value="2">2</option><option value="4">4</option><option value="8">8</option><option value="16">16</option></select></div></div>
+                <div class="pc2-group-row"><div class="pc2-card-row"><span class="pc2-card-label">${i18n('max_concurrent')}</span><select id="pc2-wasm-concurrent-select" class="pc2-select"><option value="1">1</option><option value="2">2</option><option value="4">4</option><option value="8">8</option><option value="16">16</option></select></div></div>
                 
-                <div class="pc2-group-row"><div class="pc2-card-row"><span class="pc2-card-label">Memory Limit</span><select id="pc2-wasm-memory-select" class="pc2-select"><option value="auto">Auto</option><option value="256">256 MB</option><option value="512">512 MB</option><option value="1024">1 GB</option><option value="2048">2 GB</option></select></div></div>
+                <div class="pc2-group-row"><div class="pc2-card-row"><span class="pc2-card-label">${i18n('memory_limit')}</span><select id="pc2-wasm-memory-select" class="pc2-select"><option value="auto">Auto</option><option value="256">256 MB</option><option value="512">512 MB</option><option value="1024">1 GB</option><option value="2048">2 GB</option></select></div></div>
                 
-                <div class="pc2-group-row"><div class="pc2-card-row"><span class="pc2-card-label">Timeout</span><select id="pc2-wasm-timeout-select" class="pc2-select"><option value="10000">10s</option><option value="30000">30s</option><option value="60000">1m</option><option value="120000">2m</option><option value="300000">5m</option></select></div></div>
+                <div class="pc2-group-row"><div class="pc2-card-row"><span class="pc2-card-label">${i18n('timeout')}</span><select id="pc2-wasm-timeout-select" class="pc2-select"><option value="10000">10s</option><option value="30000">30s</option><option value="60000">1m</option><option value="120000">2m</option><option value="300000">5m</option></select></div></div>
                 
-                <div class="pc2-group-row"><div class="pc2-card-row"><span class="pc2-card-label">Runtime</span><span class="pc2-card-value"><span id="pc2-wasm-active" style="color: #22c55e;">0 active</span> | <span id="pc2-wasm-queued">0 queued</span></span></div></div>
+                <div class="pc2-group-row"><div class="pc2-card-row"><span class="pc2-card-label">${i18n('runtime')}</span><span class="pc2-card-value"><span id="pc2-wasm-active" style="color: #22c55e;">0 ${i18n('active')}</span> | <span id="pc2-wasm-queued">0 ${i18n('queued')}</span></span></div></div>
                 
                 </div>
                 </div>
                 
                 <!-- Storage Section -->
                 <div class="pc2-section">
-                <div class="pc2-section-title">Storage</div>
+                <div class="pc2-section-title">${i18n('storage')}</div>
                 <div class="pc2-group">
                 
                 <div class="pc2-group-row">
                     <div class="pc2-card-row">
-                        <span class="pc2-card-label">Used</span>
+                        <span class="pc2-card-label">${i18n('used')}</span>
                         <span class="pc2-card-value"><span id="pc2-storage-used">-</span> / <span id="pc2-storage-limit">-</span></span>
                     </div>
                     <div style="background: #e5e7eb; border-radius: 3px; height: 5px; overflow: hidden; margin-top: 6px;">
@@ -243,14 +243,14 @@ export default {
                 
                 <div class="pc2-group-row">
                     <div class="pc2-card-row">
-                        <span class="pc2-card-label">Files</span>
+                        <span class="pc2-card-label">${i18n('files')}</span>
                         <span id="pc2-files-count" class="pc2-card-value">-</span>
                     </div>
                 </div>
                 
                 <div class="pc2-group-row">
                     <div class="pc2-card-row">
-                        <span class="pc2-card-label">Encrypted</span>
+                        <span class="pc2-card-label">${i18n('encrypted')}</span>
                         <span id="pc2-encrypted-count" class="pc2-card-value">-</span>
                     </div>
                 </div>
@@ -261,15 +261,15 @@ export default {
                 <!-- Backup & Restore Section -->
                 <div class="pc2-section">
                 <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-                    <span class="pc2-section-title" style="margin-bottom: 0;">Backup & Restore</span>
-                    <span id="pc2-backup-help" style="cursor: pointer; font-size: 10px; color: #6b7280; text-decoration: underline;" title="Click for backup help">Help</span>
+                    <span class="pc2-section-title" style="margin-bottom: 0;">${i18n('backup_restore')}</span>
+                    <span id="pc2-backup-help" style="cursor: pointer; font-size: 10px; color: #6b7280; text-decoration: underline;" title="Click for backup help">${i18n('help')}</span>
                 </div>
                 
                 <div class="pc2-backup-card">
                     <div class="pc2-backup-header">
-                        <strong>Backups</strong>
+                        <strong>${i18n('backups')}</strong>
                         <button class="button pc2-btn-primary" id="pc2-create-backup-btn" title="Create a new backup of your PC2 node data">
-                            <span style="margin-right: 4px;">+</span> Create Backup
+                            <span style="margin-right: 4px;">+</span> ${i18n('create_backup')}
                         </button>
                     </div>
                     
@@ -291,9 +291,9 @@ export default {
                                 ${window.icons && window.icons['warning-sign.svg'] ? `<img src="${window.icons['warning-sign.svg']}" style="width: 18px; height: 18px;">` : ''}
                             </span>
                             <div>
-                                <strong style="display: block; margin-bottom: 4px;">Important: Download Backups to External Device</strong>
+                                <strong style="display: block; margin-bottom: 4px;">${i18n('important_backup_warning')}</strong>
                                 <div style="font-size: 11px; line-height: 1.4;">
-                                    Backups stored on the same server will be lost if the server fails. Always download backups to your laptop, external drive, or another server to keep them safe.
+                                    ${i18n('backup_external_warning')}
                                 </div>
                             </div>
                         </div>
@@ -302,19 +302,19 @@ export default {
                     <div id="pc2-backup-status" style="display: none; margin: 10px 0; padding: 8px; background: #f0f9ff; border-radius: 4px; font-size: 12px; color: #0369a1;"></div>
                     
                     <div id="pc2-backups-list" style="margin-top: 12px;">
-                        <span style="color: #888; font-size: 13px;">Loading...</span>
+                        <span style="color: #888; font-size: 13px;">${i18n('loading')}</span>
                     </div>
                 </div>
                 
                 <!-- Restore Section -->
                 <div class="pc2-section" style="margin-top: 12px;">
-                <div class="pc2-section-title">Restore</div>
+                <div class="pc2-section-title">${i18n('restore')}</div>
                 <div class="pc2-group">
                     <div class="pc2-group-row">
-                        <p style="margin: 0 0 8px; font-size: 11px; color: #666;">Upload a backup file (.tar.gz) to restore your node data.</p>
+                        <p style="margin: 0 0 8px; font-size: 11px; color: #666;">${i18n('upload_backup_file')}</p>
                         <div id="pc2-restore-upload-area" style="border: 1px dashed #ccc; border-radius: 6px; padding: 16px; text-align: center; background: #fafafa; cursor: pointer;">
                             <input type="file" id="pc2-restore-file-input" accept=".tar.gz" style="display: none;">
-                            <div style="font-size: 12px; color: #666;"><strong>Click to select</strong> or drag & drop</div>
+                            <div style="font-size: 12px; color: #666;"><strong>${i18n('click_to_select')}</strong> ${i18n('or_drag_drop')}</div>
                         </div>
                         <div id="pc2-restore-file-info" style="display: none; margin-top: 8px; padding: 8px; background: #f0f9ff; border-radius: 4px;">
                             <div style="display: flex; align-items: center; justify-content: space-between;">
@@ -336,12 +336,12 @@ export default {
                 
                 <!-- Access Control Section -->
                 <div class="pc2-section">
-                <div class="pc2-section-title">Access Control</div>
+                <div class="pc2-section-title">${i18n('access_control')}</div>
                 <div class="pc2-group">
                     <div class="pc2-group-row">
                         <div class="pc2-card-row" style="margin-bottom: 8px;">
-                            <span class="pc2-card-label">Trusted Wallets</span>
-                            <button class="button pc2-btn" id="pc2-invite-btn" style="font-size: 10px; padding: 3px 8px;">+ Invite</button>
+                            <span class="pc2-card-label">${i18n('trusted_wallets')}</span>
+                            <button class="button pc2-btn" id="pc2-invite-btn" style="font-size: 10px; padding: 3px 8px;">+ ${i18n('invite')}</button>
                         </div>
                         <div id="pc2-invite-form" style="display: none; padding: 8px; background: #f3f4f6; border-radius: 4px; margin-bottom: 8px;">
                             <div style="display: flex; gap: 6px;">
@@ -351,18 +351,18 @@ export default {
                             </div>
                             <div id="pc2-invite-error" style="font-size: 10px; color: #dc2626; margin-top: 4px;"></div>
                         </div>
-                        <div id="pc2-wallets-list" style="font-size: 12px;">Loading...</div>
+                        <div id="pc2-wallets-list" style="font-size: 12px;">${i18n('loading')}</div>
                     </div>
                 </div>
                 </div>
                 
                 <!-- Actions -->
                 <div class="pc2-section">
-                <div class="pc2-section-title">Actions</div>
+                <div class="pc2-section-title">${i18n('actions')}</div>
                 <div class="pc2-group">
                     <div class="pc2-group-row" style="display: flex; gap: 6px;">
-                        <button class="button pc2-btn" id="pc2-disconnect-btn" style="font-size: 11px;">Disconnect</button>
-                        <button class="button pc2-btn" id="pc2-forget-btn" style="font-size: 11px; background: #fee2e2; color: #dc2626; border-color: #fecaca;">Forget</button>
+                        <button class="button pc2-btn" id="pc2-disconnect-btn" style="font-size: 11px;">${i18n('disconnect')}</button>
+                        <button class="button pc2-btn" id="pc2-forget-btn" style="font-size: 11px; background: #fee2e2; color: #dc2626; border-color: #fecaca;">${i18n('forget')}</button>
                     </div>
                 </div>
                 </div>
@@ -984,14 +984,14 @@ export default {
             
             if (isConnected) {
                 $statusDot.removeClass('disconnected connecting').addClass('connected');
-                $statusText.text('Connected');
+                $statusText.text(i18n('connected'));
                 $connected.show();
                 $notConnected.hide();
                 
                 // Populate node info
                 const session = pc2Service.getSession?.() || {};
                 // In PC2 mode, show "This PC2 Node" to match status bar
-                const nodeName = pc2Mode ? 'This PC2 Node' : (session.nodeName || 'My PC2 Node');
+                const nodeName = pc2Mode ? i18n('this_pc2_node') : (session.nodeName || 'My PC2 Node');
                 $el_window.find('#pc2-node-name').text(nodeName);
                 $el_window.find('#pc2-wallet').text(
                     window.user?.wallet_address 
@@ -1012,7 +1012,7 @@ export default {
                 startSystemResourcesPolling();
             } else {
                 $statusDot.removeClass('connected connecting').addClass('disconnected');
-                $statusText.text(isConfigured ? 'Disconnected' : 'Not Configured');
+                $statusText.text(isConfigured ? i18n('disconnected') : i18n('not_configured'));
                 $connected.hide();
                 $notConnected.show();
             }

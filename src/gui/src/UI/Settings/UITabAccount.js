@@ -69,20 +69,20 @@ async function initElastosIdentity($el_window) {
                     </svg>
                 </div>
                 <p style="color: #333; font-size: 14px; margin-bottom: 16px;">
-                    Are you sure you want to untether your Elastos DID?
+                    ${i18n('untether_warning')}
                 </p>
                 <p style="color: #666; font-size: 12px; margin-bottom: 20px;">
-                    You will lose access to Mainchain ELA, Bitcoin, and Tron balances.
+                    ${i18n('untether_consequence')}
                 </p>
                 <div style="display: flex; gap: 12px; justify-content: center;">
-                    <button id="untether-cancel-btn" class="button" style="background: #e5e7eb; color: #333; padding: 6px 16px; font-size: 13px; line-height: 1.4; border-radius: 4px;">Cancel</button>
-                    <button id="untether-confirm-btn" class="button" style="background: #dc2626; color: white; padding: 6px 16px; font-size: 13px; line-height: 1.4; border-radius: 4px;">Untether</button>
+                    <button id="untether-cancel-btn" class="button" style="background: #e5e7eb; color: #333; padding: 6px 16px; font-size: 13px; line-height: 1.4; border-radius: 4px;">${i18n('cancel')}</button>
+                    <button id="untether-confirm-btn" class="button" style="background: #dc2626; color: white; padding: 6px 16px; font-size: 13px; line-height: 1.4; border-radius: 4px;">${i18n('untether')}</button>
                 </div>
             </div>
         `;
         
         const confirmWindow = UIWindow({
-            title: 'Confirm Untether',
+            title: i18n('confirm_untether'),
             icon: null,
             uid: null,
             is_dir: false,
@@ -146,7 +146,7 @@ async function initElastosIdentity($el_window) {
                         console.error('[DID] Untether error:', error);
                         $confirmBtn.prop('disabled', false).text('Untether');
                         // Show error in the confirm window
-                        $(el_confirm_window).find('#untether-confirm-btn').after('<p style="color: #dc2626; font-size: 11px; margin-top: 8px;">Failed to untether. Please try again.</p>');
+                        $(el_confirm_window).find('#untether-confirm-btn').after(`<p style="color: #dc2626; font-size: 11px; margin-top: 8px;">${i18n('failed_to_untether')}</p>`);
                     }
                 });
             }
@@ -508,7 +508,7 @@ export default {
         
         h += `<div class="account-section" style="text-align: center; padding: 12px 0;">`;
             h += `<div class="profile-picture change-profile-picture" style="background-image: url('${html_encode(profilePicUrl)}'); cursor: pointer; width: 110px; height: 110px; margin: 0 auto;" title="Click to change"></div>`;
-            h += `<div id="profile-display-name" style="margin-top: 12px; font-size: 18px; font-weight: 600; color: #333;">${html_encode(displayName) || '<span style="color: #aaa; font-weight: 400; font-size: 13px;">Set display name</span>'}</div>`;
+            h += `<div id="profile-display-name" style="margin-top: 12px; font-size: 18px; font-weight: 600; color: #333;">${html_encode(displayName) || `<span style="color: #aaa; font-weight: 400; font-size: 13px;">${i18n('set_display_name')}</span>`}</div>`;
         h += `</div>`;
         
         // Display Name Input
@@ -518,8 +518,8 @@ export default {
                     h += `<div class="account-card-row">`;
                         h += `<span class="account-card-label">Display Name</span>`;
                         h += `<div style="display: flex; align-items: center; gap: 6px;">`;
-                            h += `<input type="text" id="account-display-name" class="account-input" value="${html_encode(displayName)}" placeholder="Your name">`;
-                            h += `<button class="button account-btn save-display-name">Save</button>`;
+                            h += `<input type="text" id="account-display-name" class="account-input" value="${html_encode(displayName)}" placeholder="${i18n('your_name')}">`;
+                            h += `<button class="button account-btn save-display-name">${i18n('save')}</button>`;
                         h += `</div>`;
                     h += `</div>`;
                 h += `</div>`;
@@ -719,8 +719,8 @@ export default {
                             h += `<div id="account-recovery-status" class="account-card-sublabel">Checking...</div>`;
                         h += `</div>`;
                         h += `<div style="display: flex; gap: 6px;">`;
-                            h += `<button id="view-recovery-btn" class="button account-btn" style="display: none;">View</button>`;
-                            h += `<button id="open-encrypt-modal-btn" class="button account-btn" style="display: none;">Encrypt</button>`;
+                            h += `<button id="view-recovery-btn" class="button account-btn" style="display: none;">${i18n('view')}</button>`;
+                            h += `<button id="open-encrypt-modal-btn" class="button account-btn" style="display: none;">${i18n('encrypt')}</button>`;
                         h += `</div>`;
                     h += `</div>`;
                     
@@ -957,7 +957,7 @@ export default {
                     }
                     
                     if (data.hasMnemonicBackup) {
-                        $el_window.find('#account-recovery-status').text('Encrypted backup available');
+                        $el_window.find('#account-recovery-status').text(i18n('encrypted_backup_available'));
                         $el_window.find('#view-recovery-btn').show();
                         $el_window.find('#open-encrypt-modal-btn, #no-recovery-message, #encrypt-now-section').hide();
                     } else {
@@ -965,11 +965,11 @@ export default {
                         const needsResult = await needsCheck.json();
                         
                         if (needsResult.hasMnemonicInMemory) {
-                            $el_window.find('#account-recovery-status').text('Not yet encrypted');
+                            $el_window.find('#account-recovery-status').text(i18n('not_yet_encrypted'));
                             $el_window.find('#encrypt-now-section').show();
                             $el_window.find('#view-recovery-btn, #open-encrypt-modal-btn, #no-recovery-message').hide();
                         } else {
-                            $el_window.find('#account-recovery-status').text('No backup');
+                            $el_window.find('#account-recovery-status').text(i18n('no_backup'));
                             $el_window.find('#open-encrypt-modal-btn, #no-recovery-message').show();
                             $el_window.find('#view-recovery-btn, #encrypt-now-section').hide();
                         }
@@ -1081,7 +1081,7 @@ export default {
                     params: [msgResult.message, walletAddress]
                 });
                 
-                $status.text('Encrypting...');
+                $status.text(i18n('encrypting'));
                 
                 const secureResponse = await fetch(new URL('/api/boson/secure-mnemonic', window.api_origin).toString(), {
                     method: 'POST',
@@ -1091,9 +1091,9 @@ export default {
                 const secureResult = await secureResponse.json();
                 if (!secureResponse.ok || !secureResult.success) throw new Error(secureResult.error || 'Failed');
                 
-                $status.text('Done!').css('color', '#22c55e');
+                $status.text(i18n('done')).css('color', '#22c55e');
                 $el_window.find('#encrypt-now-section').hide();
-                $el_window.find('#account-recovery-status').text('Encrypted backup available');
+                $el_window.find('#account-recovery-status').text(i18n('encrypted_backup_available'));
                 $el_window.find('#view-recovery-btn').show();
                 
             } catch (error) {
@@ -1117,16 +1117,16 @@ export default {
                 <div id="encrypt-modal-overlay" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 999999;">
                     <div style="background: ${bgColor}; border-radius: 8px; padding: 20px; max-width: 400px; width: 90%;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                            <h3 style="margin: 0; font-size: 15px; color: ${textColor};">Encrypt Recovery Phrase</h3>
+                            <h3 style="margin: 0; font-size: 15px; color: ${textColor};">${i18n('encrypt_recovery_phrase')}</h3>
                             <button id="close-encrypt-modal" style="background: none; border: none; font-size: 18px; cursor: pointer; color: ${textColor};">&times;</button>
                         </div>
-                        <p style="font-size: 12px; color: ${mutedColor}; margin-bottom: 12px;">Enter your 24-word recovery phrase.</p>
-                        <textarea id="modal-mnemonic-input" placeholder="word1 word2 word3..." style="width: 100%; height: 80px; padding: 10px; border: 1px solid ${borderColor}; border-radius: 6px; font-family: monospace; font-size: 11px; resize: none; box-sizing: border-box; background: ${inputBg}; color: ${textColor};"></textarea>
+                        <p style="font-size: 12px; color: ${mutedColor}; margin-bottom: 12px;">${i18n('enter_24_words')}</p>
+                        <textarea id="modal-mnemonic-input" placeholder="${i18n('word_placeholder')}" style="width: 100%; height: 80px; padding: 10px; border: 1px solid ${borderColor}; border-radius: 6px; font-family: monospace; font-size: 11px; resize: none; box-sizing: border-box; background: ${inputBg}; color: ${textColor};"></textarea>
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
                             <span id="modal-encrypt-status" style="font-size: 11px; color: ${mutedColor};"></span>
                             <div style="display: flex; gap: 6px;">
-                                <button id="cancel-encrypt-modal" class="button">Cancel</button>
-                                <button id="confirm-encrypt-btn" class="button button-primary">Encrypt</button>
+                                <button id="cancel-encrypt-modal" class="button">${i18n('cancel')}</button>
+                                <button id="confirm-encrypt-btn" class="button button-primary">${i18n('encrypt')}</button>
                             </div>
                         </div>
                     </div>
@@ -1148,7 +1148,7 @@ export default {
                 const words = mnemonic.split(/\s+/);
                 
                 if (words.length !== 24) {
-                    $status.text('Need 24 words').css('color', '#ef4444');
+                    $status.text(i18n('need_24_words')).css('color', '#ef4444');
                     return;
                 }
                 
@@ -1181,13 +1181,13 @@ export default {
                     
                     if (!secureResponse.ok || !secureResult.success) throw new Error(secureResult.error || 'Failed');
                     
-                    $status.text('Done!').css('color', '#22c55e');
+                    $status.text(i18n('done')).css('color', '#22c55e');
                     $('#modal-mnemonic-input').val('');
                     
                     setTimeout(() => {
                         $('#encrypt-modal-overlay').remove();
                         $el_window.find('#no-recovery-message, #open-encrypt-modal-btn').hide();
-                        $el_window.find('#account-recovery-status').text('Encrypted backup available');
+                        $el_window.find('#account-recovery-status').text(i18n('encrypted_backup_available'));
                         $el_window.find('#view-recovery-btn').show();
                     }, 1000);
                     
@@ -1240,7 +1240,7 @@ export default {
                 allowed_file_types: ['.png', '.jpg', '.jpeg', 'image/*'],
                 show_maximize_button: false,
                 show_minimize_button: false,
-                title: 'Select Profile Picture',
+                title: i18n('select_profile_picture'),
                 is_dir: true,
                 is_openFileDialog: true,
                 selectable_body: false,

@@ -15,7 +15,7 @@ import UIAlert from '../UIAlert.js';
 
 export default {
     id: 'ai',
-    title_i18n_key: 'AI Assistant',
+    title_i18n_key: 'ai_assistant',
     icon: 'magnifier-outline.svg',
     html: () => {
         return `

@@ -487,6 +487,66 @@ const ja = {
         'window_folder_empty': 'このフォルダーは空です', // In English: "This folder is empty"
         'manage_your_subdomains': 'サブドメインを管理する', // In English: "Manage Your Subdomains"
         'open_containing_folder': '保存先のフォルダーを開く', // In English: "Open Containing Folder"
+
+        // Settings Tab Names
+        'ai_assistant': 'AIアシスタント',
+        'storage': 'ストレージ',
+        'personal_cloud': 'パーソナルクラウド',
+        'system': 'システム',
+        'connection': '接続',
+        'node_info': 'ノード情報',
+        'connected': '接続済み',
+        'not_connected': '未接続',
+        'loading': '読み込み中...',
+        'status': 'ステータス',
+
+        // Taskbar Menu
+        'check_for_updates': 'アップデートを確認',
+        'update_available': 'アップデート利用可能',
+        'restart_pc2': 'PC2を再起動',
+        
+        // PC2 Status Bar
+        'personal_cloud_status': 'パーソナルクラウド',
+        'sign_in': 'サインイン',
+        'pc2_settings': 'PC2設定',
+        'files_count': 'ファイル',
+        'pc2_node': 'PC2ノード',
+        
+        // Wallet
+        'total_balance': '総残高',
+        'universal': 'ユニバーサル',
+        'send': '送信',
+        'receive': '受信',
+        'tokens': 'トークン',
+        'nfts': 'NFT',
+        'activity': 'アクティビティ',
+        'history': '履歴',
+        'refresh_balances': '残高を更新',
+        'select_network': 'ネットワークを選択',
+        'no_tokens_found': 'トークンが見つかりません',
+        'no_transactions': '取引履歴がありません',
+        
+        // Send/Receive
+        'send_tokens': 'トークンを送信',
+        'receive_tokens': 'トークンを受信',
+        'recipient_address': '受信者アドレス',
+        'amount': '金額',
+        'estimated_fee': '推定手数料',
+        'free_gas': '無料ガス',
+        'calculating': '計算中...',
+        'insufficient_balance': '残高不足',
+        'transaction_sent': '取引が送信されました',
+        'transaction_failed': '取引に失敗しました',
+        
+        // Transaction Confirm
+        'confirm_transaction': '取引を確認',
+        'you_send': '送信額',
+        'you_receive': '受信額',
+        'network_fee': 'ネットワーク手数料',
+        'total': '合計',
+        'approve_send': '承認して送信',
+        'reject': '拒否',
+        'signing': '署名中...',
     },
 };
 

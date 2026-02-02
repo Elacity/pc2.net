@@ -120,7 +120,7 @@ export default {
 
         // Authentication Section
         h += `<div class="security-section">`;
-        h += `<div class="security-section-title">Authentication</div>`;
+        h += `<div class="security-section-title">${i18n('security')}</div>`;
         h += `<div class="security-group">`;
         
         // Password (not for wallet users)
@@ -162,11 +162,11 @@ export default {
             h += `<div style="display: flex; align-items: center; gap: 8px;">`;
             h += `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><polyline points="9 12 11 14 15 10"></polyline></svg>`;
             h += `<div>`;
-            h += `<span class="security-card-label" style="color: #166534;">Wallet Authentication</span>`;
-            h += `<div class="security-card-sublabel" style="color: #15803d;">Secured by blockchain cryptography</div>`;
+            h += `<span class="security-card-label" style="color: #166534;">${i18n('wallet_address')}</span>`;
+            h += `<div class="security-card-sublabel" style="color: #15803d;">${i18n('eoa_info')}</div>`;
             h += `</div>`;
             h += `</div>`;
-            h += `<span style="color: #16a34a; font-size: 12px;">Connected</span>`;
+            h += `<span style="color: #16a34a; font-size: 12px;">${i18n('connected')}</span>`;
             h += `</div></div>`;
         }
         h += `</div>`;
@@ -176,7 +176,7 @@ export default {
         if (isPC2Mode) {
             // ACCESS CONTROL
             h += `<div class="security-section">`;
-            h += `<div class="security-section-title">Access Control</div>`;
+            h += `<div class="security-section-title">${i18n('access_control')}</div>`;
             h += `<div style="font-size: 12px; color: #6b7280; margin-bottom: 12px; line-height: 1.5;">
                 As the node owner, you can allow other wallet addresses to create their own accounts on this PC2 node. 
                 Each account has its own separate files, settings, and data.
@@ -186,20 +186,20 @@ export default {
             // Owner info
             h += `<div class="security-group-row">`;
             h += `<div class="security-card-row">`;
-            h += `<span class="security-card-label">Node Owner (Admin)</span>`;
-            h += `<span id="owner-wallet" style="font-size: 11px; font-family: monospace; color: #666;">Loading...</span>`;
+            h += `<span class="security-card-label">${i18n('owner_wallet')}</span>`;
+            h += `<span id="owner-wallet" style="font-size: 11px; font-family: monospace; color: #666;">${i18n('loading')}...</span>`;
             h += `</div></div>`;
 
             // Add wallet account
             h += `<div class="security-group-row">`;
             h += `<div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">`;
-            h += `<span class="security-card-label">Add Wallet Account</span>`;
+            h += `<span class="security-card-label">${i18n('add_wallet')}</span>`;
             h += `<span class="access-control-tooltip" style="cursor: help; color: #9ca3af; font-size: 12px; position: relative;">ⓘ</span>`;
             h += `</div>`;
             h += `<div style="display: flex; gap: 6px; align-items: center;">`;
             h += `<input type="text" id="add-wallet-address" class="security-input" placeholder="0x..." style="flex: 1; font-family: monospace;">`;
-            h += `<select id="add-wallet-role" class="security-input" style="width: 80px;"><option value="member">Member</option><option value="admin">Admin</option></select>`;
-            h += `<button id="btn-add-wallet" class="button security-btn">Add</button>`;
+            h += `<select id="add-wallet-role" class="security-input" style="width: 80px;"><option value="member">${i18n('member')}</option><option value="admin">${i18n('admin')}</option></select>`;
+            h += `<button id="btn-add-wallet" class="button security-btn">${i18n('add')}</button>`;
             h += `</div>`;
             h += `<div id="add-wallet-status" style="margin-top: 4px; font-size: 10px; min-height: 14px;"></div>`;
             h += `</div>`;
@@ -207,10 +207,10 @@ export default {
             // Accounts on this node
             h += `<div class="security-group-row">`;
             h += `<div class="security-card-row" style="margin-bottom: 8px;">`;
-            h += `<span class="security-card-label">Accounts on this Node</span>`;
-            h += `<button id="btn-refresh-wallets" class="button security-btn" style="font-size: 10px; padding: 3px 8px;">Refresh</button>`;
+            h += `<span class="security-card-label">${i18n('additional_wallets')}</span>`;
+            h += `<button id="btn-refresh-wallets" class="button security-btn" style="font-size: 10px; padding: 3px 8px;">${i18n('refresh')}</button>`;
             h += `</div>`;
-            h += `<div id="allowed-wallets-list" style="min-height: 30px; font-size: 12px;">Loading...</div>`;
+            h += `<div id="allowed-wallets-list" style="min-height: 30px; font-size: 12px;">${i18n('loading')}...</div>`;
             h += `</div>`;
             h += `</div>`;
             h += `</div>`;
@@ -225,17 +225,17 @@ export default {
             
             // API KEYS
             h += `<div class="security-section">`;
-            h += `<div class="security-section-title">API Keys</div>`;
+            h += `<div class="security-section-title">${i18n('api_keys')}</div>`;
             h += `<div class="security-group">`;
             h += `<div class="security-group-row">`;
             h += `<div class="security-card-row" style="margin-bottom: 8px;">`;
             h += `<div>`;
-            h += `<span class="security-card-label">Programmatic Access</span>`;
-            h += `<div class="security-card-sublabel">Enable AI agents and automation</div>`;
+            h += `<span class="security-card-label">${i18n('api_keys')}</span>`;
+            h += `<div class="security-card-sublabel">${i18n('permissions')}</div>`;
             h += `</div>`;
-            h += `<button class="button security-btn api-keys-create-btn">+ Create Key</button>`;
+            h += `<button class="button security-btn api-keys-create-btn">+ ${i18n('create')}</button>`;
             h += `</div>`;
-            h += `<div id="security-api-keys-list" style="border-top: 1px solid #e5e7eb; padding-top: 8px; min-height: 30px; font-size: 12px;">Loading...</div>`;
+            h += `<div id="security-api-keys-list" style="border-top: 1px solid #e5e7eb; padding-top: 8px; min-height: 30px; font-size: 12px;">${i18n('loading')}...</div>`;
             h += `</div>`;
             h += `</div>`;
             h += `</div>`;
@@ -256,7 +256,7 @@ export default {
             h += `<a href="${window.api_origin || 'http://localhost:4200'}/api/tools/openapi" target="_blank" style="font-family: monospace; font-size: 11px; color: #2563eb;">${window.api_origin || 'http://localhost:4200'}/api/tools/openapi</a>`;
             h += `</div>`;
             
-            h += `<button class="button security-btn copy-agent-prompt-btn" style="margin-top: 6px;">Copy Setup Prompt for AI</button>`;
+            h += `<button class="button security-btn copy-agent-prompt-btn" style="margin-top: 6px;">${i18n('copy_setup_prompt')}</button>`;
             h += `</div>`;
             h += `</div>`;
             
@@ -345,7 +345,7 @@ export default {
             };
 
             win = await UIComponentWindow({
-                html: `<div style="padding: 20px;"><h3 style="margin: 0 0 12px; font-size: 16px;">${i18n('disable_2fa_confirm')}</h3><p style="font-size: 13px; margin-bottom: 12px;">${i18n('disable_2fa_instructions')}</p><div style="display: flex; gap: 6px;"><input type="password" class="password-entry" style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px;" /><button class="button confirm-disable-2fa">${i18n('disable_2fa')}</button><button class="button cancel-disable-2fa">Cancel</button></div></div>`,
+                html: `<div style="padding: 20px;"><h3 style="margin: 0 0 12px; font-size: 16px;">${i18n('disable_2fa_confirm')}</h3><p style="font-size: 13px; margin-bottom: 12px;">${i18n('disable_2fa_instructions')}</p><div style="display: flex; gap: 6px;"><input type="password" class="password-entry" style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px;" /><button class="button confirm-disable-2fa">${i18n('disable_2fa')}</button><button class="button cancel-disable-2fa">${i18n('cancel')}</button></div></div>`,
                 width: 400, backdrop: true, is_resizable: false,
                 body_css: { width: 'initial', 'background-color': '#fff', padding: '0' },
             });
@@ -460,17 +460,17 @@ export default {
             // Create API Key
             $el_window.find('.api-keys-create-btn').on('click', async () => {
                 let h = '<div style="padding: 16px 16px 8px 16px; max-width: 380px;">';
-                h += '<h3 style="margin: 0 0 12px; font-size: 15px;">Create API Key</h3>';
-                h += '<input type="text" id="api-key-name-input" placeholder="Key name (e.g., claude-agent)" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 10px; box-sizing: border-box; font-size: 13px;">';
-                h += '<div style="margin-bottom: 10px; font-size: 12px;"><strong>Permissions:</strong><br>';
-                h += '<label style="display: block; margin: 4px 0;"><input type="checkbox" class="scope-cb" value="read" checked> Read</label>';
-                h += '<label style="display: block; margin: 4px 0;"><input type="checkbox" class="scope-cb" value="write" checked> Write</label>';
-                h += '<label style="display: block; margin: 4px 0;"><input type="checkbox" class="scope-cb" value="execute" checked> Execute</label>';
+                h += `<h3 style="margin: 0 0 12px; font-size: 15px;">${i18n('create_api_key')}</h3>`;
+                h += `<input type="text" id="api-key-name-input" placeholder="${i18n('key_name_placeholder')}" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 10px; box-sizing: border-box; font-size: 13px;">`;
+                h += `<div style="margin-bottom: 10px; font-size: 12px;"><strong>${i18n('permissions')}:</strong><br>`;
+                h += `<label style="display: block; margin: 4px 0;"><input type="checkbox" class="scope-cb" value="read" checked> ${i18n('permission_read')}</label>`;
+                h += `<label style="display: block; margin: 4px 0;"><input type="checkbox" class="scope-cb" value="write" checked> ${i18n('permission_write')}</label>`;
+                h += `<label style="display: block; margin: 4px 0;"><input type="checkbox" class="scope-cb" value="execute" checked> ${i18n('permission_execute')}</label>`;
                 h += '</div>';
                 h += '<div id="create-key-error" style="display: none; color: #dc2626; font-size: 12px; margin-bottom: 8px;"></div>';
                 h += '<div style="display: flex; gap: 6px; justify-content: flex-end; margin-bottom: 0;">';
-                h += '<button class="button cancel-btn">Cancel</button>';
-                h += '<button class="button create-btn" style="background: #3b82f6; color: white;">Create</button>';
+                h += `<button class="button cancel-btn">${i18n('cancel')}</button>`;
+                h += `<button class="button create-btn" style="background: #3b82f6; color: white;">${i18n('create')}</button>`;
                 h += '</div></div>';
                 
                 const win = await UIWindow({ body_content: h, width: 400, height: 220, backdrop: true, is_resizable: false, has_head: false, body_css: { 'background-color': 'var(--color-window-bg)', padding: '0', 'border-radius': '8px' } });
@@ -480,8 +480,8 @@ export default {
                 $win.find('.create-btn').on('click', async () => {
                     const name = $win.find('#api-key-name-input').val().trim();
                     const scopes = []; $win.find('.scope-cb:checked').each(function() { scopes.push($(this).val()); });
-                    if (!name) { $win.find('#create-key-error').text('Enter a name').show(); return; }
-                    if (scopes.length === 0) { $win.find('#create-key-error').text('Select at least one permission').show(); return; }
+                    if (!name) { $win.find('#create-key-error').text(i18n('enter_a_name')).show(); return; }
+                    if (scopes.length === 0) { $win.find('#create-key-error').text(i18n('select_at_least_one_permission')).show(); return; }
                     
                     $win.find('.create-btn').prop('disabled', true).text('...');
                     try {
@@ -496,18 +496,18 @@ export default {
                         
                         // Show key
                         const keyWin = await UIWindow({
-                            body_content: `<div style="padding: 16px;"><h3 class="key-created-title" style="margin: 0 0 8px; font-size: 15px;">Key Created!</h3><p class="key-created-warning" style="font-size: 12px; margin-bottom: 10px;">Save this key now - it won't be shown again.</p><div class="key-created-box" style="padding: 10px; border-radius: 4px; margin-bottom: 10px;"><code style="font-size: 11px; word-break: break-all;">${data.key.api_key}</code></div><button class="button copy-key-btn" style="width: 100%;">Copy Key</button></div>`,
+                            body_content: `<div style="padding: 16px;"><h3 class="key-created-title" style="margin: 0 0 8px; font-size: 15px;">${i18n('key_created')}</h3><p class="key-created-warning" style="font-size: 12px; margin-bottom: 10px;">${i18n('save_key_warning')}</p><div class="key-created-box" style="padding: 10px; border-radius: 4px; margin-bottom: 10px;"><code style="font-size: 11px; word-break: break-all;">${data.key.api_key}</code></div><button class="button copy-key-btn" style="width: 100%;">${i18n('copy')}</button></div>`,
                             width: 380, backdrop: true, is_resizable: false, has_head: false, body_css: { 'background-color': 'var(--color-window-bg)', padding: '0', 'border-radius': '8px' }
                         });
                         $(keyWin).find('.copy-key-btn').on('click', function() {
                             navigator.clipboard.writeText(data.key.api_key);
-                            $(this).text('Copied!');
+                            $(this).text(i18n('copied'));
                             setTimeout(() => $(keyWin).close(), 1000);
                         });
                         loadApiKeys();
                     } catch (e) {
-                        $win.find('#create-key-error').text('Failed to create').show();
-                        $win.find('.create-btn').prop('disabled', false).text('Create');
+                        $win.find('#create-key-error').text(i18n('failed_to_create')).show();
+                        $win.find('.create-btn').prop('disabled', false).text(i18n('create'));
                     }
                 });
                 $win.find('#api-key-name-input').focus();
@@ -524,11 +524,11 @@ Schema: ${window.api_origin || 'http://localhost:4200'}/api/tools/openapi
 Capabilities: files, terminal, git, http, scheduler`;
                 try {
                     await navigator.clipboard.writeText(prompt);
-                    $btn.text('Copied!');
-                    setTimeout(() => $btn.text('Copy Setup Prompt for AI'), 2000);
+                    $btn.text(i18n('copied'));
+                    setTimeout(() => $btn.text(i18n('copy_setup_prompt')), 2000);
                 } catch (e) {
-                    $btn.text('Failed');
-                    setTimeout(() => $btn.text('Copy Setup Prompt for AI'), 2000);
+                    $btn.text(i18n('error'));
+                    setTimeout(() => $btn.text(i18n('copy_setup_prompt')), 2000);
                 }
             });
             
@@ -545,7 +545,7 @@ Capabilities: files, terminal, git, http, scheduler`;
                         const short = data.ownerWallet.substring(0, 8) + '...' + data.ownerWallet.substring(data.ownerWallet.length - 4);
                         ownerEl.text(short).attr('title', data.ownerWallet);
                     } else {
-                        ownerEl.text('Not set').css('color', '#f59e0b');
+                        ownerEl.text(i18n('not_set')).css('color', '#f59e0b');
                     }
                 } catch (e) {
                     $el_window.find('#owner-wallet').text('Error');
@@ -563,7 +563,7 @@ Capabilities: files, terminal, git, http, scheduler`;
                     const data = await resp.json();
                     if (!data.success) { listEl.html('Failed'); return; }
                     const wallets = data.wallets || [];
-                    if (wallets.length === 0) { listEl.html('<span style="color: #999;">No additional wallets</span>'); return; }
+                    if (wallets.length === 0) { listEl.html(`<span style="color: #999;">${i18n('no_additional_wallets')}</span>`); return; }
                     
                     let h = '';
                     wallets.forEach(entry => {
@@ -601,7 +601,7 @@ Capabilities: files, terminal, git, http, scheduler`;
                 const isSolana = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(walletInput);
                 
                 if (!walletInput || (!isEVM && !isSolana)) { 
-                    statusEl.html('<span style="color: #ef4444;">Invalid wallet address</span>'); 
+                    statusEl.html(`<span style="color: #ef4444;">${i18n('invalid_wallet_address')}</span>`); 
                     return; 
                 }
                 
@@ -619,7 +619,7 @@ Capabilities: files, terminal, git, http, scheduler`;
                         body: JSON.stringify({ wallet, role }) 
                     });
                     const result = await resp.json();
-                    if (result.success) { statusEl.html('<span style="color: #22c55e;">Added!</span>'); $el_window.find('#add-wallet-address').val(''); loadAllowedWallets(); }
+                    if (result.success) { statusEl.html(`<span style="color: #22c55e;">${i18n('added')}</span>`); $el_window.find('#add-wallet-address').val(''); loadAllowedWallets(); }
                     else statusEl.html(`<span style="color: #ef4444;">${result.error}</span>`);
                 } catch (e) { statusEl.html('<span style="color: #ef4444;">Error</span>'); }
                 $(this).prop('disabled', false).text('Add');
@@ -672,8 +672,8 @@ Capabilities: files, terminal, git, http, scheduler`;
             // Copy origin button
             $el_window.find('#wc-settings-copy-origin').on('click', function() {
                 navigator.clipboard.writeText(window.location.origin);
-                $(this).text('Copied!');
-                setTimeout(() => $(this).text('Copy'), 2000);
+                $(this).text(i18n('copied'));
+                setTimeout(() => $(this).text(i18n('copy')), 2000);
             });
             
             // Save WalletConnect project ID

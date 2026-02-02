@@ -314,9 +314,10 @@ export class UpdateService {
 
       // Step 3: npm install (in case of new dependencies)
       // Using --legacy-peer-deps to avoid dependency conflicts
+      // Using --include=dev to ensure @types packages are installed for TypeScript build
       this.updateProgress = 'Installing dependencies...';
       logger.info('[UpdateService] Running npm install...');
-      await execAsync('npm install --legacy-peer-deps', { cwd: pc2NodeDir });
+      await execAsync('npm install --legacy-peer-deps --include=dev', { cwd: pc2NodeDir });
       logger.info('[UpdateService] npm install complete');
 
       // Step 4: Build GUI and backend (skip particle-auth rebuild - it's pre-built in repo)

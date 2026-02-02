@@ -58,7 +58,8 @@
     "prepare": "husky",
     "build:ts": "tsc",
     "gen": "./scripts/gen.sh",
-    "build:particle-auth": "cd ./packages/particle-auth && yarn install && yarn build && rm -rf ../../src/particle-auth && mv ./dist ../../src/particle-auth"
+    "build:particle-auth": "cd ./packages/particle-auth && yarn install && yarn build && rm -rf ../../src/particle-auth && mv ./dist ../../src/particle-auth",
+    "release": "./scripts/release.sh"
   },
   "workspaces": [
     "src/*",

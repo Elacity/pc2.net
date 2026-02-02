@@ -152,7 +152,23 @@ git push origin main
 **This step is REQUIRED for VPS auto-updates to work!**
 
 #### 4a. Bump version numbers
+
+> ⚠️ **CRITICAL: DO NOT SKIP THIS STEP!**
+> 
+> If you create a GitHub release without bumping `package.json`, the VPS will:
+> - Download the update successfully
+> - But still show the OLD version number in Settings → System
+> - Keep showing "Update Available" even after installing
+> 
+> The `package.json` version is what the server reports as "current version".
+
 ```bash
+# OPTION 1: Use the automated release script (RECOMMENDED)
+npm run release -- patch   # For bug fixes (2.6.0 → 2.6.1)
+npm run release -- minor   # For new features (2.6.0 → 2.7.0)
+npm run release -- major   # For breaking changes (2.6.0 → 3.0.0)
+
+# OPTION 2: Manual version bump
 # Edit both files:
 # /package.json → "version": "X.Y.Z"
 # /pc2-node/package.json → "version": "X.Y.Z"

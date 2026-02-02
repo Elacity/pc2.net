@@ -269,6 +269,14 @@ const config = createConfig({
               '--wcm-font-family': '-apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", Roboto, Ubuntu',
             },
             enableExplorer: true,
+            // Featured wallets appear first in the "All Wallets" list
+            // Essentials (Elastos community wallet) is prioritized
+            featuredWalletIds: [
+              '022e8ff84519e427bff394b3a58308bc9838196a8efb45158da0ab7c3228abfb', // Essentials
+            ],
+            explorerRecommendedWalletIds: [
+              '022e8ff84519e427bff394b3a58308bc9838196a8efb45158da0ab7c3228abfb', // Essentials
+            ],
           },
         }),
         // Additional wallets for "View all wallets"

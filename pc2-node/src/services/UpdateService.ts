@@ -336,16 +336,20 @@ export class UpdateService {
         logger.info('[UpdateService] Attempting restart...');
         
         // Try multiple restart methods in order
+        // Include full paths for PM2 since it may not be in PATH for systemd
         const restartCommands = [
           { cmd: 'systemctl restart pc2-node', name: 'systemctl pc2-node' },
           { cmd: 'systemctl restart pc2', name: 'systemctl pc2' },
-          { cmd: 'pm2 restart all', name: 'pm2' },
+          { cmd: 'pm2 restart pc2', name: 'pm2 pc2' },
+          { cmd: 'pm2 restart all', name: 'pm2 all' },
+          { cmd: `${process.env.HOME}/.nvm/versions/node/*/bin/pm2 restart pc2`, name: 'pm2 (nvm path)' },
+          { cmd: '/usr/local/bin/pm2 restart pc2', name: 'pm2 (/usr/local)' },
         ];
 
         for (const { cmd, name } of restartCommands) {
           try {
             logger.info(`[UpdateService] Trying ${name}...`);
-            execSync(cmd, { timeout: 30000 }); // 30 second timeout
+            execSync(cmd, { timeout: 30000, shell: '/bin/bash' }); // Use bash for glob expansion
             logger.info(`[UpdateService] Restart successful via ${name}`);
             return; // Success, don't try other methods
           } catch (error: unknown) {

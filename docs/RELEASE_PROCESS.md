@@ -2,6 +2,262 @@
 
 > **For AI Agents**: Follow this guide exactly when asked to "publish a release" or "create a new version".
 
+---
+
+## Complete Developer Workflow
+
+This is the full process from development to production deployment.
+
+### Overview
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    DEVELOPMENT → PRODUCTION FLOW                         │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  1. DEVELOP (Local)                                                     │
+│     └── Create feature branch                                           │
+│     └── Make changes, commit                                            │
+│     └── Rebuild GUI: npm run build:gui                                  │
+│     └── Test on localhost:4200                                          │
+│                                                                         │
+│  2. PRE-MERGE CHECKLIST                                                 │
+│     └── Commit any rebuilt assets (particle-auth, bundles)              │
+│     └── Run full test checklist                                         │
+│     └── Push branch to origin                                           │
+│                                                                         │
+│  3. MERGE TO MAIN                                                       │
+│     └── Create PR or direct merge                                       │
+│     └── Push to origin/main                                             │
+│                                                                         │
+│  4. CREATE RELEASE                                                      │
+│     └── Bump version in package.json files                              │
+│     └── Create git tag                                                  │
+│     └── Create GitHub Release                                           │
+│                                                                         │
+│  5. AUTO-DEPLOY TO VPS                                                  │
+│     └── VPS checks for updates (every 3 hours, or manual check)         │
+│     └── User clicks "Install Update" in Settings → System               │
+│     └── Server: git pull → npm install → npm build → restart            │
+│     └── Done! New version is live                                       │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### Step 1: Development (Local Machine)
+
+```bash
+# Create feature branch
+git checkout -b feature/my-feature
+
+# Make your changes...
+
+# Rebuild the GUI after frontend changes
+npm run build:gui
+
+# Start local server for testing
+npm run start:pc2
+
+# Test at http://localhost:4200
+```
+
+**Key build commands:**
+| Command | What it does |
+|---------|--------------|
+| `npm run build:gui` | Rebuilds frontend bundle (`pc2-node/frontend/bundle.min.js`) |
+| `npm run build:backend` | Compiles TypeScript backend (in `pc2-node/`) |
+| `npm run start:pc2` | Starts the PC2 node server on port 4200 |
+
+---
+
+### Step 2: Pre-Merge Checklist
+
+Before merging to main, ensure everything is committed:
+
+#### Check for uncommitted build artifacts
+```bash
+git status
+```
+
+**Common uncommitted files that MUST be committed:**
+
+| File/Folder | When to commit |
+|-------------|----------------|
+| `pc2-node/frontend/bundle.min.js` | After `npm run build:gui` |
+| `pc2-node/frontend/bundle.min.css` | After `npm run build:gui` |
+| `src/particle-auth/` | After rebuilding particle-auth |
+| `src/gui/src/i18n/translations/*.js` | After adding translations |
+
+#### Commit build artifacts
+```bash
+# If particle-auth was rebuilt
+git add src/particle-auth/
+git commit -m "chore: rebuild particle-auth assets"
+
+# If GUI was rebuilt  
+git add pc2-node/frontend/
+git commit -m "chore: rebuild GUI bundle"
+
+# Push to your branch
+git push origin feature/my-feature
+```
+
+#### Test Checklist (before merge)
+
+Run through these on localhost:4200:
+
+- [ ] **Login** - No grey screen, wallet connects
+- [ ] **Language** - Switching languages persists after reload
+- [ ] **Theme** - Dark/light mode persists after reload
+- [ ] **Settings tabs** - All tabs load without errors
+- [ ] **Wallet sidebar** - Opens, shows balances
+- [ ] **Send/Receive** - Windows open correctly
+- [ ] **Browser console** - No 404 errors or JS exceptions
+
+---
+
+### Step 3: Merge to Main
+
+**Option A: Via Pull Request (Recommended)**
+```bash
+# Create PR
+gh pr create --base main --head feature/my-feature \
+  --title "feat: My feature description" \
+  --body "## Summary
+- Change 1
+- Change 2
+
+## Test Plan
+- Tested login flow
+- Tested settings
+"
+
+# After review, merge via GitHub UI
+```
+
+**Option B: Direct Merge**
+```bash
+git checkout main
+git pull origin main
+git merge feature/my-feature
+git push origin main
+```
+
+---
+
+### Step 4: Create GitHub Release
+
+**This step is REQUIRED for VPS auto-updates to work!**
+
+#### 4a. Bump version numbers
+```bash
+# Edit both files:
+# /package.json → "version": "X.Y.Z"
+# /pc2-node/package.json → "version": "X.Y.Z"
+```
+
+#### 4b. Commit and tag
+```bash
+git add package.json pc2-node/package.json
+git commit -m "chore: bump version to vX.Y.Z"
+git push origin main
+
+git tag -a vX.Y.Z -m "vX.Y.Z - Brief description"
+git push origin vX.Y.Z
+```
+
+#### 4c. Create GitHub Release
+```bash
+gh release create vX.Y.Z \
+  --title "vX.Y.Z - Release Title" \
+  --notes "## What's New
+
+- Feature 1: Description
+- Feature 2: Description
+
+## Bug Fixes
+
+- Fixed issue with X
+
+## For Node Operators
+
+Your PC2 node will detect this update within 3 hours.
+Click 'Install Update' in Settings → System.
+"
+```
+
+Or create manually at: https://github.com/Elacity/pc2.net/releases/new
+
+---
+
+### Step 5: Deploy to VPS (Auto-Update)
+
+Once the GitHub Release exists, your VPS will auto-detect it:
+
+1. **Automatic detection**: Checks every 3 hours
+2. **Manual check**: Go to **Settings → System** → Click **"Check for Updates"**
+3. **Install**: Click **"Install Update"** button
+4. **Progress**: Watch the status: Downloading → Installing → Building → Restarting
+5. **Done**: Page auto-refreshes with new version
+
+**What happens during install:**
+```bash
+# The server automatically runs:
+git pull origin main      # Download latest code
+npm install               # Install any new dependencies
+npm run build             # Rebuild backend + frontend
+systemctl restart pc2     # Restart the service
+```
+
+---
+
+### Rebuilding Particle Auth
+
+If you modify the Particle Auth source code (`packages/particle-auth/`):
+
+```bash
+# Navigate to particle-auth package
+cd packages/particle-auth
+
+# Install dependencies (if needed)
+npm install
+
+# Build
+npm run build
+
+# Copy built files to src/particle-auth
+rm -rf ../../src/particle-auth
+cp -r dist ../../src/particle-auth
+
+# Commit the rebuilt assets
+cd ../..
+git add src/particle-auth/
+git commit -m "chore: rebuild particle-auth"
+```
+
+**Important**: The built `src/particle-auth/` folder contains hashed filenames (e.g., `index-DWEcBvd3.js`). Every rebuild creates new hashes. You MUST commit these changes or the login page will 404.
+
+---
+
+### Troubleshooting
+
+#### Grey screen after login
+- Check if `src/particle-auth/` was committed after a rebuild
+- Check browser console for 404 errors on `/particle-auth/assets/`
+
+#### Changes not appearing after merge
+- Ensure you ran `npm run build:gui` and committed `pc2-node/frontend/bundle.min.js`
+- Check cache-busting: update the version query param in `pc2-node/frontend/index.html`
+
+#### VPS doesn't see update
+- Ensure you created a **GitHub Release** (not just pushed to main)
+- Check the release is visible at: https://github.com/Elacity/pc2.net/releases/latest
+- Manual check: `curl -s https://api.github.com/repos/Elacity/pc2.net/releases/latest | jq .tag_name`
+
+---
+
 ## GitHub Releases URL
 
 **View all releases:** https://github.com/Elacity/pc2.net/releases

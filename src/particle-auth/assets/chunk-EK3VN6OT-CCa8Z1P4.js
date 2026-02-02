@@ -1,0 +1,1 @@
+import{f as r,L as n,D as s,aW as i}from"./index-DWEcBvd3.js";function u(){const[t,o]=s.useState(i());return s.useEffect(()=>{const e=()=>{o(i())};return window.addEventListener("resize",e),()=>window.removeEventListener("resize",e)},[]),t}var l=r({"src/hooks/useIsMobile.ts"(){n()}});export{l as i,u};

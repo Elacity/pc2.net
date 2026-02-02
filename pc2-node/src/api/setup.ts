@@ -226,10 +226,12 @@ router.post('/complete', async (req: Request, res: Response) => {
     const passwordHash = await bcrypt.hash(password, 12);
     
     // Save node config with password hash (owner not yet set)
+    // Include publicUrl so DID tethering can use it for callbacks
     saveNodeConfig({
       antiSnipePasswordHash: passwordHash,
       ownerWallet: null,
       createdAt: new Date().toISOString(),
+      publicUrl: publicUrl || null,
     });
     
     logger.info(`[Setup] Anti-snipe password set for node`);

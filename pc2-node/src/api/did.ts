@@ -81,10 +81,30 @@ export async function handleTetherRequest(req: AuthenticatedRequest, res: Respon
     const nodeConfig = getNodeConfig();
     
     // Determine callback URL - needs to be reachable from Essentials mobile app
+    // Try multiple sources for public URL:
+    // 1. nodeConfig.publicUrl (saved during setup)
+    // 2. bosonService.getPublicUrl() (if username registered)
+    // 3. x-forwarded-host (when behind gateway proxy)
+    // 4. Local network IP (last resort, usually won't work)
+    
+    let publicUrl = nodeConfig.publicUrl;
+    
+    // Fallback: Check BosonService for registered username
+    if (!publicUrl) {
+      const bosonService = req.app.locals.bosonService;
+      if (bosonService) {
+        publicUrl = bosonService.getPublicUrl();
+        if (publicUrl) {
+          logger.info('[DID] Using BosonService public URL for callback:', publicUrl);
+        }
+      }
+    }
+    
     let callbackUrl: string;
-    if (nodeConfig.publicUrl) {
-      // Production: use configured public URL
-      callbackUrl = `${nodeConfig.publicUrl}/api/did/callback`;
+    if (publicUrl) {
+      // Use the public ela.city URL (works from anywhere)
+      callbackUrl = `${publicUrl}/api/did/callback`;
+      logger.info('[DID] Using public URL for callback:', callbackUrl);
     } else {
       // Check for x-forwarded-host first (when behind a proxy like ela.city gateway)
       const forwardedHost = req.headers['x-forwarded-host'];
@@ -97,6 +117,7 @@ export async function handleTetherRequest(req: AuthenticatedRequest, res: Respon
         logger.info('[DID] Using forwarded host for callback:', callbackUrl);
       } else {
         // Development: use local network IP so phone can reach us
+        // NOTE: This usually won't work as Essentials servers can't reach local IPs
         const host = req.get('host') || 'localhost:4200';
         const isLocalhost = host.includes('localhost') || host.includes('127.0.0.1');
         
@@ -105,7 +126,8 @@ export async function handleTetherRequest(req: AuthenticatedRequest, res: Respon
           const port = host.split(':')[1] || '4200';
           if (localIP) {
             callbackUrl = `http://${localIP}:${port}/api/did/callback`;
-            logger.info('[DID] Using local network IP for callback:', callbackUrl);
+            logger.warn('[DID] Using local network IP for callback (may not work):', callbackUrl);
+            logger.warn('[DID] Consider registering a username for DID tethering to work');
           } else {
             // Fallback - will only work if phone is on same machine (unlikely)
             callbackUrl = `http://localhost:${port}/api/did/callback`;

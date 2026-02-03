@@ -29,9 +29,7 @@ module.exports = {
       PORT: "4200"
     },
     
-    // Logging
-    error_file: "./logs/pc2-error.log",
-    out_file: "./logs/pc2-out.log",
+    // Logging - PM2 defaults are fine, logs go to ~/.pm2/logs/
     merge_logs: true,
     log_date_format: "YYYY-MM-DD HH:mm:ss Z"
   }]

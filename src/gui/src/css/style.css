@@ -10471,6 +10471,22 @@ fieldset[name=number-code] {
     fill: rgba(255, 255, 255, 0.5);
 }
 
+/* Upload/progress modal: dark text for light mode */
+[data-theme="light"] .window-progress .window-body,
+[data-theme="light"] .window-progress .window-body .progress-msg,
+[data-theme="light"] .window-progress .window-body .progress-percent,
+[data-theme="light"] .window-progress .window-body .progress-report,
+[data-theme="light"] .window-progress .progress-error .progress-error-title,
+[data-theme="light"] .window-progress .progress-error .progress-error-message {
+    color: #1a1a1a;
+}
+[data-theme="light"] .window-progress .window-body svg path {
+    fill: #1a1a1a;
+}
+[data-theme="light"] .window-progress .window-body svg path[opacity] {
+    fill: rgba(0, 0, 0, 0.5);
+}
+
 /*****************************************************
  * Mobile Settings Layout Fixes
  *****************************************************/

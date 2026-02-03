@@ -14,23 +14,43 @@ const router = Router();
 
 /**
  * Detect which process manager is available
+ * Tries multiple methods to find PM2, including alternative paths
  */
 function detectProcessManager(): 'systemctl' | 'pm2' | 'none' {
-  try {
-    // Check if we're running under systemd
-    execSync('systemctl is-active pc2', { stdio: 'ignore' });
-    return 'systemctl';
-  } catch {
+  // Check systemctl first (VPS deployments)
+  const systemctlServices = ['pc2-node', 'pc2'];
+  for (const service of systemctlServices) {
     try {
-      // Check if pm2 is available and managing pc2
-      const result = execSync('pm2 pid pc2 2>/dev/null', { encoding: 'utf8' });
+      execSync(`systemctl is-active ${service}`, { stdio: 'ignore' });
+      return 'systemctl';
+    } catch {
+      // Try next
+    }
+  }
+  
+  // Check PM2 with multiple paths (local installations via start-local.sh)
+  const pm2Commands = [
+    'pm2',
+    `${process.env.HOME}/.nvm/versions/node/*/bin/pm2`,
+    '/usr/local/bin/pm2',
+    '/usr/bin/pm2',
+  ];
+  
+  for (const pm2Cmd of pm2Commands) {
+    try {
+      const result = execSync(`${pm2Cmd} pid pc2 2>/dev/null`, { 
+        encoding: 'utf8',
+        shell: '/bin/bash',  // Use bash for glob expansion
+        timeout: 5000 
+      });
       if (result && result.trim() && result.trim() !== '0') {
         return 'pm2';
       }
     } catch {
-      // pm2 not available or not managing pc2
+      // Try next path
     }
   }
+  
   return 'none';
 }
 
@@ -82,28 +102,30 @@ router.post('/restart', authenticate, requireOwner, async (req: AuthenticatedReq
     setTimeout(() => {
       logger.info('[System] Initiating restart...');
       
-      if (processManager === 'systemctl') {
+      // Try multiple restart methods in order (same approach as UpdateService)
+      const restartCommands = [
+        { cmd: 'systemctl restart pc2-node', name: 'systemctl pc2-node' },
+        { cmd: 'systemctl restart pc2', name: 'systemctl pc2' },
+        { cmd: 'pm2 restart pc2', name: 'pm2 pc2' },
+        { cmd: 'pm2 restart all', name: 'pm2 all' },
+        { cmd: `${process.env.HOME}/.nvm/versions/node/*/bin/pm2 restart pc2`, name: 'pm2 (nvm path)' },
+        { cmd: '/usr/local/bin/pm2 restart pc2', name: 'pm2 (/usr/local)' },
+      ];
+
+      for (const { cmd, name } of restartCommands) {
         try {
-          execSync('systemctl restart pc2', { stdio: 'ignore' });
-          logger.info('[System] Restart via systemctl succeeded');
+          logger.info(`[System] Trying ${name}...`);
+          execSync(cmd, { timeout: 30000, shell: '/bin/bash', stdio: 'ignore' });
+          logger.info(`[System] Restart successful via ${name}`);
           return;
-        } catch (e) {
-          logger.warn('[System] systemctl restart failed, falling back');
+        } catch (error: unknown) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          logger.warn(`[System] ${name} failed: ${errorMessage}`);
         }
       }
       
-      if (processManager === 'pm2') {
-        try {
-          execSync('pm2 restart pc2', { stdio: 'ignore' });
-          logger.info('[System] Restart via pm2 succeeded');
-          return;
-        } catch (e) {
-          logger.warn('[System] pm2 restart failed, falling back');
-        }
-      }
-      
-      // No process manager - just exit
-      logger.info('[System] No process manager found, exiting...');
+      // All restart methods failed - exit and let external process manager restart
+      logger.info('[System] All restart methods failed, exiting for external restart...');
       process.exit(0);
     }, 500);
     

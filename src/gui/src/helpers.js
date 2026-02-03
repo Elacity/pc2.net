@@ -1531,48 +1531,59 @@ function downloadFile(url, postData = {}) {
  * window.trigger_download(filePaths);
  */
 window.trigger_download = (paths)=>{
-    let urls = [];
-    for (let index = 0; index < paths.length; index++) {
-        urls.push({
-            download: window.origin + "/down?path=" + paths[index],
-            filename: path.basename(paths[index]),
-        });
-    }
-
-    urls.forEach(async function (e) {                
-        const anti_csrf = await (async () => {
-            const resp = await fetch(
-                `${window.gui_origin}/get-anticsrf-token`,{
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': 'Bearer ' + window.auth_token,
-                    }
-                },)
-            const { token } = await resp.json();
-            return token;
-        })();
-
-        downloadFile(e.download, {
-            anti_csrf,
-            auth_token: puter.authToken,
-        });
-        return;
-
-        fetch(e.download, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': 'Bearer ' + puter.authToken,
-            },
-            body: JSON.stringify({
-                anti_csrf,
-            }),
-        })
-            .then(res => res.blob())
-            .then(blob => {
-                saveAs(blob, e.filename);
+    // Use PC2's /read endpoint for downloading files
+    const apiOrigin = window.api_origin || window.origin;
+    const authToken = window.auth_token || localStorage.getItem('puter_auth_token') || localStorage.getItem('auth_token') || '';
+    
+    paths.forEach(async function (filePath) {
+        const filename = path.basename(filePath);
+        const downloadUrl = `${apiOrigin}/read?path=${encodeURIComponent(filePath)}`;
+        
+        try {
+            const response = await fetch(downloadUrl, {
+                method: 'GET',
+                headers: {
+                    'Authorization': authToken ? `Bearer ${authToken}` : '',
+                },
             });
             
+            if (!response.ok) {
+                console.error('[Download] Failed to download file:', response.status, response.statusText);
+                // Show error notification
+                if (window.UIAlert) {
+                    window.UIAlert({
+                        message: `Failed to download "${filename}": ${response.statusText}`,
+                        type: 'error'
+                    });
+                }
+                return;
+            }
+            
+            const blob = await response.blob();
+            
+            // Use FileSaver.js saveAs if available, otherwise use native approach
+            if (typeof saveAs === 'function') {
+                saveAs(blob, filename);
+            } else {
+                // Fallback: create download link
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }
+        } catch (error) {
+            console.error('[Download] Error downloading file:', error);
+            if (window.UIAlert) {
+                window.UIAlert({
+                    message: `Error downloading "${filename}": ${error.message || 'Unknown error'}`,
+                    type: 'error'
+                });
+            }
+        }
     });
 }
 

@@ -219,9 +219,9 @@ Please try recreating the link.`);
     // Does the user have a preference for this file type?
     //----------------------------------------------------------------
     else if ( !associated_app_name && !is_dir && window.user_preferences[`default_apps${path.extname(item_path).toLowerCase()}`] ) {
-        // PDF files should open maximized by default (like puter.com)
-        const isPdf = path.extname(item_path).toLowerCase() === '.pdf';
-        const shouldMaximize = options.maximized !== undefined ? options.maximized : isPdf;
+        // PDF files now open in normal window to allow resizing
+        // Users can maximize manually if needed
+        const shouldMaximize = options.maximized !== undefined ? options.maximized : false;
         
         launch_app({
             name: window.user_preferences[`default_apps${path.extname(item_path).toLowerCase()}`],
@@ -334,9 +334,9 @@ Please try recreating the link.`);
         // First suggested app is default app to open this item
         //---------------------------------------------
         else {
-            // PDF files should open maximized by default (like puter.com)
-            const isPdf = path.extname(item_path).toLowerCase() === '.pdf';
-            const shouldMaximize = options.maximized !== undefined ? options.maximized : isPdf;
+            // PDF files now open in normal window to allow resizing
+            // Users can maximize manually if needed
+            const shouldMaximize = options.maximized !== undefined ? options.maximized : false;
             
             launch_app({
                 name: suggested_apps[0].name,

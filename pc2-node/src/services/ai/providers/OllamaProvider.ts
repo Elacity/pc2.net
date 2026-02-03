@@ -150,10 +150,13 @@ export class OllamaProvider {
   /**
    * Convert messages to Ollama format
    * Ollama supports multimodal content with images as base64 data URLs
+   * IMPORTANT: Filter out any unexpected fields (like 'context') to prevent Ollama API errors
    */
   private convertMessages(messages: ChatMessage[]): any[] {
     return messages.map(msg => {
       // Ollama supports both string content and array content with images
+      // CRITICAL: Only include role, content, and images - never include 'context' or other fields
+      // as they can cause "json: cannot unmarshal string into Go struct field GenerateRequest.context of type []int"
       if (typeof msg.content === 'string') {
         return {
           role: msg.role === 'system' ? 'user' : msg.role, // Ollama doesn't support system role
@@ -242,9 +245,16 @@ export class OllamaProvider {
     const temperature = args.temperature ?? 0.7;
     const maxTokens = args.max_tokens;
 
+    // CRITICAL: Ensure messages don't contain 'context' field from previous Ollama responses
+    // This prevents "json: cannot unmarshal string into Go struct field GenerateRequest.context of type []int"
+    const sanitizedMessages = messages.map((msg: any) => {
+      const { context, ...rest } = msg; // Strip 'context' if present
+      return rest;
+    });
+
     const requestBody: any = {
       model: model,
-      messages: messages,
+      messages: sanitizedMessages,
       stream: false,
       options: {
         temperature: temperature,
@@ -467,9 +477,16 @@ export class OllamaProvider {
    */
   async *streamComplete(args: CompleteArguments): AsyncGenerator<ChatCompletion, void, unknown> {
     const model = args.model?.replace('ollama:', '') || this.defaultModel;
-    const messages = this.convertMessages(args.messages);
+    const rawMessages = this.convertMessages(args.messages);
     const temperature = args.temperature ?? 0.7;
     const hasTools = args.tools && args.tools.length > 0;
+
+    // CRITICAL: Ensure messages don't contain 'context' field from previous Ollama responses
+    // This prevents "json: cannot unmarshal string into Go struct field GenerateRequest.context of type []int"
+    const messages = rawMessages.map((msg: any) => {
+      const { context, ...rest } = msg; // Strip 'context' if present
+      return rest;
+    });
 
     // Use OpenAI-compatible endpoint when tools are provided
     const useOpenAICompat = hasTools;

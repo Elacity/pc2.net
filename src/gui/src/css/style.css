@@ -1814,12 +1814,16 @@
     background: var(--ai-input-bg);
     color: var(--ai-text-color);
     cursor: pointer;
-    flex-shrink: 0;
+    flex-shrink: 1;
     width: auto;
     min-width: 60px;
+    max-width: 150px;
     height: 36px;
     margin: 0;
     box-sizing: border-box;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .ai-model-select:focus {
@@ -10804,6 +10808,10 @@ fieldset[name=number-code] {
 [data-theme="light"] .item-props-tab-btn {
     color: #374653;
     border-color: transparent;
+}
+
+[data-theme="light"] .item-props-tab-btn:hover {
+    color: #1a1a1a;
 }
 
 [data-theme="light"] .item-props-tab-selected {

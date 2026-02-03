@@ -1,6 +1,6 @@
 {
   "name": "@elastos/pc2-node",
-  "version": "2.6.8",
+  "version": "0.1.1",
   "description": "PC2 Production Node - Self-hosted personal cloud with ElastOS frontend built-in",
   "main": "dist/index.js",
   "type": "module",

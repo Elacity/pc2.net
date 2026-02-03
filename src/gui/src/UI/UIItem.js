@@ -1286,13 +1286,28 @@ function UIItem (options) {
                     html: i18n('download'),
                     disabled: options.is_dir && !window.feature_flags.download_directory,
                     onClick: async function () {
+                        // Get the file path - try multiple sources
+                        const filePath = options.path || $(el_item).attr('data-path');
+                        
+                        if (!filePath) {
+                            console.error('[Download] No file path available');
+                            if (window.UIAlert) {
+                                window.UIAlert({
+                                    message: 'Cannot download: file path not found',
+                                    type: 'error'
+                                });
+                            }
+                            return;
+                        }
+                        
                         if ( options.is_dir )
                         {
-                            window.zipItems(el_item, path.dirname($(el_item).attr('data-path')), true);
+                            window.zipItems(el_item, path.dirname(filePath), true);
                         }
                         else
                         {
-                            window.trigger_download([options.path]);
+                            console.log('[Download] Downloading file:', filePath);
+                            window.trigger_download([filePath]);
                         }
                     },
                 });

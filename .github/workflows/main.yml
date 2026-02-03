@@ -1,9 +1,10 @@
 name: Maintain Release Merge PR
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:  # Manual trigger only - disabled for Elacity fork
+  # push:
+  #   branches:
+  #     - main
 
 jobs:
   update-release-pr:

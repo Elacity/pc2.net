@@ -1,16 +1,17 @@
 name: PC2 Node Docker Image
 
 on:
-  push:
-    tags:
-      - 'pc2-v*.*.*'
-    branches:
-      - 'main'
-      - 'feature/mvp-production-release'
-    paths:
-      - 'pc2-node/**'
-      - '.github/workflows/pc2-node-docker.yml'
-  workflow_dispatch:
+  workflow_dispatch:  # Manual trigger only for now
+  # Disabled auto-trigger to prevent CI failures
+  # push:
+  #   tags:
+  #     - 'pc2-v*.*.*'
+  #   branches:
+  #     - 'main'
+  #     - 'feature/mvp-production-release'
+  #   paths:
+  #     - 'pc2-node/**'
+  #     - '.github/workflows/pc2-node-docker.yml'
 
 env:
   REGISTRY: ghcr.io

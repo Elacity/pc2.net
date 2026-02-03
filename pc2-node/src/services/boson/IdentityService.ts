@@ -366,13 +366,32 @@ export class IdentityService {
 
   /**
    * Get cryptographic keys as Buffers for Active Proxy authentication
+   * Converts from stored PKCS8 DER / SPKI formats to raw Ed25519 format
+   * 
+   * Key Format Conversion:
+   * - PKCS8 DER (48 bytes) = 16-byte ASN.1 header + 32-byte seed
+   * - SPKI (44 bytes) = 12-byte ASN.1 header + 32-byte public key
+   * - Raw Ed25519 (64 bytes) = 32-byte seed + 32-byte public key
    */
   getKeypair(): { publicKey: Buffer; privateKey: Buffer } | null {
     if (!this.identity) return null;
     
+    // Get stored keys (PKCS8 DER and SPKI formats)
+    const storedPrivateKey = Buffer.from(this.identity.privateKey, 'hex');
+    const storedPublicKey = Buffer.from(this.identity.publicKey, 'hex');
+    
+    // Extract raw 32-byte public key from SPKI (last 32 bytes)
+    const rawPublicKey = storedPublicKey.slice(-32);
+    
+    // Extract raw 32-byte seed from PKCS8 DER (last 32 bytes)
+    const rawSeed = storedPrivateKey.slice(-32);
+    
+    // Raw Ed25519 private key format: seed (32) + public (32) = 64 bytes
+    const rawPrivateKey = Buffer.concat([rawSeed, rawPublicKey]);
+    
     return {
-      publicKey: Buffer.from(this.identity.publicKey, 'hex'),
-      privateKey: Buffer.from(this.identity.privateKey, 'hex'),
+      publicKey: rawPublicKey,
+      privateKey: rawPrivateKey,
     };
   }
 

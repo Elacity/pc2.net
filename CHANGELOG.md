@@ -6,6 +6,20 @@
 
 ---
 
+## [2.7.0](https://github.com/Elacity/pc2.net/compare/v2.6.8...v2.7.0) (2026-02-03)
+
+
+### Features
+
+* add ElastOS Desktop Launcher (Electron app) ([b72abb3](https://github.com/Elacity/pc2.net/commit/b72abb39ab72b1722d7e8e3c69a42b3381bf9562))
+
+
+### Bug Fixes
+
+* community-reported bugs and reset version to 0.1.1 ([a0a835a](https://github.com/Elacity/pc2.net/commit/a0a835a0cdf2ddfccac8ce7d0e47b1bf142318ac))
+* multiple bug fixes for community feedback ([6cf1353](https://github.com/Elacity/pc2.net/commit/6cf1353e364f724e570b71c186850316467ff668))
+* upload progress dialog text visibility in light mode ([15a1a3f](https://github.com/Elacity/pc2.net/commit/15a1a3fbebf2a659906dfa3fcd5383ab0f172d94))
+
 ## [UNRELEASED] PC2 v1.0.0-alpha
 
 ### 🎉 Major Features

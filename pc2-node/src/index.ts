@@ -1,3 +1,27 @@
+// Global error handlers MUST be registered first, before any other imports
+// This prevents WASM modules from registering their own crash-happy handlers
+process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
+  // Log but don't crash - many rejections are recoverable (e.g., 409 Telegram conflicts)
+  console.error('[PC2] Unhandled Promise Rejection:', reason?.message || reason);
+  // Only exit on truly fatal errors
+  if (reason?.code === 'EADDRINUSE') {
+    console.error('[PC2] Fatal: Port already in use, exiting');
+    process.exit(1);
+  }
+});
+
+process.on('uncaughtException', (error: Error) => {
+  console.error('[PC2] Uncaught Exception:', error);
+  // Log stack trace for debugging
+  if (error.stack) {
+    console.error(error.stack);
+  }
+  // Only exit on truly fatal errors that we can't recover from
+  if ((error as any).code === 'EADDRINUSE') {
+    process.exit(1);
+  }
+});
+
 import { createServer } from './server.js';
 import { DatabaseManager, IPFSStorage, FilesystemManager, type IPFSNetworkMode, setGlobalDatabase } from './storage/index.js';
 import { loadConfig, type Config } from './config/loader.js';

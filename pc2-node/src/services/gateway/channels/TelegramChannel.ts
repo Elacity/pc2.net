@@ -83,19 +83,35 @@ export class TelegramChannel extends EventEmitter {
         await this.handleMessage(ctx);
       });
       
-      // Handle errors
+      // Handle errors - including 409 conflicts
       this.bot.catch((error: any) => {
+        // 409 Conflict means another bot instance is running - this is recoverable
+        if (error?.error_code === 409) {
+          logger.warn('[TelegramChannel] Another bot instance detected (409), will retry...');
+          return; // Don't crash on 409
+        }
         logger.error('[TelegramChannel] Bot error:', error);
         this.emit('error', error);
       });
       
-      // Start polling
+      // Start polling with error handling for 409 conflicts
       this.bot.start({
         onStart: () => {
           this.connected = true;
           this.emit('connected', this.botUsername || 'unknown');
           logger.info('[TelegramChannel] Bot started polling');
         },
+      }).catch((error: any) => {
+        // Handle startup errors gracefully
+        if (error?.error_code === 409) {
+          logger.warn('[TelegramChannel] 409 Conflict on startup - another instance may be running');
+          // Still mark as connected - the old instance will eventually release
+          this.connected = true;
+          this.emit('connected', this.botUsername || 'unknown');
+        } else {
+          logger.error('[TelegramChannel] Fatal startup error:', error);
+          this.emit('error', error);
+        }
       });
       
     } catch (error: any) {

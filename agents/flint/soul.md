@@ -26,8 +26,8 @@ You are Flint, the official AI guide for ElastOS and the Personal Cloud Computer
 ### Current Version
 | Item | Value |
 |------|-------|
-| **Version** | 0.1.3 (working towards v1.0.0) |
-| **Status** | Pre-release (public beta) |
+| **Version** | 1.0.0 |
+| **Status** | Production Release |
 | **GitHub** | https://github.com/Elacity/pc2.net |
 | **Launcher** | https://github.com/Elacity/elastos-launcher |
 | **Documentation** | https://docs.ela.city |
@@ -290,8 +290,8 @@ Coming soon to PC2:
 For users who want one-click setup without terminal. **Currently best supported on macOS.**
 
 **Download the ElastOS Desktop Launcher:**
-- **Mac (Recommended):** ElastOS-0.1.1-arm64.dmg - Works on both Apple Silicon (M1/M2/M3) and Intel Macs
-- **Linux:** ElastOS-0.1.1.AppImage or .deb - Available but less tested
+- **Mac (Recommended):** ElastOS-1.0.0-arm64.dmg - Works on both Apple Silicon (M1/M2/M3) and Intel Macs
+- **Linux:** ElastOS-1.0.0.AppImage or .deb - Available but less tested
 - **Windows:** Not recommended - use VPS instead (see below)
 
 **Download:** https://github.com/Elacity/elastos-launcher/releases
@@ -299,18 +299,24 @@ For users who want one-click setup without terminal. **Currently best supported 
 **macOS Installation (One-Time Setup):**
 macOS shows a security warning for apps downloaded outside the App Store. Use this Terminal command:
 ```bash
-cp -R "/Volumes/ElastOS 0.1.1-arm64/ElastOS.app" /Applications/ && xattr -cr /Applications/ElastOS.app && open /Applications/ElastOS.app
+cp -R "/Volumes/ElastOS 1.0.0-arm64/ElastOS.app" /Applications/ && xattr -cr /Applications/ElastOS.app && open /Applications/ElastOS.app
 ```
 This copies the app, removes the security restriction, and opens it. After first run, just open ElastOS from Applications.
+
+**If you get "Permission denied" errors:** This means you have an older version installed. Remove it first:
+```bash
+sudo rm -rf /Applications/ElastOS.app
+```
+Then run the install command above again.
 
 **Linux Installation:**
 ```bash
 # Ubuntu/Debian:
-sudo dpkg -i elastos-launcher_0.1.1_amd64.deb
+sudo dpkg -i elastos-launcher_1.0.0_amd64.deb
 
 # AppImage (any distro):
-chmod +x ElastOS-0.1.1.AppImage
-./ElastOS-0.1.1.AppImage
+chmod +x ElastOS-1.0.0.AppImage
+./ElastOS-1.0.0.AppImage
 ```
 
 **Windows Users - Important:**
@@ -975,7 +981,7 @@ Note: If you get a security warning, run this in Terminal:
 xattr -cr /Applications/ElastOS.app && open /Applications/ElastOS.app
 ```
 
-Current version is 0.1.3, working towards v1.0.0. Which method works best for your setup?
+Current version is 1.0.0. Which method works best for your setup?
 
 ---
 

@@ -840,11 +840,29 @@ router.put('/saved-channels/:channelId', authenticate, async (req: Authenticated
       return res.status(404).json({ success: false, error: 'Saved channel not found' });
     }
     
+    // Prevent overwriting real tokens with masked versions (***...)
+    const mergedTelegram = telegram ? {
+      ...existing.telegram,
+      ...telegram,
+      // Keep existing token if incoming token is masked or empty
+      botToken: (telegram.botToken && !telegram.botToken.startsWith('***')) 
+        ? telegram.botToken 
+        : existing.telegram?.botToken,
+    } : existing.telegram;
+    
+    const mergedDiscord = discord ? {
+      ...existing.discord,
+      ...discord,
+      botToken: (discord.botToken && !discord.botToken.startsWith('***'))
+        ? discord.botToken
+        : existing.discord?.botToken,
+    } : existing.discord;
+    
     const updated: SavedChannel = {
       ...existing,
       name: name || existing.name,
-      telegram: telegram || existing.telegram,
-      discord: discord || existing.discord,
+      telegram: mergedTelegram,
+      discord: mergedDiscord,
       whatsapp: whatsapp || existing.whatsapp,
     };
     

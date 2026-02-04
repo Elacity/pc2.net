@@ -6,7 +6,7 @@
 
 export function showTelegramConnectModal() {
     return new Promise((resolve, reject) => {
-        // Create modal overlay
+        // Create modal container (no dark overlay - just the modal itself)
         const overlay = document.createElement('div');
         overlay.className = 'telegram-connect-overlay';
         overlay.innerHTML = `
@@ -17,11 +17,11 @@ export function showTelegramConnectModal() {
                     left: 0;
                     width: 100%;
                     height: 100%;
-                    background: rgba(0, 0, 0, 0.5);
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    z-index: 999999;
+                    z-index: 2147483647;
+                    pointer-events: none;
                 }
                 .telegram-connect-modal {
                     background: white;
@@ -29,7 +29,8 @@ export function showTelegramConnectModal() {
                     padding: 24px;
                     width: 440px;
                     max-width: 90%;
-                    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+                    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+                    pointer-events: auto;
                 }
                 .telegram-connect-header {
                     display: flex;
@@ -223,8 +224,15 @@ export function showTelegramConnectModal() {
         const errorEl = overlay.querySelector('#telegram-error');
         const connectingEl = overlay.querySelector('#telegram-connecting');
         
+        // Escape key handler (will be added after definition)
+        let handleEscape = null;
+        
         // Close modal function
         function closeModal(result = null) {
+            // Clean up escape listener
+            if (handleEscape) {
+                document.removeEventListener('keydown', handleEscape);
+            }
             overlay.remove();
             if (result) {
                 resolve(result);
@@ -317,12 +325,13 @@ export function showTelegramConnectModal() {
             }
         });
         
-        // Close on overlay click
-        overlay.addEventListener('click', (e) => {
-            if (e.target === overlay) {
+        // Close on Escape key
+        handleEscape = (e) => {
+            if (e.key === 'Escape') {
                 closeModal();
             }
-        });
+        };
+        document.addEventListener('keydown', handleEscape);
         
         // Focus input
         setTimeout(() => tokenInput.focus(), 100);

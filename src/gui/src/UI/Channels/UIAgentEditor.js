@@ -697,7 +697,7 @@ You are **PC2 Guide**, a knowledgeable assistant for PC2 (Personal Cloud Compute
                 const newTelegramToken = $win.find('#new-telegram-token').val().trim();
                 
                 try {
-                    // If new token, create saved channel first
+                    // If new token, create saved channel first AND auto-connect it
                     if (newTelegramToken && /^\d+:[A-Za-z0-9_-]+$/.test(newTelegramToken)) {
                         const saveResponse = await $.ajax({
                             url: '/api/gateway/saved-channels',
@@ -712,7 +712,21 @@ You are **PC2 Guide**, a knowledgeable assistant for PC2 (Personal Cloud Compute
                         });
                         
                         if (saveResponse.success && saveResponse.data?.id) {
-                            tetheredChannels.push(saveResponse.data.id);
+                            const savedChannelId = saveResponse.data.id;
+                            tetheredChannels.push(savedChannelId);
+                            
+                            // Auto-connect the channel after saving
+                            try {
+                                await $.ajax({
+                                    url: `/api/gateway/saved-channels/${savedChannelId}/connect`,
+                                    method: 'POST',
+                                    headers: { 'Authorization': `Bearer ${window.auth_token}` }
+                                });
+                                console.log('[AgentEditor] Auto-connected Telegram channel:', savedChannelId);
+                            } catch (connectErr) {
+                                console.warn('[AgentEditor] Could not auto-connect channel:', connectErr.message);
+                                // Don't fail the save - user can manually connect later
+                            }
                         }
                     }
                     
@@ -743,6 +757,7 @@ You are **PC2 Guide**, a knowledgeable assistant for PC2 (Personal Cloud Compute
                         },
                         accessControl: {
                             mode: $win.find('input[name="access-mode"]:checked').val(),
+                            publicAccess: $win.find('input[name="access-mode"]:checked').val() === 'public',
                             rateLimit: {
                                 perMinute: parseInt($win.find('#rate-per-minute').val()) || 10,
                                 perDay: parseInt($win.find('#rate-per-day').val()) || 100,

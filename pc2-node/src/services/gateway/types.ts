@@ -147,6 +147,7 @@ export interface AgentConfig {
   name: string;
   description?: string;
   enabled: boolean;
+  isDefault?: boolean;      // Mark as default agent for the channel
   workspace: string;        // Path to agent workspace
   
   // Identity (for UI display)
@@ -190,10 +191,13 @@ export interface AgentPermissions {
  * Agent access control settings
  */
 export interface AgentAccessControl {
-  publicAccess: boolean;
+  publicAccess?: boolean;
+  mode?: 'public' | 'private';  // Alternative to publicAccess (UI uses this)
   rateLimit?: {
-    messagesPerMinute: number;
-    messagesPerDay: number;
+    messagesPerMinute?: number;
+    messagesPerDay?: number;
+    perMinute?: number;  // Alternative key from UI
+    perDay?: number;     // Alternative key from UI
   };
 }
 

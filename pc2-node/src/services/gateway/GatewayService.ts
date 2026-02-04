@@ -614,6 +614,19 @@ export class GatewayService extends EventEmitter {
     const { sender } = message;
     const { dmPolicy, allowFrom } = config;
     
+    // Check if the default agent has public access enabled
+    // If so, bypass pairing requirements
+    const defaultAgent = this.config.agents.find(a => a.isDefault) || this.config.agents[0];
+    const isPublicAgent = defaultAgent?.accessControl?.publicAccess === true || 
+                          defaultAgent?.accessControl?.mode === 'public';
+    if (isPublicAgent) {
+      logger.info('[GatewayService] Public agent - allowing message without pairing', {
+        agent: defaultAgent.id,
+        sender: sender.id,
+      });
+      return true;
+    }
+    
     switch (dmPolicy) {
       case 'disabled':
         return false;

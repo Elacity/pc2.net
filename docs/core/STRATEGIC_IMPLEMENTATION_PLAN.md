@@ -128,7 +128,7 @@ npm start
 | Area | Status | Details |
 |------|--------|---------|
 | **Branch** | `main` | All features merged |
-| **Version** | Ready for v1.0.0 | Launch pending |
+| **Version** | v0.1.x → v1.0.0 | See "AI AGENT QUICK REFERENCE" for versioning |
 | **Backend** | ✅ Complete | 32 services, 100+ API endpoints |
 | **Frontend** | ✅ Complete | 8 settings tabs, 50+ UI components |
 | **AI Agents** | ✅ Complete | 5 providers, per-agent memory, 20+ tools |
@@ -148,10 +148,12 @@ npm start
 ### Key Documents to Read
 
 1. **This document** - Full technical context
+   - **⚠️ READ "AI AGENT QUICK REFERENCE" section below FIRST for releases/versioning!**
 2. **`.cursor/plans/pc2_v1_launch_plan_b56827f2.plan.md`** - v1 launch plan
 3. **`docs/WORLD_COMPUTER_ROADMAP.md`** - Executive update (1,057 lines)
-4. **`docs/RELEASE_PROCESS.md`** - How to publish releases
-5. **`docs/design/CLAWDBOT_UI_UX_PLAN.md`** - AI agent UI spec
+4. **`docs/RELEASE_PROCESS.md`** - Full release documentation
+5. **`docs/PRE_RELEASE_PLAN.md`** - v1.0.0 launch plan & versioning strategy
+6. **`docs/design/CLAWDBOT_UI_UX_PLAN.md`** - AI agent UI spec
 
 ### Key Directories
 
@@ -179,6 +181,145 @@ npm run dev          # Development with hot reload
 - ❌ Never run `npm start` from root (runs wrong server)
 - ❌ Never access `puter.localhost` URLs (wrong architecture)
 - ❌ Never modify Puter core files in `src/backend/` (reference only)
+
+---
+
+## 🤖 AI AGENT QUICK REFERENCE
+
+> **⚠️ READ THIS BEFORE ANY RELEASE OR VERSION WORK**
+> 
+> This section contains critical information for AI agents to avoid common mistakes.
+
+### Versioning Strategy
+
+| Current Line | Target | Notes |
+|--------------|--------|-------|
+| **v0.1.x** | **v1.0.0** | Working towards first public release |
+| v2.x | DEPRECATED | Old internal versions, marked as pre-release on GitHub |
+
+**Current Version:** Check `package.json` → `"version": "0.1.x"`
+
+**Version Progression:**
+```
+v0.1.1 → v0.1.2 → v0.1.3 → ... → v1.0.0 (Public Launch)
+```
+
+### Release Process Checklist
+
+> **⚠️ CRITICAL: GitHub Release is REQUIRED for auto-updates to work!**
+> 
+> Just pushing a git tag is NOT enough. The auto-update system checks the GitHub Releases API.
+
+**Complete Release Steps:**
+
+```bash
+# 1. Bump version in BOTH package.json files
+/package.json → "version": "X.Y.Z"
+/pc2-node/package.json → "version": "X.Y.Z"
+
+# 2. Commit the version bump
+git add package.json pc2-node/package.json
+git commit -m "chore: bump version to X.Y.Z"
+
+# 3. Create git tag
+git tag -a vX.Y.Z -m "vX.Y.Z - Brief description"
+
+# 4. Push commit AND tag
+git push origin main
+git push origin vX.Y.Z
+
+# 5. ⚠️ CRITICAL: Create GitHub Release (NOT optional!)
+gh release create vX.Y.Z \
+  --repo Elacity/pc2.net \
+  --title "vX.Y.Z - Release Title" \
+  --notes "## What's New
+- Feature 1
+- Feature 2
+
+## For Node Operators
+Click 'Check for Updates' in Settings → System."
+```
+
+**Verify Release is Live:**
+```bash
+curl -s "https://api.github.com/repos/Elacity/pc2.net/releases/latest" | grep tag_name
+# Should show: "tag_name": "vX.Y.Z"
+```
+
+### Key Files for Releases
+
+| File | Purpose |
+|------|---------|
+| `/package.json` | Root version (must match) |
+| `/pc2-node/package.json` | Backend version (must match) |
+| `docs/RELEASE_PROCESS.md` | Full release documentation |
+| `docs/PRE_RELEASE_PLAN.md` | v1.0.0 launch plan & versioning strategy |
+
+### Auto-Update System
+
+The PC2 auto-update system works as follows:
+
+```
+GitHub Release Created
+        ↓
+PC2 Node checks /api/update/check (every 3 hours or manual)
+        ↓
+Compares: current version < latest release?
+        ↓
+Shows "Update Available" in Settings → System
+        ↓
+User clicks "Install Update"
+        ↓
+Server: git pull → npm install → npm build → restart
+```
+
+**If users don't see updates:**
+1. Check GitHub Release exists (not just a tag)
+2. Check `https://api.github.com/repos/Elacity/pc2.net/releases/latest`
+3. User clicks "Check for Updates" button
+
+### VPS Server Updates (Contabo, etc.)
+
+For VPS deployments, use the safe update script:
+
+```bash
+cd ~/pc2.net
+./scripts/update.sh
+```
+
+This script:
+- Stops PM2 gracefully
+- Kills orphaned processes
+- Verifies ports are free
+- Pulls latest code
+- Rebuilds application
+- Waits for Telegram session expiry (avoids bot conflicts)
+- Restarts PM2
+
+### Common Mistakes to Avoid
+
+| ❌ Wrong | ✅ Correct |
+|----------|-----------|
+| Create tag only | Create tag AND GitHub Release |
+| Use v2.6.x version | Use v0.1.x version (working to v1.0.0) |
+| Push to wrong remote | Use `--repo Elacity/pc2.net` with gh CLI |
+| Skip version bump in package.json | Always bump BOTH package.json files |
+
+### Quick Commands
+
+```bash
+# Check current version
+cat package.json | grep '"version"'
+
+# Check latest GitHub release
+curl -s "https://api.github.com/repos/Elacity/pc2.net/releases/latest" | grep tag_name
+
+# List recent tags
+git tag --sort=-v:refname | head -5
+
+# Check git remotes (ensure origin is Elacity)
+git remote -v
+```
 
 ---
 

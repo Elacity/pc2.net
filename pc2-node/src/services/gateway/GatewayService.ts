@@ -614,27 +614,23 @@ export class GatewayService extends EventEmitter {
     const { sender, channel } = message;
     const { dmPolicy, allowFrom } = config;
     
-    // Find saved channel for this channel type to get its ID
-    // Currently only Telegram is implemented
-    const savedChannel = this.config.savedChannels?.find(sc => {
-      if (sc.type !== channel) return false;
-      if (channel === 'telegram' && config.telegram?.botToken) {
-        return sc.telegram?.botToken === config.telegram.botToken;
-      }
-      // For other channels, just match by type for now
-      return true;
-    });
+    // Get all saved channel IDs for this channel type
+    const savedChannelIds = this.config.savedChannels
+      ?.filter(sc => sc.type === channel)
+      .map(sc => sc.id) || [];
     
-    // Check if ANY agent tethered to this channel has public access
-    // This allows public agents on Telegram even if default agent is private
+    // Check if ANY agent that handles this channel is public
+    // An agent handles this channel if:
+    // 1. It's tethered to any saved channel of this type, OR
+    // 2. It's the default agent
     const publicAgent = this.config.agents.find(agent => {
       // Check if agent is public
       const isPublic = agent.accessControl?.publicAccess === true || 
                        agent.accessControl?.mode === 'public';
       if (!isPublic) return false;
       
-      // Check if agent is tethered to this channel (by savedChannel ID)
-      if (savedChannel && agent.tetheredChannels?.includes(savedChannel.id)) {
+      // Check if agent is tethered to ANY saved channel of this type
+      if (agent.tetheredChannels?.some(id => savedChannelIds.includes(id))) {
         return true;
       }
       

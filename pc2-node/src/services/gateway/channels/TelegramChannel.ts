@@ -94,25 +94,33 @@ export class TelegramChannel extends EventEmitter {
         this.emit('error', error);
       });
       
-      // Start polling with error handling for 409 conflicts
-      this.bot.start({
-        onStart: () => {
-          this.connected = true;
-          this.emit('connected', this.botUsername || 'unknown');
-          logger.info('[TelegramChannel] Bot started polling');
-        },
-      }).catch((error: any) => {
-        // Handle startup errors gracefully
-        if (error?.error_code === 409) {
-          logger.warn('[TelegramChannel] 409 Conflict on startup - another instance may be running');
-          // Still mark as connected - the old instance will eventually release
-          this.connected = true;
-          this.emit('connected', this.botUsername || 'unknown');
-        } else {
-          logger.error('[TelegramChannel] Fatal startup error:', error);
-          this.emit('error', error);
+      // Start polling with retry logic for 409 conflicts
+      const startPolling = async (retries = 3, delay = 5000): Promise<void> => {
+        try {
+          await this.bot!.start({
+            onStart: () => {
+              this.connected = true;
+              this.emit('connected', this.botUsername || 'unknown');
+              logger.info('[TelegramChannel] Bot started polling');
+            },
+          });
+        } catch (error: any) {
+          if (error?.error_code === 409 && retries > 0) {
+            logger.warn(`[TelegramChannel] 409 Conflict - waiting ${delay/1000}s before retry (${retries} retries left)`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            return startPolling(retries - 1, delay);
+          } else if (error?.error_code === 409) {
+            logger.error('[TelegramChannel] 409 Conflict persists after retries - another instance may still be running');
+            this.emit('error', error);
+          } else {
+            logger.error('[TelegramChannel] Fatal startup error:', error);
+            this.emit('error', error);
+          }
         }
-      });
+      };
+      
+      // Start polling (don't await - let it run in background with retries)
+      startPolling().catch(err => logger.error('[TelegramChannel] Polling failed:', err));
       
     } catch (error: any) {
       logger.error('[TelegramChannel] Connection error:', error);

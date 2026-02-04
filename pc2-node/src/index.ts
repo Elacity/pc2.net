@@ -253,11 +253,29 @@ async function main() {
     app.locals.bosonService = bosonService;
   }
 
-  server.listen(PORT, () => {
-    logger.info(`🚀 PC2 Node running on http://localhost:${PORT}`);
-    logger.info(`   Health check: http://localhost:${PORT}/health`);
-    logger.info(`   API: http://localhost:${PORT}/api`);
-  });
+  // Handle server listen with retry for EADDRINUSE
+  const startServer = (retries = 3, delay = 3000): void => {
+    server.once('error', (error: NodeJS.ErrnoException) => {
+      if (error.code === 'EADDRINUSE' && retries > 0) {
+        logger.warn(`[Server] Port ${PORT} in use, waiting ${delay/1000}s before retry (${retries} retries left)`);
+        setTimeout(() => startServer(retries - 1, delay), delay);
+      } else if (error.code === 'EADDRINUSE') {
+        logger.error(`[Server] Port ${PORT} still in use after retries, exiting...`);
+        process.exit(1);
+      } else {
+        logger.error(`[Server] Failed to start:`, error);
+        process.exit(1);
+      }
+    });
+    
+    server.listen(PORT, () => {
+      logger.info(`🚀 PC2 Node running on http://localhost:${PORT}`);
+      logger.info(`   Health check: http://localhost:${PORT}/health`);
+      logger.info(`   API: http://localhost:${PORT}/api`);
+    });
+  };
+  
+  startServer();
 
   // ============================================================================
   // Periodic IPFS DHT Re-announcement

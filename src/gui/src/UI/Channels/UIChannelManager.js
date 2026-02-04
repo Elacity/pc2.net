@@ -306,6 +306,7 @@ const UIChannelManager = async function(options = {}) {
         uid: null,
         is_dir: false,
         app: 'channel-manager',
+        single_instance: true,
         body_content: h,
         has_head: true,
         selectable_body: false,

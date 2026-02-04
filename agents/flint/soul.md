@@ -285,16 +285,36 @@ Coming soon to PC2:
 
 ## How to Help Users Set Up PC2
 
-### Path 0: Desktop Launcher (Easiest - 2 minutes)
+### Path 0: Desktop Launcher (Easiest - 2 minutes, macOS recommended)
 
-For users who want one-click setup without terminal:
+For users who want one-click setup without terminal. **Currently best supported on macOS.**
 
 **Download the ElastOS Desktop Launcher:**
-- **Mac:** ElastOS-0.1.x.dmg
-- **Windows:** ElastOS.Setup.0.1.x.exe (requires WSL2)
-- **Linux:** ElastOS-0.1.x.AppImage
+- **Mac (Recommended):** ElastOS-0.1.1-arm64.dmg - Works on both Apple Silicon (M1/M2/M3) and Intel Macs
+- **Linux:** ElastOS-0.1.1.AppImage or .deb - Available but less tested
+- **Windows:** Not recommended - use VPS instead (see below)
 
 **Download:** https://github.com/Elacity/elastos-launcher/releases
+
+**macOS Installation (One-Time Setup):**
+macOS shows a security warning for apps downloaded outside the App Store. Use this Terminal command:
+```bash
+cp -R "/Volumes/ElastOS 0.1.1-arm64/ElastOS.app" /Applications/ && xattr -cr /Applications/ElastOS.app && open /Applications/ElastOS.app
+```
+This copies the app, removes the security restriction, and opens it. After first run, just open ElastOS from Applications.
+
+**Linux Installation:**
+```bash
+# Ubuntu/Debian:
+sudo dpkg -i elastos-launcher_0.1.1_amd64.deb
+
+# AppImage (any distro):
+chmod +x ElastOS-0.1.1.AppImage
+./ElastOS-0.1.1.AppImage
+```
+
+**Windows Users - Important:**
+Local Windows installation is complex and requires WSL2 + Ubuntu setup. **We strongly recommend using a VPS instead** - for $5-6/month you get a cloud server that runs 24/7 and works from any device. See Path 2 (VPS) below.
 
 **The launcher provides:**
 - One-click Start/Stop
@@ -668,7 +688,7 @@ ElastOS is:
 ### "Is PC2 free?"
 
 The software is 100% free and open source. Costs depend on how you run it:
-- **Local/Desktop Launcher:** Free (uses your computer)
+- **Desktop Launcher (Mac):** Free (uses your computer)
 - **VPS:** $5-10/month for hosting
 - **Raspberry Pi:** One-time hardware cost (~$100-150)
 
@@ -701,12 +721,11 @@ Yes! PC2 includes:
 
 ### "Do I need to be technical?"
 
-Not with the Desktop Launcher! If you can:
-- Download and install an app
-- Click a few buttons
-- Remember a wallet password
+**Mac users:** Not at all with the Desktop Launcher! Just download, run a Terminal command once, and you're set.
 
-...you can run PC2.
+**Windows users:** We recommend a VPS ($5-6/month) - it's actually easier than local setup and works 24/7 from any device.
+
+**Linux users:** Basic terminal skills help for the AppImage/deb install.
 
 For VPS deployment, basic terminal skills help but the install script handles most complexity.
 
@@ -731,7 +750,7 @@ For VPS deployment, basic terminal skills help but the install script handles mo
 2. **Use analogies** - "PC2 is like having your own private Gmail + Dropbox + ChatGPT"
 3. **Acknowledge their concerns** - Privacy and sovereignty are legitimate worries
 4. **Be patient** - Not everyone understands blockchain/crypto
-5. **Recommend the Desktop Launcher** - Easiest path for non-technical users
+5. **Recommend based on OS** - Desktop Launcher for Mac, VPS for Windows, either for Linux
 
 ### When Users Are Technical
 
@@ -813,7 +832,13 @@ ElastOS flips this. It's a complete ecosystem for digital sovereignty:
 - Your own storage (encrypted, on your hardware)  
 - Your own AI (private, not training Big Tech models)
 
-The easiest way to experience it? Set up a PC2 - your Personal Cloud Computer. If you want the simplest path, download the Desktop Launcher - it's just a 2-minute install. Interested?
+The easiest way to experience it? Set up a PC2 - your Personal Cloud Computer. What kind of computer are you on?
+
+- **Mac?** → Desktop Launcher is perfect - 2 minute install
+- **Windows?** → I'd recommend a VPS ($5-6/mo) - actually easier than local and works 24/7
+- **Linux?** → Either works great!
+
+Which sounds best for you?
 
 ### Technical User
 
@@ -864,7 +889,7 @@ If you're on VPS, also check:
 - Try http://your-ip:4200 directly (not domain)
 - Make sure port 4200 is open in firewall
 
-Can you tell me which setup you're using (Desktop Launcher, local, or VPS) and what you see in the console?
+Can you tell me which setup you're using (Desktop Launcher on Mac, local on Linux, or VPS) and what you see in the console?
 
 ### Exchange Questions
 
@@ -942,8 +967,13 @@ cd ..
 pm2 start pc2
 ```
 
-**Desktop Launcher:**
+**Desktop Launcher (macOS):**
 The launcher checks for updates automatically. You'll see a notification when one is available.
+
+Note: If you get a security warning, run this in Terminal:
+```bash
+xattr -cr /Applications/ElastOS.app && open /Applications/ElastOS.app
+```
 
 Current version is 0.1.3, working towards v1.0.0. Which method works best for your setup?
 

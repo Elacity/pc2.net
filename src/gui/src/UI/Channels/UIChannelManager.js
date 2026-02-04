@@ -146,20 +146,28 @@ const UIChannelManager = async function(options = {}) {
     
     const h = `
         <style>
+            /* Dark mode is DEFAULT - no data-theme attribute */
             .channel-manager {
                 display: flex;
                 flex-direction: column;
                 height: 100%;
-                background: #fff;
+                background: #1e1e1e;
+                color: #e0e0e0;
             }
             .channel-manager-header {
                 padding: 16px 20px;
-                border-bottom: 1px solid #e5e7eb;
-                background: #f9fafb;
+                border-bottom: 1px solid #3a3a3a;
+                background: #252525;
+            }
+            .channel-manager-header h2 {
+                color: #e0e0e0;
+            }
+            .channel-manager-header p {
+                color: #aaa;
             }
             .channel-manager-footer {
                 padding: 16px 20px;
-                border-top: 1px solid #e5e7eb;
+                border-top: 1px solid #3a3a3a;
                 display: flex;
                 justify-content: flex-end;
             }
@@ -167,81 +175,81 @@ const UIChannelManager = async function(options = {}) {
                 font-size: 12px;
                 font-weight: 600;
                 margin-bottom: 8px;
-                color: #374151;
+                color: #ccc;
             }
             .channel-manager .add-channel-btn {
                 display: flex;
                 align-items: center;
                 gap: 6px;
                 padding: 8px 14px;
-                background: #fff;
-                border: 1px solid #d1d5db;
+                background: #2a2a2a;
+                border: 1px solid #444;
                 border-radius: 6px;
                 cursor: pointer;
                 font-size: 12px;
+                color: #e0e0e0;
             }
             .channel-manager .close-btn {
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
                 padding: 8px 16px;
-                background: #f3f4f6;
-                border: 1px solid #d1d5db;
+                background: #3a3a3a;
+                border: 1px solid #555;
                 border-radius: 6px;
                 cursor: pointer;
                 font-size: 13px;
                 line-height: 1;
                 font-family: inherit;
-            }
-            
-            /* Dark mode */
-            html[data-theme="dark"] .channel-manager,
-            body.dark-mode .channel-manager {
-                background: #1e1e1e;
                 color: #e0e0e0;
             }
-            html[data-theme="dark"] .channel-manager-header,
-            body.dark-mode .channel-manager-header {
-                background: #252525;
-                border-bottom-color: #3a3a3a;
-            }
-            html[data-theme="dark"] .channel-manager-footer,
-            body.dark-mode .channel-manager-footer {
-                border-top-color: #3a3a3a;
-            }
-            html[data-theme="dark"] .channel-manager-section-title,
-            body.dark-mode .channel-manager-section-title {
-                color: #ccc;
-            }
-            html[data-theme="dark"] .channel-manager .add-channel-btn,
-            body.dark-mode .channel-manager .add-channel-btn {
-                background: #2a2a2a;
-                border-color: #444;
-                color: #e0e0e0;
-            }
-            html[data-theme="dark"] .channel-manager .close-btn,
-            body.dark-mode .channel-manager .close-btn {
-                background: #3a3a3a;
-                border-color: #555;
-                color: #e0e0e0;
-            }
-            html[data-theme="dark"] .channel-manager h2,
-            body.dark-mode .channel-manager h2 {
-                color: #e0e0e0;
-            }
-            html[data-theme="dark"] .channel-manager p,
-            body.dark-mode .channel-manager p {
-                color: #aaa;
-            }
-            html[data-theme="dark"] .saved-channel-row,
-            body.dark-mode .saved-channel-row {
+            .saved-channel-row {
                 background: #2a2a2a !important;
             }
-            html[data-theme="dark"] .saved-channel-row .delete-channel-btn,
-            body.dark-mode .saved-channel-row .delete-channel-btn {
+            .saved-channel-row .delete-channel-btn {
                 background: #3a3a3a !important;
                 border-color: #555 !important;
                 color: #ccc !important;
+            }
+            
+            /* Light mode - data-theme="light" */
+            html[data-theme="light"] .channel-manager {
+                background: #fff;
+                color: #333;
+            }
+            html[data-theme="light"] .channel-manager-header {
+                background: #f9fafb;
+                border-bottom-color: #e5e7eb;
+            }
+            html[data-theme="light"] .channel-manager-header h2 {
+                color: #333;
+            }
+            html[data-theme="light"] .channel-manager-header p {
+                color: #666;
+            }
+            html[data-theme="light"] .channel-manager-footer {
+                border-top-color: #e5e7eb;
+            }
+            html[data-theme="light"] .channel-manager-section-title {
+                color: #374151;
+            }
+            html[data-theme="light"] .channel-manager .add-channel-btn {
+                background: #fff;
+                border-color: #d1d5db;
+                color: #333;
+            }
+            html[data-theme="light"] .channel-manager .close-btn {
+                background: #f3f4f6;
+                border-color: #d1d5db;
+                color: #333;
+            }
+            html[data-theme="light"] .saved-channel-row {
+                background: #f9fafb !important;
+            }
+            html[data-theme="light"] .saved-channel-row .delete-channel-btn {
+                background: #f3f4f6 !important;
+                border-color: #d1d5db !important;
+                color: #666 !important;
             }
         </style>
         <div class="channel-manager">

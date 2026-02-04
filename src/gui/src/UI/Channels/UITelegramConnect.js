@@ -23,15 +23,16 @@ export function showTelegramConnectModal() {
                     z-index: 2147483647;
                     pointer-events: none;
                 }
+                /* Dark mode is DEFAULT - no data-theme attribute */
                 .telegram-connect-modal {
-                    background: white;
+                    background: #1e1e1e;
                     border-radius: 12px;
                     padding: 24px;
                     width: 440px;
                     max-width: 90%;
-                    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+                    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
                     pointer-events: auto;
-                    color: #333;
+                    color: #e0e0e0;
                 }
                 .telegram-connect-header {
                     display: flex;
@@ -52,29 +53,29 @@ export function showTelegramConnectModal() {
                     border: none;
                     font-size: 24px;
                     cursor: pointer;
-                    color: #666;
+                    color: #aaa;
                     padding: 0;
                     line-height: 1;
                 }
                 .telegram-connect-close:hover {
-                    color: #333;
+                    color: #fff;
                 }
                 .telegram-steps {
-                    background: #f0f7ff;
+                    background: #2a3a4a;
                     border-radius: 8px;
                     padding: 16px;
                     margin-bottom: 20px;
                 }
                 .telegram-steps-title {
                     font-weight: 600;
-                    color: #333;
+                    color: #e0e0e0;
                     margin-bottom: 12px;
                     font-size: 14px;
                 }
                 .telegram-steps ol {
                     margin: 0;
                     padding-left: 20px;
-                    color: #555;
+                    color: #ccc;
                     font-size: 13px;
                     line-height: 1.6;
                 }
@@ -82,12 +83,12 @@ export function showTelegramConnectModal() {
                     margin-bottom: 6px;
                 }
                 .telegram-steps code {
-                    background: #e3f2fd;
+                    background: #3a4a5a;
                     padding: 2px 6px;
                     border-radius: 4px;
                     font-family: monospace;
                     font-size: 12px;
-                    color: #333;
+                    color: #e0e0e0;
                 }
                 .telegram-input-group {
                     margin-bottom: 20px;
@@ -95,28 +96,28 @@ export function showTelegramConnectModal() {
                 .telegram-input-label {
                     display: block;
                     font-weight: 500;
-                    color: #333;
+                    color: #e0e0e0;
                     margin-bottom: 8px;
                     font-size: 14px;
                 }
                 .telegram-input {
                     width: 100%;
                     padding: 12px;
-                    border: 1px solid #ddd;
+                    border: 1px solid #444;
                     border-radius: 8px;
                     font-size: 14px;
                     box-sizing: border-box;
                     transition: border-color 0.2s;
-                    background: white;
-                    color: #333;
+                    background: #2a2a2a;
+                    color: #e0e0e0;
                 }
                 .telegram-input:focus {
                     outline: none;
                     border-color: #0088cc;
-                    box-shadow: 0 0 0 3px rgba(0, 136, 204, 0.1);
+                    box-shadow: 0 0 0 3px rgba(0, 136, 204, 0.2);
                 }
                 .telegram-input::placeholder {
-                    color: #999;
+                    color: #888;
                 }
                 .telegram-buttons {
                     display: flex;
@@ -133,11 +134,11 @@ export function showTelegramConnectModal() {
                     transition: all 0.2s;
                 }
                 .telegram-btn-cancel {
-                    background: #f0f0f0;
-                    color: #666;
+                    background: #3a3a3a;
+                    color: #ccc;
                 }
                 .telegram-btn-cancel:hover {
-                    background: #e0e0e0;
+                    background: #4a4a4a;
                 }
                 .telegram-btn-connect {
                     background: #0088cc;
@@ -147,11 +148,12 @@ export function showTelegramConnectModal() {
                     background: #006699;
                 }
                 .telegram-btn-connect:disabled {
-                    background: #ccc;
+                    background: #555;
+                    color: #888;
                     cursor: not-allowed;
                 }
                 .telegram-error {
-                    color: #dc2626;
+                    color: #ef4444;
                     font-size: 13px;
                     margin-top: 8px;
                     display: none;
@@ -160,14 +162,14 @@ export function showTelegramConnectModal() {
                     display: none;
                     align-items: center;
                     gap: 8px;
-                    color: #666;
+                    color: #aaa;
                     font-size: 13px;
                     margin-top: 8px;
                 }
                 .telegram-spinner {
                     width: 16px;
                     height: 16px;
-                    border: 2px solid #ddd;
+                    border: 2px solid #444;
                     border-top-color: #0088cc;
                     border-radius: 50%;
                     animation: telegram-spin 0.8s linear infinite;
@@ -176,73 +178,57 @@ export function showTelegramConnectModal() {
                     to { transform: rotate(360deg); }
                 }
                 
-                /* Dark mode styles */
-                html[data-theme="dark"] .telegram-connect-modal,
-                body.dark-mode .telegram-connect-modal,
-                .window.dark-mode .telegram-connect-modal {
-                    background: #1e1e1e;
-                    color: #e0e0e0;
+                /* Light mode styles - data-theme="light" */
+                html[data-theme="light"] .telegram-connect-modal {
+                    background: white;
+                    color: #333;
                 }
-                html[data-theme="dark"] .telegram-connect-close,
-                body.dark-mode .telegram-connect-close {
-                    color: #aaa;
+                html[data-theme="light"] .telegram-connect-close {
+                    color: #666;
                 }
-                html[data-theme="dark"] .telegram-connect-close:hover,
-                body.dark-mode .telegram-connect-close:hover {
-                    color: #fff;
+                html[data-theme="light"] .telegram-connect-close:hover {
+                    color: #333;
                 }
-                html[data-theme="dark"] .telegram-steps,
-                body.dark-mode .telegram-steps {
-                    background: #2a3a4a;
+                html[data-theme="light"] .telegram-steps {
+                    background: #f0f7ff;
                 }
-                html[data-theme="dark"] .telegram-steps-title,
-                body.dark-mode .telegram-steps-title {
-                    color: #e0e0e0;
+                html[data-theme="light"] .telegram-steps-title {
+                    color: #333;
                 }
-                html[data-theme="dark"] .telegram-steps ol,
-                body.dark-mode .telegram-steps ol {
-                    color: #ccc;
+                html[data-theme="light"] .telegram-steps ol {
+                    color: #555;
                 }
-                html[data-theme="dark"] .telegram-steps code,
-                body.dark-mode .telegram-steps code {
-                    background: #3a4a5a;
-                    color: #e0e0e0;
+                html[data-theme="light"] .telegram-steps code {
+                    background: #e3f2fd;
+                    color: #333;
                 }
-                html[data-theme="dark"] .telegram-input-label,
-                body.dark-mode .telegram-input-label {
-                    color: #e0e0e0;
+                html[data-theme="light"] .telegram-input-label {
+                    color: #333;
                 }
-                html[data-theme="dark"] .telegram-input,
-                body.dark-mode .telegram-input {
-                    background: #2a2a2a;
-                    border-color: #444;
-                    color: #e0e0e0;
+                html[data-theme="light"] .telegram-input {
+                    background: white;
+                    border-color: #ddd;
+                    color: #333;
                 }
-                html[data-theme="dark"] .telegram-input::placeholder,
-                body.dark-mode .telegram-input::placeholder {
+                html[data-theme="light"] .telegram-input::placeholder {
+                    color: #999;
+                }
+                html[data-theme="light"] .telegram-btn-cancel {
+                    background: #f0f0f0;
+                    color: #666;
+                }
+                html[data-theme="light"] .telegram-btn-cancel:hover {
+                    background: #e0e0e0;
+                }
+                html[data-theme="light"] .telegram-btn-connect:disabled {
+                    background: #ccc;
                     color: #888;
                 }
-                html[data-theme="dark"] .telegram-btn-cancel,
-                body.dark-mode .telegram-btn-cancel {
-                    background: #3a3a3a;
-                    color: #ccc;
+                html[data-theme="light"] .telegram-connecting {
+                    color: #666;
                 }
-                html[data-theme="dark"] .telegram-btn-cancel:hover,
-                body.dark-mode .telegram-btn-cancel:hover {
-                    background: #4a4a4a;
-                }
-                html[data-theme="dark"] .telegram-btn-connect:disabled,
-                body.dark-mode .telegram-btn-connect:disabled {
-                    background: #555;
-                    color: #888;
-                }
-                html[data-theme="dark"] .telegram-connecting,
-                body.dark-mode .telegram-connecting {
-                    color: #aaa;
-                }
-                html[data-theme="dark"] .telegram-spinner,
-                body.dark-mode .telegram-spinner {
-                    border-color: #444;
+                html[data-theme="light"] .telegram-spinner {
+                    border-color: #ddd;
                     border-top-color: #0088cc;
                 }
             </style>

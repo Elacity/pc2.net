@@ -254,7 +254,8 @@ async function main() {
   }
 
   // Handle server listen with retry for EADDRINUSE
-  const startServer = (retries = 3, delay = 3000): void => {
+  // Increased retries and delay to handle slow port release after crashes
+  const startServer = (retries = 5, delay = 5000): void => {
     server.once('error', (error: NodeJS.ErrnoException) => {
       if (error.code === 'EADDRINUSE' && retries > 0) {
         logger.warn(`[Server] Port ${PORT} in use, waiting ${delay/1000}s before retry (${retries} retries left)`);

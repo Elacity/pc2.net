@@ -18,10 +18,10 @@ module.exports = {
     interpreter: "node",
     
     // Restart behavior - prevents port conflicts from rapid restarts
-    restart_delay: 5000,      // Wait 5 seconds between restarts
+    restart_delay: 10000,     // Wait 10 seconds between restarts (ports need time to release)
     max_restarts: 10,         // Max 10 restarts before giving up
-    min_uptime: 10000,        // Must run 10s to count as successful start
-    kill_timeout: 10000,      // Wait 10s for graceful shutdown
+    min_uptime: 30000,        // Must run 30s to count as successful start
+    kill_timeout: 15000,      // Wait 15s for graceful shutdown
     
     // Environment
     env: {

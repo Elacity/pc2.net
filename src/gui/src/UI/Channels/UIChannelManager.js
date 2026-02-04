@@ -145,11 +145,110 @@ const UIChannelManager = async function(options = {}) {
     };
     
     const h = `
-        <div class="channel-manager" style="display: flex; flex-direction: column; height: 100%; background: #fff;">
+        <style>
+            .channel-manager {
+                display: flex;
+                flex-direction: column;
+                height: 100%;
+                background: #fff;
+            }
+            .channel-manager-header {
+                padding: 16px 20px;
+                border-bottom: 1px solid #e5e7eb;
+                background: #f9fafb;
+            }
+            .channel-manager-footer {
+                padding: 16px 20px;
+                border-top: 1px solid #e5e7eb;
+                display: flex;
+                justify-content: flex-end;
+            }
+            .channel-manager-section-title {
+                font-size: 12px;
+                font-weight: 600;
+                margin-bottom: 8px;
+                color: #374151;
+            }
+            .channel-manager .add-channel-btn {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                padding: 8px 14px;
+                background: #fff;
+                border: 1px solid #d1d5db;
+                border-radius: 6px;
+                cursor: pointer;
+                font-size: 12px;
+            }
+            .channel-manager .close-btn {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                padding: 8px 16px;
+                background: #f3f4f6;
+                border: 1px solid #d1d5db;
+                border-radius: 6px;
+                cursor: pointer;
+                font-size: 13px;
+                line-height: 1;
+                font-family: inherit;
+            }
+            
+            /* Dark mode */
+            html[data-theme="dark"] .channel-manager,
+            body.dark-mode .channel-manager {
+                background: #1e1e1e;
+                color: #e0e0e0;
+            }
+            html[data-theme="dark"] .channel-manager-header,
+            body.dark-mode .channel-manager-header {
+                background: #252525;
+                border-bottom-color: #3a3a3a;
+            }
+            html[data-theme="dark"] .channel-manager-footer,
+            body.dark-mode .channel-manager-footer {
+                border-top-color: #3a3a3a;
+            }
+            html[data-theme="dark"] .channel-manager-section-title,
+            body.dark-mode .channel-manager-section-title {
+                color: #ccc;
+            }
+            html[data-theme="dark"] .channel-manager .add-channel-btn,
+            body.dark-mode .channel-manager .add-channel-btn {
+                background: #2a2a2a;
+                border-color: #444;
+                color: #e0e0e0;
+            }
+            html[data-theme="dark"] .channel-manager .close-btn,
+            body.dark-mode .channel-manager .close-btn {
+                background: #3a3a3a;
+                border-color: #555;
+                color: #e0e0e0;
+            }
+            html[data-theme="dark"] .channel-manager h2,
+            body.dark-mode .channel-manager h2 {
+                color: #e0e0e0;
+            }
+            html[data-theme="dark"] .channel-manager p,
+            body.dark-mode .channel-manager p {
+                color: #aaa;
+            }
+            html[data-theme="dark"] .saved-channel-row,
+            body.dark-mode .saved-channel-row {
+                background: #2a2a2a !important;
+            }
+            html[data-theme="dark"] .saved-channel-row .delete-channel-btn,
+            body.dark-mode .saved-channel-row .delete-channel-btn {
+                background: #3a3a3a !important;
+                border-color: #555 !important;
+                color: #ccc !important;
+            }
+        </style>
+        <div class="channel-manager">
             <!-- Header -->
-            <div style="padding: 16px 20px; border-bottom: 1px solid #e5e7eb; background: #f9fafb;">
+            <div class="channel-manager-header">
                 <h2 style="margin: 0; font-size: 18px; font-weight: 600;">Manage Channels</h2>
-                <p style="margin: 4px 0 0 0; font-size: 12px; color: #666;">
+                <p style="margin: 4px 0 0 0; font-size: 12px;">
                     Add and manage your messaging bot credentials
                 </p>
             </div>
@@ -158,18 +257,18 @@ const UIChannelManager = async function(options = {}) {
             <div style="flex: 1; overflow-y: auto; padding: 20px;">
                 <!-- Add New Channel -->
                 <div style="margin-bottom: 20px;">
-                    <div style="font-size: 12px; font-weight: 600; margin-bottom: 8px; color: #374151;">Add New Channel</div>
+                    <div class="channel-manager-section-title">Add New Channel</div>
                     <div style="display: flex; gap: 8px;">
-                        <button class="add-channel-btn" data-type="telegram" style="display: flex; align-items: center; gap: 6px; padding: 8px 14px; background: #fff; border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer; font-size: 12px;">
+                        <button class="add-channel-btn" data-type="telegram">
                             ${channelIcons.telegram}
                             <span>Telegram Bot</span>
                         </button>
-                        <button class="add-channel-btn" data-type="whatsapp" style="display: flex; align-items: center; gap: 6px; padding: 8px 14px; background: #fff; border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer; font-size: 12px; opacity: 0.5;" disabled>
+                        <button class="add-channel-btn" data-type="whatsapp" style="opacity: 0.5;" disabled>
                             ${channelIcons.whatsapp}
                             <span>WhatsApp</span>
                             <span style="font-size: 9px; color: #888;">(Soon)</span>
                         </button>
-                        <button class="add-channel-btn" data-type="discord" style="display: flex; align-items: center; gap: 6px; padding: 8px 14px; background: #fff; border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer; font-size: 12px; opacity: 0.5;" disabled>
+                        <button class="add-channel-btn" data-type="discord" style="opacity: 0.5;" disabled>
                             ${channelIcons.discord}
                             <span>Discord</span>
                             <span style="font-size: 9px; color: #888;">(Soon)</span>
@@ -179,7 +278,7 @@ const UIChannelManager = async function(options = {}) {
                 
                 <!-- Saved Channels -->
                 <div>
-                    <div style="font-size: 12px; font-weight: 600; margin-bottom: 8px; color: #374151;">Your Channels</div>
+                    <div class="channel-manager-section-title">Your Channels</div>
                     <div id="saved-channels-list">
                         ${buildChannelsList()}
                     </div>
@@ -187,8 +286,8 @@ const UIChannelManager = async function(options = {}) {
             </div>
             
             <!-- Footer -->
-            <div style="padding: 16px 20px; border-top: 1px solid #e5e7eb; display: flex; justify-content: flex-end;">
-                <button class="close-btn" style="display: inline-flex; align-items: center; justify-content: center; padding: 8px 16px; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer; font-size: 13px; line-height: 1; font-family: inherit;">Close</button>
+            <div class="channel-manager-footer">
+                <button class="close-btn">Close</button>
             </div>
         </div>
     `;

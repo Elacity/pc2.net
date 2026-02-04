@@ -611,17 +611,45 @@ export class GatewayService extends EventEmitter {
    * Check if a message is allowed by DM policy
    */
   private async checkDMPolicy(message: ChannelMessage, config: ChannelConfig): Promise<boolean> {
-    const { sender } = message;
+    const { sender, channel } = message;
     const { dmPolicy, allowFrom } = config;
     
-    // Check if the default agent has public access enabled
-    // If so, bypass pairing requirements
-    const defaultAgent = this.config.agents.find(a => a.isDefault) || this.config.agents[0];
-    const isPublicAgent = defaultAgent?.accessControl?.publicAccess === true || 
-                          defaultAgent?.accessControl?.mode === 'public';
-    if (isPublicAgent) {
+    // Find saved channel for this channel type to get its ID
+    // Currently only Telegram is implemented
+    const savedChannel = this.config.savedChannels?.find(sc => {
+      if (sc.type !== channel) return false;
+      if (channel === 'telegram' && config.telegram?.botToken) {
+        return sc.telegram?.botToken === config.telegram.botToken;
+      }
+      // For other channels, just match by type for now
+      return true;
+    });
+    
+    // Check if ANY agent tethered to this channel has public access
+    // This allows public agents on Telegram even if default agent is private
+    const publicAgent = this.config.agents.find(agent => {
+      // Check if agent is public
+      const isPublic = agent.accessControl?.publicAccess === true || 
+                       agent.accessControl?.mode === 'public';
+      if (!isPublic) return false;
+      
+      // Check if agent is tethered to this channel (by savedChannel ID)
+      if (savedChannel && agent.tetheredChannels?.includes(savedChannel.id)) {
+        return true;
+      }
+      
+      // Also check if it's the default agent
+      if (agent.isDefault || agent.id === this.config.defaultAgentId) {
+        return true;
+      }
+      
+      return false;
+    });
+    
+    if (publicAgent) {
       logger.info('[GatewayService] Public agent - allowing message without pairing', {
-        agent: defaultAgent.id,
+        agent: publicAgent.id,
+        channel,
         sender: sender.id,
       });
       return true;

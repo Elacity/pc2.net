@@ -156,6 +156,37 @@ install_pm2() {
     echo -e "${GREEN}✓ PM2 installed${NC}"
 }
 
+# Install build dependencies for native modules (Debian/Ubuntu only)
+install_build_deps() {
+    # Only run on Debian/Ubuntu systems
+    if [[ ! -f /etc/debian_version ]]; then
+        return 0
+    fi
+    
+    echo -e "${CYAN}Installing build dependencies for native modules (Debian/Ubuntu)...${NC}"
+    
+    # Check if we need sudo
+    if [[ $EUID -ne 0 ]]; then
+        SUDO="sudo"
+    else
+        SUDO=""
+    fi
+    
+    # Install build-essential, python3, and native module dependencies
+    $SUDO apt-get update -qq
+    $SUDO apt-get install -y -qq \
+        build-essential \
+        python3 \
+        libcairo2-dev \
+        libpango1.0-dev \
+        libjpeg-dev \
+        libgif-dev \
+        librsvg2-dev \
+        2>&1 | grep -v "is already the newest version" || true
+    
+    echo -e "${GREEN}✓ Build dependencies installed${NC}"
+}
+
 # Main installation
 main() {
     echo -e "${CYAN}Checking requirements...${NC}"
@@ -165,6 +196,10 @@ main() {
     if ! check_git; then
         install_git
     fi
+    
+    # Install build dependencies for native modules (Debian/Ubuntu only)
+    # This must happen BEFORE npm install to ensure native modules compile correctly
+    install_build_deps
     
     # Check and install Node.js
     if ! check_node; then
@@ -244,7 +279,11 @@ PARTICLE_EOF
     echo -e "${GREEN}✓ Dependencies installed${NC}"
     
     # Rebuild native modules (skipped by --ignore-scripts)
+    # This compiles node-pty, better-sqlite3, canvas, etc. for this platform
     echo -e "${CYAN}Building native modules...${NC}"
+    cd "$ROOT_DIR"
+    npm rebuild 2>&1 || true
+    cd "$PC2_DIR"
     npm rebuild 2>&1 || true
     echo -e "${GREEN}✓ Native modules built${NC}"
     

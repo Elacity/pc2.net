@@ -12,7 +12,6 @@ import { logger } from '../../utils/logger.js';
 import { UsernameService } from './UsernameService.js';
 import { NetworkDetector, type NATType } from './NetworkDetector.js';
 import { ActiveProxyClient, ConnectionState, type ProxyConnection } from './ActiveProxyClient.js';
-import { fromBase58 } from './IdentityService.js';
 import net, { type Server, type Socket } from 'net';
 import { request as httpRequest } from 'http';
 
@@ -220,13 +219,11 @@ export class ConnectivityService {
    */
   private async connectViaActiveProxy(): Promise<boolean> {
     const validSuperNodes = this.config.superNodes.filter(superNode => {
-      try {
-        const serverPublicKey = fromBase58(superNode.id);
-        return serverPublicKey.length === 32;
-      } catch {
-        logger.warn(`[Connectivity] Invalid supernode ID '${superNode.id}', skipping`);
+      if (!superNode.address || !superNode.proxyPort) {
+        logger.warn(`[Connectivity] Invalid supernode config (missing address/port), skipping`);
         return false;
       }
+      return true;
     });
 
     if (validSuperNodes.length === 0) {
@@ -273,15 +270,12 @@ export class ConnectivityService {
     try {
       logger.debug(`[Connectivity] Trying ${superNode.address}:${superNode.proxyPort}...`);
 
-      const serverPublicKey = fromBase58(superNode.id);
-      
       const client = new ActiveProxyClient({
         host: superNode.address,
         port: superNode.proxyPort,
         nodeId: this.nodeId!,
         publicKey: this.publicKey!,
         privateKey: this.privateKey!,
-        serverPublicKey: serverPublicKey,
         localPort: this.config.localPort,
         keepaliveIntervalMs: 30000,
         reconnectIntervalMs: this.config.reconnectIntervalMs,
@@ -314,10 +308,11 @@ export class ConnectivityService {
       this.status.superNode = superNode;
       this.status.connectedAt = new Date().toISOString();
       
-      logger.info(`✅ Active Proxy connected! Session: ${sessionId}, Port: ${allocatedPort}`);
+      logger.info(`✅ Active Proxy connected! Session: ${sessionId}, Allocated Port: ${allocatedPort}`);
       
-      // Register proxy endpoint with gateway
-      this.registerProxyEndpoint(superNode, sessionId);
+      // Register proxy endpoint with gateway using the ALLOCATED port (not static proxyPort)
+      // The allocated port (e.g., 25001) is where the gateway should ATTACH for relay
+      this.registerProxyEndpoint(superNode, sessionId, allocatedPort);
     });
 
     this.activeProxyClient.on('disconnected', (reason: string) => {
@@ -344,15 +339,24 @@ export class ConnectivityService {
 
   /**
    * Register proxy endpoint with the gateway
+   * 
+   * Uses the allocatedPort from Boson's AUTH_ACK (e.g., 25001) instead of the
+   * static proxyPort (8090). The allocated port is where the gateway should
+   * send ATTACH packets for relay connections.
+   * 
+   * Previous bug: used superNode.proxyPort (8090) which is the AUTH port,
+   * not the relay port. This caused gateway ATTACH to connect to wrong port.
    */
-  private async registerProxyEndpoint(superNode: SuperNode, sessionId: string): Promise<void> {
+  private async registerProxyEndpoint(superNode: SuperNode, sessionId: string, allocatedPort: number): Promise<void> {
     if (!this.usernameService || !this.usernameService.hasUsername()) {
       logger.warn('No username registered, skipping proxy endpoint registration');
       return;
     }
 
-    // Format: proxy://host:port/sessionId
-    const endpoint = `proxy://${superNode.address}:${superNode.proxyPort}/${sessionId}`;
+    // Format: proxy://host:allocatedPort/sessionId
+    // CRITICAL: Use allocatedPort (e.g., 25001) NOT proxyPort (8090)
+    const endpoint = `proxy://${superNode.address}:${allocatedPort}/${sessionId}`;
+    logger.info(`[Connectivity] Registering proxy endpoint with allocated port ${allocatedPort} (not static ${superNode.proxyPort})`);
     
     const result = await this.usernameService.updateEndpoint(endpoint);
     

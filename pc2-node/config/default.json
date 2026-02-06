@@ -30,7 +30,10 @@
       "ollama": {
         "enabled": true,
         "baseUrl": "http://localhost:11434",
-        "defaultModel": "deepseek-r1:1.5b"
+        "defaultModel": "deepseek-r1:1.5b",
+        "hardware": {
+          "autoDetect": true
+        }
       },
       "openai": {
         "enabled": false,

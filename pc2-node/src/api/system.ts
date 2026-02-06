@@ -8,6 +8,7 @@
 import { Router, Response } from 'express';
 import { authenticate, AuthenticatedRequest, requireOwner } from './middleware.js';
 import { logger } from '../utils/logger.js';
+import { detectPlatform } from '../utils/platform.js';
 import { execSync } from 'child_process';
 
 const router = Router();
@@ -146,6 +147,7 @@ router.get('/info', authenticate, async (req: AuthenticatedRequest, res: Respons
   try {
     const uptime = process.uptime();
     const memoryUsage = process.memoryUsage();
+    const platformInfo = detectPlatform();
     
     res.json({
       success: true,
@@ -160,6 +162,16 @@ router.get('/info', authenticate, async (req: AuthenticatedRequest, res: Respons
         nodeVersion: process.version,
         platform: process.platform,
         arch: process.arch,
+        // Hardware/GPU detection for AI optimization awareness
+        hardware: {
+          isJetson: platformInfo.isJetson,
+          jetsonModel: platformInfo.jetsonModel,
+          cudaAvailable: platformInfo.cudaAvailable,
+          gpuInfo: platformInfo.gpuInfo,
+          totalMemoryMB: platformInfo.totalMemoryMB,
+          estimatedAvailableVRAM: platformInfo.estimatedAvailableVRAM,
+          isConstrainedDevice: platformInfo.isConstrainedDevice,
+        },
       },
     });
   } catch (error) {

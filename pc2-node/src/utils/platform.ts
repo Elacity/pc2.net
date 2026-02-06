@@ -195,6 +195,154 @@ export function detectPlatform(): PlatformInfo {
 }
 
 /**
+ * Build optimized environment variables for Ollama server on constrained/GPU devices.
+ * These are set when PC2 spawns `ollama serve`, NOT per-request.
+ * On non-constrained/non-GPU devices, returns empty object (no changes).
+ */
+export function getOllamaServerEnv(): Record<string, string> {
+  const info = detectPlatform();
+  const env: Record<string, string> = {};
+
+  // Flash attention: reduces memory and speeds up inference on NVIDIA GPUs
+  // Safe on all CUDA devices, no downside
+  if (info.cudaAvailable && !info.isMacOS) {
+    env.OLLAMA_FLASH_ATTENTION = '1';
+  }
+
+  // KV cache quantization: halves KV cache memory with minimal quality loss
+  // Critical for constrained devices -- the difference between fitting a model or not
+  if (info.isConstrainedDevice && info.cudaAvailable) {
+    env.OLLAMA_KV_CACHE_TYPE = 'q8_0';
+  }
+
+  // Max loaded models: prevent memory exhaustion from multiple models on constrained devices
+  if (info.isConstrainedDevice) {
+    env.OLLAMA_MAX_LOADED_MODELS = '1';
+  }
+
+  if (Object.keys(env).length > 0) {
+    logger.info('[Platform] Ollama server environment optimizations:', env);
+  }
+
+  return env;
+}
+
+/** Jetson diagnostic info for system health and optimization guidance */
+export interface JetsonDiagnostics {
+  powerMode?: string;
+  powerModeId?: number;
+  clocksMaxed: boolean;
+  swapType: 'zram' | 'disk' | 'both' | 'none';
+  swapTotalMB: number;
+  desktopGuiRunning: boolean;
+  recommendations: string[];
+}
+
+/**
+ * Run Jetson-specific diagnostics: power mode, clock speed, swap config, GUI status.
+ * Returns null on non-Jetson devices.
+ */
+export function getJetsonDiagnostics(): JetsonDiagnostics | null {
+  const info = detectPlatform();
+  if (!info.isJetson) return null;
+
+  const recommendations: string[] = [];
+
+  // Check power mode via nvpmodel
+  let powerMode: string | undefined;
+  let powerModeId: number | undefined;
+  try {
+    const stdout = execSync('nvpmodel -q 2>/dev/null', { encoding: 'utf-8', timeout: 3000 });
+    // Output like: "NV Power Mode: MAXN" or "NV Power Mode: 15W"
+    const modeMatch = stdout.match(/NV Power Mode:\s*(.+)/i);
+    if (modeMatch) {
+      powerMode = modeMatch[1].trim();
+    }
+    const idMatch = stdout.match(/(\d+)/);
+    if (idMatch) {
+      powerModeId = parseInt(idMatch[1], 10);
+    }
+    // MAXN mode is typically ID 0 -- recommend if not set
+    if (powerModeId !== undefined && powerModeId !== 0) {
+      recommendations.push('Run "sudo nvpmodel -m 0" to enable MAXN performance mode for fastest AI inference');
+    }
+  } catch {
+    // nvpmodel not available
+  }
+
+  // Check if jetson_clocks has been run (clocks at max frequency)
+  let clocksMaxed = false;
+  try {
+    const stdout = execSync('jetson_clocks --show 2>/dev/null', { encoding: 'utf-8', timeout: 3000 });
+    // If GPU and CPU are at max, clocks are maxed
+    clocksMaxed = stdout.includes('Max') || !stdout.includes('scaling_governor: schedutil');
+    if (!clocksMaxed) {
+      recommendations.push('Run "sudo jetson_clocks" to lock CPU/GPU frequencies to maximum for consistent AI performance');
+    }
+  } catch {
+    // jetson_clocks not available
+  }
+
+  // Check swap configuration
+  let swapType: 'zram' | 'disk' | 'both' | 'none' = 'none';
+  let swapTotalMB = 0;
+  try {
+    const stdout = execSync('swapon --show=NAME,SIZE,TYPE --noheadings 2>/dev/null', { encoding: 'utf-8', timeout: 3000 });
+    const lines = stdout.trim().split('\n').filter(Boolean);
+    let hasZram = false;
+    let hasDisk = false;
+
+    for (const line of lines) {
+      const parts = line.trim().split(/\s+/);
+      const name = parts[0] || '';
+      const sizeStr = parts[1] || '0';
+      // Parse size (e.g., "3.7G", "512M")
+      let sizeMB = 0;
+      if (sizeStr.endsWith('G')) sizeMB = parseFloat(sizeStr) * 1024;
+      else if (sizeStr.endsWith('M')) sizeMB = parseFloat(sizeStr);
+      swapTotalMB += sizeMB;
+
+      if (name.includes('zram')) hasZram = true;
+      else hasDisk = true;
+    }
+
+    if (hasZram && hasDisk) swapType = 'both';
+    else if (hasZram) swapType = 'zram';
+    else if (hasDisk) swapType = 'disk';
+
+    // zram competes with GPU for physical RAM -- recommend disk swap on NVMe
+    if (hasZram && !hasDisk) {
+      recommendations.push('Swap is using zram (compressed RAM) which competes with GPU memory. For better AI performance, add NVMe SSD swap: "sudo fallocate -l 8G /ssd/swapfile && sudo mkswap /ssd/swapfile && sudo swapon /ssd/swapfile"');
+    }
+  } catch {
+    // swapon not available
+  }
+
+  // Check if desktop GUI is running (uses ~800MB RAM)
+  let desktopGuiRunning = false;
+  try {
+    execSync('pgrep -x gdm3 || pgrep -x lightdm || pgrep -x Xorg || pgrep -x gnome-shell 2>/dev/null', {
+      encoding: 'utf-8',
+      timeout: 3000,
+    });
+    desktopGuiRunning = true;
+    recommendations.push('Desktop GUI is running and using ~800MB RAM. For headless AI servers, disable it: "sudo systemctl set-default multi-user.target && sudo reboot"');
+  } catch {
+    // No GUI detected -- good
+  }
+
+  return {
+    powerMode,
+    powerModeId,
+    clocksMaxed,
+    swapType,
+    swapTotalMB: Math.round(swapTotalMB),
+    desktopGuiRunning,
+    recommendations,
+  };
+}
+
+/**
  * Calculate the optimal num_ctx (context window size) based on available memory.
  * Smaller context windows use less VRAM and process prompts faster.
  *

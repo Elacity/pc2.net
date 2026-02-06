@@ -8,7 +8,7 @@
 import { Router, Response } from 'express';
 import { authenticate, AuthenticatedRequest } from './middleware.js';
 import { logger } from '../utils/logger.js';
-import { detectPlatform } from '../utils/platform.js';
+import { detectPlatform, getOllamaServerEnv } from '../utils/platform.js';
 import { AIChatService } from '../services/ai/AIChatService.js';
 import { readFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
@@ -918,6 +918,9 @@ router.get('/ollama-status', authenticate, async (req: AuthenticatedRequest, res
       }
     }
     
+    // Report which Ollama server-level optimizations would be applied
+    const ollamaOptimizations = getOllamaServerEnv();
+
     res.json({
       success: true,
       result: {
@@ -935,6 +938,8 @@ router.get('/ollama-status', authenticate, async (req: AuthenticatedRequest, res
         gpuInfo: platformInfo.gpuInfo,
         totalMemoryMB: platformInfo.totalMemoryMB,
         estimatedAvailableVRAM: platformInfo.estimatedAvailableVRAM,
+        // Server-level optimizations (applied when PC2 starts Ollama)
+        ollamaOptimizations: Object.keys(ollamaOptimizations).length > 0 ? ollamaOptimizations : undefined,
       }
     });
   } catch (error: any) {
@@ -1014,10 +1019,12 @@ router.post('/install-ollama', authenticate, async (req: AuthenticatedRequest, r
           });
         }
       } catch {
-        // Ollama might not be running, try to start it
+        // Ollama might not be running, try to start it with optimized env vars
+        const ollamaEnv = getOllamaServerEnv();
         const startProcess = spawn('ollama', ['serve'], {
           detached: true,
-          stdio: 'ignore'
+          stdio: 'ignore',
+          env: { ...process.env, ...ollamaEnv },
         });
         startProcess.unref();
         

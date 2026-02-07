@@ -12,6 +12,7 @@ import { logger } from '../../utils/logger.js';
 import { UsernameService } from './UsernameService.js';
 import { NetworkDetector, type NATType } from './NetworkDetector.js';
 import { ActiveProxyClient, ConnectionState, type ProxyConnection } from './ActiveProxyClient.js';
+import { fromBase58 } from './IdentityService.js';
 import net, { type Server, type Socket } from 'net';
 import { request as httpRequest } from 'http';
 
@@ -198,8 +199,9 @@ export class ConnectivityService {
       try {
         await this.connectViaActiveProxy();
       } catch (error) {
-        logger.warn(`⚠️ Active Proxy connection failed: ${error}. Node will run in local-only mode.`);
-        // Fall back to direct connection attempt
+        logger.warn(`⚠️ Active Proxy connection failed: ${error}. Will retry via heartbeat.`);
+        // Still connect to gateway for health monitoring, but natType stays 'relay'
+        // so registerWithGateway() won't register an unreachable public IP
         await this.connect();
       }
     } else {
@@ -221,6 +223,17 @@ export class ConnectivityService {
     const validSuperNodes = this.config.superNodes.filter(superNode => {
       if (!superNode.address || !superNode.proxyPort) {
         logger.warn(`[Connectivity] Invalid supernode config (missing address/port), skipping`);
+        return false;
+      }
+      // Validate server public key for CryptoBox handshake
+      try {
+        const serverPublicKey = fromBase58(superNode.id);
+        if (serverPublicKey.length !== 32) {
+          logger.warn(`[Connectivity] Invalid supernode ID length for '${superNode.id}', skipping`);
+          return false;
+        }
+      } catch {
+        logger.warn(`[Connectivity] Invalid supernode ID '${superNode.id}', skipping`);
         return false;
       }
       return true;
@@ -270,12 +283,15 @@ export class ConnectivityService {
     try {
       logger.debug(`[Connectivity] Trying ${superNode.address}:${superNode.proxyPort}...`);
 
+      const serverPublicKey = fromBase58(superNode.id);
+      
       const client = new ActiveProxyClient({
         host: superNode.address,
         port: superNode.proxyPort,
         nodeId: this.nodeId!,
         publicKey: this.publicKey!,
         privateKey: this.privateKey!,
+        serverPublicKey: serverPublicKey,
         localPort: this.config.localPort,
         keepaliveIntervalMs: 30000,
         reconnectIntervalMs: this.config.reconnectIntervalMs,
@@ -515,7 +531,12 @@ export class ConnectivityService {
           this.status.connected = true;
           this.status.superNode = superNode;
           this.status.connectedAt = new Date().toISOString();
-          this.status.natType = 'direct';
+          // IMPORTANT: Do NOT overwrite natType if already set to 'relay'.
+          // A NAT node that falls back to direct gateway check is still behind NAT
+          // and should not register with an unreachable public IP.
+          if (this.status.natType !== 'relay') {
+            this.status.natType = 'direct';
+          }
           this.currentSuperNodeIndex = index;
           
           // Clear this node from failed list on success
@@ -600,6 +621,10 @@ export class ConnectivityService {
 
   /**
    * Register this node's endpoint with the gateway
+   * 
+   * Only registers direct HTTP endpoints for nodes with verified public IPs.
+   * NAT nodes should NOT register here - they register via registerProxyEndpoint()
+   * when ActiveProxy connects and provides an allocated port.
    */
   private async registerWithGateway(superNode: SuperNode): Promise<void> {
     if (!this.usernameService) return;
@@ -607,7 +632,7 @@ export class ConnectivityService {
     let endpoint: string;
     
     if (this.status.natType === 'direct' && !this.config.privacyMode) {
-      // Direct mode: Use public IP
+      // Direct mode: Use public IP (VPS users with actual public IPs)
       const networkInfo = await this.networkDetector.detect();
       if (networkInfo.publicIP) {
         endpoint = `http://${networkInfo.publicIP}:${this.config.localPort}`;
@@ -618,10 +643,12 @@ export class ConnectivityService {
         logger.warn('Could not detect public IP, using localhost');
       }
     } else {
-      // NAT/Privacy mode: Use local endpoint (will be proxied via Active Proxy)
-      // In full implementation, this would be: proxy://${superNode.address}:${superNode.proxyPort}/${sessionId}
-      endpoint = `http://127.0.0.1:${this.config.localPort}`;
-      logger.info(`🔒 Privacy/NAT mode: using proxied endpoint`);
+      // NAT/Privacy mode: Do NOT register an unreachable public IP.
+      // ActiveProxy will handle registration via registerProxyEndpoint() when connected.
+      // If ActiveProxy failed, registering a public IP that's behind NAT is useless
+      // and causes "Bad Gateway" / "ETIMEDOUT" errors for other users.
+      logger.info(`🔒 NAT/Privacy mode: skipping direct endpoint registration (waiting for Active Proxy)`);
+      return;
     }
     
     const result = await this.usernameService.updateEndpoint(endpoint);
@@ -661,6 +688,7 @@ export class ConnectivityService {
 
   /**
    * Schedule reconnection attempt
+   * For NAT nodes, retries ActiveProxy first before falling back to direct connect
    */
   private scheduleReconnect(): void {
     if (this.reconnectTimer || !this.isRunning) return;
@@ -669,6 +697,18 @@ export class ConnectivityService {
     
     this.reconnectTimer = setTimeout(async () => {
       this.reconnectTimer = null;
+      
+      // For NAT/relay nodes, retry ActiveProxy before falling back to direct
+      if (this.status.natType === 'relay' && this.publicKey && this.privateKey && this.nodeId) {
+        try {
+          logger.info('🔄 Retrying Active Proxy connection...');
+          await this.connectViaActiveProxy();
+          return;
+        } catch (error) {
+          logger.warn(`⚠️ Active Proxy reconnect failed: ${error}. Falling back to direct.`);
+        }
+      }
+      
       await this.connect();
     }, this.config.reconnectIntervalMs);
   }

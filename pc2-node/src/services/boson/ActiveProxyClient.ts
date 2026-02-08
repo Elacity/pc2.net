@@ -554,7 +554,8 @@ export class ActiveProxyClient extends EventEmitter {
       let decryptedPayload: Buffer = Buffer.alloc(0);
       
       if (remainingData && remainingData.length > 0) {
-        // Try format 1: [type][24-byte nonce][ciphertext] - nonce prepended after type
+        // Server format: [type][24-byte nonce][ciphertext]
+        // Nonce is ALWAYS prepended in each packet (confirmed by PONG being 171 bytes)
         if (remainingData.length >= NONCE_SIZE + 16) {
           const nonce = new Uint8Array(remainingData.slice(0, NONCE_SIZE));
           const ciphertext = new Uint8Array(remainingData.slice(NONCE_SIZE));
@@ -563,43 +564,16 @@ export class ActiveProxyClient extends EventEmitter {
           
           if (plaintext) {
             decryptedPayload = Buffer.from(plaintext);
-            logger.debug(`[ActiveProxy] Decrypted with prepended nonce: ${decryptedPayload.length} bytes`);
+            logger.debug(`[ActiveProxy] Decrypted ${getPacketTypeName(type)}: ${decryptedPayload.length} bytes payload`);
           } else {
-            // Try format 2: [type][ciphertext] - using session counter nonce
-            if (this.sessionRecvNonce) {
-              const plaintext2 = decrypt(
-                new Uint8Array(remainingData),
-                this.sessionRecvNonce,
-                this.cryptoSession.sharedKey
-              );
-              
-              if (plaintext2) {
-                decryptedPayload = Buffer.from(plaintext2);
-                this.sessionRecvNonce = incrementNonce(this.sessionRecvNonce);
-                logger.debug(`[ActiveProxy] Decrypted with session nonce: ${decryptedPayload.length} bytes`);
-              } else {
-                // Neither format worked - treat remaining data as raw payload (might be padding)
-                logger.debug(`[ActiveProxy] Could not decrypt ${getPacketTypeName(type)} payload (${remainingData.length} bytes) - treating as raw/padding`);
-                decryptedPayload = Buffer.from(remainingData);
-              }
-            }
-          }
-        } else if (this.sessionRecvNonce) {
-          // Too short for prepended nonce, try session nonce
-          const plaintext = decrypt(
-            new Uint8Array(remainingData),
-            this.sessionRecvNonce,
-            this.cryptoSession.sharedKey
-          );
-          
-          if (plaintext) {
-            decryptedPayload = Buffer.from(plaintext);
-            this.sessionRecvNonce = incrementNonce(this.sessionRecvNonce);
-            logger.debug(`[ActiveProxy] Decrypted with session nonce: ${decryptedPayload.length} bytes`);
-          } else {
+            logger.warn(`[ActiveProxy] Failed to decrypt ${getPacketTypeName(type)} (${ciphertext.length} cipher bytes)`);
+            // Pass raw data so handler can try to make sense of it
             decryptedPayload = Buffer.from(remainingData);
-            logger.debug(`[ActiveProxy] Raw payload (no decryption): ${remainingData.length} bytes`);
           }
+        } else {
+          // Data too short for nonce+ciphertext - treat as raw/padding
+          logger.debug(`[ActiveProxy] Short payload for ${getPacketTypeName(type)}: ${remainingData.length} bytes (no decryption)`);
+          decryptedPayload = Buffer.from(remainingData);
         }
       }
       
@@ -613,27 +587,39 @@ export class ActiveProxyClient extends EventEmitter {
   }
   
   /**
-   * Parse a raw byte into a PacketType
+   * Parse a raw wire byte into a PacketType
    * 
-   * The Java server randomizes the lower 3 bits of each packet type.
+   * The Java server uses: base = ordinal * 8, ACK = base | 0x80
+   * Lower 3 bits are randomized (e.g., PONG can be 0x90-0x97).
+   * 
+   * Confirmed wire evidence:
+   *   AUTH_ACK    = 0x80-0x87 (confirmed from working AUTH handshake)
+   *   PONG        = 0x90-0x97 (wire 0x92 observed)
+   *   CONNECT_ACK = 0x98-0x9F (wire 0x9f observed)
    */
   private parsePacketType(byte: number): PacketType | null {
-    if (byte >= 0x00 && byte <= 0x07) return PacketType.AUTH;
-    if (byte >= 0x08 && byte <= 0x0F) return PacketType.ATTACH;
-    if (byte >= 0x10 && byte <= 0x17) return PacketType.PING;
-    if (byte >= 0x18 && byte <= 0x1F) return PacketType.PONG;
-    if (byte >= 0x20 && byte <= 0x27) return PacketType.CONNECT;
-    if (byte >= 0x28 && byte <= 0x2F) return PacketType.CONNECT_ACK;
-    if (byte >= 0x30 && byte <= 0x37) return PacketType.DISCONNECT;
-    if (byte >= 0x38 && byte <= 0x3F) return PacketType.DISCONNECT_ACK;
-    if (byte >= 0x40 && byte <= 0x6F) return PacketType.DATA;
-    if (byte >= 0x70 && byte <= 0x7F) return PacketType.ERROR;
-    if (byte >= 0x80 && byte <= 0x87) return PacketType.AUTH_ACK;
-    if (byte >= 0x88 && byte <= 0x8F) return PacketType.ATTACH_ACK;
-    if (byte >= 0x90 && byte <= 0x97) return PacketType.PONG;
-    if (byte >= 0x98 && byte <= 0x9F) return PacketType.CONNECT_ACK;
-    if (byte >= 0xA0 && byte <= 0xA7) return PacketType.DISCONNECT_ACK;
-    return null;
+    // Clear lower 3 bits to get the base type
+    const base = byte & 0xF8;
+    
+    switch (base) {
+      // Non-ACK types (ordinal * 8)
+      case 0x00: return PacketType.AUTH;           // 0x00-0x07
+      case 0x08: return PacketType.ATTACH;         // 0x08-0x0F
+      case 0x10: return PacketType.PING;           // 0x10-0x17
+      case 0x18: return PacketType.CONNECT;        // 0x18-0x1F
+      case 0x20: return PacketType.DISCONNECT;     // 0x20-0x27
+      case 0x28: return PacketType.DATA;           // 0x28-0x2F
+      case 0x30: return PacketType.ERROR;          // 0x30-0x37
+      
+      // ACK types (non-ACK base | 0x80)
+      case 0x80: return PacketType.AUTH_ACK;       // 0x80-0x87
+      case 0x88: return PacketType.ATTACH_ACK;     // 0x88-0x8F
+      case 0x90: return PacketType.PONG;           // 0x90-0x97 (PING_ACK)
+      case 0x98: return PacketType.CONNECT_ACK;    // 0x98-0x9F
+      case 0xA0: return PacketType.DISCONNECT_ACK; // 0xA0-0xA7
+      
+      default: return null;
+    }
   }
   
   /**
@@ -1050,36 +1036,39 @@ export class ActiveProxyClient extends EventEmitter {
   }
 
   /**
-   * Send an encrypted packet with type in the clear
+   * Send an encrypted packet with type in the clear + nonce prepended
    * 
-   * Java server packet format (post-AUTH):
-   *   [2-byte length][1-byte type IN CLEAR][encrypted payload]
+   * Wire format (post-AUTH): [2-byte length][1-byte type][24-byte nonce][ciphertext]
    * 
-   * The type byte is NOT encrypted. Only the payload is encrypted using
-   * session CryptoBox + incrementing nonce from the AUTH handshake.
+   * Evidence: Server sends PONG as 171 bytes = 2(len) + 1(type) + 24(nonce) + 128(plain) + 16(MAC).
+   * Server uses random nonce per packet, prepended after the type byte.
+   * Client must match this format for the server to decrypt.
    */
   private sendEncryptedPacket(type: PacketType, payload: Buffer): boolean {
-    if (!this.socket || !this.cryptoSession || !this.sessionSendNonce) {
-      logger.warn('[ActiveProxy] Cannot send encrypted packet - no socket, session, or nonce');
+    if (!this.socket || !this.cryptoSession) {
+      logger.warn('[ActiveProxy] Cannot send encrypted packet - no socket or session');
       return false;
     }
     
-    // Encrypt only the payload (NOT the type) using session nonce
+    // Generate a random nonce for this packet (matching server behavior)
+    const nonce = generateNonce();
+    
+    // Encrypt the payload using the random nonce and session shared key
     const ciphertext = encrypt(
       new Uint8Array(payload),
-      this.sessionSendNonce,
+      nonce,
       this.cryptoSession.sharedKey
     );
     
-    // Increment the send nonce for the next packet
-    this.sessionSendNonce = incrementNonce(this.sessionSendNonce);
-    
-    // Build packet: [2-byte length][1-byte type][encrypted payload]
-    const packetLength = 2 + 1 + ciphertext.length;
+    // Build packet: [2-byte length][1-byte type][24-byte nonce][ciphertext]
+    const packetLength = 2 + 1 + NONCE_SIZE + ciphertext.length;
     const packet = Buffer.alloc(packetLength);
     packet.writeUInt16BE(packetLength, 0);
     packet.writeUInt8(type, 2);
-    Buffer.from(ciphertext).copy(packet, 3);
+    Buffer.from(nonce).copy(packet, 3);
+    Buffer.from(ciphertext).copy(packet, 3 + NONCE_SIZE);
+    
+    logger.debug(`[ActiveProxy] Sending ${getPacketTypeName(type)}: ${packetLength} bytes (payload: ${payload.length}, cipher: ${ciphertext.length})`);
     
     try {
       this.socket.write(packet);

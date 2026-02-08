@@ -532,34 +532,74 @@ export class ActiveProxyClient extends EventEmitter {
         break;
       }
       
+      // Log raw packet bytes for protocol debugging
+      const rawPreview = buffer.slice(0, Math.min(packetLength, 40)).toString('hex');
+      logger.info(`[ActiveProxy] Raw packet: len=${packetLength} hex=${rawPreview}`);
+      
       // Read type at offset 2 (in the clear - Java server format)
       const typeByte = buffer.readUInt8(2);
       const type = this.parsePacketType(typeByte);
       
       if (type === null) {
-        logger.warn(`[ActiveProxy] Unknown packet type: 0x${typeByte.toString(16)}`);
+        logger.warn(`[ActiveProxy] Unknown wire type: 0x${typeByte.toString(16)} (raw: ${rawPreview})`);
         this.packetBuffer.consume(packetLength);
         continue;
       }
       
-      // Extract encrypted payload (everything after [length][type])
-      const encryptedPayload = packetLength > 3 ? buffer.slice(3, packetLength) : null;
+      logger.info(`[ActiveProxy] Parsed type: ${getPacketTypeName(type)} (wire: 0x${typeByte.toString(16)}, enum: 0x${type.toString(16)})`);
+      
+      // Extract data after [length][type]
+      const remainingData = packetLength > 3 ? buffer.slice(3, packetLength) : null;
       
       let decryptedPayload: Buffer = Buffer.alloc(0);
       
-      // Decrypt payload if present and this is a data-carrying packet
-      if (encryptedPayload && encryptedPayload.length > 16 && this.sessionRecvNonce) {
-        const plaintext = decrypt(
-          new Uint8Array(encryptedPayload),
-          this.sessionRecvNonce,
-          this.cryptoSession.sharedKey
-        );
-        
-        if (plaintext) {
-          decryptedPayload = Buffer.from(plaintext);
-          this.sessionRecvNonce = incrementNonce(this.sessionRecvNonce);
-        } else {
-          logger.debug(`[ActiveProxy] Could not decrypt payload for ${getPacketTypeName(type)} (${encryptedPayload.length} bytes) - may be padding`);
+      if (remainingData && remainingData.length > 0) {
+        // Try format 1: [type][24-byte nonce][ciphertext] - nonce prepended after type
+        if (remainingData.length >= NONCE_SIZE + 16) {
+          const nonce = new Uint8Array(remainingData.slice(0, NONCE_SIZE));
+          const ciphertext = new Uint8Array(remainingData.slice(NONCE_SIZE));
+          
+          const plaintext = decrypt(ciphertext, nonce, this.cryptoSession.sharedKey);
+          
+          if (plaintext) {
+            decryptedPayload = Buffer.from(plaintext);
+            logger.debug(`[ActiveProxy] Decrypted with prepended nonce: ${decryptedPayload.length} bytes`);
+          } else {
+            // Try format 2: [type][ciphertext] - using session counter nonce
+            if (this.sessionRecvNonce) {
+              const plaintext2 = decrypt(
+                new Uint8Array(remainingData),
+                this.sessionRecvNonce,
+                this.cryptoSession.sharedKey
+              );
+              
+              if (plaintext2) {
+                decryptedPayload = Buffer.from(plaintext2);
+                this.sessionRecvNonce = incrementNonce(this.sessionRecvNonce);
+                logger.debug(`[ActiveProxy] Decrypted with session nonce: ${decryptedPayload.length} bytes`);
+              } else {
+                // Neither format worked - treat remaining data as raw payload (might be padding)
+                logger.debug(`[ActiveProxy] Could not decrypt ${getPacketTypeName(type)} payload (${remainingData.length} bytes) - treating as raw/padding`);
+                decryptedPayload = Buffer.from(remainingData);
+              }
+            }
+          }
+        } else if (this.sessionRecvNonce) {
+          // Too short for prepended nonce, try session nonce
+          const plaintext = decrypt(
+            new Uint8Array(remainingData),
+            this.sessionRecvNonce,
+            this.cryptoSession.sharedKey
+          );
+          
+          if (plaintext) {
+            decryptedPayload = Buffer.from(plaintext);
+            this.sessionRecvNonce = incrementNonce(this.sessionRecvNonce);
+            logger.debug(`[ActiveProxy] Decrypted with session nonce: ${decryptedPayload.length} bytes`);
+          } else {
+            decryptedPayload = Buffer.from(remainingData);
+            logger.debug(`[ActiveProxy] Raw payload (no decryption): ${remainingData.length} bytes`);
+          }
         }
       }
       
@@ -1054,7 +1094,7 @@ export class ActiveProxyClient extends EventEmitter {
    * Handle a decoded packet
    */
   private handlePacket(packet: Packet): void {
-    logger.debug(`[ActiveProxy] Received ${getPacketTypeName(packet.type)} packet`);
+    logger.debug(`[ActiveProxy] Received ${getPacketTypeName(packet.type)} packet (payload: ${packet.payload.length} bytes)`);
     
     switch (packet.type) {
       case PacketType.AUTH_ACK:
@@ -1065,17 +1105,33 @@ export class ActiveProxyClient extends EventEmitter {
         this.handleAuthError(packet.payload);
         break;
         
+      case PacketType.PING:
+        // Server sent us a PING - respond with PONG
+        logger.debug('[ActiveProxy] Received PING from server');
+        this.sendControlPacket(PacketType.PONG);
+        break;
+        
       case PacketType.PONG:
-        // Keepalive response, nothing to do
-        logger.debug('[ActiveProxy] Received PONG');
+        // Keepalive response - connection is alive
+        logger.debug('[ActiveProxy] Received PONG (keepalive OK)');
         break;
         
       case PacketType.CONNECT:
         this.handleConnect(packet.payload);
         break;
         
+      case PacketType.CONNECT_ACK:
+        // Server confirmed upstream connection
+        logger.debug('[ActiveProxy] Received CONNECT_ACK');
+        break;
+        
       case PacketType.DISCONNECT:
         this.handleDisconnectPacket(packet.payload);
+        break;
+        
+      case PacketType.DISCONNECT_ACK:
+        // Server confirmed disconnect
+        logger.debug('[ActiveProxy] Received DISCONNECT_ACK');
         break;
         
       case PacketType.DATA:
@@ -1086,8 +1142,16 @@ export class ActiveProxyClient extends EventEmitter {
         this.handleError(packet.payload);
         break;
         
+      case PacketType.ATTACH_ACK:
+        logger.debug('[ActiveProxy] Received ATTACH_ACK');
+        break;
+        
+      case PacketType.ATTACH_ERROR:
+        this.handleAuthError(packet.payload);
+        break;
+        
       default:
-        logger.warn(`[ActiveProxy] Unknown packet type: 0x${packet.type.toString(16)}`);
+        logger.warn(`[ActiveProxy] Unhandled packet type: 0x${packet.type.toString(16)}`);
     }
   }
 

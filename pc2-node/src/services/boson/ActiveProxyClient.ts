@@ -335,22 +335,34 @@ export class ActiveProxyClient extends EventEmitter {
       return false;
     }
     
-    // Encrypt raw data (no connectionId framing - server expects raw payload)
-    const ciphertext = encrypt(
-      new Uint8Array(data),
-      this.authConnectionNonce,
-      this.cryptoSession.sharedKey
-    );
-    
-    // Build DATA packet: [2-byte len][1-byte type][cipher] (no padding for DATA)
-    const packetLength = PACKET_HEADER_SIZE + ciphertext.length;
-    const packet = Buffer.alloc(packetLength);
-    packet.writeUInt16BE(packetLength, 0);
-    packet.writeUInt8(PacketType.DATA, 2);
-    Buffer.from(ciphertext).copy(packet, PACKET_HEADER_SIZE);
+    // Max packet is 65535 (2-byte length field limit).
+    // Packet = [2-byte len][1-byte type][ciphertext]
+    // NaCl box adds 16-byte MAC to ciphertext, so:
+    //   max ciphertext = 65535 - PACKET_HEADER_SIZE(3) = 65532
+    //   max plaintext  = 65532 - 16 (NaCl MAC)        = 65516
+    const MAX_PLAINTEXT_PER_PACKET = 65535 - PACKET_HEADER_SIZE - 16;
     
     try {
-      this.socket.write(packet);
+      // Chunk data if it exceeds the max plaintext size per packet
+      for (let offset = 0; offset < data.length; offset += MAX_PLAINTEXT_PER_PACKET) {
+        const chunk = data.subarray(offset, Math.min(offset + MAX_PLAINTEXT_PER_PACKET, data.length));
+        
+        // Encrypt chunk (no connectionId framing - server expects raw payload)
+        const ciphertext = encrypt(
+          new Uint8Array(chunk),
+          this.authConnectionNonce,
+          this.cryptoSession.sharedKey
+        );
+        
+        // Build DATA packet: [2-byte len][1-byte type][cipher]
+        const packetLength = PACKET_HEADER_SIZE + ciphertext.length;
+        const packet = Buffer.alloc(packetLength);
+        packet.writeUInt16BE(packetLength, 0);
+        packet.writeUInt8(PacketType.DATA, 2);
+        Buffer.from(ciphertext).copy(packet, PACKET_HEADER_SIZE);
+        
+        this.socket.write(packet);
+      }
       return true;
     } catch (error) {
       logger.error(`[ActiveProxy] Failed to send DATA: ${error}`);

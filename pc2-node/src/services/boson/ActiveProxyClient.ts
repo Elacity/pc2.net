@@ -39,6 +39,7 @@ import {
   generateKeyPair,
   computeSharedSecret,
   generateNonce,
+  incrementNonce,
   deriveNonceFromX25519Keys,
   encrypt,
   decrypt,
@@ -148,6 +149,12 @@ export class ActiveProxyClient extends EventEmitter {
   // ATTACH support - reuse existing session for 40x faster connection
   private serverSessionPublicKey: Uint8Array | null = null;
   private isAttaching: boolean = false;
+  
+  // Session nonce tracking for post-AUTH encrypted communication
+  // The connectionNonce from AUTH payload is used as the base, incremented per packet
+  private sessionSendNonce: Uint8Array | null = null;
+  private sessionRecvNonce: Uint8Array | null = null;
+  private authConnectionNonce: Uint8Array | null = null;
 
   constructor(config: Partial<ActiveProxyConfig> & Pick<ActiveProxyConfig, 'host' | 'port' | 'nodeId' | 'publicKey' | 'privateKey' | 'serverPublicKey' | 'localPort'>) {
     super();
@@ -354,9 +361,7 @@ export class ActiveProxyClient extends EventEmitter {
     }
     
     const payload = encodeDataPayload(connectionId, data);
-    const plaintextPacket = encodePlaintextPacket(PacketType.DATA, payload);
-    
-    return this.sendEncryptedPacket(plaintextPacket);
+    return this.sendEncryptedPacket(PacketType.DATA, payload);
   }
 
   /**
@@ -368,9 +373,7 @@ export class ActiveProxyClient extends EventEmitter {
     }
     
     const payload = encodeDisconnectPayload(connectionId);
-    const plaintextPacket = encodePlaintextPacket(PacketType.DISCONNECT, payload);
-    
-    if (this.sendEncryptedPacket(plaintextPacket)) {
+    if (this.sendEncryptedPacket(PacketType.DISCONNECT, payload)) {
       this.activeConnections.delete(connectionId);
     }
   }
@@ -490,43 +493,107 @@ export class ActiveProxyClient extends EventEmitter {
   /**
    * Process encrypted packets after handshake
    * 
-   * Note: AUTH_ACK uses a different format than other packets:
-   * - AUTH_ACK: [2-byte length][1-byte type][cipher (no prepended nonce)]
-   * - Other packets: [2-byte length][24-byte nonce][ciphertext]
+   * Java server packet format (post-AUTH):
+   *   [2-byte length][1-byte type IN CLEAR][encrypted payload OR padding]
    * 
-   * The server uses XOR-derived nonce for AUTH_ACK (same as AUTH encryption)
+   * - AUTH_ACK: [2-byte length][1-byte type][cipher (XOR nonce)]
+   * - PING_ACK: [2-byte length][1-byte type][optional padding] (no encryption)
+   * - CONNECT/DATA/etc.: [2-byte length][1-byte type][encrypted payload]
+   * 
+   * The type byte is ALWAYS in the clear at offset 2.
    */
   private processEncryptedPackets(): void {
     if (!this.cryptoSession) {
       throw new Error('No crypto session - handshake not complete');
     }
     
-    // For AUTH_ACK, we need special handling - no prepended nonce
+    // For AUTH_ACK, we need special handling - XOR-derived nonce
     if (this.state === ConnectionState.AUTHENTICATING) {
       this.processAuthAckPacket();
       return;
     }
     
-    let encryptedPacket;
-    while ((encryptedPacket = this.packetBuffer.extractEncryptedPacket()) !== null) {
-      // Decrypt the packet
-      const plaintext = decrypt(
-        new Uint8Array(encryptedPacket.ciphertext),
-        new Uint8Array(encryptedPacket.nonce),
-        this.cryptoSession.sharedKey
-      );
+    // Process session packets: [2-byte length][1-byte type][payload]
+    const buffer = this.packetBuffer.getBuffer();
+    
+    while (buffer.length >= 3) {
+      // Read packet length
+      const packetLength = buffer.readUInt16BE(0);
       
-      if (!plaintext) {
-        logger.warn('[ActiveProxy] Failed to decrypt packet - authentication error');
+      // Validate length
+      if (packetLength < 3 || packetLength > 1048576) {
+        logger.error(`[ActiveProxy] Invalid packet length: ${packetLength}`);
+        this.packetBuffer.clear();
+        break;
+      }
+      
+      // Wait for complete packet
+      if (buffer.length < packetLength) {
+        break;
+      }
+      
+      // Read type at offset 2 (in the clear - Java server format)
+      const typeByte = buffer.readUInt8(2);
+      const type = this.parsePacketType(typeByte);
+      
+      if (type === null) {
+        logger.warn(`[ActiveProxy] Unknown packet type: 0x${typeByte.toString(16)}`);
+        this.packetBuffer.consume(packetLength);
         continue;
       }
       
-      // Decode plaintext packet (type + payload)
-      const packet = decodePlaintextPacket(Buffer.from(plaintext));
-      if (packet) {
-        this.handlePacket(packet);
+      // Extract encrypted payload (everything after [length][type])
+      const encryptedPayload = packetLength > 3 ? buffer.slice(3, packetLength) : null;
+      
+      let decryptedPayload: Buffer = Buffer.alloc(0);
+      
+      // Decrypt payload if present and this is a data-carrying packet
+      if (encryptedPayload && encryptedPayload.length > 16 && this.sessionRecvNonce) {
+        const plaintext = decrypt(
+          new Uint8Array(encryptedPayload),
+          this.sessionRecvNonce,
+          this.cryptoSession.sharedKey
+        );
+        
+        if (plaintext) {
+          decryptedPayload = Buffer.from(plaintext);
+          this.sessionRecvNonce = incrementNonce(this.sessionRecvNonce);
+        } else {
+          logger.debug(`[ActiveProxy] Could not decrypt payload for ${getPacketTypeName(type)} (${encryptedPayload.length} bytes) - may be padding`);
+        }
       }
+      
+      // Consume the packet from buffer
+      this.packetBuffer.consume(packetLength);
+      
+      // Handle the packet
+      const packet: Packet = { type, payload: decryptedPayload };
+      this.handlePacket(packet);
     }
+  }
+  
+  /**
+   * Parse a raw byte into a PacketType
+   * 
+   * The Java server randomizes the lower 3 bits of each packet type.
+   */
+  private parsePacketType(byte: number): PacketType | null {
+    if (byte >= 0x00 && byte <= 0x07) return PacketType.AUTH;
+    if (byte >= 0x08 && byte <= 0x0F) return PacketType.ATTACH;
+    if (byte >= 0x10 && byte <= 0x17) return PacketType.PING;
+    if (byte >= 0x18 && byte <= 0x1F) return PacketType.PONG;
+    if (byte >= 0x20 && byte <= 0x27) return PacketType.CONNECT;
+    if (byte >= 0x28 && byte <= 0x2F) return PacketType.CONNECT_ACK;
+    if (byte >= 0x30 && byte <= 0x37) return PacketType.DISCONNECT;
+    if (byte >= 0x38 && byte <= 0x3F) return PacketType.DISCONNECT_ACK;
+    if (byte >= 0x40 && byte <= 0x6F) return PacketType.DATA;
+    if (byte >= 0x70 && byte <= 0x7F) return PacketType.ERROR;
+    if (byte >= 0x80 && byte <= 0x87) return PacketType.AUTH_ACK;
+    if (byte >= 0x88 && byte <= 0x8F) return PacketType.ATTACH_ACK;
+    if (byte >= 0x90 && byte <= 0x97) return PacketType.PONG;
+    if (byte >= 0x98 && byte <= 0x9F) return PacketType.CONNECT_ACK;
+    if (byte >= 0xA0 && byte <= 0xA7) return PacketType.DISCONNECT_ACK;
+    return null;
   }
   
   /**
@@ -583,6 +650,12 @@ export class ActiveProxyClient extends EventEmitter {
           clientKeyPair: this.clientKeyPair,
           nonceCounter: BigInt(0),
         };
+        
+        // Initialize session nonces for ATTACH flow
+        if (this.authConnectionNonce) {
+          this.sessionSendNonce = new Uint8Array(this.authConnectionNonce);
+          this.sessionRecvNonce = new Uint8Array(this.authConnectionNonce);
+        }
       }
       
       // Mark as connected
@@ -666,6 +739,13 @@ export class ActiveProxyClient extends EventEmitter {
         clientKeyPair: this.clientKeyPair,
         nonceCounter: BigInt(0),
       };
+      
+      // Initialize session nonces from the connectionNonce sent in AUTH
+      if (this.authConnectionNonce) {
+        this.sessionSendNonce = new Uint8Array(this.authConnectionNonce);
+        this.sessionRecvNonce = new Uint8Array(this.authConnectionNonce);
+        logger.debug(`[ActiveProxy] Session nonces initialized from connectionNonce: ${Buffer.from(this.authConnectionNonce).toString('hex').slice(0, 16)}...`);
+      }
     }
     
     // Mark as connected
@@ -723,7 +803,9 @@ export class ActiveProxyClient extends EventEmitter {
     logger.debug(`[ActiveProxy] Signed challenge: ${Buffer.from(signature).toString('hex').slice(0, 32)}...`);
     
     // Step 2: Generate random nonce for the session (included inside encrypted payload)
+    // This becomes the BASE nonce for all post-AUTH encrypted communication
     const sessionNonce = generateNonce();
+    this.authConnectionNonce = new Uint8Array(sessionNonce);
     
     // Step 3: Build the plaintext auth payload
     // Format: [32-byte sessionPk][24-byte connectionNonce][64-byte signature][1-byte domainLen][domain]
@@ -833,8 +915,9 @@ export class ActiveProxyClient extends EventEmitter {
       new Uint8Array(this.config.privateKey)
     );
 
-    // Step 2: Generate session nonce
+    // Step 2: Generate session nonce (stored for post-AUTH session encryption)
     const sessionNonce = nacl.randomBytes(24);
+    this.authConnectionNonce = new Uint8Array(sessionNonce);
 
     // Step 3: Build ATTACH payload (same as AUTH but without domain)
     // Format: [32-byte sessionPk][24-byte sessionNonce][64-byte signature]
@@ -900,31 +983,63 @@ export class ActiveProxyClient extends EventEmitter {
   }
   
   /**
-   * Send an encrypted packet
+   * Send a raw (unencrypted) control packet
+   * 
+   * Format: [2-byte length][1-byte type]
+   * Used for PING and other control packets that have no payload.
+   * The Java server reads type at byte offset 2 (in the clear).
    */
-  private sendEncryptedPacket(plaintext: Buffer): boolean {
-    if (!this.socket || !this.cryptoSession) {
-      logger.warn('[ActiveProxy] Cannot send encrypted packet - no socket or session');
+  private sendControlPacket(type: PacketType): boolean {
+    if (!this.socket) {
+      logger.warn('[ActiveProxy] Cannot send control packet - no socket');
       return false;
     }
     
-    // Generate nonce
-    const nonce = generateNonce();
+    const packetLength = 3; // 2 (length) + 1 (type)
+    const packet = Buffer.alloc(packetLength);
+    packet.writeUInt16BE(packetLength, 0);
+    packet.writeUInt8(type, 2);
     
-    // Encrypt
+    try {
+      this.socket.write(packet);
+      return true;
+    } catch (error) {
+      logger.error(`[ActiveProxy] Failed to send control packet: ${error}`);
+      return false;
+    }
+  }
+
+  /**
+   * Send an encrypted packet with type in the clear
+   * 
+   * Java server packet format (post-AUTH):
+   *   [2-byte length][1-byte type IN CLEAR][encrypted payload]
+   * 
+   * The type byte is NOT encrypted. Only the payload is encrypted using
+   * session CryptoBox + incrementing nonce from the AUTH handshake.
+   */
+  private sendEncryptedPacket(type: PacketType, payload: Buffer): boolean {
+    if (!this.socket || !this.cryptoSession || !this.sessionSendNonce) {
+      logger.warn('[ActiveProxy] Cannot send encrypted packet - no socket, session, or nonce');
+      return false;
+    }
+    
+    // Encrypt only the payload (NOT the type) using session nonce
     const ciphertext = encrypt(
-      new Uint8Array(plaintext),
-      nonce,
+      new Uint8Array(payload),
+      this.sessionSendNonce,
       this.cryptoSession.sharedKey
     );
     
-    // Build packet: [2-byte length][24-byte nonce][ciphertext]
-    const packetLength = LENGTH_FIELD_SIZE + NONCE_SIZE + ciphertext.length;
-    const packet = Buffer.alloc(packetLength);
+    // Increment the send nonce for the next packet
+    this.sessionSendNonce = incrementNonce(this.sessionSendNonce);
     
+    // Build packet: [2-byte length][1-byte type][encrypted payload]
+    const packetLength = 2 + 1 + ciphertext.length;
+    const packet = Buffer.alloc(packetLength);
     packet.writeUInt16BE(packetLength, 0);
-    Buffer.from(nonce).copy(packet, LENGTH_FIELD_SIZE);
-    Buffer.from(ciphertext).copy(packet, LENGTH_FIELD_SIZE + NONCE_SIZE);
+    packet.writeUInt8(type, 2);
+    Buffer.from(ciphertext).copy(packet, 3);
     
     try {
       this.socket.write(packet);
@@ -1026,12 +1141,11 @@ export class ActiveProxyClient extends EventEmitter {
       // Emit connection event
       this.emit('connection', conn);
       
-      // Send encrypted CONNECT_ACK
+      // Send CONNECT_ACK with connection ID
       if (this.socket && this.cryptoSession) {
         const ackPayload = Buffer.alloc(4);
         ackPayload.writeUInt32BE(conn.connectionId, 0);
-        const plaintextPacket = encodePlaintextPacket(PacketType.CONNECT_ACK, ackPayload);
-        this.sendEncryptedPacket(plaintextPacket);
+        this.sendEncryptedPacket(PacketType.CONNECT_ACK, ackPayload);
       }
     } catch (error) {
       logger.error(`[ActiveProxy] Failed to handle CONNECT: ${error}`);
@@ -1090,6 +1204,9 @@ export class ActiveProxyClient extends EventEmitter {
     this.serverX25519PublicKey = null;
     this.clientX25519PrivateKey = null;
     this.serverChallenge = null;
+    this.sessionSendNonce = null;
+    this.sessionRecvNonce = null;
+    this.authConnectionNonce = null;
     
     if (this.socket) {
       this.socket.destroy();
@@ -1112,18 +1229,17 @@ export class ActiveProxyClient extends EventEmitter {
     this.stopKeepalive();
     
     // Send an immediate PING to prevent early idle timeout
-    if (this.isConnected() && this.socket && this.cryptoSession) {
-      const immediatePing = encodePlaintextPacket(PacketType.PING);
-      if (this.sendEncryptedPacket(immediatePing)) {
+    // PING is a control packet: [2-byte length=3][1-byte type=PING] - no encryption
+    if (this.isConnected() && this.socket) {
+      if (this.sendControlPacket(PacketType.PING)) {
         logger.info('[ActiveProxy] Sent initial PING (keepalive)');
       }
     }
     
     this.keepaliveTimer = setInterval(() => {
-      if (this.isConnected() && this.socket && this.cryptoSession) {
-        const plaintextPacket = encodePlaintextPacket(PacketType.PING);
-        if (this.sendEncryptedPacket(plaintextPacket)) {
-          logger.debug('[ActiveProxy] Sent encrypted PING');
+      if (this.isConnected() && this.socket) {
+        if (this.sendControlPacket(PacketType.PING)) {
+          logger.debug('[ActiveProxy] Sent PING keepalive');
         } else {
           logger.error('[ActiveProxy] Failed to send PING');
         }

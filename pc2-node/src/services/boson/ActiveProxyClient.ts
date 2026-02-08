@@ -106,13 +106,12 @@ export interface ActiveProxyEvents {
 /**
  * Default configuration
  * 
- * Keepalive tuning: Java server has setIdleTimeout(120) = 2 minutes.
- * We PING every 30 seconds to stay well within that window.
- * This ensures the connection stays alive through any intermediate
- * NAT/firewall timeouts (typically 60-120 seconds).
+ * Keepalive tuning: The Boson Java server closes idle connections after ~30s.
+ * We PING every 10 seconds to stay well within that window and send an
+ * immediate PING right after authentication to prevent early timeout.
  */
 const DEFAULT_CONFIG: Partial<ActiveProxyConfig> = {
-  keepaliveIntervalMs: 30000,  // 30s - matches Phase 1 optimization plan
+  keepaliveIntervalMs: 10000,  // 10s - must be well under server's 30s idle timeout
   reconnectIntervalMs: 5000,
   maxReconnectAttempts: 10,
 };
@@ -1107,9 +1106,18 @@ export class ActiveProxyClient extends EventEmitter {
 
   /**
    * Start keepalive timer
+   * Sends an immediate PING first, then continues at the configured interval.
    */
   private startKeepalive(): void {
     this.stopKeepalive();
+    
+    // Send an immediate PING to prevent early idle timeout
+    if (this.isConnected() && this.socket && this.cryptoSession) {
+      const immediatePing = encodePlaintextPacket(PacketType.PING);
+      if (this.sendEncryptedPacket(immediatePing)) {
+        logger.info('[ActiveProxy] Sent initial PING (keepalive)');
+      }
+    }
     
     this.keepaliveTimer = setInterval(() => {
       if (this.isConnected() && this.socket && this.cryptoSession) {

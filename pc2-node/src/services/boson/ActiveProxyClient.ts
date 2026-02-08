@@ -150,6 +150,10 @@ export class ActiveProxyClient extends EventEmitter {
   private serverSessionPublicKey: Uint8Array | null = null;
   private isAttaching: boolean = false;
   
+  // Keep the pre-AUTH_ACK shared key for diagnostic/fallback decryption
+  // The server may use permanent keys or session keys for post-AUTH encryption
+  private preAuthSharedKey: Uint8Array | null = null;
+  
   // Session nonce tracking for post-AUTH encrypted communication
   // The connectionNonce from AUTH payload is used as the base, incremented per packet
   private sessionSendNonce: Uint8Array | null = null;
@@ -555,19 +559,64 @@ export class ActiveProxyClient extends EventEmitter {
       
       if (remainingData && remainingData.length > 0) {
         // Server format: [type][24-byte nonce][ciphertext]
-        // Nonce is ALWAYS prepended in each packet (confirmed by PONG being 171 bytes)
+        // Nonce is ALWAYS prepended in each packet (confirmed by PONG being 187 bytes)
         if (remainingData.length >= NONCE_SIZE + 16) {
           const nonce = new Uint8Array(remainingData.slice(0, NONCE_SIZE));
           const ciphertext = new Uint8Array(remainingData.slice(NONCE_SIZE));
           
-          const plaintext = decrypt(ciphertext, nonce, this.cryptoSession.sharedKey);
+          // Try 1: Session shared key (DH(session_sk, server_session_pk))
+          let plaintext = decrypt(ciphertext, nonce, this.cryptoSession.sharedKey);
           
           if (plaintext) {
             decryptedPayload = Buffer.from(plaintext);
-            logger.debug(`[ActiveProxy] Decrypted ${getPacketTypeName(type)}: ${decryptedPayload.length} bytes payload`);
+            logger.debug(`[ActiveProxy] Decrypted ${getPacketTypeName(type)} with session key: ${decryptedPayload.length} bytes`);
+          } else if (this.preAuthSharedKey) {
+            // Try 2: Pre-AUTH shared key (DH(session_sk, server_permanent_pk))
+            // Server may continue using its permanent key after AUTH
+            plaintext = decrypt(ciphertext, nonce, this.preAuthSharedKey);
+            
+            if (plaintext) {
+              decryptedPayload = Buffer.from(plaintext);
+              logger.info(`[ActiveProxy] ✅ Decrypted ${getPacketTypeName(type)} with PRE-AUTH key (server uses permanent key!): ${decryptedPayload.length} bytes`);
+              
+              // Switch to the correct key for future packets
+              logger.info('[ActiveProxy] Switching session to use pre-AUTH shared key (server permanent key)');
+              this.cryptoSession.sharedKey = this.preAuthSharedKey;
+            } else if (this.clientX25519PrivateKey && this.serverX25519PublicKey) {
+              // Try 3: Identity key (DH(identity_x25519_sk, server_permanent_pk))
+              const identitySharedKey = computeSharedSecret(this.clientX25519PrivateKey, this.serverX25519PublicKey);
+              plaintext = decrypt(ciphertext, nonce, identitySharedKey);
+              
+              if (plaintext) {
+                decryptedPayload = Buffer.from(plaintext);
+                logger.info(`[ActiveProxy] ✅ Decrypted ${getPacketTypeName(type)} with IDENTITY key: ${decryptedPayload.length} bytes`);
+                
+                // Switch to the correct key
+                logger.info('[ActiveProxy] Switching session to use identity shared key');
+                this.cryptoSession.sharedKey = identitySharedKey;
+              } else if (this.serverSessionPublicKey && this.clientX25519PrivateKey) {
+                // Try 4: DH(identity_x25519_sk, server_session_pk)
+                const identitySessionKey = computeSharedSecret(this.clientX25519PrivateKey, this.serverSessionPublicKey);
+                plaintext = decrypt(ciphertext, nonce, identitySessionKey);
+                
+                if (plaintext) {
+                  decryptedPayload = Buffer.from(plaintext);
+                  logger.info(`[ActiveProxy] ✅ Decrypted ${getPacketTypeName(type)} with IDENTITY+SESSION key: ${decryptedPayload.length} bytes`);
+                  this.cryptoSession.sharedKey = identitySessionKey;
+                } else {
+                  logger.warn(`[ActiveProxy] Failed to decrypt ${getPacketTypeName(type)} with ALL 4 key combinations (${ciphertext.length} cipher bytes)`);
+                  decryptedPayload = Buffer.from(remainingData);
+                }
+              } else {
+                logger.warn(`[ActiveProxy] Failed to decrypt ${getPacketTypeName(type)} with 3 key combinations (${ciphertext.length} cipher bytes)`);
+                decryptedPayload = Buffer.from(remainingData);
+              }
+            } else {
+              logger.warn(`[ActiveProxy] Failed to decrypt ${getPacketTypeName(type)} (${ciphertext.length} cipher bytes)`);
+              decryptedPayload = Buffer.from(remainingData);
+            }
           } else {
-            logger.warn(`[ActiveProxy] Failed to decrypt ${getPacketTypeName(type)} (${ciphertext.length} cipher bytes)`);
-            // Pass raw data so handler can try to make sense of it
+            logger.warn(`[ActiveProxy] Failed to decrypt ${getPacketTypeName(type)} (${ciphertext.length} cipher bytes, no fallback keys)`);
             decryptedPayload = Buffer.from(remainingData);
           }
         } else {
@@ -888,12 +937,14 @@ export class ActiveProxyClient extends EventEmitter {
       logger.debug('[ActiveProxy] AUTH packet sent');
       
       // Set up crypto session for receiving AUTH_ACK and subsequent messages
-      // The server will encrypt using: server_permanent_secret + client_ephemeral_public
-      // So we decrypt using: client_ephemeral_secret + server_permanent_public
+      // Initial key: DH(client_session_sk, server_permanent_pk)
       const sessionSharedKey = computeSharedSecret(
         this.clientKeyPair.secretKey,
         this.serverX25519PublicKey
       );
+      
+      // Save this key - server may continue using permanent keys post-AUTH
+      this.preAuthSharedKey = sessionSharedKey;
       
       this.cryptoSession = {
         sharedKey: sessionSharedKey,
@@ -1260,6 +1311,7 @@ export class ActiveProxyClient extends EventEmitter {
     this.sessionSendNonce = null;
     this.sessionRecvNonce = null;
     this.authConnectionNonce = null;
+    this.preAuthSharedKey = null;
     
     if (this.socket) {
       this.socket.destroy();

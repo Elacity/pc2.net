@@ -709,16 +709,16 @@ export class ActiveProxyClient extends EventEmitter {
     const connectionNonce = generateNonce();
     this.authConnectionNonce = new Uint8Array(connectionNonce);
     
-    // Build plaintext payload (domain enables virtual host registration on the server)
+    // Build plaintext payload
+    // NOTE: Do NOT send domain - the Java server's helper service is not configured
+    // and crashes the connection when a domain is included. We handle routing via
+    // our own gateway endpoint registration in ConnectivityService instead.
     const authPayload = buildAuthPayload(
       this.clientKeyPair.publicKey,
       connectionNonce,
       signature,
-      this.config.domain  // Domain for nginx virtual host (e.g., "elastos" → elastos.ela.city)
+      undefined
     );
-    if (this.config.domain) {
-      logger.info(`[ActiveProxy] AUTH includes domain: ${this.config.domain}`);
-    }
     
     // Derive XOR nonce from X25519 public keys
     const clientX25519Pubkey = ed25519PublicKeyToX25519(new Uint8Array(this.config.publicKey));

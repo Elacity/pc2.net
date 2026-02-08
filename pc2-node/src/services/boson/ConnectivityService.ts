@@ -285,6 +285,9 @@ export class ConnectivityService {
 
       const serverPublicKey = fromBase58(superNode.id);
       
+      // Pass domain (username) so the server registers the nginx virtual host
+      const domain = this.usernameService?.getUsername() ?? undefined;
+
       const client = new ActiveProxyClient({
         host: superNode.address,
         port: superNode.proxyPort,
@@ -293,6 +296,7 @@ export class ConnectivityService {
         privateKey: this.privateKey!,
         serverPublicKey: serverPublicKey,
         localPort: this.config.localPort,
+        domain,
         keepaliveIntervalMs: 30000,
         reconnectIntervalMs: this.config.reconnectIntervalMs,
         maxReconnectAttempts: 10,
@@ -393,9 +397,12 @@ export class ConnectivityService {
     // Create a local socket to the PC2 node
     const localSocket = new net.Socket();
     
+    // Register immediately so data arriving before connect completes can be buffered
+    // Node.js net.Socket buffers writes before connection is established
+    this.proxyConnections.set(conn.connectionId, localSocket);
+    
     localSocket.connect(this.config.localPort, '127.0.0.1', () => {
       logger.debug(`[Proxy] Connected to local server for connection ${conn.connectionId}`);
-      this.proxyConnections.set(conn.connectionId, localSocket);
     });
 
     localSocket.on('data', (data: Buffer) => {

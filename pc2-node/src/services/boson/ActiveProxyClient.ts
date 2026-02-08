@@ -84,6 +84,7 @@ export interface ActiveProxyConfig {
   privateKey: Buffer;          // Client's Ed25519 private key (64 bytes)
   serverPublicKey: Buffer;     // Server's Ed25519 public key (32 bytes, from supernode config)
   localPort: number;
+  domain?: string;             // Domain name for virtual host registration (e.g., "elastos")
   keepaliveIntervalMs: number;
   reconnectIntervalMs: number;
   maxReconnectAttempts: number;
@@ -622,7 +623,7 @@ export class ActiveProxyClient extends EventEmitter {
     const domainEnabled = plaintext[34] !== 0;
     
     logger.info(`[ActiveProxy] Allocated port: ${allocatedPort}`);
-    logger.debug(`[ActiveProxy] Domain enabled: ${domainEnabled}`);
+    logger.info(`[ActiveProxy] Domain enabled: ${domainEnabled}`);
     
     this.packetBuffer.consume(packetLength);
     
@@ -708,13 +709,16 @@ export class ActiveProxyClient extends EventEmitter {
     const connectionNonce = generateNonce();
     this.authConnectionNonce = new Uint8Array(connectionNonce);
     
-    // Build plaintext payload
+    // Build plaintext payload (domain enables virtual host registration on the server)
     const authPayload = buildAuthPayload(
       this.clientKeyPair.publicKey,
       connectionNonce,
       signature,
-      undefined  // No domain for now
+      this.config.domain  // Domain for nginx virtual host (e.g., "elastos" → elastos.ela.city)
     );
+    if (this.config.domain) {
+      logger.info(`[ActiveProxy] AUTH includes domain: ${this.config.domain}`);
+    }
     
     // Derive XOR nonce from X25519 public keys
     const clientX25519Pubkey = ed25519PublicKeyToX25519(new Uint8Array(this.config.publicKey));

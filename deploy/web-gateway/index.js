@@ -1306,46 +1306,19 @@ async function handleRequest(req, res) {
   }
 
   // Check if this is a proxy:// endpoint
+  // The Java ActiveProxy server's allocated port accepts plain TCP connections
+  // and transparently relays them through the encrypted tunnel to the PC2 node.
+  // We just need to HTTP proxy to host:allocatedPort - no custom protocol needed.
   if (nodeInfo.endpoint.startsWith("proxy://")) {
-    // Relay through Active Proxy
-    try {
-      console.log(`[Gateway] Relaying ${username} via Active Proxy: ${nodeInfo.endpoint}`);
-      const session = await getProxySession(nodeInfo.endpoint);
-      const responseData = await session.relayRequest(req, res);
-
-      // Parse and send HTTP response
-      const responseStr = responseData.toString("utf8");
-      const headerEnd = responseStr.indexOf("\r\n\r\n");
-
-      if (headerEnd !== -1) {
-        const headerLines = responseStr.slice(0, headerEnd).split("\r\n");
-        const statusLine = headerLines[0];
-        const statusMatch = statusLine.match(/HTTP\/\d\.\d (\d+)/);
-        const statusCode = statusMatch ? parseInt(statusMatch[1], 10) : 200;
-
-        // Parse headers
-        const headers = {};
-        for (let i = 1; i < headerLines.length; i++) {
-          const colonIdx = headerLines[i].indexOf(":");
-          if (colonIdx > 0) {
-            const key = headerLines[i].slice(0, colonIdx).trim();
-            const value = headerLines[i].slice(colonIdx + 1).trim();
-            headers[key] = value;
-          }
-        }
-
-        // Send response
-        res.writeHead(statusCode, headers);
-        res.end(responseData.slice(headerEnd + 4));
-      } else {
-        res.writeHead(502, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: "Invalid response from node" }));
-      }
-    } catch (error) {
-      console.error(`[Gateway] Proxy relay error: ${error.message}`);
+    const parsed = parseProxyEndpoint(nodeInfo.endpoint);
+    if (!parsed) {
       res.writeHead(502, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Bad Gateway", message: error.message }));
+      res.end(JSON.stringify({ error: "Invalid proxy endpoint" }));
+      return;
     }
+    const target = `http://${parsed.host}:${parsed.port}`;
+    console.log(`[Gateway] Proxying ${username} via ActiveProxy relay: ${target}`);
+    proxy.web(req, res, { target });
     return;
   }
 
@@ -1582,16 +1555,16 @@ async function handleUpgrade(req, socket, head) {
     return;
   }
 
-  // Phase 2: WebSocket via Active Proxy
+  // proxy:// endpoints: Java server's allocated port accepts plain TCP/WebSocket
   if (nodeInfo.endpoint.startsWith("proxy://")) {
-    console.log(`[Gateway] WebSocket via Active Proxy for ${username}`);
-    
-    try {
-      await handleWebSocketViaProxy(req, socket, head, nodeInfo.endpoint, username);
-    } catch (error) {
-      console.error(`[Gateway] WebSocket proxy error for ${username}: ${error.message}`);
+    const parsed = parseProxyEndpoint(nodeInfo.endpoint);
+    if (!parsed) {
       socket.destroy();
+      return;
     }
+    const target = `http://${parsed.host}:${parsed.port}`;
+    console.log(`[Gateway] WS upgrade for ${username} via ActiveProxy relay: ${target}`);
+    proxy.ws(req, socket, head, { target });
     return;
   }
 

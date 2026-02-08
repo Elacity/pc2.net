@@ -514,9 +514,9 @@ export class ActiveProxyClient extends EventEmitter {
     }
     
     // Process session packets: [2-byte length][1-byte type][payload]
-    const buffer = this.packetBuffer.getBuffer();
-    
-    while (buffer.length >= 3) {
+    // Re-read buffer each iteration because consume() replaces the internal buffer
+    while (this.packetBuffer.getBuffer().length >= 3) {
+      const buffer = this.packetBuffer.getBuffer();
       // Read packet length
       const packetLength = buffer.readUInt16BE(0);
       

@@ -558,70 +558,16 @@ export class ActiveProxyClient extends EventEmitter {
       let decryptedPayload: Buffer = Buffer.alloc(0);
       
       if (remainingData && remainingData.length > 0) {
-        // Server format: [type][24-byte nonce][ciphertext]
-        // Nonce is ALWAYS prepended in each packet (confirmed by PONG being 187 bytes)
-        if (remainingData.length >= NONCE_SIZE + 16) {
-          const nonce = new Uint8Array(remainingData.slice(0, NONCE_SIZE));
-          const ciphertext = new Uint8Array(remainingData.slice(NONCE_SIZE));
-          
-          // Try 1: Session shared key (DH(session_sk, server_session_pk))
-          let plaintext = decrypt(ciphertext, nonce, this.cryptoSession.sharedKey);
-          
-          if (plaintext) {
-            decryptedPayload = Buffer.from(plaintext);
-            logger.debug(`[ActiveProxy] Decrypted ${getPacketTypeName(type)} with session key: ${decryptedPayload.length} bytes`);
-          } else if (this.preAuthSharedKey) {
-            // Try 2: Pre-AUTH shared key (DH(session_sk, server_permanent_pk))
-            // Server may continue using its permanent key after AUTH
-            plaintext = decrypt(ciphertext, nonce, this.preAuthSharedKey);
-            
-            if (plaintext) {
-              decryptedPayload = Buffer.from(plaintext);
-              logger.info(`[ActiveProxy] ✅ Decrypted ${getPacketTypeName(type)} with PRE-AUTH key (server uses permanent key!): ${decryptedPayload.length} bytes`);
-              
-              // Switch to the correct key for future packets
-              logger.info('[ActiveProxy] Switching session to use pre-AUTH shared key (server permanent key)');
-              this.cryptoSession.sharedKey = this.preAuthSharedKey;
-            } else if (this.clientX25519PrivateKey && this.serverX25519PublicKey) {
-              // Try 3: Identity key (DH(identity_x25519_sk, server_permanent_pk))
-              const identitySharedKey = computeSharedSecret(this.clientX25519PrivateKey, this.serverX25519PublicKey);
-              plaintext = decrypt(ciphertext, nonce, identitySharedKey);
-              
-              if (plaintext) {
-                decryptedPayload = Buffer.from(plaintext);
-                logger.info(`[ActiveProxy] ✅ Decrypted ${getPacketTypeName(type)} with IDENTITY key: ${decryptedPayload.length} bytes`);
-                
-                // Switch to the correct key
-                logger.info('[ActiveProxy] Switching session to use identity shared key');
-                this.cryptoSession.sharedKey = identitySharedKey;
-              } else if (this.serverSessionPublicKey && this.clientX25519PrivateKey) {
-                // Try 4: DH(identity_x25519_sk, server_session_pk)
-                const identitySessionKey = computeSharedSecret(this.clientX25519PrivateKey, this.serverSessionPublicKey);
-                plaintext = decrypt(ciphertext, nonce, identitySessionKey);
-                
-                if (plaintext) {
-                  decryptedPayload = Buffer.from(plaintext);
-                  logger.info(`[ActiveProxy] ✅ Decrypted ${getPacketTypeName(type)} with IDENTITY+SESSION key: ${decryptedPayload.length} bytes`);
-                  this.cryptoSession.sharedKey = identitySessionKey;
-                } else {
-                  logger.warn(`[ActiveProxy] Failed to decrypt ${getPacketTypeName(type)} with ALL 4 key combinations (${ciphertext.length} cipher bytes)`);
-                  decryptedPayload = Buffer.from(remainingData);
-                }
-              } else {
-                logger.warn(`[ActiveProxy] Failed to decrypt ${getPacketTypeName(type)} with 3 key combinations (${ciphertext.length} cipher bytes)`);
-                decryptedPayload = Buffer.from(remainingData);
-              }
-            } else {
-              logger.warn(`[ActiveProxy] Failed to decrypt ${getPacketTypeName(type)} (${ciphertext.length} cipher bytes)`);
-              decryptedPayload = Buffer.from(remainingData);
-            }
-          } else {
-            logger.warn(`[ActiveProxy] Failed to decrypt ${getPacketTypeName(type)} (${ciphertext.length} cipher bytes, no fallback keys)`);
-            decryptedPayload = Buffer.from(remainingData);
-          }
+        // Minimum ciphertext size: 16 bytes (Poly1305 MAC) + at least 1 byte
+        if (remainingData.length >= 17) {
+          // Try to decrypt with all available key+nonce combinations
+          // Pattern analysis of raw packets shows identical ciphertext bytes at offset 16-31
+          // across different packets, proving the nonce is NOT prepended per-packet.
+          // The nonce is the connectionNonce from AUTH (fixed for session).
+          decryptedPayload = this.tryDecrypt(remainingData, type);
         } else {
-          // Data too short for nonce+ciphertext - treat as raw/padding
-          logger.debug(`[ActiveProxy] Short payload for ${getPacketTypeName(type)}: ${remainingData.length} bytes (no decryption)`);
+          // Short data (e.g., 9-byte PONG padding) - no decryption needed
+          logger.debug(`[ActiveProxy] Short payload for ${getPacketTypeName(type)}: ${remainingData.length} bytes`);
           decryptedPayload = Buffer.from(remainingData);
         }
       }
@@ -635,6 +581,91 @@ export class ActiveProxyClient extends EventEmitter {
     }
   }
   
+  /**
+   * Try all key+nonce combinations to decrypt a packet payload.
+   * 
+   * Tests two nonce strategies:
+   *   A) connectionNonce (fixed for session) - remaining data IS the ciphertext
+   *   B) Nonce prepended in packet - first 24 bytes of remaining = nonce, rest = ciphertext
+   * 
+   * For each nonce strategy, tests 4 shared key combinations:
+   *   1) DH(session_sk, server_session_pk) - current session key
+   *   2) DH(session_sk, server_permanent_pk) - pre-AUTH key
+   *   3) DH(identity_x25519_sk, server_permanent_pk)
+   *   4) DH(identity_x25519_sk, server_session_pk)
+   * 
+   * When a combination succeeds, auto-switches for future packets.
+   */
+  private tryDecrypt(remainingData: Buffer, type: PacketType): Buffer {
+    const cipherAsIs = new Uint8Array(remainingData);
+    
+    // Build list of keys to try
+    const keys: Array<{ name: string; key: Uint8Array }> = [];
+    
+    if (this.cryptoSession) {
+      keys.push({ name: 'session', key: this.cryptoSession.sharedKey });
+    }
+    if (this.preAuthSharedKey) {
+      keys.push({ name: 'preAuth(session_sk+server_permanent_pk)', key: this.preAuthSharedKey });
+    }
+    if (this.clientX25519PrivateKey && this.serverX25519PublicKey) {
+      keys.push({ name: 'identity(identity_sk+server_permanent_pk)', key: computeSharedSecret(this.clientX25519PrivateKey, this.serverX25519PublicKey) });
+    }
+    if (this.clientX25519PrivateKey && this.serverSessionPublicKey) {
+      keys.push({ name: 'identity+session(identity_sk+server_session_pk)', key: computeSharedSecret(this.clientX25519PrivateKey, this.serverSessionPublicKey) });
+    }
+    
+    // Build list of nonces to try
+    const nonces: Array<{ name: string; nonce: Uint8Array; ciphertext: Uint8Array }> = [];
+    
+    // Strategy A: connectionNonce (no nonce in packet) - remaining data IS the ciphertext
+    if (this.authConnectionNonce) {
+      nonces.push({ name: 'connectionNonce', nonce: this.authConnectionNonce, ciphertext: cipherAsIs });
+    }
+    
+    // Strategy B: Nonce prepended in packet (first 24 bytes = nonce)
+    if (remainingData.length >= NONCE_SIZE + 16) {
+      const prependedNonce = new Uint8Array(remainingData.slice(0, NONCE_SIZE));
+      const prependedCipher = new Uint8Array(remainingData.slice(NONCE_SIZE));
+      nonces.push({ name: 'prepended', nonce: prependedNonce, ciphertext: prependedCipher });
+    }
+    
+    // Strategy C: XOR-derived nonce (same as AUTH encryption)
+    if (this.clientX25519PrivateKey && this.serverX25519PublicKey) {
+      const clientX25519Pub = ed25519PublicKeyToX25519(new Uint8Array(this.config.publicKey));
+      const xorNonce = deriveNonceFromX25519Keys(clientX25519Pub, this.serverX25519PublicKey);
+      nonces.push({ name: 'xorDerived', nonce: xorNonce, ciphertext: cipherAsIs });
+    }
+    
+    // Try all combinations
+    for (const nonceStrategy of nonces) {
+      for (const keyStrategy of keys) {
+        const plaintext = decrypt(nonceStrategy.ciphertext, nonceStrategy.nonce, keyStrategy.key);
+        
+        if (plaintext) {
+          logger.info(`[ActiveProxy] ✅ DECRYPTED ${getPacketTypeName(type)}: nonce=${nonceStrategy.name}, key=${keyStrategy.name}, ${plaintext.length} bytes`);
+          
+          // Auto-switch to the winning combination for future packets
+          if (this.cryptoSession && keyStrategy.name !== 'session') {
+            logger.info(`[ActiveProxy] 🔑 Switching to key: ${keyStrategy.name}`);
+            this.cryptoSession.sharedKey = keyStrategy.key;
+          }
+          
+          // Store the winning nonce strategy
+          if (nonceStrategy.name !== 'connectionNonce') {
+            logger.info(`[ActiveProxy] 📌 Nonce strategy: ${nonceStrategy.name}`);
+          }
+          
+          return Buffer.from(plaintext);
+        }
+      }
+    }
+    
+    // All combinations failed
+    logger.warn(`[ActiveProxy] ❌ Failed to decrypt ${getPacketTypeName(type)}: tried ${nonces.length * keys.length} combinations (${remainingData.length} bytes)`);
+    return Buffer.from(remainingData);
+  }
+
   /**
    * Parse a raw wire byte into a PacketType
    * 
@@ -1087,37 +1118,35 @@ export class ActiveProxyClient extends EventEmitter {
   }
 
   /**
-   * Send an encrypted packet with type in the clear + nonce prepended
+   * Send an encrypted packet with type in the clear
    * 
-   * Wire format (post-AUTH): [2-byte length][1-byte type][24-byte nonce][ciphertext]
+   * Wire format (post-AUTH): [2-byte length][1-byte type][ciphertext]
    * 
-   * Evidence: Server sends PONG as 171 bytes = 2(len) + 1(type) + 24(nonce) + 128(plain) + 16(MAC).
-   * Server uses random nonce per packet, prepended after the type byte.
-   * Client must match this format for the server to decrypt.
+   * Evidence from raw packet analysis:
+   *   - Identical ciphertext bytes at offset 16-31 across different packets proves
+   *     nonce is NOT prepended per-packet (same keystream = same nonce).
+   *   - The nonce is the connectionNonce from AUTH (fixed for session).
+   *   - Format: [len][type][nacl.box.after(payload, connectionNonce, sharedKey)]
    */
   private sendEncryptedPacket(type: PacketType, payload: Buffer): boolean {
-    if (!this.socket || !this.cryptoSession) {
-      logger.warn('[ActiveProxy] Cannot send encrypted packet - no socket or session');
+    if (!this.socket || !this.cryptoSession || !this.authConnectionNonce) {
+      logger.warn('[ActiveProxy] Cannot send encrypted packet - no socket, session, or connectionNonce');
       return false;
     }
     
-    // Generate a random nonce for this packet (matching server behavior)
-    const nonce = generateNonce();
-    
-    // Encrypt the payload using the random nonce and session shared key
+    // Encrypt the payload using the session connectionNonce and shared key
     const ciphertext = encrypt(
       new Uint8Array(payload),
-      nonce,
+      this.authConnectionNonce,
       this.cryptoSession.sharedKey
     );
     
-    // Build packet: [2-byte length][1-byte type][24-byte nonce][ciphertext]
-    const packetLength = 2 + 1 + NONCE_SIZE + ciphertext.length;
+    // Build packet: [2-byte length][1-byte type][ciphertext]
+    const packetLength = 2 + 1 + ciphertext.length;
     const packet = Buffer.alloc(packetLength);
     packet.writeUInt16BE(packetLength, 0);
     packet.writeUInt8(type, 2);
-    Buffer.from(nonce).copy(packet, 3);
-    Buffer.from(ciphertext).copy(packet, 3 + NONCE_SIZE);
+    Buffer.from(ciphertext).copy(packet, 3);
     
     logger.debug(`[ActiveProxy] Sending ${getPacketTypeName(type)}: ${packetLength} bytes (payload: ${payload.length}, cipher: ${ciphertext.length})`);
     

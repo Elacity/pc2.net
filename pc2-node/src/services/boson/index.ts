@@ -25,14 +25,13 @@ export type { ActiveProxyConfig, ProxyConnection, ActiveProxyEvents } from './Ac
 export {
   PacketType,
   PacketBuffer,
-  encodePacket,
-  decodePacket,
+  parsePacketType,
+  hasEncryptedPayload,
+  hasPadding,
+  getKnownCipherSize,
+  parseConnectPayload,
   encodeAuthPayload,
   decodeAuthAckPayload,
-  decodeConnectPayload,
-  encodeDataPayload,
-  decodeDataPayload,
-  encodeDisconnectPayload,
   getPacketTypeName,
 } from './ProxyProtocol.js';
-export type { Packet, AuthPayload, AuthAckPayload, ConnectPayload, DataPayload } from './ProxyProtocol.js';
+export type { Packet, AuthPayload, AuthAckPayload, ConnectPayload } from './ProxyProtocol.js';

@@ -287,6 +287,7 @@ export class ConnectivityService {
       
       // Pass domain (username) so the server registers the nginx virtual host
       const domain = this.usernameService?.getUsername() ?? undefined;
+      logger.info(`[Connectivity] Username service available: ${!!this.usernameService}, hasUsername: ${this.usernameService?.hasUsername()}, domain: ${domain || '(none)'}`);
 
       const client = new ActiveProxyClient({
         host: superNode.address,

@@ -256,6 +256,8 @@ export class ConnectivityService {
       const result = await Promise.any(connectionAttempts);
       if (result.success) {
         this.activeProxyClient = result.client;
+        // 'connected' handler was set up pre-connect() in tryConnectToSuperNode().
+        // Set up remaining runtime handlers (disconnected, data, connection, etc.)
         this.setupClientEventHandlers(result.superNode);
         return true;
       }
@@ -303,6 +305,17 @@ export class ConnectivityService {
         maxReconnectAttempts: 10,
       });
 
+      // Register endpoint on 'connected' event BEFORE connect() resolves.
+      // connect() emits 'connected' during AUTH_ACK processing; if we wait
+      // until after connect() resolves, the event is already consumed by once().
+      client.on('connected', (sessionId: string, allocatedPort: number) => {
+        this.status.connected = true;
+        this.status.superNode = superNode;
+        this.status.connectedAt = new Date().toISOString();
+        logger.info(`✅ Active Proxy connected! Session: ${sessionId}, Allocated Port: ${allocatedPort}`);
+        this.registerProxyEndpoint(superNode, sessionId, allocatedPort);
+      });
+
       await client.connect();
       
       const elapsed = Date.now() - startTime;
@@ -319,22 +332,14 @@ export class ConnectivityService {
   }
 
   /**
-   * Set up event handlers for the active proxy client
+   * Set up runtime event handlers for the active proxy client.
+   * 
+   * Note: The 'connected' event handler is registered in tryConnectToSuperNode()
+   * BEFORE client.connect() so it fires during AUTH_ACK processing. This method
+   * sets up remaining handlers that fire after connection is established.
    */
   private setupClientEventHandlers(superNode: SuperNode): void {
     if (!this.activeProxyClient) return;
-
-    this.activeProxyClient.on('connected', (sessionId: string, allocatedPort: number) => {
-      this.status.connected = true;
-      this.status.superNode = superNode;
-      this.status.connectedAt = new Date().toISOString();
-      
-      logger.info(`✅ Active Proxy connected! Session: ${sessionId}, Allocated Port: ${allocatedPort}`);
-      
-      // Register proxy endpoint with gateway using the ALLOCATED port (not static proxyPort)
-      // The allocated port (e.g., 25001) is where the gateway should ATTACH for relay
-      this.registerProxyEndpoint(superNode, sessionId, allocatedPort);
-    });
 
     this.activeProxyClient.on('disconnected', (reason: string) => {
       logger.warn(`⚠️ Active Proxy disconnected: ${reason}`);

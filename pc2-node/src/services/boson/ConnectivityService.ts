@@ -846,7 +846,12 @@ export class ConnectivityService {
   }
 
   /**
-   * Force reconnection
+   * Force reconnection with transport upgrade.
+   * 
+   * Called after username registration to activate the best available
+   * transport. Tries WireGuard first (if available and username is now
+   * registered), which may succeed where it previously failed at startup
+   * due to no username. Falls back to ActiveProxy, then direct.
    */
   async reconnect(): Promise<boolean> {
     this.status.connected = false;
@@ -854,6 +859,33 @@ export class ConnectivityService {
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
+    }
+
+    // Stop existing ActiveProxy connection before upgrading
+    if (this.activeProxyClient) {
+      await this.activeProxyClient.disconnect();
+      this.activeProxyClient = null;
+    }
+
+    // Try WireGuard first -- this is the key path after username registration.
+    // On initial startup, WireGuard was skipped because no username existed.
+    // Now that the wizard has completed, it can provision and activate.
+    if (this.wireGuardService && this.wireGuardService.isAvailable()) {
+      const connected = await this.connectViaWireGuard();
+      if (connected) {
+        logger.info('🚀 Upgraded to WireGuard tunnel (high-performance mode)');
+        return true;
+      }
+    }
+
+    // Fall back to ActiveProxy for NAT nodes
+    if (this.status.natType === 'relay' && this.publicKey && this.privateKey && this.nodeId) {
+      try {
+        const connected = await this.connectViaActiveProxy();
+        if (connected) return true;
+      } catch (error) {
+        logger.warn(`[Connectivity] ActiveProxy reconnect failed: ${error}`);
+      }
     }
 
     return await this.connect();

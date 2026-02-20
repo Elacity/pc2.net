@@ -219,13 +219,13 @@ export class WireGuardService {
     writeFileSync(confPath, conf + '\n', { mode: 0o600 });
 
     try {
-      execSync(`wg-quick down ${confPath} 2>/dev/null`, { stdio: 'pipe' });
+      execSync(`sudo wg-quick down ${confPath} 2>/dev/null`, { stdio: 'pipe' });
     } catch {
       // Interface may not be up
     }
 
     try {
-      execSync(`wg-quick up ${confPath}`, { stdio: 'pipe', timeout: 15_000 });
+      execSync(`sudo wg-quick up ${confPath}`, { stdio: 'pipe', timeout: 15_000 });
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);
       throw new Error(`Failed to bring up WireGuard interface: ${msg}`);
@@ -309,7 +309,7 @@ export class WireGuardService {
     if (!this.externalInterface) {
       const confPath = join(this.wgDir, `${WG_INTERFACE}.conf`);
       try {
-        execSync(`wg-quick down ${confPath} 2>/dev/null`, { stdio: 'pipe' });
+        execSync(`sudo wg-quick down ${confPath} 2>/dev/null`, { stdio: 'pipe' });
       } catch {
         // May not be up
       }

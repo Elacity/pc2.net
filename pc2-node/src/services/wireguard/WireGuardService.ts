@@ -56,6 +56,7 @@ export class WireGuardService {
   private assignedIP: string | null = null;
   private serverEndpoint: string | null = null;
   private connected = false;
+  private externalInterface = false;
   private healthTimer: NodeJS.Timeout | null = null;
 
   constructor(config: WireGuardConfig) {
@@ -167,30 +168,37 @@ export class WireGuardService {
   /**
    * Configure and bring up the WireGuard interface.
    * 
-   * Creates a temporary wg-quick config and activates the tunnel.
-   * PersistentKeepalive = 25 keeps the NAT mapping alive.
+   * First checks if wg0 is already running (e.g. brought up by setup-wireguard-client.sh
+   * as root). If so, reuses the existing tunnel without provisioning, which avoids
+   * overwriting the registered public key on the supernode with a different keypair.
+   * 
+   * If the interface is not up, provisions with the supernode API, creates a
+   * wg-quick config, and activates the tunnel.
    */
   async connect(provision?: WGProvisionResponse): Promise<void> {
-    if (!provision) {
-      provision = await this.provision();
-    }
-
     // Check if the interface is already up (e.g. brought up by setup script as root).
-    // The PC2 node process may not have sudo privileges, so we should reuse an
-    // existing tunnel rather than trying to wg-quick up again.
-    if (this.isInterfaceUp(provision.assignedIP)) {
-      logger.info(`[WireGuard] Interface ${WG_INTERFACE} already up with ${provision.assignedIP} -- reusing`);
-      this.assignedIP = provision.assignedIP;
-      this.serverEndpoint = provision.serverEndpoint;
+    // If so, skip provisioning entirely to avoid overwriting the registered key
+    // with a different keypair from the node's data directory.
+    const running = this.getRunningInterfaceInfo();
+    if (running) {
+      logger.info(`[WireGuard] Interface ${WG_INTERFACE} already up with ${running.assignedIP} -- reusing`);
+      this.assignedIP = running.assignedIP;
+      this.serverEndpoint = running.serverEndpoint;
       this.connected = true;
+      this.externalInterface = true;
 
-      const reachable = await this.pingServer(provision.serverIP);
+      const reachable = await this.pingServer(running.serverIP);
       if (reachable) {
         logger.info('[WireGuard] Tunnel verified - server reachable');
       } else {
         logger.warn('[WireGuard] Interface up but server not reachable via ping (may be filtered)');
       }
       return;
+    }
+
+    // Interface not up -- proceed with provisioning and setup
+    if (!provision) {
+      provision = await this.provision();
     }
 
     const { privateKey } = this.ensureKeypair();
@@ -226,6 +234,7 @@ export class WireGuardService {
     this.assignedIP = provision.assignedIP;
     this.serverEndpoint = provision.serverEndpoint;
     this.connected = true;
+    this.externalInterface = false;
 
     logger.info(`[WireGuard] Interface ${WG_INTERFACE} up: ${provision.assignedIP}`);
 
@@ -238,16 +247,32 @@ export class WireGuardService {
   }
 
   /**
-   * Check if the WireGuard interface is already up with the expected IP.
-   * This handles the case where the setup script brought it up as root
-   * and the node process is running as a non-root user.
+   * Read the current state of the wg0 interface directly from the kernel.
+   * Returns connection info if the interface is up with a valid 10.100.x.x IP,
+   * or null if the interface doesn't exist or isn't configured.
    */
-  private isInterfaceUp(expectedIP: string): boolean {
+  private getRunningInterfaceInfo(): { assignedIP: string; serverPublicKey: string; serverEndpoint: string; serverIP: string } | null {
     try {
-      const output = execSync(`ip addr show ${WG_INTERFACE} 2>/dev/null`, { stdio: 'pipe' }).toString();
-      return output.includes(expectedIP);
+      const addrOutput = execSync(`ip addr show ${WG_INTERFACE} 2>/dev/null`, { stdio: 'pipe' }).toString();
+      const ipMatch = addrOutput.match(/inet (10\.100\.\d+\.\d+)/);
+      if (!ipMatch) return null;
+
+      const wgOutput = execSync(`wg show ${WG_INTERFACE} 2>/dev/null`, { stdio: 'pipe' }).toString();
+      const peerKeyMatch = wgOutput.match(/peer:\s+(\S+)/);
+      const endpointMatch = wgOutput.match(/endpoint:\s+(\S+)/);
+      if (!peerKeyMatch || !endpointMatch) return null;
+
+      const serverEndpoint = endpointMatch[1];
+      const serverIP = serverEndpoint.split(':')[0];
+
+      return {
+        assignedIP: ipMatch[1],
+        serverPublicKey: peerKeyMatch[1],
+        serverEndpoint,
+        serverIP,
+      };
     } catch {
-      return false;
+      return null;
     }
   }
 
@@ -271,7 +296,9 @@ export class WireGuardService {
   }
 
   /**
-   * Tear down the WireGuard interface
+   * Tear down the WireGuard interface.
+   * Skips teardown if the interface was brought up externally (e.g. by the
+   * setup script as root) since the node process likely lacks permissions.
    */
   async disconnect(): Promise<void> {
     if (this.healthTimer) {
@@ -279,19 +306,29 @@ export class WireGuardService {
       this.healthTimer = null;
     }
 
-    const confPath = join(this.wgDir, `${WG_INTERFACE}.conf`);
-    try {
-      execSync(`wg-quick down ${confPath} 2>/dev/null`, { stdio: 'pipe' });
-    } catch {
-      // May not be up
+    if (!this.externalInterface) {
+      const confPath = join(this.wgDir, `${WG_INTERFACE}.conf`);
+      try {
+        execSync(`wg-quick down ${confPath} 2>/dev/null`, { stdio: 'pipe' });
+      } catch {
+        // May not be up
+      }
+    } else {
+      logger.info('[WireGuard] Skipping interface teardown (externally managed)');
     }
 
     this.connected = false;
-    logger.info('[WireGuard] Interface down');
+    this.externalInterface = false;
+    logger.info('[WireGuard] Disconnected');
   }
 
   getAssignedIP(): string | null {
     return this.assignedIP;
+  }
+
+  getServerIP(): string | null {
+    if (!this.serverEndpoint) return null;
+    return this.serverEndpoint.split(':')[0];
   }
 
   isConnected(): boolean {

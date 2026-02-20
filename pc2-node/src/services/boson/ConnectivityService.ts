@@ -191,8 +191,7 @@ export class ConnectivityService {
 
     try {
       logger.info('[Connectivity] Attempting WireGuard tunnel...');
-      const provision = await this.wireGuardService.provision();
-      await this.wireGuardService.connect(provision);
+      await this.wireGuardService.connect();
 
       const wgIP = this.wireGuardService.getAssignedIP();
       if (!wgIP) {
@@ -211,8 +210,10 @@ export class ConnectivityService {
         logger.info(`[Connectivity] WireGuard tunnel active: ${endpoint}`);
         logger.info(`[Connectivity] Public URL: ${this.status.publicEndpoint}`);
 
-        // Start health monitoring
-        this.wireGuardService.startHealthCheck(provision.serverIP);
+        const serverIP = this.wireGuardService.getServerIP();
+        if (serverIP) {
+          this.wireGuardService.startHealthCheck(serverIP);
+        }
         return true;
       }
 

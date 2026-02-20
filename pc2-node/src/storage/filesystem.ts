@@ -377,6 +377,46 @@ export class FilesystemManager {
   }
 
   /**
+   * Get the byte size of a file without loading content into memory.
+   * Falls back to metadata.size if IPFS streaming is unavailable.
+   */
+  async getFileSize(path: string, walletAddress: string): Promise<number> {
+    const normalizedPath = this.normalizePath(path);
+    const metadata = this.db.getFile(normalizedPath, walletAddress);
+    if (!metadata) throw new Error(`File not found: ${path}`);
+    if (metadata.is_dir) throw new Error(`Path is a directory: ${path}`);
+    if (!metadata.ipfs_hash) throw new Error(`File has no IPFS hash: ${path}`);
+
+    if (this.ipfs) {
+      try {
+        return await this.ipfs.getFileSize(metadata.ipfs_hash);
+      } catch {
+        // Fall back to DB size (may be stale but better than nothing)
+      }
+    }
+    return metadata.size;
+  }
+
+  /**
+   * Stream file content with optional byte-range support.
+   * Memory usage is proportional to IPFS chunk size (~256 KB), not file size.
+   */
+  async *readFileStream(
+    path: string,
+    walletAddress: string,
+    options?: { offset?: number; length?: number }
+  ): AsyncGenerator<Uint8Array> {
+    const normalizedPath = this.normalizePath(path);
+    const metadata = this.db.getFile(normalizedPath, walletAddress);
+    if (!metadata) throw new Error(`File not found: ${path}`);
+    if (metadata.is_dir) throw new Error(`Path is a directory: ${path}`);
+    if (!metadata.ipfs_hash) throw new Error(`File has no IPFS hash: ${path}`);
+    if (!this.ipfs) throw new Error('IPFS is not available');
+
+    yield* this.ipfs.getFileStream(metadata.ipfs_hash, options);
+  }
+
+  /**
    * Get file metadata
    */
   getFileMetadata(path: string, walletAddress: string): FileMetadata | null {
@@ -707,15 +747,22 @@ export class FilesystemManager {
       'css': 'text/css',
       'js': 'text/javascript',
       'json': 'application/json',
+      'xml': 'application/xml',
       'png': 'image/png',
       'jpg': 'image/jpeg',
       'jpeg': 'image/jpeg',
       'gif': 'image/gif',
       'svg': 'image/svg+xml',
+      'webp': 'image/webp',
+      'avif': 'image/avif',
+      'ico': 'image/x-icon',
       'pdf': 'application/pdf',
       'zip': 'application/zip',
+      'gz': 'application/gzip',
+      'tar': 'application/x-tar',
       // Video formats
       'mp4': 'video/mp4',
+      'm4v': 'video/mp4',
       'mov': 'video/quicktime',
       'webm': 'video/webm',
       'mpg': 'video/mpeg',
@@ -723,12 +770,18 @@ export class FilesystemManager {
       'mpv': 'video/mpeg',
       'avi': 'video/x-msvideo',
       'mkv': 'video/x-matroska',
+      'ts': 'video/mp2t',
+      '3gp': 'video/3gpp',
+      'ogv': 'video/ogg',
       // Audio formats
       'mp3': 'audio/mpeg',
       'm4a': 'audio/mp4',
+      'aac': 'audio/aac',
       'wav': 'audio/wav',
       'ogg': 'audio/ogg',
-      'flac': 'audio/flac'
+      'opus': 'audio/opus',
+      'flac': 'audio/flac',
+      'weba': 'audio/webm',
     };
 
     return mimeTypes[ext] || null;

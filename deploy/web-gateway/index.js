@@ -1398,7 +1398,11 @@ compressingProxy.on("proxyRes", (proxyRes, req, res) => {
   const tooSmall = contentLength > 0 && contentLength < MIN_COMPRESS_SIZE;
   const supportsGzip = acceptEncoding.includes('gzip');
 
-  if (!alreadyEncoded && isCompressible && !tooSmall && supportsGzip) {
+  // Never compress 206 Partial Content -- gzip changes byte offsets, breaking
+  // Content-Range semantics and video player seeking.
+  const isPartial = proxyRes.statusCode === 206;
+
+  if (!alreadyEncoded && isCompressible && !tooSmall && supportsGzip && !isPartial) {
     delete headers['content-length'];
     headers['content-encoding'] = 'gzip';
     headers['vary'] = 'Accept-Encoding';

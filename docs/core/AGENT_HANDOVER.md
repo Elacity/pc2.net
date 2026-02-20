@@ -1,8 +1,8 @@
 # PC2 Agent Handover Document
 
 > **Purpose:** Complete contextual awareness for AI agents working on PC2
-> **Last Updated:** 2026-02-20
-> **Current Status:** MVP v1.0.0 Complete, Production Deployed, WireGuard NAT Traversal + Gateway Performance Live
+> **Last Updated:** 2026-02-21
+> **Current Status:** MVP v1.0.0 Complete, Production Deployed, WireGuard NAT Traversal + Gateway Performance + Video Streaming Live
 
 ---
 
@@ -84,6 +84,14 @@ User Browser                    Supernode                     PC2 Node (home)
 - Gzip compression: text responses compressed 74-77% (3MB JS bundle → 816KB)
 - Keep-alive pooling: TCP connections to WireGuard peers reused (saves ~240ms/request)
 - Cache headers: static assets get `Cache-Control` when node doesn't set its own
+- 206 bypass: Range/partial responses are never compressed (preserves byte-range semantics)
+
+**Video streaming layer** (IPFS byte-range streaming):
+- All file-serving endpoints support `Range` requests (HTTP 206 Partial Content)
+- Streams directly from IPFS blockstore -- memory usage ~256 KB per request regardless of file size
+- Enables instant video playback and seeking for 2GB+ files on memory-constrained devices (Jetson)
+- Routes: `/ipfs/:cid`, `/public/:wallet/*`, `/file?uid=`, authenticated `/read`
+- Key files: `ipfs.ts` (getFileStream/getFileSize), `public.ts` (streamToResponse helper)
 
 **VPS (public IP) - direct HTTP:**
 ```

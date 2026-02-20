@@ -1,8 +1,8 @@
 # PC2 Architecture Overview: Self-Hosted Sovereign Cloud
 
-**Version:** 2.2  
-**Date:** 2026-02-20  
-**Status:** Production MVP Complete - Live Infrastructure Deployed (WireGuard NAT Traversal + Gateway Performance)
+**Version:** 2.3  
+**Date:** 2026-02-21  
+**Status:** Production MVP Complete - Live Infrastructure Deployed (WireGuard NAT Traversal + Gateway Performance + Video Streaming)
 
 ---
 
@@ -374,7 +374,7 @@ PC2 supports multi-user access with wallet-based permissions:
 
 #### 2.1 API Layer (`src/api/`)
 - **Authentication**: `/whoami`, `/auth/*` - Wallet-based auth
-- **File Operations**: `/read`, `/write`, `/readdir`, `/stat` - Puter-compatible
+- **File Operations**: `/read`, `/write`, `/readdir`, `/stat` - Puter-compatible, streaming Range support
 - **WASM**: `/api/wasm/execute-file`, `/api/wasm/execute` - WASM execution
 - **Apps**: `/apps/:name`, `/get-launch-apps` - App metadata
 - **Backup/Restore**: `/api/backup/*` - Data backup system
@@ -405,7 +405,7 @@ PC2 supports multi-user access with wallet-based permissions:
 
 | Component | Technology | Port | Purpose |
 |-----------|------------|------|---------|
-| **Web Gateway** | Node.js | 80/443 | HTTPS routing, wildcard SSL, gzip compression, keep-alive pooling |
+| **Web Gateway** | Node.js | 80/443 | HTTPS routing, wildcard SSL, gzip compression, keep-alive pooling, 206 passthrough |
 | **Boson DHT** | Java 17 | 39001/UDP | Distributed hash table |
 | **Active Proxy** | Java 17 | 8090/TCP | NAT traversal relay (fallback) |
 | **WireGuard** | Kernel | 51820/UDP | High-performance NAT traversal tunnel |
@@ -445,6 +445,8 @@ PC2 supports multi-user access with wallet-based permissions:
    - Distributed file storage
    - Content-addressed storage
    - P2P distribution capability
+   - Byte-range streaming via `ipfs-unixfs-exporter` (offset/length on `entry.content()`)
+   - Memory-efficient: streams ~256 KB chunks regardless of file size
 
 3. **Local Filesystem**
    - User files (`data/users/{wallet}/`)
@@ -547,6 +549,16 @@ PC2 supports multi-user access with wallet-based permissions:
    - ✅ System prep script (scripts/setup-node.sh) for seamless activation
    - ✅ Config-driven supernode discovery (boson.supernodes in config.json)
    - ✅ Tested: elastos.ela.city loads in ~1.5s via WireGuard (vs minutes via Boson)
+
+11. **Video Streaming + Large File Serving**
+   - ✅ IPFS byte-range streaming (getFileStream with offset/length)
+   - ✅ HTTP 206 Partial Content on all file-serving routes
+   - ✅ HEAD requests return metadata without loading content
+   - ✅ Backpressure via stream.pipeline() (memory-safe on slow connections)
+   - ✅ ~256 KB memory per request regardless of file size (2GB+ safe on Jetson)
+   - ✅ Expanded MIME types (avif, m4v, ts, 3gp, opus, aac, weba, etc.)
+   - ✅ Content rate limit (600/min) separate from API rate limit (100/min)
+   - ✅ Gateway 206 passthrough (no compression on partial content)
 
 ### 🚧 In Progress (Phase 5)
 

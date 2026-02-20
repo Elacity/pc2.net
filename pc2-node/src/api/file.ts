@@ -5,6 +5,7 @@
  */
 
 import { Request, Response } from 'express';
+import { Readable, pipeline } from 'stream';
 import { FilesystemManager } from '../storage/filesystem.js';
 import { AuthenticatedRequest } from './middleware.js';
 
@@ -159,17 +160,64 @@ export async function handleFile(req: Request, res: Response): Promise<void> {
     
     console.log('[File] File found:', metadata.path);
 
-    // Read file content - use the metadata path and wallet address
     const finalWalletAddress = walletAddress || (metadata.path.split('/').filter(p => p)[0]?.startsWith('0x') ? metadata.path.split('/').filter(p => p)[0] : '');
-    const content = await filesystem.readFile(metadata.path, finalWalletAddress);
-    
-    // Set appropriate headers
-    if (metadata.mime_type) {
-      res.setHeader('Content-Type', metadata.mime_type);
+    const mimeType = metadata.mime_type || 'application/octet-stream';
+
+    let fileSize: number;
+    try {
+      fileSize = await filesystem.getFileSize(metadata.path, finalWalletAddress);
+    } catch {
+      fileSize = metadata.size;
     }
-    res.setHeader('Content-Length', metadata.size.toString());
-    
-    res.send(content);
+
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges');
+
+    // HEAD -- return size/headers without content
+    if (req.method === 'HEAD') {
+      res.setHeader('Content-Length', fileSize.toString());
+      res.status(200).end();
+      return;
+    }
+
+    // Range request -- stream only the requested byte range
+    const rangeHeader = req.headers.range;
+    if (rangeHeader) {
+      const match = rangeHeader.match(/^bytes=(\d+)-(\d*)$/);
+      if (!match || parseInt(match[1], 10) >= fileSize) {
+        res.status(416).setHeader('Content-Range', `bytes */${fileSize}`).end();
+        return;
+      }
+      const start = parseInt(match[1], 10);
+      const end = match[2] ? parseInt(match[2], 10) : fileSize - 1;
+      const chunkSize = end - start + 1;
+
+      res.status(206).set({
+        'Content-Length': chunkSize.toString(),
+        'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+      });
+
+      const stream = filesystem.readFileStream(metadata.path, finalWalletAddress, {
+        offset: start, length: chunkSize,
+      });
+      pipeline(Readable.from(stream), res, (err) => {
+        if (err && err.code !== 'ERR_STREAM_PREMATURE_CLOSE') {
+          console.error('[File] Stream error:', err.message);
+        }
+      });
+      return;
+    }
+
+    // Full file -- stream without buffering
+    res.setHeader('Content-Length', fileSize.toString());
+    const stream = filesystem.readFileStream(metadata.path, finalWalletAddress);
+    pipeline(Readable.from(stream), res, (err) => {
+      if (err && err.code !== 'ERR_STREAM_PREMATURE_CLOSE') {
+        console.error('[File] Stream error:', err.message);
+      }
+    });
   } catch (error) {
     console.error('[File] File access error:', error, { uid });
     res.status(500).json({

@@ -372,6 +372,61 @@ export class IPFSStorage {
   }
 
   /**
+   * Get file size from IPFS without loading any content into memory.
+   * Uses the exporter's entry.size which reads only the DAG metadata.
+   */
+  async getFileSize(cid: string): Promise<number> {
+    if (!this.blockstore) {
+      throw new Error('Blockstore not initialized');
+    }
+
+    const { CID } = await import('multiformats/cid');
+    const cidObj = CID.parse(cid);
+    const { exporter } = await import('ipfs-unixfs-exporter');
+
+    const entry = await exporter(cidObj, this.blockstore);
+    if (!entry) {
+      throw new Error(`Entry not found for CID: ${cid}`);
+    }
+    if (entry.type !== 'file' && entry.type !== 'raw') {
+      throw new Error(`CID ${cid} is not a file (type: ${entry.type})`);
+    }
+
+    return Number(entry.size);
+  }
+
+  /**
+   * Stream file content from IPFS with optional byte-range support.
+   * Only reads the requested bytes from the blockstore -- memory usage is
+   * proportional to the chunk size (~256 KB), not the file size.
+   */
+  async *getFileStream(cid: string, options?: {
+    offset?: number;
+    length?: number;
+  }): AsyncGenerator<Uint8Array> {
+    if (!this.blockstore) {
+      throw new Error('Blockstore not initialized');
+    }
+
+    const { CID } = await import('multiformats/cid');
+    const cidObj = CID.parse(cid);
+    const { exporter } = await import('ipfs-unixfs-exporter');
+
+    const entry = await exporter(cidObj, this.blockstore);
+    if (!entry) {
+      throw new Error(`Entry not found for CID: ${cid}`);
+    }
+    if (entry.type !== 'file' && entry.type !== 'raw') {
+      throw new Error(`CID ${cid} is not a file (type: ${entry.type})`);
+    }
+
+    yield* entry.content({
+      offset: options?.offset,
+      length: options?.length,
+    });
+  }
+
+  /**
    * Check if a CID exists in IPFS
    */
   async fileExists(cid: string): Promise<boolean> {

@@ -14,8 +14,16 @@
 #   - Older kernels via DKMS fallback
 #
 # Usage:
-#   ./setup-wireguard-client.sh --gateway https://demo.ela.city --username alice
-#   ./setup-wireguard-client.sh --auto   (reads from PC2 node config)
+#   Run from the pc2.net repo root:
+#     sudo bash scripts/setup-wireguard-client.sh --auto
+#     sudo bash scripts/setup-wireguard-client.sh --username alice
+#
+#   Or with explicit paths:
+#     sudo bash scripts/setup-wireguard-client.sh --data-dir ./pc2-node/data --username alice
+#
+# The script stores WireGuard keys in <data-dir>/wireguard/ -- the SAME
+# directory that the PC2 node's WireGuardService uses. This ensures there
+# is only one keypair, preventing key mismatches.
 #
 # =============================================================================
 
@@ -40,27 +48,38 @@ print_ok()     { echo -e "${GREEN}✓${NC} $1"; }
 GATEWAY_URL="${GATEWAY_URL:-}"
 USERNAME="${PC2_USERNAME:-}"
 NODE_ID="${PC2_NODE_ID:-}"
-PC2_DATA_DIR="${PC2_DATA_DIR:-$HOME/.pc2}"
-WG_DIR="$PC2_DATA_DIR/wireguard"
+PC2_DATA_DIR="${PC2_DATA_DIR:-}"
 WG_INTERFACE="wg0"
 AUTO_MODE=false
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 
 while [[ $# -gt 0 ]]; do
   case $1 in
     --gateway)   GATEWAY_URL="$2"; shift 2 ;;
     --username)  USERNAME="$2"; shift 2 ;;
     --node-id)   NODE_ID="$2"; shift 2 ;;
-    --data-dir)  PC2_DATA_DIR="$2"; WG_DIR="$PC2_DATA_DIR/wireguard"; shift 2 ;;
+    --data-dir)  PC2_DATA_DIR="$2"; shift 2 ;;
     --auto)      AUTO_MODE=true; shift ;;
     --help)
       echo "Usage: $0 [OPTIONS]"
       echo ""
       echo "Options:"
-      echo "  --gateway URL      Supernode gateway URL (e.g., https://demo.ela.city)"
-      echo "  --username NAME    PC2 username"
-      echo "  --node-id ID       PC2 node ID (base58 public key)"
-      echo "  --data-dir PATH    PC2 data directory (default: ~/.pc2)"
-      echo "  --auto             Auto-detect from PC2 node config"
+      echo "  --gateway URL      Supernode gateway URL (default: auto-detect from node config)"
+      echo "  --username NAME    PC2 username (default: auto-detect from node data)"
+      echo "  --node-id ID       PC2 node ID (default: auto-detect from node data)"
+      echo "  --data-dir PATH    PC2 node data directory (default: auto-detect)"
+      echo "  --auto             Auto-detect all settings from PC2 node config"
+      echo ""
+      echo "Examples:"
+      echo "  # Auto-detect everything (run from pc2.net repo root):"
+      echo "  sudo bash scripts/setup-wireguard-client.sh --auto"
+      echo ""
+      echo "  # Specify username only (auto-detect data dir):"
+      echo "  sudo bash scripts/setup-wireguard-client.sh --username alice"
+      echo ""
+      echo "  # Fully explicit:"
+      echo "  sudo bash scripts/setup-wireguard-client.sh --data-dir /home/user/pc2.net/pc2-node/data --username alice --gateway https://69.164.241.210"
       echo ""
       exit 0 ;;
     *) echo "Unknown option: $1"; exit 1 ;;
@@ -68,37 +87,152 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ---------------------------------------------------------------------------
-# Auto-detect from PC2 node config
+# Auto-detect PC2 node data directory
+#
+# Search order:
+#   1. Explicit --data-dir argument
+#   2. Relative to repo root: <repo>/pc2-node/data/
+#   3. PM2 process working dir: look for running pc2 process
+#   4. Common locations: ./data, ~/pc2.net/pc2-node/data, ~/.pc2
 # ---------------------------------------------------------------------------
 
-if [ "$AUTO_MODE" = true ] || [ -z "$USERNAME" ]; then
-  # Try to read from PC2 node data directory
-  USERNAME_FILE="$PC2_DATA_DIR/username.json"
-  IDENTITY_FILE="$PC2_DATA_DIR/identity.json"
+auto_detect_data_dir() {
+  # Already specified
+  if [ -n "$PC2_DATA_DIR" ] && [ -d "$PC2_DATA_DIR" ]; then
+    return 0
+  fi
 
-  if [ -z "$USERNAME" ] && [ -f "$USERNAME_FILE" ]; then
-    USERNAME=$(python3 -c "import json; print(json.load(open('$USERNAME_FILE')).get('username',''))" 2>/dev/null || true)
-    if [ -n "$USERNAME" ]; then
-      print_ok "Auto-detected username: $USERNAME"
+  # Try relative to repo root (most common: running from pc2.net/)
+  if [ -d "$REPO_ROOT/pc2-node/data" ]; then
+    PC2_DATA_DIR="$REPO_ROOT/pc2-node/data"
+    return 0
+  fi
+
+  # Try PM2: get working directory of running pc2 process
+  if command -v pm2 &>/dev/null; then
+    PM2_CWD=$(pm2 jlist 2>/dev/null | python3 -c "
+import sys, json
+try:
+  procs = json.load(sys.stdin)
+  for p in procs:
+    if p.get('name') == 'pc2':
+      cwd = p.get('pm2_env', {}).get('pm_cwd', '')
+      if cwd:
+        print(cwd)
+        break
+except: pass
+" 2>/dev/null || true)
+    if [ -n "$PM2_CWD" ] && [ -d "$PM2_CWD/data" ]; then
+      PC2_DATA_DIR="$PM2_CWD/data"
+      return 0
     fi
   fi
 
-  if [ -z "$NODE_ID" ] && [ -f "$IDENTITY_FILE" ]; then
-    NODE_ID=$(python3 -c "import json; print(json.load(open('$IDENTITY_FILE')).get('nodeId',''))" 2>/dev/null || true)
-    if [ -n "$NODE_ID" ]; then
-      print_ok "Auto-detected nodeId: ${NODE_ID:0:12}..."
+  # Try common locations
+  for candidate in \
+    "./data" \
+    "./pc2-node/data" \
+    "$HOME/pc2.net/pc2-node/data" \
+    "$HOME/pc2/data" \
+    "$HOME/.pc2"; do
+    if [ -f "$candidate/username.json" ] || [ -f "$candidate/identity.json" ]; then
+      PC2_DATA_DIR="$candidate"
+      return 0
     fi
-  fi
+  done
 
+  return 1
+}
+
+if ! auto_detect_data_dir; then
+  if [ -n "$PC2_DATA_DIR" ]; then
+    # User specified but doesn't exist yet -- will be created
+    print_warn "Data directory $PC2_DATA_DIR does not exist, will create it"
+    mkdir -p "$PC2_DATA_DIR"
+  else
+    print_error "Could not auto-detect PC2 node data directory."
+    echo ""
+    echo "Please specify it explicitly:"
+    echo "  $0 --data-dir /path/to/pc2-node/data --username yourname"
+    echo ""
+    echo "Common locations:"
+    echo "  ~/pc2.net/pc2-node/data   (git clone setup)"
+    echo "  ~/pc2/data                (Docker setup)"
+    echo "  ~/.pc2                    (legacy)"
+    exit 1
+  fi
+fi
+
+# Resolve to absolute path
+PC2_DATA_DIR="$(cd "$PC2_DATA_DIR" && pwd)"
+WG_DIR="$PC2_DATA_DIR/wireguard"
+
+print_ok "Using data directory: $PC2_DATA_DIR"
+
+# ---------------------------------------------------------------------------
+# Auto-detect username, nodeId, and gateway URL from node config
+# ---------------------------------------------------------------------------
+
+USERNAME_FILE="$PC2_DATA_DIR/username.json"
+IDENTITY_FILE="$PC2_DATA_DIR/identity.json"
+
+if [ -z "$USERNAME" ] && [ -f "$USERNAME_FILE" ]; then
+  USERNAME=$(python3 -c "import json; print(json.load(open('$USERNAME_FILE')).get('username',''))" 2>/dev/null || true)
+  if [ -n "$USERNAME" ]; then
+    print_ok "Auto-detected username: $USERNAME"
+  fi
+fi
+
+if [ -z "$NODE_ID" ] && [ -f "$IDENTITY_FILE" ]; then
+  NODE_ID=$(python3 -c "import json; print(json.load(open('$IDENTITY_FILE')).get('nodeId',''))" 2>/dev/null || true)
+  if [ -n "$NODE_ID" ]; then
+    print_ok "Auto-detected nodeId: ${NODE_ID:0:12}..."
+  fi
+fi
+
+# Auto-detect gateway URL from node's config.json
+if [ -z "$GATEWAY_URL" ]; then
+  # Check node config files for gateway_url / boson.gateway_url
+  for config_candidate in \
+    "$PC2_DATA_DIR/../config/config.json" \
+    "$REPO_ROOT/pc2-node/config/config.json" \
+    "$PC2_DATA_DIR/config.json"; do
+    if [ -f "$config_candidate" ]; then
+      DETECTED_GW=$(python3 -c "
+import json
+c = json.load(open('$config_candidate'))
+gw = c.get('boson', {}).get('gateway_url', '')
+if not gw:
+  gw = c.get('gateway_url', '')
+print(gw)
+" 2>/dev/null || true)
+      if [ -n "$DETECTED_GW" ]; then
+        GATEWAY_URL="$DETECTED_GW"
+        print_ok "Auto-detected gateway: $GATEWAY_URL"
+        break
+      fi
+    fi
+  done
+
+  # Fallback: use the supernode's direct IP (where WireGuard is running)
   if [ -z "$GATEWAY_URL" ]; then
-    GATEWAY_URL="https://demo.ela.city"
+    GATEWAY_URL="https://69.164.241.210"
     print_step "Using default gateway: $GATEWAY_URL"
   fi
 fi
 
 # Validate required parameters
 if [ -z "$USERNAME" ]; then
-  print_error "Username required. Use --username or --auto"
+  print_error "Username required."
+  echo ""
+  echo "If you have already completed the setup wizard, use --auto:"
+  echo "  sudo bash $0 --auto"
+  echo ""
+  echo "Or specify your username explicitly:"
+  echo "  sudo bash $0 --username yourname"
+  echo ""
+  echo "If you haven't set up your PC2 node yet, start it first and"
+  echo "complete the setup wizard at http://localhost:4200"
   exit 1
 fi
 
@@ -113,7 +247,6 @@ fi
 
 print_header "PC2 WireGuard Client Setup"
 
-# Detect OS and architecture
 OS_ID="unknown"
 OS_VERSION=""
 ARCH=$(uname -m)
@@ -124,7 +257,6 @@ if [ -f /etc/os-release ]; then
   OS_VERSION="$VERSION_ID"
 fi
 
-# Detect if running on Jetson
 IS_JETSON=false
 if [ -f /etc/nv_tegra_release ]; then
   IS_JETSON=true
@@ -177,7 +309,6 @@ else
   fi
 fi
 
-# Verify kernel module loads
 if ! lsmod | grep -q wireguard 2>/dev/null; then
   if [ "$EUID" -eq 0 ]; then
     modprobe wireguard 2>/dev/null || true
@@ -187,7 +318,7 @@ if ! lsmod | grep -q wireguard 2>/dev/null; then
 fi
 
 # ---------------------------------------------------------------------------
-# Generate keypair
+# Generate keypair (stored in the node's data directory)
 # ---------------------------------------------------------------------------
 
 print_header "Generating WireGuard Keys"
@@ -219,7 +350,6 @@ print_header "Provisioning WireGuard Tunnel"
 
 PROVISION_FILE="$WG_DIR/provision.json"
 
-# Check for cached provision
 if [ -f "$PROVISION_FILE" ]; then
   CACHED_IP=$(python3 -c "import json; print(json.load(open('$PROVISION_FILE')).get('assignedIP',''))" 2>/dev/null || true)
   if [ -n "$CACHED_IP" ]; then
@@ -240,7 +370,7 @@ if [ -z "${ASSIGNED_IP:-}" ]; then
   fi
   PROVISION_BODY="$PROVISION_BODY}"
 
-  RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+  RESPONSE=$(curl -sk -w "\n%{http_code}" -X POST \
     -H "Content-Type: application/json" \
     -d "$PROVISION_BODY" \
     "$GATEWAY_URL/api/wg/register" 2>&1)
@@ -252,8 +382,8 @@ if [ -z "${ASSIGNED_IP:-}" ]; then
     print_error "Provisioning failed (HTTP $HTTP_CODE): $RESPONSE_BODY"
     echo ""
     echo "Common issues:"
-    echo "  - Username not registered yet: register first via the PC2 node"
-    echo "  - WireGuard not enabled on gateway: ask the supernode operator to run setup-wireguard-server.sh"
+    echo "  - Username not registered yet: complete the setup wizard first at http://localhost:4200"
+    echo "  - WireGuard not enabled on gateway: contact the supernode operator"
     echo "  - Network issue: check that $GATEWAY_URL is reachable"
     exit 1
   fi
@@ -268,7 +398,6 @@ if [ -z "${ASSIGNED_IP:-}" ]; then
     exit 1
   fi
 
-  # Cache the provision
   echo "$RESPONSE_BODY" > "$PROVISION_FILE"
   print_ok "Provisioned: $ASSIGNED_IP via $SERVER_ENDPOINT"
 fi
@@ -302,7 +431,6 @@ print_ok "Config written to $WG_CONF"
 
 print_header "Starting WireGuard Tunnel"
 
-# Bring down if already running
 if [ "$EUID" -eq 0 ]; then
   wg-quick down "$WG_CONF" 2>/dev/null || true
   wg-quick up "$WG_CONF"
@@ -334,7 +462,6 @@ else
   fi
 fi
 
-# Show interface status
 echo ""
 if [ "$EUID" -eq 0 ]; then
   wg show "$WG_INTERFACE" 2>/dev/null || true
@@ -343,7 +470,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Create systemd service for auto-start (optional)
+# Create systemd service for auto-start
 # ---------------------------------------------------------------------------
 
 if [ "$EUID" -eq 0 ] || command -v sudo &>/dev/null; then
@@ -386,12 +513,16 @@ echo -e "  Username:     ${BLUE}${USERNAME}${NC}"
 echo -e "  Assigned IP:  ${BLUE}${ASSIGNED_IP}${NC}"
 echo -e "  Server:       ${BLUE}${SERVER_ENDPOINT}${NC}"
 echo -e "  Interface:    ${BLUE}${WG_INTERFACE}${NC}"
+echo -e "  Data dir:     ${BLUE}${PC2_DATA_DIR}${NC}"
 echo -e "  Config:       ${BLUE}${WG_CONF}${NC}"
 echo ""
 echo "  Your PC2 node is now reachable from the supernode at:"
 echo -e "    ${GREEN}http://${ASSIGNED_IP}:4200${NC}"
 echo ""
-echo "  Once the PC2 node registers this endpoint, your domain will be:"
+echo "  Next step: restart your PC2 node so it uses the WireGuard tunnel:"
+echo -e "    ${YELLOW}pm2 restart pc2${NC}"
+echo ""
+echo "  Your domain will be:"
 echo -e "    ${GREEN}https://${USERNAME}.ela.city${NC}"
 echo ""
 echo "  Useful commands:"

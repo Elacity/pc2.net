@@ -106,16 +106,62 @@ curl -sSL https://raw.githubusercontent.com/Elacity/pc2.net/main/scripts/install
 
 By default, PC2 is only accessible on your local network. To access from anywhere:
 
-### Option A: Active Proxy (Recommended)
+### Option A: WireGuard Tunnel (Recommended - Fastest)
 
-1. Open Settings → PC2
-2. Enable "Active Proxy"
-3. Register a username
-4. Access via `https://username.ela.city`
+WireGuard provides near-localhost performance for home hardware behind NAT. Page loads take ~1.5 seconds instead of minutes.
 
-This works behind NAT without port forwarding.
+**One-Time System Setup** (run once as root):
 
-### Option B: Port Forwarding
+```bash
+sudo bash scripts/setup-node.sh
+```
+
+This installs WireGuard tools and configures permissions so the PC2 node can manage tunnels automatically.
+
+**Then start your PC2 node:**
+
+```bash
+pm2 start ecosystem.config.cjs
+# or: sudo systemctl start pc2
+```
+
+Open `http://localhost:4200`, complete the setup wizard (choose your username), and your domain is live automatically at `https://username.ela.city` via WireGuard.
+
+**That's it!** No manual tunnel setup needed. The node provisions and activates WireGuard automatically after the setup wizard.
+
+**Verify it's working:**
+
+```bash
+# Check WireGuard tunnel status
+sudo wg show wg0
+
+# Should show:
+#   interface: wg0
+#   peer: <server-public-key>
+#   endpoint: 69.164.241.210:51820
+#   latest handshake: X seconds ago
+#   transfer: X received, X sent
+```
+
+**Useful commands:**
+
+```bash
+sudo wg show wg0                      # Tunnel status
+ping 10.100.0.1                       # Test tunnel connectivity
+sudo systemctl status pc2-wireguard   # WireGuard service status
+pm2 logs pc2                          # Node logs (look for "[WireGuard]")
+```
+
+### Option B: Active Proxy (Fallback)
+
+If WireGuard is not available (older kernels, restricted environments), the node automatically falls back to Boson Active Proxy relay. This is slower (serial relay) but works everywhere.
+
+1. Start the node normally
+2. Complete the setup wizard
+3. The node connects via Active Proxy automatically
+4. Access via `https://username.ela.city` (slower page loads)
+
+### Option C: Port Forwarding
 
 1. Log into your router
 2. Forward port 4200 to your Pi's local IP

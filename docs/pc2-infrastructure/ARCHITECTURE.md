@@ -100,7 +100,61 @@ PC2 Node                    Super Node                    Client
 - External clients can connect to this mapped port
 - Traffic is relayed through the encrypted session
 
-### 3. Web Gateway
+### 3. WireGuard NAT Traversal
+
+**Purpose**: High-performance kernel-level NAT traversal for home hardware nodes
+
+**Technology Stack**:
+- Protocol: WireGuard (kernel module, Linux 5.6+)
+- Encryption: ChaCha20-Poly1305, Curve25519
+- Transport: UDP
+- Management: `wg-quick`, `wg` CLI tools
+
+**Why WireGuard over Active Proxy?**
+
+| Metric | Active Proxy (Boson) | WireGuard |
+|--------|---------------------|-----------|
+| Page load | Minutes (serial relay) | ~1.5 seconds |
+| Connections | One at a time | Unlimited parallel |
+| Protocol overhead | CryptoBox + framing per packet | Kernel-level, near zero |
+| Latency | 300ms+ per request | ~5ms through tunnel |
+
+**Architecture**:
+```
+PC2 Node (home)                Supernode                    Browser
+  10.100.0.x:4200               10.100.0.1                    │
+       │                            │                          │
+       │══ WireGuard UDP Tunnel ═══►│                          │
+       │   (encrypted, persistent)  │                          │
+       │                            │                          │
+       │                            │◄── HTTPS alice.ela.city ─│
+       │                            │                          │
+       │◄── HTTP proxy via tunnel ──│   Gateway sees node at   │
+       │    10.100.0.x:4200         │   10.100.0.x (local net) │
+       │                            │                          │
+       │──── Full HTTP response ───►│── HTTPS response ───────►│
+```
+
+**Provisioning Flow**:
+1. PC2 node generates WireGuard keypair (stored in `data/wireguard/`)
+2. Node calls `POST /api/wg/register` with username + public key
+3. Supernode assigns IP from 10.100.0.0/24 pool, adds peer to wg0
+4. Node receives `{assignedIP, serverPublicKey, serverEndpoint}`
+5. Node creates wg0.conf and activates `wg-quick up`
+6. Node registers `http://10.100.0.x:4200` as its endpoint with the gateway
+
+**IP Allocation**: 10.100.0.0/24 subnet (supports ~250 nodes per supernode)
+
+**Client Setup Scripts**:
+- `scripts/setup-node.sh` - One-time system prep (installs WireGuard, configures sudoers)
+- `scripts/setup-wireguard-client.sh` - Manual tunnel setup (alternative to auto-provisioning)
+
+**Key Files**:
+- `pc2-node/src/services/wireguard/WireGuardService.ts` - Client-side WireGuard logic
+- `deploy/web-gateway/index.js` - `/api/wg/register` provisioning endpoint
+- Supernode: `/etc/wireguard/wg0.conf` - WireGuard server config
+
+### 4. Web Gateway
 
 **Purpose**: HTTP/HTTPS routing for subdomain access
 
@@ -148,10 +202,10 @@ PC2 Node                    Super Node                    Client
 ┌─────────────────────────────────────────────────────────────┐
 │                      SUPER NODE                             │
 │                                                             │
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐     │
-│  │ Web Gateway │    │  Boson DHT  │    │Active Proxy │     │
-│  │   :80/443   │    │   :39001    │    │   :8090     │     │
-│  └──────┬──────┘    └─────────────┘    └─────────────┘     │
+│  ┌───────────┐  ┌───────────┐  ┌───────────┐  ┌───────────┐│
+│  │Web Gateway│  │ Boson DHT │  │Active Prxy│  │ WireGuard ││
+│  │  :80/443  │  │  :39001   │  │   :8090   │  │  :51820   ││
+│  └─────┬─────┘  └───────────┘  └───────────┘  └─────┬─────┘│
 │         │                                                   │
 │         │ Proxy                                             │
 │         ▼                                                   │
@@ -249,8 +303,9 @@ PC2 Node                    Super Node                    Client
 ### Encryption Layers
 
 1. **Transport Layer**: TLS 1.3 (HTTPS)
-2. **Session Layer**: CryptoBox (Active Proxy)
-3. **Identity Layer**: Ed25519 signatures (DID)
+2. **Tunnel Layer**: WireGuard (ChaCha20-Poly1305, Curve25519)
+3. **Session Layer**: CryptoBox (Active Proxy fallback)
+4. **Identity Layer**: Ed25519 signatures (DID)
 
 ### Authentication Flow
 
@@ -327,7 +382,17 @@ PC2 Node                    Super Node                    Client
 /etc/systemd/system/
 ├── pc2-boson.service         # Boson DHT + Active Proxy
 ├── pc2-gateway.service       # Web Gateway
-└── pc2-test-node.service     # Demo node
+├── pc2-test-node.service     # Demo node
+└── wg-quick@wg0.service      # WireGuard server interface
+```
+
+### WireGuard Configuration (on Supernode)
+
+```
+/etc/wireguard/
+└── wg0.conf                  # WireGuard server config
+                              # 10.100.0.1/24, port 51820
+                              # Peers added dynamically via /api/wg/register
 ```
 
 ---

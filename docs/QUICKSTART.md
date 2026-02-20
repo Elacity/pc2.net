@@ -202,14 +202,21 @@ Local:   http://localhost:4200
 Network: http://192.168.x.x:4200  (shown after install)
 ```
 
-### Enable Remote Access
+### Enable Remote Access (WireGuard - Recommended)
 
-For access outside your home network:
+For fast access outside your home network via `https://username.ela.city`:
 
-1. Open Settings → PC2
-2. Enable "Active Proxy"
-3. Register a username
-4. Access via `https://username.ela.city`
+```bash
+# One-time system setup (installs WireGuard, configures permissions)
+sudo bash scripts/setup-node.sh
+
+# Start the node
+pm2 start ecosystem.config.cjs
+```
+
+Open `http://localhost:4200`, complete the setup wizard, and your domain is live automatically with WireGuard. Page loads are ~1.5 seconds from anywhere.
+
+If WireGuard is not available, the node falls back to Boson Active Proxy (slower but works everywhere).
 
 ### Useful Commands
 

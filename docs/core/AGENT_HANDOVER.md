@@ -1,8 +1,8 @@
 # PC2 Agent Handover Document
 
 > **Purpose:** Complete contextual awareness for AI agents working on PC2
-> **Last Updated:** 2026-01-23
-> **Current Status:** MVP v1.0.0 Complete, Production Deployed
+> **Last Updated:** 2026-02-03
+> **Current Status:** MVP v1.0.0 Complete, Production Deployed, WireGuard NAT Traversal Live
 
 ---
 
@@ -62,20 +62,63 @@ Three WebSpaces being built:
 | Service | Port | Purpose |
 |---------|------|---------|
 | Boson DHT | 39001/UDP | Decentralized identity, peer discovery |
-| Active Proxy | 8090/TCP | NAT traversal for nodes behind firewalls |
+| Active Proxy | 8090/TCP | NAT traversal relay (fallback, slow) |
+| WireGuard | 51820/UDP | NAT traversal tunnel (primary, fast) |
 | Web Gateway | 80/443 | Subdomain routing with SSL |
 
 ### How Routing Works
 
+**Home hardware (Jetson, Pi) - via WireGuard tunnel:**
 ```
-User Browser                    Supernode                     PC2 Node
+User Browser                    Supernode                     PC2 Node (home)
      │                              │                            │
-     │ https://test7.ela.city ──────►│                            │
-     │                              │ DNS points here            │
+     │ https://alice.ela.city ─────►│                            │
      │                              │                            │
-     │                              │ Active Proxy relay ────────►│
-     │                              │                            │
+     │                              │─── HTTP via WG tunnel ────►│
+     │                              │    10.100.0.x:4200         │ (kernel-level,
+     │                              │                            │  ~1.5s page load)
      │◄──────────── Response ───────│◄─────── Response ──────────│
+```
+
+**VPS (public IP) - direct HTTP:**
+```
+User Browser                    Supernode                     PC2 Node (VPS)
+     │                              │                            │
+     │ https://bob.ela.city ───────►│                            │
+     │                              │─── HTTP direct ──────────►│
+     │                              │    public-ip:4200          │
+     │◄──────────── Response ───────│◄─────── Response ──────────│
+```
+
+### Transport Priority (ConnectivityService)
+
+The node automatically selects the best transport:
+1. **WireGuard** (primary) - kernel-level UDP tunnel, near-localhost speed
+2. **Boson Active Proxy** (fallback) - serial TCP relay, slow but works everywhere
+3. **Direct** - public IP users (VPS), no tunnel needed
+
+### WireGuard Architecture
+
+**Key files:**
+- `pc2-node/src/services/wireguard/WireGuardService.ts` - Client tunnel management
+- `pc2-node/src/services/boson/ConnectivityService.ts` - Transport priority logic
+- `scripts/setup-node.sh` - One-time system prep (installs WireGuard + sudoers)
+- `scripts/setup-wireguard-client.sh` - Manual tunnel setup (alternative)
+- `deploy/web-gateway/index.js` - `/api/wg/register` provisioning endpoint
+
+**User flow (seamless for home hardware):**
+1. Run `sudo bash scripts/setup-node.sh` (one-time)
+2. Start node, complete setup wizard (choose username)
+3. Node auto-provisions WireGuard tunnel to supernode
+4. Domain is live at `https://username.ela.city`
+
+**Supernode config-driven (config/config.json):**
+```json
+{
+  "boson": {
+    "supernodes": [{ "id": "...", "address": "69.164.241.210", "port": 39001, "proxyPort": 8090, "gatewayUrl": "https://69.164.241.210" }]
+  }
+}
 ```
 
 ---

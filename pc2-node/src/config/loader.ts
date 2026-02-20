@@ -36,6 +36,13 @@ export interface Config {
     public_domain?: string;
     auto_connect?: boolean;
     privacy_mode?: boolean;
+    supernodes?: Array<{
+      id: string;
+      address: string;
+      port: number;
+      proxyPort: number;
+      gatewayUrl: string;
+    }>;
   };
   ai?: {
     enabled?: boolean;

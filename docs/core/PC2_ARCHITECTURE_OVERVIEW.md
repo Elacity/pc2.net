@@ -1,8 +1,8 @@
 # PC2 Architecture Overview: Self-Hosted Sovereign Cloud
 
-**Version:** 2.0  
-**Date:** 2026-01-22  
-**Status:** Production MVP Complete - Live Infrastructure Deployed
+**Version:** 2.1  
+**Date:** 2026-02-03  
+**Status:** Production MVP Complete - Live Infrastructure Deployed (WireGuard NAT Traversal Added)
 
 ---
 
@@ -19,6 +19,7 @@
 | **Web Gateway** | ✅ Live | https://*.ela.city |
 | **Boson DHT** | ✅ Running | Port 39001/UDP |
 | **Active Proxy** | ✅ Running | Port 8090/TCP |
+| **WireGuard** | ✅ Running | Port 51820/UDP |
 | **Wildcard SSL** | ✅ Valid | Let's Encrypt |
 
 ### Key Differentiators
@@ -29,7 +30,7 @@
 | **Control** | Provider controls access | User has full control |
 | **Computation** | Provider's servers | User's hardware (WASM) |
 | **Identity** | Email/password | Wallet + DID (decentralized) |
-| **NAT Traversal** | N/A | Boson Active Proxy |
+| **NAT Traversal** | N/A | WireGuard (primary) + Boson Active Proxy (fallback) |
 | **Global Access** | Provider's domain | yourname.ela.city |
 | **Updates** | Provider pushes | User-initiated (macOS-style) |
 
@@ -55,27 +56,28 @@
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                    SUPER NODE (69.164.241.210)                               │
 │                                                                              │
-│  ┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐           │
-│  │   Web Gateway   │   │   Boson DHT     │   │  Active Proxy   │           │
-│  │    :80/443      │   │    :39001/UDP   │   │    :8090/TCP    │           │
-│  │                 │   │                 │   │                 │           │
-│  │ - Wildcard SSL  │   │ - Node registry │   │ - NAT traversal │           │
-│  │ - Subdomain     │   │ - DHT lookups   │   │ - Session relay │           │
-│  │   routing       │   │ - Peer discovery│   │ - Port mapping  │           │
-│  │ - WebSocket     │   │                 │   │   25000-30000   │           │
-│  │   proxy         │   │                 │   │                 │           │
-│  └────────┬────────┘   └─────────────────┘   └────────┬────────┘           │
-│           │                                           │                     │
-│           │ Registry Lookup                           │ Session Relay       │
-│           │                                           │                     │
-│           ▼                                           ▼                     │
-│  ┌──────────────────────────────────────────────────────────────┐          │
-│  │                     Username Registry                         │          │
-│  │  {                                                            │          │
-│  │    "alice": { endpoint: "http://1.2.3.4:4200" },             │          │
-│  │    "bob":   { endpoint: "proxy://8090/session123" }  ← NAT   │          │
-│  │  }                                                            │          │
-│  └──────────────────────────────────────────────────────────────┘          │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
+│  │  Web Gateway  │  │  Boson DHT   │  │ Active Proxy │  │  WireGuard   │  │
+│  │   :80/443     │  │  :39001/UDP  │  │  :8090/TCP   │  │ :51820/UDP   │  │
+│  │               │  │              │  │              │  │              │  │
+│  │ - Wildcard SSL│  │ - Node reg   │  │ - NAT relay  │  │ - NAT tunnel │  │
+│  │ - Subdomain   │  │ - DHT lookup │  │ - Session    │  │ - Kernel VPN │  │
+│  │   routing     │  │ - Peer disc  │  │   relay      │  │ - Near-local │  │
+│  │ - WebSocket   │  │              │  │ - Port map   │  │   speed      │  │
+│  │   proxy       │  │              │  │  25000-30000 │  │ - 10.100.x.x│  │
+│  └──────┬───────┘  └──────────────┘  └──────┬───────┘  └──────┬───────┘  │
+│         │                                    │                  │          │
+│         │ Registry Lookup                    │ Fallback Relay   │ Primary  │
+│         │                                    │                  │ Tunnel   │
+│         ▼                                    ▼                  ▼          │
+│  ┌──────────────────────────────────────────────────────────────────────┐ │
+│  │                        Username Registry                              │ │
+│  │  {                                                                    │ │
+│  │    "alice": { endpoint: "http://1.2.3.4:4200" },     ← VPS/Public   │ │
+│  │    "bob":   { endpoint: "http://10.100.0.2:4200" },  ← WireGuard   │ │
+│  │    "carol": { endpoint: "proxy://8090/session123" }   ← Boson relay │ │
+│  │  }                                                                    │ │
+│  └──────────────────────────────────────────────────────────────────────┘ │
 │                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
                               │                           │
@@ -151,10 +153,11 @@ PC2 integrates with the Boson Network (evolved from Elastos Carrier) for:
 |---------|---------|-------------|
 | **IdentityService** | Node identity management | `generateIdentity()`, `getMnemonic()` |
 | **UsernameService** | Web Gateway registration | `registerUsername()`, `checkAvailability()` |
-| **ConnectivityService** | Super node connection | `connect()`, `heartbeat()` |
-| **ActiveProxyClient** | NAT traversal client | `authenticate()`, `relay()` |
+| **ConnectivityService** | Super node connection + transport priority | `connect()`, `heartbeat()`, `reconnect()` |
+| **ActiveProxyClient** | NAT traversal client (fallback) | `authenticate()`, `relay()` |
 | **NetworkDetector** | NAT detection | `detectNAT()`, `getPublicIP()` |
 | **BosonService** | Main orchestrator | `initialize()`, `getStatus()` |
+| **WireGuardService** | High-performance NAT tunnel (primary) | `connect()`, `provision()`, `startHealthCheck()` |
 
 ### Identity Flow
 
@@ -173,7 +176,54 @@ PC2 integrates with the Boson Network (evolved from Elastos Carrier) for:
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### NAT Traversal with Active Proxy
+### NAT Traversal: Transport Priority
+
+PC2 uses a tiered transport system for nodes behind NAT. The node automatically selects the best available transport:
+
+| Priority | Transport | Speed | Requirements |
+|----------|-----------|-------|-------------|
+| 1st | **WireGuard** | Near-localhost (~1.5s page load) | `wg` tools installed, kernel 5.6+ |
+| 2nd | **Boson Active Proxy** | Slow (serial relay, minutes for page load) | Boson DHT running on supernode |
+| 3rd | **Direct** | Full speed | Public IP (VPS users) |
+
+### WireGuard NAT Traversal (Primary - Home Hardware)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    WIREGUARD TUNNEL FLOW                          │
+│                                                                  │
+│  PC2 Node (behind NAT)          Super Node           Client     │
+│         │                            │                    │     │
+│  1. setup-node.sh installs WireGuard tools + sudoers rule       │
+│  2. Node starts, completes setup wizard (choose username)        │
+│  3. Node auto-provisions WireGuard tunnel:                       │
+│         │                            │                    │     │
+│         │── POST /api/wg/register ──►│                    │     │
+│         │   {username, publicKey}     │                    │     │
+│         │                            │                    │     │
+│         │◄── {assignedIP: 10.100.0.x,│                    │     │
+│         │     serverPublicKey, ...}   │                    │     │
+│         │                            │                    │     │
+│         │════ WireGuard UDP Tunnel ══►│  (kernel-level,   │     │
+│         │   10.100.0.x ↔ 10.100.0.1  │   encrypted,      │     │
+│         │                            │   persistent)      │     │
+│         │                            │                    │     │
+│         │                            │◄── HTTPS Request ──│     │
+│         │                            │   alice.ela.city    │     │
+│         │                            │                    │     │
+│         │◄── HTTP via WG tunnel ─────│  Gateway proxies   │     │
+│         │    http://10.100.0.x:4200  │  to WG IP          │     │
+│         │                            │                    │     │
+│         │──── Response ─────────────►│                    │     │
+│         │    (full speed, parallel)  │                    │     │
+│         │                            │── HTTPS Response ─►│     │
+│                                                                  │
+│  Result: Page loads in ~1.5 seconds (vs minutes with relay)     │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Boson Active Proxy (Fallback)
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -198,6 +248,9 @@ PC2 integrates with the Boson Network (evolved from Elastos Carrier) for:
 │         │                            │                    │     │
 │         │                            │── Response to ────►│     │
 │         │                            │   Client           │     │
+│                                                                  │
+│  Note: Serial relay - one request at a time. Slow for web UIs.  │
+│  Used only as fallback when WireGuard is unavailable.           │
 │                                                                  │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -354,12 +407,14 @@ PC2 supports multi-user access with wallet-based permissions:
 |-----------|------------|------|---------|
 | **Web Gateway** | Node.js | 80/443 | HTTPS routing, wildcard SSL |
 | **Boson DHT** | Java 17 | 39001/UDP | Distributed hash table |
-| **Active Proxy** | Java 17 | 8090/TCP | NAT traversal relay |
+| **Active Proxy** | Java 17 | 8090/TCP | NAT traversal relay (fallback) |
+| **WireGuard** | Kernel | 51820/UDP | High-performance NAT traversal tunnel |
 
 **Systemd Services:**
 - `pc2-gateway.service` - Web Gateway
 - `pc2-boson.service` - Boson DHT + Active Proxy
 - `pc2-node.service` - Demo/test PC2 node
+- `wg-quick@wg0.service` - WireGuard server interface
 
 **Location on Super Node:**
 ```
@@ -483,10 +538,20 @@ PC2 supports multi-user access with wallet-based permissions:
    - ✅ Smart domain redirect (VPS users → ela.city for WalletConnect)
    - ✅ Always-show welcome screen
 
+10. **WireGuard NAT Traversal**
+   - ✅ Supernode WireGuard server (wg0 on 10.100.0.1/24)
+   - ✅ Dynamic peer provisioning API (/api/wg/register)
+   - ✅ PC2 node WireGuardService (auto-provision + connect)
+   - ✅ ConnectivityService transport priority (WireGuard > Boson > Direct)
+   - ✅ Client setup script (scripts/setup-wireguard-client.sh)
+   - ✅ System prep script (scripts/setup-node.sh) for seamless activation
+   - ✅ Config-driven supernode discovery (boson.supernodes in config.json)
+   - ✅ Tested: elastos.ela.city loads in ~1.5s via WireGuard (vs minutes via Boson)
+
 ### 🚧 In Progress (Phase 5)
 
 1. **End-to-End Testing**
-   - Active Proxy relay verification
+   - WireGuard tunnel verification for new users
    - Multi-node network tests
    - Failover between super nodes
 
@@ -494,10 +559,10 @@ PC2 supports multi-user access with wallet-based permissions:
    - Store usernames in DHT (not just gateway)
    - Decentralized resolution
 
-3. **Performance Optimization**
-   - Connection pooling
-   - Request caching
-   - Bundle optimization
+3. **Multi-Supernode Scaling**
+   - Config-driven supernode list (implemented)
+   - Dynamic supernode discovery API
+   - GeoDNS for geographic routing
 
 ### 📋 Planned (Future Phases)
 
@@ -518,9 +583,10 @@ PC2 supports multi-user access with wallet-based permissions:
 ### Encryption Layers
 
 1. **Transport Layer**: TLS 1.3 (HTTPS via Let's Encrypt)
-2. **Session Layer**: CryptoBox (Active Proxy)
-3. **Identity Layer**: Ed25519 signatures (DID)
-4. **Storage Layer**: Wallet-scoped isolation
+2. **Tunnel Layer**: WireGuard (ChaCha20-Poly1305, Curve25519)
+3. **Session Layer**: CryptoBox (Active Proxy fallback)
+4. **Identity Layer**: Ed25519 signatures (DID)
+5. **Storage Layer**: Wallet-scoped isolation
 
 ### Authentication Security
 
@@ -574,4 +640,4 @@ PC2 supports multi-user access with wallet-based permissions:
 
 **End of Architecture Overview**
 
-*Last Updated: 2026-01-22*
+*Last Updated: 2026-02-03*

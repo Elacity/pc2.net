@@ -176,6 +176,7 @@ async function main() {
         publicDomain: bosonConfig.public_domain || 'ela.city',
         localPort: PORT,
         autoConnect: bosonConfig.auto_connect !== false,
+        superNodes: bosonConfig.supernodes,
       });
       
       await bosonService.initialize();

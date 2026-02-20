@@ -237,6 +237,17 @@ export class ConnectivityService {
     this.isRunning = true;
     logger.info('🌐 Starting connectivity service...');
 
+    // Try dynamic supernode discovery to get the latest list.
+    // Falls back to config-provided or hardcoded defaults.
+    try {
+      const discovered = await fetchSuperNodes();
+      if (discovered.length > 0) {
+        this.config.superNodes = discovered;
+      }
+    } catch {
+      logger.debug('[Connectivity] Dynamic supernode discovery unavailable, using configured list');
+    }
+
     // Detect network configuration
     const networkInfo = await this.networkDetector.detect();
     

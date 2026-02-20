@@ -175,6 +175,24 @@ export class WireGuardService {
       provision = await this.provision();
     }
 
+    // Check if the interface is already up (e.g. brought up by setup script as root).
+    // The PC2 node process may not have sudo privileges, so we should reuse an
+    // existing tunnel rather than trying to wg-quick up again.
+    if (this.isInterfaceUp(provision.assignedIP)) {
+      logger.info(`[WireGuard] Interface ${WG_INTERFACE} already up with ${provision.assignedIP} -- reusing`);
+      this.assignedIP = provision.assignedIP;
+      this.serverEndpoint = provision.serverEndpoint;
+      this.connected = true;
+
+      const reachable = await this.pingServer(provision.serverIP);
+      if (reachable) {
+        logger.info('[WireGuard] Tunnel verified - server reachable');
+      } else {
+        logger.warn('[WireGuard] Interface up but server not reachable via ping (may be filtered)');
+      }
+      return;
+    }
+
     const { privateKey } = this.ensureKeypair();
     const confPath = join(this.wgDir, `${WG_INTERFACE}.conf`);
 
@@ -186,18 +204,16 @@ export class WireGuardService {
       '[Peer]',
       `PublicKey = ${provision.serverPublicKey}`,
       `Endpoint = ${provision.serverEndpoint}`,
-      // Only route traffic destined for the supernode's WireGuard subnet
       `AllowedIPs = ${provision.serverIP}/32`,
       'PersistentKeepalive = 25',
     ].join('\n');
 
     writeFileSync(confPath, conf + '\n', { mode: 0o600 });
 
-    // Bring down any existing interface first
     try {
       execSync(`wg-quick down ${confPath} 2>/dev/null`, { stdio: 'pipe' });
     } catch {
-      // Interface may not be up, that's fine
+      // Interface may not be up
     }
 
     try {
@@ -213,12 +229,25 @@ export class WireGuardService {
 
     logger.info(`[WireGuard] Interface ${WG_INTERFACE} up: ${provision.assignedIP}`);
 
-    // Verify tunnel with a ping to the server
     const reachable = await this.pingServer(provision.serverIP);
     if (!reachable) {
       logger.warn('[WireGuard] Server not reachable through tunnel (may need a moment to establish)');
     } else {
       logger.info('[WireGuard] Tunnel verified - server reachable');
+    }
+  }
+
+  /**
+   * Check if the WireGuard interface is already up with the expected IP.
+   * This handles the case where the setup script brought it up as root
+   * and the node process is running as a non-root user.
+   */
+  private isInterfaceUp(expectedIP: string): boolean {
+    try {
+      const output = execSync(`ip addr show ${WG_INTERFACE} 2>/dev/null`, { stdio: 'pipe' }).toString();
+      return output.includes(expectedIP);
+    } catch {
+      return false;
     }
   }
 

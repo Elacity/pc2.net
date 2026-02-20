@@ -1698,11 +1698,14 @@ async function handleApiRequest(req, res) {
       try {
         const { username, nodeId, publicKey } = JSON.parse(body);
 
-        if (!username || !nodeId || !publicKey) {
+        if (!username || !publicKey) {
           res.writeHead(400, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: "Missing required fields: username, nodeId, publicKey" }));
+          res.end(JSON.stringify({ error: "Missing required fields: username, publicKey" }));
           return;
         }
+
+        // nodeId is optional -- look up from registry if not provided
+        const resolvedNodeId = nodeId || (registry.get(username.toLowerCase()) || {}).nodeId || 'unknown';
 
         // Validate WireGuard public key format (base64, 44 chars with = padding)
         if (!/^[A-Za-z0-9+/]{42,43}=?$/.test(publicKey)) {
@@ -1715,7 +1718,7 @@ async function handleApiRequest(req, res) {
 
         // Check if this node already has a WireGuard peer assignment
         const existingPeer = wgPeers.peers[normalizedUsername];
-        if (existingPeer && existingPeer.nodeId === nodeId) {
+        if (existingPeer) {
           // Same node re-registering: update public key if changed
           if (existingPeer.publicKey !== publicKey) {
             removeWGPeer(existingPeer.publicKey);
@@ -1744,7 +1747,7 @@ async function handleApiRequest(req, res) {
         const assignedIP = allocateWGIP();
 
         wgPeers.peers[normalizedUsername] = {
-          nodeId,
+          nodeId: resolvedNodeId,
           publicKey,
           assignedIP,
           registeredAt: new Date().toISOString(),

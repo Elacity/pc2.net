@@ -446,8 +446,13 @@ export async function handleBatch(req: AuthenticatedRequest, res: Response): Pro
             // Normalize the path (remove double slashes, etc.)
             filePath = filePath.replace(/\/+/g, '/');
             
-            // Get file content - prioritize buffer, fallback to data
-            const fileContent = file.buffer || file.data;
+            // Get file content - buffer (memoryStorage), data, or read from disk (diskStorage)
+            let fileContent = file.buffer || file.data;
+            if (!fileContent && file.path) {
+              const { readFileSync, unlinkSync } = await import('fs');
+              fileContent = readFileSync(file.path);
+              try { unlinkSync(file.path); } catch { /* cleanup best-effort */ }
+            }
             const reportedSize = file.size || (fileContent ? fileContent.length : 0);
             const actualSize = fileContent ? (Buffer.isBuffer(fileContent) ? fileContent.length : (fileContent instanceof Uint8Array ? fileContent.length : Buffer.byteLength(fileContent))) : 0;
             
@@ -578,9 +583,16 @@ export async function handleBatch(req: AuthenticatedRequest, res: Response): Pro
               filePath
             });
             
+            let singleFileContent = file.buffer || file.data;
+            if (!singleFileContent && file.path) {
+              const { readFileSync, unlinkSync } = await import('fs');
+              singleFileContent = readFileSync(file.path);
+              try { unlinkSync(file.path); } catch { /* cleanup best-effort */ }
+            }
+
             const metadata = await filesystem.writeFile(
               filePath,
-              file.buffer || file.data,
+              singleFileContent,
               req.user.wallet_address,
               {
                 mimeType: file.mimetype || file.type

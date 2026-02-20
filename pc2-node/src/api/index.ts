@@ -1,6 +1,9 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
 import cookieParser from 'cookie-parser';
 import multer from 'multer';
+import os from 'os';
+import path from 'path';
+import fs from 'fs';
 import { DatabaseManager, FilesystemManager } from '../storage/index.js';
 import { Config } from '../config/loader.js';
 import { Server as SocketIOServer } from 'socket.io';
@@ -395,11 +398,22 @@ export function setupAPI(app: Express): void {
   app.get('/df', authenticate, handleDF);
   app.post('/df', authenticate, handleDF);
   
-  // Batch endpoint with multer for multipart file uploads
+  // Batch endpoint with multer for multipart file uploads.
+  // Uses diskStorage to stream uploads to a temp dir instead of buffering
+  // entirely in RAM -- critical for large files on memory-constrained devices.
+  const uploadTmpDir = path.join(os.tmpdir(), 'pc2-uploads');
+  if (!fs.existsSync(uploadTmpDir)) fs.mkdirSync(uploadTmpDir, { recursive: true });
+
   const upload = multer({ 
-    storage: multer.memoryStorage(),
+    storage: multer.diskStorage({
+      destination: uploadTmpDir,
+      filename: (_req, file, cb) => {
+        const unique = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        cb(null, `${unique}-${file.originalname}`);
+      },
+    }),
     limits: {
-      fileSize: 100 * 1024 * 1024 // 100MB max file size
+      fileSize: 500 * 1024 * 1024 // 500MB max file size
     }
   });
   

@@ -15,6 +15,7 @@ import { ActiveProxyClient, ConnectionState, type ProxyConnection } from './Acti
 import { WireGuardService } from '../wireguard/WireGuardService.js';
 import { fromBase58 } from './IdentityService.js';
 import net, { type Server, type Socket } from 'net';
+import https from 'https';
 import { request as httpRequest } from 'http';
 
 export interface SuperNode {
@@ -62,10 +63,11 @@ const DEFAULT_SUPER_NODES: SuperNode[] = [
   },
 ];
 
-// Well-known endpoint for dynamic supernode discovery
+// Well-known endpoints for dynamic supernode discovery.
+// Each gateway exposes /api/supernodes, so we query the known supernodes themselves.
 const SUPERNODE_DISCOVERY_URLS = [
-  'https://demo.ela.city/api/supernodes',
-  'https://api.ela.city/supernodes',
+  'https://69.164.241.210/api/supernodes',
+  'https://38.242.211.112/api/supernodes',
 ];
 
 // Cache for discovered supernodes
@@ -74,36 +76,49 @@ let cacheTimestamp: number = 0;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 /**
- * Fetch the list of active supernodes from the network
- * Falls back to defaults if fetch fails
+ * Fetch JSON from an HTTPS URL, tolerating self-signed certs
+ * (supernodes serve HTTPS on raw IPs with self-signed certificates).
  */
+function httpsGetJson<T>(url: string, timeoutMs = 5000): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const req = https.get(url, { rejectUnauthorized: false, timeout: timeoutMs }, (res) => {
+      if (!res.statusCode || res.statusCode >= 400) {
+        res.resume();
+        reject(new Error(`HTTP ${res.statusCode}`));
+        return;
+      }
+      let body = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => { body += chunk; });
+      res.on('end', () => {
+        try { resolve(JSON.parse(body) as T); }
+        catch (e) { reject(e); }
+      });
+    });
+    req.on('error', reject);
+    req.on('timeout', () => { req.destroy(); reject(new Error('timeout')); });
+  });
+}
+
 export async function fetchSuperNodes(): Promise<SuperNode[]> {
-  // Return cached if still valid
   if (cachedSuperNodes && Date.now() - cacheTimestamp < CACHE_TTL_MS) {
     return cachedSuperNodes;
   }
   
   for (const url of SUPERNODE_DISCOVERY_URLS) {
     try {
-      const response = await fetch(url, { 
-        signal: AbortSignal.timeout(5000) 
-      });
-      
-      if (response.ok) {
-        const data = await response.json() as { supernodes: SuperNode[] };
-        if (data.supernodes && data.supernodes.length > 0) {
-          cachedSuperNodes = data.supernodes;
-          cacheTimestamp = Date.now();
-          logger.info(`[Connectivity] Discovered ${data.supernodes.length} supernodes from ${url}`);
-          return data.supernodes;
-        }
+      const data = await httpsGetJson<{ supernodes: SuperNode[] }>(url);
+      if (data.supernodes && data.supernodes.length > 0) {
+        cachedSuperNodes = data.supernodes;
+        cacheTimestamp = Date.now();
+        logger.info(`[Connectivity] Discovered ${data.supernodes.length} supernodes from ${url}`);
+        return data.supernodes;
       }
     } catch (error) {
       logger.debug(`[Connectivity] Failed to fetch supernodes from ${url}: ${error}`);
     }
   }
   
-  // Fallback to defaults
   logger.info('[Connectivity] Using default supernode list');
   return DEFAULT_SUPER_NODES;
 }
@@ -121,6 +136,7 @@ export class ConnectivityService {
   private networkDetector: NetworkDetector;
   private activeProxyClient: ActiveProxyClient | null = null;
   private wireGuardService: WireGuardService | null = null;
+  private wireGuardRetryTimer: NodeJS.Timeout | null = null;
   private currentSuperNodeIndex: number = 0;
   private failedSuperNodes: Set<string> = new Set();
   private proxyConnections: Map<number, Socket> = new Map();
@@ -212,6 +228,7 @@ export class ConnectivityService {
 
         const serverIP = this.wireGuardService.getServerIP();
         if (serverIP) {
+          this.wireGuardService.setOnTunnelDown(() => this.handleWireGuardDown());
           this.wireGuardService.startHealthCheck(serverIP);
         }
         return true;
@@ -598,6 +615,11 @@ export class ConnectivityService {
       this.reconnectTimer = null;
     }
 
+    if (this.wireGuardRetryTimer) {
+      clearTimeout(this.wireGuardRetryTimer);
+      this.wireGuardRetryTimer = null;
+    }
+
     // Stop WireGuard tunnel
     if (this.wireGuardService && this.wireGuardService.isConnected()) {
       await this.wireGuardService.disconnect();
@@ -854,6 +876,58 @@ export class ConnectivityService {
    */
   getPublicEndpoint(): string | null {
     return this.status.publicEndpoint;
+  }
+
+  /**
+   * Called by WireGuardService when the tunnel is declared dead after
+   * consecutive health check failures. Falls back to Boson immediately
+   * and schedules a background WireGuard retry in 60s.
+   */
+  private handleWireGuardDown(): void {
+    logger.warn('⚠️ WireGuard tunnel lost -- falling back to Boson relay');
+    this.status.connected = false;
+    this.status.natType = 'unknown';
+
+    // Immediate fallback to ActiveProxy
+    if (this.publicKey && this.privateKey && this.nodeId) {
+      this.connectViaActiveProxy().then((ok) => {
+        if (ok) {
+          logger.info('🔄 Fell back to Boson Active Proxy after WireGuard loss');
+        } else {
+          this.scheduleReconnect();
+        }
+      }).catch(() => {
+        this.scheduleReconnect();
+      });
+    } else {
+      this.scheduleReconnect();
+    }
+
+    // Schedule a background WireGuard retry
+    if (this.wireGuardRetryTimer) clearTimeout(this.wireGuardRetryTimer);
+    const WG_RETRY_DELAY_MS = 60_000;
+    this.wireGuardRetryTimer = setTimeout(async () => {
+      this.wireGuardRetryTimer = null;
+      if (!this.wireGuardService || !this.isRunning) return;
+
+      logger.info('🔄 Attempting WireGuard re-establishment...');
+      try {
+        await this.wireGuardService.disconnect();
+        const connected = await this.connectViaWireGuard();
+        if (connected) {
+          // Tear down Boson since we're back on WireGuard
+          if (this.activeProxyClient) {
+            await this.activeProxyClient.disconnect();
+            this.activeProxyClient = null;
+          }
+          logger.info('🚀 WireGuard tunnel re-established');
+        } else {
+          logger.info('[Connectivity] WireGuard retry failed, staying on Boson');
+        }
+      } catch (error) {
+        logger.warn(`[Connectivity] WireGuard retry error: ${error}`);
+      }
+    }, WG_RETRY_DELAY_MS);
   }
 
   /**

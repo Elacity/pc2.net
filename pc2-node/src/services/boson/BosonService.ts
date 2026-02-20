@@ -11,7 +11,7 @@
 import { IdentityService, IdentityConfig } from './IdentityService.js';
 import { UsernameService, UsernameConfig } from './UsernameService.js';
 import { ConnectivityService, ConnectivityConfig, ConnectionStatus } from './ConnectivityService.js';
-import { WireGuardService } from '../wireguard/WireGuardService.js';
+import { WireGuardService, type WireGuardStatus } from '../wireguard/WireGuardService.js';
 import { logger } from '../../utils/logger.js';
 
 export interface BosonConfig {
@@ -36,6 +36,7 @@ export interface BosonStatus {
     publicUrl: string | null;
   };
   connectivity: ConnectionStatus;
+  wireguard: WireGuardStatus | null;
 }
 
 export class BosonService {
@@ -185,6 +186,7 @@ export class BosonService {
         publicUrl: usernameInfo.publicUrl,
       },
       connectivity: connectivityStatus,
+      wireguard: this.wireGuardService ? this.wireGuardService.getStatus() : null,
     };
   }
 

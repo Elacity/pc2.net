@@ -46,6 +46,7 @@ export interface WireGuardStatus {
 const WG_INTERFACE = 'wg0';
 const HEALTH_CHECK_INTERVAL_MS = 30_000;
 const PROVISION_TIMEOUT_MS = 10_000;
+const HEALTH_FAILURE_THRESHOLD = 3;
 
 export class WireGuardService {
   private config: WireGuardConfig;
@@ -58,6 +59,8 @@ export class WireGuardService {
   private connected = false;
   private externalInterface = false;
   private healthTimer: NodeJS.Timeout | null = null;
+  private consecutiveFailures = 0;
+  private onTunnelDown: (() => void) | null = null;
 
   constructor(config: WireGuardConfig) {
     this.config = config;
@@ -277,20 +280,45 @@ export class WireGuardService {
   }
 
   /**
+   * Register a callback that fires when the tunnel is declared dead.
+   * ConnectivityService uses this to fall back to Boson and schedule retry.
+   */
+  setOnTunnelDown(callback: () => void): void {
+    this.onTunnelDown = callback;
+  }
+
+  /**
    * Start periodic health monitoring.
    * Pings the supernode through the tunnel every 30s.
-   * On failure, marks the tunnel as disconnected so ConnectivityService can fall back.
+   * Requires HEALTH_FAILURE_THRESHOLD consecutive failures before declaring
+   * the tunnel dead -- a single dropped ping (network blip) won't kill it.
    */
   startHealthCheck(serverIP: string): void {
     if (this.healthTimer) return;
+    this.consecutiveFailures = 0;
 
     this.healthTimer = setInterval(async () => {
       if (!this.connected) return;
 
       const ok = await this.pingServer(serverIP);
-      if (!ok) {
-        logger.warn('[WireGuard] Health check failed - tunnel may be down');
+      if (ok) {
+        if (this.consecutiveFailures > 0) {
+          logger.info(`[WireGuard] Health check recovered after ${this.consecutiveFailures} failure(s)`);
+        }
+        this.consecutiveFailures = 0;
+        return;
+      }
+
+      this.consecutiveFailures++;
+      logger.warn(`[WireGuard] Health check failed (${this.consecutiveFailures}/${HEALTH_FAILURE_THRESHOLD})`);
+
+      if (this.consecutiveFailures >= HEALTH_FAILURE_THRESHOLD) {
+        logger.error('[WireGuard] Tunnel declared dead after consecutive failures');
         this.connected = false;
+        this.consecutiveFailures = 0;
+        if (this.onTunnelDown) {
+          this.onTunnelDown();
+        }
       }
     }, HEALTH_CHECK_INTERVAL_MS);
   }

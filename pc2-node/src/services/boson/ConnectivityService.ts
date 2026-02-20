@@ -411,6 +411,16 @@ export class ConnectivityService {
       logger.debug(`[Proxy] Connected to local server for connection ${conn.connectionId}`);
     });
 
+    // Auto-close idle relay connections. The Boson protocol handles one connection
+    // at a time — if HTTP keep-alive holds this socket open, all other browser
+    // requests queue indefinitely on the allocated port. 15s is enough for any
+    // single HTTP response while preventing keep-alive from blocking the relay.
+    localSocket.setTimeout(15000);
+    localSocket.on('timeout', () => {
+      logger.debug(`[Proxy] Local socket idle timeout for connection ${conn.connectionId}, closing to free relay`);
+      localSocket.destroy();
+    });
+
     localSocket.on('data', (data: Buffer) => {
       // Send response back through the proxy
       if (this.activeProxyClient) {

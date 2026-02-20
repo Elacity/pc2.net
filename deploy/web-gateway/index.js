@@ -1309,6 +1309,13 @@ async function handleRequest(req, res) {
   // The Java ActiveProxy server's allocated port accepts plain TCP connections
   // and transparently relays them through the encrypted tunnel to the PC2 node.
   // We just need to HTTP proxy to host:allocatedPort - no custom protocol needed.
+  //
+  // CRITICAL: Force Connection: close. The Boson ActiveProxy protocol handles one
+  // TCP connection at a time per session (DATA packets have no connectionId).
+  // HTTP keep-alive would hold the relay open indefinitely, blocking all subsequent
+  // browser requests (CSS, JS, images) which queue on the allocated port.
+  // Connection: close ensures each request completes its CONNECT→DATA→DISCONNECT
+  // cycle so the next queued connection can proceed.
   if (nodeInfo.endpoint.startsWith("proxy://")) {
     const parsed = parseProxyEndpoint(nodeInfo.endpoint);
     if (!parsed) {
@@ -1317,6 +1324,8 @@ async function handleRequest(req, res) {
       return;
     }
     const target = `http://${parsed.host}:${parsed.port}`;
+    req.headers['connection'] = 'close';
+    delete req.headers['keep-alive'];
     console.log(`[Gateway] Proxying ${username} via ActiveProxy relay: ${target}`);
     proxy.web(req, res, { target });
     return;

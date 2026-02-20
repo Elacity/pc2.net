@@ -139,9 +139,14 @@ function ipfsCidHandler(ipfs: IPFSStorage | null, db: DatabaseManager) {
 
     try {
       const metadata = db.getFileByCID(cid);
-      const fileSize = await ipfs.getFileSize(cid);
       const mimeType = metadata?.mime_type || 'application/octet-stream';
       const contentFilename = filename || metadata?.path?.split('/').pop() || cid;
+
+      // Use DB size for non-Range requests (fast); only hit IPFS when needed
+      const needsIpfsSize = !!req.headers.range || !metadata?.size;
+      const fileSize = needsIpfsSize
+        ? await ipfs.getFileSize(cid)
+        : metadata!.size;
 
       streamToResponse(ipfs, cid, req, res, {
         fileSize,
@@ -207,9 +212,14 @@ function publicWalletHandler(ipfs: IPFSStorage | null, db: DatabaseManager) {
         return res.status(404).json({ error: 'File has no content' });
       }
 
-      const fileSize = await ipfs.getFileSize(metadata.ipfs_hash);
       const mimeType = metadata.mime_type || 'application/octet-stream';
       const filename = metadata.path.split('/').pop() || 'file';
+
+      // Use DB size for non-Range requests (fast); only hit IPFS when needed
+      const needsIpfsSize = !!req.headers.range || !metadata.size;
+      const fileSize = needsIpfsSize
+        ? await ipfs.getFileSize(metadata.ipfs_hash)
+        : metadata.size;
 
       streamToResponse(ipfs, metadata.ipfs_hash, req, res, {
         fileSize,

@@ -162,29 +162,23 @@ export async function handleFile(req: Request, res: Response): Promise<void> {
 
     const finalWalletAddress = walletAddress || (metadata.path.split('/').filter(p => p)[0]?.startsWith('0x') ? metadata.path.split('/').filter(p => p)[0] : '');
     const mimeType = metadata.mime_type || 'application/octet-stream';
-
-    let fileSize: number;
-    try {
-      fileSize = await filesystem.getFileSize(metadata.path, finalWalletAddress);
-    } catch {
-      fileSize = metadata.size;
-    }
+    const rangeHeader = req.headers.range;
 
     res.setHeader('Content-Type', mimeType);
     res.setHeader('Accept-Ranges', 'bytes');
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges');
 
-    // HEAD -- return size/headers without content
+    // HEAD -- return headers from DB metadata (no IPFS call)
     if (req.method === 'HEAD') {
-      res.setHeader('Content-Length', fileSize.toString());
+      res.setHeader('Content-Length', metadata.size.toString());
       res.status(200).end();
       return;
     }
 
-    // Range request -- stream only the requested byte range
-    const rangeHeader = req.headers.range;
+    // Range request -- stream only the requested byte range from IPFS
     if (rangeHeader) {
+      const fileSize = await filesystem.getFileSize(metadata.path, finalWalletAddress).catch(() => metadata.size);
       const match = rangeHeader.match(/^bytes=(\d+)-(\d*)$/);
       if (!match || parseInt(match[1], 10) >= fileSize) {
         res.status(416).setHeader('Content-Range', `bytes */${fileSize}`).end();
@@ -210,14 +204,21 @@ export async function handleFile(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    // Full file -- stream without buffering
-    res.setHeader('Content-Length', fileSize.toString());
-    const stream = filesystem.readFileStream(metadata.path, finalWalletAddress);
-    pipeline(Readable.from(stream), res, (err) => {
-      if (err && err.code !== 'ERR_STREAM_PREMATURE_CLOSE') {
-        console.error('[File] Stream error:', err.message);
-      }
-    });
+    // Full file -- use buffer for small files, stream for large (>10 MB)
+    const STREAM_THRESHOLD = 10 * 1024 * 1024;
+    if (metadata.size > STREAM_THRESHOLD) {
+      res.setHeader('Content-Length', metadata.size.toString());
+      const stream = filesystem.readFileStream(metadata.path, finalWalletAddress);
+      pipeline(Readable.from(stream), res, (err) => {
+        if (err && err.code !== 'ERR_STREAM_PREMATURE_CLOSE') {
+          console.error('[File] Stream error:', err.message);
+        }
+      });
+    } else {
+      const content = await filesystem.readFile(metadata.path, finalWalletAddress);
+      res.setHeader('Content-Length', content.length.toString());
+      res.send(content);
+    }
   } catch (error) {
     console.error('[File] File access error:', error, { uid });
     res.status(500).json({

@@ -532,62 +532,42 @@ export async function handleRead(req: AuthenticatedRequest, res: Response): Prom
       res.setHeader('Expires', '0');
     }
 
-    // Binary files with Range support -- stream directly from IPFS
+    // Range request on binary files -- stream directly from IPFS
     const rangeHeader = req.headers.range;
-    if (isBinary && encoding !== 'base64') {
-      let fileSize: number;
-      try {
-        fileSize = await filesystem.getFileSize(resolvedPath, walletAddress);
-      } catch {
-        fileSize = fileMetadata.size;
-      }
+    const STREAM_THRESHOLD = 10 * 1024 * 1024; // 10 MB
 
-      if (rangeHeader) {
-        const match = rangeHeader.match(/^bytes=(\d+)-(\d*)$/);
-        if (!match) {
-          res.status(416).set({ 'Content-Range': `bytes */${fileSize}` }).end();
-          return;
-        }
-        const start = parseInt(match[1], 10);
-        const end = match[2] ? parseInt(match[2], 10) : fileSize - 1;
-        if (start > end || start >= fileSize) {
-          res.status(416).set({ 'Content-Range': `bytes */${fileSize}` }).end();
-          return;
-        }
-        const chunkSize = end - start + 1;
-
-        logger.info('[Read] Streaming range request', {
-          path: resolvedPath, range: rangeHeader, start, end, fileSize, chunkSize,
-        });
-
-        res.status(206).set({
-          'Content-Type': mimeType,
-          'Content-Length': chunkSize.toString(),
-          'Content-Range': `bytes ${start}-${end}/${fileSize}`,
-          'Accept-Ranges': 'bytes',
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges',
-        });
-
-        const ipfsStream = filesystem.readFileStream(resolvedPath, walletAddress, {
-          offset: start, length: chunkSize,
-        });
-        const readable = Readable.from(ipfsStream);
-        pipeline(readable, res, (err) => {
-          if (err && err.code !== 'ERR_STREAM_PREMATURE_CLOSE') {
-            logger.error('[Read] Stream pipeline error', { path: resolvedPath, error: err.message });
-          }
-        });
+    if (rangeHeader && isBinary && encoding !== 'base64') {
+      const fileSize = await filesystem.getFileSize(resolvedPath, walletAddress).catch(() => fileMetadata.size);
+      const match = rangeHeader.match(/^bytes=(\d+)-(\d*)$/);
+      if (!match) {
+        res.status(416).set({ 'Content-Range': `bytes */${fileSize}` }).end();
         return;
       }
+      const start = parseInt(match[1], 10);
+      const end = match[2] ? parseInt(match[2], 10) : fileSize - 1;
+      if (start > end || start >= fileSize) {
+        res.status(416).set({ 'Content-Range': `bytes */${fileSize}` }).end();
+        return;
+      }
+      const chunkSize = end - start + 1;
 
-      // Full binary file -- stream without buffering entire file
-      res.setHeader('Content-Type', mimeType);
-      res.setHeader('Content-Length', fileSize.toString());
+      logger.info('[Read] Streaming range request', {
+        path: resolvedPath, range: rangeHeader, start, end, fileSize, chunkSize,
+      });
 
-      const ipfsStream = filesystem.readFileStream(resolvedPath, walletAddress);
-      const readable = Readable.from(ipfsStream);
-      pipeline(readable, res, (err) => {
+      res.status(206).set({
+        'Content-Type': mimeType,
+        'Content-Length': chunkSize.toString(),
+        'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+        'Accept-Ranges': 'bytes',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges',
+      });
+
+      const ipfsStream = filesystem.readFileStream(resolvedPath, walletAddress, {
+        offset: start, length: chunkSize,
+      });
+      pipeline(Readable.from(ipfsStream), res, (err) => {
         if (err && err.code !== 'ERR_STREAM_PREMATURE_CLOSE') {
           logger.error('[Read] Stream pipeline error', { path: resolvedPath, error: err.message });
         }
@@ -595,7 +575,21 @@ export async function handleRead(req: AuthenticatedRequest, res: Response): Prom
       return;
     }
 
-    // Text files and base64 -- small enough to buffer
+    // Large binary files without Range -- stream to avoid buffering entire file
+    if (isBinary && encoding !== 'base64' && fileMetadata.size > STREAM_THRESHOLD) {
+      res.setHeader('Content-Type', mimeType);
+      res.setHeader('Content-Length', fileMetadata.size.toString());
+
+      const ipfsStream = filesystem.readFileStream(resolvedPath, walletAddress);
+      pipeline(Readable.from(ipfsStream), res, (err) => {
+        if (err && err.code !== 'ERR_STREAM_PREMATURE_CLOSE') {
+          logger.error('[Read] Stream pipeline error', { path: resolvedPath, error: err.message });
+        }
+      });
+      return;
+    }
+
+    // Small files and text -- buffer is fine, no IPFS overhead
     const content = await filesystem.readFile(resolvedPath, walletAddress);
 
     if (encoding === 'base64') {

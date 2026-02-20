@@ -446,15 +446,11 @@ export async function handleBatch(req: AuthenticatedRequest, res: Response): Pro
             // Normalize the path (remove double slashes, etc.)
             filePath = filePath.replace(/\/+/g, '/');
             
-            // Get file content - buffer (memoryStorage), data, or read from disk (diskStorage)
-            let fileContent = file.buffer || file.data;
-            if (!fileContent && file.path) {
-              const { readFileSync, unlinkSync } = await import('fs');
-              fileContent = readFileSync(file.path);
-              try { unlinkSync(file.path); } catch { /* cleanup best-effort */ }
-            }
+            // Get file content - buffer (memoryStorage), data, or disk path (diskStorage)
+            const fileContent = file.buffer || file.data;
+            const onDisk = !fileContent && file.path;
             const reportedSize = file.size || (fileContent ? fileContent.length : 0);
-            const actualSize = fileContent ? (Buffer.isBuffer(fileContent) ? fileContent.length : (fileContent instanceof Uint8Array ? fileContent.length : Buffer.byteLength(fileContent))) : 0;
+            const actualSize = fileContent ? (Buffer.isBuffer(fileContent) ? fileContent.length : (fileContent instanceof Uint8Array ? fileContent.length : Buffer.byteLength(fileContent))) : reportedSize;
             
             logger.info('[Batch] Uploading file', {
               originalDest: formData.path || formData.dest_path || formData.fileinfo || formData.operation || req.query.path,
@@ -465,22 +461,11 @@ export async function handleBatch(req: AuthenticatedRequest, res: Response): Pro
               actualSize,
               hasBuffer: !!file.buffer,
               hasData: !!file.data,
-              bufferType: fileContent ? (Buffer.isBuffer(fileContent) ? 'Buffer' : (fileContent instanceof Uint8Array ? 'Uint8Array' : typeof fileContent)) : 'none',
+              onDisk,
               mimeType: file.mimetype || file.type
             });
             
-            // Validate file size matches
-            if (reportedSize > 0 && actualSize > 0 && reportedSize !== actualSize) {
-              logger.error('[Batch] File size mismatch', {
-                fileName,
-                reportedSize,
-                actualSize,
-                difference: reportedSize - actualSize
-              });
-              // Continue anyway - might be a metadata issue
-            }
-            
-            if (!fileContent || actualSize === 0) {
+            if (!fileContent && !onDisk) {
               logger.error('[Batch] No file content received', {
                 fileName,
                 hasBuffer: !!file.buffer,
@@ -495,15 +480,20 @@ export async function handleBatch(req: AuthenticatedRequest, res: Response): Pro
               continue;
             }
             
-            // Write file to filesystem
-            const metadata = await filesystem.writeFile(
-              filePath,
-              fileContent,
-              req.user.wallet_address,
-              {
-                mimeType: file.mimetype || file.type
-              }
-            );
+            // Write file to filesystem -- stream from disk for large files
+            const metadata = onDisk
+              ? await filesystem.writeFileFromPath(
+                  filePath,
+                  file.path,
+                  req.user.wallet_address,
+                  { mimeType: file.mimetype || file.type }
+                )
+              : await filesystem.writeFile(
+                  filePath,
+                  fileContent,
+                  req.user.wallet_address,
+                  { mimeType: file.mimetype || file.type }
+                );
             
             // Extract parent directory path (dirpath) - CRITICAL for frontend
             const pathParts = metadata.path.split('/').filter(p => p);
@@ -583,21 +573,22 @@ export async function handleBatch(req: AuthenticatedRequest, res: Response): Pro
               filePath
             });
             
-            let singleFileContent = file.buffer || file.data;
-            if (!singleFileContent && file.path) {
-              const { readFileSync, unlinkSync } = await import('fs');
-              singleFileContent = readFileSync(file.path);
-              try { unlinkSync(file.path); } catch { /* cleanup best-effort */ }
-            }
+            const singleFileContent = file.buffer || file.data;
+            const singleOnDisk = !singleFileContent && file.path;
 
-            const metadata = await filesystem.writeFile(
-              filePath,
-              singleFileContent,
-              req.user.wallet_address,
-              {
-                mimeType: file.mimetype || file.type
-              }
-            );
+            const metadata = singleOnDisk
+              ? await filesystem.writeFileFromPath(
+                  filePath,
+                  file.path,
+                  req.user.wallet_address,
+                  { mimeType: file.mimetype || file.type }
+                )
+              : await filesystem.writeFile(
+                  filePath,
+                  singleFileContent,
+                  req.user.wallet_address,
+                  { mimeType: file.mimetype || file.type }
+                );
             
             // Extract parent directory path (dirpath) - CRITICAL for frontend
             const pathParts = metadata.path.split('/').filter(p => p);

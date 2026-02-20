@@ -8,6 +8,7 @@
 import { IPFSStorage } from './ipfs.js';
 import { DatabaseManager, FileMetadata } from './database.js';
 import { normalize, join, dirname } from 'path';
+import { createReadStream, statSync, unlinkSync } from 'fs';
 import { logger } from '../utils/logger.js';
 import { generateThumbnail, supportsThumbnails } from './thumbnail.js';
 
@@ -183,6 +184,106 @@ export class FilesystemManager {
       this.ipfs.announceCID(ipfsHash).then(announced => {
         if (announced) {
           logger.info(`[Filesystem] 📡 Announced public file CID to DHT: ${ipfsHash}`);
+        }
+      }).catch(err => {
+        logger.warn(`[Filesystem] Failed to announce CID to DHT: ${err.message}`);
+      });
+    }
+
+    return metadata;
+  }
+
+  /**
+   * Write a file from a local path on disk, streaming to IPFS without loading
+   * the entire file into memory. The temp file is deleted after processing.
+   * Suitable for large uploads on memory-constrained devices.
+   */
+  async writeFileFromPath(
+    destPath: string,
+    localFilePath: string,
+    walletAddress: string,
+    options?: {
+      mimeType?: string;
+      isPublic?: boolean;
+    }
+  ): Promise<FileMetadata> {
+    const normalizedPath = this.normalizePath(destPath);
+    const isInPublicFolder = this.isInPublicFolder(normalizedPath);
+    const isPublic = options?.isPublic ?? isInPublicFolder;
+
+    const parentPath = dirname(normalizedPath);
+    if (parentPath !== '/' && parentPath !== '.') {
+      await this.ensureDirectory(parentPath, walletAddress);
+    }
+
+    if (!this.isIPFSAvailable() || !this.ipfs) {
+      throw new Error('IPFS is not available. File storage requires IPFS to be initialized.');
+    }
+
+    const fileSize = statSync(localFilePath).size;
+    logger.info(`[Filesystem] Streaming file to IPFS: ${normalizedPath} (size: ${fileSize} bytes)`);
+
+    // Stream file to IPFS in chunks -- never holds the whole file in memory
+    async function* fileChunks(filePath: string): AsyncIterable<Uint8Array> {
+      const stream = createReadStream(filePath, { highWaterMark: 256 * 1024 });
+      for await (const chunk of stream) {
+        yield chunk instanceof Buffer ? new Uint8Array(chunk) : chunk;
+      }
+    }
+
+    const ipfsHash = await this.ipfs.storeFileStream(fileChunks(localFilePath), { pin: true });
+    logger.info(`[Filesystem] File streamed to IPFS: ${normalizedPath} -> CID: ${ipfsHash} (size: ${fileSize} bytes)`);
+
+    // Clean up temp file
+    try { unlinkSync(localFilePath); } catch { /* best-effort */ }
+
+    const mimeType = options?.mimeType || this.guessMimeType(destPath);
+
+    // Thumbnails skipped for streamed files (would require reading file again).
+    // Could be added as a background job later.
+    const thumbnail: string | null = null;
+
+    const existing = this.db.getFile(normalizedPath, walletAddress);
+    if (existing && existing.ipfs_hash) {
+      const nextVersion = this.db.getNextVersionNumber(normalizedPath, walletAddress);
+      this.db.createFileVersion({
+        file_path: normalizedPath,
+        wallet_address: walletAddress,
+        version_number: nextVersion,
+        ipfs_hash: existing.ipfs_hash,
+        size: existing.size,
+        mime_type: existing.mime_type,
+        created_at: existing.updated_at,
+        created_by: null,
+        comment: null
+      });
+      logger.info(`[Filesystem] Created version ${nextVersion} snapshot for: ${normalizedPath} (CID: ${existing.ipfs_hash})`);
+    }
+
+    const metadata: FileMetadata = {
+      path: normalizedPath,
+      wallet_address: walletAddress,
+      ipfs_hash: ipfsHash,
+      size: fileSize,
+      mime_type: mimeType,
+      thumbnail,
+      content_text: null,
+      is_dir: false,
+      is_public: isPublic,
+      created_at: existing?.created_at || Date.now(),
+      updated_at: Date.now()
+    };
+
+    if (isPublic) {
+      logger.info(`[Filesystem] File marked as public: ${normalizedPath}`);
+    }
+
+    this.db.createOrUpdateFile(metadata);
+
+    if (isPublic && this.ipfs && this.ipfs.canAnnounce()) {
+      this.ipfs.announceCID(ipfsHash).then(announced => {
+        if (announced) {
+          logger.info(`[Filesystem] Announced public file CID to DHT: ${ipfsHash}`);
         }
       }).catch(err => {
         logger.warn(`[Filesystem] Failed to announce CID to DHT: ${err.message}`);

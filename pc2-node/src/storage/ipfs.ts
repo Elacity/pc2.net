@@ -288,6 +288,29 @@ export class IPFSStorage {
   }
 
   /**
+   * Store a file from a readable stream without loading it entirely into memory.
+   * Uses Helia's addByteStream for efficient chunked IPFS ingestion.
+   */
+  async storeFileStream(stream: AsyncIterable<Uint8Array>, options?: {
+    pin?: boolean;
+  }): Promise<string> {
+    const fs = this.getUnixFS();
+
+    try {
+      const cid = await fs.addByteStream(stream);
+
+      if (options?.pin !== false) {
+        await this.pinFile(cid.toString());
+      }
+
+      return cid.toString();
+    } catch (error) {
+      console.error('Error storing file stream in Helia IPFS:', error);
+      throw new Error(`Failed to store file stream in IPFS: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
    * Retrieve file content from IPFS using CID
    */
   async getFile(cid: string): Promise<Buffer> {

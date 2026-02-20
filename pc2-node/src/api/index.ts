@@ -413,7 +413,7 @@ export function setupAPI(app: Express): void {
       },
     }),
     limits: {
-      fileSize: 500 * 1024 * 1024 // 500MB max file size
+      fileSize: Infinity // No artificial limit -- user's hardware, user's resources
     }
   });
   

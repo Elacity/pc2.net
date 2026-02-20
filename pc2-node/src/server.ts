@@ -81,7 +81,7 @@ export function createServer(options: ServerOptions): { app: Express; server: Se
   // The viewer app sends Blobs which may have various content types
   app.use('/writeFile', express.raw({ 
     type: '*/*', // Accept all content types for /writeFile
-    limit: '100mb' // Allow large files
+    limit: '10gb' // User's hardware -- no practical limit
   }));
   
   app.use(express.json({ 

@@ -14,9 +14,33 @@ import http from "http";
 import https from "https";
 import path from "path";
 import net from "net";
+import zlib from "zlib";
 import { execSync } from "child_process";
 import httpProxy from "http-proxy";
 const { createProxyServer } = httpProxy;
+
+// ============================================================================
+// Performance: Keep-alive agent for WireGuard / direct HTTP proxy targets.
+// Reuses TCP connections to PC2 nodes instead of opening one per request.
+// NOT used for Boson ActiveProxy (requires Connection: close).
+// ============================================================================
+const keepAliveAgent = new http.Agent({
+  keepAlive: true,
+  maxSockets: 64,
+  maxFreeSockets: 16,
+  timeout: 60_000,
+});
+
+// ============================================================================
+// Performance: Compression + cache header configuration
+// ============================================================================
+const COMPRESSIBLE_TYPES = /^text\/|\/json|\/javascript|\/xml|\+xml|\/svg/;
+const MIN_COMPRESS_SIZE = 1024; // Don't compress responses under 1KB
+
+const STATIC_CACHE_RULES = {
+  long:  { maxAge: 604800, extensions: /\.(png|jpe?g|gif|webp|ico|woff2?|ttf|eot)$/i },
+  medium: { maxAge: 86400, extensions: /\.(js|css|svg|map)$/i },
+};
 
 // Configuration (supports environment variables for multi-gateway deployment)
 const CONFIG = {
@@ -1367,6 +1391,56 @@ proxy.on("error", (err, req, res) => {
   }
 });
 
+// ============================================================================
+// Performance: Intercept proxy responses to add compression + cache headers.
+// Operates transparently -- the PC2 node receives identical requests and its
+// response headers are preserved. We only supplement missing Cache-Control and
+// compress text-based responses that the browser can accept compressed.
+// ============================================================================
+proxy.on("proxyRes", (proxyRes, req, res) => {
+  const reqUrl = req.url || '';
+  const contentType = proxyRes.headers['content-type'] || '';
+
+  // --- Cache headers for static assets (only if node didn't set its own) ---
+  if (!proxyRes.headers['cache-control']) {
+    for (const rule of Object.values(STATIC_CACHE_RULES)) {
+      if (rule.extensions.test(reqUrl)) {
+        proxyRes.headers['cache-control'] = `public, max-age=${rule.maxAge}`;
+        break;
+      }
+    }
+  }
+
+  // --- Gzip compression for text-based responses ---
+  const acceptEncoding = req.headers['accept-encoding'] || '';
+  const alreadyEncoded = !!proxyRes.headers['content-encoding'];
+  const isCompressible = COMPRESSIBLE_TYPES.test(contentType);
+  const contentLength = parseInt(proxyRes.headers['content-length'] || '0', 10);
+  const tooSmall = contentLength > 0 && contentLength < MIN_COMPRESS_SIZE;
+  const supportsGzip = acceptEncoding.includes('gzip');
+
+  if (!alreadyEncoded && isCompressible && !tooSmall && supportsGzip) {
+    // Remove content-length (unknown after compression) and set encoding
+    delete proxyRes.headers['content-length'];
+    proxyRes.headers['content-encoding'] = 'gzip';
+    proxyRes.headers['vary'] = 'Accept-Encoding';
+
+    // Pipe through gzip -- override res.write/end to compress on the fly
+    const gzipStream = zlib.createGzip({ level: 6 });
+    const originalWrite = res.write.bind(res);
+    const originalEnd = res.end.bind(res);
+
+    gzipStream.on('data', (chunk) => originalWrite(chunk));
+    gzipStream.on('end', () => originalEnd());
+
+    res.write = (chunk) => gzipStream.write(chunk);
+    res.end = (chunk) => {
+      if (chunk) gzipStream.write(chunk);
+      gzipStream.end();
+    };
+  }
+});
+
 // Extract username from hostname
 function extractUsername(hostname) {
   if (!hostname) return null;
@@ -1458,10 +1532,11 @@ async function handleRequest(req, res) {
     return;
   }
 
-  // Direct HTTP proxy (includes WireGuard tunnel endpoints at 10.100.x.x)
+  // Direct HTTP proxy (includes WireGuard tunnel endpoints at 10.100.x.x).
+  // Uses keep-alive agent to reuse TCP connections to the PC2 node.
   const viaWG = isWireGuardIP(nodeInfo.endpoint);
   console.log(`[Gateway] Proxying ${username} -> ${nodeInfo.endpoint}${viaWG ? ' (WireGuard tunnel)' : ''}`);
-  proxy.web(req, res, { target: nodeInfo.endpoint });
+  proxy.web(req, res, { target: nodeInfo.endpoint, agent: keepAliveAgent });
 }
 
 // API request handler

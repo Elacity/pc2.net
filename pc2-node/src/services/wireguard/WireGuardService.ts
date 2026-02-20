@@ -33,8 +33,11 @@ export interface WGProvisionResponse {
   serverIP: string;
 }
 
+export type WireGuardMode = 'kernel' | 'userspace' | 'none';
+
 export interface WireGuardStatus {
   available: boolean;
+  mode: WireGuardMode;
   connected: boolean;
   assignedIP: string | null;
   serverEndpoint: string | null;
@@ -61,6 +64,7 @@ export class WireGuardService {
   private healthTimer: NodeJS.Timeout | null = null;
   private consecutiveFailures = 0;
   private onTunnelDown: (() => void) | null = null;
+  private _mode: WireGuardMode = 'none';
 
   constructor(config: WireGuardConfig) {
     this.config = config;
@@ -71,16 +75,75 @@ export class WireGuardService {
   }
 
   /**
-   * Check if WireGuard tools (wg, wg-quick) are installed on this system
+   * Check if WireGuard tools (wg, wg-quick) are installed on this system.
+   * Also detects whether WireGuard runs in kernel mode or userspace (wireguard-go).
    */
   isAvailable(): boolean {
     try {
       execSync('which wg', { stdio: 'pipe' });
       execSync('which wg-quick', { stdio: 'pipe' });
-      return true;
     } catch {
+      this._mode = 'none';
       return false;
     }
+
+    this._mode = this.detectMode();
+    return this._mode !== 'none';
+  }
+
+  /**
+   * Determine whether WireGuard will use the kernel module or userspace (wireguard-go).
+   * On NVIDIA Jetson the kernel module is absent unless manually compiled.
+   *
+   * Detection order:
+   *   1. lsmod -- check if module is already loaded
+   *   2. modinfo -- check if module exists (works for built-in and loadable modules,
+   *      doesn't require root, and doesn't try to load anything)
+   *   3. wireguard-go -- userspace fallback
+   */
+  private detectMode(): WireGuardMode {
+    // Check if kernel module is already loaded
+    try {
+      const result = execSync('lsmod 2>/dev/null | grep -q wireguard && echo yes || echo no', {
+        stdio: 'pipe', shell: '/bin/sh',
+      }).toString().trim();
+      if (result === 'yes') return 'kernel';
+    } catch {
+      // lsmod unavailable
+    }
+
+    // Check if kernel module exists (loadable or built-in) without requiring root.
+    // The setup script already handled modprobe -- if the module is present but
+    // not loaded, wg-quick will load it automatically.
+    try {
+      execSync('modinfo wireguard 2>/dev/null', { stdio: 'pipe' });
+      return 'kernel';
+    } catch {
+      // Module not found -- expected on Jetson with NVIDIA custom kernel
+    }
+
+    // Fall back to userspace if wireguard-go is installed
+    try {
+      execSync('which wireguard-go', { stdio: 'pipe' });
+      logger.info('[WireGuard] Kernel module unavailable, using wireguard-go (userspace)');
+      return 'userspace';
+    } catch {
+      logger.warn('[WireGuard] Neither kernel module nor wireguard-go available');
+      return 'none';
+    }
+  }
+
+  /**
+   * Build a sudo wg-quick command string.
+   * In userspace mode, sets WG_QUICK_USERSPACE_IMPLEMENTATION via sudo -E
+   * so wg-quick knows to use wireguard-go instead of the kernel module.
+   * The sudoers rule includes SETENV to allow -E to work.
+   */
+  private wgQuickCmd(action: 'up' | 'down', confPath: string): string {
+    if (this._mode === 'userspace') {
+      return `WG_QUICK_USERSPACE_IMPLEMENTATION=wireguard-go sudo -E wg-quick ${action} ${confPath}`;
+    }
+    return `sudo wg-quick ${action} ${confPath}`;
   }
 
   /**
@@ -222,13 +285,13 @@ export class WireGuardService {
     writeFileSync(confPath, conf + '\n', { mode: 0o600 });
 
     try {
-      execSync(`sudo wg-quick down ${confPath} 2>/dev/null`, { stdio: 'pipe' });
+      execSync(`${this.wgQuickCmd('down', confPath)} 2>/dev/null`, { stdio: 'pipe', shell: '/bin/sh' });
     } catch {
       // Interface may not be up
     }
 
     try {
-      execSync(`sudo wg-quick up ${confPath}`, { stdio: 'pipe', timeout: 15_000 });
+      execSync(this.wgQuickCmd('up', confPath), { stdio: 'pipe', timeout: 15_000, shell: '/bin/sh' });
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);
       throw new Error(`Failed to bring up WireGuard interface: ${msg}`);
@@ -239,7 +302,7 @@ export class WireGuardService {
     this.connected = true;
     this.externalInterface = false;
 
-    logger.info(`[WireGuard] Interface ${WG_INTERFACE} up: ${provision.assignedIP}`);
+    logger.info(`[WireGuard] Interface ${WG_INTERFACE} up (${this._mode} mode): ${provision.assignedIP}`);
 
     const reachable = await this.pingServer(provision.serverIP);
     if (!reachable) {
@@ -337,7 +400,7 @@ export class WireGuardService {
     if (!this.externalInterface) {
       const confPath = join(this.wgDir, `${WG_INTERFACE}.conf`);
       try {
-        execSync(`sudo wg-quick down ${confPath} 2>/dev/null`, { stdio: 'pipe' });
+        execSync(`${this.wgQuickCmd('down', confPath)} 2>/dev/null`, { stdio: 'pipe', shell: '/bin/sh' });
       } catch {
         // May not be up
       }
@@ -365,7 +428,8 @@ export class WireGuardService {
 
   getStatus(): WireGuardStatus {
     const status: WireGuardStatus = {
-      available: this.isAvailable(),
+      available: this._mode !== 'none',
+      mode: this._mode,
       connected: this.connected,
       assignedIP: this.assignedIP,
       serverEndpoint: this.serverEndpoint,

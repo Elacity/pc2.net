@@ -72,42 +72,126 @@ fi
 
 print_header "Installing WireGuard"
 
+IS_JETSON=false
+if [ -f /etc/nv_tegra_release ]; then
+  IS_JETSON=true
+fi
+
 if command -v wg &>/dev/null && command -v wg-quick &>/dev/null; then
   print_ok "WireGuard tools already installed"
 else
-  if (( KERNEL_MAJOR > 5 || (KERNEL_MAJOR == 5 && KERNEL_MINOR >= 6) )); then
+  apt-get update -qq
+
+  if (( KERNEL_MAJOR > 5 || (KERNEL_MAJOR == 5 && KERNEL_MINOR >= 6) )) && [ "$IS_JETSON" = false ]; then
     print_step "Kernel $KERNEL_VERSION has built-in WireGuard -- installing tools only"
-    WG_PKG="wireguard-tools"
+    apt-get install -y -qq wireguard-tools
+  elif [ "$IS_JETSON" = true ]; then
+    print_step "NVIDIA Jetson detected -- installing tools only (custom kernel)"
+    apt-get install -y -qq wireguard-tools
   else
     print_step "Kernel $KERNEL_VERSION needs DKMS WireGuard module"
-    WG_PKG="wireguard"
+    apt-get install -y -qq wireguard
   fi
 
-  apt-get update -qq
-  apt-get install -y -qq "$WG_PKG"
-
   if command -v wg &>/dev/null; then
-    print_ok "WireGuard installed successfully"
+    print_ok "WireGuard tools installed successfully"
   else
-    print_error "Failed to install WireGuard"
+    print_error "Failed to install WireGuard tools"
     echo "  Try manually: apt install wireguard-tools"
     exit 1
   fi
 fi
 
 # ---------------------------------------------------------------------------
-# Step 2: Load WireGuard kernel module
+# Step 2: Load WireGuard kernel module (or install userspace fallback)
+#
+# NVIDIA Jetson ships a custom kernel without the WireGuard module.
+# Building it from source requires downloading the BSP and compiling
+# three kernel modules (wireguard.ko, libchacha20poly1305.ko, poly1305-neon.ko).
+# See: https://docs.kinesis.network/blog/enable-wireguard-on-nvidia-jetson
+#
+# As a zero-effort fallback, we install wireguard-go (userspace implementation).
+# It's slower than kernel WireGuard but still far faster than Boson relay.
+# wg-quick auto-detects and uses it when the kernel module is absent.
 # ---------------------------------------------------------------------------
 
-if ! lsmod | grep -q wireguard 2>/dev/null; then
-  modprobe wireguard 2>/dev/null || true
-  if lsmod | grep -q wireguard 2>/dev/null; then
-    print_ok "WireGuard kernel module loaded"
-  else
-    print_warn "WireGuard kernel module not loaded (may load on first use)"
-  fi
-else
+WG_MODE="kernel"
+
+if lsmod | grep -q wireguard 2>/dev/null; then
   print_ok "WireGuard kernel module already loaded"
+elif modprobe wireguard 2>/dev/null && lsmod | grep -q wireguard 2>/dev/null; then
+  print_ok "WireGuard kernel module loaded"
+else
+  # Kernel module not available -- need userspace fallback
+  WG_MODE="none"
+
+  if [ "$IS_JETSON" = true ]; then
+    print_warn "Jetson custom kernel does not include WireGuard module"
+  else
+    print_warn "WireGuard kernel module not available"
+  fi
+
+  if command -v wireguard-go &>/dev/null; then
+    print_ok "wireguard-go (userspace) already installed"
+    WG_MODE="userspace"
+  else
+    print_step "Installing wireguard-go (userspace WireGuard)..."
+
+    # Try apt first (available on some distros)
+    if apt-get install -y -qq wireguard-go 2>/dev/null && command -v wireguard-go &>/dev/null; then
+      print_ok "wireguard-go installed via apt"
+      WG_MODE="userspace"
+    else
+      # Build from source -- requires Go
+      if ! command -v go &>/dev/null; then
+        print_step "Installing Go compiler for wireguard-go build..."
+        apt-get install -y -qq golang-go 2>/dev/null || apt-get install -y -qq golang 2>/dev/null || true
+      fi
+
+      if command -v go &>/dev/null; then
+        print_step "Building wireguard-go from source..."
+        TMPDIR_WG=$(mktemp -d)
+        if git clone --depth 1 https://git.zx2c4.com/wireguard-go "$TMPDIR_WG/wireguard-go" 2>/dev/null; then
+          cd "$TMPDIR_WG/wireguard-go"
+          if make 2>/dev/null; then
+            cp wireguard-go /usr/local/bin/
+            chmod +x /usr/local/bin/wireguard-go
+            print_ok "wireguard-go built and installed to /usr/local/bin/"
+            WG_MODE="userspace"
+          else
+            print_warn "wireguard-go build failed"
+          fi
+          cd - >/dev/null
+        else
+          print_warn "Failed to clone wireguard-go repository"
+        fi
+        rm -rf "$TMPDIR_WG"
+      else
+        print_warn "Go compiler not available, cannot build wireguard-go"
+      fi
+    fi
+  fi
+
+  if [ "$WG_MODE" = "userspace" ]; then
+    print_ok "WireGuard will use userspace mode (wireguard-go)"
+    echo ""
+    if [ "$IS_JETSON" = true ]; then
+      print_step "For best performance, you can build the kernel module:"
+      echo "  See: https://docs.kinesis.network/blog/enable-wireguard-on-nvidia-jetson"
+      echo ""
+    fi
+  else
+    print_warn "WireGuard not available -- will fall back to Boson relay"
+    echo "  The node will still work but with slower connectivity."
+    if [ "$IS_JETSON" = true ]; then
+      echo ""
+      echo "  To enable WireGuard on Jetson, build the kernel module:"
+      echo "  https://docs.kinesis.network/blog/enable-wireguard-on-nvidia-jetson"
+      echo ""
+      echo "  Or install wireguard-go manually:"
+      echo "  https://git.zx2c4.com/wireguard-go"
+    fi
+  fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -124,28 +208,35 @@ fi
 
 print_header "Configuring WireGuard Permissions"
 
-SUDOERS_FILE="/etc/sudoers.d/pc2-wireguard"
-WG_QUICK_PATH=$(which wg-quick)
+if command -v wg-quick &>/dev/null; then
+  SUDOERS_FILE="/etc/sudoers.d/pc2-wireguard"
+  WG_QUICK_PATH=$(which wg-quick)
 
-if [ -f "$SUDOERS_FILE" ]; then
-  print_ok "Sudoers rule already exists"
-else
-  cat > "$SUDOERS_FILE" << EOF
+  if [ -f "$SUDOERS_FILE" ] && grep -q "SETENV" "$SUDOERS_FILE" 2>/dev/null; then
+    print_ok "Sudoers rule already exists (with SETENV)"
+  else
+    # Regenerate if missing or if old rule lacks SETENV (needed for wireguard-go)
+    rm -f "$SUDOERS_FILE" 2>/dev/null
+    cat > "$SUDOERS_FILE" << EOF
 # Allow any user to manage WireGuard via wg-quick without a password.
 # This enables the PC2 node process to activate WireGuard tunnels
 # automatically after the setup wizard completes.
-ALL ALL=(root) NOPASSWD: ${WG_QUICK_PATH} up *, ${WG_QUICK_PATH} down *
+# SETENV allows passing WG_QUICK_USERSPACE_IMPLEMENTATION through sudo -E
+# which is required for wireguard-go (userspace mode) on Jetson/ARM devices.
+ALL ALL=(root) NOPASSWD: SETENV: ${WG_QUICK_PATH} up *, ${WG_QUICK_PATH} down *
 EOF
-  chmod 440 "$SUDOERS_FILE"
+    chmod 440 "$SUDOERS_FILE"
 
-  # Validate the sudoers file
-  if visudo -c -f "$SUDOERS_FILE" &>/dev/null; then
-    print_ok "Sudoers rule configured: passwordless wg-quick for all users"
-  else
-    print_error "Invalid sudoers file, removing"
-    rm -f "$SUDOERS_FILE"
-    exit 1
+    if visudo -c -f "$SUDOERS_FILE" &>/dev/null; then
+      print_ok "Sudoers rule configured: passwordless wg-quick for all users"
+    else
+      print_error "Invalid sudoers file, removing"
+      rm -f "$SUDOERS_FILE"
+      exit 1
+    fi
   fi
+else
+  print_warn "wg-quick not found, skipping sudoers configuration"
 fi
 
 # ---------------------------------------------------------------------------
@@ -154,7 +245,16 @@ fi
 
 print_header "Setup Complete"
 
-echo "  WireGuard is installed and the PC2 node can manage tunnels automatically."
+if [ "$WG_MODE" = "kernel" ]; then
+  echo "  WireGuard (kernel mode) is ready. Best performance."
+elif [ "$WG_MODE" = "userspace" ]; then
+  echo "  WireGuard (userspace/wireguard-go) is ready."
+  echo "  Performance is good. For maximum speed, build the kernel module."
+else
+  echo "  WireGuard is NOT available. The node will use Boson relay (slower)."
+fi
+echo ""
+echo "  The PC2 node can manage tunnels automatically."
 echo ""
 echo "  Next steps:"
 echo -e "    ${BLUE}1.${NC} Start the node:  ${YELLOW}pm2 start ecosystem.config.cjs${NC}"

@@ -1360,11 +1360,62 @@ function saveRegistry() {
   }
 }
 
-// Create proxy server for direct HTTP endpoints
+// Create proxy server for direct HTTP endpoints (Boson relay + WebSocket upgrades)
 const proxy = createProxyServer({
   changeOrigin: true,
   ws: true,
   xfwd: true,
+});
+
+// Separate proxy for WireGuard/direct targets with response compression.
+// selfHandleResponse gives us full control over the response stream so we
+// can pipe through gzip without fighting http-proxy's internal pipe().
+const compressingProxy = createProxyServer({
+  changeOrigin: true,
+  xfwd: true,
+  selfHandleResponse: true,
+});
+
+compressingProxy.on("proxyRes", (proxyRes, req, res) => {
+  const headers = { ...proxyRes.headers };
+  const reqUrl = req.url || '';
+  const contentType = headers['content-type'] || '';
+
+  // Cache headers for static assets (only if node didn't set its own)
+  if (!headers['cache-control']) {
+    for (const rule of Object.values(STATIC_CACHE_RULES)) {
+      if (rule.extensions.test(reqUrl)) {
+        headers['cache-control'] = `public, max-age=${rule.maxAge}`;
+        break;
+      }
+    }
+  }
+
+  const acceptEncoding = req.headers['accept-encoding'] || '';
+  const alreadyEncoded = !!headers['content-encoding'];
+  const isCompressible = COMPRESSIBLE_TYPES.test(contentType);
+  const contentLength = parseInt(headers['content-length'] || '0', 10);
+  const tooSmall = contentLength > 0 && contentLength < MIN_COMPRESS_SIZE;
+  const supportsGzip = acceptEncoding.includes('gzip');
+
+  if (!alreadyEncoded && isCompressible && !tooSmall && supportsGzip) {
+    delete headers['content-length'];
+    headers['content-encoding'] = 'gzip';
+    headers['vary'] = 'Accept-Encoding';
+    res.writeHead(proxyRes.statusCode, headers);
+    proxyRes.pipe(zlib.createGzip({ level: 6 })).pipe(res);
+  } else {
+    res.writeHead(proxyRes.statusCode, headers);
+    proxyRes.pipe(res);
+  }
+});
+
+compressingProxy.on("error", (err, req, res) => {
+  console.error("[Proxy] Compressing proxy error:", err.message);
+  if (res.writeHead) {
+    res.writeHead(502, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "Bad Gateway", message: err.message }));
+  }
 });
 
 // Network Map proxy (map.ela.city → localhost:3100)
@@ -1391,53 +1442,17 @@ proxy.on("error", (err, req, res) => {
   }
 });
 
-// ============================================================================
-// Performance: Intercept proxy responses to add compression + cache headers.
-// Operates transparently -- the PC2 node receives identical requests and its
-// response headers are preserved. We only supplement missing Cache-Control and
-// compress text-based responses that the browser can accept compressed.
-// ============================================================================
-proxy.on("proxyRes", (proxyRes, req, res) => {
-  const reqUrl = req.url || '';
-  const contentType = proxyRes.headers['content-type'] || '';
-
-  // --- Cache headers for static assets (only if node didn't set its own) ---
+// Cache headers for Boson ActiveProxy responses (no compression -- serial relay
+// protocol doesn't benefit and the proxy uses selfHandleResponse:false)
+proxy.on("proxyRes", (proxyRes, req) => {
   if (!proxyRes.headers['cache-control']) {
+    const reqUrl = req.url || '';
     for (const rule of Object.values(STATIC_CACHE_RULES)) {
       if (rule.extensions.test(reqUrl)) {
         proxyRes.headers['cache-control'] = `public, max-age=${rule.maxAge}`;
         break;
       }
     }
-  }
-
-  // --- Gzip compression for text-based responses ---
-  const acceptEncoding = req.headers['accept-encoding'] || '';
-  const alreadyEncoded = !!proxyRes.headers['content-encoding'];
-  const isCompressible = COMPRESSIBLE_TYPES.test(contentType);
-  const contentLength = parseInt(proxyRes.headers['content-length'] || '0', 10);
-  const tooSmall = contentLength > 0 && contentLength < MIN_COMPRESS_SIZE;
-  const supportsGzip = acceptEncoding.includes('gzip');
-
-  if (!alreadyEncoded && isCompressible && !tooSmall && supportsGzip) {
-    // Remove content-length (unknown after compression) and set encoding
-    delete proxyRes.headers['content-length'];
-    proxyRes.headers['content-encoding'] = 'gzip';
-    proxyRes.headers['vary'] = 'Accept-Encoding';
-
-    // Pipe through gzip -- override res.write/end to compress on the fly
-    const gzipStream = zlib.createGzip({ level: 6 });
-    const originalWrite = res.write.bind(res);
-    const originalEnd = res.end.bind(res);
-
-    gzipStream.on('data', (chunk) => originalWrite(chunk));
-    gzipStream.on('end', () => originalEnd());
-
-    res.write = (chunk) => gzipStream.write(chunk);
-    res.end = (chunk) => {
-      if (chunk) gzipStream.write(chunk);
-      gzipStream.end();
-    };
   }
 });
 
@@ -1533,10 +1548,11 @@ async function handleRequest(req, res) {
   }
 
   // Direct HTTP proxy (includes WireGuard tunnel endpoints at 10.100.x.x).
-  // Uses keep-alive agent to reuse TCP connections to the PC2 node.
+  // Uses compressingProxy (selfHandleResponse) for gzip + cache headers,
+  // and keep-alive agent to reuse TCP connections to the PC2 node.
   const viaWG = isWireGuardIP(nodeInfo.endpoint);
   console.log(`[Gateway] Proxying ${username} -> ${nodeInfo.endpoint}${viaWG ? ' (WireGuard tunnel)' : ''}`);
-  proxy.web(req, res, { target: nodeInfo.endpoint, agent: keepAliveAgent });
+  compressingProxy.web(req, res, { target: nodeInfo.endpoint, agent: keepAliveAgent });
 }
 
 // API request handler

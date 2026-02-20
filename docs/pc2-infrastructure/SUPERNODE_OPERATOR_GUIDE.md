@@ -478,6 +478,16 @@ The Web Gateway's `/api/wg/register` endpoint handles dynamic peer provisioning:
 4. Node receives `{assignedIP, serverPublicKey, serverEndpoint}` and activates its tunnel
 5. Gateway updates the username registry to point to `http://10.100.0.x:4200`
 
+### Gateway Performance Layer
+
+The Web Gateway includes a transparent performance layer for WireGuard/direct proxy targets:
+
+- **Gzip compression**: Text responses (HTML, CSS, JS, JSON, SVG) are compressed on the fly, reducing transfer sizes by 74-77%. Binary content (images, video) passes through untouched.
+- **HTTP keep-alive pooling**: TCP connections to PC2 nodes are reused instead of opening a new one per request, eliminating repeated TCP handshake latency (~240ms saved per subsequent request).
+- **Cache headers**: Static assets (`.js`, `.css`, `.png`, `.woff2`, etc.) receive `Cache-Control` headers when the PC2 node doesn't set its own, enabling browser caching.
+
+These optimizations are fully transparent -- the PC2 node receives identical requests and its response headers are preserved. Boson Active Proxy connections are unaffected (they require `Connection: close`).
+
 ### Capacity
 
 Each supernode supports ~250 WireGuard peers (10.100.0.2 through 10.100.0.254). For larger deployments, multiple supernodes can each manage their own /24 subnet.

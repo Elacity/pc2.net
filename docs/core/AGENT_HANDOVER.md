@@ -1,8 +1,8 @@
 # PC2 Agent Handover Document
 
 > **Purpose:** Complete contextual awareness for AI agents working on PC2
-> **Last Updated:** 2026-02-03
-> **Current Status:** MVP v1.0.0 Complete, Production Deployed, WireGuard NAT Traversal Live
+> **Last Updated:** 2026-02-20
+> **Current Status:** MVP v1.0.0 Complete, Production Deployed, WireGuard NAT Traversal + Gateway Performance Live
 
 ---
 
@@ -64,7 +64,7 @@ Three WebSpaces being built:
 | Boson DHT | 39001/UDP | Decentralized identity, peer discovery |
 | Active Proxy | 8090/TCP | NAT traversal relay (fallback, slow) |
 | WireGuard | 51820/UDP | NAT traversal tunnel (primary, fast) |
-| Web Gateway | 80/443 | Subdomain routing with SSL |
+| Web Gateway | 80/443 | Subdomain routing with SSL, gzip compression, keep-alive pooling |
 
 ### How Routing Works
 
@@ -74,11 +74,16 @@ User Browser                    Supernode                     PC2 Node (home)
      │                              │                            │
      │ https://alice.ela.city ─────►│                            │
      │                              │                            │
-     │                              │─── HTTP via WG tunnel ────►│
-     │                              │    10.100.0.x:4200         │ (kernel-level,
-     │                              │                            │  ~1.5s page load)
-     │◄──────────── Response ───────│◄─────── Response ──────────│
+     │                              │── HTTP via WG tunnel ─────►│
+     │                              │   10.100.0.x:4200          │ (kernel-level,
+     │                              │   (keep-alive pooled)      │  keep-alive reuse)
+     │◄──── gzip compressed ────────│◄─────── Response ──────────│
 ```
+
+**Gateway performance layer** (transparent, no behavior change):
+- Gzip compression: text responses compressed 74-77% (3MB JS bundle → 816KB)
+- Keep-alive pooling: TCP connections to WireGuard peers reused (saves ~240ms/request)
+- Cache headers: static assets get `Cache-Control` when node doesn't set its own
 
 **VPS (public IP) - direct HTTP:**
 ```

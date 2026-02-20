@@ -1,8 +1,8 @@
 # PC2 Architecture Overview: Self-Hosted Sovereign Cloud
 
-**Version:** 2.1  
-**Date:** 2026-02-03  
-**Status:** Production MVP Complete - Live Infrastructure Deployed (WireGuard NAT Traversal Added)
+**Version:** 2.2  
+**Date:** 2026-02-20  
+**Status:** Production MVP Complete - Live Infrastructure Deployed (WireGuard NAT Traversal + Gateway Performance)
 
 ---
 
@@ -405,7 +405,7 @@ PC2 supports multi-user access with wallet-based permissions:
 
 | Component | Technology | Port | Purpose |
 |-----------|------------|------|---------|
-| **Web Gateway** | Node.js | 80/443 | HTTPS routing, wildcard SSL |
+| **Web Gateway** | Node.js | 80/443 | HTTPS routing, wildcard SSL, gzip compression, keep-alive pooling |
 | **Boson DHT** | Java 17 | 39001/UDP | Distributed hash table |
 | **Active Proxy** | Java 17 | 8090/TCP | NAT traversal relay (fallback) |
 | **WireGuard** | Kernel | 51820/UDP | High-performance NAT traversal tunnel |

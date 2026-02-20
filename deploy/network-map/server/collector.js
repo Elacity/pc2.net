@@ -304,7 +304,9 @@ export class DataCollector {
   determineEndpointType(endpoint) {
     if (!endpoint) return 'unknown';
     if (endpoint.includes('127.0.0.1') || endpoint.includes('localhost')) return 'proxy';
-    if (endpoint.match(/^\d+\.\d+\.\d+\.\d+/)) return 'direct';
+    if (endpoint.match(/10\.100\.\d+\.\d+/)) return 'wireguard';
+    if (endpoint.startsWith('proxy://')) return 'proxy';
+    if (endpoint.match(/^\d+\.\d+\.\d+\.\d+/) || endpoint.match(/https?:\/\/\d+\.\d+\.\d+\.\d+/)) return 'direct';
     return 'domain';
   }
   

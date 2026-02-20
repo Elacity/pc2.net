@@ -14,6 +14,7 @@ import http from "http";
 import https from "https";
 import path from "path";
 import net from "net";
+import { execSync } from "child_process";
 import httpProxy from "http-proxy";
 const { createProxyServer } = httpProxy;
 
@@ -65,6 +66,132 @@ const registry = new Map();
 
 // Rate limiting store
 const rateLimitStore = new Map();
+
+// ============================================================================
+// WireGuard Peer Management
+// ============================================================================
+
+const WG_CONFIG = {
+  enabled: process.env.WG_ENABLED !== 'false',
+  interface: process.env.WG_INTERFACE || 'wg0',
+  subnet: process.env.WG_SUBNET || '10.100.0.0/16',
+  serverIP: process.env.WG_SERVER_IP || '10.100.0.1',
+  listenPort: parseInt(process.env.WG_PORT || '51820', 10),
+  peersFile: process.env.WG_PEERS_FILE || path.join(CONFIG.dataDir, 'wg-peers.json'),
+  serverPubkeyFile: '/etc/wireguard/server-public.key',
+};
+
+const wgPeers = { nextIP: 2, peers: {} };
+
+function loadWGPeers() {
+  try {
+    if (fs.existsSync(WG_CONFIG.peersFile)) {
+      const data = JSON.parse(fs.readFileSync(WG_CONFIG.peersFile, 'utf8'));
+      wgPeers.nextIP = data.nextIP || 2;
+      wgPeers.peers = data.peers || {};
+      console.log(`[WireGuard] Loaded ${Object.keys(wgPeers.peers).length} peers from ${WG_CONFIG.peersFile}`);
+    }
+  } catch (error) {
+    console.error('[WireGuard] Failed to load peers:', error.message);
+  }
+}
+
+function saveWGPeers() {
+  try {
+    fs.writeFileSync(WG_CONFIG.peersFile, JSON.stringify(wgPeers, null, 2));
+  } catch (error) {
+    console.error('[WireGuard] Failed to save peers:', error.message);
+  }
+}
+
+function allocateWGIP() {
+  const ip = wgPeers.nextIP;
+  if (ip > 65534) {
+    throw new Error('WireGuard IP pool exhausted (10.100.0.0/16 range full)');
+  }
+  wgPeers.nextIP = ip + 1;
+  const octet3 = Math.floor(ip / 256);
+  const octet4 = ip % 256;
+  return `10.100.${octet3}.${octet4}`;
+}
+
+function isWireGuardAvailable() {
+  if (!WG_CONFIG.enabled) return false;
+  try {
+    execSync(`ip link show ${WG_CONFIG.interface} 2>/dev/null`, { stdio: 'pipe' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function getServerPublicKey() {
+  try {
+    if (fs.existsSync(WG_CONFIG.serverPubkeyFile)) {
+      return fs.readFileSync(WG_CONFIG.serverPubkeyFile, 'utf8').trim();
+    }
+  } catch (error) {
+    console.error('[WireGuard] Failed to read server public key:', error.message);
+  }
+  return null;
+}
+
+function addWGPeer(publicKey, allowedIP) {
+  try {
+    execSync(
+      `wg set ${WG_CONFIG.interface} peer ${publicKey} allowed-ips ${allowedIP}/32`,
+      { stdio: 'pipe', timeout: 5000 }
+    );
+    return true;
+  } catch (error) {
+    console.error(`[WireGuard] Failed to add peer: ${error.message}`);
+    return false;
+  }
+}
+
+function removeWGPeer(publicKey) {
+  try {
+    execSync(
+      `wg set ${WG_CONFIG.interface} peer ${publicKey} remove`,
+      { stdio: 'pipe', timeout: 5000 }
+    );
+    return true;
+  } catch (error) {
+    console.error(`[WireGuard] Failed to remove peer: ${error.message}`);
+    return false;
+  }
+}
+
+function syncWGPeers() {
+  if (!isWireGuardAvailable()) {
+    console.log('[WireGuard] Interface not available, skipping peer sync');
+    return;
+  }
+
+  let synced = 0;
+  for (const [username, peer] of Object.entries(wgPeers.peers)) {
+    if (peer.publicKey && peer.assignedIP) {
+      if (addWGPeer(peer.publicKey, peer.assignedIP)) {
+        synced++;
+      }
+    }
+  }
+  console.log(`[WireGuard] Synced ${synced}/${Object.keys(wgPeers.peers).length} peers to interface`);
+}
+
+function isWireGuardIP(endpoint) {
+  if (!endpoint) return false;
+  const match = endpoint.match(/^https?:\/\/(10\.100\.\d+\.\d+)/);
+  return !!match;
+}
+
+let _cachedPublicIP = null;
+function getPublicIP() {
+  if (_cachedPublicIP) return _cachedPublicIP;
+  // Use the first supernode address as the public IP (this gateway runs on the supernode)
+  _cachedPublicIP = DEFAULT_SUPERNODES[0]?.address || '69.164.241.210';
+  return _cachedPublicIP;
+}
 
 // ============================================================================
 // Phase 1: LRU Cache for Registry Lookups
@@ -1331,8 +1458,9 @@ async function handleRequest(req, res) {
     return;
   }
 
-  // Direct HTTP proxy
-  console.log(`[Gateway] Proxying ${username} -> ${nodeInfo.endpoint}`);
+  // Direct HTTP proxy (includes WireGuard tunnel endpoints at 10.100.x.x)
+  const viaWG = isWireGuardIP(nodeInfo.endpoint);
+  console.log(`[Gateway] Proxying ${username} -> ${nodeInfo.endpoint}${viaWG ? ' (WireGuard tunnel)' : ''}`);
   proxy.web(req, res, { target: nodeInfo.endpoint });
 }
 
@@ -1376,6 +1504,10 @@ async function handleApiRequest(req, res) {
       cacheHitRate: cacheStats.hitRate,
       proxyConnections: proxyConnections.size,
       supernodes: getActiveSuperNodes().length,
+      wireguard: {
+        available: isWireGuardAvailable(),
+        peers: Object.keys(wgPeers.peers).length,
+      },
     }));
     return;
   }
@@ -1536,6 +1668,173 @@ async function handleApiRequest(req, res) {
     return;
   }
 
+  // ========================================================================
+  // WireGuard Peer Provisioning API
+  // ========================================================================
+
+  if (url.pathname === "/api/wg/register" && req.method === "POST") {
+    if (!checkRateLimit('register', clientIP)) {
+      res.writeHead(429, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Rate limit exceeded", retryAfter: 60 }));
+      return;
+    }
+
+    if (!isWireGuardAvailable()) {
+      res.writeHead(503, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "WireGuard not available on this gateway" }));
+      return;
+    }
+
+    const serverPubKey = getServerPublicKey();
+    if (!serverPubKey) {
+      res.writeHead(503, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "WireGuard server key not configured" }));
+      return;
+    }
+
+    let body = "";
+    req.on("data", (chunk) => (body += chunk));
+    req.on("end", () => {
+      try {
+        const { username, nodeId, publicKey } = JSON.parse(body);
+
+        if (!username || !nodeId || !publicKey) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Missing required fields: username, nodeId, publicKey" }));
+          return;
+        }
+
+        // Validate WireGuard public key format (base64, 44 chars with = padding)
+        if (!/^[A-Za-z0-9+/]{42,43}=?$/.test(publicKey)) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Invalid WireGuard public key format" }));
+          return;
+        }
+
+        const normalizedUsername = username.toLowerCase();
+
+        // Check if this node already has a WireGuard peer assignment
+        const existingPeer = wgPeers.peers[normalizedUsername];
+        if (existingPeer && existingPeer.nodeId === nodeId) {
+          // Same node re-registering: update public key if changed
+          if (existingPeer.publicKey !== publicKey) {
+            removeWGPeer(existingPeer.publicKey);
+            existingPeer.publicKey = publicKey;
+            existingPeer.lastSeen = new Date().toISOString();
+            addWGPeer(publicKey, existingPeer.assignedIP);
+            saveWGPeers();
+            console.log(`[WireGuard] Updated key for ${normalizedUsername} (${existingPeer.assignedIP})`);
+          } else {
+            existingPeer.lastSeen = new Date().toISOString();
+            addWGPeer(publicKey, existingPeer.assignedIP);
+            saveWGPeers();
+          }
+
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({
+            assignedIP: existingPeer.assignedIP,
+            serverPublicKey: serverPubKey,
+            serverEndpoint: `${getPublicIP()}:${WG_CONFIG.listenPort}`,
+            serverIP: WG_CONFIG.serverIP,
+          }));
+          return;
+        }
+
+        // New peer: allocate IP
+        const assignedIP = allocateWGIP();
+
+        wgPeers.peers[normalizedUsername] = {
+          nodeId,
+          publicKey,
+          assignedIP,
+          registeredAt: new Date().toISOString(),
+          lastSeen: new Date().toISOString(),
+        };
+
+        if (!addWGPeer(publicKey, assignedIP)) {
+          delete wgPeers.peers[normalizedUsername];
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Failed to configure WireGuard peer" }));
+          return;
+        }
+
+        saveWGPeers();
+        console.log(`[WireGuard] Registered ${normalizedUsername}: ${assignedIP} (pubkey: ${publicKey.slice(0, 8)}...)`);
+
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({
+          assignedIP,
+          serverPublicKey: serverPubKey,
+          serverEndpoint: `${getPublicIP()}:${WG_CONFIG.listenPort}`,
+          serverIP: WG_CONFIG.serverIP,
+        }));
+      } catch (error) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Invalid JSON" }));
+      }
+    });
+    return;
+  }
+
+  if (url.pathname === "/api/wg/status" && req.method === "GET") {
+    const wgAvailable = isWireGuardAvailable();
+    let wgDump = null;
+
+    if (wgAvailable) {
+      try {
+        const raw = execSync(`wg show ${WG_CONFIG.interface} dump`, { stdio: 'pipe', timeout: 5000 }).toString();
+        const lines = raw.trim().split('\n');
+        // First line is interface info, subsequent lines are peers
+        const peers = lines.slice(1).map(line => {
+          const parts = line.split('\t');
+          return {
+            publicKey: parts[0],
+            endpoint: parts[2] || 'none',
+            latestHandshake: parts[4] ? parseInt(parts[4], 10) : 0,
+            transferRx: parts[5] ? parseInt(parts[5], 10) : 0,
+            transferTx: parts[6] ? parseInt(parts[6], 10) : 0,
+          };
+        });
+        wgDump = { peerCount: peers.length, peers };
+      } catch (error) {
+        wgDump = { error: error.message };
+      }
+    }
+
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({
+      wireguard: {
+        available: wgAvailable,
+        interface: WG_CONFIG.interface,
+        serverIP: WG_CONFIG.serverIP,
+        listenPort: WG_CONFIG.listenPort,
+        registeredPeers: Object.keys(wgPeers.peers).length,
+        live: wgDump,
+      },
+    }));
+    return;
+  }
+
+  if (url.pathname.startsWith("/api/wg/peer/") && req.method === "DELETE") {
+    const targetUsername = url.pathname.slice("/api/wg/peer/".length).toLowerCase();
+    const peer = wgPeers.peers[targetUsername];
+
+    if (!peer) {
+      res.writeHead(404, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Peer not found" }));
+      return;
+    }
+
+    removeWGPeer(peer.publicKey);
+    delete wgPeers.peers[targetUsername];
+    saveWGPeers();
+    console.log(`[WireGuard] Removed peer ${targetUsername} (${peer.assignedIP})`);
+
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ success: true, removed: targetUsername }));
+    return;
+  }
+
   // Default: 404
   res.writeHead(404, { "Content-Type": "application/json" });
   res.end(JSON.stringify({ error: "Not found" }));
@@ -1577,7 +1876,8 @@ async function handleUpgrade(req, socket, head) {
     return;
   }
 
-  console.log(`[Gateway] WS upgrade for ${username} -> ${nodeInfo.endpoint}`);
+  const viaWG = isWireGuardIP(nodeInfo.endpoint);
+  console.log(`[Gateway] WS upgrade for ${username} -> ${nodeInfo.endpoint}${viaWG ? ' (WireGuard tunnel)' : ''}`);
   proxy.ws(req, socket, head, { target: nodeInfo.endpoint });
 }
 
@@ -1778,6 +2078,16 @@ function loadSSL() {
 // Start servers
 loadRegistry();
 
+// Initialize WireGuard peer management
+loadWGPeers();
+if (isWireGuardAvailable()) {
+  syncWGPeers();
+  console.log(`[WireGuard] Server ready on ${WG_CONFIG.interface} (${WG_CONFIG.serverIP})`);
+} else {
+  console.log('[WireGuard] Interface not detected - WireGuard endpoints will not be available');
+  console.log('[WireGuard] Run scripts/setup-wireguard-server.sh on the supernode to enable');
+}
+
 // Load SSL first to know if we should redirect
 const sslOptions = loadSSL();
 const httpsAvailable = !!sslOptions;
@@ -1831,5 +2141,5 @@ if (httpsAvailable) {
 }
 
 console.log(`[Gateway] PC2 Web Gateway started for *.${CONFIG.domain}`);
-console.log(`[Gateway] Proxy endpoint support: http://, proxy://`);
+console.log(`[Gateway] Proxy endpoint support: http://, proxy://, wireguard (10.100.0.0/16)`);
 console.log(`[Gateway] Security: Rate limiting enabled, CORS restricted to *.ela.city`);

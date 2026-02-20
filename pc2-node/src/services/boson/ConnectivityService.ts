@@ -12,6 +12,7 @@ import { logger } from '../../utils/logger.js';
 import { UsernameService } from './UsernameService.js';
 import { NetworkDetector, type NATType } from './NetworkDetector.js';
 import { ActiveProxyClient, ConnectionState, type ProxyConnection } from './ActiveProxyClient.js';
+import { WireGuardService } from '../wireguard/WireGuardService.js';
 import { fromBase58 } from './IdentityService.js';
 import net, { type Server, type Socket } from 'net';
 import { request as httpRequest } from 'http';
@@ -38,7 +39,7 @@ export interface ConnectionStatus {
   connectedAt: string | null;
   lastHeartbeat: string | null;
   publicEndpoint: string | null;
-  natType: 'direct' | 'upnp' | 'relay' | 'unknown';
+  natType: 'direct' | 'upnp' | 'relay' | 'wireguard' | 'unknown';
 }
 
 // Default super nodes - multiple nodes for failover
@@ -119,6 +120,7 @@ export class ConnectivityService {
   private isRunning: boolean = false;
   private networkDetector: NetworkDetector;
   private activeProxyClient: ActiveProxyClient | null = null;
+  private wireGuardService: WireGuardService | null = null;
   private currentSuperNodeIndex: number = 0;
   private failedSuperNodes: Set<string> = new Set();
   private proxyConnections: Map<number, Socket> = new Map();
@@ -167,6 +169,62 @@ export class ConnectivityService {
   }
 
   /**
+   * Set WireGuard service for high-performance NAT traversal
+   */
+  setWireGuardService(service: WireGuardService): void {
+    this.wireGuardService = service;
+  }
+
+  /**
+   * Attempt to connect via WireGuard tunnel.
+   * Returns true if the tunnel is established and the endpoint is registered.
+   */
+  private async connectViaWireGuard(): Promise<boolean> {
+    if (!this.wireGuardService || !this.wireGuardService.isAvailable()) {
+      return false;
+    }
+
+    if (!this.usernameService || !this.usernameService.hasUsername()) {
+      logger.debug('[WireGuard] No username registered, skipping WireGuard');
+      return false;
+    }
+
+    try {
+      logger.info('[Connectivity] Attempting WireGuard tunnel...');
+      const provision = await this.wireGuardService.provision();
+      await this.wireGuardService.connect(provision);
+
+      const wgIP = this.wireGuardService.getAssignedIP();
+      if (!wgIP) {
+        throw new Error('No IP assigned after WireGuard connect');
+      }
+
+      // Register the WireGuard IP as a direct HTTP endpoint with the gateway
+      const endpoint = `http://${wgIP}:${this.config.localPort}`;
+      const result = await this.usernameService.updateEndpoint(endpoint);
+
+      if (result.success) {
+        this.status.connected = true;
+        this.status.natType = 'wireguard';
+        this.status.publicEndpoint = this.usernameService.getPublicUrl();
+        this.status.connectedAt = new Date().toISOString();
+        logger.info(`[Connectivity] WireGuard tunnel active: ${endpoint}`);
+        logger.info(`[Connectivity] Public URL: ${this.status.publicEndpoint}`);
+
+        // Start health monitoring
+        this.wireGuardService.startHealthCheck(provision.serverIP);
+        return true;
+      }
+
+      logger.warn(`[Connectivity] WireGuard connected but endpoint registration failed: ${result.error}`);
+      return false;
+    } catch (error) {
+      logger.warn(`[Connectivity] WireGuard failed: ${error}`);
+      return false;
+    }
+  }
+
+  /**
    * Start connectivity service
    */
   async start(): Promise<void> {
@@ -195,13 +253,30 @@ export class ConnectivityService {
     }
 
     // Attempt initial connection
-    if (needsProxy && this.publicKey && this.privateKey && this.nodeId) {
-      try {
-        await this.connectViaActiveProxy();
-      } catch (error) {
-        logger.warn(`⚠️ Active Proxy connection failed: ${error}. Will retry via heartbeat.`);
-        // Still connect to gateway for health monitoring, but natType stays 'relay'
-        // so registerWithGateway() won't register an unreachable public IP
+    if (needsProxy) {
+      // Priority: WireGuard > Boson ActiveProxy
+      // WireGuard gives near-localhost speed; Boson is the fallback
+      let connected = false;
+
+      // Try WireGuard first (requires wg tools installed + username registered)
+      if (this.wireGuardService && this.wireGuardService.isAvailable()) {
+        connected = await this.connectViaWireGuard();
+        if (connected) {
+          logger.info('🚀 Connected via WireGuard tunnel (high-performance mode)');
+        }
+      }
+
+      // Fall back to Boson ActiveProxy
+      if (!connected && this.publicKey && this.privateKey && this.nodeId) {
+        try {
+          await this.connectViaActiveProxy();
+        } catch (error) {
+          logger.warn(`⚠️ Active Proxy connection failed: ${error}. Will retry via heartbeat.`);
+          // Still connect to gateway for health monitoring, but natType stays 'relay'
+          // so registerWithGateway() won't register an unreachable public IP
+          await this.connect();
+        }
+      } else if (!connected) {
         await this.connect();
       }
     } else {
@@ -509,6 +584,11 @@ export class ConnectivityService {
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
+    }
+
+    // Stop WireGuard tunnel
+    if (this.wireGuardService && this.wireGuardService.isConnected()) {
+      await this.wireGuardService.disconnect();
     }
 
     // Stop Active Proxy client

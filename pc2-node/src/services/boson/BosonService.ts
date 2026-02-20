@@ -11,6 +11,7 @@
 import { IdentityService, IdentityConfig } from './IdentityService.js';
 import { UsernameService, UsernameConfig } from './UsernameService.js';
 import { ConnectivityService, ConnectivityConfig, ConnectionStatus } from './ConnectivityService.js';
+import { WireGuardService } from '../wireguard/WireGuardService.js';
 import { logger } from '../../utils/logger.js';
 
 export interface BosonConfig {
@@ -42,6 +43,7 @@ export class BosonService {
   private identityService: IdentityService;
   private usernameService: UsernameService;
   private connectivityService: ConnectivityService;
+  private wireGuardService: WireGuardService | null;
   private initialized: boolean = false;
   private firstRunMnemonic: string | null = null;
 
@@ -70,6 +72,9 @@ export class BosonService {
       superNodes: this.config.superNodes,
       localPort: this.config.localPort,
     });
+
+    // WireGuard is initialized later in initialize() once nodeId is known
+    this.wireGuardService = null;
   }
 
   /**
@@ -106,7 +111,22 @@ export class BosonService {
       this.connectivityService.setNodeKeys(keypair.publicKey, keypair.privateKey);
     }
 
-    // 4. Auto-connect if enabled
+    // 4. Initialize WireGuard (preferred NAT traversal over Boson relay)
+    this.wireGuardService = new WireGuardService({
+      dataDir: this.config.dataDir,
+      gatewayUrl: this.config.gatewayUrl!,
+      nodeId,
+      localPort: this.config.localPort!,
+    });
+
+    if (this.wireGuardService.isAvailable()) {
+      logger.info('[Boson] WireGuard tools detected -- will prefer WireGuard tunnel for NAT traversal');
+      this.connectivityService.setWireGuardService(this.wireGuardService);
+    } else {
+      logger.info('[Boson] WireGuard not installed -- will use Boson ActiveProxy for NAT traversal');
+    }
+
+    // 5. Auto-connect if enabled
     if (this.config.autoConnect) {
       await this.connectivityService.start();
     }
@@ -120,7 +140,10 @@ export class BosonService {
    */
   async stop(): Promise<void> {
     await this.connectivityService.stop();
-    logger.info('✅ Boson service stopped');
+    if (this.wireGuardService?.isConnected()) {
+      await this.wireGuardService.disconnect();
+    }
+    logger.info('Boson service stopped');
   }
 
   /**

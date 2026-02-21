@@ -56,10 +56,10 @@ curl -sSL https://raw.githubusercontent.com/Elacity/pc2.net/main/scripts/install
 ```
 
 This will:
-1. Install Node.js 20
-2. Install build tools
+1. Install Node.js 20, PM2, build tools
+2. Install WireGuard (kernel module on Pi, wireguard-go on Jetson)
 3. Clone and build PC2
-4. Create systemd service for auto-start
+4. Start PC2 with PM2 (auto-starts on boot)
 
 **Installation takes 10-15 minutes on Pi 4/5.**
 
@@ -76,60 +76,63 @@ Open the Network URL from any device on your local network.
 
 ---
 
-## Jetson Nano Setup
+## Jetson Orin Nano Setup
 
 ### Prerequisites
 
-1. Jetson Nano Developer Kit (4GB)
-2. SD card with JetPack OS
+1. Jetson Orin Nano Developer Kit (8GB)
+2. SD card / NVMe with JetPack OS
 3. Power supply (barrel jack recommended for stability)
 4. Network connection
 
 ### Installation
 
-Same as Raspberry Pi:
+Same one-liner as Raspberry Pi:
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/Elacity/pc2.net/main/scripts/install-arm.sh | bash
 ```
+
+### WireGuard on Jetson (Automatic)
+
+NVIDIA Jetson ships a custom kernel that **does not include the WireGuard kernel module**. The install script handles this automatically:
+
+1. Detects Jetson via `/etc/nv_tegra_release`
+2. Installs `wireguard-tools` (wg, wg-quick)
+3. Attempts to load kernel module -- **fails** on Jetson (expected)
+4. Automatically installs `wireguard-go` (userspace WireGuard) -- builds from source with Go
+5. Configures `SETENV` sudoers rule so the PC2 node can pass `WG_QUICK_USERSPACE_IMPLEMENTATION=wireguard-go` through `sudo -E`
+
+**No kernel rebuild required.** wireguard-go provides good performance (150-300 Mbps on ARM, ~2ms extra latency). For home internet (10-50 Mbps upload), this is indistinguishable from kernel WireGuard.
+
+For maximum performance, power users can optionally build the kernel module:
+https://docs.kinesis.network/blog/enable-wireguard-on-nvidia-jetson
 
 ### Notes for Jetson
 
 - GPU is not utilized by PC2 (future feature)
 - Works great for AI agent workloads with Ollama
 - Use barrel jack power for stability
-- **Important:** Use the install script above - it creates a systemd service that keeps PC2 running even when you close SSH. If you run manually (`npm start`), PC2 will stop when you disconnect.
+- PC2 runs via PM2 process manager -- survives SSH disconnect and reboots automatically
 
 ---
 
 ## Remote Access
 
-By default, PC2 is only accessible on your local network. To access from anywhere:
+The install script sets up WireGuard automatically. No separate steps needed.
 
-### Option A: WireGuard Tunnel (Recommended - Fastest)
+### How It Works
 
-WireGuard provides near-localhost performance for home hardware behind NAT. Page loads take ~1.5 seconds instead of minutes.
+After running `install-arm.sh`, WireGuard is already installed and configured. When you complete the setup wizard and choose your domain name:
 
-**One-Time System Setup** (run once as root):
+1. PC2 detects WireGuard is available (kernel module on Pi, wireguard-go on Jetson)
+2. Provisions a tunnel to the supernode (gets assigned a 10.100.x.x IP)
+3. Registers your domain with the gateway
+4. Your node is live at `https://yourname.ela.city` -- page loads ~1.5 seconds from anywhere
 
-```bash
-sudo bash scripts/setup-node.sh
-```
+**This is fully automatic. No manual WireGuard commands needed.**
 
-This installs WireGuard tools and configures permissions so the PC2 node can manage tunnels automatically.
-
-**Then start your PC2 node:**
-
-```bash
-pm2 start ecosystem.config.cjs
-# or: sudo systemctl start pc2
-```
-
-Open `http://localhost:4200`, complete the setup wizard (choose your username), and your domain is live automatically at `https://username.ela.city` via WireGuard.
-
-**That's it!** No manual tunnel setup needed. The node provisions and activates WireGuard automatically after the setup wizard.
-
-**Verify it's working:**
+### Verify it's working
 
 ```bash
 # Check WireGuard tunnel status
@@ -148,18 +151,12 @@ sudo wg show wg0
 ```bash
 sudo wg show wg0                      # Tunnel status
 ping 10.100.0.1                       # Test tunnel connectivity
-sudo systemctl status pc2-wireguard   # WireGuard service status
 pm2 logs pc2                          # Node logs (look for "[WireGuard]")
 ```
 
-### Option B: Active Proxy (Fallback)
+### Automatic Fallback
 
-If WireGuard is not available (older kernels, restricted environments), the node automatically falls back to Boson Active Proxy relay. This is slower (serial relay) but works everywhere.
-
-1. Start the node normally
-2. Complete the setup wizard
-3. The node connects via Active Proxy automatically
-4. Access via `https://username.ela.city` (slower page loads)
+If WireGuard is blocked (e.g. restrictive network, DPI firewall) or fails (3 consecutive health check failures), the node automatically falls back to Boson Active Proxy relay. This is slower (TCP relay) but works everywhere, including networks that block VPN traffic. No user action needed -- the `ConnectivityService` handles failover transparently.
 
 ### Option C: Port Forwarding
 
@@ -213,15 +210,18 @@ sudo systemctl restart pc2
 
 ## Auto-Start on Boot
 
-The install script creates a systemd service automatically. Verify:
+The install script configures PM2 to start on boot automatically. Verify:
 
 ```bash
-sudo systemctl status pc2
+pm2 status
 ```
 
-If not enabled:
+If PC2 doesn't start after reboot:
 ```bash
-sudo systemctl enable pc2
+cd ~/pc2.net
+pm2 start ecosystem.config.cjs
+pm2 save
+pm2 startup  # follow the command it outputs
 ```
 
 ---
@@ -231,12 +231,12 @@ sudo systemctl enable pc2
 ### Manual Update
 
 ```bash
-cd ~/pc2
+cd ~/pc2.net
 git pull origin main
 cd pc2-node
-npm install
-npm run build
-sudo systemctl restart pc2
+npm install --legacy-peer-deps
+cd .. && npm run build:pc2
+pm2 restart pc2
 ```
 
 ### From Web UI
@@ -252,7 +252,7 @@ sudo systemctl restart pc2
 ### Create Backup
 
 ```bash
-cd ~/pc2/pc2-node
+cd ~/pc2.net/pc2-node
 npm run backup
 ```
 
@@ -262,7 +262,7 @@ Backups are in `data/backups/`. **Copy to another device!**
 
 ```bash
 npm run restore data/backups/backup-YYYY-MM-DD.tar.gz
-sudo systemctl restart pc2
+pm2 restart pc2
 ```
 
 ---
@@ -273,47 +273,36 @@ sudo systemctl restart pc2
 
 **Problem:** PC2 stops when you close the terminal or disconnect SSH.
 
-**Cause:** You're running PC2 manually (`npm start`) instead of via systemd service.
+**Cause:** You're running PC2 manually (`npm start`) instead of via PM2.
 
 **Solution 1: Use Our Official Install Script (Recommended)**
 
-Our install script creates a systemd service that keeps PC2 running:
+Our install script sets up PM2 with auto-start on boot:
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/Elacity/pc2.net/main/scripts/install-arm.sh | bash
 ```
 
-**Solution 2: Manually Create systemd Service**
+**Solution 2: Set Up PM2 Manually**
 
-If you already installed manually, create the service:
+If you already installed manually:
 
 ```bash
-sudo tee /etc/systemd/system/pc2.service > /dev/null << EOF
-[Unit]
-Description=PC2 Personal Cloud Computer
-After=network.target
+# Install PM2
+npm install -g pm2
 
-[Service]
-Type=simple
-User=$USER
-WorkingDirectory=$HOME/pc2.net/pc2-node
-ExecStart=/usr/bin/npm start
-Restart=always
-RestartSec=10
-Environment=NODE_ENV=production
+# Start PC2 with PM2
+cd ~/pc2.net
+pm2 start ecosystem.config.cjs
 
-[Install]
-WantedBy=multi-user.target
-EOF
-
-sudo systemctl daemon-reload
-sudo systemctl enable pc2
-sudo systemctl start pc2
+# Save process list and enable boot startup
+pm2 save
+pm2 startup  # follow the sudo command it outputs
 ```
 
 **Solution 3: Use screen (Quick Workaround)**
 
-If you can't use systemd:
+If you can't use PM2:
 
 ```bash
 # Install screen
@@ -347,16 +336,16 @@ pm2 startup  # Follow the command it outputs
 ### Service Won't Start
 
 ```bash
-# Check status
-sudo systemctl status pc2
+# Check PM2 status
+pm2 status
 
 # Check logs
-sudo journalctl -u pc2 -n 50
+pm2 logs pc2 --lines 50
 
 # Common fix: rebuild
-cd ~/pc2/pc2-node
-npm run build
-sudo systemctl restart pc2
+cd ~/pc2.net
+npm run build:pc2
+pm2 restart pc2
 ```
 
 ### Out of Memory
@@ -396,7 +385,7 @@ sudo ufw allow 4200
 sudo apt-get install -y build-essential python3
 
 # Rebuild native modules
-cd ~/pc2/pc2-node
+cd ~/pc2.net/pc2-node
 npm rebuild
 ```
 

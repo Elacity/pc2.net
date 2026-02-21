@@ -113,17 +113,29 @@ The node automatically selects the best transport:
 ### WireGuard Architecture
 
 **Key files:**
-- `pc2-node/src/services/wireguard/WireGuardService.ts` - Client tunnel management
-- `pc2-node/src/services/boson/ConnectivityService.ts` - Transport priority logic
-- `scripts/setup-node.sh` - One-time system prep (installs WireGuard + sudoers)
-- `scripts/setup-wireguard-client.sh` - Manual tunnel setup (alternative)
+- `pc2-node/src/services/wireguard/WireGuardService.ts` - Client tunnel management (kernel + wireguard-go userspace)
+- `pc2-node/src/services/boson/ConnectivityService.ts` - Transport priority logic + automatic fallback
+- `scripts/install-arm.sh` - **One-command installer** for ARM (Pi/Jetson). Installs Node.js, PM2, WireGuard, builds PC2, starts it. Includes Jetson wireguard-go fallback.
+- `scripts/setup-node.sh` - Standalone WireGuard system prep (can also be run separately)
 - `deploy/web-gateway/index.js` - `/api/wg/register` provisioning endpoint
 
-**User flow (seamless for home hardware):**
-1. Run `sudo bash scripts/setup-node.sh` (one-time)
-2. Start node, complete setup wizard (choose username)
+**User flow (one command, then wizard):**
+1. Run `curl -sSL .../install-arm.sh | bash` (installs EVERYTHING including WireGuard)
+2. Open browser, login with wallet, complete setup wizard (choose domain name)
 3. Node auto-provisions WireGuard tunnel to supernode
 4. Domain is live at `https://username.ela.city`
+5. If WireGuard fails (blocked network, etc.), auto-falls back to Boson relay
+
+**WireGuard modes (auto-detected by WireGuardService.ts):**
+- `kernel` -- Linux kernel module (regular Linux, Pi, or Jetson with manually compiled .ko). Best speed.
+- `userspace` -- wireguard-go (Jetson out-of-box, NVIDIA custom kernel lacks module). Good speed, zero kernel work needed. Install script builds from source automatically.
+- `none` -- Falls back to Boson Active Proxy. Slower but works everywhere.
+
+**Critical implementation details (bugs found and fixed in previous sessions):**
+- `sudo` strips env vars: `WG_QUICK_USERSPACE_IMPLEMENTATION` must be set BEFORE `sudo -E` (not via Node.js env option). `wgQuickCmd()` builds: `WG_QUICK_USERSPACE_IMPLEMENTATION=wireguard-go sudo -E wg-quick up /path`
+- Sudoers must include `SETENV:` for `sudo -E` to work: `ALL ALL=(root) NOPASSWD: SETENV: /usr/bin/wg-quick up *, /usr/bin/wg-quick down *`
+- `detectMode()` uses `modinfo` (not `modprobe`) to check for kernel module -- doesn't need root, no noisy sudo errors
+- Install script checks if existing sudoers has `SETENV` -- if old rule lacks it (returning user from before fix), it regenerates
 
 **Supernode config-driven (config/config.json):**
 ```json
@@ -261,42 +273,55 @@ ssh root@38.242.211.112
 # Password: Bella2822!
 
 # Update and restart
-cd /root/pc2-node/pc2.net
+cd ~/pc2.net
 git pull origin main
 cd pc2-node
 npm run build:backend
-systemctl restart pc2-node
+pm2 restart pc2    # or: systemctl restart pc2-node (on older setups)
 ```
 
 ---
 
-## Current State (2026-01-23)
+## Current State (2026-02-21)
 
 ### What's Working
 
 - ✅ Wallet-based authentication (Particle Network)
 - ✅ File management (IPFS storage)
-- ✅ Apps (Calculator, Editor, Viewer, Player, Terminal)
+- ✅ Apps (Calculator, Editor, Viewer, Player, Terminal, PDF Reader)
 - ✅ AI Chat (OpenAI, Anthropic, Groq, local Ollama)
 - ✅ Access control (owner/admin/member roles)
 - ✅ Backup & restore
-- ✅ NAT traversal via Active Proxy
-- ✅ Subdomain routing (`test7.ela.city`)
+- ✅ NAT traversal via WireGuard (primary) + Boson Active Proxy (fallback)
+- ✅ Subdomain routing (`*.ela.city`)
 - ✅ Auto-update notifications
+- ✅ WireGuard kernel + wireguard-go userspace (Jetson automatic fallback)
+- ✅ One-command ARM installer (`install-arm.sh`) with PM2 auto-start on boot
+- ✅ Video streaming with HTTP Range/206 support (IPFS byte-range, memory-efficient)
+- ✅ Large file uploads (multi-GB, disk-based streaming via multer)
+- ✅ Gateway gzip compression + keep-alive pooling
+- ✅ PDF and image rendering (fixed binary data corruption)
 
-### Recently Fixed (2026-01-23)
+### Recently Fixed (2026-02-21)
 
-1. **Apps not opening via domain** - Fixed URL resolution for Active Proxy
-2. **WebSocket Mixed Content** - Fixed wss:// protocol handling
-3. **API origin detection** - Created shared `urlUtils.ts`
+1. **WireGuard on Jetson** - wireguard-go userspace fallback (NVIDIA custom kernel lacks module)
+2. **sudo env stripping** - `WG_QUICK_USERSPACE_IMPLEMENTATION` now set before `sudo -E`, SETENV in sudoers
+3. **Video streaming regression** - `ipfs.getFileSize()` was called on every request; now uses DB metadata, IPFS only for Range requests
+4. **PDF blank pages** - Binary data was corrupted by `content.toString('utf8')`; now sends raw Buffer for binary files
+5. **Image loading errors** - Same binary corruption fix as PDFs
+6. **Accept-Ranges header** - Now only set for video/audio types; was causing PDF.js to attempt broken range-based loading
+7. **100MB+ upload crashes** - Switched multer to diskStorage, IPFS streaming upload
+8. **Gateway 206 compression** - Partial content responses are never gzipped (preserves byte-range semantics)
+9. **install-arm.sh rewrite** - Now includes WireGuard setup, PM2 (not systemd), wireguard-go for Jetson, boot persistence
 
 ### Pending Tasks
 
+- [ ] Merge `feature/jetson-gpu-acceleration` to main (after community Jetson testing)
+- [ ] AV1 video playback in Firefox (codec detection / transcoding)
 - [ ] Debian package (.deb) for Raspberry Pi
 - [ ] macOS package (.dmg)
 - [ ] Multi-domain support (pc2.net, ela.net)
 - [ ] P2P messaging between PC2 nodes
-- [ ] DHT participation for PC2 nodes
 
 ---
 

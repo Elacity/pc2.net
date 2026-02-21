@@ -598,6 +598,10 @@ export async function handleRead(req: AuthenticatedRequest, res: Response): Prom
     if (encoding === 'base64') {
       res.setHeader('Content-Type', 'application/octet-stream');
       res.send(content.toString('base64'));
+    } else if (isBinary) {
+      res.setHeader('Content-Type', mimeType);
+      res.setHeader('Content-Length', content.length.toString());
+      res.send(content);
     } else {
       res.setHeader('Content-Type', mimeType);
       res.send(content.toString('utf8'));

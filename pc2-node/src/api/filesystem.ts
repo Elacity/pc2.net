@@ -512,13 +512,16 @@ export async function handleRead(req: AuthenticatedRequest, res: Response): Prom
                        mimeType === 'application/javascript' ||
                        mimeType === 'application/x-javascript';
     const isBinary = !isTextFile || encoding === 'base64';
+    const isStreamable = /^(video|audio)\//.test(mimeType);
 
     if (isBinary) {
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
       res.setHeader('Access-Control-Allow-Headers', 'Range, Content-Type');
       res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges');
-      res.setHeader('Accept-Ranges', 'bytes');
+      if (isStreamable) {
+        res.setHeader('Accept-Ranges', 'bytes');
+      }
     }
 
     // Cache headers based on IPFS CID (immutable content addressing)
@@ -532,11 +535,11 @@ export async function handleRead(req: AuthenticatedRequest, res: Response): Prom
       res.setHeader('Expires', '0');
     }
 
-    // Range request on binary files -- stream directly from IPFS
+    // Range request -- only for video/audio where seeking is needed
     const rangeHeader = req.headers.range;
     const STREAM_THRESHOLD = 10 * 1024 * 1024; // 10 MB
 
-    if (rangeHeader && isBinary && encoding !== 'base64') {
+    if (rangeHeader && isStreamable && isBinary && encoding !== 'base64') {
       const fileSize = await filesystem.getFileSize(resolvedPath, walletAddress).catch(() => fileMetadata.size);
       const match = rangeHeader.match(/^bytes=(\d+)-(\d*)$/);
       if (!match) {
@@ -575,8 +578,8 @@ export async function handleRead(req: AuthenticatedRequest, res: Response): Prom
       return;
     }
 
-    // Large binary files without Range -- stream to avoid buffering entire file
-    if (isBinary && encoding !== 'base64' && fileMetadata.size > STREAM_THRESHOLD) {
+    // Large video/audio without Range -- stream to avoid buffering entire file
+    if (isStreamable && isBinary && encoding !== 'base64' && fileMetadata.size > STREAM_THRESHOLD) {
       res.setHeader('Content-Type', mimeType);
       res.setHeader('Content-Length', fileMetadata.size.toString());
 
@@ -589,7 +592,7 @@ export async function handleRead(req: AuthenticatedRequest, res: Response): Prom
       return;
     }
 
-    // Small files and text -- buffer is fine, no IPFS overhead
+    // All other files (PDFs, images, documents, text) -- buffer is fine
     const content = await filesystem.readFile(resolvedPath, walletAddress);
 
     if (encoding === 'base64') {

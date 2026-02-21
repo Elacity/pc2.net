@@ -162,12 +162,15 @@ export async function handleFile(req: Request, res: Response): Promise<void> {
 
     const finalWalletAddress = walletAddress || (metadata.path.split('/').filter(p => p)[0]?.startsWith('0x') ? metadata.path.split('/').filter(p => p)[0] : '');
     const mimeType = metadata.mime_type || 'application/octet-stream';
-    const rangeHeader = req.headers.range;
+    const isStreamable = /^(video|audio)\//.test(mimeType);
 
     res.setHeader('Content-Type', mimeType);
-    res.setHeader('Accept-Ranges', 'bytes');
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges');
+
+    if (isStreamable) {
+      res.setHeader('Accept-Ranges', 'bytes');
+    }
 
     // HEAD -- return headers from DB metadata (no IPFS call)
     if (req.method === 'HEAD') {
@@ -176,8 +179,9 @@ export async function handleFile(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    // Range request -- stream only the requested byte range from IPFS
-    if (rangeHeader) {
+    // Range request -- only for video/audio where seeking is needed
+    const rangeHeader = req.headers.range;
+    if (rangeHeader && isStreamable) {
       const fileSize = await filesystem.getFileSize(metadata.path, finalWalletAddress).catch(() => metadata.size);
       const match = rangeHeader.match(/^bytes=(\d+)-(\d*)$/);
       if (!match || parseInt(match[1], 10) >= fileSize) {
@@ -204,9 +208,9 @@ export async function handleFile(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    // Full file -- use buffer for small files, stream for large (>10 MB)
+    // Full file -- stream large video/audio, buffer everything else
     const STREAM_THRESHOLD = 10 * 1024 * 1024;
-    if (metadata.size > STREAM_THRESHOLD) {
+    if (isStreamable && metadata.size > STREAM_THRESHOLD) {
       res.setHeader('Content-Length', metadata.size.toString());
       const stream = filesystem.readFileStream(metadata.path, finalWalletAddress);
       pipeline(Readable.from(stream), res, (err) => {

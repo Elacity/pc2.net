@@ -71,10 +71,10 @@ function streamToResponse(
   }
 ): void {
   const { fileSize, mimeType, filename, extraHeaders } = opts;
+  const isStreamable = /^(video|audio)\//.test(mimeType);
 
   const commonHeaders: Record<string, string> = {
     'Content-Type': mimeType,
-    'Accept-Ranges': 'bytes',
     'X-IPFS-CID': cid,
     'X-IPFS-Path': `/ipfs/${cid}`,
     'Cache-Control': 'public, max-age=31536000, immutable',
@@ -83,6 +83,10 @@ function streamToResponse(
     'Content-Disposition': `inline; filename="${encodeURIComponent(filename)}"`,
     ...extraHeaders,
   };
+
+  if (isStreamable) {
+    commonHeaders['Accept-Ranges'] = 'bytes';
+  }
 
   // HEAD request -- return headers only, no content
   if (req.method === 'HEAD') {
@@ -95,7 +99,7 @@ function streamToResponse(
   let offset: number | undefined;
   let length: number | undefined;
 
-  if (rangeHeader) {
+  if (rangeHeader && isStreamable) {
     const range = parseRange(rangeHeader, fileSize);
     if (!range) {
       res.status(416).set({ 'Content-Range': `bytes */${fileSize}` }).end();

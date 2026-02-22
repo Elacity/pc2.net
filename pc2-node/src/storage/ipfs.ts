@@ -118,10 +118,10 @@ export class IPFSStorage {
       // Build libp2p configuration
       const libp2pConfig: Libp2pOptions = {
         addresses: {
-          listen: [
+          listen: enableNetwork ? [
             '/ip4/0.0.0.0/tcp/4001',
             '/ip4/0.0.0.0/tcp/4002/ws'
-          ]
+          ] : []
         },
         transports: [
           tcp(),
@@ -133,13 +133,18 @@ export class IPFSStorage {
         streamMuxers: [
           yamux()
         ],
+        connectionManager: {
+          maxConnections: enableNetwork ? 50 : 0,
+          minConnections: 0,
+        },
         services: {} as any
       };
 
       // Add network services for public/hybrid modes
       if (enableNetwork) {
-        console.log(`   DHT: ${enableDHT ? 'enabled' : 'disabled'}`);
+        console.log(`   DHT: ${enableDHT ? 'enabled (client mode)' : 'disabled'}`);
         console.log(`   Bootstrap: ${enableBootstrap ? 'enabled' : 'disabled'}`);
+        console.log(`   Max connections: 50`);
 
         // Add identify service (required for DHT)
         (libp2pConfig.services as any).identify = identify();
@@ -147,10 +152,15 @@ export class IPFSStorage {
         // Add ping service (required for DHT)
         (libp2pConfig.services as any).ping = ping();
 
-        // Add DHT for content discovery
+        // DHT in CLIENT mode: can query the network to find content,
+        // but does NOT advertise/announce what this node has. This prevents
+        // the IPFS swarm from pulling content directly and saturating the
+        // node's bandwidth. Content is served via our HTTP gateway instead.
+        // When dDRM marketplace launches, selected encrypted content will
+        // be announced via selective provide (announce: true).
         if (enableDHT) {
           (libp2pConfig.services as any).dht = kadDHT({
-            clientMode: false,  // Full DHT node, not just client
+            clientMode: true,
           });
         }
 
@@ -262,6 +272,7 @@ export class IPFSStorage {
   async storeFile(content: Buffer | Uint8Array | string, options?: {
     pin?: boolean;
     timeoutMs?: number;
+    announce?: boolean; // Future: announce CID to DHT (for dDRM marketplace encrypted content)
   }): Promise<string> {
     const fs = this.getUnixFS();
     const timeout = options?.timeoutMs ?? 15 * 60 * 1000; // 15 min default
@@ -298,6 +309,7 @@ export class IPFSStorage {
   async storeFileStream(stream: AsyncIterable<Uint8Array>, options?: {
     pin?: boolean;
     timeoutMs?: number;
+    announce?: boolean; // Future: announce CID to DHT (for dDRM marketplace encrypted content)
   }): Promise<string> {
     const fs = this.getUnixFS();
     const timeout = options?.timeoutMs ?? 30 * 60 * 1000; // 30 min default for large files

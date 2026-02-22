@@ -401,8 +401,15 @@ export function setupAPI(app: Express): void {
   // Batch endpoint with multer for multipart file uploads.
   // Uses diskStorage to stream uploads to a temp dir instead of buffering
   // entirely in RAM -- critical for large files on memory-constrained devices.
-  const uploadTmpDir = path.join(os.tmpdir(), 'pc2-uploads');
+  // Prefer data directory over os.tmpdir() because /tmp is often tmpfs (RAM-backed)
+  // and can't hold large files on memory-constrained devices like Jetson.
+  const config = app.locals.config as Config | undefined;
+  const dataDir = config?.storage?.database_path ? path.dirname(config.storage.database_path) : null;
+  const uploadTmpDir = dataDir
+    ? path.join(dataDir, 'tmp', 'pc2-uploads')
+    : path.join(os.tmpdir(), 'pc2-uploads');
   if (!fs.existsSync(uploadTmpDir)) fs.mkdirSync(uploadTmpDir, { recursive: true });
+  logger.info(`[API] Upload temp directory: ${uploadTmpDir}`);
 
   const upload = multer({ 
     storage: multer.diskStorage({

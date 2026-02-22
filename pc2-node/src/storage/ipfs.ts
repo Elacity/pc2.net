@@ -260,22 +260,26 @@ export class IPFSStorage {
    * Returns the Content ID (CID) that can be used to retrieve the file
    */
   async storeFile(content: Buffer | Uint8Array | string, options?: {
-    pin?: boolean; // Pin the file to prevent garbage collection
+    pin?: boolean;
+    timeoutMs?: number;
   }): Promise<string> {
     const fs = this.getUnixFS();
+    const timeout = options?.timeoutMs ?? 15 * 60 * 1000; // 15 min default
 
     try {
-      // Convert to Uint8Array if needed
       const data = typeof content === 'string' 
         ? new TextEncoder().encode(content)
         : content instanceof Buffer
         ? new Uint8Array(content)
         : content;
 
-      // Add file to IPFS using UnixFS
-      const cid = await fs.addBytes(data);
+      const cidPromise = fs.addBytes(data);
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error(`IPFS addBytes timed out after ${Math.round(timeout / 60000)} minutes`)), timeout);
+      });
 
-      // Pin if requested (default: true)
+      const cid = await Promise.race([cidPromise, timeoutPromise]);
+
       if (options?.pin !== false) {
         await this.pinFile(cid.toString());
       }
@@ -293,11 +297,19 @@ export class IPFSStorage {
    */
   async storeFileStream(stream: AsyncIterable<Uint8Array>, options?: {
     pin?: boolean;
+    timeoutMs?: number;
   }): Promise<string> {
     const fs = this.getUnixFS();
+    const timeout = options?.timeoutMs ?? 30 * 60 * 1000; // 30 min default for large files
 
     try {
-      const cid = await fs.addByteStream(stream);
+      // Wrap with a timeout so large uploads don't hang forever
+      const cidPromise = fs.addByteStream(stream);
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error(`IPFS addByteStream timed out after ${Math.round(timeout / 60000)} minutes`)), timeout);
+      });
+
+      const cid = await Promise.race([cidPromise, timeoutPromise]);
 
       if (options?.pin !== false) {
         await this.pinFile(cid.toString());

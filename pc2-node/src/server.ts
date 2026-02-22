@@ -134,6 +134,11 @@ export function createServer(options: ServerOptions): { app: Express; server: Se
   // Create HTTP server
   const server = new Server(app);
   
+  // Allow long-running uploads (45 min) -- prevents Node.js default 2 min timeout
+  // from killing large file uploads mid-transfer
+  server.timeout = 45 * 60 * 1000;
+  server.keepAliveTimeout = 45 * 60 * 1000;
+  
   // Determine user homes base directory for terminal isolation
   // Use data directory from config or derive from database path
   let userHomesBase = '';

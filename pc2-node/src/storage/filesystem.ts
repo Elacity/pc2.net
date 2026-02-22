@@ -224,14 +224,28 @@ export class FilesystemManager {
     logger.info(`[Filesystem] Streaming file to IPFS: ${normalizedPath} (size: ${fileSize} bytes)`);
 
     // Stream file to IPFS in chunks -- never holds the whole file in memory
+    let bytesStreamed = 0;
+    const logInterval = 50 * 1024 * 1024; // Log every 50MB
+    let nextLogAt = logInterval;
+
     async function* fileChunks(filePath: string): AsyncIterable<Uint8Array> {
       const stream = createReadStream(filePath, { highWaterMark: 256 * 1024 });
       for await (const chunk of stream) {
-        yield chunk instanceof Buffer ? new Uint8Array(chunk) : chunk;
+        const data = chunk instanceof Buffer ? new Uint8Array(chunk) : chunk;
+        bytesStreamed += data.length;
+        if (bytesStreamed >= nextLogAt) {
+          const mb = (bytesStreamed / (1024 * 1024)).toFixed(1);
+          const pct = ((bytesStreamed / fileSize) * 100).toFixed(0);
+          logger.info(`[Filesystem] IPFS upload progress: ${mb}MB / ${(fileSize / (1024 * 1024)).toFixed(1)}MB (${pct}%)`);
+          nextLogAt += logInterval;
+        }
+        yield data;
       }
     }
 
-    const ipfsHash = await this.ipfs.storeFileStream(fileChunks(localFilePath), { pin: true });
+    // Scale timeout with file size: 5 min base + 1 min per 100MB
+    const timeoutMs = 5 * 60 * 1000 + Math.ceil(fileSize / (100 * 1024 * 1024)) * 60 * 1000;
+    const ipfsHash = await this.ipfs.storeFileStream(fileChunks(localFilePath), { pin: true, timeoutMs });
     logger.info(`[Filesystem] File streamed to IPFS: ${normalizedPath} -> CID: ${ipfsHash} (size: ${fileSize} bytes)`);
 
     // Clean up temp file

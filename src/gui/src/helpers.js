@@ -30,6 +30,9 @@ import UIWindowProgress from './UI/UIWindowProgress.js';
 import globToRegExp from "./helpers/globToRegExp.js";
 import get_html_element_from_options from "./helpers/get_html_element_from_options.js";
 import item_icon from "./helpers/item_icon.js";
+import refresh_item_container from "./helpers/refresh_item_container.js";
+
+window.refresh_item_container = refresh_item_container;
 
 window.is_auth = ()=>{
     if(localStorage.getItem("auth_token") === null || window.auth_token === null)

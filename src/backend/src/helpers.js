@@ -1430,7 +1430,12 @@ async function suggest_app_for_fsentry(fsentry, options){
         fsname.endsWith('.mpv') ||
         fsname.endsWith('.mp3') ||
         fsname.endsWith('.m4a') ||
-        fsname.endsWith('.ogg')
+        fsname.endsWith('.ogg') ||
+        fsname.endsWith('.mkv') ||
+        fsname.endsWith('.mov') ||
+        fsname.endsWith('.avi') ||
+        fsname.endsWith('.wav') ||
+        fsname.endsWith('.flac')
     ){
         suggested_apps.push(await get_app({name: 'player'}));
     }

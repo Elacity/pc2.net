@@ -1420,7 +1420,7 @@ export async function handleOpenItem(req: AuthenticatedRequest, res: Response): 
   else if (fsname.endsWith('.mp4') || fsname.endsWith('.webm') || fsname.endsWith('.mpg') || 
            fsname.endsWith('.mpv') || fsname.endsWith('.mp3') || fsname.endsWith('.m4a') || 
            fsname.endsWith('.ogg') || fsname.endsWith('.mov') || fsname.endsWith('.avi') ||
-           fsname.endsWith('.wav') || fsname.endsWith('.flac')) {
+           fsname.endsWith('.wav') || fsname.endsWith('.flac') || fsname.endsWith('.mkv')) {
     appUid = 'app-11edfba2-1ed3-4e22-8573-47e88fb87d70';
     appName = 'player';
     appIndexUrl = `${baseUrl}/apps/player/index.html`;
@@ -1586,7 +1586,7 @@ export async function handleSuggestApps(req: AuthenticatedRequest, res: Response
   else if (fsname.endsWith('.mp4') || fsname.endsWith('.webm') || fsname.endsWith('.mpg') || 
            fsname.endsWith('.mpv') || fsname.endsWith('.mp3') || fsname.endsWith('.m4a') || 
            fsname.endsWith('.ogg') || fsname.endsWith('.mov') || fsname.endsWith('.avi') ||
-           fsname.endsWith('.wav') || fsname.endsWith('.flac')) {
+           fsname.endsWith('.wav') || fsname.endsWith('.flac') || fsname.endsWith('.mkv')) {
     appUid = 'app-11edfba2-1ed3-4e22-8573-47e88fb87d70';
     appName = 'player';
     appIndexUrl = `${baseUrl}/apps/player/index.html`;

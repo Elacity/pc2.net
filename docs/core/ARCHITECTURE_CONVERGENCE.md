@@ -298,7 +298,9 @@ Anders thinks in layers. Each layer only talks to the one below it:
 
 ### The Key Insight: Everything Is a Capsule
 
-In Anders' world, there is no "server code" like PC2's `file.ts` or `filesystem.ts`. Instead:
+In Anders' words: *"Capsules are like DLL files, called when needed by other capsules."*
+
+There is no "server code" like PC2's `file.ts` or `filesystem.ts`. Instead:
 
 - **Storage** is a capsule (`local-provider`) that registers the `local://` protocol
 - **Networking** is a capsule (`gateway-client`) that maintains the tunnel
@@ -306,6 +308,120 @@ In Anders' world, there is no "server code" like PC2's `file.ts` or `filesystem.
 - **Apps** are capsules that request access to resources
 
 The runtime just routes messages between capsules and enforces token-based access.
+
+### Concrete Example: Playing BELLA_DANCING.MP4
+
+Anders gave this specific walkthrough. It's the clearest way to understand how capsules chain together:
+
+```
+The runtime boots and loads the SHELL (first capsule -- Puter desktop).
+The shell has special orchestrating abilities (launching/stopping capsules).
+
+   ┌─────────────────────────────────────────────────────────┐
+   │  SHELL (Puter Desktop)                                   │
+   │                                                          │
+   │  Desktop shows an icon: BELLA_DANCING.MP4                │
+   │                                                          │
+   │  That icon exists because the shell already called:      │
+   │  • IPFS capsule (fetched the file metadata)              │
+   │  • Identity capsule (verified ownership)                 │
+   │  • Elacity SDK capsule (checked DRM rights)              │
+   │  • Possibly more capsules behind the scenes              │
+   │                                                          │
+   │  User double-clicks the icon...                          │
+   └─────────────────────┬───────────────────────────────────┘
+                         │
+                         ▼
+   ┌─────────────────────────────────────────────────────────┐
+   │  Shell starts a NEW CAPSULE: the Media Capsule           │
+   │                                                          │
+   │  The Media Capsule then calls:                           │
+   │  • Media Player capsule (video rendering)                │
+   │  • Codec capsule (AV1/H.264 decoding)                   │
+   │  • IPFS capsule (streaming bytes)                        │
+   │  • Audio capsule (sound output)                          │
+   │  • Every other capsule the player needs to function      │
+   │                                                          │
+   │  A new window opens in the desktop.                      │
+   │  That window is either:                                  │
+   │  • An iframe (web-based player)                          │
+   │  • Pure pixel output from the capsule (native rendering) │
+   └─────────────────────────────────────────────────────────┘
+```
+
+The critical point: **each capsule is independent**. If you need to fix the IPFS capsule, the shell and runtime are untouched. If you need to update the media player, nothing else changes. Each capsule has its own CID (content hash) and gets upgraded separately.
+
+### Anders' View of PC2 v1
+
+In his words: *"What you built now is like a functional interactive mockup without the long-term security/architecture. Very useful to define the product, get users excited, and actually providing real value from an early stage."*
+
+This is an accurate and fair assessment. PC2 v1 proves the product works and people want it. The runtime provides the architecture to make it secure and maintainable long-term.
+
+---
+
+## Part 5b: Why Capsules Beat Monoliths (Anders' Argument)
+
+This is the core of Anders' philosophy. Understand this and you understand his entire approach.
+
+### The Monolith Problem (PC2 v1 Today)
+
+```
+┌──────────────────────────────────────────────────────────┐
+│                    PC2 REPO (monolith)                    │
+│                                                          │
+│  Express API + IPFS storage + Puter frontend +           │
+│  WireGuard service + Boson service + file handlers +     │
+│  WebSocket + auth + AI chat + terminal + apps +          │
+│  updater + backup + ... ALL IN ONE REPO                  │
+│                                                          │
+│  Any change = new PC2 version                            │
+│  Any change COULD affect or break anything else          │
+│  Every developer works in the same codebase              │
+│  1000s of issues/PRs/forks all in one place              │
+│                                                          │
+│  Like Windows or macOS: huge monolith codebase that      │
+│  is near impossible to fully trust and increasingly      │
+│  harder to develop and keep stable.                      │
+└──────────────────────────────────────────────────────────┘
+```
+
+### The Capsule Solution (ElastOS Runtime)
+
+```
+┌────────────────────────────────┐
+│  RUNTIME (minimal, ~5000 LOC)  │  ← Like Bitcoin Core:
+│                                │    only changes under
+│  Isolation + Signatures +      │    long, hard scrutiny
+│  Capability tokens + Fetch     │
+└───────────────┬────────────────┘
+                │ loads capsules on demand
+    ┌───────────┼───────────────────────────────┐
+    │           │           │           │       │
+    ▼           ▼           ▼           ▼       ▼
+┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐
+│ Shell  │ │  IPFS  │ │ Player │ │Identity│ │Network │
+│capsule │ │capsule │ │capsule │ │capsule │ │capsule │
+│        │ │        │ │        │ │        │ │        │
+│own repo│ │own repo│ │own repo│ │own repo│ │own repo│
+│own CID │ │own CID │ │own CID │ │own CID │ │own CID │
+│own devs│ │own devs│ │own devs│ │own devs│ │own devs│
+└────────┘ └────────┘ └────────┘ └────────┘ └────────┘
+
+Each capsule:
+  • Has its own repo, issues, PRs
+  • Is upgraded independently (new CID)
+  • Cannot break other capsules
+  • A dev working on the player never touches IPFS code
+  • The core stays clean and minimal
+```
+
+### Anders' Analogy: OpenClaw
+
+*"Look at the OpenClaw repo. The number of issues, pull requests, discussions. How is this manageable compared to a hypothetical minimal OpenClaw core without plugins + 1000s of independent plugins that interface with OpenClaw with their own repos?"*
+
+*"Do we want everyone to work on everything in one place? Or do we distribute so the core stays clean, like a Bitcoin core client, only changing under long and hard scrutiny, and a dev concerned about email capabilities works on the email-plugin without the distractions from 1000s of issues/PRs/forks in the monolith repo?"*
+
+The answer Anders is driving at: **the runtime IS the platform, capsules ARE the ecosystem.** The runtime should be as boring and unchanging as possible. All the innovation happens in capsules.
 
 ---
 
@@ -557,15 +673,15 @@ The v2 protocol system is a superset. PC2's endpoints would become:
 
 ## Part 11: What You Should Ask Anders
 
-Based on this analysis, these are the conversations that need to happen:
+Based on this analysis and Anders' own explanations, these are the conversations that need to happen:
 
 ### 1. "Can we define the capsule interfaces NOW?"
 
-Even if the Rust runtime isn't ready, agreeing on what a `StorageProvider` capsule looks like lets PC2 start building toward it. The interface is the contract.
+Even if the Rust runtime isn't ready, agreeing on what a `StorageProvider` capsule looks like lets PC2 start building toward it. The interface is the contract. Anders said capsules are like DLLs -- what does the "function signature" of a capsule look like? What's the standardized interface format?
 
 ### 2. "Phase 10 (networking) should use our WireGuard + Boson code"
 
-We've spent weeks making NAT traversal work reliably. The gateway supernode, WireGuard provisioning, Boson fallback -- this shouldn't be reinvented. Ask how to wrap it as a capsule.
+We've spent weeks making NAT traversal work reliably. The gateway supernode, WireGuard provisioning, Boson fallback -- this shouldn't be reinvented. Ask how to wrap it as a capsule. Given that each capsule has its own CID, how does the networking capsule get the runtime's host-level access it needs (kernel WireGuard, port binding)?
 
 ### 3. "What about Firecracker on Jetson/ARM?"
 
@@ -579,6 +695,14 @@ Firecracker doesn't run on macOS (no KVM). How do developers test locally? WASM-
 
 Networking and wallet auth are what make PC2 useful. If Phase 10-11 are 6+ months away, PC2 v1.x needs to keep evolving independently. If they're 2-3 months away, we should start the bridge work now.
 
+### 6. "What does the capsule dev experience look like?"
+
+Anders argues that distributed repos (one per capsule) are better than a monolith. Practically: how does a capsule developer test their capsule locally? Is there a local runtime emulator? Can capsules be hot-reloaded during development? What's the `npm publish` equivalent for shipping a new capsule CID?
+
+### 7. "What's the window model: iframe or pixel?"
+
+Anders mentioned capsules can render as either an iframe or "pure pixel output." What decides which mode is used? Does the capsule declare its rendering preference? How does the shell composite pixel-rendered capsule windows?
+
 ---
 
 ## Part 12: Summary -- One Page View
@@ -589,18 +713,25 @@ Networking and wallet auth are what make PC2 useful. If Phase 10-11 are 6+ month
 ║  PC2 v1 (NOW)              ElastOS Runtime (BUILDING)           ║
 ║  ───────────               ──────────────────────               ║
 ║  Node.js/TypeScript        Pure Rust                            ║
+║  Monolith repo             Minimal runtime + capsules           ║
 ║  No sandboxing             WASM + Firecracker                   ║
 ║  Session tokens            Capability tokens                    ║
 ║  MetaMask auth             WebAuthn + planned SIWE              ║
 ║  Working networking        No networking yet                    ║
 ║  Live on Jetsons           Demo/test stage                      ║
 ║                                                                 ║
+║  PC2 = "functional interactive mockup" (Anders' words)          ║
+║  Runtime = long-term secure architecture for the same product   ║
+║                                                                 ║
 ║  SHARED: IPFS, Puter, Supernode concept, *.ela.city domains    ║
 ║                                                                 ║
 ║  CONVERGENCE PATH:                                              ║
-║  v1.x  = Ship PC2, fix bugs, grow community                    ║
+║  v1.x  = Ship PC2, prove the product, grow community           ║
 ║  v1.5  = Modularize PC2 toward capsule interfaces              ║
 ║  v2.0  = Anders' Runtime hosts PC2's functionality as capsules  ║
+║                                                                 ║
+║  KEY INSIGHT: The runtime IS the platform, capsules ARE the     ║
+║  ecosystem. Runtime = boring/stable. Innovation = capsules.     ║
 ║                                                                 ║
 ║  RISK: Two systems growing apart. MITIGATION: Define capsule   ║
 ║  interfaces NOW and build toward them from both sides.          ║

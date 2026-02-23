@@ -787,6 +787,7 @@ export class FilesystemManager {
       'ts': 'video/mp2t',
       '3gp': 'video/3gpp',
       'ogv': 'video/ogg',
+      'av1': 'video/mp4',
       // Audio formats
       'mp3': 'audio/mpeg',
       'm4a': 'audio/mp4',

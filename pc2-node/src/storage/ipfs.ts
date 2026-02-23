@@ -135,7 +135,6 @@ export class IPFSStorage {
         ],
         connectionManager: {
           maxConnections: enableNetwork ? 50 : 0,
-          minConnections: 0,
         },
         services: {} as any
       };

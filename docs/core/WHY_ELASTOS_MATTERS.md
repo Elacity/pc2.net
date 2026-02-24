@@ -183,7 +183,7 @@ ElastOS represents the same structural shift — **from extraction to ownership:
 
 - **Your data is yours** — stored on your hardware, encrypted with your keys
 - **Your AI learns from you — for you** — your conversations improve YOUR assistant, not a corporation's model
-- **You capture the value** — if your content is valuable, you sell it directly through Elacity dDRM. The revenue is yours.
+- **You capture the value** — if your content is valuable, you sell it through services like Elacity dDRM that operate on your infrastructure. The revenue is yours, minus a small service fee you chose to pay — like a delivery service, not a landlord.
 - **You consent to every interaction** — in V2, capability tokens mean apps must ask permission for every resource, every time
 - **You can leave at any time** — your data is on your device. There's nothing to "export." It's already yours.
 
@@ -235,7 +235,7 @@ The capsule model in ElastOS is a digital free market:
 - **The marketplace is inside your OS** — you browse, install, and run capsules on your own hardware
 - **Competition drives quality** — anyone can build a better version of any capsule
 
-Elacity dDRM adds the rights management layer: creators can sell content with real ownership rights, royalty structures, and provable scarcity — without a platform taking a third of the revenue.
+Third-party services like Elacity dDRM can operate on this open marketplace — providing rights management, royalty structures, and provable scarcity as a service. Creators choose which services to use, and service providers compete on value rather than gatekeeping. Small toll fees replace the 30% platform tax.
 
 ---
 
@@ -275,11 +275,11 @@ Bitcoin solved money. ElastOS solves **everything else:**
 | **Identity** | — | Your wallet, your DID, your keys |
 | **Applications** | — | Capsules on your machine, not corporate servers |
 | **Network Access** | — | Your domain, your connectivity, your relay |
-| **Digital Property** | — | Elacity dDRM: content you truly own and can resell |
+| **Digital Property** | — | Content you truly own, traded through services like Elacity dDRM |
 
 Bitcoin gave you a bank account nobody can freeze. ElastOS gives you a **computer nobody can shut down.**
 
-Together, they represent the full stack of digital sovereignty: own your money (Bitcoin), own your digital life (ElastOS), own your creative output (Elacity dDRM).
+Together, they represent the full stack of digital sovereignty: own your money (Bitcoin), own your digital life (ElastOS). Services like Elacity dDRM then provide the marketplaces where free individuals trade their digital property — choosing which services to use, the way you choose which delivery company brings your packages.
 
 ---
 
@@ -348,7 +348,7 @@ History tells us this story always ends the same way: **the people who produce t
 
 Peasants owned their land. Workers owned their homes. People owned their labor. Citizens owned their money. And soon, individuals will own their data, their AI, their digital identity, and their creative output.
 
-ElastOS is the infrastructure for that world. Elacity dDRM is the marketplace. ELA is the economic engine. And the team building it has already delivered the working product — for a fraction of what was raised, with every dollar tracked and every commit verifiable.
+ElastOS is the open infrastructure for that world — the sovereign land on which free individuals build. Services like Elacity dDRM provide the marketplaces where people trade their digital property. ELA powers the network through staking, gas, and routing fees. And the team building it has already delivered the working product — for a fraction of what was raised, with every dollar tracked and every commit verifiable.
 
 The question isn't whether this transition will happen. It's whether Elastos will lead it.
 

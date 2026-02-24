@@ -138,9 +138,10 @@ Everything else — storage, networking, the desktop, AI, the video player — b
 - Integrating the Rust runtime so capsules run in WASM sandboxes
 - Implementing capability tokens — apps must request specific permission for every resource they access, with time limits and full audit logging
 - AI agents operate under the same security model as human users — they can only access what you've granted them
-- Building an agent economy where AI skills can be traded as capsules, protected by Elacity dDRM
-- Implementing protocol fees that generate real ELA demand from network activity
+- Building an agent economy where AI skills can be traded as capsules
+- Implementing ELA-native protocol fees across the network — Carrier staking, gas settlement, routing fees
 - Making node operation profitable through routing, compute, and storage fees
+- Third-party services like Elacity choose to operate on ElastOS, driving platform usage the way businesses choose to build on the internet
 
 **Why it matters:** This is the endgame. Once the runtime is the protocol, ElastOS becomes as open and permissionless as HTTP itself. Anyone can build a capsule. Anyone can run a node. Anyone can participate in the economy. No gatekeeper. No corporate middleman. The runtime is boring and stable (like the HTTP protocol), and all the innovation happens in capsules (like websites).
 
@@ -150,50 +151,48 @@ Everything else — storage, networking, the desktop, AI, the video player — b
 
 ## How It All Connects to ELA
 
-Every piece of ElastOS is designed to create real demand for the ELA token:
+ElastOS creates ELA demand through its own infrastructure — not through any single third-party service:
 
-```
-You use ElastOS
-    → Transactions happen (buying content, premium features, agent services)
-    → Fees are collected (small amounts on every transaction)
-    → Fees are pooled and used to buy ELA from the open market
-    → More users = more transactions = more buying pressure = ELA value
-```
-
-**Specific mechanisms:**
+**ELA-native mechanisms (built into ElastOS itself):**
 
 | Mechanism | How It Works | When |
 |-----------|-------------|------|
-| **Elacity dDRM Marketplace** | Buy and sell digital content with real ownership. Small fee on every transaction. | Phase 1 |
 | **Carrier Premium Tiers** | Lock ELA to your node to unlock priority routing, persistent connections, GPU services, custom domains. More locked ELA = less circulating supply. | Phase 1-2 |
-| **Protocol Fees** | Every transaction inside the OS (currency operations, marketplace activity) generates a small fee used to buy ELA. | Phase 1-2 |
-| **Node Operator Revenue** | Running a node earns routing fees and compute fees from the network. More nodes = more infrastructure = more demand. | Phase 2-3 |
-| **Agent Economy** | AI agents transact with each other — buying skills, services, data. Every agent transaction generates fees. | Phase 3 |
+| **Elastos Blockchain Gas** | All on-chain transactions on the Elastos Smart Chain settle gas fees in ELA. More usage = more gas burned. | Live |
+| **In-OS Protocol Fees** | Transactions within ElastOS (currency operations, service requests) generate small fees that support ELA. | Phase 1-2 |
+| **Node Operator Revenue** | Running a node earns routing fees and compute fees from the network, settled in ELA. More nodes = more infrastructure = more demand. | Phase 2-3 |
+| **Agent Economy** | AI agents transact with each other — buying skills, services, compute. Agent transactions generate network fees. | Phase 3 |
 
-This is the first concrete mechanism capable of generating daily ELA buy pressure from real usage — structurally, on-chain, and verifiable.
+**Third-party services drive usage:**
+
+Services like Elacity choose to operate on ElastOS because the infrastructure is superior — the way businesses choose to build on the internet. These services have their own business models and stakeholders, but their presence on the platform drives usage, node demand, and network activity — all of which feeds ELA utility through the mechanisms above. Users choose which services they want, just like the real world — nobody is locked in.
 
 ---
 
-## The Elacity dDRM Integration
+## Third-Party Services: Elacity dDRM as an Example
 
-Elacity dDRM (decentralized Digital Rights Management) is a separate protocol built by Elacity Labs — the content monetization and rights management layer being integrated into ElastOS. Here's how it works in simple terms:
+ElastOS is open infrastructure — anyone can build services on top of it, the way anyone can build a website on the internet. Elacity dDRM is one example of a third-party service that chooses to operate on ElastOS.
 
-**Today's problem:** When you buy a movie on iTunes, you don't own it. Apple can revoke your access at any time. You can't resell it. You can't lend it.
+**What is Elacity dDRM?**
 
-**Elacity dDRM solution:**
+Elacity dDRM (decentralized Digital Rights Management) is a separate protocol built by Elacity Labs — a private company with its own stakeholders and business model. It's a content monetization and rights management service, like a toll road or delivery service — creators and buyers choose to use it, and Elacity takes small protocol fees for facilitating the exchange. Rather than extracting data (like Web2 platforms), Elacity earns through transparent service fees that users opt into.
+
+**How it works:**
 1. A creator encrypts their content (movie, song, art) and uploads it to IPFS
 2. The encrypted file is public — anyone can download it — but it's useless without the decryption key
-3. A buyer pays (in ELA or other currencies) and receives an access token
+3. A buyer pays and receives an access token
 4. The token unlocks the content on their personal cloud
 5. **They now truly own it** — stored on their hardware, playable anytime, no corporation can take it away
 6. Their node can also share the encrypted file to other buyers, creating a natural CDN
 
-**Why this is built for ElastOS:** Your personal cloud IS where you watch your movies, listen to your music, display your art. The content lives on your node. The rights are managed by smart contracts. The marketplace is inside your OS. It's one seamless experience — buy content, it appears in your file system, play it from your personal cloud.
+**Why it's built for ElastOS:** Your personal cloud IS where you watch your movies, listen to your music, display your art. The content lives on your node. The rights are managed by smart contracts. The experience is seamless — buy content, it appears in your file system, play it from your personal cloud. ElastOS provides the sovereign infrastructure that makes true digital ownership possible.
 
 **Elacity dDRM integration timeline:**
 - **Phase 1:** Integrate the Elacity dDRM SDK, encrypted content uploads, marketplace UI inside ElastOS
-- **Phase 2:** Fee collection flowing to ELA buy-pressure, creator tools for AI-generated content with Elacity dDRM rights management
-- **Phase 3:** Elacity dDRM becomes an independent capsule — anyone can build their own rights management system on top
+- **Phase 2:** Creator tools for AI-generated content with Elacity dDRM rights management
+- **Phase 3:** Elacity dDRM becomes an independent capsule — and other rights management services can build on ElastOS too
+
+**The relationship:** Elacity Labs builds ElastOS (the open infrastructure) AND Elacity dDRM (their commercial service). This creates natural alignment — the better ElastOS is, the better Elacity's business does. But the two are distinct: ElastOS is open-source infrastructure for everyone. Elacity dDRM is a service that Elacity operates on that infrastructure, with its own fees and economics.
 
 ---
 

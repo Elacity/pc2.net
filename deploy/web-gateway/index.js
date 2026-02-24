@@ -27,9 +27,64 @@ const { createProxyServer } = httpProxy;
 const keepAliveAgent = new http.Agent({
   keepAlive: true,
   maxSockets: 64,
-  maxFreeSockets: 16,
-  timeout: 60_000,
+  maxFreeSockets: 8,
+  timeout: 30_000,
+  freeSocketTimeout: 15_000,
 });
+
+// Periodically destroy free (idle) sockets so stale connections from
+// rebooted WireGuard peers do not accumulate and block new requests.
+setInterval(() => {
+  const freeSockets = keepAliveAgent.freeSockets;
+  let destroyed = 0;
+  for (const [key, sockets] of Object.entries(freeSockets)) {
+    for (const sock of sockets) {
+      sock.destroy();
+      destroyed++;
+    }
+  }
+  if (destroyed > 0) {
+    console.log(`[Gateway] Evicted ${destroyed} idle keep-alive sockets`);
+  }
+}, 30_000);
+
+// WireGuard peer health-check: probe registered WireGuard endpoints every 60s.
+// If a peer is unreachable (connection refused / timeout), destroy its pooled
+// sockets so the next real request gets a clean connection or a fast 502.
+setInterval(() => {
+  for (const [username, info] of registry) {
+    if (!info.endpoint || !info.endpoint.startsWith("http://10.100.")) continue;
+
+    const url = new URL(info.endpoint);
+    const probe = http.request({
+      hostname: url.hostname,
+      port: url.port || 4200,
+      path: "/?healthcheck=gateway",
+      method: "HEAD",
+      timeout: 5000,
+    }, (res) => {
+      res.resume();
+    });
+
+    probe.on("error", () => {
+      // Peer is down -- flush any pooled sockets for this host
+      const hostKey = url.hostname + ":" + (url.port || 4200) + ":";
+      const freeSockets = keepAliveAgent.freeSockets;
+      for (const [key, sockets] of Object.entries(freeSockets)) {
+        if (key.includes(hostKey)) {
+          for (const sock of sockets) sock.destroy();
+          console.log(`[Gateway] Health-check: flushed stale sockets for ${username} (${info.endpoint})`);
+        }
+      }
+    });
+
+    probe.on("timeout", () => {
+      probe.destroy();
+    });
+
+    probe.end();
+  }
+}, 60_000);
 
 // ============================================================================
 // Performance: Compression + cache header configuration
@@ -1398,11 +1453,7 @@ compressingProxy.on("proxyRes", (proxyRes, req, res) => {
   const tooSmall = contentLength > 0 && contentLength < MIN_COMPRESS_SIZE;
   const supportsGzip = acceptEncoding.includes('gzip');
 
-  // Never compress 206 Partial Content -- gzip changes byte offsets, breaking
-  // Content-Range semantics and video player seeking.
-  const isPartial = proxyRes.statusCode === 206;
-
-  if (!alreadyEncoded && isCompressible && !tooSmall && supportsGzip && !isPartial) {
+  if (!alreadyEncoded && isCompressible && !tooSmall && supportsGzip) {
     delete headers['content-length'];
     headers['content-encoding'] = 'gzip';
     headers['vary'] = 'Accept-Encoding';
@@ -1416,6 +1467,26 @@ compressingProxy.on("proxyRes", (proxyRes, req, res) => {
 
 compressingProxy.on("error", (err, req, res) => {
   console.error("[Proxy] Compressing proxy error:", err.message);
+
+  // On connection-level failures, destroy all free sockets for the target
+  // so the agent stops reusing dead connections from rebooted peers.
+  if (err.code === "ECONNREFUSED" || err.code === "ECONNRESET" || err.code === "EPIPE" || err.message.includes("socket hang up")) {
+    const target = req._proxyTarget || "";
+    const freeSockets = keepAliveAgent.freeSockets;
+    let flushed = 0;
+    for (const [key, sockets] of Object.entries(freeSockets)) {
+      if (key.includes(target) || !target) {
+        for (const sock of sockets) {
+          sock.destroy();
+          flushed++;
+        }
+      }
+    }
+    if (flushed > 0) {
+      console.log(`[Gateway] Flushed ${flushed} stale sockets after ${err.code || err.message}`);
+    }
+  }
+
   if (res.writeHead) {
     res.writeHead(502, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "Bad Gateway", message: err.message }));
@@ -1556,6 +1627,7 @@ async function handleRequest(req, res) {
   // and keep-alive agent to reuse TCP connections to the PC2 node.
   const viaWG = isWireGuardIP(nodeInfo.endpoint);
   console.log(`[Gateway] Proxying ${username} -> ${nodeInfo.endpoint}${viaWG ? ' (WireGuard tunnel)' : ''}`);
+  req._proxyTarget = nodeInfo.endpoint;
   compressingProxy.web(req, res, { target: nodeInfo.endpoint, agent: keepAliveAgent });
 }
 

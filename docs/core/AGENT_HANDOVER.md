@@ -314,14 +314,27 @@ pm2 restart pc2    # or: systemctl restart pc2-node (on older setups)
 8. **Gateway 206 compression** - Partial content responses are never gzipped (preserves byte-range semantics)
 9. **install-arm.sh rewrite** - Now includes WireGuard setup, PM2 (not systemd), wireguard-go for Jetson, boot persistence
 
+### Recently Fixed (2026-02-23/24)
+
+10. **AV1/Firefox playback** — Player now shows clear error for unsupported containers (MKV/AVI/MOV in Firefox), added `.av1` file support
+11. **IPFS DHT broadcasting** — Switched to client-mode DHT with 50-peer connection limit, private files no longer announced to IPFS network
+12. **Active Proxy overwriting WireGuard** — ConnectivityService now prefers WireGuard on reconnect, Active Proxy can't overwrite a working WireGuard endpoint
+13. **Gateway stale connections** — Health-check every 60s probes WireGuard peers, auto-flushes dead sockets, error-triggered flush on ECONNREFUSED
+14. **PM2 auto-start** — `pm2 startup systemd` integrated into install script for boot persistence
+15. **File creation error** — `window.refresh_item_container` exposed globally (was missing)
+16. **MKV double-click** — Added to file-to-player associations
+17. **Large upload timeout** — Added timeout wrappers to IPFS storeFile/storeFileStream with progress logging
+
 ### Pending Tasks
 
-- [ ] Merge `feature/jetson-gpu-acceleration` to main (after community Jetson testing)
-- [ ] AV1 video playback in Firefox (codec detection / transcoding)
+- [ ] Merge `feature/jetson-gpu-acceleration` to main (after community Jetson testing passes clean)
+- [ ] Large file upload stalling at ~85% on 2.5GB+ (ulimit fix pending verification on Jetson)
+- [ ] Wallpaper not loading via gateway (URL origin mismatch)
 - [ ] Debian package (.deb) for Raspberry Pi
 - [ ] macOS package (.dmg)
 - [ ] Multi-domain support (pc2.net, ela.net)
 - [ ] P2P messaging between PC2 nodes
+- [ ] See [ROADMAP.md](./ROADMAP.md) for full strategic roadmap
 
 ---
 

@@ -110,6 +110,7 @@ These diagrams from Rong define the north star. Every work stream should move us
 - [ ] Explore dedicated DePIN hardware partnerships (plug-and-play boxes)
 - [ ] Debian package (.deb) for ARM devices
 - [ ] macOS package (.dmg) for desktop users
+- [ ] Windows installer (.exe) exploration
 
 **Carrier Overlay Network:**
 - [ ] Gateway under systemd with auto-restart (NETWORK_HARDENING item #5)
@@ -154,6 +155,8 @@ These diagrams from Rong define the north star. Every work stream should move us
 - [ ] Node auto-migration between supernodes on failure
 - [ ] Per-domain rate limiting on gateway (NETWORK_HARDENING item #8)
 - [ ] Explore Carrier premium tier staking mechanisms (ELA lock → priority routing)
+- [ ] Multi-domain support — DNS + SSL + gateway for `*.pc2.net` and `*.ela.net`
+- [ ] Relay nodes — PC2 nodes with public IP act as WireGuard relays for NAT'd peers
 
 ---
 
@@ -215,9 +218,11 @@ These diagrams from Rong define the north star. Every work stream should move us
 - [ ] Cross-device sync foundation
 - [ ] Cloud storage integration (S3-compatible, for users who want it)
 
-**Remote Access:**
+**Remote Access & Mobile:**
 - [ ] Desktop-as-a-Service exploration (RDP/VNC server mode)
 - [ ] Mobile app for accessing your PC2 remotely
+- [ ] Mobile SDK for Carrier (phone↔PC2 — Rong's `localhost://` WebSpace)
+- [ ] GeoDNS for `*.ela.city` routing to nearest supernode
 
 ---
 
@@ -230,6 +235,8 @@ These diagrams from Rong define the north star. Every work stream should move us
 - [ ] Capability token model (capsules request permissions, users grant)
 - [ ] Capsule isolation (each capsule runs in its own sandbox)
 - [ ] MicroVM isolation where hardware supports it (Firecracker on x86)
+- [ ] DID integration with ESC/EID for `elastos://` WebSpace
+- [ ] DHT participation — PC2 nodes store/forward DHT entries (Level 2)
 
 **Agent Economy:**
 - [ ] Agent-to-agent communication (capability-gated trust)

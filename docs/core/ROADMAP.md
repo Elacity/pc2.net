@@ -85,10 +85,18 @@ These diagrams from Rong define the north star. Every work stream should move us
 
 **Goal:** Continuity. Keep shipping. Merge the tested branch to main.
 
-- [ ] Merge `feature/jetson-gpu-acceleration` to `main` after Jetson community test passes
+- [ ] Merge `feature/jetson-gpu-acceleration` to `main` after Sash validates on own Jetson hardware
 - [ ] Establish weekly shipping report cadence (GitHub-based)
-- [ ] Set up public expenditure tracking portal
-- [ ] First monthly release (v1.1.0)
+- [x] Set up public expenditure tracking portal
+- [ ] First monthly release (v1.1.0) — after Jetson validation
+- [x] Publish WCI ecosystem update article
+
+**Status (2026-02-24):**
+- WireGuard reconnect after reboot: confirmed working
+- Large file upload (2.5GB+): needs more testing (ulimit fix pending verification)
+- WCI update article: published
+- Expenditure portal: live
+- v1.1.0 release: blocked on Sash's own Jetson hardware test
 
 ---
 

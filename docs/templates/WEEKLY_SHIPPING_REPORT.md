@@ -293,9 +293,11 @@ Key qualities that made it effective:
 
 **GitHub Discussions (shipping reports):**
 
-| Date | Discussion | Key Theme |
-|------|-----------|-----------|
-| 2026-02-24 | [#1](https://github.com/Elacity/pc2.net/discussions/1) | IPFS privacy, AV1 Firefox, WireGuard priority, gateway self-healing |
+| Date | Discussion | Commits | Key Theme |
+|------|-----------|---------|-----------|
+| 2026-02-07 | [#2](https://github.com/Elacity/pc2.net/discussions/2) | 18 | GPU acceleration, Active Proxy protocol rewrite, gateway relay |
+| 2026-02-20 | [#3](https://github.com/Elacity/pc2.net/discussions/3) | 16 | WireGuard NAT traversal, video streaming, gateway perf, ARM installer |
+| 2026-02-24 | [#1](https://github.com/Elacity/pc2.net/discussions/1) | 12 | IPFS privacy, AV1 Firefox, WireGuard priority, gateway self-healing |
 | 2026-01-29 | Published on blog | https://blog.elastos.net/wci-ecosystem-report-jan-29-2026/ | IPFS Sharing, NAT Traversal, AI Agents, DAO Dashboard |
 
 *Add new reports to this table as they're created.*

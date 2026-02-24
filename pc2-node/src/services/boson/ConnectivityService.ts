@@ -474,8 +474,8 @@ export class ConnectivityService {
    * static proxyPort (8090). The allocated port is where the gateway should
    * send ATTACH packets for relay connections.
    * 
-   * Previous bug: used superNode.proxyPort (8090) which is the AUTH port,
-   * not the relay port. This caused gateway ATTACH to connect to wrong port.
+   * Skips registration if WireGuard is the active transport -- Active Proxy
+   * must not overwrite a working WireGuard endpoint.
    */
   private async registerProxyEndpoint(superNode: SuperNode, sessionId: string, allocatedPort: number): Promise<void> {
     if (!this.usernameService || !this.usernameService.hasUsername()) {
@@ -483,8 +483,11 @@ export class ConnectivityService {
       return;
     }
 
-    // Format: proxy://host:allocatedPort/sessionId
-    // CRITICAL: Use allocatedPort (e.g., 25001) NOT proxyPort (8090)
+    if (this.status.natType === 'wireguard' && this.status.connected) {
+      logger.info(`[Connectivity] WireGuard is active -- skipping Active Proxy endpoint registration`);
+      return;
+    }
+
     const endpoint = `proxy://${superNode.address}:${allocatedPort}/${sessionId}`;
     logger.info(`[Connectivity] Registering proxy endpoint with allocated port ${allocatedPort} (not static ${superNode.proxyPort})`);
     
@@ -824,8 +827,8 @@ export class ConnectivityService {
   }
 
   /**
-   * Schedule reconnection attempt
-   * For NAT nodes, retries ActiveProxy first before falling back to direct connect
+   * Schedule reconnection attempt.
+   * Priority: WireGuard > ActiveProxy > direct.
    */
   private scheduleReconnect(): void {
     if (this.reconnectTimer || !this.isRunning) return;
@@ -834,9 +837,22 @@ export class ConnectivityService {
     
     this.reconnectTimer = setTimeout(async () => {
       this.reconnectTimer = null;
+
+      // Try WireGuard first -- it may have recovered since last attempt
+      if (this.wireGuardService && this.wireGuardService.isAvailable()) {
+        const wgConnected = await this.connectViaWireGuard();
+        if (wgConnected) {
+          logger.info('🚀 Reconnected via WireGuard tunnel');
+          if (this.activeProxyClient) {
+            await this.activeProxyClient.disconnect();
+            this.activeProxyClient = null;
+          }
+          return;
+        }
+      }
       
-      // For NAT/relay nodes, retry ActiveProxy before falling back to direct
-      if (this.status.natType === 'relay' && this.publicKey && this.privateKey && this.nodeId) {
+      // Fall back to ActiveProxy for NAT nodes
+      if ((this.status.natType === 'relay' || this.status.natType === 'unknown') && this.publicKey && this.privateKey && this.nodeId) {
         try {
           logger.info('🔄 Retrying Active Proxy connection...');
           await this.connectViaActiveProxy();

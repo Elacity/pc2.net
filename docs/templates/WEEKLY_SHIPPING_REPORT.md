@@ -7,51 +7,75 @@
 
 ## How to Generate a Weekly Report
 
-### Step 1: Gather Data
+### Step 1: Audit the Branch (MANDATORY — DO THIS FIRST)
 
-Run these commands to collect what happened this week:
+Before writing ANYTHING, run a full audit of every commit on the branch since the last report. Do NOT skip this. Do NOT summarize from memory. Read every single commit.
 
-```bash
-# Commits this week
-git log --oneline --since="7 days ago" --until="now"
+Run these commands:
 
-# Files changed
-git diff --stat HEAD~{number_of_commits}...HEAD
+- git log --oneline --since="7 days ago" --until="now" (commits this week)
+- git diff --stat HEAD~{n}...HEAD (files changed)
+- git diff --shortstat HEAD~{n}...HEAD (total lines)
+- git log --oneline feature/jetson-gpu-acceleration --not main (full branch history if needed)
 
-# Total lines added/removed
-git diff --shortstat HEAD~{number_of_commits}...HEAD
-```
+Read each commit message. Check the actual code changes if the message is ambiguous. Understand the FULL scope before writing a single word.
 
-Also check:
+### Step 2: Check External Context
+
 - Community feedback from Telegram / Discord
 - EverlastingOS or other tester reports
-- Any supernode fixes or deployments
-- Proposal / governance updates
+- Any supernode fixes or deployments (SSH into supernode if needed)
+- Proposal / governance updates on Cyber Republic
 - Any articles published or media appearances
+- Any community questions or criticism that should be addressed
 
-### Step 2: Write the Report
+### Step 3: Write TWO Outputs
 
-Use the structure below. Keep it **simple enough for a 9th grader** — no jargon, no internal code references, explain the "why" for each item. Bold the key phrases so someone scanning gets the story in 10 seconds.
+Produce a single markdown file containing:
 
-### Step 3: Output Format
+1. **GitHub Shipping Report** — concise bullet-point format with commit hashes for developer verification
+2. **Blog Article (HTML)** — polished, 9th-grader friendly, SEO-optimized HTML for pasting into the Elastos blog CMS at blog.elastos.net
 
-Produce TWO outputs in a single markdown file:
-1. **The readable markdown version** (for GitHub, internal reference)
-2. **The HTML version** (for pasting into the Elastos blog CMS at blog.elastos.net)
+Save to: docs/updates/WCI_Update_[Month]_[Day]_[Year].md
 
 ---
 
-## Report Structure
+## Output 1: GitHub Shipping Report
+
+Post this to GitHub Discussions or the repo wiki. Short, verifiable, developer-focused.
+
+Format:
+
+**ElastOS Weekly Shipping Report — Week of [Date Range]**
+
+**Shipped:**
+- [One-line description] ([commit hash linked to GitHub](https://github.com/Elacity/pc2.net/commit/HASH))
+- [One-line description] ([commit hash](https://github.com/Elacity/pc2.net/commit/HASH))
+- [One-line description] ([commit hash](https://github.com/Elacity/pc2.net/commit/HASH))
+
+**In Progress:**
+- [Item — current status]
+
+**Community Testing:**
+- [Feedback received and status]
+
+**Next Week:**
+- [Planned item 1]
+- [Planned item 2]
+
+---
+
+## Output 2: Blog Article (HTML)
 
 ### Title Format
-`Elastos WCI Team Ecosystem Report, [Month] [Day], [Year]`
+Elastos WCI Team Ecosystem Report, [Month] [Day], [Year]
 
 ### Sections (in order)
 
 1. **Opening Summary** (2-3 sentences)
    - What was the theme of this week?
    - One punchy line that captures the overall progress
-   - Reference the current milestone from the roadmap
+   - Reference the current milestone from the [roadmap](https://github.com/Elacity/pc2.net/blob/main/docs/core/ROADMAP.md)
 
 2. **What We Shipped** (the bulk of the report)
    - Group by theme, not by commit
@@ -66,7 +90,7 @@ Produce TWO outputs in a single markdown file:
    - Highlight the feedback loop: report → fix → ship
 
 4. **Proposal / Governance Updates** (if applicable)
-   - Keystone Fund proposal status
+   - [Keystone Fund proposal](https://elastos.com/suggestion/699c045de3bb57006e75463e) status
    - Any council activity
    - Community discussion highlights
 
@@ -75,9 +99,11 @@ Produce TWO outputs in a single markdown file:
    - Reference the roadmap milestone
 
 6. **Try ElastOS Today**
-   - Install links (always include)
+   - Install links (always include, always hyperlinked)
    - Documentation link
    - GitHub link
+
+7. **Yoast SEO Block** (always include at the bottom — see SEO section below)
 
 ---
 
@@ -91,53 +117,66 @@ Produce TWO outputs in a single markdown file:
 
 ### Language Rules
 - No internal file names (say "the connection manager" not "ConnectivityService.ts")
-- No line counts or code metrics (say "a complete rewrite" not "332 lines added")
-- Always say "Elacity dDRM" not just "dDRM" (it's a separate protocol built by Elacity Labs)
-- Use "ElastOS" not "PC2" in public-facing content
+- No line counts or code metrics in the blog article (say "a complete rewrite" not "332 lines added") — save numbers for the GitHub report
+- Always say "Elacity dDRM" not just "dDRM" (it's a separate protocol built by [Elacity Labs](http://elacitylabs.com))
+- Use "[ElastOS](https://blog.elastos.net/announcement/elastos-world-computer-v1-launches/)" not "PC2" in public-facing content
 - Explain technical concepts in one phrase: "WireGuard (a high-speed encrypted tunnel)" on first mention, then just "WireGuard" after
+- NEVER use code tags or backtick formatting in the HTML output — it doesn't render in the blog CMS
 
-### Formatting
+### Hyperlinking (CRITICAL for SEO)
+- Hyperlink aggressively — every mention of a key term should link somewhere
+- First mention of "ElastOS" → link to the [launch article](https://blog.elastos.net/announcement/elastos-world-computer-v1-launches/)
+- First mention of "Elacity Labs" → link to [elacitylabs.com](http://elacitylabs.com)
+- First mention of the proposal → link to the [Keystone Fund proposal](https://elastos.com/suggestion/699c045de3bb57006e75463e)
+- Mention of GitHub → link to [the repo](https://github.com/Elacity/pc2.net)
+- Mention of documentation → link to [docs.ela.city](https://docs.ela.city)
+- Mention of previous reports → link to their blog posts
+- Mention of Elastos ecosystem → link to [elastos.org](https://elastos.org) or relevant pages
+- Mention of Rong Chen → link to the [launch article](https://blog.elastos.net/announcement/elastos-world-computer-v1-launches/) or relevant interview
+- Mention of the DAO → link to [Cyber Republic](https://www.cyberrepublic.org)
+- Mention of ELA → link to [ELA utility page](https://elastos.org/ela) or [buy ELA](https://elastos.org/buy-ela)
+- Mention of any previous blog post → link to it on blog.elastos.net
+- External references (Bitcoin, IPFS, WireGuard, etc.) → link to their official sites on first mention
+
+### Formatting Rules
 - Bold key phrases so scanners get the story
-- Use `<strong>` in HTML, `**` in markdown
-- Section headers: `<h3>` for main sections, `<h4>` for sub-sections, `<h5>` for numbered items
+- Use strong tags in HTML, ** in markdown
+- Section headers: h3 for main sections, h4 for sub-sections, h5 for numbered items
 - Include images where available (screenshots of features, terminal output)
-- Links: always inline `<a href="...">text</a>`, never bare URLs
+- Links: always inline a href tags, never bare URLs
+- NEVER use code tags — they don't render properly in the WordPress CMS
+- Use &amp; for ampersands in HTML
 
 ---
 
-## HTML Style Reference
-
-This is the proven format used for the Feb 24, 2026 update (the gold standard):
+## HTML Structure Reference
 
 ### Opening
-```html
+
 <strong>[Title — one line capturing the week]</strong>
 <h3><strong>[First Major Section]</strong></h3>
 [2-3 sentence summary paragraph with <strong>bold key phrases</strong> and <a href="...">inline links</a>.]
-```
 
 ### Feature Items
-```html
+
 <h5>1) <strong>[Feature Name]</strong></h5>
 [2-3 sentence plain-English explanation of what was built and what it does.]
 <strong>Why it matters:</strong> [One sentence connecting this to the bigger picture.]
-```
 
 ### Bug Fix Lists
-```html
+
 <h4><strong>Bug Fixes &amp; Polish</strong></h4>
 <ul>
   <li><strong>[Fix name]</strong> — [one line explanation]</li>
   <li><strong>[Fix name]</strong> — [one line explanation]</li>
 </ul>
-```
 
-### Closing
-```html
-<h3><strong>Try ElastOS Today</strong></h3>
+### Closing (always include)
+
+<h3><strong>Try <a href="https://blog.elastos.net/announcement/elastos-world-computer-v1-launches/">ElastOS</a> Today</strong></h3>
 <ul>
   <li><strong>Desktop Launcher (Mac):</strong> <a href="https://docs.ela.city">Download ElastOS</a></li>
-  <li><strong>Terminal Install:</strong> <code>curl -fsSL https://raw.githubusercontent.com/Elacity/pc2.net/main/scripts/start-local.sh | bash</code></li>
+  <li><strong>Terminal Install:</strong> curl -fsSL https://raw.githubusercontent.com/Elacity/pc2.net/main/scripts/start-local.sh | bash</li>
   <li><strong>Documentation:</strong> <a href="https://docs.ela.city">docs.ela.city</a></li>
   <li><strong>GitHub:</strong> <a href="https://github.com/Elacity/pc2.net">github.com/Elacity/pc2.net</a></li>
 </ul>
@@ -148,27 +187,76 @@ This is the proven format used for the Feb 24, 2026 update (the gold standard):
   <li>[Item 2]</li>
   <li>[Item 3]</li>
 </ul>
-```
 
 ---
 
-## Recurring Links (copy-paste ready)
+## Yoast SEO Block (10/10 — Always Include at Bottom)
 
-```
-ElastOS Launch Article:    https://blog.elastos.net/announcement/elastos-world-computer-v1-launches/
-Keystone Fund Proposal:    https://elastos.com/suggestion/699c045de3bb57006e75463e
-Elacity Labs Website:      http://elacitylabs.com
-GitHub Repository:         https://github.com/Elacity/pc2.net
-Documentation:             https://docs.ela.city
-WCI v1 Proposal (CRC):     https://www.cyberrepublic.org/proposals/180
-Keystone Fund Wallet:      0x52bA882916f11f96f9DC996ACf31926D09c38391
-```
+Include this at the very end of every report markdown file so it can be copy-pasted into the WordPress Yoast SEO fields:
+
+### SEO Template
+
+**SEO Title:** ElastOS Weekly Update [Date] — [Key Feature or Theme] | Elastos World Computer
+**Meta Description:** [150-160 characters summarizing the week's progress. Include "ElastOS," "Elastos," and one key feature. End with a call to action.]
+**Focus Keyphrase:** ElastOS weekly update
+**Slug:** elastos-wci-update-[month]-[day]-[year]
+
+**Secondary Keyphrases:**
+- Elastos World Computer
+- ElastOS personal cloud
+- sovereign AI operating system
+- decentralized personal cloud
+- Elastos ELA
+
+**Internal Links (must include at least 3):**
+- [ElastOS V1 Launch](https://blog.elastos.net/announcement/elastos-world-computer-v1-launches/)
+- [Previous weekly update](link to most recent prior update)
+- [Elastos Roadmap](https://elastos.org/roadmap) or [ELA Utility](https://elastos.org/ela)
+
+**External Links (include 1-2):**
+- [GitHub Repository](https://github.com/Elacity/pc2.net)
+- [Keystone Fund Proposal](https://elastos.com/suggestion/699c045de3bb57006e75463e)
+
+**Open Graph:**
+- og:title = SEO Title
+- og:description = Meta Description
+- og:image = Featured image from the article (screenshot of ElastOS desktop or relevant feature)
+
+### Example SEO Block (Feb 24, 2026)
+
+**SEO Title:** ElastOS Weekly Update Feb 24 — V1 Live, WCI Audit Passed, Keystone Proposal | Elastos World Computer
+**Meta Description:** ElastOS V1 is live with 7,229 commits. WCI v1 audit passed. Keystone Fund proposal published for continuous development. Try the sovereign personal cloud today.
+**Focus Keyphrase:** ElastOS weekly update
+**Slug:** elastos-wci-update-feb-24-2026
+**Secondary Keyphrases:** Elastos World Computer, sovereign AI operating system, ElastOS personal cloud, Elastos ELA, decentralized personal cloud
 
 ---
 
-## Example: Feb 24, 2026 Report (Gold Standard)
+## Recurring Links (use these every report)
 
-The Feb 24 update is saved at `docs/updates/WCI_Update_Feb_24_2026.md` with both markdown and HTML versions. Use this as the quality benchmark for all future reports.
+| Name | URL |
+|------|-----|
+| ElastOS Launch Article | https://blog.elastos.net/announcement/elastos-world-computer-v1-launches/ |
+| Keystone Fund Proposal | https://elastos.com/suggestion/699c045de3bb57006e75463e |
+| Elacity Labs Website | http://elacitylabs.com |
+| GitHub Repository | https://github.com/Elacity/pc2.net |
+| Documentation | https://docs.ela.city |
+| WCI v1 Proposal (CRC) | https://www.cyberrepublic.org/proposals/180 |
+| Keystone Fund Wallet | 0x52bA882916f11f96f9DC996ACf31926D09c38391 |
+| Elastos Website | https://elastos.org |
+| Elastos Roadmap | https://elastos.org/roadmap |
+| ELA Utility | https://elastos.org/ela |
+| Buy ELA | https://elastos.org/buy-ela |
+| Elastos DAO | https://www.cyberrepublic.org |
+| Elastos Blog | https://blog.elastos.net |
+| Previous Update (Jan 29) | https://blog.elastos.net/wci-ecosystem-report-jan-29-2026/ |
+| Previous Update (Feb 24) | docs/updates/WCI_Update_Feb_24_2026.md |
+
+---
+
+## Gold Standard Reference
+
+The Feb 24 update is saved at docs/updates/WCI_Update_Feb_24_2026.md. Use this as the quality benchmark for all future reports.
 
 Key qualities that made it effective:
 - Opened with V1 being live and the WCI audit passing (credibility first)
@@ -177,14 +265,17 @@ Key qualities that made it effective:
 - 9 numbered features, each with "Why it matters" (educational)
 - Community testing section proving the feedback loop works (accountability)
 - Ended with install links and clear next steps (call to action)
+- Aggressive hyperlinking throughout for SEO
+- No code tags or backtick formatting
+- Every key term linked on first mention
 
 ---
 
 ## Previous Reports
 
-| Date | File | Key Theme |
-|------|------|-----------|
-| 2026-02-24 | `docs/updates/WCI_Update_Feb_24_2026.md` | V1 Live, WCI Audit Passed, Keystone Proposal, v1.1 Preview |
-| 2026-01-29 | Published on blog.elastos.net | IPFS Sharing, NAT Traversal, AI Agents, DAO Dashboard |
+| Date | File | Blog URL | Key Theme |
+|------|------|----------|-----------|
+| 2026-02-24 | docs/updates/WCI_Update_Feb_24_2026.md | TBD | V1 Live, WCI Audit Passed, Keystone Proposal, v1.1 Preview |
+| 2026-01-29 | Published on blog | https://blog.elastos.net/wci-ecosystem-report-jan-29-2026/ | IPFS Sharing, NAT Traversal, AI Agents, DAO Dashboard |
 
 *Add new reports to this table as they're created.*

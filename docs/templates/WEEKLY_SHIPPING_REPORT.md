@@ -38,6 +38,20 @@ Produce a single markdown file containing:
 
 Save to: docs/updates/WCI_Update_[Month]_[Day]_[Year].md
 
+### Step 4: Post GitHub Discussion (MANDATORY)
+
+After writing the report, automatically post the GitHub shipping report to GitHub Discussions:
+
+- Use the GraphQL API via gh cli
+- Repository ID: R_kgDOOfDR3g
+- Category: Announcements (ID: DIC_kwDOOfDR3s4C3ILe)
+- Title format: "ElastOS Weekly Shipping Report — Week of [Date Range]"
+- Body: The GitHub shipping report content (markdown format with linked commit hashes)
+- Share the discussion URL with the user after posting
+
+Command pattern:
+gh api graphql -f query='mutation { createDiscussion(input: { repositoryId: "R_kgDOOfDR3g", categoryId: "DIC_kwDOOfDR3s4C3ILe", title: "[TITLE]", body: "[BODY]" }) { discussion { url } } }'
+
 ---
 
 ## Output 1: GitHub Shipping Report
@@ -276,6 +290,12 @@ Key qualities that made it effective:
 | Date | File | Blog URL | Key Theme |
 |------|------|----------|-----------|
 | 2026-02-24 | docs/updates/WCI_Update_Feb_24_2026.md | TBD | V1 Live, WCI Audit Passed, Keystone Proposal, v1.1 Preview |
+
+**GitHub Discussions (shipping reports):**
+
+| Date | Discussion | Key Theme |
+|------|-----------|-----------|
+| 2026-02-24 | [#1](https://github.com/Elacity/pc2.net/discussions/1) | IPFS privacy, AV1 Firefox, WireGuard priority, gateway self-healing |
 | 2026-01-29 | Published on blog | https://blog.elastos.net/wci-ecosystem-report-jan-29-2026/ | IPFS Sharing, NAT Traversal, AI Agents, DAO Dashboard |
 
 *Add new reports to this table as they're created.*

@@ -109,7 +109,9 @@ install_prerequisites() {
 
     sudo apt-get update -qq
 
-    sudo apt-get install -y -qq git curl build-essential python3
+    sudo apt-get install -y -qq git curl build-essential python3 \
+        libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev \
+        pkg-config
 
     print_ok "Prerequisites installed"
 }

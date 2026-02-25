@@ -29,7 +29,8 @@ module.exports = {
     // Environment
     env: {
       NODE_ENV: "production",
-      PORT: "4200"
+      PORT: "4200",
+      PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"
     },
     
     // Logging - PM2 defaults are fine, logs go to ~/.pm2/logs/

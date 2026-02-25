@@ -80,8 +80,8 @@ export class WireGuardService {
    */
   isAvailable(): boolean {
     try {
-      execSync('which wg', { stdio: 'pipe' });
-      execSync('which wg-quick', { stdio: 'pipe' });
+      execSync('which wg || test -x /usr/bin/wg', { stdio: 'pipe', shell: '/bin/sh' });
+      execSync('which wg-quick || test -x /usr/bin/wg-quick', { stdio: 'pipe', shell: '/bin/sh' });
     } catch {
       this._mode = 'none';
       return false;
@@ -123,8 +123,9 @@ export class WireGuardService {
     }
 
     // Fall back to userspace if wireguard-go is installed
+    // Check both PATH and common install locations (PM2/systemd may have restricted PATH)
     try {
-      execSync('which wireguard-go', { stdio: 'pipe' });
+      execSync('which wireguard-go || test -x /usr/local/bin/wireguard-go', { stdio: 'pipe', shell: '/bin/sh' });
       logger.info('[WireGuard] Kernel module unavailable, using wireguard-go (userspace)');
       return 'userspace';
     } catch {

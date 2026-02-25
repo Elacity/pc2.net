@@ -218,9 +218,10 @@ const upload = async function (items, dirPath, options = {}) {
             }
         }
 
-        // total size of the upload is doubled because we will be uploading the files to the server
-        // and then the server will upload them to the cloud
-        total_size = total_size * 2;
+        // In PC2 mode, the server writes directly to IPFS during the upload request —
+        // there is no separate "server → cloud" phase, so we don't double the total.
+        // The XHR upload progress alone represents the full operation.
+        // total_size = total_size * 2; // Disabled for PC2 — was causing progress to stall at ~50%
 
         // holds the data to be sent to the server
         const fd = new FormData();

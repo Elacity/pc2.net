@@ -161,9 +161,9 @@ install_pm2() {
         return
     fi
 
-    print_step "Installing PM2 process manager..."
-    sudo npm install -g pm2
-    print_ok "PM2 installed"
+    print_step "Installing PM2 process manager and Yarn..."
+    sudo npm install -g pm2 yarn
+    print_ok "PM2 and Yarn installed"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

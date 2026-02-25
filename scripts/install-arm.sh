@@ -375,6 +375,12 @@ PARTICLE_EOF
         print_ok "Particle Network configured"
     fi
 
+    # Fix particle-auth build script — replace yarn with npm (yarn conflicts with cmdtest on Ubuntu/JetPack)
+    if grep -q "yarn install" "$PC2_DIR/package.json" 2>/dev/null; then
+        sed -i 's/yarn install/npm install --legacy-peer-deps/g; s/yarn build/npm run build/g' "$PC2_DIR/package.json"
+        print_ok "Fixed particle-auth build script (yarn → npm)"
+    fi
+
     print_step "Installing dependencies (this takes a few minutes on ARM)..."
     npm install --legacy-peer-deps --ignore-scripts || true
 

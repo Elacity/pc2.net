@@ -332,10 +332,14 @@ PARTICLE_EOF
     npm install --legacy-peer-deps || true
     cd ..
 
-    # Rebuild native modules
+    # Rebuild native modules (canvas is optional — if it fails, thumbnails just won't work)
     print_step "Building native modules..."
     npm rebuild 2>&1 || true
-    cd pc2-node && npm rebuild 2>&1 || true && cd ..
+    cd pc2-node
+    npm rebuild sharp 2>&1 || true
+    npm rebuild canvas 2>&1 || print_warn "Canvas compilation failed (thumbnails for PDFs/text disabled). This is optional and non-critical."
+    npm rebuild 2>&1 || true
+    cd ..
 
     print_step "Building PC2..."
     npm run build:pc2

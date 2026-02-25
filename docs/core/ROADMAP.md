@@ -105,11 +105,11 @@ These diagrams from Rong define the north star. Every work stream should move us
 **Goal:** Harden everything. Grow the node count. Make it dead-simple to install.
 
 **V1 Hardening:**
-- [ ] Fix large file upload stalling (ulimit / IPFS DAG block issue on constrained devices)
-- [ ] Fix wallpaper not loading via gateway (URL origin mismatch)
+- [x] Fix large file upload stalling — post-upload size verification, smaller chunks, doubled timeout
+- [x] Fix wallpaper not loading via gateway — confirmed resolved after WireGuard reconnect fix
 - [ ] AV1/Firefox — server-side remuxing for MKV→MP4 (beyond the error message)
 - [ ] Performance profiling on Jetson (memory, CPU, IPFS block store)
-- [ ] Reduce PC2 cold-start time
+- [x] Reduce PC2 cold-start time — parallelized AI/Gateway/Boson initialization
 - [ ] Mobile-responsive UI improvements
 
 **DePIN Hardware Expansion:**
@@ -121,8 +121,8 @@ These diagrams from Rong define the north star. Every work stream should move us
 - [ ] Windows installer (.exe) exploration
 
 **Carrier Overlay Network:**
-- [ ] Gateway under systemd with auto-restart (NETWORK_HARDENING item #5)
-- [ ] SQLite registry replacing JSON file (NETWORK_HARDENING item #2)
+- [x] Gateway under systemd with auto-restart — deployed live, enabled for boot
+- [ ] SQLite registry replacing JSON file (NETWORK_HARDENING item #2) — deferred, JSON fine at current scale
 - [ ] Automated SSL renewal with monitoring (NETWORK_HARDENING item #7)
 - [ ] Basic uptime monitoring for supernodes (NETWORK_HARDENING item #6)
 - [ ] Reduce WireGuard retry interval (15s with exponential backoff)

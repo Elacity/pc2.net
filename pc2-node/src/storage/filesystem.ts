@@ -225,11 +225,13 @@ export class FilesystemManager {
 
     // Stream file to IPFS in chunks -- never holds the whole file in memory
     let bytesStreamed = 0;
-    const logInterval = 50 * 1024 * 1024; // Log every 50MB
+    const logInterval = fileSize > 1024 * 1024 * 1024 ? 100 * 1024 * 1024 : 50 * 1024 * 1024; // 100MB for GB+ files, 50MB otherwise
     let nextLogAt = logInterval;
 
     async function* fileChunks(filePath: string): AsyncIterable<Uint8Array> {
-      const stream = createReadStream(filePath, { highWaterMark: 256 * 1024 });
+      // 64KB chunks reduce memory pressure on ARM/Jetson devices and improve
+      // backpressure handling in Helia's addByteStream for multi-GB files
+      const stream = createReadStream(filePath, { highWaterMark: 64 * 1024 });
       for await (const chunk of stream) {
         const data = chunk instanceof Buffer ? new Uint8Array(chunk) : chunk;
         bytesStreamed += data.length;
@@ -243,10 +245,35 @@ export class FilesystemManager {
       }
     }
 
-    // Scale timeout with file size: 5 min base + 1 min per 100MB
-    const timeoutMs = 5 * 60 * 1000 + Math.ceil(fileSize / (100 * 1024 * 1024)) * 60 * 1000;
+    // Scale timeout with file size: 10 min base + 2 min per 100MB (generous for ARM devices)
+    const timeoutMs = 10 * 60 * 1000 + Math.ceil(fileSize / (100 * 1024 * 1024)) * 2 * 60 * 1000;
+    logger.info(`[Filesystem] IPFS timeout set to ${Math.round(timeoutMs / 60000)} minutes for ${(fileSize / (1024 * 1024)).toFixed(0)}MB file`);
+
     const ipfsHash = await this.ipfs.storeFileStream(fileChunks(localFilePath), { pin: true, timeoutMs });
-    logger.info(`[Filesystem] File streamed to IPFS: ${normalizedPath} -> CID: ${ipfsHash} (size: ${fileSize} bytes)`);
+
+    // Verify stored size matches original — catches silent truncation from IPFS backpressure issues
+    try {
+      const storedSize = await this.ipfs.getFileSize(ipfsHash);
+      if (storedSize !== fileSize) {
+        logger.error(`[Filesystem] SIZE MISMATCH: original=${fileSize} bytes, stored=${storedSize} bytes (${((storedSize / fileSize) * 100).toFixed(1)}%). CID: ${ipfsHash}`);
+        logger.error(`[Filesystem] File was truncated during IPFS ingestion. This typically happens on memory-constrained devices when Helia drops chunks under backpressure.`);
+        // Don't delete the temp file — user may want to retry
+        throw new Error(`File upload incomplete: ${storedSize} of ${fileSize} bytes stored (${((storedSize / fileSize) * 100).toFixed(1)}%). Please retry.`);
+      }
+      logger.info(`[Filesystem] Size verified: ${storedSize} bytes matches original`);
+    } catch (sizeError) {
+      if (sizeError instanceof Error && sizeError.message.includes('File upload incomplete')) {
+        throw sizeError;
+      }
+      logger.warn(`[Filesystem] Could not verify stored file size: ${sizeError}`);
+    }
+
+    logger.info(`[Filesystem] File streamed to IPFS: ${normalizedPath} -> CID: ${ipfsHash} (${bytesStreamed} bytes streamed, ${fileSize} bytes expected)`);
+
+    // Also check if our streaming generator actually yielded all bytes
+    if (bytesStreamed < fileSize) {
+      logger.error(`[Filesystem] STREAM INCOMPLETE: only ${bytesStreamed} of ${fileSize} bytes were yielded by the file reader. Possible disk read error.`);
+    }
 
     // Clean up temp file
     try { unlinkSync(localFilePath); } catch { /* best-effort */ }

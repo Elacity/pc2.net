@@ -113,6 +113,17 @@ install_prerequisites() {
         libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev \
         pkg-config
 
+    # Increase file descriptor limit for IPFS (default 1024 is too low for multi-GB files)
+    if ! grep -q "nofile 65536" /etc/security/limits.conf 2>/dev/null; then
+        echo '* soft nofile 65536' | sudo tee -a /etc/security/limits.conf > /dev/null
+        echo '* hard nofile 65536' | sudo tee -a /etc/security/limits.conf > /dev/null
+        print_ok "File descriptor limit increased to 65536"
+    fi
+    # Also set via systemd for PM2-managed processes
+    if ! grep -q "DefaultLimitNOFILE=65536" /etc/systemd/system.conf 2>/dev/null; then
+        sudo sh -c 'echo "DefaultLimitNOFILE=65536" >> /etc/systemd/system.conf'
+    fi
+
     print_ok "Prerequisites installed"
 }
 

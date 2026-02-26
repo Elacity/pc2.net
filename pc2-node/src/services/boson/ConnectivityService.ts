@@ -137,6 +137,7 @@ export class ConnectivityService {
   private activeProxyClient: ActiveProxyClient | null = null;
   private wireGuardService: WireGuardService | null = null;
   private wireGuardRetryTimer: NodeJS.Timeout | null = null;
+  private wireGuardRetryAttempts: number = 0;
   private currentSuperNodeIndex: number = 0;
   private failedSuperNodes: Set<string> = new Set();
   private proxyConnections: Map<number, Socket> = new Map();
@@ -223,6 +224,7 @@ export class ConnectivityService {
         this.status.natType = 'wireguard';
         this.status.publicEndpoint = this.usernameService.getPublicUrl();
         this.status.connectedAt = new Date().toISOString();
+        this.wireGuardRetryAttempts = 0;
         logger.info(`[Connectivity] WireGuard tunnel active: ${endpoint}`);
         logger.info(`[Connectivity] Public URL: ${this.status.publicEndpoint}`);
 
@@ -897,7 +899,7 @@ export class ConnectivityService {
   /**
    * Called by WireGuardService when the tunnel is declared dead after
    * consecutive health check failures. Falls back to Boson immediately
-   * and schedules a background WireGuard retry in 60s.
+   * and schedules a background WireGuard retry with exponential backoff.
    */
   private handleWireGuardDown(): void {
     logger.warn('⚠️ WireGuard tunnel lost -- falling back to Boson relay');
@@ -919,9 +921,26 @@ export class ConnectivityService {
       this.scheduleReconnect();
     }
 
-    // Schedule a background WireGuard retry
+    // Schedule a background WireGuard retry with exponential backoff
+    this.wireGuardRetryAttempts = 0;
+    this.scheduleWireGuardRetry();
+  }
+
+  /**
+   * Schedule a WireGuard reconnect attempt with exponential backoff.
+   * Starts at 15s, doubles each attempt, caps at 5 minutes.
+   * Keeps retrying indefinitely until the tunnel is re-established or the service stops.
+   */
+  private scheduleWireGuardRetry(): void {
     if (this.wireGuardRetryTimer) clearTimeout(this.wireGuardRetryTimer);
-    const WG_RETRY_DELAY_MS = 60_000;
+    if (!this.isRunning) return;
+
+    const WG_RETRY_BASE_MS = 15_000;
+    const WG_RETRY_MAX_MS = 300_000;
+    const delayMs = Math.min(WG_RETRY_BASE_MS * (2 ** this.wireGuardRetryAttempts), WG_RETRY_MAX_MS);
+
+    logger.info(`[Connectivity] WireGuard retry scheduled in ${delayMs / 1000}s (attempt ${this.wireGuardRetryAttempts + 1})`);
+
     this.wireGuardRetryTimer = setTimeout(async () => {
       this.wireGuardRetryTimer = null;
       if (!this.wireGuardService || !this.isRunning) return;
@@ -931,19 +950,23 @@ export class ConnectivityService {
         await this.wireGuardService.disconnect();
         const connected = await this.connectViaWireGuard();
         if (connected) {
-          // Tear down Boson since we're back on WireGuard
           if (this.activeProxyClient) {
             await this.activeProxyClient.disconnect();
             this.activeProxyClient = null;
           }
           logger.info('🚀 WireGuard tunnel re-established');
+          // wireGuardRetryAttempts reset inside connectViaWireGuard on success
         } else {
+          this.wireGuardRetryAttempts++;
           logger.info('[Connectivity] WireGuard retry failed, staying on Boson');
+          this.scheduleWireGuardRetry();
         }
       } catch (error) {
+        this.wireGuardRetryAttempts++;
         logger.warn(`[Connectivity] WireGuard retry error: ${error}`);
+        this.scheduleWireGuardRetry();
       }
-    }, WG_RETRY_DELAY_MS);
+    }, delayMs);
   }
 
   /**

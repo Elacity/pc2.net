@@ -91,12 +91,16 @@ These diagrams from Rong define the north star. Every work stream should move us
 - [ ] First monthly release (v1.1.0) — after Jetson validation
 - [x] Publish WCI ecosystem update article
 
-**Status (2026-02-24):**
-- WireGuard reconnect after reboot: confirmed working
-- Large file upload (2.5GB+): needs more testing (ulimit fix pending verification)
+**Status (2026-02-26):**
+- WireGuard reconnect after reboot: confirmed working (EverlastingOS + Anders)
+- Large file upload: confirmed working — was a display bug (progress bar doubled total), NOT actual truncation
 - WCI update article: published
 - Expenditure portal: live
+- One-command Jetson install: validated on 2 independent Jetsons (EverlastingOS + Anders/alm.ela.city)
+- Weekly shipping reports: established on GitHub Discussions (#1, #2, #3)
 - v1.1.0 release: blocked on Sash's own Jetson hardware test
+- Anders' WalletConnect/Essentials issue: pending investigation (MetaMask works)
+- Anders' Ollama model download issue: pending (needs Ollama installed/running)
 
 ---
 
@@ -105,7 +109,7 @@ These diagrams from Rong define the north star. Every work stream should move us
 **Goal:** Harden everything. Grow the node count. Make it dead-simple to install.
 
 **V1 Hardening:**
-- [x] Fix large file upload stalling — post-upload size verification, smaller chunks, doubled timeout
+- [x] Fix large file upload — was a display bug (total_size*2 removed), uploads were always completing correctly
 - [x] Fix wallpaper not loading via gateway — confirmed resolved after WireGuard reconnect fix
 - [ ] AV1/Firefox — server-side remuxing for MKV→MP4 (beyond the error message)
 - [ ] Performance profiling on Jetson (memory, CPU, IPFS block store)

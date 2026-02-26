@@ -84,6 +84,10 @@ export class DatabaseManager {
     this.dbPath = dbPath;
   }
 
+  getDatabase(): Database.Database | null {
+    return this.db;
+  }
+
   /**
    * Initialize database connection and run migrations
    */

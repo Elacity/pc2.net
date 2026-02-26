@@ -344,6 +344,172 @@ SUDOERS_EOF
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Install voice AI tools (Whisper STT + Piper TTS + ffmpeg)
+# Optional — enable with INSTALL_VOICE=1 or auto-detected on Jetson
+# ─────────────────────────────────────────────────────────────────────────────
+
+VOICE_READY=false
+
+install_voice_tools() {
+    if [ "${INSTALL_VOICE:-0}" != "1" ] && [ "$IS_JETSON" != true ]; then
+        return
+    fi
+
+    echo ""
+    print_step "Installing voice AI tools (Whisper STT + Piper TTS)..."
+
+    # ffmpeg (required for audio format conversion)
+    if command -v ffmpeg &>/dev/null; then
+        print_ok "ffmpeg already installed"
+    else
+        sudo apt-get install -y -qq ffmpeg
+        if command -v ffmpeg &>/dev/null; then
+            print_ok "ffmpeg installed"
+        else
+            print_warn "ffmpeg install failed — voice pipeline will not work"
+            return
+        fi
+    fi
+
+    # ── Whisper.cpp (STT) ──
+    WHISPER_DIR="${WHISPER_DIR:-$HOME/whisper.cpp}"
+    if [ -f "$WHISPER_DIR/build/bin/whisper-server" ]; then
+        print_ok "whisper.cpp already built"
+    else
+        print_step "Building whisper.cpp from source (CUDA-accelerated if available)..."
+        sudo apt-get install -y -qq cmake libcurl4-openssl-dev 2>/dev/null || true
+
+        if [ -d "$WHISPER_DIR" ]; then
+            cd "$WHISPER_DIR" && git pull
+        else
+            git clone --depth 1 https://github.com/ggerganov/whisper.cpp.git "$WHISPER_DIR"
+        fi
+
+        cd "$WHISPER_DIR"
+        mkdir -p build && cd build
+
+        # Detect CUDA for Jetson GPU acceleration
+        if command -v nvcc &>/dev/null || [ -d /usr/local/cuda ]; then
+            print_step "CUDA detected — building with GPU acceleration"
+            cmake .. -DGGML_CUDA=ON -DWHISPER_BUILD_SERVER=ON
+        else
+            cmake .. -DWHISPER_BUILD_SERVER=ON
+        fi
+
+        cmake --build . --config Release -j$(nproc) 2>&1
+
+        if [ -f "$WHISPER_DIR/build/bin/whisper-server" ]; then
+            print_ok "whisper.cpp built successfully"
+        else
+            print_warn "whisper.cpp build failed"
+            cd "$HOME"
+            return
+        fi
+    fi
+
+    # Download base.en model if not present
+    WHISPER_MODEL="$WHISPER_DIR/models/ggml-base.en.bin"
+    if [ -f "$WHISPER_MODEL" ]; then
+        print_ok "Whisper model already downloaded"
+    else
+        print_step "Downloading Whisper base.en model (~142MB)..."
+        cd "$WHISPER_DIR"
+        bash models/download-ggml-model.sh base.en
+        if [ -f "$WHISPER_MODEL" ]; then
+            print_ok "Whisper model downloaded"
+        else
+            print_warn "Whisper model download failed"
+        fi
+    fi
+
+    # Create whisper-server systemd service
+    WHISPER_SERVICE="/etc/systemd/system/whisper-server.service"
+    if [ ! -f "$WHISPER_SERVICE" ]; then
+        print_step "Creating whisper-server systemd service..."
+        sudo tee "$WHISPER_SERVICE" > /dev/null << WHISPER_EOF
+[Unit]
+Description=Whisper.cpp STT Server
+After=network.target
+
+[Service]
+Type=simple
+User=$USER
+ExecStart=$WHISPER_DIR/build/bin/whisper-server -m $WHISPER_MODEL --host 127.0.0.1 --port 8080
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+WHISPER_EOF
+
+        sudo systemctl daemon-reload
+        sudo systemctl enable whisper-server
+        sudo systemctl start whisper-server
+        print_ok "whisper-server service created and started (port 8080)"
+    else
+        print_ok "whisper-server service already configured"
+        sudo systemctl restart whisper-server 2>/dev/null || true
+    fi
+
+    # ── Piper TTS ──
+    PIPER_DIR="${PIPER_DIR:-$HOME/piper}"
+    if command -v piper &>/dev/null || [ -f "$PIPER_DIR/piper" ]; then
+        print_ok "Piper TTS already installed"
+    else
+        print_step "Installing Piper TTS..."
+
+        # Try pip install first (simpler)
+        if command -v pip3 &>/dev/null; then
+            pip3 install piper-tts 2>/dev/null || true
+        fi
+
+        if command -v piper &>/dev/null; then
+            print_ok "Piper installed via pip"
+        else
+            # Download prebuilt binary for ARM
+            print_step "Downloading Piper binary for ARM64..."
+            mkdir -p "$PIPER_DIR"
+            cd "$PIPER_DIR"
+            PIPER_RELEASE="https://github.com/rhasspy/piper/releases/latest/download/piper_linux_aarch64.tar.gz"
+            curl -sSL "$PIPER_RELEASE" | tar xz --strip-components=1 2>/dev/null || true
+
+            if [ -f "$PIPER_DIR/piper" ]; then
+                sudo ln -sf "$PIPER_DIR/piper" /usr/local/bin/piper
+                print_ok "Piper installed from binary"
+            else
+                print_warn "Piper TTS installation failed — AI responses will be text-only"
+                cd "$HOME"
+                return
+            fi
+        fi
+    fi
+
+    # Download default voice model
+    PIPER_VOICE_DIR="$PIPER_DIR/voices"
+    PIPER_VOICE_FILE="$PIPER_VOICE_DIR/en_US-ryan-high.onnx"
+    if [ -f "$PIPER_VOICE_FILE" ]; then
+        print_ok "Piper voice model already downloaded"
+    else
+        print_step "Downloading Piper voice model (en_US-ryan-high)..."
+        mkdir -p "$PIPER_VOICE_DIR"
+        curl -sSL "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_US/ryan/high/en_US-ryan-high.onnx" \
+            -o "$PIPER_VOICE_FILE" 2>/dev/null || true
+        curl -sSL "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_US/ryan/high/en_US-ryan-high.onnx.json" \
+            -o "${PIPER_VOICE_FILE}.json" 2>/dev/null || true
+
+        if [ -f "$PIPER_VOICE_FILE" ]; then
+            print_ok "Piper voice model downloaded"
+        else
+            print_warn "Voice model download failed — TTS will not work"
+        fi
+    fi
+
+    VOICE_READY=true
+    print_ok "Voice AI tools installed"
+    cd "$HOME"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Clone and build PC2
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -477,7 +643,13 @@ print_success() {
     echo -e "${GREEN}║     ${NC}pm2 stop pc2        ${GREEN}- Stop the server                          ║${NC}"
     echo -e "${GREEN}║     ${NC}pm2 status          ${GREEN}- Check server status                      ║${NC}"
     echo -e "${GREEN}║     ${NC}sudo wg show wg0    ${GREEN}- Check WireGuard tunnel                   ║${NC}"
+    if [ "$VOICE_READY" = true ]; then
+    echo -e "${GREEN}║     ${NC}systemctl status whisper-server${GREEN} - Check voice STT            ║${NC}"
+    fi
     echo -e "${GREEN}║                                                                   ║${NC}"
+    if [ "$VOICE_READY" = true ]; then
+    echo -e "${GREEN}║     ${NC}Voice AI: ${CYAN}enabled (Whisper + Piper)${GREEN}                           ║${NC}"
+    fi
     echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
 }
@@ -494,6 +666,7 @@ main() {
     install_nodejs
     install_pm2
     install_wireguard
+    install_voice_tools
     install_pc2
     start_pc2
     print_success

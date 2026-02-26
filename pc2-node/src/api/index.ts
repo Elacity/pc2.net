@@ -41,6 +41,8 @@ import didRouter from './did.js';
 import walletRouter from './wallet.js';
 import gatewayRouter from './gateway.js';
 import systemRouter from './system.js';
+import contextRouter from './context.js';
+import voiceRouter from './voice.js';
 
 // Extend Express Request to include database, filesystem, config, and WebSocket
 declare global {
@@ -345,6 +347,8 @@ export function setupAPI(app: Express): void {
   app.use('/api/wallet', walletRouter);
   app.use('/api/gateway', gatewayRouter);
   app.use('/api/system', systemRouter);
+  app.use('/api/context', contextRouter);
+  app.use('/api/ai', voiceRouter);
   
   // Rate limit status endpoint
   app.get('/api/rate-limit/status', authenticate, (req: AuthenticatedRequest, res: Response) => {

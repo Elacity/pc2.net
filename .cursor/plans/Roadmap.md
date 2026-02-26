@@ -158,6 +158,32 @@ Today, every installation path requires terminal commands. This excludes 95% of 
 
 ---
 
+## Track 0.7: ActiveProxy NAT Traversal Fix (CRITICAL — In Progress)
+
+> **Branch:** `feature/jetson-gpu-acceleration`
+> **Status:** Testing with community member (EverlastingOS on Jetson)
+> **Full details:** [ActiveProxy Fix Plan](./activeproxy_fix.md)
+
+The ActiveProxy protocol (Boson NAT traversal enabling `username.ela.city` domains) required a complete rewrite. The PC2 Node.js client had multiple protocol mismatches with the Java Boson server.
+
+| Fix | Status | Commit |
+|-----|--------|--------|
+| Ed25519 key format (PKCS8 DER → raw 64 bytes) | ✅ Done | `55a9c57c` (on main) |
+| Protocol rewrite from decompiled Java source | ✅ Done | `5989ca1e` |
+| Correct PING packets (3-byte unencrypted, not 43-byte encrypted) | ✅ Done | `5989ca1e` |
+| Use allocatedPort from AUTH_ACK, not static 8090 | ✅ Done | `5dbe7e64` |
+| Register connected handler before connect() | ✅ Done | `5dbe7e64` |
+| Remove domain from AUTH (crashes Java helper) | ✅ Done | `bf3cf033` |
+| Gateway uses http-proxy for relay endpoints | ✅ Done | `8514f466` |
+| Chunk sendData to prevent 65535 overflow | ✅ Done | `91ec216b` |
+| **Community verification on Jetson** | 🔄 Testing | — |
+| **Merge to main** | ⏳ Pending | — |
+| **Deploy updated web-gateway to supernode** | ⏳ Pending | — |
+
+**Latest test (Feb 8):** AUTH succeeds, port allocated, endpoint registered, browser CONNECT received. Crashed on large DATA relay (fixed in `91ec216b`). Awaiting community re-test.
+
+---
+
 ## Track 1: Immediate Bug Fixes (February 2026)
 
 ### 1.1 Critical Bug Fixes
@@ -166,6 +192,7 @@ Today, every installation path requires terminal commands. This excludes 95% of 
 |------|----------|--------|-------|
 | Fix "Copy & Save" recovery phrase button | High | Pending | Mnemonic API returns null after server restart |
 | Auto-install build deps on Ubuntu/Debian | High | ✅ Done | Commit `4df6f0c6` - fixes node-pty error |
+| ActiveProxy NAT traversal | High | 🔄 Testing | See Track 0.7 above |
 | Monitor community feedback | High | Ongoing | Triage bugs from real users |
 | Documentation sync | Medium | Pending | Ensure docs.ela.city matches v1.0 |
 
@@ -176,6 +203,7 @@ Today, every installation path requires terminal commands. This excludes 95% of 
 | End-to-end testing on all deployment methods | High | Pending |
 | Desktop Launcher stability testing | High | Pending |
 | VPS deployment verification | Medium | Pending |
+| ActiveProxy multi-node testing | High | Pending |
 
 ---
 
@@ -329,6 +357,35 @@ Offer pre-configured PC2 hardware for users who want plug-and-play sovereignty. 
 
 ---
 
+## Track 4.5: Voice AI & Context Awareness (Milestone 2)
+
+> **Branch:** `feature/jetson-gpu-acceleration`
+> **Status:** ✅ Complete on Mac dev, ⏳ Jetson testing pending
+
+### Completed (Feb 26, 2026)
+
+| Component | Status | Details |
+|-----------|--------|---------|
+| Context API (`/api/context/*`) | ✅ Done | Ingest, query, summarize context events |
+| Context awareness in AI chat | ✅ Done | Opt-in injection of device context into system prompt |
+| Database migration 15 | ✅ Done | `context_events` table + `context_awareness` flag |
+| Voice pipeline (STT → LLM → TTS) | ✅ Done | Whisper.cpp + Ollama + Piper TTS |
+| Voice status endpoint | ✅ Done | `/api/ai/voice/status` health check |
+| Mic button UI + waveform visualizer | ✅ Done | White bars, replaces input during recording |
+| Voice-mode system prompt | ✅ Done | Natural conversational responses |
+| ARM install script (voice tools) | ✅ Done | Auto-installs Whisper + Piper on Jetson |
+
+### Pending
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Jetson end-to-end voice test | ⏳ Pending | Needs community verification on Jetson hardware |
+| Ollama model loading on Jetson | 🔄 Debugging | Anders reports model download/load issues |
+| Voice settings toggle in UI | ⏳ Future | Enable/disable voice from AI settings panel |
+| Multi-turn voice conversation | ⏳ Future | Maintain conversation history across voice turns |
+
+---
+
 ## Track 5: Version Roadmap
 
 ### v1.1 - Bug Fixes & Normal People (Feb-Mar 2026)
@@ -339,6 +396,8 @@ Offer pre-configured PC2 hardware for users who want plug-and-play sovereignty. 
 | Apple code signing (no terminal on Mac) | Pending |
 | Pre-built Pi/Jetson images | Pending |
 | Ubuntu build deps auto-install | ✅ Done |
+| Voice AI pipeline (Whisper + Piper) | ✅ Done |
+| Context awareness API | ✅ Done |
 | Improved error messages | Pending |
 | Documentation improvements | Pending |
 
@@ -469,6 +528,7 @@ Feb 2026        Mar 2026        Q2 2026         Q3 2026         Q4 2026         
 
 ## Related Plans
 
+- [ActiveProxy NAT Traversal Fix](./activeproxy_fix.md) — **Critical, in testing**
 - [Jetson SDK Optimization](./jetson_sdk_optimization_3c7e940c.plan.md)
 - [Flint AI Agent Upgrade](./upgrade_flint_ai_agent_4946c79b.plan.md)
 

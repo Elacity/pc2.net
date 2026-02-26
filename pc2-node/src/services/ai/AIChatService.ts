@@ -20,6 +20,7 @@ import { agentKitTools } from './tools/AgentKitTools.js';
 import { ToolExecutor } from './tools/ToolExecutor.js';
 import { FilesystemManager } from '../../storage/filesystem.js';
 import { DatabaseManager } from '../../storage/database.js';
+import { ContextStore } from '../../storage/context.js';
 import { MemoryConsolidator, ConsolidatedState } from './memory/MemoryConsolidator.js';
 import { TokenBudgetManager } from './budget/TokenBudgetManager.js';
 import { buildSystemPrompt, buildMinimalSystemPrompt } from './prompts/SystemPromptBuilder.js';
@@ -441,6 +442,12 @@ export class AIChatService {
       await this.registerUserProviders(args.walletAddress);
     }
 
+    // Retry Ollama registration if no providers available (handles slow startup / memory pressure)
+    if (this.providers.size === 0 && !this.providers.has('ollama')) {
+      logger.info('[AIChatService] No providers available, retrying Ollama registration...');
+      await this.registerOllamaProvider();
+    }
+
     if (this.providers.size === 0) {
       throw new Error('No AI providers available. Please ensure Ollama is installed and running, or add API keys for cloud providers.');
     }
@@ -733,6 +740,29 @@ export class AIChatService {
     if (cognitivePrompt && !useMinimalPrompt) {
       systemPromptContent = `${systemPromptContent}\n\n${cognitivePrompt}`;
       logger.info('[AIChatService] Cognitive tools injected for complex task');
+    }
+
+    // Inject real-world context if awareness is enabled
+    if (this.db && walletAddress) {
+      try {
+        const rawDb = this.db.getDatabase();
+        if (rawDb) {
+          const aiConfig = this.db.getAIConfig(walletAddress);
+          const contextEnabled = (aiConfig as any)?.context_awareness === 1;
+          if (contextEnabled) {
+            const contextStore = new ContextStore(rawDb);
+            const contextSummary = contextStore.summarizeRecentContext(walletAddress, 24);
+            if (contextSummary) {
+              systemPromptContent = `${systemPromptContent}\n\n${contextSummary}`;
+              logger.info('[AIChatService] Context awareness injected', {
+                length: contextSummary.length,
+              });
+            }
+          }
+        }
+      } catch (error: any) {
+        logger.warn(`[AIChatService] Context injection failed: ${error.message}`);
+      }
     }
     
     logger.info('[AIChatService] System prompt built:', {
@@ -1537,6 +1567,12 @@ Example: {"tool_calls": [{"name": "write_file", "arguments": {"path": "${filePat
     // Register user-specific providers if wallet address is provided
     if (args.walletAddress) {
       await this.registerUserProviders(args.walletAddress);
+    }
+
+    // Retry Ollama registration if no providers available (handles slow startup / memory pressure)
+    if (this.providers.size === 0 && !this.providers.has('ollama')) {
+      logger.info('[AIChatService] No providers available, retrying Ollama registration...');
+      await this.registerOllamaProvider();
     }
 
     if (this.providers.size === 0) {

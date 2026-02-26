@@ -158,7 +158,7 @@ export class OllamaProvider {
     try {
       const response = await fetch(`${this.apiBaseUrl}/api/tags`, {
         method: 'GET',
-        signal: AbortSignal.timeout(2000),
+        signal: AbortSignal.timeout(10000),
       });
       return response.ok;
     } catch (error) {

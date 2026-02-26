@@ -29,7 +29,7 @@ function findSchemaFile(): string {
   }
   throw new Error(`Schema file not found. Tried: ${SCHEMA_FILE} and ${sourceSchema}`);
 }
-const CURRENT_VERSION = 14;
+const CURRENT_VERSION = 15;
 
 interface Migration {
   version: number;
@@ -602,6 +602,38 @@ export function runMigrations(db: Database.Database): void {
         recordMigration(db, 14);
       } catch (error: any) {
         console.error(`❌ Migration 14 error: ${error.message}`);
+        throw error;
+      }
+    }
+
+    // Migration 15: Context events table + context_awareness flag
+    if (currentVersion < 15) {
+      try {
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS context_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            wallet TEXT NOT NULL,
+            timestamp TEXT NOT NULL,
+            type TEXT NOT NULL,
+            data TEXT NOT NULL,
+            created_at INTEGER DEFAULT (strftime('%s', 'now'))
+          )
+        `);
+
+        db.exec(`CREATE INDEX IF NOT EXISTS idx_context_wallet_time ON context_events(wallet, timestamp DESC)`);
+        db.exec(`CREATE INDEX IF NOT EXISTS idx_context_type ON context_events(type)`);
+
+        // Add context_awareness flag to ai_config
+        try {
+          db.exec(`ALTER TABLE ai_config ADD COLUMN context_awareness INTEGER DEFAULT 0`);
+        } catch {
+          // Column already exists
+        }
+
+        console.log('✅ Migration 15 complete: Context events table + awareness flag');
+        recordMigration(db, 15);
+      } catch (error: any) {
+        console.error(`❌ Migration 15 error: ${error.message}`);
         throw error;
       }
     }

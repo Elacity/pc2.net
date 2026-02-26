@@ -1,6 +1,6 @@
 -- PC2 Node Database Schema
 -- SQLite database for persistent storage
--- Version 13: Full schema with all migrations applied
+-- Version 15: Full schema with all migrations applied
 
 -- Users table: Wallet-based user accounts
 CREATE TABLE IF NOT EXISTS users (
@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS ai_config (
   default_model TEXT,
   api_keys TEXT,
   ollama_base_url TEXT DEFAULT 'http://localhost:11434',
+  context_awareness INTEGER DEFAULT 0,
   updated_at INTEGER DEFAULT (strftime('%s', 'now')),
   FOREIGN KEY (wallet_address) REFERENCES users(wallet_address)
 );
@@ -158,6 +159,16 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   FOREIGN KEY (wallet_address) REFERENCES users(wallet_address) ON DELETE CASCADE
 );
 
+-- Context events table: Awareness layer data (location, photos, voice, activity)
+CREATE TABLE IF NOT EXISTS context_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  wallet TEXT NOT NULL,
+  timestamp TEXT NOT NULL,
+  type TEXT NOT NULL,
+  data TEXT NOT NULL,
+  created_at INTEGER DEFAULT (strftime('%s', 'now'))
+);
+
 -- FTS5 Full-Text Search for files
 -- Note: We don't use content='files' because the files table doesn't have a 'name' column
 -- Instead, we use triggers to keep FTS5 in sync (defined below)
@@ -187,6 +198,8 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at DESC)
 CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
 CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_wallet ON scheduled_tasks(wallet_address);
 CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_next_run ON scheduled_tasks(next_run_at);
+CREATE INDEX IF NOT EXISTS idx_context_wallet_time ON context_events(wallet, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_context_type ON context_events(type);
 
 -- Triggers for FTS synchronization
 CREATE TRIGGER IF NOT EXISTS files_fts_insert AFTER INSERT ON files BEGIN

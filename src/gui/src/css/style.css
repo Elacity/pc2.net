@@ -1765,6 +1765,77 @@
     height: 20px;
 }
 
+/* Voice input button - same style as attach/activity/agent buttons */
+.ai-voice-btn {
+    background: var(--ai-input-bg);
+    border: 1px solid var(--ai-border-color);
+    padding: 0;
+    cursor: pointer;
+    color: #666;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    box-sizing: border-box;
+    transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+    outline: none;
+}
+
+[data-theme="dark"] .ai-voice-btn {
+    color: #9ca3af;
+}
+
+.ai-voice-btn:hover {
+    background: var(--ai-message-user-bg);
+    color: var(--ai-text-color);
+}
+
+.ai-voice-btn:focus {
+    outline: none;
+}
+
+.ai-voice-btn svg {
+    width: 20px;
+    height: 20px;
+}
+
+.ai-voice-btn.ai-voice-recording {
+    color: #ef4444;
+    border-color: #ef4444;
+}
+
+[data-theme="dark"] .ai-voice-btn.ai-voice-recording {
+    color: #ef4444;
+    border-color: #ef4444;
+}
+
+.ai-voice-btn.ai-voice-recording svg {
+    animation: voice-pulse 1s ease-in-out infinite;
+}
+
+@keyframes voice-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
+/* Voice waveform visualizer overlay */
+.ai-voice-waveform {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    height: 100%;
+    padding: 0 12px;
+}
+
+.ai-voice-waveform canvas {
+    width: 100%;
+    height: 40px;
+}
+
 /* Chat Input - full width at top */
 .ai-chat-input {
     width: 100%;

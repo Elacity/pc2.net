@@ -102,8 +102,9 @@ function UIPopover (options) {
                 // Position at top for left/right taskbars
                 y_pos = window.toolbar_height + 10; // Just below the toolbar
             } else {
-                // Default bottom taskbar behavior - position above taskbar
-                y_pos = options.top ?? (window.innerHeight - (window.taskbar_height + popover_height + 10));
+                // Default bottom taskbar behavior - position above taskbar with clear gap (dock is 12px from bottom + 50px height)
+                const gapAboveTaskbar = 24;
+                y_pos = options.top ?? (window.innerHeight - (window.taskbar_height + popover_height + gapAboveTaskbar));
             }
         } else {
             y_pos = options.top ?? ($(options.snapToElement).offset().top + $(options.snapToElement).height() + 5);

@@ -145,7 +145,7 @@ async function UIWindow(options) {
     options.top = options.top ?? default_window_top;
     options.type = options.type ?? null;
     options.update_window_url = options.update_window_url ?? false;
-    options.layout = options.layout ?? 'icons';
+    options.layout = options.layout ?? window.get_explorer_layout_preference?.() ?? 'icons';
     options.width = options.width ?? 680;
     options.window_css = options.window_css ?? {};
     options.window_class = (options.window_class !== undefined ? ' ' + options.window_class : '');
@@ -351,8 +351,13 @@ async function UIWindow(options) {
                 h += `<div class="window-navbar-path">${window.navbar_path(options.path, window.user.username)}</div>`;
                 // Path editor
                 h += `<input class="window-navbar-path-input" data-path="${html_encode(options.path)}" value="${html_encode(options.path)}" spellcheck="false"/>`;
-                // Layout settings
-                h += `<img class="window-navbar-layout-settings" src="${html_encode(options.layout === 'icons' ? window.icons['layout-icons.svg'] : window.icons['layout-list.svg'])}" draggable="false">`;
+                // Layout settings - Apple-style segmented toggle (Icons | List)
+                const layoutForToggle = (options.layout === 'list') ? 'details' : (options.layout || 'icons');
+                const iconsActive = layoutForToggle === 'icons';
+                h += `<div class="window-navbar-layout-toggle" role="group" aria-label="View mode">`;
+                h += `<button type="button" class="layout-toggle-segment layout-toggle-segment--icons${iconsActive ? ' layout-toggle-segment-active' : ''}" data-layout="icons" title="${i18n('icons') || 'Icons'}"><img src="${html_encode(window.icons['layout-icons.svg'])}" alt="" draggable="false"></button>`;
+                h += `<button type="button" class="layout-toggle-segment layout-toggle-segment--list${!iconsActive ? ' layout-toggle-segment-active' : ''}" data-layout="details" title="${i18n('list') || 'List'}"><img src="${html_encode(window.icons['layout-details.svg'])}" alt="" draggable="false"></button>`;
+                h += `</div>`;
             h += `</div>`;
         }
 
@@ -1144,41 +1149,23 @@ async function UIWindow(options) {
             }
         })
 
-        const layouts = ['icons', 'list', 'details'];
+        const layouts = ['icons', 'details'];
 
-        $(el_window).find('.window-navbar-layout-settings').on('contextmenu taphold', function() {
+        $(el_window).find('.window-navbar-layout-toggle').on('contextmenu taphold', function(e) {
+            e.preventDefault();
             let cur_layout = $(el_window).attr('data-layout');
-            let items = [];
-            for(let i=0; i<layouts.length; i++){
-                items.push({
-                    html: `<span style="text-transform: capitalize;">${layouts[i]}</span>`,
-                    icon: cur_layout === layouts[i] ? '✓' : '',
-                    onClick: async function(e){
-                        window.update_window_layout(el_window, layouts[i]);
-                        window.set_layout($(el_window).attr('data-uid'), layouts[i]);
-                    }
-                })
-            }
-            UIContextMenu({
-                parent_element: this,
-                items: items,
-            })
-        })
-        $(el_window).find('.window-navbar-layout-settings').on('click', function() {
-            let cur_layout = $(el_window).attr('data-layout');
-            for(let i=0; i<layouts.length; i++){
-                if(cur_layout === layouts[i]){
-                    if(i === layouts.length - 1){
-                        window.update_window_layout(el_window, layouts[0]);
-                        window.set_layout($(el_window).attr('data-uid'), layouts[0]);
-                    }else{
-                        window.update_window_layout(el_window, layouts[i+1]);
-                        window.set_layout($(el_window).attr('data-uid'), layouts[i+1]);
-                    }
-                    break;
-                }
-            }
-        })
+            if (cur_layout === 'list') cur_layout = 'details';
+            const items = [
+                { html: `<span style="text-transform: capitalize;">${layouts[0]}</span>`, icon: cur_layout === 'icons' ? '✓' : '', onClick: async function() { window.update_window_layout(el_window, 'icons'); window.set_layout($(el_window).attr('data-uid'), 'icons'); } },
+                { html: `<span style="text-transform: capitalize;">List</span>`, icon: cur_layout === 'details' ? '✓' : '', onClick: async function() { window.update_window_layout(el_window, 'details'); window.set_layout($(el_window).attr('data-uid'), 'details'); } }
+            ];
+            UIContextMenu({ parent_element: this, items });
+        });
+        $(el_window).find('.layout-toggle-segment').on('click', function() {
+            const layout = $(this).attr('data-layout');
+            window.update_window_layout(el_window, layout);
+            window.set_layout($(el_window).attr('data-uid'), layout);
+        });
         // --------------------------------------------------------
         // directory content
         // --------------------------------------------------------
@@ -3272,7 +3259,8 @@ window.update_window_path = async function(el_window, target_path){
                 $(el_window).attr('data-uid', fsentry.id);
                 $(el_window).attr('data-sort_by', fsentry.sort_by ?? 'name');
                 $(el_window).attr('data-sort_order', fsentry.sort_order ?? 'asc');
-                $(el_window).attr('data-layout', fsentry.layout ?? 'icons');
+                const layout = window.get_explorer_layout_preference?.() ?? fsentry.layout ?? 'icons';
+                $(el_window).attr('data-layout', layout);
                 $(el_window_item_container).attr('data-uid', fsentry.id);
                 // title
                 if (target_path === window.home_path)
@@ -3286,9 +3274,9 @@ window.update_window_path = async function(el_window, target_path){
                 $(el_window_navbar_path_input).val(target_path);
                 $(el_window_navbar_path_input).attr('data-path', target_path);
                 // update layout
-                window.update_window_layout(el_window, fsentry.layout);
+                window.update_window_layout(el_window, layout);
                 // update explore header if in details view
-                if(fsentry.layout === 'details'){
+                if(layout === 'details'){
                     window.update_details_layout_sort_visuals(el_window, fsentry.sort_by, fsentry.sort_order);
                 }
             });
@@ -3765,27 +3753,23 @@ window.explore_table_headers = function(){
 
 window.update_window_layout = function(el_window, layout){
     layout = layout ?? 'icons';
+    if (layout === 'list') layout = 'details';
 
     if(layout === 'icons'){
         $(el_window).find('.explore-table-headers').hide();
         $(el_window).find('.item-container').removeClass('item-container-list');
         $(el_window).find('.item-container').removeClass('item-container-details');
-        $(el_window).find('.window-navbar-layout-settings').attr('src', window.icons['layout-icons.svg']);
-        $(el_window).attr('data-layout', layout)
-    }
-    else if(layout === 'list'){
-        $(el_window).find('.explore-table-headers').hide();
-        $(el_window).find('.item-container').removeClass('item-container-details');
-        $(el_window).find('.item-container').addClass('item-container-list');
-        $(el_window).find('.window-navbar-layout-settings').attr('src', window.icons['layout-list.svg'])
-        $(el_window).attr('data-layout', layout)
+        $(el_window).attr('data-layout', layout);
+        $(el_window).find('.layout-toggle-segment--icons').addClass('layout-toggle-segment-active');
+        $(el_window).find('.layout-toggle-segment--list').removeClass('layout-toggle-segment-active');
     }
     else if(layout === 'details'){
         $(el_window).find('.explore-table-headers').show();
         $(el_window).find('.item-container').removeClass('item-container-list');
         $(el_window).find('.item-container').addClass('item-container-details');
-        $(el_window).find('.window-navbar-layout-settings').attr('src', window.icons['layout-details.svg'])
-        $(el_window).attr('data-layout', layout)
+        $(el_window).attr('data-layout', layout);
+        $(el_window).find('.layout-toggle-segment--icons').removeClass('layout-toggle-segment-active');
+        $(el_window).find('.layout-toggle-segment--list').addClass('layout-toggle-segment-active');
     }
 }
 
@@ -4096,6 +4080,7 @@ $(document).on('click', '.explore-table-headers-th', function(e){
 })
 
 window.set_layout = function(item_uid, layout){
+    window.set_explorer_layout_preference(layout);
     $.ajax({
         url: window.api_origin + "/set_layout",
         type: 'POST',
@@ -4125,6 +4110,23 @@ window.set_layout = function(item_uid, layout){
         }
     })
 }
+
+window.get_explorer_layout_preference = function(){
+    if (typeof window.explorer_layout_preference === 'string') {
+        return window.explorer_layout_preference === 'list' ? 'details' : window.explorer_layout_preference;
+    }
+    try {
+        const stored = window.localStorage && window.localStorage.getItem('puter_explorer_layout');
+        return stored === 'list' ? 'details' : stored;
+    } catch (e) { return null; }
+};
+
+window.set_explorer_layout_preference = function(layout){
+    window.explorer_layout_preference = layout;
+    try {
+        if (window.localStorage) window.localStorage.setItem('puter_explorer_layout', layout);
+    } catch (e) {}
+};
 
 window.update_details_layout_sort_visuals = function(el_window, sort_by, sort_order){
     let sort_icon = '';

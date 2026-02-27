@@ -2260,6 +2260,16 @@ html:not([data-theme="light"]) {
     scrollbar-color: #555 #2d2d2d;
 }
 
+/* Explorer list view: transparent scrollbar tracks so alternating row backgrounds extend to edges */
+.window[data-app="explorer"] .window-body::-webkit-scrollbar-track,
+.window[data-app="explorer"] .item-container-details::-webkit-scrollbar-track {
+    background: transparent;
+}
+.window[data-app="explorer"] .window-body,
+.window[data-app="explorer"] .item-container-details {
+    scrollbar-color: #555 transparent;
+}
+
 /* Light mode - Toolbar stays dark (like Puter), Taskbar gets light frosted glass */
 /* Puter's toolbar uses dark semi-transparent for both modes */
 /* But Puter's taskbar uses HSLA variables that create light appearance */
@@ -2272,6 +2282,9 @@ html:not([data-theme="light"]) {
     [data-theme="light"] .taskbar {
         background-color: rgba(231, 238, 245, 0.75) !important;
         backdrop-filter: blur(10px);
+    }
+    [data-theme="light"] .taskbar.taskbar-position-bottom {
+        backdrop-filter: blur(12px);
     }
 }
 
@@ -4334,12 +4347,12 @@ html:not([data-theme="light"]) {
  *****************************************************/
 /* Search bar wrapper background in light mode */
 [data-theme="light"] .launch-search-wrapper {
-    background: #ffffff !important;
+    background: var(--color-bg-surface) !important;
 }
 
 /* Search input in light mode */
 [data-theme="light"] .launch-search {
-    background-color: #ffffff !important;
+    background-color: var(--color-bg-surface) !important;
     border-color: #d1d5db !important;
     color: #374151 !important;
 }
@@ -4469,9 +4482,9 @@ html:not([data-theme="light"]) {
 /*****************************************************
  * Launch Search (Start Menu) - Dark Mode (Default)
  *****************************************************/
-/* Dark mode - dark background, white text, white icon */
+/* Dark mode - match popover surface so search is not block solid */
 .launch-search {
-    background-color: #3a3a3c !important;
+    background-color: var(--color-bg-surface) !important;
     color: #ffffff !important;
     border-color: #4a4a4c !important;
     background-image: none !important; /* Hide original inline icon */
@@ -4500,9 +4513,9 @@ html:not([data-theme="light"]) {
 /*****************************************************
  * Launch Search (Start Menu) - Light Mode
  *****************************************************/
-/* Light mode - white background, dark text, dark icon */
+/* Light mode - match popover surface (frosted), not block white */
 [data-theme="light"] .launch-search {
-    background-color: #ffffff !important;
+    background-color: var(--color-bg-surface) !important;
     color: #374151 !important;
     border-color: #d1d5db !important;
 }
@@ -5192,10 +5205,12 @@ input[type=text]:focus, input[type=password]:focus, input[type=email]:focus, sel
     display: grid;
     overflow-x: scroll !important;
     overflow-y: hidden !important;
-    grid-template-rows: repeat(auto-fill, 18px);
+    grid-template-rows: repeat(auto-fill, 32px);
     grid-auto-flow: column;
-    gap: 15px 70px;
+    gap: 2px 70px;
     padding-top: 5px;
+    padding-left: 0;
+    align-content: start;
 }
 
 .device-phone .item-container-list {
@@ -5244,6 +5259,7 @@ input[type=text]:focus, input[type=password]:focus, input[type=email]:focus, sel
 
 .item-container-list .item {
     height: initial;
+    min-height: 28px;
     width: max-content;
     margin: 0;
     pointer-events: all;
@@ -5251,6 +5267,7 @@ input[type=text]:focus, input[type=password]:focus, input[type=email]:focus, sel
     flex-direction: row;
     align-items: center;
     text-align: left;
+    background-color: transparent;
 }
 
 .device-phone .item-container-list .item {
@@ -5263,30 +5280,48 @@ input[type=text]:focus, input[type=password]:focus, input[type=email]:focus, sel
 }
 
 .item-container-details .item {
-    height: initial;
-    width: max-content;
-    margin: 0;
-    pointer-events: all;
+    height: 24px;
     width: 100%;
-    min-width: 795px;
-    margin-bottom: 20px;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    pointer-events: all;
+    min-width: 790px;
+    position: relative;
+    display: grid;
+    grid-template-columns: 30px 285px 15px 135px 15px 135px 15px 200px;
+    grid-auto-flow: dense;
+    align-items: center;
+    overflow: hidden;
+    text-align: left;
+    float: none;
+}
+
+.item-container-details .item > .item-spinner,
+.item-container-details .item > .item-divider,
+.item-container-details .item > .item-name-editor {
+    display: none;
 }
 
 .explore-table-headers {
     display: none;
     width: 100%;
-    min-width: 795px;
+    min-width: 790px;
     height: 25px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.15);
     background-color: var(--color-bg-tertiary, #2f2f30);
-    background-color: #fff;
-    margin-left: -10px;
+    margin-left: 0;
+    padding-left: 0;
     padding-top: 0;
     margin-top: -7px;
     margin-bottom: 8px;
     position: sticky;
     top: -7px;
     z-index: 1;
+    box-sizing: border-box;
+    grid-template-columns: 30px 285px 15px 135px 15px 135px 15px 200px;
+    display: grid;
+    align-items: center;
 }
 
 .device-phone .explore-table-headers {
@@ -5306,9 +5341,11 @@ span.header-sort-icon img {
 .explore-table-headers .explore-table-headers-th {
     font-size: 12px;
     line-height: 25px;
-    margin-left: 15px;
+    margin: 0;
+    padding: 0;
     color: rgba(255, 255, 255, 0.7);
-    display: inline-block;
+    display: block;
+    box-sizing: border-box;
 }
 
 /* Light mode - explore table headers */
@@ -5326,19 +5363,29 @@ span.header-sort-icon img {
 }
 
 .explore-table-headers-th--name {
-    width: 330px;
+    width: auto;
+    grid-column: 1 / span 2;
+    padding-left: 45px;
+    box-sizing: border-box;
 }
 
 .explore-table-headers-th--size {
-    width: 135px;
+    width: auto;
+    grid-column: 6;
 }
 
 .explore-table-headers-th--modified {
-    width: 135px;
+    width: auto;
+    grid-column: 4;
+}
+
+.explore-table-headers-th--type {
+    width: auto;
+    grid-column: 8;
 }
 
 .item-container-details .explore-table-headers {
-    display: block;
+    display: grid;
 }
 
 .item-disabled .item-icon, .item-disabled .item-name {
@@ -5375,9 +5422,13 @@ span.header-sort-icon img {
 }
 
 .item-container-details .item-icon {
-    float: left;
+    float: none;
     height: 15px;
     width: 15px;
+    padding: 0;
+    grid-column: 1;
+    align-self: center;
+    justify-self: center;
 }
 
 .device-desktop .item-container-details .item-selected .item-icon {
@@ -5501,14 +5552,17 @@ span.header-sort-icon img {
 }
 
 .item-container-details .item-name {
-    margin-top: 2px;
-    float: left;
+    margin: 0;
+    padding: 0;
+    float: none;
     text-overflow: ellipsis;
     overflow: hidden;
     white-space: nowrap;
     text-align: left;
     max-width: 220px;
-    margin-bottom: 3px;
+    grid-column: 2;
+    line-height: 24px;
+    text-shadow: none;
 }
 
 .item-name-shadow {
@@ -5574,23 +5628,32 @@ span.header-sort-icon img {
 }
 
 .item-container-details .item-attr {
-    display: inline;
+    display: block;
+    padding: 0;
+    margin: 0;
+    position: static;
+    height: auto;
+    line-height: 24px;
 }
 
 .device-desktop .item-container-details .item-selected .item-attr {
-    color: white;
+    color: rgba(255, 255, 255, 0.72);
 }
 
 .item-container-details .item-attr--modified {
-    left: 350px;
+    grid-column: 4;
 }
 
 .item-container-details .item-attr--size {
-    left: 500px;
+    grid-column: 6;
 }
 
 .item-container-details .item-attr--type {
-    left: 650px;
+    grid-column: 8;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .window-disabled {
@@ -5667,9 +5730,43 @@ span.header-sort-icon img {
     color: white;
 }
 
+.device-desktop .item-container-details .item-selected .item-name {
+    background-color: transparent !important;
+    color: #ffffff !important;
+}
+
+.device-desktop .item-container-list .item-selected .item-name {
+    background-color: transparent !important;
+    color: #ffffff !important;
+}
+
+/* Light theme: Apple-style selected row text (dark primary, grey secondary) */
+[data-theme="light"] .device-desktop .item-container-details .item-selected .item-name,
+[data-theme="light"] .device-desktop .item-container-list .item-selected .item-name {
+    color: #1d1d1f !important;
+}
+
+[data-theme="light"] .device-desktop .item-container-details .item-selected .item-attr {
+    color: #6b6b6b;
+}
+
 .device-desktop .item-container-details .item-selected {
-    background-color: #3b56ee;
+    background-color: #007AFF;
     border-radius: 3px;
+}
+
+.device-desktop .item-container-list .item-selected {
+    background-color: #007AFF;
+    border-radius: 3px;
+}
+
+/* Alternating row backgrounds (Apple-style list view) */
+.item-container-details > .item:nth-child(2n+5):not(.item-selected),
+.item-container-details > .item:nth-child(2n+7):not(.item-selected) {
+    background-color: var(--color-bg-tertiary);
+}
+.item-container-details > .item:nth-child(2n+6):not(.item-selected) {
+    background-color: var(--color-bg-secondary);
 }
 
 .device-desktop .item-selected.item-blurred .item-name {
@@ -5857,20 +5954,25 @@ span.header-sort-icon img {
     overflow: hidden;
     flex-grow: 1;
     display: flex;
+    align-items: center;
+    min-width: 0;
 }
 
 .window-head {
     overflow: hidden !important;
     padding: 0;
+    height: 38px;
+    min-height: 38px;
     border-radius: 12px 12px 0 0;
     background-color: hsla(var(--window-head-hue),
             var(--window-head-saturation),
             var(--window-head-lightness),
             calc(0.5 + 0.5 * var(--window-head-alpha)));
-    filter: grayscale(80%);
+    filter: grayscale(25%);
     box-shadow: inset 0px -4px 5px -7px rgb(0 0 0 / 64%);
     display: flex;
     flex-flow: row;
+    align-items: center;
     padding-left: 5px;
     margin-bottom: -1px;
 }
@@ -5893,8 +5995,7 @@ span.header-sort-icon img {
 }
 
 .window-head-title {
-    float: left;
-    line-height: 30px;
+    line-height: 1.2;
     font-size: 14px;
     /* color: #666d74; */
     margin-left: 10px;
@@ -5910,22 +6011,25 @@ span.header-sort-icon img {
 }
 
 .window-head-icon {
-    float: left;
     width: 16px;
     height: 16px;
     margin-left: 8px;
-    margin-top: 7px;
     margin-right: -5px;
+    margin-top: -1px;
+    flex-shrink: 0;
+    display: block;
     filter: drop-shadow(0px 0px 0.5px rgb(51, 51, 51));
 }
 
 .window-navbar {
     overflow: hidden;
     border-bottom: 1px solid var(--color-border);
-    padding: 5px 0 5px 1px;
+    padding: 5px 5px 5px 1px;
     background-color: var(--color-window-navbar);
     height: 48px;
     box-sizing: border-box;
+    display: flex;
+    align-items: center;
 }
 
 .window-navbar-btn {
@@ -5958,15 +6062,76 @@ span.header-sort-icon img {
     opacity: 1;
 }
 
-/* Layout settings icon in explorer also needs to be white in dark mode */
-.window-navbar-layout-settings img {
-    filter: invert(1) brightness(1.2) !important;
+/* Layout settings - Apple-style segmented toggle (Icons | List) */
+.window-navbar-layout-toggle {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    margin-left: 10px;
+    padding: 2px;
+    background: var(--color-bg-tertiary, #2d2d2d);
+    border-radius: 6px;
+    border: 1px solid var(--color-border, rgba(255,255,255,0.1));
+    box-sizing: border-box;
+}
+
+.window-navbar-layout-toggle .layout-toggle-segment {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 26px;
+    padding: 0;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.window-navbar-layout-toggle .layout-toggle-segment:hover {
+    background: rgba(255,255,255,0.08);
+}
+
+.window-navbar-layout-toggle .layout-toggle-segment.layout-toggle-segment-active {
+    background: rgba(255,255,255,0.15);
+}
+
+.window-navbar-layout-toggle .layout-toggle-segment img {
+    width: 16px;
+    height: 16px;
+    pointer-events: none;
+    filter: invert(1) brightness(1.2);
     opacity: 0.9;
 }
 
-[data-theme="light"] .window-navbar-layout-settings img {
-    filter: none !important;
-    opacity: 1;
+[data-theme="light"] .window-navbar-layout-toggle .layout-toggle-segment img {
+    filter: none;
+    opacity: 0.85;
+}
+
+[data-theme="light"] .window-navbar-layout-toggle {
+    background: #e5e7eb;
+    border-color: #d1d5db;
+}
+
+[data-theme="light"] .window-navbar-layout-toggle .layout-toggle-segment.layout-toggle-segment-active {
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+}
+
+.device-phone .window-navbar-layout-toggle {
+    float: right;
+    margin-right: 10px;
+    margin-left: 0;
+}
+
+/* Legacy single icon (hide if present) */
+.window-navbar-layout-settings {
+    width: 30px;
+    height: 30px;
+    margin-left: 10px;
+    margin-top: 3px;
 }
 
 .window-navbar-path {
@@ -5977,12 +6142,13 @@ span.header-sort-icon img {
     color: var(--color-text-primary);
     text-overflow: ellipsis;
     white-space: nowrap;
-    overflow: hidden;
     -webkit-font-smoothing: antialiased;
     border: 1px solid var(--color-border);
     border-radius: 3px;
     background: var(--color-bg-tertiary);
     box-sizing: border-box;
+    flex: 1;
+    min-width: 0;
 
     user-select: none !important;
     -moz-user-select: none !important;
@@ -6136,7 +6302,9 @@ span.header-sort-icon img {
 .window-sidebar-title {
     margin: 0;
     font-weight: bold;
-    font-size: 13px;
+    font-size: 12px;
+    letter-spacing: 0.2px;
+    text-transform: uppercase;
     color: var(--primary-color);
     text-shadow: 1px 1px rgb(247 247 247 / 15%);
     -webkit-font-smoothing: antialiased;
@@ -6158,12 +6326,12 @@ span.header-sort-icon img {
 }
 
 .window-sidebar-item, .window-sidebar-item.grabbing {
-    margin-bottom: 6px;
-    margin-top: 2px;
-    padding: 4px;
-    border-radius: 3px;
+    margin-bottom: 4px;
+    margin-top: 1px;
+    padding: 4px 5px;
+    border-radius: 5px;
     color: var(--primary-color);
-    font-size: 13px;
+    font-size: 14px;
     cursor: pointer;
     transition: 0.15s background-color;
     box-sizing: border-box;
@@ -6206,25 +6374,98 @@ span.header-sort-icon img {
 }
 
 .window-sidebar-item-icon {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
     filter: drop-shadow(0px 0px 0.2px rgb(51, 51, 51));
-    margin-right: 5px;
+    margin-right: 6px;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    margin-bottom: -2px;
+    margin-bottom: -3px;
+}
+
+/* Apple-style sidebar: dark mode – unselected white, selected blue in rounded container */
+:root .window-sidebar .window-sidebar-title {
+    color: #8e8e93;
+}
+
+:root .window-sidebar .window-sidebar-item {
+    color: #ffffff;
+}
+
+:root .window-sidebar .window-sidebar-item .window-sidebar-item-icon {
+    filter: brightness(0) invert(1) drop-shadow(0 0 0.2px rgba(255,255,255,0.3));
+}
+
+:root .window-sidebar .window-sidebar-item:hover .window-sidebar-item-icon,
+:root .window-sidebar .window-sidebar-item.has-open-contextmenu .window-sidebar-item-icon {
+    filter: brightness(0) invert(1) drop-shadow(0 0 0.2px rgba(255,255,255,0.3));
+}
+
+:root .window-sidebar .window-sidebar-item-active,
+:root .window-sidebar .window-sidebar-item-active:hover,
+:root .window-sidebar .window-sidebar-item-drag-active {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    border-radius: 6px;
+    color: #007AFF !important;
+}
+
+:root .window-sidebar .window-sidebar-item-active .window-sidebar-item-icon,
+:root .window-sidebar .window-sidebar-item-active:hover .window-sidebar-item-icon,
+:root .window-sidebar .window-sidebar-item-drag-active .window-sidebar-item-icon {
+    filter: brightness(0) saturate(100%) invert(40%) sepia(98%) saturate(2000%) hue-rotate(197deg);
+}
+
+:root .window-sidebar .window-sidebar-item:hover,
+:root .window-sidebar .window-sidebar-item.has-open-contextmenu {
+    background-color: rgba(255, 255, 255, 0.06);
+}
+
+/* Apple-style sidebar: light mode – unselected dark, selected blue in rounded container */
+[data-theme="light"] .window-sidebar .window-sidebar-title {
+    color: #6b6b6b;
+}
+
+[data-theme="light"] .window-sidebar .window-sidebar-item {
+    color: #1d1d1f;
+}
+
+[data-theme="light"] .window-sidebar .window-sidebar-item .window-sidebar-item-icon {
+    filter: none;
+}
+
+[data-theme="light"] .window-sidebar .window-sidebar-item-active,
+[data-theme="light"] .window-sidebar .window-sidebar-item-active:hover,
+[data-theme="light"] .window-sidebar .window-sidebar-item-drag-active {
+    background-color: #e5e7eb !important;
+    border-radius: 6px;
+    color: #007AFF !important;
+}
+
+[data-theme="light"] .window-sidebar .window-sidebar-item-active .window-sidebar-item-icon,
+[data-theme="light"] .window-sidebar .window-sidebar-item-active:hover .window-sidebar-item-icon,
+[data-theme="light"] .window-sidebar .window-sidebar-item-drag-active .window-sidebar-item-icon {
+    filter: brightness(0) saturate(100%) invert(40%) sepia(98%) saturate(2000%) hue-rotate(197deg);
+}
+
+[data-theme="light"] .window-sidebar .window-sidebar-item:hover,
+[data-theme="light"] .window-sidebar .window-sidebar-item.has-open-contextmenu {
+    background-color: rgba(0, 0, 0, 0.05);
 }
 
 .window[data-app="explorer"] .window-body {
-    height: calc(100% - 107px);
+    height: calc(100% - 115px);
 }
 
 .explorer-footer {
-    overflow: auto;
-    height: 30px;
+    overflow: hidden;
+    min-height: 38px;
+    height: 38px;
     font-size: 13px;
-    line-height: 28px;
-    padding-left: 10px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    padding: 6px 12px 14px 12px;
+    box-sizing: border-box;
     background-color: var(--color-window-navbar);
     border-top: 1px solid var(--color-border);
     color: var(--color-text-secondary);
@@ -6311,10 +6552,20 @@ span.header-sort-icon img {
 }
 
 .window-action-btn {
-    margin-right: 5px;
-    margin-left: 10px;
-    padding-bottom: 3px;
-    opacity: 0.6;
+    margin-right: 4px;
+    margin-left: 6px;
+    padding: 4px;
+    border-radius: 6px;
+    opacity: 0.75;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+
+.window-action-btn:hover {
+    background-color: rgba(0, 0, 0, 0.12);
+    opacity: 1;
 }
 
 .window-active .window-action-btn {
@@ -6322,11 +6573,10 @@ span.header-sort-icon img {
 }
 
 .window-action-btn>img {
-    width: 18px;
-    margin-top: 5px;
-    margin-right: 4px;
-    margin-left: 4px;
-    opacity: 0.5;
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    opacity: 0.85;
     -webkit-user-drag: none;
     user-select: none;
     -moz-user-select: none;
@@ -6340,9 +6590,12 @@ span.header-sort-icon img {
 }
 
 .window-scale-btn>img {
-    width: 15px;
-    height: 15px;
-    margin-top: 7px
+    width: 14px;
+    height: 14px;
+}
+
+[data-theme="light"] .window-action-btn:hover {
+    background-color: rgba(0, 0, 0, 0.08);
 }
 
 .window-app-iframe {
@@ -7392,18 +7645,28 @@ label {
         0 4px 16px rgba(0, 0, 0, 0.2);
 }
 
-/* Bottom positioned taskbar (default) */
+/* Bottom positioned taskbar (default) – dock-style: floating pill, centered */
 .taskbar.taskbar-position-bottom {
-    bottom: 5px;
+    bottom: 12px;
     left: 50%;
     right: auto;
     top: auto;
-    width: auto;
+    width: max-content;
+    max-width: calc(100vw - 48px);
     height: 50px;
     transform: translateX(-50%);
     flex-direction: row;
     justify-content: center;
     writing-mode: initial;
+    border-radius: 24px;
+    padding-left: 12px;
+    padding-right: 12px;
+}
+
+@supports (backdrop-filter: blur(12px)) {
+    .taskbar.taskbar-position-bottom {
+        backdrop-filter: blur(12px);
+    }
 }
 
 /* Left positioned taskbar */
@@ -7567,6 +7830,14 @@ label {
     border-radius: 0.5px;
 }
 
+:root .taskbar.taskbar-position-bottom .taskbar-item[data-app="separator"] .taskbar-icon::after {
+    background-color: rgba(255, 255, 255, 0.25);
+}
+
+[data-theme="light"] .taskbar.taskbar-position-bottom .taskbar-item[data-app="separator"] .taskbar-icon::after {
+    background-color: rgba(0, 0, 0, 0.3);
+}
+
 /* Horizontal separator for left/right taskbar */
 .taskbar.taskbar-position-left .taskbar-item[data-app="separator"] .taskbar-icon::after,
 .taskbar.taskbar-position-right .taskbar-item[data-app="separator"] .taskbar-icon::after {
@@ -7575,6 +7846,16 @@ label {
     height: 1px;
     background-color: rgba(0, 0, 0, 0.3);
     border-radius: 0.5px;
+}
+
+:root .taskbar.taskbar-position-left .taskbar-item[data-app="separator"] .taskbar-icon::after,
+:root .taskbar.taskbar-position-right .taskbar-item[data-app="separator"] .taskbar-icon::after {
+    background-color: rgba(255, 255, 255, 0.25);
+}
+
+[data-theme="light"] .taskbar.taskbar-position-left .taskbar-item[data-app="separator"] .taskbar-icon::after,
+[data-theme="light"] .taskbar.taskbar-position-right .taskbar-item[data-app="separator"] .taskbar-icon::after {
+    background-color: rgba(0, 0, 0, 0.3);
 }
 
 /* Hide separator on mobile devices */
@@ -7970,7 +8251,7 @@ label {
 @supports ((backdrop-filter: blur())) {
     .launch-popover {
         background-color: var(--color-bg-surface);
-        backdrop-filter: blur(10px);
+        backdrop-filter: blur(12px);
     }
 }
 
@@ -8135,8 +8416,8 @@ label {
     padding: 20px 20px 20px;
     border: 1px solid var(--color-border);
     border-radius: 16px;
-    background-color: var(--color-bg-secondary);
-    backdrop-filter: blur(10px);
+    background-color: var(--color-bg-surface);
+    backdrop-filter: blur(12px);
     box-sizing: border-box;
     overflow-y: scroll;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
@@ -8525,7 +8806,11 @@ fieldset[name=number-code] {
 
     .context-menu {
         background-color: var(--color-menu-bg);
-        backdrop-filter: blur(3px);
+        backdrop-filter: blur(12px);
+    }
+
+    [data-theme="light"] .context-menu {
+        background-color: rgba(255, 255, 255, 0.92) !important;
     }
 
     .popover:not(.device-phone .popover) {
@@ -8601,15 +8886,25 @@ fieldset[name=number-code] {
     background-repeat: no-repeat;
     width: 100%;
     box-sizing: border-box;
-    background-color: #3a3a3c;
-    color: #ffffff;
+    background-color: var(--color-bg-surface);
+    color: var(--color-text-primary);
     padding: 5px;
     background-size: 20px;
     background-position-y: center;
     background-position-x: 5px;
     padding-left: 35px;
     padding-right: 35px;
-    border: 2px solid #4a4a4c;
+    border: 2px solid var(--color-border);
+}
+
+.launch-search:focus,
+.launch-search:focus-visible {
+    outline: none;
+    border-color: var(--color-border);
+    box-shadow: none;
+    padding: 5px;
+    padding-left: 35px;
+    padding-right: 35px;
 }
 
 .launch-search::placeholder {
@@ -10422,7 +10717,7 @@ fieldset[name=number-code] {
     position: sticky;
     top: -20px;
     z-index: 1;
-    background: var(--color-bg-tertiary);
+    background: var(--color-bg-surface);
     padding-top: 7px;
     border-radius: 6px;
 }
@@ -10503,7 +10798,7 @@ fieldset[name=number-code] {
 
 [data-theme="light"] .device-phone .launch-search-wrapper,
 [data-theme="light"] .device-tablet .launch-search-wrapper {
-    background: #ffffff !important;
+    background: var(--color-bg-surface) !important;
 }
 
 [data-theme="light"] .device-phone .start-app:hover,
@@ -10847,7 +11142,7 @@ fieldset[name=number-code] {
     align-items: center;
     gap: 8px;
     padding: 10px 15px;
-    margin: 10px 10px 0 10px;
+    margin: 6px 10px 14px 10px;
     background: #fff3cd !important;
     border: 1px solid #ffc107 !important;
     border-radius: 6px;

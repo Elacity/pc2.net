@@ -5627,6 +5627,11 @@ span.header-sort-icon img {
     color: #738c9f;
 }
 
+/* Dark mode list view: Apple-style — Modified/Size/Type grey (not blue) */
+html:not([data-theme="light"]) .item-container-details .item-attr {
+    color: var(--color-text-secondary);
+}
+
 .item-container-details .item-attr {
     display: block;
     padding: 0;
@@ -5701,6 +5706,11 @@ span.header-sort-icon img {
     font-weight: 500;
     font-size: 13px;
     margin-left: 3px;
+}
+
+/* Dark mode list view: Apple-style — Name column white */
+html:not([data-theme="light"]) .window-body .item .item-name {
+    color: #ffffff;
 }
 
 .window-body .item-container-list .item .item-name {
@@ -6120,10 +6130,17 @@ span.header-sort-icon img {
     box-shadow: 0 1px 2px rgba(0,0,0,0.08);
 }
 
+.device-phone .window-navbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
 .device-phone .window-navbar-layout-toggle {
-    float: right;
+    float: none;
     margin-right: 10px;
-    margin-left: 0;
+    margin-left: auto;
+    flex-shrink: 0;
 }
 
 /* Legacy single icon (hide if present) */
@@ -6160,6 +6177,7 @@ span.header-sort-icon img {
 .device-phone .window-navbar-path {
     display: none;
 }
+
 
 .window-navbar-layout-settings {
     width: 30px;
@@ -6216,9 +6234,22 @@ span.header-sort-icon img {
     text-decoration: underline;
 }
 
+/* Path segment hover: same blue as file explorer (path input focus) in dark mode */
+html:not([data-theme="light"]) .window-navbar-path-dirname:hover {
+    color: #00b6ff;
+    text-decoration: underline;
+}
+
 .path-seperator {
     width: 10px;
     opacity: 0.2;
+}
+
+/* Path separator arrows visible in dark mode (dark = no data-theme or not light) */
+html:not([data-theme="light"]) .path-seperator,
+[data-theme="dark"] .path-seperator {
+    opacity: 0.65;
+    filter: invert(1);
 }
 
 .window-body {

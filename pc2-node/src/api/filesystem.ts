@@ -284,8 +284,8 @@ export function handleReaddir(req: AuthenticatedRequest, res: Response): void {
         path: trashPath,
         type: 'dir',
         size: 0,
-        created: Date.now(),
-        modified: Date.now(),
+        created: Math.floor(Date.now() / 1000),
+        modified: Math.floor(Date.now() / 1000),
         mime_type: 'inode/directory',
         is_dir: true,
         uid: `uuid-${trashPath.replace(/\//g, '-').replace(/^-/, '')}`,
@@ -323,8 +323,8 @@ export function handleReaddir(req: AuthenticatedRequest, res: Response): void {
         is_dir: metadata.is_dir,
         is_empty: is_empty,
         size: metadata.size || 0,
-        created: new Date(metadata.created_at).toISOString(), // ISO timestamp like mock server
-        modified: new Date(metadata.updated_at).toISOString(), // ISO timestamp like mock server
+        created: Math.floor(metadata.created_at / 1000), // Unix seconds (frontend timeago expects this)
+        modified: Math.floor(metadata.updated_at / 1000), // Unix seconds (frontend timeago expects this)
         type: metadata.is_dir ? null : (metadata.mime_type || 'application/octet-stream'), // null for dirs, mime_type for files
         thumbnail: metadata.thumbnail || undefined, // Include thumbnail if available
         is_public: metadata.is_public || false // Only Public folder should be true

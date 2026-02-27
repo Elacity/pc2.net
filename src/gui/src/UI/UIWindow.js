@@ -359,6 +359,7 @@ async function UIWindow(options) {
                 h += `<button type="button" class="layout-toggle-segment layout-toggle-segment--list${!iconsActive ? ' layout-toggle-segment-active' : ''}" data-layout="details" title="${i18n('list') || 'List'}"><img src="${html_encode(window.icons['layout-details.svg'])}" alt="" draggable="false"></button>`;
                 h += `</div>`;
             h += `</div>`;
+
         }
 
         // Body
@@ -3182,6 +3183,7 @@ window.update_window_path = async function(el_window, target_path){
     // update sidebar items' active status
     $(el_window).find(`.window-sidebar-item`).removeClass('window-sidebar-item-active');
     $(el_window).find(`.window-sidebar-item[data-path="${html_encode(target_path)}"]`).addClass('window-sidebar-item-active');
+
 
     // clean
     $(el_window).find('.explore-table-headers-th > .header-sort-icon').html('');

@@ -18,6 +18,7 @@
  */
 
 import truncate_filename from './truncate_filename.js';
+import { normalizeModified } from './normalizeModified.js';
 
 const get_html_element_from_options = async function (options) {
     const item_id = window.global_element_id++;
@@ -36,6 +37,8 @@ const get_html_element_from_options = async function (options) {
     options.immutable = (options.immutable === false || options.immutable === 0 || options.immutable === undefined ? 0 : 1);
     options.sort_container_after_append = (options.sort_container_after_append !== undefined ? options.sort_container_after_append : false);
     const is_shared_with_me = (options.path !== `/${window.user.username}` && !options.path.startsWith(`/${window.user.username}/`));
+
+    const modNorm = normalizeModified(options.modified);
 
     let website_url = window.determine_website_url(options.path);
 
@@ -68,7 +71,7 @@ const get_html_element_from_options = async function (options) {
                 data-sort_by = "${html_encode(options.sort_by) ?? 'name'}"
                 data-size = "${options.size ?? ''}"
                 data-type = "${html_encode(options.type) ?? ''}"
-                data-modified = "${options.modified ?? ''}"
+                data-modified = "${modNorm.sec}"
                 data-associated_app_name = "${html_encode(options.associated_app_name) ?? ''}"
                 data-path="${html_encode(options.path)}">`;
 
@@ -77,7 +80,7 @@ const get_html_element_from_options = async function (options) {
     h += '</div>';
     // modified
     h += '<div class="item-attr item-attr--modified">';
-    h += `<span>${options.modified === 0 ? '-' : timeago.format(options.modified * 1000)}</span>`;
+    h += `<span>${modNorm.ms === 0 ? '-' : timeago.format(modNorm.ms)}</span>`;
     h += '</div>';
     // size
     h += '<div class="item-attr item-attr--size">';

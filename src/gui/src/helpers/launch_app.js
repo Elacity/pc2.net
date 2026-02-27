@@ -262,6 +262,8 @@ const launch_app = async (options) => {
             uid: null,
             is_dir: true,
             app: 'explorer',
+            width: 960,
+            height: 560,
             ...window_options,
             is_maximized: options.maximized,
         });
@@ -474,7 +476,7 @@ const launch_app = async (options) => {
         let window_height;
         if ( app_info.metadata?.window_size?.height !== undefined && app_info.metadata?.window_size?.height !== '' ) {
             window_height = parseFloat(app_info.metadata.window_size.height);
-        } if ( options.maximized )
+        }         if ( options.maximized )
         {
             window_height = `calc(100% - ${window.taskbar_height + window.toolbar_height + 1}px)`;
         }

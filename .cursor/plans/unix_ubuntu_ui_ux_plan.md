@@ -4,10 +4,10 @@ overview: Align ElastOS desktop visuals with Ubuntu/GNOME (top bar, dock-style t
 todos:
   - id: dock-style-taskbar
     content: Make bottom taskbar dock-style (floating, pill, centered) in style.css
-    status: pending
+    status: done
   - id: window-head-adwaita
     content: Window head height ~38px, reduce inactive grayscale, optional Adwaita-like buttons
-    status: pending
+    status: done
   - id: clock-widget
     content: Add clock (and optional date) in toolbar or new top bar
     status: pending

@@ -2241,6 +2241,25 @@ pre {
     --color-info-bg: #dbeafe;
 }
 
+/* Dark mode scrollbars (default = dark; light mode keeps browser default) */
+html:not([data-theme="light"]) ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+html:not([data-theme="light"]) ::-webkit-scrollbar-track {
+    background: #2d2d2d;
+}
+html:not([data-theme="light"]) ::-webkit-scrollbar-thumb {
+    background: #555;
+    border-radius: 5px;
+}
+html:not([data-theme="light"]) ::-webkit-scrollbar-thumb:hover {
+    background: #666;
+}
+html:not([data-theme="light"]) {
+    scrollbar-color: #555 #2d2d2d;
+}
+
 /* Light mode - Toolbar stays dark (like Puter), Taskbar gets light frosted glass */
 /* Puter's toolbar uses dark semi-transparent for both modes */
 /* But Puter's taskbar uses HSLA variables that create light appearance */
@@ -5755,8 +5774,9 @@ span.header-sort-icon img {
     padding: 0;
     border: 1px solid #9a9a9a;
     box-shadow: 0px 0px 15px #00000066;
-    border-radius: 4px;
+    border-radius: 12px;
     border: none;
+    overflow: hidden;
     transition: opacity .2s;
     user-select: none !important;
     -moz-user-select: none !important;
@@ -5842,6 +5862,7 @@ span.header-sort-icon img {
 .window-head {
     overflow: hidden !important;
     padding: 0;
+    border-radius: 12px 12px 0 0;
     background-color: hsla(var(--window-head-hue),
             var(--window-head-saturation),
             var(--window-head-lightness),
@@ -6476,7 +6497,7 @@ span.header-sort-icon img {
     font-family: 'PP Telegraf';
     background-color: var(--color-menu-bg);
     color: var(--color-menu-text);
-    border-radius: 2px;
+    border-radius: 12px;
     padding: 3px 0;
     min-width: 200px;
     border: 1px solid var(--color-border);
@@ -6642,6 +6663,50 @@ span.header-sort-icon img {
     background-color: transparent;
     color: initial;
     cursor: initial;
+}
+
+/* Profile dropdown: wallet/smart account rows are display-only, no hover, match menu bg */
+.context-menu[data-id="user-options-menu"] .context-menu-item-disabled {
+    opacity: 1;
+    pointer-events: none;
+    cursor: default;
+    background-color: var(--color-menu-bg) !important;
+    color: var(--color-menu-text) !important;
+}
+.context-menu[data-id="user-options-menu"] .context-menu-item-disabled:hover {
+    opacity: 1;
+    background-color: var(--color-menu-bg) !important;
+    color: var(--color-menu-text) !important;
+}
+/* Dark mode: ensure disabled rows and their inner text/spans are light (override color: initial) */
+html:not([data-theme="light"]) .context-menu[data-id="user-options-menu"] .context-menu-item-disabled,
+html:not([data-theme="light"]) .context-menu[data-id="user-options-menu"] .context-menu-item-disabled span {
+    color: var(--color-menu-text) !important;
+}
+html:not([data-theme="light"]) .context-menu[data-id="user-options-menu"] .context-menu-item-disabled svg {
+    stroke: var(--color-menu-text) !important;
+    color: var(--color-menu-text) !important;
+}
+
+/* Invisible divider in profile menu: keep spacing, hide the line so UniversalX text is visible */
+.context-menu[data-id="user-options-menu"] .context-menu-divider > hr {
+    border: none !important;
+    height: 0;
+}
+.context-menu[data-id="user-options-menu"] .context-menu-divider {
+    padding-top: 6px;
+    padding-bottom: 6px;
+}
+
+/* Switch Account row: align label left with icon/address column (no extra indent) */
+.context-menu[data-id="user-options-menu"] .context-menu-item-disabled:has([data-section="switch-account"]) .context-menu-item-icon {
+    width: 0;
+    min-width: 0;
+    margin-right: 0;
+    overflow: hidden;
+}
+.context-menu[data-id="user-options-menu"] .context-menu-item-disabled:has([data-section="switch-account"]) .contextmenu-label {
+    margin-left: 0;
 }
 
 .context-menu-item-icon, .context-menu-item-icon-active {

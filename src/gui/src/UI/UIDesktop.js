@@ -2605,34 +2605,31 @@ $(document).on('click', '.user-options-menu-btn', async function (e) {
         // EOA Wallet icon (key symbol)
         const eoaIconSvg = `<svg style="width:16px;height:16px;vertical-align:middle;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>`;
         
-        // Show wallet_address (EOA wallet) first if it exists
+        // Show wallet_address (EOA wallet) first if it exists (display-only, no hover/click)
         if (window.user.wallet_address) {
             const displayName = window.user.wallet_address.slice(0, 10) + '...' + window.user.wallet_address.slice(-8);
             items.push({
                 html: displayName,
                 icon: eoaIconSvg,
-                onClick: async function () {
-                    // Already on this wallet, do nothing
-                }
+                disabled: true,
+                onClick: async function () {}
             });
         }
         
-        // Show smart_account_address (UniversalX) second if it exists
+        // Show smart_account_address (UniversalX) second if it exists (display-only, no hover/click)
         if (window.user.smart_account_address) {
             const displayName = window.user.smart_account_address.slice(0, 10) + '...' + window.user.smart_account_address.slice(-8);
-            const subtitle = '<span style="display:block;font-size:10px;color:#666;margin-top:2px;margin-left:0;padding-left:0;text-align:left;">UniversalX Smart Account</span>';
+            const subtitle = '<span style="display:block;font-size:10px;color:#666;margin-top:2px;margin-left:25px;padding-left:0;text-align:left;">UniversalX Smart Account</span>';
             // Smart Account icon (shield with bolt)
             const smartIconSvg = `<svg style="width:16px;height:16px;vertical-align:middle;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M13 6l-4 6h3l-1 6 4-6h-3l1-6z" fill="currentColor" stroke="none"/></svg>`;
             items.push({
                 html: displayName + subtitle,
                 icon: smartIconSvg,
-                onClick: async function () {
-                    // Already on this account, do nothing
-                }
+                disabled: true,
+                onClick: async function () {}
             });
         }
-        
-        // Add separator if there are other logged in users or other accounts on node
+        // Invisible spacer (no visible line) so UniversalX Smart Account text is not obscured by Switch Account
         if (window.logged_in_users.length > 0 || otherAccounts.length > 0) {
             items.push('-');
         }
@@ -2643,8 +2640,9 @@ $(document).on('click', '.user-options-menu-btn', async function (e) {
     // -------------------------------------------
     if (isPC2Mode && otherAccounts.length > 0) {
         items.push({
-            html: '<span style="font-size:11px;color:#666;font-weight:500;">Switch Account</span>',
-            disabled: true
+            html: '<span data-section="switch-account" style="font-size:11px;color:#666;font-weight:500;">Switch Account</span>',
+            disabled: true,
+            icon: ''
         });
         
         otherAccounts.forEach(account => {
@@ -2706,7 +2704,7 @@ $(document).on('click', '.user-options-menu-btn', async function (e) {
             if (l_user.smart_account_address) {
                 // Show Smart Account (truncated) with "Smart" label
                 displayName = l_user.smart_account_address.slice(0, 10) + '...' + l_user.smart_account_address.slice(-8);
-                subtitle = '<span style="display:block;font-size:10px;color:#666;margin-top:2px;margin-left:0;padding-left:0;text-align:left;">UniversalX Smart Account</span>';
+                subtitle = '<span style="display:block;font-size:10px;color:#666;margin-top:2px;margin-left:25px;padding-left:0;text-align:left;">UniversalX Smart Account</span>';
             } else if (l_user.wallet_address) {
                 // Show EOA address (truncated)
                 displayName = l_user.wallet_address.slice(0, 10) + '...' + l_user.wallet_address.slice(-8);
@@ -2748,10 +2746,11 @@ $(document).on('click', '.user-options-menu-btn', async function (e) {
         ) */
 
         // -------------------------------------------
-        // -
+        // Single divider before Settings (avoid double divider)
         // -------------------------------------------
-        items.push('-')
-
+        if (items[items.length - 1] !== '-') {
+            items.push('-');
+        }
     }
 
     // -------------------------------------------

@@ -3,20 +3,23 @@ name: Jetson SDK Optimization
 overview: Add modular Jetson platform detection and GPU acceleration support for Ollama, improving local AI performance on NVIDIA Jetson devices without affecting other platforms.
 todos:
   - id: platform-util
-    content: Create pc2-node/src/utils/platform.ts with Jetson detection
-    status: pending
+    content: Create pc2-node/src/utils/platform.ts with Jetson detection (368 lines)
+    status: completed
   - id: system-api
-    content: Update system.ts to include Jetson/GPU info
-    status: pending
+    content: Update system.ts to include Jetson/GPU info (315 lines)
+    status: completed
   - id: ollama-api
     content: Update ai.ts ollama-status endpoint with GPU status
-    status: pending
+    status: completed
+  - id: ollama-provider
+    content: Update OllamaProvider.ts with Jetson optimizations
+    status: completed
   - id: settings-ui
     content: Update AI settings UI to show GPU acceleration status
     status: pending
   - id: testing
     content: Test on Jetson device and verify no impact on other platforms
-    status: pending
+    status: in_progress
 isProject: false
 ---
 

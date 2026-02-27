@@ -236,7 +236,7 @@ window.current_active_snap_zone = undefined;
 // 
 window.is_fullpage_mode = false;
 
-window.window_border_radius = 4;
+window.window_border_radius = 12;
 
 window.sites = [];
 

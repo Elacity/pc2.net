@@ -99,7 +99,7 @@ These diagrams from Rong define the north star. Every work stream should move us
 - One-command Jetson install: validated on 2 independent Jetsons (EverlastingOS + Anders/alm.ela.city)
 - Weekly shipping reports: established on GitHub Discussions (#1, #2, #3)
 - v1.1.0 release: blocked on Sash's own Jetson hardware test
-- Anders' WalletConnect/Essentials issue: pending investigation (MetaMask works)
+- Anders' WalletConnect/Essentials issue: ✅ resolved — Anders was on an older wallet version
 - Anders' Ollama model download issue: pending (needs Ollama installed/running)
 
 ---
@@ -129,13 +129,15 @@ These diagrams from Rong define the north star. Every work stream should move us
 - [ ] SQLite registry replacing JSON file (NETWORK_HARDENING item #2) — deferred, JSON fine at current scale
 - [ ] Automated SSL renewal with monitoring (NETWORK_HARDENING item #7)
 - [ ] Basic uptime monitoring for supernodes (NETWORK_HARDENING item #6)
-- [ ] Reduce WireGuard retry interval (15s with exponential backoff)
+- [x] Reduce WireGuard retry interval (15s with exponential backoff) — shipped commit 0ac683b1
 
 **AI Integration:**
 - [ ] Integrate latest model providers as they emerge
-- [ ] Voice interaction prototype (headphones / ambient)
+- [ ] Voice interaction prototype — pipeline: Whisper (STT) + Ollama (reasoning) + Kokoro/Piper (TTS)
+- [ ] Context API endpoint (`/api/context`) — accepts location, photo CIDs, voice transcripts, activity events
 - [ ] AI agent file management improvements
 - [ ] RAG retrieval optimization for personal documents
+- [ ] Evaluate PersonaPlex-7B (NVIDIA full-duplex voice) as Jetson hardware matures
 
 **Omnichain ELA:**
 - [ ] Begin ELA liquidity deployment across target EVM chains
@@ -152,6 +154,15 @@ These diagrams from Rong define the north star. Every work stream should move us
 - [ ] Node discovery and directory (public listing with reputation)
 - [ ] Social features foundation (chat between node owners)
 - [ ] IoT device connectivity patterns (sensors → personal cloud)
+
+**Awareness Layer (Context + Memory):**
+- [ ] Context ingestion pipeline — location, photos, voice, motion, activity events all flowing to node
+- [ ] Mobile companion app — lightweight iOS/Android app pushing GPS, photos, voice to your node
+- [ ] Memory store — local SQLite + embeddings (via Ollama) for episodic and semantic memory
+- [ ] Agent reads memory before every chat interaction (contextual responses, not stateless)
+- [ ] Persistent agent loop — background process checking context every N minutes, firing proactive triggers
+- [ ] Dynamic app generation — agent builds HTML/JS apps from context data on demand (e.g. trip map)
+- [ ] Memory capsules — IPFS CID + DID ownership for generated experiences (shareable, ownable)
 
 **Elacity dDRM Integration:**
 - [ ] Integrate Elacity dDRM SDK into ElastOS
@@ -319,7 +330,9 @@ These diagrams from Rong define the north star. Every work stream should move us
 | `https://` WebSpace | `*.ela.city` domains via gateway | ✅ Working |
 | `localhost://` WebSpace | Carrier P2P between nodes | 🔨 Phase 1-2 |
 | `elastos://` WebSpace | Blockchain oracles, DID resolution | 📋 Phase 3 |
-| IoT / Smart Home | Jetson, sensors, cameras as context feeds | 🔨 Phase 1 |
+| IoT / Smart Home | Jetson, sensors, cameras as context feeds | 🔨 Phase 1-2 |
+| Awareness Layer | Location + photo + voice + memory → contextual agent | 🔨 Phase 2-3 |
+| Full-duplex Voice | PersonaPlex-7B or equivalent on-device voice model | 📋 Phase 3+ |
 | Runtime manages ALL network traffic | Capability-gated networking in runtime | 📋 Phase 3 |
 
 ### Elacity dDRM SDK Integration Path
@@ -380,8 +393,8 @@ Starting Month 1 (March 2026):
 |---------|--------|-------|
 | v1.1.0 | March 2026 | Merge Jetson branch, bug fixes, AV1 player |
 | v1.2.0 | April 2026 | Hardware expansion, installer improvements |
-| v1.3.0 | May 2026 | AI integration, performance optimization |
-| v1.4.0 | June 2026 | P2P messaging foundation, dDRM SDK integration begins |
+| v1.3.0 | May 2026 | Voice interaction prototype (Whisper + Ollama + TTS), Context API endpoint |
+| v1.4.0 | June 2026 | P2P messaging foundation, dDRM SDK integration begins, memory store alpha |
 | v1.5.0 | July 2026 | dDRM marketplace alpha |
 | v1.6.0 | August 2026 | Supernode expansion, premium tiers |
 | v1.7.0 | September 2026 | Protocol fees alpha, node economics |

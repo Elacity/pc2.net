@@ -2945,7 +2945,7 @@ $(document).on('click', '.wallet-btn', function () {
 
 $(document).on('click', '.toolbar-puter-logo', function () {
     UIWindowSettings();
-})
+});
 
 $(document).on('click', '.user-options-create-account-btn', async function (e) {
     UIWindowSaveAccount({

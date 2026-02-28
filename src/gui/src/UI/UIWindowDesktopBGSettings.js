@@ -50,6 +50,11 @@ async function UIWindowDesktopBGSettings (options) {
         h += `<option value="contain">${i18n('contain')}</option>`;
         h += `<option value="repeat">${i18n('repeat')}</option>`;
         h += '</select>';
+        h += `<label style="margin-top: 20px;">${i18n('background')} ${i18n('color')}:</label>`;
+        h += `<div style="display:flex; align-items:center; gap:8px;">`;
+        h += `<input type="color" class="desktop-bg-picture-color" value="${bg_color || '#000000'}" style="width:36px; height:28px; border:1px solid #ccc; border-radius:4px; cursor:pointer; padding:1px;">`;
+        h += `<span class="desktop-bg-picture-color-label" style="font-size:12px; color:#888;">${bg_color || '#000000'}</span>`;
+        h += `</div>`;
         h += '</div>';
 
         // Color
@@ -217,6 +222,13 @@ async function UIWindowDesktopBGSettings (options) {
             window.set_desktop_background({ fit: fit });
         });
 
+        $(el_window).find('.desktop-bg-picture-color').on('input', function (e) {
+            const color = $(this).val();
+            bg_color = color;
+            $(el_window).find('.desktop-bg-picture-color-label').text(color);
+            $('body').css('background-color', color);
+        });
+
         $(el_window).find('.desktop-bg-type').on('change', function (e) {
             const type = $(this).val();
             $(el_window).find('.desktop-bg-settings-wrapper').hide();
@@ -255,8 +267,8 @@ async function UIWindowDesktopBGSettings (options) {
                     urlToSave = null;
                     colorToSave = window.desktop_bg_color;
                 } else if (selectedType === 'picture') {
-                    // For picture, save the file path (bg_url was set to selected_file.path in file_opened handler)
                     urlToSave = bg_url || window.desktop_bg_url;
+                    colorToSave = bg_color || null;
                 }
                 
                 console.log('[UIWindowDesktopBGSettings] Apply clicked - saving:', {

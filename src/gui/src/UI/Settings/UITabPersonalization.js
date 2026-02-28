@@ -69,6 +69,7 @@ export default {
                 <div class="pers-section-title">${i18n('display')}</div>
                 <div class="pers-group">
                     <div class="pers-group-row"><div class="pers-card-row"><span class="pers-card-label">${i18n('clock_visibility')}</span><select class="pers-select change-clock-visible" style="width: auto; min-width: 100px;"><option value="auto">${i18n('clock_visible_auto')}</option><option value="hide">${i18n('clock_visible_hide')}</option><option value="show">${i18n('clock_visible_show')}</option></select></div></div>
+                    <div class="pers-group-row"><div class="pers-card-row"><span class="pers-card-label">Desktop Layout</span><select class="pers-select change-desktop-layout" style="width: auto; min-width: 100px;"><option value="toolbar">Floating Toolbar</option><option value="topbar">Full Top Bar</option></select></div></div>
                 </div>
             </div>
             
@@ -106,6 +107,12 @@ export default {
         });
 
         window.change_clock_visible();
+
+        $el_window.on('change', 'select.change-desktop-layout', function (e) {
+            window.change_desktop_layout(this.value);
+        });
+
+        $el_window.find('select.change-desktop-layout').val(window.user_preferences.desktop_layout || 'toolbar');
         
         // Dark mode toggle - switches between light and dark themes
         // Note: PC2 defaults to dark mode. Light mode is toggled OFF (unchecked).

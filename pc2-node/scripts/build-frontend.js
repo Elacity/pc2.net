@@ -378,7 +378,7 @@ async function main() {
             <div id="pc2-loading-profile" class="pc2-loading-profile">
                 <span class="pc2-loading-fallback">PC2</span>
             </div>
-            <div class="pc2-loading-title">Personal Cloud</div>
+            <div class="pc2-loading-title">Personal Cloud Compute</div>
             <div class="pc2-loading-bar-container">
                 <div id="pc2-loading-bar" class="pc2-loading-bar"></div>
             </div>

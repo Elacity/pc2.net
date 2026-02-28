@@ -10,10 +10,10 @@ todos:
     status: done
   - id: clock-widget
     content: Add clock (and optional date) in toolbar or new top bar
-    status: pending
+    status: done
   - id: top-bar-optional
     content: Optional full-width top bar with Activities, clock, system tray, profile
-    status: pending
+    status: done
   - id: system-tray
     content: System tray placeholders (WiFi, sound, power) opening Settings or dropdown
     status: pending
@@ -109,11 +109,18 @@ isProject: false
 
 ## Suggested order of work (UI first)
 
-1. **Dock-style bottom taskbar** – CSS-only for `.taskbar-position-bottom` (floating, pill, centered).
-2. **Window head** – 38px height, reduce/remove inactive grayscale, optional button restyle.
-3. **Clock** – in toolbar or in new top bar.
-4. **Full top bar (optional)** – full-width bar with Activities, clock, system tray, profile.
-5. **System tray placeholders** – icons opening Settings or menu.
+| # | Item | Status |
+|---|------|--------|
+| 1 | Dock-style bottom taskbar – floating pill, centered, inset | done |
+| 2 | Window head – 38px height, less inactive grayscale, optional Adwaita-like buttons | done |
+| 3 | Clock – in toolbar or top bar | done |
+| 4 | Full top bar (optional) – Activities, clock, system tray, profile | done |
+| 5 | System tray placeholders – WiFi, sound, power, open Settings/dropdown | pending |
+| 6 | Alt+Tab / Super+Tab, optional Alt+F4 | pending |
+| 7 | Copy path and Open terminal here in explorer/desktop context menu | pending |
+| 8 | Keyboard shortcuts overlay – linked from launch or Settings | pending |
+| 9 | Path bar editable – Edit location, navigate on Enter | pending |
+| 10 | Focus + ARIA – focus indicators, roles/labels for context menu, taskbar, window | pending |
 
 ---
 

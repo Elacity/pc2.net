@@ -1149,7 +1149,7 @@ export default function UIAIChat() {
         <path d="M8 10h.01M12 10h.01M16 10h.01"/>
     </svg>`;
     
-    // Insert AI button into toolbar (after cloud icon)
+    // Insert AI button into toolbar and topbar (after cloud icon)
     const insertAIButton = () => {
         const $toolbar = $('.toolbar');
         if ($toolbar.length === 0) {
@@ -1158,14 +1158,13 @@ export default function UIAIChat() {
         }
 
         // Wait for cloud button to exist first (it should insert before us)
-        const $cloudBtn = $('.pc2-status-bar');
+        const $cloudBtn = $('.toolbar .pc2-status-bar');
         if ($cloudBtn.length === 0) {
-            // Cloud button not ready yet, wait a bit
             setTimeout(insertAIButton, 150);
             return;
         }
 
-        // Remove existing AI button if any
+        // Remove existing AI buttons if any
         $('.ai-toolbar-btn').remove();
 
         const $aiBtn = $(`
@@ -1175,8 +1174,18 @@ export default function UIAIChat() {
         `);
 
         // Insert after cloud icon (pc2-status-bar), before wallet
-        // Order: Cloud | AI | Wallet
         $cloudBtn.after($aiBtn);
+
+        // Also insert into top bar (full-width mode)
+        const $topbarCloud = $('.topbar .pc2-status-bar');
+        if ($topbarCloud.length > 0) {
+            const $topbarAiBtn = $(`
+                <div class="ai-toolbar-btn toolbar-btn" role="button" aria-label="AI Assistant" tabindex="0" title="AI Assistant">
+                    ${aiButtonSvg}
+                </div>
+            `);
+            $topbarCloud.after($topbarAiBtn);
+        }
     };
 
     insertAIButton();

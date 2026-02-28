@@ -215,7 +215,7 @@ function initPC2StatusBar() {
         return items;
     };
 
-    // Insert status bar into toolbar
+    // Insert status bar into toolbar and topbar
     const insertStatusBar = () => {
         // Remove existing
         $('.pc2-status-bar').remove();
@@ -252,9 +252,21 @@ function initPC2StatusBar() {
             }
         }
 
+        // Also insert into top bar (full-width mode)
+        const $topbar = $('.topbar');
+        if ($topbar.length > 0) {
+            const $topbarStatusBar = createStatusBar();
+            const $topbarWallet = $topbar.find('.topbar-right .wallet-btn');
+            if ($topbarWallet.length > 0) {
+                $topbarWallet.before($topbarStatusBar);
+            } else {
+                $topbar.find('.topbar-right').prepend($topbarStatusBar);
+            }
+        }
+
         logger.log('[PC2]: Status bar inserted');
 
-        // Update status display
+        // Update status display (updates all instances across toolbar and topbar)
         const updateStatus = (status, error) => {
             currentStatus = status;
             currentError = error;
@@ -272,9 +284,9 @@ function initPC2StatusBar() {
                 effectiveStatus = window.is_auth() ? 'connected' : 'disconnected';
             }
             
-            const $indicator = $statusBar.find('.pc2-status-indicator');
-            $indicator.removeClass('disconnected connecting connected error');
-            $indicator.addClass(effectiveStatus);
+            const $allIndicators = $('.pc2-status-bar .pc2-status-indicator');
+            $allIndicators.removeClass('disconnected connecting connected error');
+            $allIndicators.addClass(effectiveStatus);
 
             const session = pc2Service.getSession?.() || {};
             let statusText = effectiveStatus === 'connected' ? (session.nodeName || i18n('connected')) :
@@ -286,7 +298,7 @@ function initPC2StatusBar() {
                 statusText = window.is_auth && window.is_auth() ? i18n('connected') : i18n('not_connected');
             }
             
-            $statusBar.attr('title', `${i18n('personal_cloud_status')} (${statusText})`);
+            $('.pc2-status-bar').attr('title', `${i18n('personal_cloud_status')} (${statusText})`);
         };
         
         // Also listen for authentication changes in PC2 mode

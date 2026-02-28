@@ -1165,11 +1165,13 @@ async function UIDesktop(options) {
     // Fetch from server, but fallback to existing localStorage values if null
     const serverLanguage = await puter.kv.get('user_preferences.language');
     const serverClockVisible = await puter.kv.get('user_preferences.clock_visible');
+    const serverDesktopLayout = await puter.kv.get('user_preferences.desktop_layout');
     
     const user_preferences = {
         show_hidden_files: showHiddenFiles,
         language: serverLanguage ?? existingPrefs.language ?? 'en',
         clock_visible: serverClockVisible ?? existingPrefs.clock_visible ?? 'auto',
+        desktop_layout: serverDesktopLayout ?? existingPrefs.desktop_layout ?? 'toolbar',
     };
 
     // update default apps
@@ -1839,6 +1841,26 @@ async function UIDesktop(options) {
     // prepend toolbar to desktop
     $(ht).insertBefore(el_desktop);
 
+    // Build full-width top bar (hidden by default, toggled via Settings > Desktop Layout)
+    let topbar_ht = '';
+    topbar_ht += `<div class="topbar">`;
+    topbar_ht += `<div class="topbar-left">`;
+    topbar_ht += `<div class="toolbar-btn toolbar-puter-logo" title="ElastOS" style="margin-left: 4px; width:22px; height:22px;"><img src="/images/elastos-icon.svg" draggable="false" style="display:block; width:22px; height:22px;"></div>`;
+    topbar_ht += `</div>`;
+    topbar_ht += `<div class="topbar-right">`;
+    if (!isMobile.phone) {
+        topbar_ht += `<div class="toolbar-btn fullscreen-btn" title="${i18n('toolbar.enter_fullscreen')}" style="background-image:url(${window.icons['fullscreen.svg']})"></div>`;
+    }
+    topbar_ht += `<div class="toolbar-btn search-btn" title="${i18n('toolbar.search')}" style="background-image:url('${window.icons['search.svg']}')"></div>`;
+    topbar_ht += `<div class="toolbar-btn wallet-btn" title="${i18n('wallet') || 'Wallet'}" style="background-image:url('${walletSvg}')"></div>`;
+    topbar_ht += `<div class="toolbar-btn user-options-menu-btn profile-pic" style="display:block;">`;
+    topbar_ht += `<div class="profile-image ${window.user?.profile?.picture && 'profile-image-has-picture'}" style="border-radius: 50%; background-image:url(${window.user?.profile?.picture || window.icons['profile.svg']}); box-sizing: border-box; width: 17px !important; height: 17px !important; background-size: contain; background-repeat: no-repeat; background-position: center; background-size: cover;"></div>`;
+    topbar_ht += `</div>`;
+    topbar_ht += `<div id="topbar-clock" class="topbar-clock">12:00 AM Sun, Jan 01</div>`;
+    topbar_ht += `</div>`;
+    topbar_ht += `</div>`;
+    $(topbar_ht).insertBefore(el_desktop);
+
     // If auto-hide is disabled, ensure toolbar is visible on load
     if (!window.toolbar_auto_hide_enabled) {
         // Make sure toolbar is visible when auto-hide is disabled
@@ -1853,6 +1875,8 @@ async function UIDesktop(options) {
     window.dispatchEvent(new CustomEvent('toolbar:ready'));
     // init clock visibility
     window.change_clock_visible();
+    // init desktop layout
+    window.change_desktop_layout();
 
     // notification container
     $('body').append(`<div class="notification-container"><div class="notifications-close-all">${i18n('close_all')}</div></div>`);
@@ -2000,6 +2024,7 @@ async function UIDesktop(options) {
         var x1 = day + ", " + month + " " + dt;
         x1 = hours + ":" + minutes + ampm + " " + x1;
         $('#clock').html(x1);
+        $('#topbar-clock').html(x1);
     }
     display_ct()
     setInterval(display_ct, 1000);
@@ -3060,10 +3085,17 @@ window.set_desktop_background = function (options) {
         window.desktop_bg_fit = fit;
     }
 
+    if (options.color) {
+        $('body').css('background-color', options.color);
+        window.desktop_bg_color = options.color;
+        if (!options.url) {
+            $('body').css('background-image', 'none');
+            window.desktop_bg_url = undefined;
+        }
+    }
+
     if (options.url) {
-        false && console.log('[set_desktop_background] Setting background-image to:', options.url);
         $('body').css('background-image', `url("${options.url}")`);
-        // Also set background-size and position for proper display
         if (options.fit) {
             if (options.fit === 'cover' || options.fit === 'contain') {
                 $('body').css('background-size', options.fit);
@@ -3079,16 +3111,6 @@ window.set_desktop_background = function (options) {
             }
         }
         window.desktop_bg_url = options.url;
-        window.desktop_bg_color = undefined;
-        false && console.log('[set_desktop_background] Background set, checking computed style:', $('body').css('background-image'));
-    }
-    else if (options.color) {
-        $('body').css({
-            'background-image': `none`,
-            'background-color': options.color,
-        });
-        window.desktop_bg_color = options.color;
-        window.desktop_bg_url = undefined;
     }
 }
 

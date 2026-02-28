@@ -125,22 +125,20 @@ async function UITaskbar (options) {
         // Position relative to viewport, not desktop container
         // CRITICAL: Keep centered positioning (left: 50%, transform: translateX(-50%)) but ensure visibility
         $taskbar.css({
-            'position': 'fixed !important', // Use fixed instead of absolute to position relative to viewport
-            'bottom': '5px !important', // Match CSS default bottom position
-            'left': '50% !important', // Center horizontally
-            'right': 'auto !important',
-            'width': 'auto !important', // Let CSS handle width based on content
-            'transform': 'translateX(-50%) !important', // Center the taskbar
-            'z-index': '10000 !important', // High z-index to ensure it's on top
-            'display': 'flex !important', // Force display
-            'flex-direction': 'row !important',
-            'align-items': 'center !important',
-            'justify-content': 'center !important',
-            'visibility': 'visible !important', // Force visibility
-            'opacity': '1 !important', // Force opacity
-            'background-color': 'rgba(0, 0, 0, 0.9) !important', // Ensure taskbar has visible background
-            'min-height': `${window.taskbar_height || 50}px !important`, // Ensure minimum height
-            'height': `${window.taskbar_height || 50}px !important` // Force height
+            'position': 'fixed',
+            'bottom': '5px',
+            'left': '50%',
+            'right': 'auto',
+            'width': 'auto',
+            'transform': 'translateX(-50%)',
+            'display': 'flex',
+            'flex-direction': 'row',
+            'align-items': 'center',
+            'justify-content': 'center',
+            'visibility': 'visible',
+            'opacity': '1',
+            'min-height': `${window.taskbar_height || 50}px`,
+            'height': `${window.taskbar_height || 50}px`
         });
         
         // Ensure taskbar-sortable takes available space

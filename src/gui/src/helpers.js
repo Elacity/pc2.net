@@ -3442,6 +3442,34 @@ window.change_clock_visible = (clock_visible) => {
     $('select.change-clock-visible').val(window.user_preferences.clock_visible);
 }
 
+window.change_desktop_layout = (layout) => {
+    let newValue = layout || window.user_preferences.desktop_layout || 'toolbar';
+
+    // On mobile, always use toolbar mode (topbar is hidden via CSS on phones)
+    const isMobileDevice = document.body.classList.contains('device-phone');
+    const effectiveValue = isMobileDevice ? 'toolbar' : newValue;
+
+    if (effectiveValue === 'topbar') {
+        $('.toolbar').hide();
+        $('.topbar').addClass('active');
+    } else {
+        $('.topbar').removeClass('active');
+        $('.toolbar').show();
+        if (!window.toolbar_auto_hide_enabled && $('.toolbar').hasClass('toolbar-hidden')) {
+            window.show_toolbar();
+        }
+    }
+
+    if (layout) {
+        window.mutate_user_preferences({
+            desktop_layout: newValue
+        });
+        return;
+    }
+
+    $('select.change-desktop-layout').val(window.user_preferences.desktop_layout || 'toolbar');
+};
+
 // Finds the `.window` element for the given app instance ID
 window.window_for_app_instance = (instance_id) => {
     return $(`.window[data-element_uuid="${instance_id}"]`).get(0);

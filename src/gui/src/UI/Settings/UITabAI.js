@@ -81,6 +81,11 @@ export default {
                                 <button class="button ai-btn" id="ai-download-selected-btn" style="background: #10b981; color: white;">Download</button>
                             </div>
                             <div id="ai-selected-model-info" style="font-size: 10px; color: #666; display: none;"></div>
+                            <div style="display: flex; gap: 6px; align-items: center; margin-top: 6px; padding-top: 6px; border-top: 1px solid #e5e5e5;">
+                                <input type="text" id="ai-custom-model-input" placeholder="Or type any model e.g. orieg/gemma3-tools:4b" style="flex: 1; padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 11px;">
+                                <button class="button ai-btn" id="ai-custom-model-pull-btn" style="background: #3b82f6; color: white; white-space: nowrap;">Pull</button>
+                            </div>
+                            <div style="font-size: 9px; color: #999; margin-top: 2px;">Browse models at <a href="https://ollama.com/library" target="_blank" style="color: #3b82f6; text-decoration: none;">ollama.com/library</a></div>
                         </div>
                     </div>
                 </div>
@@ -915,8 +920,10 @@ export default {
         // Populate dropdown with default models if API fails
         function populateDefaultDropdown() {
             const defaultModels = [
+                { id: 'orieg/gemma3-tools:4b', name: 'Gemma 3 Tools 4B', size: '3.3GB', recommended: true, communityPick: true },
                 { id: 'gemma3:4b-it-qat', name: 'Gemma 3 4B IT QAT', size: '2.5GB', recommended: true, communityPick: true },
                 { id: 'qwen3:4b', name: 'Qwen 3 4B', size: '2.6GB', recommended: true },
+                { id: 'qwen3.5:35b-a3b', name: 'Qwen 3.5 35B-A3B (MoE)', size: '24GB', communityPick: true },
                 { id: 'llama3.2:3b', name: 'Llama 3.2 3B', size: '2.0GB', recommended: true },
                 { id: 'deepseek-r1:1.5b', name: 'DeepSeek R1 1.5B', size: '1.1GB' },
                 { id: 'deepseek-r1:7b', name: 'DeepSeek R1 7B', size: '4.7GB' },
@@ -1270,6 +1277,25 @@ export default {
             }
             
             await downloadModel(modelId, modelName);
+        });
+        
+        // Custom model pull button
+        $el_window.find('#ai-custom-model-pull-btn').off('click').on('click', async function() {
+            const customModel = $el_window.find('#ai-custom-model-input').val()?.trim();
+            if (!customModel) {
+                alert('Please enter a model name (e.g. orieg/gemma3-tools:4b)');
+                return;
+            }
+            $el_window.find('#ai-custom-model-input').val('');
+            await downloadModel(customModel, customModel);
+        });
+        
+        // Allow Enter key in custom model input
+        $el_window.find('#ai-custom-model-input').off('keydown').on('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                $el_window.find('#ai-custom-model-pull-btn').click();
+            }
         });
         
         // Load model library on init

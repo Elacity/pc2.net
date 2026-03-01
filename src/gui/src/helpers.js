@@ -3430,6 +3430,14 @@ window.change_clock_visible = (clock_visible) => {
     newValue === 'show' && $('#clock').show();
     newValue === 'hide' && $('#clock').hide();
 
+    // Also apply to full top bar clock: hide when user chose "hide", otherwise show when topbar is active
+    const topbarActive = $('.topbar').hasClass('active');
+    if (newValue === 'hide') {
+        $('#topbar-clock').hide();
+    } else if (topbarActive) {
+        $('#topbar-clock').show();
+    }
+
     if(clock_visible) {
         // save clock_visible to user preferences
         window.mutate_user_preferences({
@@ -3443,7 +3451,7 @@ window.change_clock_visible = (clock_visible) => {
 }
 
 window.change_desktop_layout = (layout) => {
-    let newValue = layout || window.user_preferences.desktop_layout || 'toolbar';
+    let newValue = layout || window.user_preferences.desktop_layout || 'topbar';
 
     // On mobile, always use toolbar mode (topbar is hidden via CSS on phones)
     const isMobileDevice = document.body.classList.contains('device-phone');
@@ -3464,10 +3472,12 @@ window.change_desktop_layout = (layout) => {
         window.mutate_user_preferences({
             desktop_layout: newValue
         });
+        $('input#desktop-layout-topbar-toggle').prop('checked', newValue === 'topbar');
+        window.change_clock_visible();
         return;
     }
 
-    $('select.change-desktop-layout').val(window.user_preferences.desktop_layout || 'toolbar');
+    $('input#desktop-layout-topbar-toggle').prop('checked', (window.user_preferences.desktop_layout || 'topbar') === 'topbar');
 };
 
 // Finds the `.window` element for the given app instance ID

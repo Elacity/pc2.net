@@ -850,7 +850,7 @@ const en = {
         // =====================================================
         // PC2 Status Bar Dropdown
         // =====================================================
-        'personal_cloud_status': 'Personal Cloud',
+        'personal_cloud_status': 'Personal Cloud Compute',
         'sign_in': 'Sign In',
         'pc2_settings': 'PC2 Settings',
         'storage_usage': 'Storage',

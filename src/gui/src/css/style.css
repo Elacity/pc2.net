@@ -2301,6 +2301,40 @@ html:not([data-theme="light"]) {
     background-color: rgba(255, 255, 255, 0.8) !important;
 }
 
+/* Light mode - Full top bar matches bottom taskbar (frosted light) */
+[data-theme="light"] .topbar {
+    background-color: rgba(231, 238, 245, 0.85);
+}
+
+@supports ((backdrop-filter: blur())) {
+    [data-theme="light"] .topbar {
+        background-color: rgba(231, 238, 245, 0.75);
+        backdrop-filter: blur(14px);
+    }
+}
+
+[data-theme="light"] .topbar-clock {
+    color: #1f2937;
+    opacity: 0.9;
+}
+
+/* Top bar icons dark in light mode (invert white SVGs to dark) */
+[data-theme="light"] .topbar .toolbar-btn {
+    filter: invert(1);
+}
+/* Logo stays original brand colors - do not invert */
+[data-theme="light"] .topbar .toolbar-puter-logo {
+    filter: none;
+}
+/* Counter-invert profile photo so it stays natural */
+[data-theme="light"] .topbar .toolbar-btn .profile-image {
+    filter: invert(1);
+}
+/* Counter-invert PC2 status dot so it stays green (connected) / orange (disconnected) */
+[data-theme="light"] .topbar .pc2-status-indicator {
+    filter: invert(1);
+}
+
 /* Settings content background override */
 .settings-content {
     background-color: var(--color-settings-bg);
@@ -7184,6 +7218,12 @@ label {
     display: flex;
 }
 
+/* Allow PC2 status dot to show (it sits at bottom-right, avoid clipping) */
+.topbar .pc2-status-bar,
+.toolbar .pc2-status-bar {
+    overflow: visible !important;
+}
+
 .device-phone .topbar {
     display: none !important;
 }
@@ -8071,18 +8111,14 @@ label {
     display: none;
     color: white;
     font-size: 13px;
-    background-color: #00000056;
+    /* Seamless with toolbar: no separate pill, use toolbar background */
+    background: transparent;
     margin-right: 20px;
     margin-left: 12px;
-    /* prevent clock from moving other taskbar items */
     height: 22px;
     line-height: 22px;
-
-    /* line-height above handles vertical padding */
     padding: 0 5px;
-
-    border-radius: 5px;
-    opacity: 0.8;
+    opacity: 0.9;
 }
 
 .toolbar-spacer {

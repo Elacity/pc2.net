@@ -741,5 +741,143 @@ Anders mentioned capsules can render as either an iframe or "pure pixel output."
 
 ---
 
-*Last updated: 2026-02-21*
+## Part 13: Latest Architecture Model (Feb 28, 2026)
+
+The architecture discussions this week crystallized the three-layer model and established definitive terminology. This supersedes the four-layer model in Part 5 above — the concepts are the same, but the naming and boundaries are now precise.
+
+### The Three-Layer Model
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                                                              │
+│  AppCapsule Runtime (per-capsule execution world)            │
+│  ─────────────────────────────────────────────               │
+│  Each capsule carries its own world:                         │
+│  • MicroVM capsules → full Linux environment (guest OS)      │
+│  • WASM capsules → WASI interface + granted capabilities     │
+│  • Data capsules → content + declared viewer                 │
+│  • Agent capsules → LLM access + memory + tools              │
+│                                                              │
+│  Shell capsule = the policy brain (grant/deny capabilities,  │
+│  orchestrate capsules, evolves from rubber stamp → AI agent) │
+│                                                              │
+│══════════════════════════════════════════════════════════════│
+│                                                              │
+│  ElastOS Carrier (trust plane / network OS)                  │
+│  ──────────────────────────────────────────                  │
+│  The elastos binary (~10 Rust crates). Mechanism, not policy.│
+│  • Identity binding and session authority                    │
+│  • Capability issue / validate / revoke (12 checks/token)   │
+│  • Capsule lifecycle (load, verify signature, isolate, stop) │
+│  • Provider routing (elastos://, localhost://)                │
+│  • Immutable audit trail                                     │
+│  • TLS termination (rustls, zero OpenSSL)                    │
+│                                                              │
+│  Does NOT make policy decisions — enforces them.             │
+│  Policy lives in the shell (an AppCapsule).                  │
+│                                                              │
+│  Connects AppCapsules, WebSpaces, PC2 hosts, and blockchains.│
+│  Like carriers connecting smartphones — ElastOS connects     │
+│  all capsule sandboxes peer-to-peer.                         │
+│                                                              │
+│══════════════════════════════════════════════════════════════│
+│                                                              │
+│  PC2 OS (host)                                               │
+│  ─────────────                                               │
+│  Hardware, kernel, hypervisor/KVM, drivers, process/VM       │
+│  primitives. Conventional OS terminology applies.            │
+│  Does NOT own Elastos trust policy.                          │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Boundary rule:**
+- Hardware primitive → PC2 OS
+- Trust enforcement + cross-capsule authority → ElastOS Carrier
+- Single-capsule execution + policy decisions → AppCapsule Runtime
+
+This follows microkernel design: the Carrier provides **mechanism**, the shell (a capsule) provides **policy**. The shell can be upgraded from a rubber stamp to an intelligent AI agent without touching the trust base.
+
+### The 10 Crates (Current Implementation)
+
+```
+ElastOS Carrier (trust plane):
+├── elastos-server      — binary, HTTP API, CLI entry point
+├── elastos-runtime     — capabilities, tokens, handlers, messaging
+├── elastos-common      — shared types (CapsuleManifest, CapsuleId)
+├── elastos-namespace   — content addressing, CID → path resolution
+├── elastos-identity    — WebAuthn, credential store
+├── elastos-tls         — self-signed CA + certificates
+└── elastos-storage     — storage backends (local, IPFS, cache)
+
+Carrier ↔ PC2 bridge (execution adapters):
+├── elastos-compute     — WASM sandbox (Wasmtime)
+└── elastos-firecracker — MicroVM sandbox (Firecracker/KVM)
+
+AppCapsule contract:
+└── elastos-guest       — the SDK capsules use; the "syscall interface"
+```
+
+### URI Namespace (Aligned with W3C DID Conventions)
+
+```
+elastos://peer/alice/shared     Elastos ecosystem services
+elastos://did/key/abc           (we control the namespace)
+elastos://ai/llm/query
+elastos://cid/QmHash            Content by hash
+
+localhost://storage/photos      Local device
+localhost://clipboard            (your PC2 host)
+localhost://notify
+localhost://service/ollama
+
+https://example.com/page        Backward compatibility with WWW
+
+google.com://drive/photos       Third-party providers
+google://drive/photos            (DNS-verified or DAO-approved)
+```
+
+Three default WebSpaces:
+1. `https://` — backward compatibility with the traditional WWW
+2. `localhost://` — the PC2 home server environment
+3. `elastos://` — bootstrapping and discovering peer WebSpace providers
+
+### Current Implementation Status (Feb 28, 2026)
+
+**Working P2P chat** built from scratch across 5 capsules:
+- `localhost-provider` — encrypted file I/O
+- `shell` — policy decisions (currently auto-grant)
+- `did-provider` — Ed25519 identity (did://)
+- `peer-provider` — P2P networking via Iroh/QUIC
+- `chat` — TUI chat application
+
+Each capsule starts with zero permissions. The runtime validates Ed25519 capability tokens with 12 checks per invocation. Every action is audited.
+
+### The Shell Evolution: From Rubber Stamp to Intelligent Agent
+
+The shell capsule today is a 50ms loop that auto-grants everything. Its evolution is the key to the "agentic world computer":
+
+```
+Current:  User → dumb shell (auto-grant) → capsules
+Future:   User → intelligent shell (understands, decides, orchestrates) → capsules
+```
+
+The intelligent shell:
+- Permission decisions become conversations, not popups
+- Capsule composition becomes natural language
+- AI agents operate under the same token/audit/security model as human users
+- The runtime stays minimal and timeless; the intelligence lives in the shell
+
+This is the only architecture where AI can operate inside a personal cloud with granular, cryptographic trust — not full access (dangerous) or locked out (useless).
+
+### DAO Proposal
+
+The [Keystone Fund DAO proposal](https://elastos.com/proposals/69a24f49247f130078064edd) is live, covering the three-phase convergence:
+- **Phase 1 (Months 1–8):** V1 hardening, DePIN hardware expansion, AI integration
+- **Phase 2 (Months 6–18):** Capsule-ready architecture, modular service interfaces, developer SDK
+- **Phase 3 (Months 14–36):** Runtime convergence, capability-based security at production scale, agent economy
+
+---
+
+*Last updated: 2026-02-28*
 *Author: AI Development Assistant for Sasha Mitchell*

@@ -38,6 +38,18 @@ function initPC2StatusBar() {
                     z-index: 1;
                 }
 
+                /* In topbar (single bar mode) keep dot fully inside to avoid clipping */
+                .topbar .pc2-status-indicator {
+                    bottom: 0;
+                    right: 0;
+                }
+
+                /* In floating toolbar (smaller top bar) same fix */
+                .toolbar .pc2-status-indicator {
+                    bottom: 0;
+                    right: 0;
+                }
+
                 .pc2-status-indicator.disconnected {
                     background: #f59e0b;
                 }

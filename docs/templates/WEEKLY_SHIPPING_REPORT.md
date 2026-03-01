@@ -298,7 +298,7 @@ Key qualities that made it effective:
 | Feb 3-9 | [#2](https://github.com/Elacity/pc2.net/discussions/2) | 18 | GPU acceleration, Active Proxy protocol rewrite, gateway relay |
 | Feb 10-16 | — | 0 | No commits on this branch |
 | Feb 17-23 | [#3](https://github.com/Elacity/pc2.net/discussions/3) | 28 | WireGuard, video streaming, gateway perf, ARM installer, IPFS privacy, community bugs |
-| Feb 24-28 | [#1](https://github.com/Elacity/pc2.net/discussions/1) | 12 | Docs, strategy, gateway self-healing, WireGuard priority, AV1 Firefox |
+| Feb 24-28 | [#4](https://github.com/Elacity/pc2.net/discussions/4) | 34 | Voice AI, desktop UI upgrades, ARM installer hardening, WireGuard improvements |
 | 2026-01-29 | Published on blog | https://blog.elastos.net/wci-ecosystem-report-jan-29-2026/ | IPFS Sharing, NAT Traversal, AI Agents, DAO Dashboard |
 
 *Add new reports to this table as they're created.*

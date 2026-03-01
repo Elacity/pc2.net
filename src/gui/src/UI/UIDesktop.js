@@ -1170,8 +1170,8 @@ async function UIDesktop(options) {
     const user_preferences = {
         show_hidden_files: showHiddenFiles,
         language: serverLanguage ?? existingPrefs.language ?? 'en',
-        clock_visible: serverClockVisible ?? existingPrefs.clock_visible ?? 'auto',
-        desktop_layout: serverDesktopLayout ?? existingPrefs.desktop_layout ?? 'toolbar',
+        clock_visible: serverClockVisible ?? existingPrefs.clock_visible ?? 'hide',
+        desktop_layout: serverDesktopLayout ?? existingPrefs.desktop_layout ?? 'topbar',
     };
 
     // update default apps

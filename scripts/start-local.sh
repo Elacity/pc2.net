@@ -299,11 +299,18 @@ PARTICLE_EOF
     if ! command -v wg &> /dev/null; then
         echo -e "${CYAN}Installing WireGuard for fast remote access...${NC}"
         if [[ "$OS" == "macos" ]]; then
-            if command -v brew &> /dev/null; then
-                brew install wireguard-tools 2>&1 || true
-            else
-                echo -e "${YELLOW}⚠ Homebrew not found -- skipping WireGuard. Install later: brew install wireguard-tools${NC}"
+            if ! command -v brew &> /dev/null; then
+                echo -e "${CYAN}Installing Homebrew (macOS package manager)...${NC}"
+                /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" </dev/null
+                # Add Homebrew to PATH for this session
+                if [[ -x /opt/homebrew/bin/brew ]]; then
+                    eval "$(/opt/homebrew/bin/brew shellenv)"
+                elif [[ -x /usr/local/bin/brew ]]; then
+                    eval "$(/usr/local/bin/brew shellenv)"
+                fi
+                echo -e "${GREEN}✓ Homebrew installed${NC}"
             fi
+            brew install wireguard-tools 2>&1 || true
         elif [[ "$OS" == "linux" ]]; then
             if command -v apt-get &> /dev/null; then
                 sudo apt-get install -y -qq wireguard-tools 2>&1 || true

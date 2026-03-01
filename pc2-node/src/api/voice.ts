@@ -8,9 +8,10 @@
 import { Router, Response } from 'express';
 import { authenticate, AuthenticatedRequest } from './middleware.js';
 import multer from 'multer';
-import { spawn, execFile } from 'child_process';
+import { spawn, execFile, exec } from 'child_process';
 import { writeFile, unlink, readFile } from 'fs/promises';
 import { existsSync } from 'fs';
+import { promisify } from 'util';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { randomUUID } from 'crypto';
@@ -373,6 +374,148 @@ router.get('/voice/status', authenticate, async (_req: AuthenticatedRequest, res
   } catch (error: any) {
     logger.error('[Voice] Status check failed:', error?.message);
     res.status(500).json({ error: 'Voice status check failed', details: error?.message });
+  }
+});
+
+const execAsync = promisify(exec);
+
+/**
+ * POST /api/ai/voice/enable
+ * Start the whisper-server systemd service.
+ */
+router.post('/voice/enable', authenticate, async (_req: AuthenticatedRequest, res: Response) => {
+  try {
+    await execAsync('sudo systemctl start whisper-server 2>/dev/null');
+    // Give it a moment to start
+    await new Promise(r => setTimeout(r, 2000));
+    const available = await isWhisperAvailable();
+    res.json({ success: true, whisperRunning: available });
+  } catch (error: any) {
+    logger.error('[Voice] Failed to enable whisper-server:', error?.message);
+    res.status(500).json({ success: false, error: error?.message || 'Failed to start whisper-server' });
+  }
+});
+
+/**
+ * POST /api/ai/voice/disable
+ * Stop the whisper-server systemd service.
+ */
+router.post('/voice/disable', authenticate, async (_req: AuthenticatedRequest, res: Response) => {
+  try {
+    await execAsync('sudo systemctl stop whisper-server 2>/dev/null');
+    res.json({ success: true, whisperRunning: false });
+  } catch (error: any) {
+    logger.error('[Voice] Failed to disable whisper-server:', error?.message);
+    res.status(500).json({ success: false, error: error?.message || 'Failed to stop whisper-server' });
+  }
+});
+
+/**
+ * POST /api/ai/voice/install
+ * Install Whisper + Piper + ffmpeg in the background.
+ * Returns immediately; client should poll /voice/status.
+ */
+router.post('/voice/install', authenticate, async (_req: AuthenticatedRequest, res: Response) => {
+  try {
+    // Check if already installed
+    const whisperAvailable = await isWhisperAvailable();
+    if (whisperAvailable) {
+      return res.json({ success: true, message: 'Voice AI is already installed and running.' });
+    }
+
+    const homeDir = process.env.HOME || '/root';
+    const whisperDir = `${homeDir}/whisper.cpp`;
+    const whisperBinary = `${whisperDir}/build/bin/whisper-server`;
+
+    if (existsSync(whisperBinary)) {
+      // Binary exists but service isn't running -- just start it
+      await execAsync('sudo systemctl start whisper-server 2>/dev/null').catch(() => {});
+      return res.json({ success: true, message: 'Whisper found. Starting service...' });
+    }
+
+    // Run install in background
+    const installScript = `
+      set -e
+      sudo apt-get install -y -qq ffmpeg cmake libcurl4-openssl-dev 2>/dev/null || true
+
+      # Build whisper.cpp
+      WHISPER_DIR="${whisperDir}"
+      if [ ! -d "$WHISPER_DIR" ]; then
+        git clone --depth 1 https://github.com/ggerganov/whisper.cpp.git "$WHISPER_DIR"
+      fi
+      cd "$WHISPER_DIR"
+      mkdir -p build && cd build
+      if command -v nvcc &>/dev/null || [ -d /usr/local/cuda ]; then
+        cmake .. -DGGML_CUDA=ON -DWHISPER_BUILD_SERVER=ON
+      else
+        cmake .. -DWHISPER_BUILD_SERVER=ON
+      fi
+      cmake --build . --config Release -j$(nproc) 2>&1
+
+      # Download model
+      cd "$WHISPER_DIR"
+      if [ ! -f "models/ggml-base.en.bin" ]; then
+        bash models/download-ggml-model.sh base.en
+      fi
+
+      # Create systemd service
+      WHISPER_MODEL="$WHISPER_DIR/models/ggml-base.en.bin"
+      sudo tee /etc/systemd/system/whisper-server.service > /dev/null << WEOF
+[Unit]
+Description=Whisper.cpp STT Server
+After=network.target
+
+[Service]
+Type=simple
+User=$(whoami)
+ExecStart=$WHISPER_DIR/build/bin/whisper-server -m $WHISPER_MODEL --host 127.0.0.1 --port 8080
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+WEOF
+
+      sudo systemctl daemon-reload
+      sudo systemctl enable whisper-server
+      sudo systemctl start whisper-server
+
+      # Install Piper TTS
+      PIPER_DIR="${homeDir}/piper"
+      if [ ! -f "$PIPER_DIR/piper" ]; then
+        mkdir -p "$PIPER_DIR"
+        cd "$PIPER_DIR"
+        curl -sSL "https://github.com/rhasspy/piper/releases/latest/download/piper_linux_aarch64.tar.gz" | tar xz --strip-components=1 2>/dev/null || true
+        if [ -f "$PIPER_DIR/piper" ]; then
+          sudo ln -sf "$PIPER_DIR/piper" /usr/local/bin/piper
+        fi
+      fi
+
+      # Download voice model
+      PIPER_VOICE_DIR="$PIPER_DIR/voices"
+      mkdir -p "$PIPER_VOICE_DIR"
+      if [ ! -f "$PIPER_VOICE_DIR/en_US-ryan-high.onnx" ]; then
+        curl -sSL "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_US/ryan/high/en_US-ryan-high.onnx" -o "$PIPER_VOICE_DIR/en_US-ryan-high.onnx" 2>/dev/null || true
+        curl -sSL "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_US/ryan/high/en_US-ryan-high.onnx.json" -o "$PIPER_VOICE_DIR/en_US-ryan-high.onnx.json" 2>/dev/null || true
+      fi
+    `;
+
+    // Fire and forget -- client polls /voice/status
+    const child = spawn('bash', ['-c', installScript], {
+      detached: true,
+      stdio: 'ignore',
+    });
+    child.unref();
+
+    logger.info('[Voice] Background install started');
+    res.json({
+      success: true,
+      message: 'Voice AI installation started. This may take 10-15 minutes. Check status periodically.',
+      installing: true,
+    });
+  } catch (error: any) {
+    logger.error('[Voice] Install error:', error?.message);
+    res.status(500).json({ success: false, error: error?.message || 'Failed to start installation' });
   }
 });
 

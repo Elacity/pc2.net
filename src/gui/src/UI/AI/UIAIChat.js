@@ -21,6 +21,7 @@ import UIWindow from '../UIWindow.js';
 import UIContextMenu from '../UIContextMenu.js';
 import UIWindowSettings from '../Settings/UIWindowSettings.js';
 import UIWindowAIChat from '../UIWindowAIChat.js';
+import UIAlert from '../UIAlert.js';
 
 // Chat history storage keys (wallet-scoped for user isolation)
 const CHAT_HISTORY_KEY_PREFIX = 'pc2_ai_chat_history';
@@ -2276,13 +2277,17 @@ $(document).on('click', '.ai-voice-btn', async function () {
     // Pre-check voice service availability
     const status = await checkVoiceStatus();
     if (!status.ready) {
-        const missing = [];
-        if (!status.whisper?.available) missing.push('Whisper STT');
-        if (!status.ffmpeg?.available) missing.push('ffmpeg');
-        if (!status.piper?.available) missing.push('Piper TTS');
-        const chatInput = $('.ai-chat-input');
-        chatInput.attr('placeholder', `Voice requires: ${missing.join(', ')}`);
-        setTimeout(() => chatInput.attr('placeholder', 'Talk to ElastOS'), 4000);
+        const confirmed = await UIAlert({
+            type: 'confirm',
+            message: 'Voice AI is not set up. Would you like to open Settings to enable it?',
+            buttons: [
+                { label: 'Open Settings', value: 'settings', type: 'primary' },
+                { label: 'Cancel', value: 'cancel', type: 'secondary' },
+            ]
+        });
+        if (confirmed === 'settings') {
+            UIWindowSettings({ tab: 'ai' });
+        }
         return;
     }
 

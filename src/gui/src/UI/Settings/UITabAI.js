@@ -103,6 +103,60 @@ export default {
                 </div>
             </div>
             
+            <!-- Voice AI -->
+            <div class="ai-section">
+                <div class="ai-section-title">Voice AI</div>
+                <div class="ai-group">
+                    <div class="ai-group-row" style="background: #fffbeb; border-bottom: 1px solid #fde68a;">
+                        <div style="display: flex; align-items: flex-start; gap: 8px;">
+                            <span style="font-size: 14px; line-height: 1;">&#9888;</span>
+                            <span style="font-size: 10px; color: #92400e; line-height: 1.4;">Voice AI uses ~500MB+ GPU memory. On devices with limited memory (e.g. Jetson), this may prevent Ollama models from loading.</span>
+                        </div>
+                    </div>
+                    <div class="ai-group-row">
+                        <div class="ai-card-row">
+                            <span class="ai-card-label">Whisper STT</span>
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                                <span class="ai-status-dot" id="voice-whisper-dot"></span>
+                                <span id="voice-whisper-status" class="ai-card-value">Checking...</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="ai-group-row">
+                        <div class="ai-card-row">
+                            <span class="ai-card-label">Piper TTS</span>
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                                <span class="ai-status-dot" id="voice-piper-dot"></span>
+                                <span id="voice-piper-status" class="ai-card-value">Checking...</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="ai-group-row">
+                        <div class="ai-card-row">
+                            <span class="ai-card-label">ffmpeg</span>
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                                <span class="ai-status-dot" id="voice-ffmpeg-dot"></span>
+                                <span id="voice-ffmpeg-status" class="ai-card-value">Checking...</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="ai-group-row" id="voice-actions-row">
+                        <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+                            <div id="voice-toggle-container" style="display: none; align-items: center; gap: 8px;">
+                                <label style="font-size: 12px; font-weight: 500; color: #333; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                                    <span>Enabled</span>
+                                    <input type="checkbox" id="voice-toggle" style="width: 16px; height: 16px; cursor: pointer;">
+                                </label>
+                            </div>
+                            <div id="voice-install-container" style="display: none;">
+                                <button class="ai-btn" id="voice-install-btn" style="display: inline-flex; align-items: center; justify-content: center; padding: 6px 14px; font-size: 11px; line-height: 1; font-family: inherit; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer;">Install Voice AI</button>
+                            </div>
+                            <span id="voice-install-status" style="font-size: 10px; color: #666; display: none;"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
             <!-- Local AI Setup (Legacy - hidden) -->
             <div id="ai-local-setup-section" style="display: none;"></div>
             
@@ -1299,6 +1353,162 @@ export default {
         
         // Load model library on init
         loadModelLibrary();
+
+        // ============================================================
+        // VOICE AI HANDLERS
+        // ============================================================
+
+        async function loadVoiceStatus() {
+            try {
+                const apiOrigin = getAPIOrigin();
+                const url = new URL('/api/ai/voice/status', apiOrigin);
+                const authToken = getAuthToken();
+
+                const headers = { 'Content-Type': 'application/json' };
+                if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+                const response = await fetch(url.toString(), { method: 'GET', headers });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                const updateDot = (id, available) => {
+                    const $dot = $el_window.find(`#voice-${id}-dot`);
+                    const $text = $el_window.find(`#voice-${id}-status`);
+                    $dot.removeClass('available error');
+                    if (available) {
+                        $dot.addClass('available');
+                        $text.text('Available');
+                    } else {
+                        $dot.addClass('error');
+                        $text.text('Not found');
+                    }
+                };
+
+                updateDot('whisper', data.whisper?.available);
+                updateDot('piper', data.piper?.available);
+                updateDot('ffmpeg', data.ffmpeg?.available);
+
+                const allInstalled = data.whisper?.available || data.piper?.available || data.ffmpeg?.available;
+                const $toggleContainer = $el_window.find('#voice-toggle-container');
+                const $installContainer = $el_window.find('#voice-install-container');
+
+                if (data.whisper?.available && data.piper?.available && data.ffmpeg?.available) {
+                    $toggleContainer.css('display', 'flex');
+                    $installContainer.hide();
+                    $el_window.find('#voice-toggle').prop('checked', data.ready);
+                } else if (allInstalled) {
+                    $toggleContainer.css('display', 'flex');
+                    $installContainer.hide();
+                    $el_window.find('#voice-toggle').prop('checked', data.whisper?.available);
+                } else {
+                    $toggleContainer.hide();
+                    $installContainer.show();
+                }
+
+                return data;
+            } catch (error) {
+                console.error('[AI Settings] Error loading voice status:', error);
+                ['whisper', 'piper', 'ffmpeg'].forEach(id => {
+                    $el_window.find(`#voice-${id}-dot`).removeClass('available').addClass('error');
+                    $el_window.find(`#voice-${id}-status`).text('Unknown');
+                });
+                $el_window.find('#voice-install-container').show();
+                return null;
+            }
+        }
+
+        $el_window.find('#voice-toggle').off('change').on('change', async function() {
+            const enabled = $(this).prop('checked');
+            const action = enabled ? 'enable' : 'disable';
+            const $installStatus = $el_window.find('#voice-install-status');
+
+            try {
+                $(this).prop('disabled', true);
+                $installStatus.text(enabled ? 'Starting whisper-server...' : 'Stopping whisper-server...').show();
+
+                const apiOrigin = getAPIOrigin();
+                const url = new URL(`/api/ai/voice/${action}`, apiOrigin);
+                const authToken = getAuthToken();
+
+                const headers = { 'Content-Type': 'application/json' };
+                if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+                const response = await fetch(url.toString(), { method: 'POST', headers });
+                const data = await response.json();
+
+                if (!data.success) {
+                    throw new Error(data.error || `Failed to ${action} voice`);
+                }
+
+                $installStatus.text(enabled ? 'Voice AI enabled' : 'Voice AI disabled');
+                setTimeout(() => $installStatus.hide(), 2000);
+                await loadVoiceStatus();
+            } catch (error) {
+                console.error(`[AI Settings] Error ${action} voice:`, error);
+                $installStatus.text(`Error: ${error.message}`);
+                $(this).prop('checked', !enabled);
+            } finally {
+                $(this).prop('disabled', false);
+            }
+        });
+
+        $el_window.find('#voice-install-btn').off('click').on('click', async function() {
+            const $btn = $(this);
+            const $installStatus = $el_window.find('#voice-install-status');
+
+            try {
+                $btn.prop('disabled', true).text('Installing...');
+                $installStatus.text('Installation started. This may take 10-15 minutes...').show();
+
+                const apiOrigin = getAPIOrigin();
+                const url = new URL('/api/ai/voice/install', apiOrigin);
+                const authToken = getAuthToken();
+
+                const headers = { 'Content-Type': 'application/json' };
+                if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+                const response = await fetch(url.toString(), { method: 'POST', headers });
+                const data = await response.json();
+
+                if (!data.success) {
+                    throw new Error(data.error || 'Install failed');
+                }
+
+                $installStatus.text(data.message || 'Installing... Check back in a few minutes.');
+
+                // Poll voice status every 30s until ready
+                const pollInterval = setInterval(async () => {
+                    const status = await loadVoiceStatus();
+                    if (status && status.ready) {
+                        clearInterval(pollInterval);
+                        $btn.prop('disabled', false).text('Install Voice AI');
+                        $installStatus.text('Voice AI installed successfully!');
+                        setTimeout(() => $installStatus.hide(), 3000);
+                    }
+                }, 30000);
+
+                // Stop polling after 20 minutes
+                setTimeout(() => {
+                    clearInterval(pollInterval);
+                    $btn.prop('disabled', false).text('Install Voice AI');
+                    if ($installStatus.is(':visible')) {
+                        $installStatus.text('Installation may still be running. Refresh to check status.');
+                    }
+                }, 20 * 60 * 1000);
+
+            } catch (error) {
+                console.error('[AI Settings] Voice install error:', error);
+                $installStatus.text(`Error: ${error.message}`);
+                $btn.prop('disabled', false).text('Install Voice AI');
+            }
+        });
+
+        // Load voice status on init
+        loadVoiceStatus();
 
         // ============================================================
         // MESSAGING CHANNELS HANDLERS

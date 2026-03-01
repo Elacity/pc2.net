@@ -11525,3 +11525,342 @@ fieldset[name=number-code] {
 [data-theme="light"] .agent-row > .ai-card-row > div > div:last-child {
     color: #999;
 }
+
+/* ========================================
+   Workspace Indicator (dots in topbar/toolbar)
+   ======================================== */
+.workspace-indicator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 10px;
+    padding: 3px 8px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.workspace-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.3);
+    cursor: pointer;
+    transition: background 0.15s, transform 0.15s;
+}
+
+.workspace-dot:hover {
+    background: rgba(255, 255, 255, 0.6);
+    transform: scale(1.2);
+}
+
+.workspace-dot.active {
+    background: #fff;
+}
+
+[data-theme="light"] .workspace-indicator {
+    background: rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="light"] .workspace-dot {
+    background: rgba(0, 0, 0, 0.2);
+}
+
+[data-theme="light"] .workspace-dot:hover {
+    background: rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="light"] .workspace-dot.active {
+    background: #333;
+}
+
+/* ========================================
+   Mission Control Overlay
+   ======================================== */
+.mc-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 99999;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    display: flex;
+    flex-direction: column;
+    opacity: 0;
+    transition: opacity 0.25s ease;
+    overflow: hidden;
+}
+
+.mc-overlay.mc-visible {
+    opacity: 1;
+}
+
+/* Workspace strip at top */
+.mc-workspace-strip {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 20px 30px 16px;
+    overflow-x: auto;
+    flex-shrink: 0;
+    justify-content: center;
+}
+
+.mc-workspace-thumb {
+    position: relative;
+    min-width: 160px;
+    max-width: 200px;
+    height: 110px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 2px solid rgba(255, 255, 255, 0.15);
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: border-color 0.15s, transform 0.15s, background 0.15s;
+    flex-shrink: 0;
+}
+
+.mc-workspace-thumb:hover {
+    border-color: rgba(255, 255, 255, 0.35);
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.mc-workspace-thumb.active {
+    border-color: #3b82f6;
+    background: rgba(59, 130, 246, 0.12);
+}
+
+.mc-workspace-thumb.mc-drag-over {
+    border-color: #22c55e;
+    background: rgba(34, 197, 94, 0.15);
+    transform: scale(1.05);
+}
+
+.mc-workspace-thumb-label {
+    padding: 6px 10px 2px;
+    font-size: 11px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.85);
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mc-workspace-thumb-preview {
+    flex: 1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    padding: 4px 8px 8px;
+    align-items: flex-start;
+    align-content: flex-start;
+    overflow: hidden;
+}
+
+.mc-thumb-window {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 3px;
+    padding: 2px 5px;
+    max-width: 80px;
+    overflow: hidden;
+}
+
+.mc-thumb-window-icon {
+    width: 10px;
+    height: 10px;
+    flex-shrink: 0;
+}
+
+.mc-thumb-window-title {
+    font-size: 8px;
+    color: rgba(255, 255, 255, 0.7);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mc-workspace-remove {
+    position: absolute;
+    top: -6px;
+    left: -6px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #ef4444;
+    color: white;
+    font-size: 13px;
+    line-height: 18px;
+    text-align: center;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 2;
+}
+
+.mc-workspace-thumb:hover .mc-workspace-remove {
+    opacity: 1;
+}
+
+.mc-workspace-add {
+    min-width: 44px;
+    height: 110px;
+    border-radius: 10px;
+    border: 2px dashed rgba(255, 255, 255, 0.25);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    color: rgba(255, 255, 255, 0.4);
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+    flex-shrink: 0;
+}
+
+.mc-workspace-add:hover {
+    border-color: rgba(255, 255, 255, 0.5);
+    color: rgba(255, 255, 255, 0.8);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+/* Window spread area */
+.mc-window-spread {
+    flex: 1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 24px;
+    padding: 24px 40px;
+    align-items: center;
+    justify-content: center;
+    align-content: center;
+    overflow-y: auto;
+}
+
+.mc-window-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: transform 0.15s;
+    max-width: 260px;
+}
+
+.mc-window-card:hover {
+    transform: scale(1.06);
+}
+
+.mc-window-card.mc-dragging {
+    opacity: 0.4;
+}
+
+.mc-window-card-active .mc-window-card-preview {
+    box-shadow: 0 0 0 3px #3b82f6;
+}
+
+.mc-window-card-preview {
+    border-radius: 8px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 140px;
+    min-height: 100px;
+}
+
+.mc-window-card-preview svg {
+    display: block;
+}
+
+.mc-window-card-label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.8);
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mc-window-card-icon {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+
+.mc-empty-label {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.4);
+    text-align: center;
+}
+
+/* Light mode variants */
+[data-theme="light"] .mc-overlay {
+    background: rgba(230, 230, 230, 0.82);
+}
+
+[data-theme="light"] .mc-workspace-thumb {
+    background: rgba(0, 0, 0, 0.05);
+    border-color: rgba(0, 0, 0, 0.12);
+}
+
+[data-theme="light"] .mc-workspace-thumb:hover {
+    border-color: rgba(0, 0, 0, 0.25);
+    background: rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .mc-workspace-thumb.active {
+    border-color: #3b82f6;
+    background: rgba(59, 130, 246, 0.08);
+}
+
+[data-theme="light"] .mc-workspace-thumb-label {
+    color: rgba(0, 0, 0, 0.8);
+}
+
+[data-theme="light"] .mc-thumb-window {
+    background: rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .mc-thumb-window-title {
+    color: rgba(0, 0, 0, 0.6);
+}
+
+[data-theme="light"] .mc-workspace-remove {
+    background: #dc2626;
+}
+
+[data-theme="light"] .mc-workspace-add {
+    border-color: rgba(0, 0, 0, 0.2);
+    color: rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="light"] .mc-workspace-add:hover {
+    border-color: rgba(0, 0, 0, 0.4);
+    color: rgba(0, 0, 0, 0.6);
+    background: rgba(0, 0, 0, 0.04);
+}
+
+[data-theme="light"] .mc-window-card-preview {
+    background: rgba(0, 0, 0, 0.04);
+    border-color: rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="light"] .mc-window-card-label {
+    color: rgba(0, 0, 0, 0.7);
+}
+
+[data-theme="light"] .mc-empty-label {
+    color: rgba(0, 0, 0, 0.35);
+}

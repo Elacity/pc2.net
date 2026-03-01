@@ -103,6 +103,7 @@ if (window.user_preferences === null) {
 }
 
 window.window_stack = []
+window.workspace_manager = null;
 window.toolbar_height = 45;
 window.default_taskbar_height = 50;
 window.taskbar_height = window.default_taskbar_height;

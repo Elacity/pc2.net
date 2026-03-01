@@ -254,6 +254,7 @@ async function UIWindow(options) {
                 data-stay_on_top ="${options.stay_on_top}"
                 data-sort_by ="${options.sort_by ?? 'name'}"
                 data-sort_order ="${options.sort_order ?? 'asc'}"
+                data-workspace="${window.workspace_manager ? window.workspace_manager.activeWorkspaceId : 1}"
                 data-multiselectable = "${options.selectable_body}"
                 data-update_window_url = "${options.update_window_url && options.is_visible}"
                 data-user_set_url_params = "${html_encode(user_set_url_params)}"
@@ -2327,6 +2328,27 @@ async function UIWindow(options) {
             });
             // -
             menu_items.push('-')
+        }
+        // -------------------------------------------
+        // Move to Workspace
+        // -------------------------------------------
+        if (window.workspace_manager && window.workspace_manager.workspaces.length > 1) {
+            menu_items.push('-');
+            const wsSubmenu = window.workspace_manager.workspaces
+                .filter(ws => ws.id !== parseInt($(el_window).attr('data-workspace')))
+                .map(ws => ({
+                    html: ws.name,
+                    onClick: function () {
+                        window.workspace_manager.moveWindowToWorkspace(
+                            $(el_window).attr('data-id'),
+                            ws.id
+                        );
+                    }
+                }));
+            menu_items.push({
+                html: 'Move to Workspace',
+                items: wsSubmenu,
+            });
         }
         // -------------------------------------------
         // Close

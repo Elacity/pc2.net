@@ -47,6 +47,8 @@ import UIAccountSidebar from "./UIAccountSidebar.js"
 import walletService from "../services/WalletService.js"
 import initPC2StatusBar from "./UIPC2StatusBar.js"
 import UIAIChat from "./AI/UIAIChat.js"
+import WorkspaceManager from "../helpers/WorkspaceManager.js"
+import { toggleMissionControl } from "./UIMissionControl.js"
 
 async function UIDesktop(options) {
     // Guard against multiple UIDesktop calls
@@ -1790,7 +1792,7 @@ async function UIDesktop(options) {
     ht += `<div class="toolbar hide-scrollbar ${class_name}" style="${style}">`;
     // logo
     ht += `<div class="toolbar-btn toolbar-puter-logo" title="ElastOS" style="margin-left: 10px; width:107px;"><img src="/images/elastos-logo.webp" draggable="false" style="display:block; width:107px; height:17px"></div>`;
-
+    ht += `<div class="workspace-indicator" id="toolbar-workspace-indicator"><span class="workspace-dot active" data-workspace-id="1" title="Desktop 1"></span></div>`;
 
     // clock spacer
     ht += `<div class="toolbar-spacer"></div>`;
@@ -1810,6 +1812,9 @@ async function UIDesktop(options) {
 
     // github
     // ht += `<a href="https://github.com/HeyPuter/puter" target="_blank" class="toolbar-btn" title="GitHub" style="background-image:url(${window.icons['logo-github-white.svg']});"></a>`;
+
+    // mission control button
+    ht += `<div class="toolbar-btn mission-control-btn" title="Mission Control (F3)" style="background-image:url('${`data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>')}`}')"></div>`;
 
     // do not show the fullscreen button on mobile devices since it's broken
     if (!isMobile.phone) {
@@ -1846,8 +1851,11 @@ async function UIDesktop(options) {
     topbar_ht += `<div class="topbar">`;
     topbar_ht += `<div class="topbar-left">`;
     topbar_ht += `<div class="toolbar-btn toolbar-puter-logo" title="ElastOS" style="margin-left: 4px; width:22px; height:22px;"><img src="/images/elastos-icon.svg" draggable="false" style="display:block; width:22px; height:22px;"></div>`;
+    topbar_ht += `<div class="workspace-indicator" id="topbar-workspace-indicator"><span class="workspace-dot active" data-workspace-id="1" title="Desktop 1"></span></div>`;
     topbar_ht += `</div>`;
     topbar_ht += `<div class="topbar-right">`;
+    const missionControlSvg = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>')}`;
+    topbar_ht += `<div class="toolbar-btn mission-control-btn" title="Mission Control (F3)" style="background-image:url('${missionControlSvg}')"></div>`;
     if (!isMobile.phone) {
         topbar_ht += `<div class="toolbar-btn fullscreen-btn" title="${i18n('toolbar.enter_fullscreen')}" style="background-image:url(${window.icons['fullscreen.svg']})"></div>`;
     }
@@ -1877,6 +1885,38 @@ async function UIDesktop(options) {
     window.change_clock_visible();
     // init desktop layout
     window.change_desktop_layout();
+
+    // init workspace manager
+    window.workspace_manager = new WorkspaceManager();
+    window.workspace_manager.on('switch', () => window.updateWorkspaceIndicator());
+    window.workspace_manager.on('add', () => window.updateWorkspaceIndicator());
+    window.workspace_manager.on('remove', () => window.updateWorkspaceIndicator());
+    window.workspace_manager.on('reorder', () => window.updateWorkspaceIndicator());
+
+    window.updateWorkspaceIndicator = function () {
+        const wm = window.workspace_manager;
+        if (!wm) return;
+        const renderDots = (containerId) => {
+            const $container = $(`#${containerId}`);
+            if ($container.length === 0) return;
+            let html = '';
+            wm.workspaces.forEach(ws => {
+                const isActive = ws.id === wm.activeWorkspaceId;
+                html += `<span class="workspace-dot${isActive ? ' active' : ''}" data-workspace-id="${ws.id}" title="${ws.name}"></span>`;
+            });
+            $container.html(html);
+            $container.find('.workspace-dot').on('click', function () {
+                const id = parseInt($(this).attr('data-workspace-id'));
+                wm.switchTo(id);
+            });
+        };
+        renderDots('topbar-workspace-indicator');
+        renderDots('toolbar-workspace-indicator');
+    };
+
+    $(document).on('click', '.mission-control-btn', function () {
+        if (window.toggleMissionControl) window.toggleMissionControl();
+    });
 
     // notification container
     $('body').append(`<div class="notification-container"><div class="notifications-close-all">${i18n('close_all')}</div></div>`);

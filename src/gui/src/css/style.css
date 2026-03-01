@@ -11742,11 +11742,17 @@ fieldset[name=number-code] {
 
 /* Spread windows - actual window elements repositioned */
 .mc-spread-window {
-    cursor: pointer !important;
+    pointer-events: none !important;
 }
 
-.mc-spread-window:hover {
-    box-shadow: 0 4px 24px rgba(59, 130, 246, 0.4), 0 0 0 2px rgba(59, 130, 246, 0.6) !important;
+/* Click-target overlays above each spread window */
+.mc-click-target {
+    background: transparent;
+    transition: background 0.15s;
+}
+
+.mc-click-target:hover {
+    background: rgba(59, 130, 246, 0.08);
 }
 
 .mc-empty-label {
@@ -11806,6 +11812,3 @@ fieldset[name=number-code] {
     color: rgba(0, 0, 0, 0.35);
 }
 
-[data-theme="light"] .mc-spread-window:hover {
-    box-shadow: 0 4px 24px rgba(59, 130, 246, 0.3), 0 0 0 2px rgba(59, 130, 246, 0.5) !important;
-}

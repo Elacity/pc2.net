@@ -2,11 +2,13 @@
  * UIMissionControl - macOS-style Mission Control overlay
  * 
  * Uses actual window elements (scaled + repositioned) for the spread area
- * so iframe content is visible. Workspace thumbnails show app icons.
+ * so iframe content is visible. Transparent click-target overlays sit on top
+ * to prevent app interaction and capture user clicks.
  */
 
 let isOpen = false;
 let savedWindowStates = [];
+let pendingSwitchWorkspaceId = null;
 
 function getSpreadLayout(windowCount) {
     if (windowCount === 1) return { cols: 1, scale: 0.65 };
@@ -31,7 +33,6 @@ function renderOverlay() {
         html += `<div class="mc-workspace-thumb-label">${ws.name}</div>`;
         html += `<div class="mc-workspace-thumb-preview">`;
 
-        // Show app icons inside thumbnail
         windows.each(function () {
             const $w = $(this);
             const title = $w.find('.window-head-title').text() || $w.attr('data-name') || '';
@@ -53,8 +54,6 @@ function renderOverlay() {
     html += `<div class="mc-workspace-add" title="Add workspace">+</div>`;
     html += `</div>`;
 
-    // Spread area - actual windows will be repositioned into this zone
-    // Click targets are rendered here as invisible overlays
     const activeWindows = $(`.window[data-workspace="${wm.activeWorkspaceId}"]`).not('[data-is_minimized="true"]').not('[data-is_minimized="1"]');
     html += `<div class="mc-window-spread" id="mc-window-spread">`;
     if (activeWindows.length === 0) {
@@ -83,18 +82,14 @@ function arrangeWindowsInSpread() {
     const rows = Math.ceil(count / cols);
     const scale = layout.scale;
 
-    const $spread = $('#mc-window-spread');
-
     activeWindows.each(function (i) {
         const $w = $(this);
         const winId = $w.attr('data-id');
 
-        // Save original state
         savedWindowStates.push({
             id: winId,
             cssText: this.style.cssText,
             zIndex: $w.css('z-index'),
-            classes: this.className,
         });
 
         const winW = $w.outerWidth() || 400;
@@ -105,13 +100,11 @@ function arrangeWindowsInSpread() {
         const col = i % cols;
         const row = Math.floor(i / cols);
 
-        // Calculate cell positions centered in the spread area
         const cellW = viewW / cols;
         const cellH = viewH / rows;
         const left = col * cellW + (cellW - scaledW) / 2;
         const top = stripHeight + row * cellH + (cellH - scaledH - labelHeight) / 2;
 
-        // Apply transform to actual window
         $w.addClass('mc-spread-window');
         $w.css({
             'position': 'fixed',
@@ -125,19 +118,31 @@ function arrangeWindowsInSpread() {
             'transition': 'left 0.3s ease, top 0.3s ease, transform 0.3s ease',
             'border-radius': '10px',
             'box-shadow': '0 4px 20px rgba(0,0,0,0.4)',
-            'cursor': 'pointer',
+            'pointer-events': 'none',
         });
 
-        // Add a window label below the scaled window
+        // Transparent click-target overlay positioned exactly over the scaled window
         const title = $w.find('.window-head-title').text() || $w.attr('data-name') || 'Window';
         const iconSrc = $w.find('.window-head-icon img').attr('src') || '';
+        const clickTarget = `<div class="mc-click-target" data-window-id="${winId}" draggable="true" style="
+            position: fixed;
+            left: ${left}px;
+            top: ${top}px;
+            width: ${scaledW}px;
+            height: ${scaledH}px;
+            z-index: 100100;
+            cursor: pointer;
+            border-radius: 10px;
+        "></div>`;
+        $('body').append(clickTarget);
+
         const labelHtml = `<div class="mc-spread-label" data-for-window="${winId}" style="
             position: fixed;
             left: ${left}px;
             top: ${top + scaledH + 6}px;
             width: ${scaledW}px;
             text-align: center;
-            z-index: 100000;
+            z-index: 100100;
             pointer-events: none;
             display: flex;
             align-items: center;
@@ -152,8 +157,8 @@ function arrangeWindowsInSpread() {
 }
 
 function restoreWindows() {
-    // Remove labels
     $('.mc-spread-label').remove();
+    $('.mc-click-target').remove();
 
     savedWindowStates.forEach((state) => {
         const $w = $(`.window[data-id="${state.id}"]`);
@@ -170,11 +175,11 @@ function restoreWindows() {
 function openMissionControl() {
     if (isOpen) return;
     isOpen = true;
+    pendingSwitchWorkspaceId = null;
 
     const html = renderOverlay();
     $('body').append(html);
 
-    // Arrange actual windows after overlay is in DOM
     arrangeWindowsInSpread();
 
     requestAnimationFrame(() => {
@@ -184,15 +189,36 @@ function openMissionControl() {
     bindEvents();
 }
 
-function closeMissionControl() {
+function closeMissionControl(focusWindowId) {
     if (!isOpen) return;
     isOpen = false;
 
+    // Restore windows FIRST (puts them back to original CSS)
     restoreWindows();
+
+    // THEN apply workspace switch if one was requested
+    if (pendingSwitchWorkspaceId !== null) {
+        window.workspace_manager.switchTo(pendingSwitchWorkspaceId);
+        pendingSwitchWorkspaceId = null;
+    }
+
+    // Focus a specific window if requested
+    if (focusWindowId) {
+        setTimeout(() => {
+            $(`.window[data-id="${focusWindowId}"]`).focusWindow();
+        }, 50);
+    }
 
     const $overlay = $('#mission-control-overlay');
     $overlay.removeClass('mc-visible');
     setTimeout(() => $overlay.remove(), 250);
+
+    $(document).off('keydown.missioncontrol');
+    $(document).off('click.mc-targets');
+    $(document).off('mouseenter.mc-targets');
+    $(document).off('mouseleave.mc-targets');
+    $(document).off('dragstart.mc-targets');
+    $(document).off('dragend.mc-targets');
 }
 
 function toggleMissionControl() {
@@ -218,46 +244,48 @@ function refreshOverlay() {
 function bindEvents() {
     const wm = window.workspace_manager;
 
-    // Click overlay background to close
     $('#mission-control-overlay').on('click', function (e) {
         if ($(e.target).hasClass('mc-overlay') || $(e.target).hasClass('mc-window-spread')) {
             closeMissionControl();
         }
     });
 
-    // Escape to close
     $(document).off('keydown.missioncontrol').on('keydown.missioncontrol', function (e) {
         if (e.key === 'Escape' && isOpen) {
             closeMissionControl();
         }
     });
 
-    // Click a workspace thumbnail to switch
+    // Click workspace thumbnail: set pending switch, then close
     $('.mc-workspace-thumb').on('click', function (e) {
         if ($(e.target).hasClass('mc-workspace-remove')) return;
-        const id = parseInt($(this).attr('data-workspace-id'));
-        wm.switchTo(id);
+        pendingSwitchWorkspaceId = parseInt($(this).attr('data-workspace-id'));
         closeMissionControl();
     });
 
-    // Click a spread window to focus it and close MC
-    $('.mc-spread-window').on('click.mc', function (e) {
+    // Click-target overlays: close MC and focus the clicked window
+    $(document).on('click.mc-targets', '.mc-click-target', function (e) {
         e.stopPropagation();
-        const winId = $(this).attr('data-id');
-        closeMissionControl();
-        setTimeout(() => {
-            $(`.window[data-id="${winId}"]`).focusWindow();
-        }, 50);
+        const winId = $(this).attr('data-window-id');
+        closeMissionControl(winId);
     });
 
-    // Add workspace
+    // Hover effect on click targets highlights the window beneath
+    $(document).on('mouseenter.mc-targets', '.mc-click-target', function () {
+        const winId = $(this).attr('data-window-id');
+        $(`.window[data-id="${winId}"]`).css('box-shadow', '0 4px 24px rgba(59,130,246,0.4), 0 0 0 3px rgba(59,130,246,0.6)');
+    });
+    $(document).on('mouseleave.mc-targets', '.mc-click-target', function () {
+        const winId = $(this).attr('data-window-id');
+        $(`.window[data-id="${winId}"]`).css('box-shadow', '0 4px 20px rgba(0,0,0,0.4)');
+    });
+
     $('.mc-workspace-add').on('click', function (e) {
         e.stopPropagation();
         wm.addWorkspace();
         refreshOverlay();
     });
 
-    // Remove workspace
     $('.mc-workspace-remove').on('click', function (e) {
         e.stopPropagation();
         const id = parseInt($(this).attr('data-workspace-id'));
@@ -265,20 +293,20 @@ function bindEvents() {
         refreshOverlay();
     });
 
-    // Drag windows to workspace thumbnails
-    $('.mc-spread-window').on('dragstart.mc', function (e) {
-        const winId = $(this).attr('data-id');
+    // Drag click-targets to workspace thumbnails
+    $(document).on('dragstart.mc-targets', '.mc-click-target', function (e) {
+        const winId = $(this).attr('data-window-id');
         e.originalEvent.dataTransfer.setData('text/plain', `window:${winId}`);
         e.originalEvent.dataTransfer.effectAllowed = 'move';
-        $(this).css('opacity', '0.4');
+        $(`.window[data-id="${winId}"]`).css('opacity', '0.4');
     });
 
-    $('.mc-spread-window').on('dragend.mc', function () {
-        $(this).css('opacity', '1');
+    $(document).on('dragend.mc-targets', '.mc-click-target', function () {
+        const winId = $(this).attr('data-window-id');
+        $(`.window[data-id="${winId}"]`).css('opacity', '1');
         $('.mc-workspace-thumb').removeClass('mc-drag-over');
     });
 
-    // Workspace thumb drop targets
     $('.mc-workspace-thumb').on('dragover', function (e) {
         e.preventDefault();
         e.originalEvent.dataTransfer.dropEffect = 'move';
@@ -301,7 +329,6 @@ function bindEvents() {
         }
     });
 
-    // Drag workspace thumbnails to reorder
     let dragThumbSrc = null;
 
     $('.mc-workspace-thumb').on('dragstart', function (e) {

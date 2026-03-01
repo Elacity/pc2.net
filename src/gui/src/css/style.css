@@ -11653,10 +11653,33 @@ fieldset[name=number-code] {
 
 .mc-workspace-thumb-preview {
     flex: 1;
-    position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 4px 8px 6px;
+    align-items: center;
+    justify-content: center;
+    align-content: center;
     overflow: hidden;
     border-radius: 0 0 8px 8px;
     background: rgba(0, 0, 0, 0.08);
+}
+
+.mc-thumb-app {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.mc-thumb-app-icon {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
 }
 
 .mc-workspace-remove {
@@ -11716,93 +11739,14 @@ fieldset[name=number-code] {
     overflow-y: auto;
 }
 
-.mc-spread-single {
-    gap: 0;
+
+/* Spread windows - actual window elements repositioned */
+.mc-spread-window {
+    cursor: pointer !important;
 }
 
-.mc-spread-double {
-    gap: 40px;
-}
-
-.mc-spread-quad {
-    gap: 24px;
-}
-
-.mc-spread-many {
-    gap: 16px;
-    align-content: flex-start;
-    padding-top: 20px;
-}
-
-.mc-window-card {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 10px;
-    cursor: pointer;
-    transition: transform 0.15s;
-}
-
-.mc-window-card:hover {
-    transform: scale(1.06);
-}
-
-.mc-window-card.mc-dragging {
-    opacity: 0.4;
-}
-
-.mc-window-card-active .mc-window-card-preview {
-    box-shadow: 0 0 0 3px #3b82f6;
-}
-
-.mc-window-card-preview {
-    border-radius: 8px;
-    overflow: hidden;
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    position: relative;
-    pointer-events: none;
-}
-
-.mc-window-card-preview .mc-window-clone {
-    position: absolute;
-    top: 0;
-    left: 0;
-    transform-origin: top left;
-    pointer-events: none;
-    border-radius: 8px;
-    overflow: hidden;
-    box-shadow: 0 2px 12px rgba(0,0,0,0.3);
-}
-
-.mc-window-card-preview .mc-window-clone * {
-    pointer-events: none !important;
-}
-
-.mc-window-card-preview .mc-window-clone iframe {
-    visibility: visible;
-}
-
-.mc-window-card-preview svg {
-    display: block;
-}
-
-.mc-window-card-label {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    font-size: 11px;
-    color: rgba(255, 255, 255, 0.8);
-    max-width: 220px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.mc-window-card-icon {
-    width: 14px;
-    height: 14px;
-    flex-shrink: 0;
+.mc-spread-window:hover {
+    box-shadow: 0 4px 24px rgba(59, 130, 246, 0.4), 0 0 0 2px rgba(59, 130, 246, 0.6) !important;
 }
 
 .mc-empty-label {
@@ -11839,6 +11783,10 @@ fieldset[name=number-code] {
     background: rgba(0, 0, 0, 0.04);
 }
 
+[data-theme="light"] .mc-thumb-app {
+    background: rgba(0, 0, 0, 0.06);
+}
+
 [data-theme="light"] .mc-workspace-remove {
     background: #dc2626;
 }
@@ -11854,15 +11802,10 @@ fieldset[name=number-code] {
     background: rgba(0, 0, 0, 0.04);
 }
 
-[data-theme="light"] .mc-window-card-preview {
-    background: rgba(0, 0, 0, 0.04);
-    border-color: rgba(0, 0, 0, 0.1);
-}
-
-[data-theme="light"] .mc-window-card-label {
-    color: rgba(0, 0, 0, 0.7);
-}
-
 [data-theme="light"] .mc-empty-label {
     color: rgba(0, 0, 0, 0.35);
+}
+
+[data-theme="light"] .mc-spread-window:hover {
+    box-shadow: 0 4px 24px rgba(59, 130, 246, 0.3), 0 0 0 2px rgba(59, 130, 246, 0.5) !important;
 }

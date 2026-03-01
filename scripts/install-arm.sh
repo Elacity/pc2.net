@@ -345,13 +345,14 @@ SUDOERS_EOF
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Install voice AI tools (Whisper STT + Piper TTS + ffmpeg)
-# Optional — enable with INSTALL_VOICE=1 or auto-detected on Jetson
+# Opt-in only — enable with INSTALL_VOICE=1
+# Whisper uses ~500MB+ GPU memory which competes with Ollama on Jetson
 # ─────────────────────────────────────────────────────────────────────────────
 
 VOICE_READY=false
 
 install_voice_tools() {
-    if [ "${INSTALL_VOICE:-0}" != "1" ] && [ "$IS_JETSON" != true ]; then
+    if [ "${INSTALL_VOICE:-0}" != "1" ]; then
         return
     fi
 

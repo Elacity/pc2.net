@@ -615,76 +615,107 @@ export class OllamaProvider {
 
       if (!response.ok) {
         const errorText = await response.text();
+
+        if (useOpenAICompat && response.status === 400 &&
+            errorText.includes('does not support tools')) {
+          logger.warn('[Ollama] Model does not support tools, retrying stream without tools');
+          const fallbackEndpoint = `${this.apiBaseUrl}/api/chat`;
+          const fallbackBody = {
+            model,
+            messages,
+            stream: true,
+            options: this.buildHardwareOptions(temperature),
+          };
+          const fallbackResponse = await fetch(fallbackEndpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(fallbackBody),
+          });
+          if (!fallbackResponse.ok) {
+            const fbErr = await fallbackResponse.text();
+            throw new Error(`Ollama API error: ${fallbackResponse.status} ${fbErr}`);
+          }
+          yield* this.streamOllamaLines(fallbackResponse);
+          return;
+        }
+
         throw new Error(`Ollama API error: ${response.status} ${errorText}`);
       }
 
-      const reader = response.body?.getReader();
-      if (!reader) {
-        throw new Error('No response body reader available');
-      }
-
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        
-        if (useOpenAICompat) {
-          // OpenAI-compatible streaming format: "data: {...}\n\n"
-          const chunks = buffer.split('\n\n');
-          buffer = chunks.pop() || '';
-          
-          for (const chunk of chunks) {
-            if (!chunk.trim() || chunk === 'data: [DONE]') continue;
-            try {
-              const jsonStr = chunk.replace(/^data: /, '');
-              const data = JSON.parse(jsonStr);
-              if (data.choices && data.choices[0]) {
-                const choice = data.choices[0];
-                const delta = choice.delta || {};
-                yield {
-                  message: {
-                    role: delta.role || 'assistant',
-                    content: delta.content || '',
-                    tool_calls: delta.tool_calls || undefined,
-                  },
-                  done: choice.finish_reason !== null,
-                };
-              }
-            } catch (e) {
-              // Skip invalid JSON
-            }
-          }
-        } else {
-          // Raw Ollama streaming format: one JSON object per line
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
-
-          for (const line of lines) {
-            if (line.trim() === '') continue;
-            try {
-              const data = JSON.parse(line);
-              if (data.message) {
-                yield {
-                  message: {
-                    role: data.message.role || 'assistant',
-                    content: data.message.content || '',
-                  },
-                  done: data.done ?? false,
-                };
-              }
-            } catch (e) {
-              // Skip invalid JSON lines
-            }
-          }
-        }
+      if (useOpenAICompat) {
+        yield* this.streamOpenAICompat(response);
+      } else {
+        yield* this.streamOllamaLines(response);
       }
     } catch (error) {
       logger.error('[Ollama] Stream completion error:', error);
       throw error;
+    }
+  }
+
+  private async *streamOpenAICompat(response: Response): AsyncGenerator<ChatCompletion, void, unknown> {
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('No response body reader available');
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const chunks = buffer.split('\n\n');
+      buffer = chunks.pop() || '';
+      for (const chunk of chunks) {
+        if (!chunk.trim() || chunk === 'data: [DONE]') continue;
+        try {
+          const jsonStr = chunk.replace(/^data: /, '');
+          const data = JSON.parse(jsonStr);
+          if (data.choices && data.choices[0]) {
+            const choice = data.choices[0];
+            const delta = choice.delta || {};
+            yield {
+              message: {
+                role: delta.role || 'assistant',
+                content: delta.content || '',
+                tool_calls: delta.tool_calls || undefined,
+              },
+              done: choice.finish_reason !== null,
+            };
+          }
+        } catch {
+          // Skip invalid JSON
+        }
+      }
+    }
+  }
+
+  private async *streamOllamaLines(response: Response): AsyncGenerator<ChatCompletion, void, unknown> {
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('No response body reader available');
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        if (line.trim() === '') continue;
+        try {
+          const data = JSON.parse(line);
+          if (data.message) {
+            yield {
+              message: {
+                role: data.message.role || 'assistant',
+                content: data.message.content || '',
+              },
+              done: data.done ?? false,
+            };
+          }
+        } catch {
+          // Skip invalid JSON lines
+        }
+      }
     }
   }
 }

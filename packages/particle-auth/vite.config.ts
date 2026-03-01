@@ -36,7 +36,6 @@ export default defineConfig(({ mode }) => {
           process: true,
         },
       }),
-      // Only include particleWasmPlugin in development mode
       ...(env.NODE_ENV === 'development' ? [particleWasmPlugin] : [])
     ],
   };

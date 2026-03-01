@@ -11619,7 +11619,7 @@ fieldset[name=number-code] {
     cursor: pointer;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    overflow: visible;
     transition: border-color 0.15s, transform 0.15s, background 0.15s;
     flex-shrink: 0;
 }
@@ -11660,6 +11660,7 @@ fieldset[name=number-code] {
     align-items: flex-start;
     align-content: flex-start;
     overflow: hidden;
+    border-radius: 0 0 8px 8px;
 }
 
 .mc-thumb-window {
@@ -11689,20 +11690,21 @@ fieldset[name=number-code] {
 
 .mc-workspace-remove {
     position: absolute;
-    top: -6px;
-    left: -6px;
-    width: 18px;
-    height: 18px;
+    top: -8px;
+    left: -8px;
+    width: 20px;
+    height: 20px;
     border-radius: 50%;
     background: #ef4444;
     color: white;
-    font-size: 13px;
-    line-height: 18px;
+    font-size: 14px;
+    line-height: 20px;
     text-align: center;
     cursor: pointer;
     opacity: 0;
     transition: opacity 0.15s;
-    z-index: 2;
+    z-index: 10;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
 }
 
 .mc-workspace-thumb:hover .mc-workspace-remove {
@@ -11770,11 +11772,27 @@ fieldset[name=number-code] {
     overflow: hidden;
     background: rgba(255, 255, 255, 0.06);
     border: 1px solid rgba(255, 255, 255, 0.12);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 140px;
-    min-height: 100px;
+    position: relative;
+    pointer-events: none;
+}
+
+.mc-window-card-preview .mc-window-clone {
+    position: absolute;
+    top: 0;
+    left: 0;
+    transform-origin: top left;
+    pointer-events: none;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+}
+
+.mc-window-card-preview .mc-window-clone * {
+    pointer-events: none !important;
+}
+
+.mc-window-card-preview .mc-window-clone iframe {
+    visibility: visible;
 }
 
 .mc-window-card-preview svg {

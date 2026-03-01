@@ -8,7 +8,6 @@
  */
 
 let isOpen = false;
-let dragState = null;
 
 function renderOverlay() {
     const wm = window.workspace_manager;
@@ -55,9 +54,16 @@ function renderOverlay() {
             const iconSrc = $w.find('.window-head-icon img').attr('src') || '';
             const isActive = $w.hasClass('window-active');
 
-            html += `<div class="mc-window-card${isActive ? ' mc-window-card-active' : ''}" data-window-id="${winId}" draggable="true">`;
-            html += `<div class="mc-window-card-preview">`;
-            html += buildWindowSnapshot($w);
+            const width = $w.outerWidth() || 400;
+            const height = $w.outerHeight() || 300;
+            const maxCardW = 280;
+            const maxCardH = 200;
+            const scale = Math.min(maxCardW / width, maxCardH / height, 0.35);
+            const cardW = Math.round(width * scale);
+            const cardH = Math.round(height * scale);
+
+            html += `<div class="mc-window-card${isActive ? ' mc-window-card-active' : ''}" data-window-id="${winId}" data-clone-scale="${scale}" draggable="true">`;
+            html += `<div class="mc-window-card-preview" style="width:${cardW}px; height:${cardH}px;">`;
             html += `</div>`;
             html += `<div class="mc-window-card-label">`;
             if (iconSrc) html += `<img src="${html_encode(iconSrc)}" class="mc-window-card-icon">`;
@@ -72,25 +78,44 @@ function renderOverlay() {
     return html;
 }
 
-function buildWindowSnapshot($w) {
-    const width = $w.width() || 400;
-    const height = $w.height() || 300;
-    const ratio = Math.min(220 / width, 150 / height, 1);
-    const scaledW = Math.round(width * ratio);
-    const scaledH = Math.round(height * ratio);
+function cloneWindowsIntoCards() {
+    $('.mc-window-card').each(function () {
+        const winId = $(this).attr('data-window-id');
+        const scale = parseFloat($(this).attr('data-clone-scale')) || 0.3;
+        const $source = $(`.window[data-id="${winId}"]`);
+        if ($source.length === 0) return;
 
-    const bgColor = getComputedStyle(document.body).getPropertyValue('--window-bg') || '#2a2a2a';
-    const headColor = $w.find('.window-head').css('background-color') || '#333';
-    const title = $w.find('.window-head-title').text() || '';
+        const $preview = $(this).find('.mc-window-card-preview');
+        const clone = $source[0].cloneNode(true);
+        clone.removeAttribute('id');
+        clone.classList.remove('window-active');
+        clone.classList.add('mc-window-clone');
+        clone.style.cssText = `
+            position: absolute; top: 0; left: 0;
+            width: ${$source.outerWidth()}px;
+            height: ${$source.outerHeight()}px;
+            transform: scale(${scale});
+            transform-origin: top left;
+            pointer-events: none;
+            z-index: 1;
+            display: block;
+            opacity: 1;
+        `;
 
-    let snap = `<svg width="${scaledW}" height="${scaledH}" viewBox="0 0 ${scaledW} ${scaledH}" xmlns="http://www.w3.org/2000/svg">`;
-    snap += `<rect width="${scaledW}" height="${scaledH}" rx="6" fill="${bgColor}" opacity="0.95"/>`;
-    const headH = Math.round(30 * ratio);
-    snap += `<rect width="${scaledW}" height="${headH}" rx="6" fill="${headColor}" opacity="0.8"/>`;
-    const fontSize = Math.max(8, Math.round(11 * ratio));
-    snap += `<text x="${Math.round(scaledW / 2)}" y="${Math.round(headH / 2 + fontSize / 3)}" text-anchor="middle" fill="white" font-size="${fontSize}" font-family="system-ui, sans-serif" opacity="0.9">${html_encode(title.substring(0, 20))}</text>`;
-    snap += `</svg>`;
-    return snap;
+        // Remove interactive elements from clone to prevent side effects
+        $(clone).find('iframe').each(function () {
+            const $iframe = $(this);
+            const ph = document.createElement('div');
+            ph.style.cssText = `width:100%; height:100%; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); display:flex; align-items:center; justify-content:center;`;
+            const icon = $source.find('.window-head-icon img').attr('src');
+            if (icon) {
+                ph.innerHTML = `<img src="${icon}" style="width:32px; height:32px; opacity:0.5; filter: brightness(2);">`;
+            }
+            $iframe.replaceWith(ph);
+        });
+
+        $preview.append(clone);
+    });
 }
 
 function openMissionControl() {
@@ -99,6 +124,8 @@ function openMissionControl() {
 
     const html = renderOverlay();
     $('body').append(html);
+
+    cloneWindowsIntoCards();
 
     // Animate in
     requestAnimationFrame(() => {
@@ -127,6 +154,7 @@ function refreshOverlay() {
     $('#mission-control-overlay').remove();
     const html = renderOverlay();
     $('body').append(html);
+    cloneWindowsIntoCards();
     requestAnimationFrame(() => {
         $('#mission-control-overlay').addClass('mc-visible');
         $('.mc-workspace-strip').scrollLeft(scrollPos);

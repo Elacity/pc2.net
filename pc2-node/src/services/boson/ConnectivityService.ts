@@ -14,6 +14,7 @@ import { NetworkDetector, type NATType } from './NetworkDetector.js';
 import { ActiveProxyClient, ConnectionState, type ProxyConnection } from './ActiveProxyClient.js';
 import { WireGuardService } from '../wireguard/WireGuardService.js';
 import { fromBase58 } from './IdentityService.js';
+import { execSync } from 'child_process';
 import net, { type Server, type Socket } from 'net';
 import https from 'https';
 import { request as httpRequest } from 'http';
@@ -138,6 +139,7 @@ export class ConnectivityService {
   private wireGuardService: WireGuardService | null = null;
   private wireGuardRetryTimer: NodeJS.Timeout | null = null;
   private wireGuardRetryAttempts: number = 0;
+  private lastGatewayIP: string | null = null;
   private currentSuperNodeIndex: number = 0;
   private failedSuperNodes: Set<string> = new Set();
   private proxyConnections: Map<number, Socket> = new Map();
@@ -814,6 +816,9 @@ export class ConnectivityService {
     this.heartbeatTimer = setInterval(async () => {
       if (!this.isRunning) return;
 
+      // Detect network changes (WiFi switch, location change) by monitoring default gateway
+      this.checkNetworkChange();
+
       if (this.status.connected && this.status.superNode) {
         const healthy = await this.checkGatewayHealth(this.status.superNode);
         
@@ -826,6 +831,40 @@ export class ConnectivityService {
         }
       }
     }, this.config.heartbeatIntervalMs);
+  }
+
+  /**
+   * Detect network changes by monitoring the default gateway IP.
+   * When a laptop moves between WiFi networks, the gateway changes.
+   * This triggers an immediate reconnection instead of waiting for
+   * health check timeouts (~90s for WireGuard).
+   */
+  private checkNetworkChange(): void {
+    try {
+      const cmd = process.platform === 'darwin'
+        ? "route -n get default 2>/dev/null | awk '/gateway:/{print $2}'"
+        : "ip route show default 2>/dev/null | awk '/default/{print $3}'";
+      const currentGateway = execSync(cmd, { stdio: 'pipe', shell: '/bin/sh', timeout: 3000 }).toString().trim();
+
+      if (!currentGateway) return;
+
+      if (this.lastGatewayIP && this.lastGatewayIP !== currentGateway) {
+        logger.info(`[Network] Gateway changed: ${this.lastGatewayIP} → ${currentGateway} -- triggering reconnect`);
+        this.networkDetector.clearCache();
+
+        if (this.wireGuardService?.isConnected()) {
+          this.wireGuardService.disconnect().catch(() => {});
+          this.handleWireGuardDown();
+        } else if (this.status.connected) {
+          this.status.connected = false;
+          this.scheduleReconnect();
+        }
+      }
+
+      this.lastGatewayIP = currentGateway;
+    } catch {
+      // Network detection failed -- not critical
+    }
   }
 
   /**

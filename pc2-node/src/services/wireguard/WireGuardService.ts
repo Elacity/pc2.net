@@ -74,14 +74,20 @@ export class WireGuardService {
     this.provisionPath = join(this.wgDir, 'provision.json');
   }
 
+  private static isMacOS = process.platform === 'darwin';
+
   /**
    * Check if WireGuard tools (wg, wg-quick) are installed on this system.
-   * Also detects whether WireGuard runs in kernel mode or userspace (wireguard-go).
+   * Also detects whether WireGuard runs in kernel mode or userspace.
+   * Checks additional paths for macOS (Homebrew on Apple Silicon + Intel).
    */
   isAvailable(): boolean {
+    const wgPaths = 'which wg || test -x /usr/bin/wg || test -x /opt/homebrew/bin/wg || test -x /usr/local/bin/wg';
+    const wgQuickPaths = 'which wg-quick || test -x /usr/bin/wg-quick || test -x /opt/homebrew/bin/wg-quick || test -x /usr/local/bin/wg-quick';
+
     try {
-      execSync('which wg || test -x /usr/bin/wg', { stdio: 'pipe', shell: '/bin/sh' });
-      execSync('which wg-quick || test -x /usr/bin/wg-quick', { stdio: 'pipe', shell: '/bin/sh' });
+      execSync(wgPaths, { stdio: 'pipe', shell: '/bin/sh' });
+      execSync(wgQuickPaths, { stdio: 'pipe', shell: '/bin/sh' });
     } catch {
       this._mode = 'none';
       return false;
@@ -92,17 +98,18 @@ export class WireGuardService {
   }
 
   /**
-   * Determine whether WireGuard will use the kernel module or userspace (wireguard-go).
-   * On NVIDIA Jetson the kernel module is absent unless manually compiled.
+   * Determine whether WireGuard will use the kernel module or userspace.
    *
-   * Detection order:
-   *   1. lsmod -- check if module is already loaded
-   *   2. modinfo -- check if module exists (works for built-in and loadable modules,
-   *      doesn't require root, and doesn't try to load anything)
-   *   3. wireguard-go -- userspace fallback
+   * - macOS: always userspace (uses built-in utun driver via wg-quick)
+   * - Linux: kernel module preferred, wireguard-go as fallback
    */
   private detectMode(): WireGuardMode {
-    // Check if kernel module is already loaded
+    if (WireGuardService.isMacOS) {
+      logger.info('[WireGuard] macOS detected, using userspace mode (utun driver)');
+      return 'userspace';
+    }
+
+    // Linux: check if kernel module is already loaded
     try {
       const result = execSync('lsmod 2>/dev/null | grep -q wireguard && echo yes || echo no', {
         stdio: 'pipe', shell: '/bin/sh',
@@ -113,8 +120,6 @@ export class WireGuardService {
     }
 
     // Check if kernel module exists (loadable or built-in) without requiring root.
-    // The setup script already handled modprobe -- if the module is present but
-    // not loaded, wg-quick will load it automatically.
     try {
       execSync('modinfo wireguard 2>/dev/null', { stdio: 'pipe' });
       return 'kernel';
@@ -123,7 +128,6 @@ export class WireGuardService {
     }
 
     // Fall back to userspace if wireguard-go is installed
-    // Check both PATH and common install locations (PM2/systemd may have restricted PATH)
     try {
       execSync('which wireguard-go || test -x /usr/local/bin/wireguard-go', { stdio: 'pipe', shell: '/bin/sh' });
       logger.info('[WireGuard] Kernel module unavailable, using wireguard-go (userspace)');
@@ -136,12 +140,12 @@ export class WireGuardService {
 
   /**
    * Build a sudo wg-quick command string.
-   * In userspace mode, sets WG_QUICK_USERSPACE_IMPLEMENTATION via sudo -E
+   * On Linux userspace mode, sets WG_QUICK_USERSPACE_IMPLEMENTATION via sudo -E
    * so wg-quick knows to use wireguard-go instead of the kernel module.
-   * The sudoers rule includes SETENV to allow -E to work.
+   * On macOS, wg-quick uses the built-in utun driver natively -- no env var needed.
    */
   private wgQuickCmd(action: 'up' | 'down', confPath: string): string {
-    if (this._mode === 'userspace') {
+    if (this._mode === 'userspace' && !WireGuardService.isMacOS) {
       return `WG_QUICK_USERSPACE_IMPLEMENTATION=wireguard-go sudo -E wg-quick ${action} ${confPath}`;
     }
     return `sudo wg-quick ${action} ${confPath}`;
@@ -314,17 +318,36 @@ export class WireGuardService {
   }
 
   /**
-   * Read the current state of the wg0 interface directly from the kernel.
-   * Returns connection info if the interface is up with a valid 10.100.x.x IP,
-   * or null if the interface doesn't exist or isn't configured.
+   * Read the current state of the WireGuard interface.
+   * Returns connection info if an interface is up with a valid 10.100.x.x IP,
+   * or null if no WireGuard interface is active.
+   *
+   * On Linux: checks wg0 via `ip addr show`
+   * On macOS: uses `wg show` to find the active interface, then `ifconfig`
    */
   private getRunningInterfaceInfo(): { assignedIP: string; serverPublicKey: string; serverEndpoint: string; serverIP: string } | null {
     try {
-      const addrOutput = execSync(`ip addr show ${WG_INTERFACE} 2>/dev/null`, { stdio: 'pipe' }).toString();
-      const ipMatch = addrOutput.match(/inet (10\.100\.\d+\.\d+)/);
-      if (!ipMatch) return null;
+      let assignedIP: string | null = null;
+      let iface = WG_INTERFACE;
 
-      const wgOutput = execSync(`wg show ${WG_INTERFACE} 2>/dev/null`, { stdio: 'pipe' }).toString();
+      if (WireGuardService.isMacOS) {
+        // On macOS, wg show interfaces lists active WireGuard interface names (utunN)
+        const interfaces = execSync('wg show interfaces 2>/dev/null', { stdio: 'pipe' }).toString().trim();
+        if (!interfaces) return null;
+        iface = interfaces.split(/\s+/)[0];
+
+        const ifconfigOutput = execSync(`ifconfig ${iface} 2>/dev/null`, { stdio: 'pipe' }).toString();
+        const ipMatch = ifconfigOutput.match(/inet (10\.100\.\d+\.\d+)/);
+        if (!ipMatch) return null;
+        assignedIP = ipMatch[1];
+      } else {
+        const addrOutput = execSync(`ip addr show ${WG_INTERFACE} 2>/dev/null`, { stdio: 'pipe' }).toString();
+        const ipMatch = addrOutput.match(/inet (10\.100\.\d+\.\d+)/);
+        if (!ipMatch) return null;
+        assignedIP = ipMatch[1];
+      }
+
+      const wgOutput = execSync(`wg show ${iface} 2>/dev/null`, { stdio: 'pipe' }).toString();
       const peerKeyMatch = wgOutput.match(/peer:\s+(\S+)/);
       const endpointMatch = wgOutput.match(/endpoint:\s+(\S+)/);
       if (!peerKeyMatch || !endpointMatch) return null;
@@ -333,7 +356,7 @@ export class WireGuardService {
       const serverIP = serverEndpoint.split(':')[0];
 
       return {
-        assignedIP: ipMatch[1],
+        assignedIP,
         serverPublicKey: peerKeyMatch[1],
         serverEndpoint,
         serverIP,
@@ -441,7 +464,8 @@ export class WireGuardService {
 
     if (this.connected) {
       try {
-        const dump = execSync(`wg show ${WG_INTERFACE} dump`, { stdio: 'pipe' }).toString();
+        const iface = this.getActiveInterface();
+        const dump = execSync(`wg show ${iface} dump`, { stdio: 'pipe' }).toString();
         const lines = dump.trim().split('\n');
         if (lines.length > 1) {
           const parts = lines[1].split('\t');
@@ -458,11 +482,27 @@ export class WireGuardService {
   }
 
   /**
-   * Ping the server IP through the tunnel to verify connectivity
+   * Get the name of the active WireGuard interface.
+   * On Linux this is always 'wg0'; on macOS it's a utunN interface.
+   */
+  private getActiveInterface(): string {
+    if (WireGuardService.isMacOS) {
+      try {
+        const interfaces = execSync('wg show interfaces 2>/dev/null', { stdio: 'pipe' }).toString().trim();
+        if (interfaces) return interfaces.split(/\s+/)[0];
+      } catch { /* fall through */ }
+    }
+    return WG_INTERFACE;
+  }
+
+  /**
+   * Ping the server IP through the tunnel to verify connectivity.
+   * macOS uses -t for timeout in seconds; Linux uses -W.
    */
   private pingServer(serverIP: string): Promise<boolean> {
+    const timeoutFlag = WireGuardService.isMacOS ? '-t 3' : '-W 3';
     return new Promise((resolve) => {
-      exec(`ping -c 1 -W 3 ${serverIP}`, { timeout: 5000 }, (error) => {
+      exec(`ping -c 1 ${timeoutFlag} ${serverIP}`, { timeout: 5000 }, (error) => {
         resolve(!error);
       });
     });

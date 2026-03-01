@@ -295,6 +295,32 @@ PARTICLE_EOF
     fi
     echo -e "${GREEN}✓ Build complete${NC}"
     
+    # Optional: Install WireGuard for faster remote access (macOS)
+    if [[ "$OS" == "macos" ]]; then
+        if ! command -v wg &> /dev/null; then
+            echo ""
+            echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            echo -e "${YELLOW}  Optional: WireGuard for faster remote access${NC}"
+            echo -e "${NC}  WireGuard enables fast, direct connections to your PC2 node${NC}"
+            echo -e "${NC}  via your ela.city domain. Without it, remote access uses a${NC}"
+            echo -e "${NC}  slower relay. Requires Homebrew.${NC}"
+            echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            read -p "Install WireGuard? [y/N] " install_wg
+            if [[ "$install_wg" =~ ^[Yy] ]]; then
+                if command -v brew &> /dev/null; then
+                    brew install wireguard-tools
+                    echo -e "${GREEN}✓ WireGuard installed${NC}"
+                else
+                    echo -e "${YELLOW}⚠ Homebrew not found. Install it first: https://brew.sh${NC}"
+                    echo -e "${YELLOW}  Then run: brew install wireguard-tools${NC}"
+                fi
+            fi
+            echo ""
+        else
+            echo -e "${GREEN}✓ WireGuard tools detected${NC}"
+        fi
+    fi
+
     # Detect if running on VPS (no DISPLAY) or local machine
     # Also get public IP for VPS users
     LOCAL_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "")

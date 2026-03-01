@@ -110,10 +110,11 @@ https://docs.kinesis.network/blog/enable-wireguard-on-nvidia-jetson
 
 ### Notes for Jetson
 
-- GPU is not utilized by PC2 (future feature)
-- Works great for AI agent workloads with Ollama
+- GPU acceleration available for Ollama AI models (CUDA auto-detected)
+- Works great for AI agent workloads with local LLMs
 - Use barrel jack power for stability
 - PC2 runs via PM2 process manager -- survives SSH disconnect and reboots automatically
+- Voice AI tools (Whisper STT + Piper TTS) are auto-installed on Jetson
 
 ---
 
@@ -236,6 +237,23 @@ git pull origin main
 cd pc2-node
 npm install --legacy-peer-deps
 cd .. && npm run build:pc2
+pm2 restart pc2
+```
+
+### Testing a Development Branch
+
+To install or switch to a specific branch (e.g. for testing pre-release features):
+
+```bash
+# Fresh install with a specific branch
+PC2_BRANCH=feature/virtual-workspaces curl -sSL https://raw.githubusercontent.com/Elacity/pc2.net/main/scripts/install-arm.sh | bash
+
+# Or switch an existing install to a branch
+cd ~/pc2.net
+git fetch origin
+git checkout feature/virtual-workspaces
+git pull origin feature/virtual-workspaces
+npm run build:pc2
 pm2 restart pc2
 ```
 

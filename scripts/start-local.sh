@@ -295,30 +295,27 @@ PARTICLE_EOF
     fi
     echo -e "${GREEN}✓ Build complete${NC}"
     
-    # Optional: Install WireGuard for faster remote access (macOS)
-    if [[ "$OS" == "macos" ]]; then
-        if ! command -v wg &> /dev/null; then
-            echo ""
-            echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-            echo -e "${YELLOW}  Optional: WireGuard for faster remote access${NC}"
-            echo -e "${NC}  WireGuard enables fast, direct connections to your PC2 node${NC}"
-            echo -e "${NC}  via your ela.city domain. Without it, remote access uses a${NC}"
-            echo -e "${NC}  slower relay. Requires Homebrew.${NC}"
-            echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-            read -p "Install WireGuard? [y/N] " install_wg
-            if [[ "$install_wg" =~ ^[Yy] ]]; then
-                if command -v brew &> /dev/null; then
-                    brew install wireguard-tools
-                    echo -e "${GREEN}✓ WireGuard installed${NC}"
-                else
-                    echo -e "${YELLOW}⚠ Homebrew not found. Install it first: https://brew.sh${NC}"
-                    echo -e "${YELLOW}  Then run: brew install wireguard-tools${NC}"
-                fi
+    # Install WireGuard for fast remote access
+    if ! command -v wg &> /dev/null; then
+        echo -e "${CYAN}Installing WireGuard for fast remote access...${NC}"
+        if [[ "$OS" == "macos" ]]; then
+            if command -v brew &> /dev/null; then
+                brew install wireguard-tools 2>&1 || true
+            else
+                echo -e "${YELLOW}⚠ Homebrew not found -- skipping WireGuard. Install later: brew install wireguard-tools${NC}"
             fi
-            echo ""
-        else
-            echo -e "${GREEN}✓ WireGuard tools detected${NC}"
+        elif [[ "$OS" == "linux" ]]; then
+            if command -v apt-get &> /dev/null; then
+                sudo apt-get install -y -qq wireguard-tools 2>&1 || true
+            elif command -v yum &> /dev/null; then
+                sudo yum install -y wireguard-tools 2>&1 || true
+            fi
         fi
+        if command -v wg &> /dev/null; then
+            echo -e "${GREEN}✓ WireGuard installed${NC}"
+        fi
+    else
+        echo -e "${GREEN}✓ WireGuard tools detected${NC}"
     fi
 
     # Detect if running on VPS (no DISPLAY) or local machine

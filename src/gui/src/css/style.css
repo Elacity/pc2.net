@@ -956,6 +956,8 @@
     color: var(--ai-text-color);
     opacity: 0.8;
     border-top: 1px solid rgba(167, 139, 250, 0.15);
+    max-height: 200px;
+    overflow-y: auto;
     margin-top: 0;
     padding-top: 10px;
     max-height: 300px;

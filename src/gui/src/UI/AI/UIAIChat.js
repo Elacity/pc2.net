@@ -3246,6 +3246,9 @@ async function sendAIMessage($container) {
                         $aiMessage.removeClass('ai-streaming');
                         // Render with thinking block support
                         $aiMessage.html(renderMessageWithThinking(fullContent, true));
+                        // Auto-scroll thinking content to bottom during streaming
+                        const thinkEl = $aiMessage.find('.ai-thinking-content')[0];
+                        if (thinkEl) thinkEl.scrollTop = thinkEl.scrollHeight;
                         scrollChatToBottom();
                     }
                     // Handle tool_use chunks - display feedback cards
@@ -3348,6 +3351,8 @@ async function sendAIMessage($container) {
                         updateLoadingState('thinking');
                         $aiMessage.removeClass('ai-streaming');
                         $aiMessage.html(renderMessageWithThinking(fullContent, true));
+                        const thinkEl2 = $aiMessage.find('.ai-thinking-content')[0];
+                        if (thinkEl2) thinkEl2.scrollTop = thinkEl2.scrollHeight;
                         scrollChatToBottom();
                     }
                     // Handle final_response_start - clear previous content to avoid duplication

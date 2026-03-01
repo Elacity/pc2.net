@@ -107,7 +107,7 @@ async function UIWindow(options) {
     options.close_on_backdrop_click = options.close_on_backdrop_click ?? true;
     options.disable_parent_window = options.disable_parent_window ?? false;
     options.has_head = options.has_head ?? true;
-    options.height = options.height ?? 380;
+    options.height = options.height ?? 560;
     options.icon = options.icon ?? null;
     options.iframe_msg_uid = options.iframe_msg_uid ?? null;
     options.is_droppable = options.is_droppable ?? true;
@@ -146,7 +146,7 @@ async function UIWindow(options) {
     options.type = options.type ?? null;
     options.update_window_url = options.update_window_url ?? false;
     options.layout = options.layout ?? window.get_explorer_layout_preference?.() ?? 'icons';
-    options.width = options.width ?? 680;
+    options.width = options.width ?? 960;
     options.window_css = options.window_css ?? {};
     options.window_class = (options.window_class !== undefined ? ' ' + options.window_class : '');
 

@@ -174,8 +174,11 @@ async function UITaskbar (options) {
         sortable: false,
         keep_in_taskbar: true,
         disable_context_menu: true,
+        onHover: function (item) {
+            if ( $(item).hasClass('has-open-popover') ) return;
+            $(item).trigger('click');
+        },
         onClick: async function (item) {
-            // skip if popover already open
             if ( $(item).hasClass('has-open-popover') )
             {
                 return;
@@ -259,6 +262,28 @@ async function UITaskbar (options) {
                 },
                 stop: function () {
                 },
+            });
+
+            // Close popover when mouse leaves both the popover and the start button
+            let _popoverCloseTimer = null;
+            const startCloseTimer = function () {
+                clearTimeout(_popoverCloseTimer);
+                _popoverCloseTimer = setTimeout(function () {
+                    $(popover).removeClass('popover-visible');
+                    setTimeout(function () {
+                        $(popover).remove();
+                    }, 200);
+                }, 300);
+            };
+            const cancelCloseTimer = function () {
+                clearTimeout(_popoverCloseTimer);
+            };
+            $(popover).on('mouseenter', cancelCloseTimer);
+            $(popover).on('mouseleave', startCloseTimer);
+            $(item).on('mouseleave.popover', startCloseTimer);
+            $(item).on('mouseenter.popover', cancelCloseTimer);
+            $(popover).on('remove', function () {
+                $(item).off('.popover');
             });
 
             $(popover).on('click', function () {

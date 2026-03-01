@@ -102,6 +102,12 @@ function UITaskbarItem (options) {
         }, 100);
     }
 
+    if (options.onHover) {
+        $(el_taskbar_item).on('mouseenter', function () {
+            options.onHover(el_taskbar_item);
+        });
+    }
+
     $(el_taskbar_item).on('click', function (e) {
         e.preventDefault();
         e.stopPropagation();

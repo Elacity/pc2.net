@@ -1472,9 +1472,10 @@ window.initgui = async function(options){
             && !$(e.target).hasClass('popover')
             && $(e.target).parents('.popover').length === 0){
 
-            $(".popover").fadeOut(200, function(){
+            $(".popover").removeClass('popover-visible');
+            setTimeout(function () {
                 $(".popover").remove();
-            });
+            }, 200);
         }
 
         // Close all tooltips

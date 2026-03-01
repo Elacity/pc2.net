@@ -25,25 +25,19 @@ function renderOverlay() {
     let html = `<div id="mission-control-overlay" class="mc-overlay">`;
     html += `<div class="mc-workspace-strip">`;
 
+    // Capture desktop wallpaper for thumbnail backgrounds
+    const bodyStyle = window.getComputedStyle(document.body);
+    const bgImage = bodyStyle.backgroundImage;
+    const bgColor = bodyStyle.backgroundColor;
+    const bgSize = bodyStyle.backgroundSize;
+    const bgPos = bodyStyle.backgroundPosition;
+
     wm.workspaces.forEach((ws) => {
         const isActive = ws.id === wm.activeWorkspaceId;
-        const windows = $(`.window[data-workspace="${ws.id}"]`).not('[data-is_minimized="true"]').not('[data-is_minimized="1"]');
 
         html += `<div class="mc-workspace-thumb${isActive ? ' active' : ''}" data-workspace-id="${ws.id}" draggable="true">`;
         html += `<div class="mc-workspace-thumb-label">${ws.name}</div>`;
-        html += `<div class="mc-workspace-thumb-preview">`;
-
-        windows.each(function () {
-            const $w = $(this);
-            const title = $w.find('.window-head-title').text() || $w.attr('data-name') || '';
-            const iconSrc = $w.find('.window-head-icon img').attr('src') || '';
-            html += `<div class="mc-thumb-app" title="${html_encode(title)}">`;
-            if (iconSrc) {
-                html += `<img src="${html_encode(iconSrc)}" class="mc-thumb-app-icon">`;
-            }
-            html += `</div>`;
-        });
-
+        html += `<div class="mc-workspace-thumb-preview" style="background-image:${bgImage}; background-color:${bgColor}; background-size:${bgSize}; background-position:${bgPos}; background-repeat:no-repeat;">`;
         html += `</div>`;
         if (wm.workspaces.length > 1) {
             html += `<div class="mc-workspace-remove" data-workspace-id="${ws.id}" title="Remove workspace">&times;</div>`;
@@ -63,6 +57,127 @@ function renderOverlay() {
 
     html += `</div>`;
     return html;
+}
+
+function captureWindowSnapshots() {
+    const snapshots = {};
+    const wm = window.workspace_manager;
+    if (!wm) return snapshots;
+
+    wm.workspaces.forEach((ws) => {
+        snapshots[ws.id] = [];
+        $(`.window[data-workspace="${ws.id}"]`)
+            .not('[data-is_minimized="true"]')
+            .not('[data-is_minimized="1"]')
+            .each(function () {
+                const $w = $(this);
+                const isHidden = $w.css('display') === 'none';
+
+                if (isHidden) {
+                    $w.css({ display: 'block', visibility: 'hidden', position: 'absolute', left: '-9999px' });
+                }
+
+                const iconSrc = $w.find('.window-head-icon img').attr('src') || '';
+                const title = $w.find('.window-head-title').text() || $w.attr('data-name') || '';
+                const width = $w.outerWidth() || 400;
+                const height = $w.outerHeight() || 300;
+                const $clone = $w.clone();
+
+                if (isHidden) {
+                    $w.css({ display: 'none', visibility: '', position: '', left: '' });
+                }
+
+                snapshots[ws.id].push({ $el: $clone, width, height, iconSrc, title });
+            });
+    });
+    return snapshots;
+}
+
+function getThumbnailLayout(count) {
+    if (count === 1) return { cols: 1, rows: 1, padding: 4 };
+    if (count === 2) return { cols: 2, rows: 1, padding: 3 };
+    if (count <= 4) return { cols: 2, rows: 2, padding: 2 };
+    return { cols: 3, rows: 2, padding: 2 };
+}
+
+function populateThumbnailClones(windowSnapshots) {
+    const wm = window.workspace_manager;
+    if (!wm) return;
+
+    wm.workspaces.forEach((ws) => {
+        const $preview = $(`.mc-workspace-thumb[data-workspace-id="${ws.id}"] .mc-workspace-thumb-preview`);
+        if ($preview.length === 0) return;
+
+        const thumbW = $preview.width() || 180;
+        const thumbH = $preview.height() || 110;
+
+        const snaps = windowSnapshots[ws.id];
+        if (!snaps || snaps.length === 0) return;
+
+        const layout = getThumbnailLayout(snaps.length);
+        const pad = layout.padding;
+        const cellW = (thumbW - pad * (layout.cols + 1)) / layout.cols;
+        const cellH = (thumbH - pad * (layout.rows + 1)) / layout.rows;
+
+        snaps.forEach((snap, i) => {
+            if (i >= layout.cols * layout.rows) return;
+
+            const col = i % layout.cols;
+            const row = Math.floor(i / layout.cols);
+
+            const scale = Math.min(cellW / snap.width, cellH / snap.height);
+            if (scale <= 0) return;
+
+            const scaledW = snap.width * scale;
+            const scaledH = snap.height * scale;
+            const cellLeft = pad + col * (cellW + pad);
+            const cellTop = pad + row * (cellH + pad);
+            const left = cellLeft + (cellW - scaledW) / 2;
+            const top = cellTop + (cellH - scaledH) / 2;
+
+            const $clone = snap.$el.clone();
+
+            $clone.removeClass('window');
+            $clone.removeAttr('id');
+            $clone.removeAttr('data-id');
+            $clone.removeAttr('data-workspace');
+            $clone.find('[id]').removeAttr('id');
+            $clone.find('[data-id]').removeAttr('data-id');
+
+            $clone.find('iframe').each(function () {
+                const iconSize = Math.round(Math.min(snap.width, snap.height) * 0.18);
+                const fontSize = Math.round(iconSize * 0.55);
+                const iconHtml = snap.iconSrc
+                    ? `<img src="${snap.iconSrc}" style="width:${iconSize}px;height:${iconSize}px;">`
+                    : '';
+                const titleHtml = snap.title
+                    ? `<div style="font-size:${fontSize}px;color:rgba(0,0,0,0.5);margin-top:${Math.round(iconSize*0.15)}px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90%;">${snap.title}</div>`
+                    : '';
+                $(this).replaceWith(`<div class="mc-thumb-iframe-placeholder">${iconHtml}${titleHtml}</div>`);
+            });
+
+            $clone.css({
+                'pointer-events': 'none',
+                'position': 'absolute',
+                'display': 'block',
+                'visibility': 'visible',
+                'opacity': '1',
+                'left': left + 'px',
+                'top': top + 'px',
+                'width': snap.width + 'px',
+                'height': snap.height + 'px',
+                'transform': `scale(${scale})`,
+                'transform-origin': '0 0',
+                'z-index': 1 + i,
+                'margin': '0',
+                'transition': 'none',
+                'animation': 'none',
+            });
+            $clone.addClass('mc-thumb-clone');
+
+            $preview.append($clone);
+        });
+    });
 }
 
 function arrangeWindowsInSpread() {
@@ -157,16 +272,18 @@ function arrangeWindowsInSpread() {
 }
 
 function restoreWindows() {
+    // Remove overlay clones FIRST so they can't interfere with selectors
+    $('.mc-thumb-clone').remove();
     $('.mc-spread-label').remove();
     $('.mc-click-target').remove();
 
     savedWindowStates.forEach((state) => {
-        const $w = $(`.window[data-id="${state.id}"]`);
-        if ($w.length === 0) return;
+        const el = document.querySelector(`.window[data-id="${state.id}"]`);
+        if (!el) return;
 
-        $w.removeClass('mc-spread-window');
-        $w[0].style.cssText = state.cssText;
-        $w.css('z-index', state.zIndex);
+        el.classList.remove('mc-spread-window');
+        el.style.cssText = state.cssText;
+        el.style.zIndex = state.zIndex;
     });
 
     savedWindowStates = [];
@@ -177,6 +294,9 @@ function openMissionControl() {
     isOpen = true;
     pendingSwitchWorkspaceId = null;
 
+    // Snapshot windows in their original state BEFORE spread rearranges them
+    const snapshots = captureWindowSnapshots();
+
     const html = renderOverlay();
     $('body').append(html);
 
@@ -184,6 +304,7 @@ function openMissionControl() {
 
     requestAnimationFrame(() => {
         $('#mission-control-overlay').addClass('mc-visible');
+        populateThumbnailClones(snapshots);
     });
 
     bindEvents();
@@ -193,7 +314,18 @@ function closeMissionControl(focusWindowId) {
     if (!isOpen) return;
     isOpen = false;
 
-    // Restore windows FIRST (puts them back to original CSS)
+    // Unbind events immediately
+    $(document).off('keydown.missioncontrol');
+    $(document).off('click.mc-targets');
+    $(document).off('mouseenter.mc-targets');
+    $(document).off('mouseleave.mc-targets');
+    $(document).off('dragstart.mc-targets');
+    $(document).off('dragend.mc-targets');
+
+    // Remove overlay and all clones FIRST so they can't interfere
+    $('#mission-control-overlay').remove();
+
+    // Restore actual windows to their original CSS
     restoreWindows();
 
     // THEN apply workspace switch if one was requested
@@ -208,17 +340,6 @@ function closeMissionControl(focusWindowId) {
             $(`.window[data-id="${focusWindowId}"]`).focusWindow();
         }, 50);
     }
-
-    const $overlay = $('#mission-control-overlay');
-    $overlay.removeClass('mc-visible');
-    setTimeout(() => $overlay.remove(), 250);
-
-    $(document).off('keydown.missioncontrol');
-    $(document).off('click.mc-targets');
-    $(document).off('mouseenter.mc-targets');
-    $(document).off('mouseleave.mc-targets');
-    $(document).off('dragstart.mc-targets');
-    $(document).off('dragend.mc-targets');
 }
 
 function toggleMissionControl() {
@@ -229,14 +350,20 @@ function toggleMissionControl() {
 function refreshOverlay() {
     if (!isOpen) return;
     restoreWindows();
+
+    const snapshots = captureWindowSnapshots();
+
     const scrollPos = $('.mc-workspace-strip').scrollLeft();
     $('#mission-control-overlay').remove();
     const html = renderOverlay();
     $('body').append(html);
+
     arrangeWindowsInSpread();
+
     requestAnimationFrame(() => {
         $('#mission-control-overlay').addClass('mc-visible');
         $('.mc-workspace-strip').scrollLeft(scrollPos);
+        populateThumbnailClones(snapshots);
     });
     bindEvents();
 }

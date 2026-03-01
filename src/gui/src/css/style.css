@@ -8373,6 +8373,14 @@ label {
     overflow: hidden;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
     background: transparent;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity 0.2s ease-out, transform 0.2s ease-out;
+}
+
+.popover.popover-visible {
+    opacity: 1;
+    transform: translateY(0);
 }
 
 @supports ((backdrop-filter: blur())) {
@@ -11561,6 +11569,11 @@ fieldset[name=number-code] {
     background: rgba(0, 0, 0, 0.06);
 }
 
+.device-phone .workspace-indicator,
+.device-phone .mission-control-btn {
+    display: none !important;
+}
+
 [data-theme="light"] .workspace-dot {
     background: rgba(0, 0, 0, 0.2);
 }
@@ -11653,33 +11666,36 @@ fieldset[name=number-code] {
 
 .mc-workspace-thumb-preview {
     flex: 1;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-    padding: 4px 8px 6px;
-    align-items: center;
-    justify-content: center;
-    align-content: center;
+    min-height: 75px;
+    position: relative;
     overflow: hidden;
     border-radius: 0 0 8px 8px;
-    background: rgba(0, 0, 0, 0.08);
 }
 
-.mc-thumb-app {
-    display: flex;
+.mc-thumb-clone {
+    pointer-events: none !important;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.35) !important;
+    border-radius: 6px !important;
+    overflow: hidden !important;
+}
+
+.mc-thumb-clone * {
+    pointer-events: none !important;
+    animation: none !important;
+    transition: none !important;
+}
+
+.mc-thumb-iframe-placeholder {
+    width: 100% !important;
+    height: 100% !important;
+    background: linear-gradient(135deg, rgba(240,240,245,0.95) 0%, rgba(225,228,235,0.9) 100%);
+    display: flex !important;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 6px;
-    overflow: hidden;
-}
-
-.mc-thumb-app-icon {
-    width: 20px;
-    height: 20px;
-    object-fit: contain;
 }
 
 .mc-workspace-remove {
@@ -11785,13 +11801,6 @@ fieldset[name=number-code] {
     color: rgba(0, 0, 0, 0.8);
 }
 
-[data-theme="light"] .mc-workspace-thumb-preview {
-    background: rgba(0, 0, 0, 0.04);
-}
-
-[data-theme="light"] .mc-thumb-app {
-    background: rgba(0, 0, 0, 0.06);
-}
 
 [data-theme="light"] .mc-workspace-remove {
     background: #dc2626;

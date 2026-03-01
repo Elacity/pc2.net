@@ -36,8 +36,8 @@ export default async function UIWindowAIChat(options = {}) {
         uid: null,
         is_dir: false,
         single_instance: false, // Disabled for now - focusWindow timing issue
-        width: 500,
-        height: 700,
+        width: 960,
+        height: 560,
         min_width: 400,
         min_height: 500,
         has_head: true,

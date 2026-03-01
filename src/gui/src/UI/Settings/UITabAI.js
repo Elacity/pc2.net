@@ -113,45 +113,22 @@ export default {
                             <span style="font-size: 10px; color: #92400e; line-height: 1.4;">Voice AI uses ~500MB+ GPU memory. On devices with limited memory (e.g. Jetson), this may prevent Ollama models from loading.</span>
                         </div>
                     </div>
-                    <div class="ai-group-row">
-                        <div class="ai-card-row">
-                            <span class="ai-card-label">Whisper STT</span>
-                            <div style="display: flex; align-items: center; gap: 6px;">
-                                <span class="ai-status-dot" id="voice-whisper-dot"></span>
-                                <span id="voice-whisper-status" class="ai-card-value">Checking...</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="ai-group-row">
-                        <div class="ai-card-row">
-                            <span class="ai-card-label">Piper TTS</span>
-                            <div style="display: flex; align-items: center; gap: 6px;">
-                                <span class="ai-status-dot" id="voice-piper-dot"></span>
-                                <span id="voice-piper-status" class="ai-card-value">Checking...</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="ai-group-row">
-                        <div class="ai-card-row">
-                            <span class="ai-card-label">ffmpeg</span>
-                            <div style="display: flex; align-items: center; gap: 6px;">
-                                <span class="ai-status-dot" id="voice-ffmpeg-dot"></span>
-                                <span id="voice-ffmpeg-status" class="ai-card-value">Checking...</span>
-                            </div>
-                        </div>
-                    </div>
                     <div class="ai-group-row" id="voice-actions-row">
                         <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
-                            <div id="voice-toggle-container" style="display: none; align-items: center; gap: 8px;">
-                                <label style="font-size: 12px; font-weight: 500; color: #333; cursor: pointer; display: flex; align-items: center; gap: 8px;">
-                                    <span>Enabled</span>
-                                    <input type="checkbox" id="voice-toggle" style="width: 16px; height: 16px; cursor: pointer;">
-                                </label>
+                            <span class="ai-card-label">Voice AI (Whisper)</span>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <span id="voice-install-status" style="font-size: 10px; color: #666; display: none;"></span>
+                                <div id="voice-toggle-container" style="display: none; align-items: center; gap: 8px;">
+                                    <label style="font-size: 12px; font-weight: 500; color: #333; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                                        <span>Enabled</span>
+                                        <input type="checkbox" id="voice-toggle" style="width: 16px; height: 16px; cursor: pointer;">
+                                    </label>
+                                </div>
+                                <div id="voice-install-container" style="display: none;">
+                                    <button class="button ai-btn" id="voice-install-btn" style="background: #3b82f6; color: white;">Install</button>
+                                </div>
+                                <span id="voice-status-label" class="ai-card-value" style="font-size: 11px;">Checking...</span>
                             </div>
-                            <div id="voice-install-container" style="display: none;">
-                                <button class="ai-btn" id="voice-install-btn" style="display: inline-flex; align-items: center; justify-content: center; padding: 6px 14px; font-size: 11px; line-height: 1; font-family: inherit; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer;">Install Voice AI</button>
-                            </div>
-                            <span id="voice-install-status" style="font-size: 10px; color: #666; display: none;"></span>
                         </div>
                     </div>
                 </div>
@@ -262,7 +239,7 @@ export default {
                 .ai-status-dot.available {
                     background: #10b981;
                 }
-                .ai-status-dot.error {
+                .ai-status-dot.unavailable {
                     background: #dc2626;
                 }
                 .ai-status-dot.no-models {
@@ -356,12 +333,12 @@ export default {
                 const statusDot = $el_window.find('#ai-status-dot');
                 const statusText = $el_window.find('#ai-status-text');
                 
-                statusDot.removeClass('available error no-models');
+                statusDot.removeClass('available unavailable no-models');
                 if (config.provider_status === 'available') {
                     statusDot.addClass('available');
                     statusText.text('Available');
                 } else if (config.provider_status === 'error') {
-                    statusDot.addClass('error');
+                    statusDot.addClass('unavailable');
                     statusText.text('Error');
                 } else if (config.provider_status === 'no_models') {
                     statusDot.addClass('no-models');
@@ -393,7 +370,7 @@ export default {
                 $el_window.find('#ai-current-model').text('deepseek-r1:1.5b');
                 const statusDot = $el_window.find('#ai-status-dot');
                 const statusText = $el_window.find('#ai-status-text');
-                statusDot.removeClass('available error no-models').addClass('no-models');
+                statusDot.removeClass('available unavailable no-models').addClass('no-models');
                 statusText.text('Unable to connect to server');
             }
         }
@@ -1375,48 +1352,27 @@ export default {
 
                 const data = await response.json();
 
-                const updateDot = (id, available) => {
-                    const $dot = $el_window.find(`#voice-${id}-dot`);
-                    const $text = $el_window.find(`#voice-${id}-status`);
-                    $dot.removeClass('available error');
-                    if (available) {
-                        $dot.addClass('available');
-                        $text.text('Available');
-                    } else {
-                        $dot.addClass('error');
-                        $text.text('Not found');
-                    }
-                };
-
-                updateDot('whisper', data.whisper?.available);
-                updateDot('piper', data.piper?.available);
-                updateDot('ffmpeg', data.ffmpeg?.available);
-
-                const allInstalled = data.whisper?.available || data.piper?.available || data.ffmpeg?.available;
+                const installed = data.whisper?.available;
                 const $toggleContainer = $el_window.find('#voice-toggle-container');
                 const $installContainer = $el_window.find('#voice-install-container');
+                const $statusLabel = $el_window.find('#voice-status-label');
 
-                if (data.whisper?.available && data.piper?.available && data.ffmpeg?.available) {
+                if (installed) {
                     $toggleContainer.css('display', 'flex');
                     $installContainer.hide();
                     $el_window.find('#voice-toggle').prop('checked', data.ready);
-                } else if (allInstalled) {
-                    $toggleContainer.css('display', 'flex');
-                    $installContainer.hide();
-                    $el_window.find('#voice-toggle').prop('checked', data.whisper?.available);
+                    $statusLabel.text(data.ready ? 'Running' : 'Installed');
                 } else {
                     $toggleContainer.hide();
                     $installContainer.show();
+                    $statusLabel.text('Not installed');
                 }
 
                 return data;
             } catch (error) {
                 console.error('[AI Settings] Error loading voice status:', error);
-                ['whisper', 'piper', 'ffmpeg'].forEach(id => {
-                    $el_window.find(`#voice-${id}-dot`).removeClass('available').addClass('error');
-                    $el_window.find(`#voice-${id}-status`).text('Unknown');
-                });
                 $el_window.find('#voice-install-container').show();
+                $el_window.find('#voice-status-label').text('Not installed');
                 return null;
             }
         }

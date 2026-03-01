@@ -1077,36 +1077,35 @@ export default {
                     
                     for (const line of lines) {
                         if (line.startsWith('data: ')) {
+                            let data;
                             try {
-                                const data = JSON.parse(line.slice(6));
-                                
-                                if (data.error) {
-                                    throw new Error(data.error);
-                                }
-                                
-                                if (data.status === 'success') {
-                                    $progressBar.css('width', '100%');
-                                    $status.text('Download complete!');
-                                    setTimeout(() => {
-                                        $progress.hide();
-                                        loadModelLibrary();
-                                    }, 1500);
-                                    return;
-                                }
-                                
-                                // Update progress
-                                if (data.total && data.completed) {
-                                    const percent = Math.round((data.completed / data.total) * 100);
-                                    $progressBar.css('width', `${percent}%`);
-                                    const completedMB = (data.completed / 1024 / 1024).toFixed(1);
-                                    const totalMB = (data.total / 1024 / 1024).toFixed(1);
-                                    $status.text(`${completedMB}MB / ${totalMB}MB (${percent}%)`);
-                                } else if (data.status) {
-                                    $status.text(data.status);
-                                }
-                                
-                            } catch (parseError) {
-                                // Ignore parse errors
+                                data = JSON.parse(line.slice(6));
+                            } catch {
+                                continue;
+                            }
+
+                            if (data.error) {
+                                throw new Error(data.error);
+                            }
+
+                            if (data.status === 'success') {
+                                $progressBar.css('width', '100%');
+                                $status.text('Download complete!');
+                                setTimeout(() => {
+                                    $progress.hide();
+                                    loadModelLibrary();
+                                }, 1500);
+                                return;
+                            }
+
+                            if (data.total && data.completed) {
+                                const percent = Math.round((data.completed / data.total) * 100);
+                                $progressBar.css('width', `${percent}%`);
+                                const completedMB = (data.completed / 1024 / 1024).toFixed(1);
+                                const totalMB = (data.total / 1024 / 1024).toFixed(1);
+                                $status.text(`${data.status || 'Downloading'}: ${completedMB}MB / ${totalMB}MB (${percent}%)`);
+                            } else if (data.status) {
+                                $status.text(data.status);
                             }
                         }
                     }

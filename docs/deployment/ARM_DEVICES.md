@@ -246,7 +246,8 @@ To install or switch to a specific branch (e.g. for testing pre-release features
 
 ```bash
 # Fresh install with a specific branch
-PC2_BRANCH=feature/virtual-workspaces curl -sSL https://raw.githubusercontent.com/Elacity/pc2.net/main/scripts/install-arm.sh | bash
+export PC2_BRANCH=feature/virtual-workspaces
+curl -sSL https://raw.githubusercontent.com/Elacity/pc2.net/main/scripts/install-arm.sh | bash
 
 # Or switch an existing install to a branch
 cd ~/pc2.net
@@ -256,6 +257,8 @@ git pull origin feature/virtual-workspaces
 npm run build:pc2
 pm2 restart pc2
 ```
+
+**Note:** Use `export` to set the branch variable -- putting it inline before `curl` only sets it for `curl`, not for the `bash` that runs the script.
 
 ### From Web UI
 

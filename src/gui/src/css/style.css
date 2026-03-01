@@ -11653,39 +11653,10 @@ fieldset[name=number-code] {
 
 .mc-workspace-thumb-preview {
     flex: 1;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 3px;
-    padding: 4px 8px 8px;
-    align-items: flex-start;
-    align-content: flex-start;
+    position: relative;
     overflow: hidden;
     border-radius: 0 0 8px 8px;
-}
-
-.mc-thumb-window {
-    display: flex;
-    align-items: center;
-    gap: 3px;
-    background: rgba(255, 255, 255, 0.12);
-    border-radius: 3px;
-    padding: 2px 5px;
-    max-width: 80px;
-    overflow: hidden;
-}
-
-.mc-thumb-window-icon {
-    width: 10px;
-    height: 10px;
-    flex-shrink: 0;
-}
-
-.mc-thumb-window-title {
-    font-size: 8px;
-    color: rgba(255, 255, 255, 0.7);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    background: rgba(0, 0, 0, 0.08);
 }
 
 .mc-workspace-remove {
@@ -11737,22 +11708,39 @@ fieldset[name=number-code] {
     flex: 1;
     display: flex;
     flex-wrap: wrap;
-    gap: 24px;
-    padding: 24px 40px;
+    gap: 30px;
+    padding: 30px 50px;
     align-items: center;
     justify-content: center;
     align-content: center;
     overflow-y: auto;
 }
 
+.mc-spread-single {
+    gap: 0;
+}
+
+.mc-spread-double {
+    gap: 40px;
+}
+
+.mc-spread-quad {
+    gap: 24px;
+}
+
+.mc-spread-many {
+    gap: 16px;
+    align-content: flex-start;
+    padding-top: 20px;
+}
+
 .mc-window-card {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     cursor: pointer;
     transition: transform 0.15s;
-    max-width: 260px;
 }
 
 .mc-window-card:hover {
@@ -11847,12 +11835,8 @@ fieldset[name=number-code] {
     color: rgba(0, 0, 0, 0.8);
 }
 
-[data-theme="light"] .mc-thumb-window {
-    background: rgba(0, 0, 0, 0.08);
-}
-
-[data-theme="light"] .mc-thumb-window-title {
-    color: rgba(0, 0, 0, 0.6);
+[data-theme="light"] .mc-workspace-thumb-preview {
+    background: rgba(0, 0, 0, 0.04);
 }
 
 [data-theme="light"] .mc-workspace-remove {

@@ -397,10 +397,12 @@ install_amneziawg() {
         if [[ -n "$GO_CMD" ]]; then
             print_step "Building amneziawg-go from source (takes 1-2 minutes)..."
             AWG_BUILD_TMP=$(mktemp -d)
-            if sudo bash -c "export GOPATH='$AWG_BUILD_TMP' GOBIN='$AWG_BUILD_TMP/bin' && '$GO_CMD' install github.com/amnezia-vpn/amneziawg-go@latest" 2>&1; then
-                if test -x "$AWG_BUILD_TMP/bin/amneziawg-go"; then
-                    sudo cp "$AWG_BUILD_TMP/bin/amneziawg-go" /usr/local/bin/amneziawg-go
-                    sudo chmod 755 /usr/local/bin/amneziawg-go
+            if git clone --depth 1 https://github.com/amnezia-vpn/amneziawg-go.git "$AWG_BUILD_TMP/amneziawg-go" 2>/dev/null; then
+                if sudo bash -c "export PATH='$(dirname $GO_CMD)':\$PATH && cd '$AWG_BUILD_TMP/amneziawg-go' && make" 2>&1; then
+                    if test -x "$AWG_BUILD_TMP/amneziawg-go/amneziawg-go"; then
+                        sudo cp "$AWG_BUILD_TMP/amneziawg-go/amneziawg-go" /usr/local/bin/amneziawg-go
+                        sudo chmod 755 /usr/local/bin/amneziawg-go
+                    fi
                 fi
             fi
             sudo rm -rf "$AWG_BUILD_TMP"

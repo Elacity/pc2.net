@@ -150,7 +150,7 @@ export class VLESSRealityService {
         listen: '127.0.0.1',
         listen_port: VLESS_LOCAL_PORT,
         network: 'udp',
-        override_address: serverHost,
+        override_address: '127.0.0.1',
         override_port: 51821,
       }],
       outbounds: [{

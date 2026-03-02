@@ -219,14 +219,14 @@ main() {
     # Determine if we're in the repo or need to clone
     PC2_DIR=""
     
-    if [[ -f "package.json" ]] && grep -q "pc2-node" package.json 2>/dev/null; then
-        # Already in pc2-node directory
-        PC2_DIR="$(pwd)"
-        echo -e "${GREEN}✓ Already in PC2 directory${NC}"
-    elif [[ -d "pc2-node" ]]; then
-        # In repo root
+    if [[ -d "pc2-node" ]]; then
+        # In repo root (has pc2-node subdirectory)
         PC2_DIR="$(pwd)/pc2-node"
         echo -e "${GREEN}✓ Found PC2 in current directory${NC}"
+    elif [[ -f "package.json" ]] && grep -q '"@elastos/pc2-node"' package.json 2>/dev/null; then
+        # Actually inside the pc2-node directory
+        PC2_DIR="$(pwd)"
+        echo -e "${GREEN}✓ Already in PC2 directory${NC}"
     elif [[ -d "$HOME/pc2.net/pc2-node" ]]; then
         # Already cloned
         PC2_DIR="$HOME/pc2.net/pc2-node"

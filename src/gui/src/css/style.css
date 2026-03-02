@@ -10657,7 +10657,7 @@ fieldset[name=number-code] {
 
 .device-phone .window.window-explore {
     border-radius: 0;
-    height: 100dvh !important;
+    height: calc(100dvh - 62px) !important;
 }
 
 .device-phone .window.window-search {
@@ -10699,8 +10699,8 @@ fieldset[name=number-code] {
     transform: none;
     width: 100% !important;
     left: 0 !important;
-    min-height: 100dvh;
-    height: 100dvh;
+    min-height: calc(100dvh - 62px);
+    height: calc(100dvh - 62px);
     top: 0 !important;
     border-radius: 0 !important;
 }
@@ -10709,8 +10709,8 @@ fieldset[name=number-code] {
     transform: none;
     width: 100%;
     left: 0;
-    height: 100dvh;
-    min-height: 100dvh;
+    height: calc(100dvh - 62px);
+    min-height: calc(100dvh - 62px);
     top: 0 !important;
     border-radius: 0;
 }
@@ -10726,8 +10726,8 @@ fieldset[name=number-code] {
     transform: none;
     width: 100%;
     left: 0;
-    min-height: 100dvh;
-    height: 100dvh;
+    min-height: calc(100dvh - 62px);
+    height: calc(100dvh - 62px);
     top: 0 !important;
     border-radius: 0 !important;
 }
@@ -10737,7 +10737,7 @@ fieldset[name=number-code] {
     transform: none;
     width: 100% !important;
     left: 0 !important;
-    height: 100dvh;
+    height: calc(100dvh - 62px);
     top: 0 !important;
     border-radius: 0;
 }

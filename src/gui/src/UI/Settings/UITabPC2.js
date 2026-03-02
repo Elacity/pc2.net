@@ -97,42 +97,6 @@ export default {
                 }
             </style>
             
-            <!-- Connection Status -->
-            <div class="pc2-section">
-                <div class="pc2-section-title">${i18n('connection')}</div>
-                <div class="pc2-group">
-                    <div class="pc2-group-row">
-                        <div class="pc2-card-row">
-                            <span class="pc2-card-label">${i18n('status')}</span>
-                            <div style="display: flex; align-items: center; gap: 6px;">
-                                <span class="pc2-status-dot" id="pc2-status-dot"></span>
-                                <span id="pc2-status-text" class="pc2-card-value">${i18n('not_connected')}</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="pc2-group-row">
-                        <div class="pc2-card-row">
-                            <span class="pc2-card-label">Transport</span>
-                            <span id="pc2-transport-type" class="pc2-card-value">-</span>
-                        </div>
-                    </div>
-                    <div class="pc2-group-row">
-                        <div class="pc2-card-row">
-                            <span class="pc2-card-label">Stealth Mode</span>
-                            <div style="display:flex; align-items:center; gap:8px;">
-                                <span id="pc2-stealth-label" style="font-size:12px; color:#888;">Off</span>
-                                <label style="position:relative; display:inline-block; width:34px; height:18px; cursor:pointer;">
-                                    <input type="checkbox" id="pc2-stealth-toggle" style="opacity:0; width:0; height:0;">
-                                    <span style="position:absolute; top:0; left:0; right:0; bottom:0; background:#ccc; border-radius:9px; transition:0.3s;"></span>
-                                    <span style="position:absolute; top:2px; left:2px; width:14px; height:14px; background:#fff; border-radius:50%; transition:0.3s;"></span>
-                                </label>
-                            </div>
-                        </div>
-                        <p style="margin:4px 0 0; font-size:11px; color:#999;">Forces AmneziaWG stealth tunnel, bypassing standard WireGuard. Use if behind DPI (China, Russia).</p>
-                    </div>
-                </div>
-            </div>
-            
             <!-- Not Connected State -->
             <div id="pc2-not-connected" style="display: none;">
                 <div class="pc2-card" style="text-align: center; padding: 16px;">
@@ -228,6 +192,42 @@ export default {
                 </div>
                 </div>
                 
+                </div>
+                
+                <!-- Connection Status -->
+                <div class="pc2-section" style="margin-top: 16px;">
+                    <div class="pc2-section-title">${i18n('connection')}</div>
+                    <div class="pc2-group">
+                        <div class="pc2-group-row">
+                            <div class="pc2-card-row">
+                                <span class="pc2-card-label">${i18n('status')}</span>
+                                <div style="display: flex; align-items: center; gap: 6px;">
+                                    <span class="pc2-status-dot" id="pc2-status-dot"></span>
+                                    <span id="pc2-status-text" class="pc2-card-value">${i18n('not_connected')}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="pc2-group-row">
+                            <div class="pc2-card-row">
+                                <span class="pc2-card-label">Transport</span>
+                                <span id="pc2-transport-type" class="pc2-card-value">-</span>
+                            </div>
+                        </div>
+                        <div class="pc2-group-row">
+                            <div class="pc2-card-row">
+                                <span class="pc2-card-label">Stealth Mode</span>
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <span id="pc2-stealth-label" style="font-size:12px; color:#888;">Off</span>
+                                    <label style="position:relative; display:inline-block; width:34px; height:18px; cursor:pointer;">
+                                        <input type="checkbox" id="pc2-stealth-toggle" style="opacity:0; width:0; height:0;">
+                                        <span style="position:absolute; top:0; left:0; right:0; bottom:0; background:#ccc; border-radius:9px; transition:0.3s;"></span>
+                                        <span style="position:absolute; top:2px; left:2px; width:14px; height:14px; background:#fff; border-radius:50%; transition:0.3s;"></span>
+                                    </label>
+                                </div>
+                            </div>
+                            <p style="margin:4px 0 0; font-size:11px; color:#999;">Forces AmneziaWG stealth tunnel, bypassing standard WireGuard. Use if behind DPI (China, Russia).</p>
+                        </div>
+                    </div>
                 </div>
                 
                 <!-- Compute Limits Section -->
@@ -1084,6 +1084,11 @@ export default {
         $stealthToggle.on('change', async function() {
             const enabled = this.checked;
             updateStealthVisual(enabled);
+            if (enabled) {
+                $el_window.find('#pc2-transport-type').html('<span style="color:#a78bfa; font-weight:500;">AmneziaWG (Stealth)</span>');
+            } else {
+                $el_window.find('#pc2-transport-type').html('<span style="color:#22c55e; font-weight:500;">WireGuard</span>');
+            }
             if (isPC2Mode() && window.api_origin) {
                 try {
                     const authToken = getAuthToken();

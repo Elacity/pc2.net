@@ -474,12 +474,15 @@ install_singbox() {
     echo ""
     print_step "Setting up sing-box (VLESS Reality TCP stealth transport)..."
 
+    SINGBOX_VERSION="1.13.0"
     if command -v sing-box &>/dev/null || test -x /usr/local/bin/sing-box; then
-        print_ok "sing-box already installed"
-        return
+        INSTALLED_VER=$(sing-box version 2>/dev/null | head -1 | awk '{print $NF}')
+        if [ "$INSTALLED_VER" = "$SINGBOX_VERSION" ]; then
+            print_ok "sing-box ${SINGBOX_VERSION} already installed"
+            return
+        fi
+        print_step "Upgrading sing-box from ${INSTALLED_VER} to ${SINGBOX_VERSION}..."
     fi
-
-    SINGBOX_VERSION="1.11.0"
     ARCH=$(dpkg --print-architecture 2>/dev/null || echo "arm64")
     SB_TMP=$(mktemp -d)
 

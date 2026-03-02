@@ -456,7 +456,7 @@ chmod 440 /etc/sudoers.d/amneziawg"
         echo -e "${GREEN}✓ sing-box already installed${NC}"
     else
         echo -e "${CYAN}Installing sing-box (VLESS Reality transport)...${NC}"
-        SINGBOX_VERSION="1.11.0"
+        SINGBOX_VERSION="1.13.0"
         if [[ "$OS" == "macos" ]]; then
             if command -v brew &> /dev/null; then
                 brew install sing-box 2>&1 || true

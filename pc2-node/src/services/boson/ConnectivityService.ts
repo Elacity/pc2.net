@@ -43,6 +43,7 @@ export interface ConnectionStatus {
   lastHeartbeat: string | null;
   publicEndpoint: string | null;
   natType: 'direct' | 'upnp' | 'relay' | 'wireguard' | 'amnezia-wireguard' | 'unknown';
+  stealthMode: boolean;
 }
 
 // Default super nodes - multiple nodes for failover
@@ -166,6 +167,7 @@ export class ConnectivityService {
       lastHeartbeat: null,
       publicEndpoint: null,
       natType: 'unknown',
+      stealthMode: false,
     };
   }
 
@@ -202,8 +204,54 @@ export class ConnectivityService {
     this.amneziaWGService = service;
   }
 
-  setStealthMode(enabled: boolean): void {
+  async setStealthMode(enabled: boolean): Promise<void> {
+    const wasEnabled = this.stealthMode;
     this.stealthMode = enabled;
+
+    if (!this.isRunning || enabled === wasEnabled) return;
+
+    if (enabled) {
+      logger.info('🔒 Stealth mode activated -- switching to AmneziaWG');
+      // Disconnect WireGuard if active
+      if (this.wireGuardService?.isConnected()) {
+        await this.wireGuardService.disconnect();
+      }
+      // Connect via AmneziaWG
+      if (this.amneziaWGService && this.amneziaWGService.isAvailable()) {
+        const ok = await this.connectViaAmneziaWG();
+        if (ok) {
+          logger.info('🕵️ Stealth mode: now connected via AmneziaWG');
+          if (this.activeProxyClient) {
+            await this.activeProxyClient.disconnect();
+            this.activeProxyClient = null;
+          }
+          return;
+        }
+      }
+      logger.warn('⚠️ Stealth mode: AmneziaWG unavailable, falling back to ActiveProxy');
+      this.fallbackToActiveProxy();
+    } else {
+      logger.info('🔓 Stealth mode deactivated -- switching back to WireGuard');
+      // Disconnect AmneziaWG if active
+      if (this.amneziaWGService?.isConnected()) {
+        await this.amneziaWGService.disconnect();
+      }
+      this.wgBlockedByDPI = false;
+      // Reconnect via WireGuard
+      if (this.wireGuardService && this.wireGuardService.isAvailable()) {
+        const ok = await this.connectViaWireGuard();
+        if (ok) {
+          logger.info('🚀 Stealth mode off: reconnected via WireGuard');
+          if (this.activeProxyClient) {
+            await this.activeProxyClient.disconnect();
+            this.activeProxyClient = null;
+          }
+          return;
+        }
+      }
+      logger.warn('⚠️ WireGuard unavailable after disabling stealth, falling back');
+      this.fallbackToActiveProxy();
+    }
   }
 
   /**
@@ -1001,7 +1049,7 @@ export class ConnectivityService {
    * Get connection status
    */
   getStatus(): ConnectionStatus {
-    return { ...this.status };
+    return { ...this.status, stealthMode: this.stealthMode };
   }
 
   /**

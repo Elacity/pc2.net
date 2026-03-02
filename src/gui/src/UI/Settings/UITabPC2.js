@@ -114,8 +114,14 @@ export default {
                     <div class="pc2-group">
                         <div class="pc2-group-row">
                             <div class="pc2-card-row">
-                                <span class="pc2-card-label">${i18n('node')}</span>
-                                <span id="pc2-node-name" class="pc2-card-value">-</span>
+                                <span class="pc2-card-label">URL</span>
+                                <span id="pc2-node-url" class="pc2-card-value" style="font-family: monospace;">-</span>
+                            </div>
+                        </div>
+                        <div class="pc2-group-row">
+                            <div class="pc2-card-row">
+                                <span class="pc2-card-label">IP Address</span>
+                                <span id="pc2-node-ip" class="pc2-card-value" style="font-family: monospace;">-</span>
                             </div>
                         </div>
                         <div class="pc2-group-row">
@@ -1008,17 +1014,29 @@ export default {
                 $connected.show();
                 $notConnected.hide();
                 
-                // Populate node info
-                const session = pc2Service.getSession?.() || {};
-                // In PC2 mode, show "This PC2 Node" to match status bar
-                const nodeName = pc2Mode ? i18n('this_pc2_node') : (session.nodeName || 'My PC2 Node');
-                $el_window.find('#pc2-node-name').text(nodeName);
+                // Populate node info from full-identity API
                 $el_window.find('#pc2-wallet').text(
-                    window.user?.wallet_address 
+                    window.user?.wallet_address
                         ? `${window.user.wallet_address.slice(0, 6)}...${window.user.wallet_address.slice(-4)}`
                         : '-'
                 );
-                
+
+                if (pc2Mode && window.api_origin) {
+                    try {
+                        const authToken = getAuthToken();
+                        const headers = { 'Content-Type': 'application/json' };
+                        if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+                        const idResp = await fetch(new URL('/api/boson/full-identity', window.api_origin).toString(), { method: 'GET', headers });
+                        if (idResp.ok) {
+                            const idData = await idResp.json();
+                            $el_window.find('#pc2-node-url').text(idData.publicUrl || '-');
+                            $el_window.find('#pc2-node-ip').text(idData.localIp || '-');
+                        }
+                    } catch (err) {
+                        logger.debug('[PC2Tab] Could not fetch identity:', err);
+                    }
+                }
+
                 // Load all data
                 await Promise.all([
                     loadStorageStats(),
@@ -1053,6 +1071,11 @@ export default {
                             const label = transportLabels[natType] || natType;
                             const color = transportColors[natType] || '#888';
                             $el_window.find('#pc2-transport-type').html(`<span style="color:${color}; font-weight:500;">${label}</span>`);
+
+                            if (connData.stealthMode) {
+                                $stealthToggle.prop('checked', true);
+                                updateStealthVisual(true);
+                            }
                         }
                     } catch (err) {
                         logger.debug('[PC2Tab] Could not fetch connectivity status:', err);

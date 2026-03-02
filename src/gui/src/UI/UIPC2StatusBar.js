@@ -93,6 +93,7 @@ function initPC2StatusBar() {
 
     const copyIcon = `<svg style="width:12px;height:12px;vertical-align:middle;cursor:pointer;opacity:0.6;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>`;
     let privacyHidden = true;
+    let stealthModeEnabled = false;
 
     const maskValue = (val) => privacyHidden ? val.replace(/[a-zA-Z0-9]/g, '•') : val;
 
@@ -172,7 +173,7 @@ function initPC2StatusBar() {
                 const methodLabel = isAmneziaWG ? 'AmneziaWG (Stealth)' : (isWireGuard ? 'WireGuard' : (natType === 'relay' ? 'Active Proxy' : (natType === 'direct' ? 'Direct' : natType)));
                 const methodColor = isAmneziaWG ? '#a78bfa' : (isWireGuard ? '#22c55e' : (natType === 'relay' ? '#f59e0b' : '#fff'));
                 items.push({
-                    html: `<span style="color:#ccc; font-size:12px;">Access: <span style="color:${methodColor}; font-weight:500;">${methodLabel}</span></span>`,
+                    html: `<span data-pc2-access style="color:#ccc; font-size:12px;">Access: <span style="color:${methodColor}; font-weight:500;">${methodLabel}</span></span>`,
                     icon: `<svg style="width:14px;height:14px;vertical-align:middle;" viewBox="0 0 24 24" fill="none" stroke="${methodColor}" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`,
                     disabled: true
                 });
@@ -404,6 +405,34 @@ function initPC2StatusBar() {
         $knob.css({ left: privacyHidden ? '2px' : 'auto', right: privacyHidden ? 'auto' : '2px' });
     });
 
+    // Stealth mode toggle handler
+    $(document).on('click', '.pc2-stealth-toggle', function(e) {
+        e.stopPropagation();
+        e.preventDefault();
+        stealthModeEnabled = !stealthModeEnabled;
+        const $track = $(this).find('.pc2-stealth-track');
+        const $knob = $(this).find('.pc2-stealth-knob');
+        $track.css('background', stealthModeEnabled ? '#a78bfa' : '#555');
+        $knob.css({ left: stealthModeEnabled ? 'auto' : '2px', right: stealthModeEnabled ? '2px' : 'auto' });
+
+        // Update the Access line in the same dropdown
+        const $menu = $(this).closest('.context-menu');
+        if (stealthModeEnabled) {
+            $menu.find('[data-pc2-access]').html('Access: <span style="color:#a78bfa; font-weight:500;">AmneziaWG (Stealth)</span>');
+        } else {
+            $menu.find('[data-pc2-access]').html('Access: <span style="color:#22c55e; font-weight:500;">WireGuard</span>');
+        }
+
+        // Call backend API
+        if (window.api_origin) {
+            fetch(`${window.api_origin}/api/boson/stealth-mode`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${window.auth_token}` },
+                body: JSON.stringify({ enabled: stealthModeEnabled }),
+            }).catch(() => {});
+        }
+    });
+
     // Use delegated event for click - opens UIContextMenu
     $(document).on('click', '.pc2-status-bar', async function(e) {
         e.stopPropagation();
@@ -449,28 +478,46 @@ function initPC2StatusBar() {
             items: getMenuItems(stats, nodeInfo, connectivity)
         });
 
-        // Inject privacy toggle directly into the menu DOM (not as a menu item)
-        if (nodeInfo) {
-            requestAnimationFrame(() => {
-                const $menu = $('.context-menu[data-id="pc2-menu"]');
-                if ($menu.length) {
-                    const toggleOn = !privacyHidden;
-                    const toggleHtml = `<div class="pc2-privacy-toggle" style="display:flex; align-items:center; justify-content:space-between; padding:6px 12px; cursor:pointer; user-select:none;">
-                        <span style="color:#fff; font-size:12px;">Show details</span>
-                        <span class="pc2-toggle-track" style="width:34px; height:18px; border-radius:9px; background:${toggleOn ? '#22c55e' : '#555'}; position:relative; display:inline-flex; align-items:center; flex-shrink:0;">
-                            <span class="pc2-toggle-knob" style="width:14px; height:14px; border-radius:50%; background:#fff; position:absolute; top:2px; ${toggleOn ? 'right:2px;' : 'left:2px;'} transition:all 0.2s;"></span>
-                        </span>
-                    </div>`;
-                    // Insert before the last divider (before PC2 Settings)
-                    const $lastDivider = $menu.find('.context-menu-divider').last();
-                    if ($lastDivider.length) {
-                        $lastDivider.before(toggleHtml);
-                    } else {
-                        $menu.append(toggleHtml);
-                    }
-                }
-            });
+        // Read stealth state from connectivity response
+        if (connectivity && connectivity.stealthMode !== undefined) {
+            stealthModeEnabled = connectivity.stealthMode;
         }
+
+        // Inject toggles directly into the menu DOM (not as menu items)
+        requestAnimationFrame(() => {
+            const $menu = $('.context-menu[data-id="pc2-menu"]');
+            if (!$menu.length) return;
+
+            const $lastDivider = $menu.find('.context-menu-divider').last();
+
+            if (nodeInfo) {
+                const toggleOn = !privacyHidden;
+                const privacyHtml = `<div class="pc2-privacy-toggle" style="display:flex; align-items:center; justify-content:space-between; padding:6px 12px; cursor:pointer; user-select:none;">
+                    <span style="color:#fff; font-size:12px;">Show details</span>
+                    <span class="pc2-toggle-track" style="width:34px; height:18px; border-radius:9px; background:${toggleOn ? '#22c55e' : '#555'}; position:relative; display:inline-flex; align-items:center; flex-shrink:0;">
+                        <span class="pc2-toggle-knob" style="width:14px; height:14px; border-radius:50%; background:#fff; position:absolute; top:2px; ${toggleOn ? 'right:2px;' : 'left:2px;'} transition:all 0.2s;"></span>
+                    </span>
+                </div>`;
+                if ($lastDivider.length) {
+                    $lastDivider.before(privacyHtml);
+                } else {
+                    $menu.append(privacyHtml);
+                }
+            }
+
+            const stealthOn = stealthModeEnabled;
+            const stealthHtml = `<div class="pc2-stealth-toggle" style="display:flex; align-items:center; justify-content:space-between; padding:6px 12px; cursor:pointer; user-select:none;">
+                <span style="color:#fff; font-size:12px;">Stealth Mode</span>
+                <span class="pc2-stealth-track" style="width:34px; height:18px; border-radius:9px; background:${stealthOn ? '#a78bfa' : '#555'}; position:relative; display:inline-flex; align-items:center; flex-shrink:0;">
+                    <span class="pc2-stealth-knob" style="width:14px; height:14px; border-radius:50%; background:#fff; position:absolute; top:2px; ${stealthOn ? 'right:2px;' : 'left:2px;'} transition:all 0.2s;"></span>
+                </span>
+            </div>`;
+            if ($lastDivider.length) {
+                $lastDivider.before(stealthHtml);
+            } else {
+                $menu.append(stealthHtml);
+            }
+        });
     });
 
     // Auto-reconnect if we have saved config (silent mode - no signature prompts)

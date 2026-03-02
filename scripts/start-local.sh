@@ -409,15 +409,21 @@ PARTICLE_EOF
         echo -e "${GREEN}✓ AmneziaWG tools detected${NC}"
     fi
 
-    # Patch awg-quick: upstream bug references /var/run/wireguard/ for name/sock
-    # files instead of /var/run/amneziawg/, causing get_real_interface to always fail
+    # Patch awg-quick: upstream bugs:
+    # 1. References /var/run/wireguard/ instead of /var/run/amneziawg/ for name/sock files
+    # 2. Calls 'wg' (standard WireGuard CLI) instead of 'awg' (AmneziaWG CLI),
+    #    which can't parse obfuscation parameters (Jc, Jmin, S1, H1, etc.)
     if command -v awg-quick &> /dev/null; then
         AWG_QUICK_PATH=$(which awg-quick 2>/dev/null)
-        if grep -q '/var/run/wireguard/\$INTERFACE.name' "$AWG_QUICK_PATH" 2>/dev/null; then
-            echo -e "${CYAN}Patching awg-quick (fixing runtime path bug)...${NC}"
+        if grep -q '/var/run/wireguard/\$INTERFACE.name' "$AWG_QUICK_PATH" 2>/dev/null || grep -q 'cmd wg ' "$AWG_QUICK_PATH" 2>/dev/null; then
+            echo -e "${CYAN}Patching awg-quick (fixing upstream bugs)...${NC}"
             sudo sed -i.bak \
                 -e 's|/var/run/wireguard/\$INTERFACE\.name|/var/run/amneziawg/\$INTERFACE.name|g' \
                 -e 's|/var/run/wireguard/\$REAL_INTERFACE\.sock|/var/run/amneziawg/\$REAL_INTERFACE.sock|g' \
+                -e 's|cmd wg setconf|cmd awg setconf|g' \
+                -e 's|cmd wg showconf|cmd awg showconf|g' \
+                -e 's|wg show interfaces|awg show interfaces|g' \
+                -e 's|wg show "\$REAL_INTERFACE"|awg show "\$REAL_INTERFACE"|g' \
                 "$AWG_QUICK_PATH"
             sudo rm -f "${AWG_QUICK_PATH}.bak"
             echo -e "${GREEN}✓ awg-quick patched${NC}"

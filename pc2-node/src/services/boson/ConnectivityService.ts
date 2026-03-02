@@ -380,24 +380,23 @@ export class ConnectivityService {
       const endpoint = `http://${awgIP}:${this.config.localPort}`;
       const result = await this.usernameService.updateEndpoint(endpoint);
 
-      if (result.success) {
-        this.status.connected = true;
-        this.status.natType = 'amnezia-wireguard';
-        this.status.publicEndpoint = this.usernameService.getPublicUrl();
-        this.status.connectedAt = new Date().toISOString();
-        logger.info(`[Connectivity] AmneziaWG stealth tunnel active: ${endpoint}`);
-        logger.info(`[Connectivity] Public URL: ${this.status.publicEndpoint}`);
-
-        const serverIP = this.amneziaWGService.getServerIP();
-        if (serverIP) {
-          this.amneziaWGService.setOnTunnelDown(() => this.handleAmneziaWGDown());
-          this.amneziaWGService.startHealthCheck(serverIP);
-        }
-        return true;
+      if (!result.success) {
+        logger.warn(`[Connectivity] AmneziaWG tunnel up but endpoint registration failed -- continuing anyway: ${result.error}`);
       }
 
-      logger.warn(`[Connectivity] AmneziaWG connected but endpoint registration failed: ${result.error}`);
-      return false;
+      this.status.connected = true;
+      this.status.natType = 'amnezia-wireguard';
+      this.status.publicEndpoint = this.usernameService.getPublicUrl();
+      this.status.connectedAt = new Date().toISOString();
+      logger.info(`[Connectivity] AmneziaWG stealth tunnel active: ${endpoint}`);
+      logger.info(`[Connectivity] Public URL: ${this.status.publicEndpoint}`);
+
+      const serverIP = this.amneziaWGService.getServerIP();
+      if (serverIP) {
+        this.amneziaWGService.setOnTunnelDown(() => this.handleAmneziaWGDown());
+        this.amneziaWGService.startHealthCheck(serverIP);
+      }
+      return true;
     } catch (error) {
       logger.warn(`[Connectivity] AmneziaWG failed: ${error}`);
       return false;
@@ -436,26 +435,23 @@ export class ConnectivityService {
       const endpoint = `http://${awgIP}:${this.config.localPort}`;
       const result = await this.usernameService.updateEndpoint(endpoint);
 
-      if (result.success) {
-        this.status.connected = true;
-        this.status.natType = 'vless-reality';
-        this.status.publicEndpoint = this.usernameService.getPublicUrl();
-        this.status.connectedAt = new Date().toISOString();
-        logger.info(`[Connectivity] VLESS Reality chained tunnel active: ${endpoint}`);
-
-        const serverIP = this.amneziaWGService.getServerIP();
-        if (serverIP) {
-          this.amneziaWGService.setOnTunnelDown(() => this.handleVLESSRealityDown());
-          this.amneziaWGService.startHealthCheck(serverIP);
-        }
-        this.vlessRealityService.startHealthCheck();
-        return true;
+      if (!result.success) {
+        logger.warn('[Connectivity] VLESS Reality tunnel up but endpoint registration failed -- continuing anyway (AWG IP unchanged)');
       }
 
-      logger.warn('[Connectivity] VLESS Reality connected but endpoint registration failed');
-      await this.amneziaWGService.disconnect();
-      await this.vlessRealityService.disconnect();
-      return false;
+      this.status.connected = true;
+      this.status.natType = 'vless-reality';
+      this.status.publicEndpoint = this.usernameService.getPublicUrl();
+      this.status.connectedAt = new Date().toISOString();
+      logger.info(`[Connectivity] VLESS Reality chained tunnel active: ${endpoint}`);
+
+      const serverIP = this.amneziaWGService.getServerIP();
+      if (serverIP) {
+        this.amneziaWGService.setOnTunnelDown(() => this.handleVLESSRealityDown());
+        this.amneziaWGService.startHealthCheck(serverIP);
+      }
+      this.vlessRealityService.startHealthCheck();
+      return true;
     } catch (error) {
       logger.warn(`[Connectivity] VLESS Reality chained tunnel failed: ${error}`);
       try { await this.amneziaWGService?.disconnect(); } catch {}

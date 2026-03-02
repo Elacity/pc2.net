@@ -330,6 +330,16 @@ PARTICLE_EOF
         echo -e "${GREEN}✓ WireGuard tools detected${NC}"
     fi
 
+    # Configure passwordless sudo for wg-quick (required for background PM2 process)
+    if command -v wg &> /dev/null; then
+        WG_QUICK_PATH=$(which wg-quick 2>/dev/null)
+        if [[ -n "$WG_QUICK_PATH" ]] && [[ ! -f /etc/sudoers.d/wireguard ]]; then
+            echo -e "${CYAN}Configuring WireGuard permissions...${NC}"
+            sudo sh -c "echo '$(whoami) ALL=(ALL) NOPASSWD: ${WG_QUICK_PATH}' > /etc/sudoers.d/wireguard && chmod 440 /etc/sudoers.d/wireguard"
+            echo -e "${GREEN}✓ WireGuard permissions configured${NC}"
+        fi
+    fi
+
     # Detect if running on VPS (no DISPLAY) or local machine
     # Also get public IP for VPS users
     LOCAL_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "")

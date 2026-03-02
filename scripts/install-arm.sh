@@ -363,28 +363,52 @@ install_amneziawg() {
         print_ok "AmneziaWG binary already installed"
         AWG_READY=true
     else
-        # Requires Go compiler (should already be installed from wireguard-go step)
-        if ! command -v go &>/dev/null; then
-            print_step "Installing Go compiler for AmneziaWG build..."
-            sudo apt-get install -y -qq golang-go 2>/dev/null || sudo snap install go --classic 2>/dev/null || true
+        GO_CMD="go"
+        GO_MIN_VER="1.24"
+
+        # Check if system Go exists and is new enough (amneziawg-go requires Go 1.24+)
+        if command -v go &>/dev/null; then
+            SYS_GO_VER=$(go version 2>/dev/null | grep -oP '\d+\.\d+' | head -1)
+            if [[ "$(printf '%s\n' "$GO_MIN_VER" "$SYS_GO_VER" | sort -V | head -1)" != "$GO_MIN_VER" ]]; then
+                print_warn "System Go ($SYS_GO_VER) is too old for amneziawg-go (needs $GO_MIN_VER+)"
+                GO_CMD=""
+            fi
         fi
 
-        if command -v go &>/dev/null; then
+        # Install recent Go if needed
+        if [[ -z "$GO_CMD" ]] || ! command -v go &>/dev/null; then
+            print_step "Installing Go $GO_MIN_VER for AmneziaWG build..."
+            GO_INSTALL_VER="1.24.4"
+            GO_TMP=$(mktemp -d)
+            ARCH=$(dpkg --print-architecture 2>/dev/null || echo "arm64")
+            if wget -q "https://go.dev/dl/go${GO_INSTALL_VER}.linux-${ARCH}.tar.gz" -O "$GO_TMP/go.tar.gz" 2>/dev/null || \
+               curl -sL "https://go.dev/dl/go${GO_INSTALL_VER}.linux-${ARCH}.tar.gz" -o "$GO_TMP/go.tar.gz"; then
+                sudo rm -rf /usr/local/go-awg
+                sudo tar -C /usr/local -xzf "$GO_TMP/go.tar.gz"
+                sudo mv /usr/local/go /usr/local/go-awg
+                GO_CMD="/usr/local/go-awg/bin/go"
+                print_ok "Go ${GO_INSTALL_VER} installed to /usr/local/go-awg"
+            else
+                print_warn "Failed to download Go ${GO_INSTALL_VER}"
+            fi
+            rm -rf "$GO_TMP"
+        fi
+
+        if [[ -n "$GO_CMD" ]]; then
             print_step "Building amneziawg-go from source (takes 1-2 minutes)..."
             AWG_BUILD_TMP=$(mktemp -d)
-            if sudo bash -c "export GOPATH='$AWG_BUILD_TMP' GOBIN='$AWG_BUILD_TMP/bin' && go install github.com/amnezia-vpn/amneziawg-go@latest" 2>&1; then
+            if sudo bash -c "export GOPATH='$AWG_BUILD_TMP' GOBIN='$AWG_BUILD_TMP/bin' && '$GO_CMD' install github.com/amnezia-vpn/amneziawg-go@latest" 2>&1; then
                 if test -x "$AWG_BUILD_TMP/bin/amneziawg-go"; then
                     sudo cp "$AWG_BUILD_TMP/bin/amneziawg-go" /usr/local/bin/amneziawg-go
                     sudo chmod 755 /usr/local/bin/amneziawg-go
                 fi
             fi
-            rm -rf "$AWG_BUILD_TMP"
+            sudo rm -rf "$AWG_BUILD_TMP"
             if test -x /usr/local/bin/amneziawg-go; then
                 print_ok "AmneziaWG binary built and installed"
                 AWG_READY=true
             else
                 print_warn "AmneziaWG build failed -- stealth transport will not be available"
-                print_warn "Try manually: sudo GOBIN=/usr/local/bin go install github.com/amnezia-vpn/amneziawg-go@latest"
             fi
         else
             print_warn "Go compiler not available, cannot build AmneziaWG"

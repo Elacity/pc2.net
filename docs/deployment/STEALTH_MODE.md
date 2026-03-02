@@ -133,6 +133,31 @@ The supernode infrastructure includes:
 
 These parameters must match between server and client. They are generated once per supernode interface and distributed via the provisioning API.
 
+## Architecture: Shared vs Isolated State
+
+PC2's network has two distinct layers with deliberately different sharing models:
+
+### Shared Layer: Boson DHT (Decentralized Identity & Routing)
+
+The **Boson DID DHT** is the shared coordination layer across the entire network:
+
+- **DID registration** — when a user registers `test39.ela.city`, their Decentralized Identifier is published to the distributed hash table, resolvable by any node on the network
+- **Username-to-endpoint resolution** — any supernode or PC2 node can resolve where a user lives, regardless of which supernode they're registered on
+- **Peer discovery** — the DHT enables cross-supernode routing; a user on `supernode-A.ela.city` can be discovered by `supernode-B.foo.city`
+- **No single point of failure** — identity and routing are not owned by any one server
+
+This shared state IS the decentralization and security model. No single supernode controls identity or routing for the network.
+
+### Isolated Layer: Transport (WireGuard / AmneziaWG)
+
+The transport tunnels are **intentionally per-supernode**:
+
+- Each supernode manages its own AWG/WG interface, keys, peer IP allocation, and obfuscation params
+- If a supernode is compromised, its AWG keys don't expose peers on other supernodes
+- Obfuscation params (including I1 QUIC signatures) can vary per supernode for fingerprint diversity
+
+This separation means the identity layer is global and decentralized, while the transport layer is compartmentalized for security.
+
 ## Scalability
 
 ### Current Capacity
@@ -143,19 +168,28 @@ These parameters must match between server and client. They are generated once p
 
 ### Multi-Supernode / Multi-Domain
 
-The architecture is already designed for horizontal scaling:
+The architecture is designed for horizontal scaling:
 
-- Each supernode runs its own independent AWG instance with its own keypair and obfuscation params
-- The gateway is per-supernode — adding a new domain (e.g., `*.foo.city`) means deploying a new supernode with its own AWG interface
+- Adding a new domain (e.g., `*.foo.city`) means deploying a new supernode with its own AWG interface and gateway
 - Clients provision against whichever supernode hosts their domain
-- No shared state between supernodes for AWG — each is self-contained
-- Obfuscation params (including I1) can vary per supernode for additional fingerprint diversity
+- The Boson DHT ties all supernodes together — a node on one supernode is discoverable from any other
+- Per-region obfuscation profiles (different I1 signatures for different censorship regimes) can be configured per supernode
+
+### PC2 Nodes as Network Participants
+
+Every PC2 node already participates in the Boson DHT as a peer, contributing to routing and peer discovery. This creates an opportunity for **lightweight relay nodes** that strengthen the network:
+
+- **Relay capacity** — PC2 nodes with stable connections and public IPs could act as lightweight relay points for other peers, reducing load on supernodes and adding redundancy
+- **DHT density** — more nodes on the DHT means faster peer discovery, more routing paths, and greater resilience against targeted takedowns
+- **Regional presence** — nodes in censored regions naturally become stepping stones for nearby peers, creating organic mesh density where it's needed most
+- **Stealth relay chaining** — a PC2 node behind AmneziaWG could relay traffic for other nodes in the same region, meaning only one node needs the direct supernode tunnel while others chain through it locally
+- **Incentive alignment** — nodes that contribute relay capacity could earn network credits or priority routing, aligning individual node operation with collective network health
 
 ### Future Scaling Considerations
 
 - If a single supernode exceeds peer capacity, load balancing across multiple AWG interfaces on separate ports is straightforward
-- The provisioning API could be extended to support supernode discovery/selection
-- Per-region obfuscation profiles (different I1 signatures for different censorship regimes) can be configured per supernode
+- The provisioning API could be extended to support supernode discovery/selection based on latency, capacity, or region
+- PC2 nodes could publish their relay capability to the DHT, enabling automatic relay selection without supernode involvement
 
 ## Security Considerations
 

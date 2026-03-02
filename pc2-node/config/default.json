@@ -26,6 +26,10 @@
     "amnezia_wg": {
       "enabled": true,
       "auto_fallback": true
+    },
+    "vless_reality": {
+      "enabled": true,
+      "auto_fallback": true
     }
   },
   "ai": {

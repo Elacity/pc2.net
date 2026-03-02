@@ -184,16 +184,21 @@ router.post('/stealth-mode', async (req: Request, res: Response) => {
     });
   }
 
-  const { enabled } = req.body;
+  const { enabled, transport } = req.body;
   if (typeof enabled !== 'boolean') {
     return res.status(400).json({ error: 'enabled must be a boolean' });
   }
 
+  const validTransports = ['amnezia-wireguard', 'vless-reality'];
+  if (transport && !validTransports.includes(transport)) {
+    return res.status(400).json({ error: `transport must be one of: ${validTransports.join(', ')}` });
+  }
+
   const connectivityService = bosonService.getConnectivityService();
-  await connectivityService.setStealthMode(enabled);
+  await connectivityService.setStealthMode(enabled, transport || undefined);
 
   const status = connectivityService.getStatus();
-  res.json({ success: true, stealthMode: enabled, transport: status.natType });
+  res.json({ success: true, stealthMode: enabled, transport: status.natType, forcedTransport: status.forcedTransport });
 });
 
 /**

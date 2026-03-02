@@ -434,6 +434,36 @@ SUDOERS_EOF
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Install sing-box (VLESS Reality TCP stealth transport)
+# ─────────────────────────────────────────────────────────────────────────────
+install_singbox() {
+    echo ""
+    print_step "Setting up sing-box (VLESS Reality TCP stealth transport)..."
+
+    if command -v sing-box &>/dev/null || test -x /usr/local/bin/sing-box; then
+        print_ok "sing-box already installed"
+        return
+    fi
+
+    SINGBOX_VERSION="1.11.0"
+    ARCH=$(dpkg --print-architecture 2>/dev/null || echo "arm64")
+    SB_TMP=$(mktemp -d)
+
+    print_step "Downloading sing-box v${SINGBOX_VERSION} for ${ARCH}..."
+    wget -q "https://github.com/SagerNet/sing-box/releases/download/v${SINGBOX_VERSION}/sing-box-${SINGBOX_VERSION}-linux-${ARCH}.tar.gz" -O "$SB_TMP/sing-box.tar.gz" 2>/dev/null || \
+        curl -sL "https://github.com/SagerNet/sing-box/releases/download/v${SINGBOX_VERSION}/sing-box-${SINGBOX_VERSION}-linux-${ARCH}.tar.gz" -o "$SB_TMP/sing-box.tar.gz"
+
+    (cd "$SB_TMP" && tar -xzf sing-box.tar.gz && sudo cp sing-box-*/sing-box /usr/local/bin/sing-box && sudo chmod 755 /usr/local/bin/sing-box) 2>/dev/null || true
+    rm -rf "$SB_TMP"
+
+    if command -v sing-box &>/dev/null || test -x /usr/local/bin/sing-box; then
+        print_ok "sing-box installed (VLESS Reality transport available)"
+    else
+        print_warn "sing-box installation failed (VLESS Reality will be unavailable)"
+    fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Install voice AI tools (Whisper STT + Piper TTS + ffmpeg)
 # Opt-in only — enable with INSTALL_VOICE=1
 # Whisper uses ~500MB+ GPU memory which competes with Ollama on Jetson
@@ -758,6 +788,7 @@ main() {
     install_pm2
     install_wireguard
     install_amneziawg
+    install_singbox
     install_voice_tools
     install_pc2
     start_pc2

@@ -13,6 +13,7 @@ import { UsernameService, UsernameConfig } from './UsernameService.js';
 import { ConnectivityService, ConnectivityConfig, ConnectionStatus } from './ConnectivityService.js';
 import { WireGuardService, type WireGuardStatus } from '../wireguard/WireGuardService.js';
 import { AmneziaWGService, type AmneziaWGStatus } from '../wireguard/AmneziaWGService.js';
+import { VLESSRealityService, type VLESSRealityStatus } from '../vless/VLESSRealityService.js';
 import { logger } from '../../utils/logger.js';
 
 export interface BosonConfig {
@@ -40,6 +41,7 @@ export interface BosonStatus {
   connectivity: ConnectionStatus;
   wireguard: WireGuardStatus | null;
   amneziaWG: AmneziaWGStatus | null;
+  vlessReality: VLESSRealityStatus | null;
 }
 
 export class BosonService {
@@ -49,6 +51,7 @@ export class BosonService {
   private connectivityService: ConnectivityService;
   private wireGuardService: WireGuardService | null;
   private amneziaWGService: AmneziaWGService | null;
+  private vlessRealityService: VLESSRealityService | null;
   private initialized: boolean = false;
   private firstRunMnemonic: string | null = null;
 
@@ -80,6 +83,7 @@ export class BosonService {
 
     this.wireGuardService = null;
     this.amneziaWGService = null;
+    this.vlessRealityService = null;
   }
 
   /**
@@ -142,6 +146,19 @@ export class BosonService {
     if (this.amneziaWGService.isAvailable()) {
       logger.info('[Boson] AmneziaWG stealth transport detected -- available as DPI-resistant fallback');
       this.connectivityService.setAmneziaWGService(this.amneziaWGService);
+    }
+
+    // 4c. Initialize VLESS Reality (TCP stealth transport via sing-box)
+    this.vlessRealityService = new VLESSRealityService({
+      dataDir: this.config.dataDir,
+      gatewayUrl: this.config.gatewayUrl!,
+      nodeId,
+      localPort: this.config.localPort!,
+    });
+
+    if (this.vlessRealityService.isAvailable()) {
+      logger.info('[Boson] VLESS Reality transport detected -- available as TCP stealth fallback');
+      this.connectivityService.setVLESSRealityService(this.vlessRealityService);
     }
 
     // Apply stealth mode config
@@ -215,6 +232,7 @@ export class BosonService {
       connectivity: connectivityStatus,
       wireguard: this.wireGuardService ? this.wireGuardService.getStatus() : null,
       amneziaWG: this.amneziaWGService ? this.amneziaWGService.getStatus() : null,
+      vlessReality: this.vlessRealityService ? this.vlessRealityService.getStatus() : null,
     };
   }
 

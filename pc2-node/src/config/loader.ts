@@ -41,6 +41,10 @@ export interface Config {
       enabled?: boolean;
       auto_fallback?: boolean;
     };
+    vless_reality?: {
+      enabled?: boolean;
+      auto_fallback?: boolean;
+    };
     supernodes?: Array<{
       id: string;
       address: string;

@@ -170,8 +170,9 @@ function initPC2StatusBar() {
                 const natType = connectivity.natType || 'unknown';
                 const isWireGuard = natType === 'wireguard';
                 const isAmneziaWG = natType === 'amnezia-wireguard';
-                const methodLabel = isAmneziaWG ? 'AmneziaWG (Stealth)' : (isWireGuard ? 'WireGuard' : (natType === 'relay' ? 'Active Proxy' : (natType === 'direct' ? 'Direct' : natType)));
-                const methodColor = isAmneziaWG ? '#a78bfa' : (isWireGuard ? '#22c55e' : (natType === 'relay' ? '#f59e0b' : '#fff'));
+                const isVLESSReality = natType === 'vless-reality';
+                const methodLabel = isVLESSReality ? 'VLESS Reality (TCP Stealth)' : (isAmneziaWG ? 'AmneziaWG (Stealth)' : (isWireGuard ? 'WireGuard' : (natType === 'relay' ? 'Active Proxy' : (natType === 'direct' ? 'Direct' : natType))));
+                const methodColor = isVLESSReality ? '#3b82f6' : (isAmneziaWG ? '#a78bfa' : (isWireGuard ? '#22c55e' : (natType === 'relay' ? '#f59e0b' : '#fff')));
                 items.push({
                     html: `<span data-pc2-access style="color:#ccc; font-size:12px;">Access: <span style="color:${methodColor}; font-weight:500;">${methodLabel}</span></span>`,
                     icon: `<svg style="width:14px;height:14px;vertical-align:middle;" viewBox="0 0 24 24" fill="none" stroke="${methodColor}" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`,
@@ -415,22 +416,42 @@ function initPC2StatusBar() {
         $track.css('background', stealthModeEnabled ? '#a78bfa' : '#555');
         $knob.css({ left: stealthModeEnabled ? 'auto' : '2px', right: stealthModeEnabled ? '2px' : 'auto' });
 
-        // Update the Access line in the same dropdown
         const $menu = $(this).closest('.context-menu');
-        if (stealthModeEnabled) {
-            $menu.find('[data-pc2-access]').html('Access: <span style="color:#a78bfa; font-weight:500;">AmneziaWG (Stealth)</span>');
-        } else {
-            $menu.find('[data-pc2-access]').html('Access: <span style="color:#22c55e; font-weight:500;">WireGuard</span>');
-        }
+        $menu.find('.pc2-transport-select-row').toggle(stealthModeEnabled);
 
-        // Call backend API
+        const transport = stealthModeEnabled ? $menu.find('.pc2-bar-transport-select').val() : '';
+
         if (window.api_origin) {
             fetch(`${window.api_origin}/api/boson/stealth-mode`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${window.auth_token}` },
-                body: JSON.stringify({ enabled: stealthModeEnabled }),
+                body: JSON.stringify({ enabled: stealthModeEnabled, transport: transport || undefined }),
+            }).then(r => r.ok ? r.json() : null).then(data => {
+                if (data) {
+                    const tLabels = { 'wireguard': ['WireGuard', '#22c55e'], 'amnezia-wireguard': ['AmneziaWG (Stealth)', '#a78bfa'], 'vless-reality': ['VLESS Reality (TCP Stealth)', '#3b82f6'], 'relay': ['Active Proxy', '#f59e0b'] };
+                    const [label, color] = tLabels[data.transport] || [data.transport, '#fff'];
+                    $menu.find('[data-pc2-access]').html(`Access: <span style="color:${color}; font-weight:500;">${label}</span>`);
+                }
             }).catch(() => {});
         }
+    });
+
+    // Transport selector change in cloud dropdown
+    $(document).on('change', '.pc2-bar-transport-select', function(e) {
+        e.stopPropagation();
+        if (!stealthModeEnabled || !window.api_origin) return;
+        const transport = $(this).val();
+        fetch(`${window.api_origin}/api/boson/stealth-mode`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${window.auth_token}` },
+            body: JSON.stringify({ enabled: true, transport: transport || undefined }),
+        }).then(r => r.ok ? r.json() : null).then(data => {
+            if (data) {
+                const tLabels = { 'wireguard': ['WireGuard', '#22c55e'], 'amnezia-wireguard': ['AmneziaWG (Stealth)', '#a78bfa'], 'vless-reality': ['VLESS Reality (TCP Stealth)', '#3b82f6'], 'relay': ['Active Proxy', '#f59e0b'] };
+                const [label, color] = tLabels[data.transport] || [data.transport, '#fff'];
+                $(this).closest('.context-menu').find('[data-pc2-access]').html(`Access: <span style="color:${color}; font-weight:500;">${label}</span>`);
+            }
+        }).catch(() => {});
     });
 
     // Use delegated event for click - opens UIContextMenu
@@ -512,10 +533,23 @@ function initPC2StatusBar() {
                     <span class="pc2-stealth-knob" style="width:14px; height:14px; border-radius:50%; background:#fff; position:absolute; top:2px; ${stealthOn ? 'right:2px;' : 'left:2px;'} transition:all 0.2s;"></span>
                 </span>
             </div>`;
+            const transportSelectHtml = `<div class="pc2-transport-select-row" style="display:${stealthOn ? 'flex' : 'none'}; align-items:center; justify-content:space-between; padding:4px 12px;">
+                <span style="color:#aaa; font-size:11px;">Transport</span>
+                <select class="pc2-bar-transport-select" style="font-size:11px; padding:2px 6px; border-radius:4px; border:1px solid #555; background:#333; color:#fff; cursor:pointer; font-family:inherit;">
+                    <option value="">Auto</option>
+                    <option value="amnezia-wireguard">AmneziaWG</option>
+                    <option value="vless-reality">VLESS Reality</option>
+                </select>
+            </div>`;
             if ($lastDivider.length) {
                 $lastDivider.before(stealthHtml);
+                $lastDivider.before(transportSelectHtml);
             } else {
                 $menu.append(stealthHtml);
+                $menu.append(transportSelectHtml);
+            }
+            if (connectivity?.forcedTransport) {
+                $menu.find('.pc2-bar-transport-select').val(connectivity.forcedTransport);
             }
         });
     });

@@ -449,6 +449,40 @@ chmod 440 /etc/sudoers.d/amneziawg"
         fi
     fi
 
+    # ============================================================
+    # Install sing-box (VLESS Reality TCP stealth transport)
+    # ============================================================
+    if command -v sing-box &> /dev/null || test -x /usr/local/bin/sing-box; then
+        echo -e "${GREEN}✓ sing-box already installed${NC}"
+    else
+        echo -e "${CYAN}Installing sing-box (VLESS Reality transport)...${NC}"
+        SINGBOX_VERSION="1.11.0"
+        if [[ "$OS" == "macos" ]]; then
+            if command -v brew &> /dev/null; then
+                brew install sing-box 2>&1 || true
+            fi
+            if ! command -v sing-box &> /dev/null; then
+                ARCH=$(uname -m)
+                [[ "$ARCH" == "arm64" ]] && SB_ARCH="arm64" || SB_ARCH="amd64"
+                SB_TMP=$(mktemp -d)
+                curl -sL "https://github.com/SagerNet/sing-box/releases/download/v${SINGBOX_VERSION}/sing-box-${SINGBOX_VERSION}-darwin-${SB_ARCH}.tar.gz" -o "$SB_TMP/sing-box.tar.gz"
+                (cd "$SB_TMP" && tar -xzf sing-box.tar.gz && cp sing-box-*/sing-box /usr/local/bin/sing-box && chmod 755 /usr/local/bin/sing-box) 2>/dev/null || true
+                rm -rf "$SB_TMP"
+            fi
+        else
+            ARCH=$(dpkg --print-architecture 2>/dev/null || echo "amd64")
+            SB_TMP=$(mktemp -d)
+            wget -q "https://github.com/SagerNet/sing-box/releases/download/v${SINGBOX_VERSION}/sing-box-${SINGBOX_VERSION}-linux-${ARCH}.tar.gz" -O "$SB_TMP/sing-box.tar.gz" 2>/dev/null || curl -sL "https://github.com/SagerNet/sing-box/releases/download/v${SINGBOX_VERSION}/sing-box-${SINGBOX_VERSION}-linux-${ARCH}.tar.gz" -o "$SB_TMP/sing-box.tar.gz"
+            (cd "$SB_TMP" && tar -xzf sing-box.tar.gz && cp sing-box-*/sing-box /usr/local/bin/sing-box && chmod 755 /usr/local/bin/sing-box) 2>/dev/null || true
+            rm -rf "$SB_TMP"
+        fi
+        if command -v sing-box &> /dev/null || test -x /usr/local/bin/sing-box; then
+            echo -e "${GREEN}✓ sing-box installed${NC}"
+        else
+            echo -e "${YELLOW}⚠ sing-box installation failed (VLESS Reality will be unavailable)${NC}"
+        fi
+    fi
+
     # Detect if running on VPS (no DISPLAY) or local machine
     # Also get public IP for VPS users
     LOCAL_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "")

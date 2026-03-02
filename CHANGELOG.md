@@ -32,9 +32,19 @@
 - **Settings UI**: Single-row Voice AI control with Install button or Enable toggle
 - **Opt-in on ARM**: Voice AI tools not auto-installed on Jetson (saves ~500MB GPU memory)
 
+#### VLESS Reality TCP Stealth Transport (2026-03-02)
+- **TCP Stealth Layer**: VLESS Reality (via sing-box) wraps AWG traffic in TLS 1.3 mimicry when all UDP is blocked
+- **Chaining Architecture**: AWG provides the tunnel, VLESS Reality provides the stealth TCP transport — double obfuscation
+- **TLS Mimicry**: Connections appear as HTTPS to www.microsoft.com with Chrome JA3/JA4 fingerprint
+- **XUDP Encapsulation**: AWG UDP packets carried transparently inside the VLESS tunnel
+- **Four-Tier Cascade**: WireGuard > AmneziaWG > VLESS Reality + AWG > ActiveProxy
+- **Supernode Setup**: sing-box server on port 8443, systemd service, watchdog cron, peer management
+- **Provisioning API**: `/api/vless/register` and `/api/vless/status` gateway endpoints
+- **Auto-install**: sing-box installed by `start-local.sh` (brew/binary) and `install-arm.sh`
+- **UI**: Transport shows "VLESS Reality (TCP Stealth)" in blue when active
+
 #### AmneziaWG Stealth Transport (2026-03-02)
 - **DPI-Resistant Tunnel**: AmneziaWG (WireGuard fork) as a stealth fallback for censored networks
-- **Three-Tier Cascade**: WireGuard > AmneziaWG > ActiveProxy, automatic failover and upgrade
 - **DPI Detection**: Automatic detection of DPI blocks (WireGuard connects but traffic is dropped)
 - **Stealth Mode**: Toggle in Settings to force AmneziaWG, bypassing standard WireGuard
 - **Supernode Support**: Separate AWG interface (awg0) on port 51821 with 10.101.0.0/16 subnet

@@ -2285,6 +2285,91 @@ async function handleApiRequest(req, res) {
     return;
   }
 
+  // ==========================================
+  // VLESS Reality API
+  // ==========================================
+
+  if (url.pathname === "/api/vless/register" && req.method === "POST") {
+    const credentialsFile = '/etc/vless-reality/credentials.json';
+    if (!fs.existsSync(credentialsFile)) {
+      res.writeHead(503, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "VLESS Reality not configured on this supernode" }));
+      return;
+    }
+
+    let body = "";
+    req.on("data", (chunk) => (body += chunk));
+    req.on("end", () => {
+      try {
+        const { username } = JSON.parse(body);
+        if (!username) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "username required" }));
+          return;
+        }
+
+        const credentials = JSON.parse(fs.readFileSync(credentialsFile, 'utf8'));
+        const normalizedUsername = username.toLowerCase().trim();
+
+        let uuid;
+        const peersFile = '/etc/vless-reality/peers.json';
+        const peers = fs.existsSync(peersFile) ? JSON.parse(fs.readFileSync(peersFile, 'utf8')) : { peers: {} };
+
+        if (peers.peers[normalizedUsername]) {
+          uuid = peers.peers[normalizedUsername].uuid;
+        } else {
+          try {
+            uuid = execSync(`/etc/vless-reality/manage-peers.sh add "${normalizedUsername}"`, { stdio: 'pipe', timeout: 10000 }).toString().trim();
+          } catch (err) {
+            console.error('[VLESS] Failed to add peer:', err.message);
+            res.writeHead(500, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Failed to provision VLESS peer" }));
+            return;
+          }
+        }
+
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({
+          uuid,
+          serverEndpoint: `69.164.241.210:${credentials.listen_port}`,
+          serverPublicKey: credentials.public_key,
+          shortId: credentials.short_id,
+          serverName: credentials.server_name,
+        }));
+      } catch (err) {
+        console.error('[VLESS] Register error:', err);
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+    return;
+  }
+
+  if (url.pathname === "/api/vless/status" && req.method === "GET") {
+    const credentialsFile = '/etc/vless-reality/credentials.json';
+    const available = fs.existsSync(credentialsFile) && fs.existsSync('/usr/local/bin/sing-box');
+    let peerCount = 0;
+    try {
+      const peers = JSON.parse(fs.readFileSync('/etc/vless-reality/peers.json', 'utf8'));
+      peerCount = Object.keys(peers.peers || {}).length;
+    } catch {}
+
+    let processRunning = false;
+    try { execSync('pgrep -x sing-box', { stdio: 'pipe' }); processRunning = true; } catch {}
+
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({
+      vlessReality: {
+        available,
+        listenPort: 8443,
+        registeredPeers: peerCount,
+        processRunning,
+        serverName: "www.microsoft.com",
+      },
+    }));
+    return;
+  }
+
   // Default: 404
   res.writeHead(404, { "Content-Type": "application/json" });
   res.end(JSON.stringify({ error: "Not found" }));
@@ -2602,5 +2687,5 @@ if (httpsAvailable) {
 }
 
 console.log(`[Gateway] PC2 Web Gateway started for *.${CONFIG.domain}`);
-console.log(`[Gateway] Proxy endpoint support: http://, proxy://, wireguard (10.100.0.0/16), amneziawg (10.101.0.0/16)`);
+console.log(`[Gateway] Proxy endpoint support: http://, proxy://, wireguard (10.100.0.0/16), amneziawg (10.101.0.0/16), vless-reality (port 8443)`);
 console.log(`[Gateway] Security: Rate limiting enabled, CORS restricted to *.ela.city`);

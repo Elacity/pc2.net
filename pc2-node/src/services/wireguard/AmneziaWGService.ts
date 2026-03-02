@@ -237,7 +237,7 @@ export class AmneziaWGService {
   /**
    * Configure and bring up the AmneziaWG interface with obfuscation params.
    */
-  async connect(provision?: AWGProvisionResponse): Promise<void> {
+  async connect(provision?: AWGProvisionResponse, options?: { endpointOverride?: string }): Promise<void> {
     if (!provision) {
       provision = await this.provision();
     }
@@ -245,6 +245,7 @@ export class AmneziaWGService {
     const { privateKey } = this.ensureKeypair();
     const confPath = join(this.awgDir, `${AWG_INTERFACE}.conf`);
     const obf = provision.obfuscation;
+    const endpoint = options?.endpointOverride || provision.serverEndpoint;
 
     const interfaceLines = [
       '[Interface]',
@@ -273,7 +274,7 @@ export class AmneziaWGService {
       '',
       '[Peer]',
       `PublicKey = ${provision.serverPublicKey}`,
-      `Endpoint = ${provision.serverEndpoint}`,
+      `Endpoint = ${endpoint}`,
       `AllowedIPs = ${provision.serverIP}/32`,
       'PersistentKeepalive = 25',
     ].join('\n');

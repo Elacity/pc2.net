@@ -231,6 +231,14 @@ export default {
                                     </label>
                                 </div>
                             </div>
+                            <div class="pc2-card-row" id="pc2-transport-selector-row" style="display:none;">
+                                <span class="pc2-card-label">Transport</span>
+                                <select id="pc2-transport-select" style="font-size:12px; padding:3px 8px; border-radius:6px; border:1px solid #d1d5db; background:#f9fafb; cursor:pointer; font-family:inherit; color:#333;">
+                                    <option value="">Auto</option>
+                                    <option value="amnezia-wireguard">AmneziaWG (UDP)</option>
+                                    <option value="vless-reality">VLESS Reality (TCP)</option>
+                                </select>
+                            </div>
                             <p style="margin:4px 0 0; font-size:11px; color:#999;">Forces AmneziaWG stealth tunnel, bypassing standard WireGuard. Use if behind DPI (China, Russia).</p>
                         </div>
                     </div>
@@ -1059,12 +1067,14 @@ export default {
                             const transportLabels = {
                                 'wireguard': 'WireGuard',
                                 'amnezia-wireguard': 'AmneziaWG (Stealth)',
+                                'vless-reality': 'VLESS Reality (TCP Stealth)',
                                 'relay': 'Active Proxy',
                                 'direct': 'Direct',
                             };
                             const transportColors = {
                                 'wireguard': '#22c55e',
                                 'amnezia-wireguard': '#a78bfa',
+                                'vless-reality': '#3b82f6',
                                 'relay': '#f59e0b',
                                 'direct': '#22c55e',
                             };
@@ -1075,6 +1085,9 @@ export default {
                             if (connData.stealthMode) {
                                 $stealthToggle.prop('checked', true);
                                 updateStealthVisual(true);
+                                if (connData.forcedTransport) {
+                                    $transportSelect.val(connData.forcedTransport);
+                                }
                             }
                         }
                     } catch (err) {
@@ -1098,33 +1111,54 @@ export default {
         const $stealthTrack = $stealthToggle.parent().find('span').eq(0);
         const $stealthKnob = $stealthToggle.parent().find('span').eq(1);
 
+        const $transportSelectorRow = $el_window.find('#pc2-transport-selector-row');
+        const $transportSelect = $el_window.find('#pc2-transport-select');
+
         function updateStealthVisual(on) {
             $stealthTrack.css('background', on ? '#22c55e' : '#ccc');
             $stealthKnob.css('left', on ? '18px' : '2px');
             $stealthLabel.text(on ? 'On' : 'Off').css('color', on ? '#22c55e' : '#888');
+            $transportSelectorRow.toggle(on);
         }
 
-        $stealthToggle.on('change', async function() {
-            const enabled = this.checked;
-            updateStealthVisual(enabled);
-            if (enabled) {
-                $el_window.find('#pc2-transport-type').html('<span style="color:#a78bfa; font-weight:500;">AmneziaWG (Stealth)</span>');
-            } else {
-                $el_window.find('#pc2-transport-type').html('<span style="color:#22c55e; font-weight:500;">WireGuard</span>');
-            }
+        async function applyStealthMode(enabled, transport) {
             if (isPC2Mode() && window.api_origin) {
                 try {
                     const authToken = getAuthToken();
                     const headers = { 'Content-Type': 'application/json' };
                     if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
-                    await fetch(new URL('/api/boson/stealth-mode', window.api_origin).toString(), {
+                    const resp = await fetch(new URL('/api/boson/stealth-mode', window.api_origin).toString(), {
                         method: 'POST',
                         headers,
-                        body: JSON.stringify({ enabled }),
+                        body: JSON.stringify({ enabled, transport: transport || undefined }),
                     });
+                    if (resp.ok) {
+                        const data = await resp.json();
+                        const transportLabelsMap = {
+                            'wireguard': ['WireGuard', '#22c55e'],
+                            'amnezia-wireguard': ['AmneziaWG (Stealth)', '#a78bfa'],
+                            'vless-reality': ['VLESS Reality (TCP Stealth)', '#3b82f6'],
+                            'relay': ['Active Proxy', '#f59e0b'],
+                        };
+                        const [label, color] = transportLabelsMap[data.transport] || [data.transport, '#888'];
+                        $el_window.find('#pc2-transport-type').html(`<span style="color:${color}; font-weight:500;">${label}</span>`);
+                    }
                 } catch (err) {
                     logger.warn('[PC2Tab] Failed to set stealth mode:', err);
                 }
+            }
+        }
+
+        $stealthToggle.on('change', async function() {
+            const enabled = this.checked;
+            updateStealthVisual(enabled);
+            const transport = enabled ? $transportSelect.val() : '';
+            await applyStealthMode(enabled, transport);
+        });
+
+        $transportSelect.on('change', async function() {
+            if ($stealthToggle.prop('checked')) {
+                await applyStealthMode(true, $(this).val());
             }
         });
 

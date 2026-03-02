@@ -14,6 +14,7 @@ import { NetworkDetector, type NATType } from './NetworkDetector.js';
 import { ActiveProxyClient, ConnectionState, type ProxyConnection } from './ActiveProxyClient.js';
 import { WireGuardService } from '../wireguard/WireGuardService.js';
 import { AmneziaWGService } from '../wireguard/AmneziaWGService.js';
+import { VLESSRealityService } from '../vless/VLESSRealityService.js';
 import { fromBase58 } from './IdentityService.js';
 import { execSync } from 'child_process';
 import net, { type Server, type Socket } from 'net';
@@ -42,8 +43,9 @@ export interface ConnectionStatus {
   connectedAt: string | null;
   lastHeartbeat: string | null;
   publicEndpoint: string | null;
-  natType: 'direct' | 'upnp' | 'relay' | 'wireguard' | 'amnezia-wireguard' | 'unknown';
+  natType: 'direct' | 'upnp' | 'relay' | 'wireguard' | 'amnezia-wireguard' | 'vless-reality' | 'unknown';
   stealthMode: boolean;
+  forcedTransport: 'amnezia-wireguard' | 'vless-reality' | null;
 }
 
 // Default super nodes - multiple nodes for failover
@@ -140,10 +142,12 @@ export class ConnectivityService {
   private activeProxyClient: ActiveProxyClient | null = null;
   private wireGuardService: WireGuardService | null = null;
   private amneziaWGService: AmneziaWGService | null = null;
+  private vlessRealityService: VLESSRealityService | null = null;
   private wireGuardRetryTimer: NodeJS.Timeout | null = null;
   private wireGuardRetryAttempts: number = 0;
   private wgBlockedByDPI: boolean = false;
   private stealthMode: boolean = false;
+  private forcedTransport: 'amnezia-wireguard' | 'vless-reality' | null = null;
   private lastGatewayIP: string | null = null;
   private currentSuperNodeIndex: number = 0;
   private failedSuperNodes: Set<string> = new Set();
@@ -168,6 +172,7 @@ export class ConnectivityService {
       publicEndpoint: null,
       natType: 'unknown',
       stealthMode: false,
+      forcedTransport: null,
     };
   }
 
@@ -204,19 +209,47 @@ export class ConnectivityService {
     this.amneziaWGService = service;
   }
 
-  async setStealthMode(enabled: boolean): Promise<void> {
+  setVLESSRealityService(service: VLESSRealityService): void {
+    this.vlessRealityService = service;
+  }
+
+  async setStealthMode(enabled: boolean, forceTransport?: 'amnezia-wireguard' | 'vless-reality'): Promise<void> {
     const wasEnabled = this.stealthMode;
     this.stealthMode = enabled;
+    this.forcedTransport = forceTransport || null;
 
-    if (!this.isRunning || enabled === wasEnabled) return;
+    if (!this.isRunning || (enabled === wasEnabled && !forceTransport)) return;
 
     if (enabled) {
-      logger.info('🔒 Stealth mode activated -- switching to AmneziaWG');
-      // Disconnect WireGuard if active
+      logger.info(`🔒 Stealth mode activated${forceTransport ? ` (forced: ${forceTransport})` : ''}`);
+      // Disconnect current transports
       if (this.wireGuardService?.isConnected()) {
         await this.wireGuardService.disconnect();
       }
-      // Connect via AmneziaWG
+      if (this.vlessRealityService?.isConnected()) {
+        await this.vlessRealityService.disconnect();
+      }
+      if (this.amneziaWGService?.isConnected()) {
+        await this.amneziaWGService.disconnect();
+      }
+
+      // Force VLESS Reality (Tier 3): AWG over VLESS tunnel
+      if (forceTransport === 'vless-reality' && this.vlessRealityService?.isAvailable() && this.amneziaWGService?.isAvailable()) {
+        const ok = await this.connectViaVLESSReality();
+        if (ok) {
+          logger.info('🛡️ Stealth mode: connected via VLESS Reality (TCP stealth)');
+          if (this.activeProxyClient) {
+            await this.activeProxyClient.disconnect();
+            this.activeProxyClient = null;
+          }
+          return;
+        }
+        logger.warn('⚠️ Forced VLESS Reality failed, falling back to ActiveProxy');
+        this.fallbackToActiveProxy();
+        return;
+      }
+
+      // Default stealth: try AWG direct first, then VLESS Reality
       if (this.amneziaWGService && this.amneziaWGService.isAvailable()) {
         const ok = await this.connectViaAmneziaWG();
         if (ok) {
@@ -227,12 +260,27 @@ export class ConnectivityService {
           }
           return;
         }
+
+        if (this.vlessRealityService?.isAvailable()) {
+          const vlessOk = await this.connectViaVLESSReality();
+          if (vlessOk) {
+            logger.info('🛡️ Stealth mode: connected via VLESS Reality (TCP stealth)');
+            if (this.activeProxyClient) {
+              await this.activeProxyClient.disconnect();
+              this.activeProxyClient = null;
+            }
+            return;
+          }
+        }
       }
-      logger.warn('⚠️ Stealth mode: AmneziaWG unavailable, falling back to ActiveProxy');
+      logger.warn('⚠️ Stealth mode: stealth transports unavailable, falling back to ActiveProxy');
       this.fallbackToActiveProxy();
     } else {
       logger.info('🔓 Stealth mode deactivated -- switching back to WireGuard');
-      // Disconnect AmneziaWG if active
+      // Disconnect AmneziaWG and VLESS Reality if active
+      if (this.vlessRealityService?.isConnected()) {
+        await this.vlessRealityService.disconnect();
+      }
       if (this.amneziaWGService?.isConnected()) {
         await this.amneziaWGService.disconnect();
       }
@@ -357,6 +405,75 @@ export class ConnectivityService {
   }
 
   /**
+   * Attempt VLESS Reality + AmneziaWG chained tunnel (Tier 3).
+   * Wraps AWG traffic inside a VLESS Reality TLS tunnel for TCP-based stealth
+   * when all UDP is blocked. DPI sees HTTPS to www.microsoft.com.
+   */
+  private async connectViaVLESSReality(): Promise<boolean> {
+    if (!this.vlessRealityService || !this.vlessRealityService.isAvailable()) {
+      return false;
+    }
+    if (!this.amneziaWGService || !this.amneziaWGService.isAvailable()) {
+      return false;
+    }
+    if (!this.usernameService || !this.usernameService.hasUsername()) {
+      return false;
+    }
+
+    try {
+      logger.info('[Connectivity] Attempting VLESS Reality + AmneziaWG chained tunnel...');
+      await this.vlessRealityService.connect();
+
+      const localPort = this.vlessRealityService.getTunnelLocalPort();
+      const endpointOverride = `127.0.0.1:${localPort}`;
+      await this.amneziaWGService.connect(undefined, { endpointOverride });
+
+      const awgIP = this.amneziaWGService.getAssignedIP();
+      if (!awgIP) {
+        throw new Error('No IP assigned after AWG-over-VLESS connect');
+      }
+
+      const endpoint = `http://${awgIP}:${this.config.localPort}`;
+      const result = await this.usernameService.updateEndpoint(endpoint);
+
+      if (result.success) {
+        this.status.connected = true;
+        this.status.natType = 'vless-reality';
+        this.status.publicEndpoint = this.usernameService.getPublicUrl();
+        this.status.connectedAt = new Date().toISOString();
+        logger.info(`[Connectivity] VLESS Reality chained tunnel active: ${endpoint}`);
+
+        const serverIP = this.amneziaWGService.getServerIP();
+        if (serverIP) {
+          this.amneziaWGService.setOnTunnelDown(() => this.handleVLESSRealityDown());
+          this.amneziaWGService.startHealthCheck(serverIP);
+        }
+        this.vlessRealityService.startHealthCheck();
+        return true;
+      }
+
+      logger.warn('[Connectivity] VLESS Reality connected but endpoint registration failed');
+      await this.amneziaWGService.disconnect();
+      await this.vlessRealityService.disconnect();
+      return false;
+    } catch (error) {
+      logger.warn(`[Connectivity] VLESS Reality chained tunnel failed: ${error}`);
+      try { await this.amneziaWGService?.disconnect(); } catch {}
+      try { await this.vlessRealityService?.disconnect(); } catch {}
+      return false;
+    }
+  }
+
+  private handleVLESSRealityDown(): void {
+    logger.warn('[Connectivity] VLESS Reality tunnel down');
+    this.status.connected = false;
+    this.status.natType = 'unknown';
+    try { this.vlessRealityService?.disconnect(); } catch {}
+    this.fallbackToActiveProxy();
+    this.scheduleWireGuardRetry();
+  }
+
+  /**
    * Start connectivity service
    */
   async start(): Promise<void> {
@@ -414,7 +531,7 @@ export class ConnectivityService {
         logger.info('🔒 Stealth mode enabled - skipping standard WireGuard');
       }
 
-      // Try AmneziaWG stealth tunnel (fallback or primary in stealth mode)
+      // Tier 2: AmneziaWG stealth tunnel (fallback or primary in stealth mode)
       if (!connected && this.amneziaWGService && this.amneziaWGService.isAvailable()) {
         connected = await this.connectViaAmneziaWG();
         if (connected) {
@@ -422,7 +539,15 @@ export class ConnectivityService {
         }
       }
 
-      // Fall back to Boson ActiveProxy
+      // Tier 3: VLESS Reality + AmneziaWG chained (TCP stealth when all UDP blocked)
+      if (!connected && this.vlessRealityService?.isAvailable() && this.amneziaWGService?.isAvailable()) {
+        connected = await this.connectViaVLESSReality();
+        if (connected) {
+          logger.info('🛡️ Connected via VLESS Reality chained tunnel (TCP stealth)');
+        }
+      }
+
+      // Tier 4: Boson ActiveProxy
       if (!connected && this.publicKey && this.privateKey && this.nodeId) {
         try {
           await this.connectViaActiveProxy();
@@ -753,6 +878,16 @@ export class ConnectivityService {
       await this.wireGuardService.disconnect();
     }
 
+    // Stop AmneziaWG tunnel
+    if (this.amneziaWGService?.isConnected()) {
+      await this.amneziaWGService.disconnect();
+    }
+
+    // Stop VLESS Reality tunnel
+    if (this.vlessRealityService?.isConnected()) {
+      await this.vlessRealityService.disconnect();
+    }
+
     // Stop Active Proxy client
     if (this.activeProxyClient) {
       await this.activeProxyClient.disconnect();
@@ -974,6 +1109,9 @@ export class ConnectivityService {
         this.networkDetector.clearCache();
         this.wgBlockedByDPI = false;
 
+        if (this.vlessRealityService?.isConnected()) {
+          this.vlessRealityService.disconnect().catch(() => {});
+        }
         if (this.amneziaWGService?.isConnected()) {
           this.amneziaWGService.disconnect().catch(() => {});
           this.handleAmneziaWGDown();
@@ -1029,6 +1167,19 @@ export class ConnectivityService {
           return;
         }
       }
+
+      // Try VLESS Reality chained tunnel
+      if (this.vlessRealityService?.isAvailable() && this.amneziaWGService?.isAvailable()) {
+        const vlessConnected = await this.connectViaVLESSReality();
+        if (vlessConnected) {
+          logger.info('🛡️ Reconnected via VLESS Reality chained tunnel');
+          if (this.activeProxyClient) {
+            await this.activeProxyClient.disconnect();
+            this.activeProxyClient = null;
+          }
+          return;
+        }
+      }
       
       // Fall back to ActiveProxy for NAT nodes
       if ((this.status.natType === 'relay' || this.status.natType === 'unknown') && this.publicKey && this.privateKey && this.nodeId) {
@@ -1049,7 +1200,7 @@ export class ConnectivityService {
    * Get connection status
    */
   getStatus(): ConnectionStatus {
-    return { ...this.status, stealthMode: this.stealthMode };
+    return { ...this.status, stealthMode: this.stealthMode, forcedTransport: this.forcedTransport };
   }
 
   /**
@@ -1084,11 +1235,19 @@ export class ConnectivityService {
     this.status.natType = 'unknown';
     this.wgBlockedByDPI = true;
 
-    // Try AmneziaWG stealth tunnel before falling back to ActiveProxy
+    // Cascade: AWG > VLESS Reality > ActiveProxy
     if (this.amneziaWGService && this.amneziaWGService.isAvailable()) {
       this.connectViaAmneziaWG().then((ok) => {
         if (ok) {
           logger.info('🕵️ Fell back to AmneziaWG stealth tunnel after WireGuard loss');
+        } else if (this.vlessRealityService?.isAvailable()) {
+          return this.connectViaVLESSReality().then((vlessOk) => {
+            if (vlessOk) {
+              logger.info('🛡️ Fell back to VLESS Reality after WireGuard + AWG loss');
+            } else {
+              this.fallbackToActiveProxy();
+            }
+          });
         } else {
           this.fallbackToActiveProxy();
         }
@@ -1105,13 +1264,25 @@ export class ConnectivityService {
   }
 
   private handleAmneziaWGDown(): void {
-    logger.warn('⚠️ AmneziaWG stealth tunnel lost -- falling back to Boson relay');
+    logger.warn('⚠️ AmneziaWG stealth tunnel lost');
     this.status.connected = false;
     this.status.natType = 'unknown';
 
-    this.fallbackToActiveProxy();
+    // Try VLESS Reality chaining before falling to ActiveProxy
+    if (this.vlessRealityService?.isAvailable() && this.amneziaWGService?.isAvailable()) {
+      this.connectViaVLESSReality().then((ok) => {
+        if (ok) {
+          logger.info('🛡️ Recovered via VLESS Reality chained tunnel');
+        } else {
+          this.fallbackToActiveProxy();
+        }
+      }).catch(() => {
+        this.fallbackToActiveProxy();
+      });
+    } else {
+      this.fallbackToActiveProxy();
+    }
 
-    // Schedule retry: try AmneziaWG again in background, then WireGuard
     this.wireGuardRetryAttempts = 0;
     this.scheduleWireGuardRetry();
   }
@@ -1188,6 +1359,24 @@ export class ConnectivityService {
           }
         } catch (error) {
           logger.warn(`[Connectivity] AmneziaWG retry error: ${error}`);
+        }
+      }
+
+      // Try VLESS Reality chained tunnel
+      if (this.vlessRealityService?.isAvailable() && this.amneziaWGService?.isAvailable()) {
+        logger.info('🔄 Attempting VLESS Reality chained tunnel...');
+        try {
+          const connected = await this.connectViaVLESSReality();
+          if (connected) {
+            if (this.activeProxyClient) {
+              await this.activeProxyClient.disconnect();
+              this.activeProxyClient = null;
+            }
+            logger.info('🛡️ VLESS Reality chained tunnel established');
+            return;
+          }
+        } catch (error) {
+          logger.warn(`[Connectivity] VLESS Reality retry error: ${error}`);
         }
       }
 

@@ -1,32 +1,58 @@
-# Stealth Mode: AmneziaWG DPI-Resistant Transport
+# Stealth Mode: Multi-Layer DPI-Resistant Transport
 
 > For users behind Deep Packet Inspection (DPI) firewalls — China GFW, Russian ISP blocks, Iranian censorship, corporate networks.
 
 ## What is Stealth Mode?
 
-Stealth Mode uses **AmneziaWG 2.0**, a fork of WireGuard that adds transport-layer obfuscation to make VPN tunnels undetectable by DPI systems. While standard WireGuard uses a recognizable handshake pattern that can be fingerprinted and blocked, AmneziaWG:
+Stealth Mode activates PC2's DPI-resistant transport layers. Two complementary technologies work together:
+
+### AmneziaWG 2.0 (UDP Stealth)
+
+A WireGuard fork that adds transport-layer obfuscation to make UDP VPN tunnels undetectable by DPI:
 
 - **Randomizes headers** (H1-H4) to eliminate the WireGuard fingerprint
 - **Pads packets** (S1-S4) and injects junk traffic (Jc, Jmin, Jmax)
 - **Mimics real protocol signatures** (I1) — tunnel initiation packets look like a QUIC handshake (the protocol Chrome uses for Google/YouTube), so DPI systems classify the connection as normal web traffic rather than an unknown VPN
 
+### VLESS Reality (TCP Stealth)
+
+When all UDP is blocked (some ISPs and firewalls block unknown UDP entirely), PC2 wraps AmneziaWG traffic inside a VLESS Reality tunnel:
+
+- **TLS 1.3 mimicry** — "borrows" the TLS certificate of a real website (www.microsoft.com) so DPI sees a perfectly valid HTTPS handshake
+- **Chrome fingerprint** — uses uTLS to match Chrome's JA3/JA4 TLS fingerprint, making the connection indistinguishable from regular browsing
+- **XUDP encapsulation** — carries AWG's UDP packets inside the TCP/TLS tunnel transparently
+- **Chaining architecture** — AWG handles the bidirectional VPN tunnel, VLESS handles the stealth TCP transport. Double obfuscation: AWG randomizes + VLESS mimics HTTPS
+
 The cryptographic core remains identical to WireGuard (ChaCha20-Poly1305, Curve25519) — only the transport layer is modified.
 
-## Three-Tier Transport Cascade
+## Four-Tier Transport Cascade
 
 PC2 uses a cascading transport system that automatically finds the best available connection:
 
 ```
-1. WireGuard (primary)     — fastest, audited, works on most networks
-2. AmneziaWG (stealth)     — DPI-resistant, nearly as fast, for censored networks
-3. ActiveProxy (relay)     — TCP relay via Boson supernode, works everywhere
+1. WireGuard (primary)           — fastest, audited, works on most networks
+2. AmneziaWG (UDP stealth)       — DPI-resistant, nearly as fast, for censored networks
+3. VLESS Reality + AWG (TCP)     — maximum stealth, for networks blocking all UDP
+4. ActiveProxy (relay)           — TCP relay via Boson supernode, last resort
 ```
 
 The system automatically falls down the cascade when a transport fails and periodically retries higher-tier transports in the background.
 
 ### Automatic DPI Detection
 
-When standard WireGuard connects but immediately fails its health check (interface is up but packets are dropped), PC2 flags this as a likely DPI block and automatically switches to AmneziaWG. This flag resets when the network changes (e.g., switching WiFi networks).
+When standard WireGuard connects but immediately fails its health check (interface is up but packets are dropped), PC2 flags this as a likely DPI block and automatically switches to AmneziaWG. If AmneziaWG also fails (all UDP blocked), it tries VLESS Reality wrapping before falling to ActiveProxy. The DPI flag resets when the network changes (e.g., switching WiFi networks).
+
+### How VLESS Reality Chaining Works
+
+```
+Client AWG ──UDP──> sing-box client ──TCP/TLS──> sing-box server ──UDP──> AWG server
+                    (localhost:51822)    (port 8443)                  (port 51821)
+                    
+DPI sees: TLS 1.3 connection to www.microsoft.com (legitimate HTTPS)
+Reality:  AmneziaWG packets encapsulated in VLESS tunnel via XUDP
+```
+
+The supernode runs sing-box as a VLESS Reality server on port 8443. The client's sing-box creates a local UDP tunnel (127.0.0.1:51822) that forwards AWG packets through the VLESS tunnel. AWG connects to this local port instead of directly to the supernode. The gateway sees a normal AWG peer — no routing changes needed.
 
 ## Configuration
 
@@ -63,9 +89,21 @@ If you don't want AmneziaWG available even as a fallback:
 }
 ```
 
+### Disable VLESS Reality Fallback
+
+```json
+{
+  "boson": {
+    "vless_reality": {
+      "enabled": false
+    }
+  }
+}
+```
+
 ## Installation
 
-AmneziaWG is automatically installed by the PC2 install scripts:
+AmneziaWG and sing-box (for VLESS Reality) are automatically installed by the PC2 install scripts:
 
 - **macOS/Linux desktop:** `start-local.sh` builds `amneziawg-go` from source using Go
 - **ARM/Jetson devices:** `install-arm.sh` does the same
@@ -104,12 +142,20 @@ The supernode runs a separate AmneziaWG interface (`awg0`) on port `51821` with 
 
 The supernode infrastructure includes:
 
+**AmneziaWG:**
 - **Systemd service** (`pc2-amneziawg.service`) — manages the `awg0` interface, auto-starts on boot
 - **Crash watchdog** (`/etc/cron.d/amneziawg-watchdog`) — checks every minute if `amneziawg-go` is alive; restarts via systemd if crashed (necessary because AmneziaWG is a userspace Go binary, unlike WireGuard which runs as a kernel module)
 - **Gateway healthcheck** — probes both WireGuard (`10.100.*`) and AmneziaWG (`10.101.*`) peers every 60s, flushing stale sockets for unreachable peers
 - **Provisioning API** (`/api/awg/register`) — handles client registration, IP allocation, and distributes obfuscation + I1 parameters
 
-### Client Side
+**VLESS Reality (sing-box):**
+- **sing-box server** on port `8443` — VLESS Reality inbound with TLS 1.3 mimicry (www.microsoft.com), direct outbound to forward decapsulated AWG UDP packets to port `51821`
+- **Systemd service** (`pc2-vless-reality.service`) — manages sing-box, auto-restarts on crash (RestartSec=5)
+- **Crash watchdog** (`/etc/cron.d/vless-reality-watchdog`) — checks every minute if `sing-box` is alive
+- **Peer management** (`/etc/vless-reality/manage-peers.sh`) — add/remove VLESS users, auto-reloads sing-box config
+- **Provisioning API** (`/api/vless/register`) — assigns UUID, returns Reality public key + short ID for client config
+
+### Client Side (AmneziaWG direct)
 
 1. PC2 node checks if `amneziawg-go` and `awg-quick` are installed
 2. Generates a keypair (same Curve25519 format as WireGuard)
@@ -119,6 +165,16 @@ The supernode infrastructure includes:
 6. Cleans up any stale processes/state from previous connections
 7. Brings up `awg0` interface using `awg-quick`
 8. Registers `http://<awg-ip>:4200` with the gateway
+
+### Client Side (VLESS Reality chained — when UDP is blocked)
+
+1. PC2 node detects that direct AWG connection failed (UDP blocked)
+2. Calls `/api/vless/register` to get UUID + Reality credentials
+3. Generates sing-box client config: local UDP tunnel (127.0.0.1:51822) → VLESS Reality → supernode:51821
+4. Starts sing-box as a background process
+5. Connects AWG through the local tunnel (endpoint override: 127.0.0.1:51822)
+6. AWG packets travel inside the VLESS TLS tunnel transparently
+7. Gateway sees a normal AWG peer — no changes needed
 
 ### Obfuscation Parameters (AWG 2.0)
 

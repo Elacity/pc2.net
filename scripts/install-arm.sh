@@ -34,7 +34,16 @@ CYAN='\033[0;36m'
 NC='\033[0m'
 
 # Configuration
-PC2_DIR="${PC2_DIR:-$HOME/pc2.net}"
+# When run via sudo, $HOME is /root. Resolve the REAL user's home to avoid
+# creating a duplicate installation under /root/pc2.net.
+if [ -n "$SUDO_USER" ]; then
+    REAL_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
+    REAL_USER="$SUDO_USER"
+else
+    REAL_HOME="$HOME"
+    REAL_USER="$(whoami)"
+fi
+PC2_DIR="${PC2_DIR:-$REAL_HOME/pc2.net}"
 PC2_PORT="${PC2_PORT:-4200}"
 REPO_URL="https://github.com/Elacity/pc2.net.git"
 REPO_BRANCH="${PC2_BRANCH:-main}"
@@ -675,12 +684,18 @@ install_pc2() {
     echo ""
     print_step "Installing PC2 to ${PC2_DIR}..."
 
+    # When running via sudo, clone/pull as the real user to keep correct ownership
+    RUN_AS=""
+    if [ -n "$SUDO_USER" ]; then
+        RUN_AS="sudo -u $REAL_USER"
+    fi
+
     if [ -d "$PC2_DIR" ]; then
         print_warn "Existing installation found. Updating..."
         cd "$PC2_DIR"
-        git pull origin "$REPO_BRANCH"
+        $RUN_AS git pull origin "$REPO_BRANCH"
     else
-        git clone -b "$REPO_BRANCH" "$REPO_URL" "$PC2_DIR"
+        $RUN_AS git clone -b "$REPO_BRANCH" "$REPO_URL" "$PC2_DIR"
         cd "$PC2_DIR"
     fi
 
@@ -688,8 +703,8 @@ install_pc2() {
     PARTICLE_ENV="$PC2_DIR/packages/particle-auth/.env"
     if [[ ! -f "$PARTICLE_ENV" ]]; then
         print_step "Setting up Particle Network configuration..."
-        mkdir -p "$PC2_DIR/packages/particle-auth"
-        cat > "$PARTICLE_ENV" << 'PARTICLE_EOF'
+        $RUN_AS mkdir -p "$PC2_DIR/packages/particle-auth"
+        $RUN_AS tee "$PARTICLE_ENV" > /dev/null << 'PARTICLE_EOF'
 VITE_PARTICLE_PROJECT_ID=01cdbdd6-b07e-45b5-81ca-7036e45dff0d
 VITE_PARTICLE_CLIENT_KEY=cMSSRMUCgciyuStuvPg2FSLKSovXDmrbvknJJnLU
 VITE_PARTICLE_APP_ID=1567a90d-9ff3-459a-bca8-d264685482cb
@@ -706,23 +721,23 @@ PARTICLE_EOF
     fi
 
     print_step "Installing dependencies (this takes a few minutes on ARM)..."
-    npm install --legacy-peer-deps --ignore-scripts || true
+    $RUN_AS npm install --legacy-peer-deps --ignore-scripts || true
 
     cd pc2-node
-    npm install --legacy-peer-deps || true
+    $RUN_AS npm install --legacy-peer-deps || true
     cd ..
 
     # Rebuild native modules (canvas is optional — if it fails, thumbnails just won't work)
     print_step "Building native modules..."
-    npm rebuild 2>&1 || true
+    $RUN_AS npm rebuild 2>&1 || true
     cd pc2-node
-    npm rebuild sharp 2>&1 || true
-    npm rebuild canvas 2>&1 || print_warn "Canvas compilation failed (thumbnails for PDFs/text disabled). This is optional and non-critical."
-    npm rebuild 2>&1 || true
+    $RUN_AS npm rebuild sharp 2>&1 || true
+    $RUN_AS npm rebuild canvas 2>&1 || print_warn "Canvas compilation failed (thumbnails for PDFs/text disabled). This is optional and non-critical."
+    $RUN_AS npm rebuild 2>&1 || true
     cd ..
 
     print_step "Building PC2..."
-    npm run build:pc2
+    $RUN_AS npm run build:pc2
 
     print_ok "PC2 installed and built"
 }
@@ -737,20 +752,25 @@ start_pc2() {
 
     cd "$PC2_DIR"
 
-    # Stop any existing instance
-    pm2 delete pc2 2>/dev/null || true
+    if [ -n "$SUDO_USER" ]; then
+        # Running under sudo -- execute PM2 as the real user to avoid
+        # creating a root-owned PM2 instance that hijacks port 4200
+        sudo -u "$REAL_USER" bash -c "cd '$PC2_DIR' && pm2 delete pc2 2>/dev/null; pm2 start ecosystem.config.cjs && pm2 save"
 
-    # Start with ecosystem config
-    pm2 start ecosystem.config.cjs
+        NODE_BIN_DIR=$(dirname "$(which node)")
+        PM2_BIN=$(which pm2)
+        env PATH=$PATH:$NODE_BIN_DIR $PM2_BIN startup systemd -u "$REAL_USER" --hp "$REAL_HOME" 2>/dev/null || true
+        sudo -u "$REAL_USER" pm2 save 2>/dev/null || true
+    else
+        pm2 delete pc2 2>/dev/null || true
+        pm2 start ecosystem.config.cjs
+        pm2 save
 
-    # Save PM2 process list so it survives reboot
-    pm2 save
-
-    # Set up PM2 to start on boot (sudo credentials are already cached from earlier steps)
-    NODE_BIN_DIR=$(dirname "$(which node)")
-    PM2_BIN=$(which pm2)
-    sudo env PATH=$PATH:$NODE_BIN_DIR $PM2_BIN startup systemd -u $USER --hp $HOME 2>/dev/null || true
-    pm2 save 2>/dev/null || true
+        NODE_BIN_DIR=$(dirname "$(which node)")
+        PM2_BIN=$(which pm2)
+        sudo env PATH=$PATH:$NODE_BIN_DIR $PM2_BIN startup systemd -u $USER --hp $HOME 2>/dev/null || true
+        pm2 save 2>/dev/null || true
+    fi
 
     print_ok "PC2 running with PM2"
 }
@@ -820,6 +840,16 @@ main() {
     print_banner
     check_arch
     detect_platform
+
+    # Safety: if running via sudo and there's a rogue /root/pc2.net from a
+    # previous bad install, warn and clean it up to prevent port conflicts
+    if [ -n "$SUDO_USER" ] && [ -d "/root/pc2.net" ] && [ "$PC2_DIR" != "/root/pc2.net" ]; then
+        print_warn "Found rogue PC2 installation at /root/pc2.net (from previous sudo install)"
+        print_step "Cleaning up to prevent port 4200 conflict..."
+        (cd /root/pc2.net && pm2 delete pc2 2>/dev/null) || true
+        rm -rf /root/pc2.net
+        print_ok "Rogue installation removed"
+    fi
     install_prerequisites
     install_nodejs
     install_pm2

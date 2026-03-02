@@ -108,26 +108,71 @@ export default {
             <!-- Connected State -->
             <div id="pc2-connected" style="display: none;">
                 
-                <!-- Node Info -->
+                <!-- Node Info + Connection (merged) -->
                 <div class="pc2-section">
                     <div class="pc2-section-title">${i18n('node_info')}</div>
                     <div class="pc2-group">
                         <div class="pc2-group-row">
                             <div class="pc2-card-row">
                                 <span class="pc2-card-label">URL</span>
-                                <span id="pc2-node-url" class="pc2-card-value" style="font-family: monospace;">-</span>
+                                <span style="display:flex; align-items:center; gap:6px;">
+                                    <span id="pc2-node-url" class="pc2-card-value" style="font-family: monospace;">-</span>
+                                    <svg class="pc2-copy-btn" data-copy-from="pc2-node-url" style="width:14px;height:14px;cursor:pointer;opacity:0.5;flex-shrink:0;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                                </span>
                             </div>
                         </div>
                         <div class="pc2-group-row">
                             <div class="pc2-card-row">
                                 <span class="pc2-card-label">IP Address</span>
-                                <span id="pc2-node-ip" class="pc2-card-value" style="font-family: monospace;">-</span>
+                                <span style="display:flex; align-items:center; gap:6px;">
+                                    <span id="pc2-node-ip" class="pc2-card-value" style="font-family: monospace;">-</span>
+                                    <svg class="pc2-copy-btn" data-copy-from="pc2-node-ip" style="width:14px;height:14px;cursor:pointer;opacity:0.5;flex-shrink:0;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                                </span>
                             </div>
                         </div>
                         <div class="pc2-group-row">
                             <div class="pc2-card-row">
                                 <span class="pc2-card-label">${i18n('your_wallet')}</span>
                                 <span id="pc2-wallet" class="pc2-card-value" style="font-family: monospace;">-</span>
+                            </div>
+                        </div>
+                        <div class="pc2-group-row">
+                            <div class="pc2-card-row">
+                                <span class="pc2-card-label">${i18n('status')}</span>
+                                <div style="display: flex; align-items: center; gap: 6px;">
+                                    <span class="pc2-status-dot" id="pc2-status-dot"></span>
+                                    <span id="pc2-status-text" class="pc2-card-value">${i18n('not_connected')}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="pc2-group-row">
+                            <div class="pc2-card-row">
+                                <span class="pc2-card-label">Transport</span>
+                                <span id="pc2-transport-type" class="pc2-card-value">-</span>
+                            </div>
+                        </div>
+                        <div class="pc2-group-row">
+                            <div class="pc2-card-row">
+                                <span class="pc2-card-label" style="display:flex; align-items:center; gap:4px;">Stealth Mode<span class="pc2-tip" data-tip="Routes traffic through obfuscated tunnels to bypass Deep Packet Inspection (DPI). Auto-detects blocking and selects the best stealth transport."><svg style="width:13px;height:13px;opacity:0.4;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></span></span>
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <span id="pc2-stealth-label" style="font-size:12px; color:#888;">Off</span>
+                                    <label style="position:relative; display:inline-block; width:34px; height:18px; cursor:pointer;">
+                                        <input type="checkbox" id="pc2-stealth-toggle" style="opacity:0; width:0; height:0;">
+                                        <span style="position:absolute; top:0; left:0; right:0; bottom:0; background:#ccc; border-radius:9px; transition:0.3s;"></span>
+                                        <span style="position:absolute; top:2px; left:2px; width:14px; height:14px; background:#fff; border-radius:50%; transition:0.3s;"></span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="pc2-card-row" id="pc2-vless-toggle-row" style="display:none; margin-top:8px;">
+                                <span class="pc2-card-label" style="display:flex; align-items:center; gap:4px;">VLESS Reality<span class="pc2-tip" data-tip="Wraps your connection in a TLS tunnel that mimics HTTPS traffic to legitimate websites (e.g. microsoft.com). Use when all UDP traffic is blocked."><svg style="width:13px;height:13px;opacity:0.4;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></span></span>
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <span id="pc2-vless-label" style="font-size:12px; color:#888;">Off</span>
+                                    <label style="position:relative; display:inline-block; width:34px; height:18px; cursor:pointer;">
+                                        <input type="checkbox" id="pc2-vless-toggle" style="opacity:0; width:0; height:0;">
+                                        <span style="position:absolute; top:0; left:0; right:0; bottom:0; background:#ccc; border-radius:9px; transition:0.3s;"></span>
+                                        <span style="position:absolute; top:2px; left:2px; width:14px; height:14px; background:#fff; border-radius:50%; transition:0.3s;"></span>
+                                    </label>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -200,51 +245,7 @@ export default {
                 
                 </div>
                 
-                <!-- Connection Status -->
-                <div class="pc2-section" style="margin-top: 16px;">
-                    <div class="pc2-section-title">${i18n('connection')}</div>
-                    <div class="pc2-group">
-                        <div class="pc2-group-row">
-                            <div class="pc2-card-row">
-                                <span class="pc2-card-label">${i18n('status')}</span>
-                                <div style="display: flex; align-items: center; gap: 6px;">
-                                    <span class="pc2-status-dot" id="pc2-status-dot"></span>
-                                    <span id="pc2-status-text" class="pc2-card-value">${i18n('not_connected')}</span>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="pc2-group-row">
-                            <div class="pc2-card-row">
-                                <span class="pc2-card-label">Transport</span>
-                                <span id="pc2-transport-type" class="pc2-card-value">-</span>
-                            </div>
-                        </div>
-                        <div class="pc2-group-row">
-                            <div class="pc2-card-row">
-                                <span class="pc2-card-label" style="display:flex; align-items:center; gap:4px;">Stealth Mode<svg title="Routes traffic through obfuscated tunnels to bypass Deep Packet Inspection (DPI). Auto-detects blocking and selects the best stealth transport." style="width:13px;height:13px;vertical-align:middle;opacity:0.4;cursor:help;flex-shrink:0;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></span>
-                                <div style="display:flex; align-items:center; gap:8px;">
-                                    <span id="pc2-stealth-label" style="font-size:12px; color:#888;">Off</span>
-                                    <label style="position:relative; display:inline-block; width:34px; height:18px; cursor:pointer;">
-                                        <input type="checkbox" id="pc2-stealth-toggle" style="opacity:0; width:0; height:0;">
-                                        <span style="position:absolute; top:0; left:0; right:0; bottom:0; background:#ccc; border-radius:9px; transition:0.3s;"></span>
-                                        <span style="position:absolute; top:2px; left:2px; width:14px; height:14px; background:#fff; border-radius:50%; transition:0.3s;"></span>
-                                    </label>
-                                </div>
-                            </div>
-                            <div class="pc2-card-row" id="pc2-vless-toggle-row" style="display:none; padding-left:16px;">
-                                <span class="pc2-card-label" style="display:flex; align-items:center; gap:4px;">VLESS Reality<svg title="Wraps your connection in a TLS tunnel that mimics HTTPS traffic to legitimate websites (e.g. microsoft.com). Use when all UDP traffic is blocked." style="width:13px;height:13px;vertical-align:middle;opacity:0.4;cursor:help;flex-shrink:0;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></span>
-                                <div style="display:flex; align-items:center; gap:8px;">
-                                    <span id="pc2-vless-label" style="font-size:12px; color:#888;">Off</span>
-                                    <label style="position:relative; display:inline-block; width:34px; height:18px; cursor:pointer;">
-                                        <input type="checkbox" id="pc2-vless-toggle" style="opacity:0; width:0; height:0;">
-                                        <span style="position:absolute; top:0; left:0; right:0; bottom:0; background:#ccc; border-radius:9px; transition:0.3s;"></span>
-                                        <span style="position:absolute; top:2px; left:2px; width:14px; height:14px; background:#fff; border-radius:50%; transition:0.3s;"></span>
-                                    </label>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <!-- Connection section merged into Node Info above -->
                 
                 <!-- Compute Limits Section -->
                 <div class="pc2-section">
@@ -1084,10 +1085,14 @@ export default {
                             const color = transportColors[natType] || '#888';
                             $el_window.find('#pc2-transport-type').html(`<span style="color:${color}; font-weight:500;">${label}</span>`);
 
-                            if (connData.stealthMode) {
+                            // Sync from shared state (dropdown) or API
+                            const sharedState = window._pc2Stealth || {};
+                            const isStealth = sharedState.initialized ? sharedState.stealth : connData.stealthMode;
+                            const isVless = sharedState.initialized ? sharedState.vless : connData.forcedTransport === 'vless-reality';
+                            if (isStealth) {
                                 $stealthToggle.prop('checked', true);
                                 updateStealthVisual(true);
-                                if (connData.forcedTransport === 'vless-reality') {
+                                if (isVless) {
                                     $vlessToggle.prop('checked', true);
                                     updateVlessVisual(true);
                                 }
@@ -1137,8 +1142,51 @@ export default {
             $vlessLabel.text(on ? 'On' : 'Off').css('color', on ? '#3b82f6' : '#888');
         }
 
+        const transportLabelsMap = {
+            'wireguard': ['WireGuard', '#22c55e'],
+            'amnezia-wireguard': ['AmneziaWG (Stealth)', '#a78bfa'],
+            'vless-reality': ['VLESS Reality', '#3b82f6'],
+            'relay': ['Active Proxy', '#f59e0b'],
+        };
+
+        function setTransportLabel(natType) {
+            const [label, color] = transportLabelsMap[natType] || [natType, '#888'];
+            $el_window.find('#pc2-transport-type').html(`<span style="color:${color}; font-weight:500;">${label}</span>`);
+        }
+
+        async function pollTransportStatus(expectedType, maxAttempts) {
+            const authToken = getAuthToken();
+            const headers = {};
+            if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+            for (let i = 0; i < maxAttempts; i++) {
+                await new Promise(r => setTimeout(r, 2000));
+                try {
+                    const r = await fetch(new URL('/api/boson/connectivity', window.api_origin).toString(), { headers });
+                    if (r.ok) {
+                        const d = await r.json();
+                        if (d.natType === expectedType || (!expectedType && d.connected)) {
+                            setTransportLabel(d.natType);
+                            $el_window.find('#pc2-status-text').text(i18n('connected'));
+                            $el_window.find('#pc2-status-dot').removeClass('connecting').addClass('connected');
+                            return true;
+                        }
+                    }
+                } catch {}
+            }
+            return false;
+        }
+
         async function applyStealthMode(enabled, transport) {
             if (isPC2Mode() && window.api_origin) {
+                const $transportEl = $el_window.find('#pc2-transport-type');
+                const $statusText = $el_window.find('#pc2-status-text');
+                const $statusDot = $el_window.find('#pc2-status-dot');
+
+                const targetLabel = transport ? (transportLabelsMap[transport]?.[0] || transport) : (enabled ? 'AmneziaWG' : 'WireGuard');
+                $transportEl.html(`<span style="color:#f59e0b; font-weight:500;">Switching to ${targetLabel}...</span>`);
+                $statusText.text('Reconnecting...');
+                $statusDot.removeClass('connected disconnected').addClass('connecting');
+
                 try {
                     const authToken = getAuthToken();
                     const headers = { 'Content-Type': 'application/json' };
@@ -1149,18 +1197,24 @@ export default {
                         body: JSON.stringify({ enabled, transport: transport || undefined }),
                     });
                     if (resp.ok) {
-                        const data = await resp.json();
-                        const transportLabelsMap = {
-                            'wireguard': ['WireGuard', '#22c55e'],
-                            'amnezia-wireguard': ['AmneziaWG (Stealth)', '#a78bfa'],
-                            'vless-reality': ['VLESS Reality', '#3b82f6'],
-                            'relay': ['Active Proxy', '#f59e0b'],
-                        };
-                        const [label, color] = transportLabelsMap[data.transport] || [data.transport, '#888'];
-                        $el_window.find('#pc2-transport-type').html(`<span style="color:${color}; font-weight:500;">${label}</span>`);
+                        const expectedType = transport === 'vless-reality' ? 'vless-reality' : (enabled ? 'amnezia-wireguard' : 'wireguard');
+                        const found = await pollTransportStatus(expectedType, 10);
+                        if (!found) {
+                            const fallbackResp = await fetch(new URL('/api/boson/connectivity', window.api_origin).toString(), {
+                                headers: { 'Authorization': `Bearer ${authToken}` }
+                            });
+                            if (fallbackResp.ok) {
+                                const fb = await fallbackResp.json();
+                                setTransportLabel(fb.natType || 'unknown');
+                                $statusText.text(fb.connected ? i18n('connected') : i18n('not_connected'));
+                                $statusDot.removeClass('connecting').addClass(fb.connected ? 'connected' : 'disconnected');
+                            }
+                        }
                     }
                 } catch (err) {
                     logger.warn('[PC2Tab] Failed to set stealth mode:', err);
+                    $statusText.text(i18n('connected'));
+                    $statusDot.removeClass('connecting').addClass('connected');
                 }
             }
         }
@@ -1168,6 +1222,14 @@ export default {
         $stealthToggle.on('change', async function() {
             const enabled = this.checked;
             updateStealthVisual(enabled);
+            if (!enabled) {
+                $vlessToggle.prop('checked', false);
+                updateVlessVisual(false);
+            }
+            if (window._pc2Stealth) {
+                window._pc2Stealth.stealth = enabled;
+                if (!enabled) window._pc2Stealth.vless = false;
+            }
             const transport = enabled && $vlessToggle.prop('checked') ? 'vless-reality' : undefined;
             await applyStealthMode(enabled, transport);
         });
@@ -1175,8 +1237,21 @@ export default {
         $vlessToggle.on('change', async function() {
             const vlessOn = this.checked;
             updateVlessVisual(vlessOn);
+            if (window._pc2Stealth) window._pc2Stealth.vless = vlessOn;
             if ($stealthToggle.prop('checked')) {
                 await applyStealthMode(true, vlessOn ? 'vless-reality' : undefined);
+            }
+        });
+
+        // Copy button handler for Node Info
+        $el_window.find('.pc2-copy-btn').on('click', function() {
+            const sourceId = $(this).data('copy-from');
+            const text = $el_window.find(`#${sourceId}`).text();
+            if (text && text !== '-') {
+                navigator.clipboard.writeText(text);
+                const $icon = $(this);
+                $icon.css('opacity', '1');
+                setTimeout(() => $icon.css('opacity', '0.5'), 800);
             }
         });
 

@@ -71,6 +71,27 @@ function initPC2StatusBar() {
                     0%, 100% { opacity: 1; }
                     50% { opacity: 0.5; }
                 }
+
+                .pc2-tip {
+                    display: inline-flex;
+                    align-items: center;
+                    margin-left: 6px;
+                    cursor: help;
+                }
+                #pc2-floating-tip {
+                    position: fixed;
+                    background: #1a1a1a;
+                    color: #ddd;
+                    padding: 8px 10px;
+                    border-radius: 6px;
+                    font-size: 11px;
+                    line-height: 1.4;
+                    max-width: 240px;
+                    z-index: 2147483647;
+                    pointer-events: none;
+                    border: 1px solid #555;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+                }
             </style>
         `);
     }
@@ -93,7 +114,9 @@ function initPC2StatusBar() {
 
     const copyIcon = `<svg style="width:12px;height:12px;vertical-align:middle;cursor:pointer;opacity:0.6;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>`;
     let privacyHidden = true;
-    let stealthModeEnabled = false;
+    if (!window._pc2Stealth) window._pc2Stealth = { stealth: false, vless: false, initialized: false };
+    let stealthModeEnabled = window._pc2Stealth.stealth;
+    let vlessEnabled = window._pc2Stealth.vless;
 
     const maskValue = (val) => privacyHidden ? val.replace(/[a-zA-Z0-9]/g, '•') : val;
 
@@ -408,9 +431,31 @@ function initPC2StatusBar() {
 
     const tLabels = { 'wireguard': ['WireGuard', '#22c55e'], 'amnezia-wireguard': ['AmneziaWG (Stealth)', '#a78bfa'], 'vless-reality': ['VLESS Reality', '#3b82f6'], 'relay': ['Active Proxy', '#f59e0b'] };
 
+    // Floating tooltip for .pc2-tip elements (avoids overflow clipping)
+    $(document).on('mouseenter', '.pc2-tip', function() {
+        const tip = $(this).attr('data-tip');
+        if (!tip) return;
+        const rect = this.getBoundingClientRect();
+        const $tip = $('<div id="pc2-floating-tip"></div>').text(tip).appendTo('body');
+        const tipW = $tip.outerWidth();
+        let left = rect.left + rect.width / 2 - tipW / 2;
+        if (left < 8) left = 8;
+        if (left + tipW > window.innerWidth - 8) left = window.innerWidth - 8 - tipW;
+        $tip.css({ top: rect.top - $tip.outerHeight() - 6, left });
+    });
+    $(document).on('mouseleave', '.pc2-tip', function() {
+        $('#pc2-floating-tip').remove();
+    });
+
+    // Prevent info icon clicks from toggling the parent switch
+    $(document).on('click', '.pc2-info-icon', function(e) {
+        e.stopPropagation();
+        e.preventDefault();
+    });
+
     function applyStealthFromDropdown($menu) {
         if (!window.api_origin) return;
-        const vlessOn = $menu.find('.pc2-vless-toggle').data('on');
+        const vlessOn = !!$menu.find('.pc2-vless-toggle').data('on');
         const transport = stealthModeEnabled && vlessOn ? 'vless-reality' : undefined;
         fetch(`${window.api_origin}/api/boson/stealth-mode`, {
             method: 'POST',
@@ -429,10 +474,16 @@ function initPC2StatusBar() {
         e.stopPropagation();
         e.preventDefault();
         stealthModeEnabled = !stealthModeEnabled;
+        window._pc2Stealth.stealth = stealthModeEnabled;
         const $track = $(this).find('.pc2-stealth-track');
         const $knob = $(this).find('.pc2-stealth-knob');
         $track.css('background', stealthModeEnabled ? '#a78bfa' : '#555');
         $knob.css({ left: stealthModeEnabled ? 'auto' : '2px', right: stealthModeEnabled ? '2px' : 'auto' });
+
+        if (!stealthModeEnabled) {
+            vlessEnabled = false;
+            window._pc2Stealth.vless = false;
+        }
 
         const $menu = $(this).closest('.context-menu');
         $menu.find('.pc2-vless-row').toggle(stealthModeEnabled);
@@ -445,6 +496,8 @@ function initPC2StatusBar() {
         e.preventDefault();
         const isOn = !$(this).data('on');
         $(this).data('on', isOn);
+        vlessEnabled = isOn;
+        window._pc2Stealth.vless = isOn;
         const $track = $(this).find('.pc2-vless-track');
         const $knob = $(this).find('.pc2-vless-knob');
         $track.css('background', isOn ? '#3b82f6' : '#555');
@@ -497,9 +550,13 @@ function initPC2StatusBar() {
             items: getMenuItems(stats, nodeInfo, connectivity)
         });
 
-        // Read stealth state from connectivity response
-        if (connectivity && connectivity.stealthMode !== undefined) {
-            stealthModeEnabled = connectivity.stealthMode;
+        // Read stealth state from connectivity on first open only
+        if (connectivity && !window._pc2Stealth.initialized) {
+            stealthModeEnabled = !!connectivity.stealthMode;
+            vlessEnabled = connectivity.forcedTransport === 'vless-reality';
+            window._pc2Stealth.stealth = stealthModeEnabled;
+            window._pc2Stealth.vless = vlessEnabled;
+            window._pc2Stealth.initialized = true;
         }
 
         // Inject toggles directly into the menu DOM (not as menu items)
@@ -524,20 +581,21 @@ function initPC2StatusBar() {
                 }
             }
 
-            const infoIcon = `<svg style="width:12px;height:12px;vertical-align:middle;opacity:0.4;cursor:help;margin-left:4px;flex-shrink:0;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>`;
-
             const stealthOn = stealthModeEnabled;
+            const vlessOn = vlessEnabled;
+            const stealthTip = 'Routes traffic through obfuscated tunnels to bypass Deep Packet Inspection (DPI). Auto-detects blocking and selects the best stealth transport.';
+            const vlessTip = 'Wraps your connection in a TLS tunnel that mimics HTTPS traffic to legitimate websites (e.g. microsoft.com). Use when all UDP is blocked.';
+
             const stealthHtml = `<div class="pc2-stealth-toggle" style="display:flex; align-items:center; justify-content:space-between; padding:6px 12px; cursor:pointer; user-select:none;">
-                <span style="color:#fff; font-size:12px; display:flex; align-items:center;">Stealth Mode<span title="Routes traffic through obfuscated tunnels to bypass Deep Packet Inspection (DPI). Auto-detects blocking and selects the best stealth transport.">${infoIcon}</span></span>
+                <span style="color:#fff; font-size:12px; display:flex; align-items:center;">Stealth Mode<span class="pc2-tip pc2-info-icon" data-tip="${stealthTip}"><svg style="width:12px;height:12px;opacity:0.4;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></span></span>
                 <span class="pc2-stealth-track" style="width:34px; height:18px; border-radius:9px; background:${stealthOn ? '#a78bfa' : '#555'}; position:relative; display:inline-flex; align-items:center; flex-shrink:0;">
                     <span class="pc2-stealth-knob" style="width:14px; height:14px; border-radius:50%; background:#fff; position:absolute; top:2px; ${stealthOn ? 'right:2px;' : 'left:2px;'} transition:all 0.2s;"></span>
                 </span>
             </div>`;
 
-            const vlessOn = stealthOn && connectivity?.forcedTransport === 'vless-reality';
-            const vlessHtml = `<div class="pc2-vless-row" style="display:${stealthOn ? 'flex' : 'none'}; align-items:center; justify-content:space-between; padding:4px 12px 6px 24px; cursor:pointer; user-select:none;" >
-                <div class="pc2-vless-toggle" data-on="${vlessOn}" style="display:flex; align-items:center; justify-content:space-between; width:100%;">
-                    <span style="color:#ccc; font-size:12px; display:flex; align-items:center;">VLESS Reality<span title="Wraps your connection in a TLS tunnel that mimics HTTPS traffic to legitimate websites (e.g. microsoft.com). Use when all UDP traffic is blocked.">${infoIcon}</span></span>
+            const vlessHtml = `<div class="pc2-vless-row" style="display:${stealthOn ? 'flex' : 'none'}; align-items:center; justify-content:space-between; padding:6px 12px; cursor:pointer; user-select:none;">
+                <div class="pc2-vless-toggle" data-on="${vlessOn ? 'true' : ''}" style="display:flex; align-items:center; justify-content:space-between; width:100%;">
+                    <span style="color:#fff; font-size:12px; display:flex; align-items:center;">VLESS Reality<span class="pc2-tip pc2-info-icon" data-tip="${vlessTip}"><svg style="width:12px;height:12px;opacity:0.4;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></span></span>
                     <span class="pc2-vless-track" style="width:34px; height:18px; border-radius:9px; background:${vlessOn ? '#3b82f6' : '#555'}; position:relative; display:inline-flex; align-items:center; flex-shrink:0;">
                         <span class="pc2-vless-knob" style="width:14px; height:14px; border-radius:50%; background:#fff; position:absolute; top:2px; ${vlessOn ? 'right:2px;' : 'left:2px;'} transition:all 0.2s;"></span>
                     </span>

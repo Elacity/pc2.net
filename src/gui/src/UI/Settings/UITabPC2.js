@@ -221,7 +221,7 @@ export default {
                         </div>
                         <div class="pc2-group-row">
                             <div class="pc2-card-row">
-                                <span class="pc2-card-label">Stealth Mode</span>
+                                <span class="pc2-card-label" style="display:flex; align-items:center; gap:4px;">Stealth Mode<svg title="Routes traffic through obfuscated tunnels to bypass Deep Packet Inspection (DPI). Auto-detects blocking and selects the best stealth transport." style="width:13px;height:13px;vertical-align:middle;opacity:0.4;cursor:help;flex-shrink:0;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></span>
                                 <div style="display:flex; align-items:center; gap:8px;">
                                     <span id="pc2-stealth-label" style="font-size:12px; color:#888;">Off</span>
                                     <label style="position:relative; display:inline-block; width:34px; height:18px; cursor:pointer;">
@@ -231,15 +231,17 @@ export default {
                                     </label>
                                 </div>
                             </div>
-                            <div class="pc2-card-row" id="pc2-transport-selector-row" style="display:none;">
-                                <span class="pc2-card-label">Transport</span>
-                                <select id="pc2-transport-select" style="font-size:12px; padding:3px 8px; border-radius:6px; border:1px solid #d1d5db; background:#f9fafb; cursor:pointer; font-family:inherit; color:#333;">
-                                    <option value="">Auto</option>
-                                    <option value="amnezia-wireguard">AmneziaWG (UDP)</option>
-                                    <option value="vless-reality">VLESS Reality (TCP)</option>
-                                </select>
+                            <div class="pc2-card-row" id="pc2-vless-toggle-row" style="display:none; padding-left:16px;">
+                                <span class="pc2-card-label" style="display:flex; align-items:center; gap:4px;">VLESS Reality<svg title="Wraps your connection in a TLS tunnel that mimics HTTPS traffic to legitimate websites (e.g. microsoft.com). Use when all UDP traffic is blocked." style="width:13px;height:13px;vertical-align:middle;opacity:0.4;cursor:help;flex-shrink:0;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></span>
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <span id="pc2-vless-label" style="font-size:12px; color:#888;">Off</span>
+                                    <label style="position:relative; display:inline-block; width:34px; height:18px; cursor:pointer;">
+                                        <input type="checkbox" id="pc2-vless-toggle" style="opacity:0; width:0; height:0;">
+                                        <span style="position:absolute; top:0; left:0; right:0; bottom:0; background:#ccc; border-radius:9px; transition:0.3s;"></span>
+                                        <span style="position:absolute; top:2px; left:2px; width:14px; height:14px; background:#fff; border-radius:50%; transition:0.3s;"></span>
+                                    </label>
+                                </div>
                             </div>
-                            <p style="margin:4px 0 0; font-size:11px; color:#999;">Forces AmneziaWG stealth tunnel, bypassing standard WireGuard. Use if behind DPI (China, Russia).</p>
                         </div>
                     </div>
                 </div>
@@ -1067,7 +1069,7 @@ export default {
                             const transportLabels = {
                                 'wireguard': 'WireGuard',
                                 'amnezia-wireguard': 'AmneziaWG (Stealth)',
-                                'vless-reality': 'VLESS Reality (TCP Stealth)',
+                                'vless-reality': 'VLESS Reality',
                                 'relay': 'Active Proxy',
                                 'direct': 'Direct',
                             };
@@ -1085,8 +1087,9 @@ export default {
                             if (connData.stealthMode) {
                                 $stealthToggle.prop('checked', true);
                                 updateStealthVisual(true);
-                                if (connData.forcedTransport) {
-                                    $transportSelect.val(connData.forcedTransport);
+                                if (connData.forcedTransport === 'vless-reality') {
+                                    $vlessToggle.prop('checked', true);
+                                    updateVlessVisual(true);
                                 }
                             }
                         }
@@ -1111,14 +1114,27 @@ export default {
         const $stealthTrack = $stealthToggle.parent().find('span').eq(0);
         const $stealthKnob = $stealthToggle.parent().find('span').eq(1);
 
-        const $transportSelectorRow = $el_window.find('#pc2-transport-selector-row');
-        const $transportSelect = $el_window.find('#pc2-transport-select');
+        const $vlessToggleRow = $el_window.find('#pc2-vless-toggle-row');
+        const $vlessToggle = $el_window.find('#pc2-vless-toggle');
+        const $vlessLabel = $el_window.find('#pc2-vless-label');
+        const $vlessTrack = $vlessToggle.parent().find('span').eq(0);
+        const $vlessKnob = $vlessToggle.parent().find('span').eq(1);
 
         function updateStealthVisual(on) {
-            $stealthTrack.css('background', on ? '#22c55e' : '#ccc');
+            $stealthTrack.css('background', on ? '#a78bfa' : '#ccc');
             $stealthKnob.css('left', on ? '18px' : '2px');
-            $stealthLabel.text(on ? 'On' : 'Off').css('color', on ? '#22c55e' : '#888');
-            $transportSelectorRow.toggle(on);
+            $stealthLabel.text(on ? 'On' : 'Off').css('color', on ? '#a78bfa' : '#888');
+            $vlessToggleRow.toggle(on);
+            if (!on) {
+                $vlessToggle.prop('checked', false);
+                updateVlessVisual(false);
+            }
+        }
+
+        function updateVlessVisual(on) {
+            $vlessTrack.css('background', on ? '#3b82f6' : '#ccc');
+            $vlessKnob.css('left', on ? '18px' : '2px');
+            $vlessLabel.text(on ? 'On' : 'Off').css('color', on ? '#3b82f6' : '#888');
         }
 
         async function applyStealthMode(enabled, transport) {
@@ -1137,7 +1153,7 @@ export default {
                         const transportLabelsMap = {
                             'wireguard': ['WireGuard', '#22c55e'],
                             'amnezia-wireguard': ['AmneziaWG (Stealth)', '#a78bfa'],
-                            'vless-reality': ['VLESS Reality (TCP Stealth)', '#3b82f6'],
+                            'vless-reality': ['VLESS Reality', '#3b82f6'],
                             'relay': ['Active Proxy', '#f59e0b'],
                         };
                         const [label, color] = transportLabelsMap[data.transport] || [data.transport, '#888'];
@@ -1152,13 +1168,15 @@ export default {
         $stealthToggle.on('change', async function() {
             const enabled = this.checked;
             updateStealthVisual(enabled);
-            const transport = enabled ? $transportSelect.val() : '';
+            const transport = enabled && $vlessToggle.prop('checked') ? 'vless-reality' : undefined;
             await applyStealthMode(enabled, transport);
         });
 
-        $transportSelect.on('change', async function() {
+        $vlessToggle.on('change', async function() {
+            const vlessOn = this.checked;
+            updateVlessVisual(vlessOn);
             if ($stealthToggle.prop('checked')) {
-                await applyStealthMode(true, $(this).val());
+                await applyStealthMode(true, vlessOn ? 'vless-reality' : undefined);
             }
         });
 

@@ -171,7 +171,7 @@ function initPC2StatusBar() {
                 const isWireGuard = natType === 'wireguard';
                 const isAmneziaWG = natType === 'amnezia-wireguard';
                 const isVLESSReality = natType === 'vless-reality';
-                const methodLabel = isVLESSReality ? 'VLESS Reality (TCP Stealth)' : (isAmneziaWG ? 'AmneziaWG (Stealth)' : (isWireGuard ? 'WireGuard' : (natType === 'relay' ? 'Active Proxy' : (natType === 'direct' ? 'Direct' : natType))));
+                const methodLabel = isVLESSReality ? 'VLESS Reality' : (isAmneziaWG ? 'AmneziaWG (Stealth)' : (isWireGuard ? 'WireGuard' : (natType === 'relay' ? 'Active Proxy' : (natType === 'direct' ? 'Direct' : natType))));
                 const methodColor = isVLESSReality ? '#3b82f6' : (isAmneziaWG ? '#a78bfa' : (isWireGuard ? '#22c55e' : (natType === 'relay' ? '#f59e0b' : '#fff')));
                 items.push({
                     html: `<span data-pc2-access style="color:#ccc; font-size:12px;">Access: <span style="color:${methodColor}; font-weight:500;">${methodLabel}</span></span>`,
@@ -249,8 +249,8 @@ function initPC2StatusBar() {
 
         items.push({
             html: i18n('pc2_settings'),
+            icon: `<svg style="width:14px;height:14px;vertical-align:middle;" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M12.22 2h-.44a2 2 0 00-2 2v.18a2 2 0 01-1 1.73l-.43.25a2 2 0 01-2 0l-.15-.08a2 2 0 00-2.73.73l-.22.38a2 2 0 00.73 2.73l.15.1a2 2 0 011 1.72v.51a2 2 0 01-1 1.74l-.15.09a2 2 0 00-.73 2.73l.22.38a2 2 0 002.73.73l.15-.08a2 2 0 012 0l.43.25a2 2 0 011 1.73V20a2 2 0 002 2h.44a2 2 0 002-2v-.18a2 2 0 011-1.73l.43-.25a2 2 0 012 0l.15.08a2 2 0 002.73-.73l.22-.39a2 2 0 00-.73-2.73l-.15-.08a2 2 0 01-1-1.74v-.5a2 2 0 011-1.74l.15-.09a2 2 0 00.73-2.73l-.22-.38a2 2 0 00-2.73-.73l-.15.08a2 2 0 01-2 0l-.43-.25a2 2 0 01-1-1.73V4a2 2 0 00-2-2z"/><circle cx="12" cy="12" r="3"/></svg>`,
             onClick: () => {
-                // Open Settings window with PC2 tab selected
                 import('./Settings/UIWindowSettings.js').then(({ default: UIWindowSettings }) => {
                     UIWindowSettings({ tab: 'pc2' });
                 }).catch((err) => {
@@ -406,6 +406,24 @@ function initPC2StatusBar() {
         $knob.css({ left: privacyHidden ? '2px' : 'auto', right: privacyHidden ? 'auto' : '2px' });
     });
 
+    const tLabels = { 'wireguard': ['WireGuard', '#22c55e'], 'amnezia-wireguard': ['AmneziaWG (Stealth)', '#a78bfa'], 'vless-reality': ['VLESS Reality', '#3b82f6'], 'relay': ['Active Proxy', '#f59e0b'] };
+
+    function applyStealthFromDropdown($menu) {
+        if (!window.api_origin) return;
+        const vlessOn = $menu.find('.pc2-vless-toggle').data('on');
+        const transport = stealthModeEnabled && vlessOn ? 'vless-reality' : undefined;
+        fetch(`${window.api_origin}/api/boson/stealth-mode`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${window.auth_token}` },
+            body: JSON.stringify({ enabled: stealthModeEnabled, transport }),
+        }).then(r => r.ok ? r.json() : null).then(data => {
+            if (data) {
+                const [label, color] = tLabels[data.transport] || [data.transport, '#fff'];
+                $menu.find('[data-pc2-access]').html(`Access: <span style="color:${color}; font-weight:500;">${label}</span>`);
+            }
+        }).catch(() => {});
+    }
+
     // Stealth mode toggle handler
     $(document).on('click', '.pc2-stealth-toggle', function(e) {
         e.stopPropagation();
@@ -417,41 +435,21 @@ function initPC2StatusBar() {
         $knob.css({ left: stealthModeEnabled ? 'auto' : '2px', right: stealthModeEnabled ? '2px' : 'auto' });
 
         const $menu = $(this).closest('.context-menu');
-        $menu.find('.pc2-transport-select-row').toggle(stealthModeEnabled);
-
-        const transport = stealthModeEnabled ? $menu.find('.pc2-bar-transport-select').val() : '';
-
-        if (window.api_origin) {
-            fetch(`${window.api_origin}/api/boson/stealth-mode`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${window.auth_token}` },
-                body: JSON.stringify({ enabled: stealthModeEnabled, transport: transport || undefined }),
-            }).then(r => r.ok ? r.json() : null).then(data => {
-                if (data) {
-                    const tLabels = { 'wireguard': ['WireGuard', '#22c55e'], 'amnezia-wireguard': ['AmneziaWG (Stealth)', '#a78bfa'], 'vless-reality': ['VLESS Reality (TCP Stealth)', '#3b82f6'], 'relay': ['Active Proxy', '#f59e0b'] };
-                    const [label, color] = tLabels[data.transport] || [data.transport, '#fff'];
-                    $menu.find('[data-pc2-access]').html(`Access: <span style="color:${color}; font-weight:500;">${label}</span>`);
-                }
-            }).catch(() => {});
-        }
+        $menu.find('.pc2-vless-row').toggle(stealthModeEnabled);
+        applyStealthFromDropdown($menu);
     });
 
-    // Transport selector change in cloud dropdown
-    $(document).on('change', '.pc2-bar-transport-select', function(e) {
+    // VLESS Reality sub-toggle handler
+    $(document).on('click', '.pc2-vless-toggle', function(e) {
         e.stopPropagation();
-        if (!stealthModeEnabled || !window.api_origin) return;
-        const transport = $(this).val();
-        fetch(`${window.api_origin}/api/boson/stealth-mode`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${window.auth_token}` },
-            body: JSON.stringify({ enabled: true, transport: transport || undefined }),
-        }).then(r => r.ok ? r.json() : null).then(data => {
-            if (data) {
-                const tLabels = { 'wireguard': ['WireGuard', '#22c55e'], 'amnezia-wireguard': ['AmneziaWG (Stealth)', '#a78bfa'], 'vless-reality': ['VLESS Reality (TCP Stealth)', '#3b82f6'], 'relay': ['Active Proxy', '#f59e0b'] };
-                const [label, color] = tLabels[data.transport] || [data.transport, '#fff'];
-                $(this).closest('.context-menu').find('[data-pc2-access]').html(`Access: <span style="color:${color}; font-weight:500;">${label}</span>`);
-            }
-        }).catch(() => {});
+        e.preventDefault();
+        const isOn = !$(this).data('on');
+        $(this).data('on', isOn);
+        const $track = $(this).find('.pc2-vless-track');
+        const $knob = $(this).find('.pc2-vless-knob');
+        $track.css('background', isOn ? '#3b82f6' : '#555');
+        $knob.css({ left: isOn ? 'auto' : '2px', right: isOn ? '2px' : 'auto' });
+        applyStealthFromDropdown($(this).closest('.context-menu'));
     });
 
     // Use delegated event for click - opens UIContextMenu
@@ -526,30 +524,32 @@ function initPC2StatusBar() {
                 }
             }
 
+            const infoIcon = `<svg style="width:12px;height:12px;vertical-align:middle;opacity:0.4;cursor:help;margin-left:4px;flex-shrink:0;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>`;
+
             const stealthOn = stealthModeEnabled;
             const stealthHtml = `<div class="pc2-stealth-toggle" style="display:flex; align-items:center; justify-content:space-between; padding:6px 12px; cursor:pointer; user-select:none;">
-                <span style="color:#fff; font-size:12px;">Stealth Mode</span>
+                <span style="color:#fff; font-size:12px; display:flex; align-items:center;">Stealth Mode<span title="Routes traffic through obfuscated tunnels to bypass Deep Packet Inspection (DPI). Auto-detects blocking and selects the best stealth transport.">${infoIcon}</span></span>
                 <span class="pc2-stealth-track" style="width:34px; height:18px; border-radius:9px; background:${stealthOn ? '#a78bfa' : '#555'}; position:relative; display:inline-flex; align-items:center; flex-shrink:0;">
                     <span class="pc2-stealth-knob" style="width:14px; height:14px; border-radius:50%; background:#fff; position:absolute; top:2px; ${stealthOn ? 'right:2px;' : 'left:2px;'} transition:all 0.2s;"></span>
                 </span>
             </div>`;
-            const transportSelectHtml = `<div class="pc2-transport-select-row" style="display:${stealthOn ? 'flex' : 'none'}; align-items:center; justify-content:space-between; padding:4px 12px;">
-                <span style="color:#aaa; font-size:11px;">Transport</span>
-                <select class="pc2-bar-transport-select" style="font-size:11px; padding:2px 6px; border-radius:4px; border:1px solid #555; background:#333; color:#fff; cursor:pointer; font-family:inherit;">
-                    <option value="">Auto</option>
-                    <option value="amnezia-wireguard">AmneziaWG</option>
-                    <option value="vless-reality">VLESS Reality</option>
-                </select>
+
+            const vlessOn = stealthOn && connectivity?.forcedTransport === 'vless-reality';
+            const vlessHtml = `<div class="pc2-vless-row" style="display:${stealthOn ? 'flex' : 'none'}; align-items:center; justify-content:space-between; padding:4px 12px 6px 24px; cursor:pointer; user-select:none;" >
+                <div class="pc2-vless-toggle" data-on="${vlessOn}" style="display:flex; align-items:center; justify-content:space-between; width:100%;">
+                    <span style="color:#ccc; font-size:12px; display:flex; align-items:center;">VLESS Reality<span title="Wraps your connection in a TLS tunnel that mimics HTTPS traffic to legitimate websites (e.g. microsoft.com). Use when all UDP traffic is blocked.">${infoIcon}</span></span>
+                    <span class="pc2-vless-track" style="width:34px; height:18px; border-radius:9px; background:${vlessOn ? '#3b82f6' : '#555'}; position:relative; display:inline-flex; align-items:center; flex-shrink:0;">
+                        <span class="pc2-vless-knob" style="width:14px; height:14px; border-radius:50%; background:#fff; position:absolute; top:2px; ${vlessOn ? 'right:2px;' : 'left:2px;'} transition:all 0.2s;"></span>
+                    </span>
+                </div>
             </div>`;
+
             if ($lastDivider.length) {
                 $lastDivider.before(stealthHtml);
-                $lastDivider.before(transportSelectHtml);
+                $lastDivider.before(vlessHtml);
             } else {
                 $menu.append(stealthHtml);
-                $menu.append(transportSelectHtml);
-            }
-            if (connectivity?.forcedTransport) {
-                $menu.find('.pc2-bar-transport-select').val(connectivity.forcedTransport);
+                $menu.append(vlessHtml);
             }
         });
     });

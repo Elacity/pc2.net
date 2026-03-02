@@ -453,20 +453,46 @@ function initPC2StatusBar() {
         e.preventDefault();
     });
 
-    function applyStealthFromDropdown($menu) {
+    async function applyStealthFromDropdown($menu) {
         if (!window.api_origin) return;
         const vlessOn = !!$menu.find('.pc2-vless-toggle').data('on');
         const transport = stealthModeEnabled && vlessOn ? 'vless-reality' : undefined;
-        fetch(`${window.api_origin}/api/boson/stealth-mode`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${window.auth_token}` },
-            body: JSON.stringify({ enabled: stealthModeEnabled, transport }),
-        }).then(r => r.ok ? r.json() : null).then(data => {
-            if (data) {
-                const [label, color] = tLabels[data.transport] || [data.transport, '#fff'];
+        const targetLabel = transport ? (tLabels[transport]?.[0] || transport) : (stealthModeEnabled ? 'AmneziaWG' : 'WireGuard');
+        $menu.find('[data-pc2-access]').html(`Access: <span style="color:#f59e0b; font-weight:500;">Switching to ${targetLabel}...</span>`);
+
+        try {
+            const resp = await fetch(`${window.api_origin}/api/boson/stealth-mode`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${window.auth_token}` },
+                body: JSON.stringify({ enabled: stealthModeEnabled, transport }),
+            });
+            if (!resp.ok) return;
+
+            const expectedType = transport === 'vless-reality' ? 'vless-reality' : (stealthModeEnabled ? 'amnezia-wireguard' : 'wireguard');
+            for (let i = 0; i < 10; i++) {
+                await new Promise(r => setTimeout(r, 2000));
+                try {
+                    const r = await fetch(`${window.api_origin}/api/boson/connectivity`, {
+                        headers: { 'Authorization': `Bearer ${window.auth_token}` }
+                    });
+                    if (r.ok) {
+                        const d = await r.json();
+                        if (d.natType === expectedType || (!expectedType && d.connected)) {
+                            const [label, color] = tLabels[d.natType] || [d.natType, '#fff'];
+                            $menu.find('[data-pc2-access]').html(`Access: <span style="color:${color}; font-weight:500;">${label}</span>`);
+                            return;
+                        }
+                    }
+                } catch {}
+            }
+            const fb = await fetch(`${window.api_origin}/api/boson/connectivity`, {
+                headers: { 'Authorization': `Bearer ${window.auth_token}` }
+            }).then(r => r.ok ? r.json() : null);
+            if (fb) {
+                const [label, color] = tLabels[fb.natType] || [fb.natType, '#fff'];
                 $menu.find('[data-pc2-access]').html(`Access: <span style="color:${color}; font-weight:500;">${label}</span>`);
             }
-        }).catch(() => {});
+        } catch {}
     }
 
     // Stealth mode toggle handler

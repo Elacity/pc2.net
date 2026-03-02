@@ -6520,6 +6520,11 @@ html:not([data-theme="light"]) .path-seperator,
     background-color: rgba(0, 0, 0, 0.05);
 }
 
+[data-theme="light"] .window-sidebar .window-sidebar-item:hover .window-sidebar-item-icon,
+[data-theme="light"] .window-sidebar .window-sidebar-item.has-open-contextmenu .window-sidebar-item-icon {
+    filter: brightness(0) saturate(100%) invert(20%) sepia(10%) saturate(500%) hue-rotate(180deg);
+}
+
 .window[data-app="explorer"] .window-body {
     height: calc(100% - 115px);
 }

@@ -409,6 +409,21 @@ PARTICLE_EOF
         echo -e "${GREEN}✓ AmneziaWG tools detected${NC}"
     fi
 
+    # Patch awg-quick: upstream bug references /var/run/wireguard/ for name/sock
+    # files instead of /var/run/amneziawg/, causing get_real_interface to always fail
+    if command -v awg-quick &> /dev/null; then
+        AWG_QUICK_PATH=$(which awg-quick 2>/dev/null)
+        if grep -q '/var/run/wireguard/\$INTERFACE.name' "$AWG_QUICK_PATH" 2>/dev/null; then
+            echo -e "${CYAN}Patching awg-quick (fixing runtime path bug)...${NC}"
+            sudo sed -i.bak \
+                -e 's|/var/run/wireguard/\$INTERFACE\.name|/var/run/amneziawg/\$INTERFACE.name|g' \
+                -e 's|/var/run/wireguard/\$REAL_INTERFACE\.sock|/var/run/amneziawg/\$REAL_INTERFACE.sock|g' \
+                "$AWG_QUICK_PATH"
+            sudo rm -f "${AWG_QUICK_PATH}.bak"
+            echo -e "${GREEN}✓ awg-quick patched${NC}"
+        fi
+    fi
+
     # Configure passwordless sudo for AmneziaWG operations:
     # - awg-quick for interface management
     # - killall amneziawg-go for cleaning stale processes

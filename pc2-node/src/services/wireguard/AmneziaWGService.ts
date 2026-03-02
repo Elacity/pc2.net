@@ -130,9 +130,10 @@ export class AmneziaWGService {
    * uses the obfuscated userspace implementation instead of the kernel module.
    */
   private awgQuickCmd(action: 'up' | 'down', confPath: string): string {
-    const awgGoBin = execSync('which amneziawg-go', { stdio: 'pipe' }).toString().trim();
     const absConf = resolve(confPath);
-    return `sudo WG_QUICK_USERSPACE_IMPLEMENTATION=${awgGoBin} awg-quick ${action} ${absConf}`;
+    // awg-quick defaults to amneziawg-go and adds its own directory to PATH,
+    // so no env var is needed when both are in the same directory (e.g. /opt/homebrew/bin).
+    return `sudo awg-quick ${action} ${absConf}`;
   }
 
   /**

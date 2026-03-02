@@ -410,11 +410,12 @@ PARTICLE_EOF
     fi
 
     # Configure passwordless sudo for awg-quick (needed for interface management)
+    # SETENV allows passing WG_QUICK_USERSPACE_IMPLEMENTATION env var through sudo
     if command -v awg-quick &> /dev/null; then
         AWG_QUICK_PATH=$(which awg-quick 2>/dev/null)
-        if [[ -x "$AWG_QUICK_PATH" ]] && [[ ! -f /etc/sudoers.d/amneziawg ]]; then
+        if [[ -x "$AWG_QUICK_PATH" ]]; then
             echo -e "${CYAN}Configuring AmneziaWG permissions...${NC}"
-            sudo sh -c "echo '$(whoami) ALL=(ALL) NOPASSWD: ${AWG_QUICK_PATH}' > /etc/sudoers.d/amneziawg && chmod 440 /etc/sudoers.d/amneziawg"
+            sudo sh -c "echo '$(whoami) ALL=(ALL) NOPASSWD:SETENV: ${AWG_QUICK_PATH}' > /etc/sudoers.d/amneziawg && chmod 440 /etc/sudoers.d/amneziawg"
             echo -e "${GREEN}✓ AmneziaWG permissions configured${NC}"
         fi
     fi

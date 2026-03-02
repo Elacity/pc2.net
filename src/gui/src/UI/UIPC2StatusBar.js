@@ -168,8 +168,9 @@ function initPC2StatusBar() {
             if (connectivity) {
                 const natType = connectivity.natType || 'unknown';
                 const isWireGuard = natType === 'wireguard';
-                const methodLabel = isWireGuard ? 'WireGuard' : (natType === 'relay' ? 'Active Proxy' : (natType === 'direct' ? 'Direct' : natType));
-                const methodColor = isWireGuard ? '#22c55e' : (natType === 'relay' ? '#f59e0b' : '#fff');
+                const isAmneziaWG = natType === 'amnezia-wireguard';
+                const methodLabel = isAmneziaWG ? 'AmneziaWG (Stealth)' : (isWireGuard ? 'WireGuard' : (natType === 'relay' ? 'Active Proxy' : (natType === 'direct' ? 'Direct' : natType)));
+                const methodColor = isAmneziaWG ? '#a78bfa' : (isWireGuard ? '#22c55e' : (natType === 'relay' ? '#f59e0b' : '#fff'));
                 items.push({
                     html: `<span style="color:#ccc; font-size:12px;">Access: <span style="color:${methodColor}; font-weight:500;">${methodLabel}</span></span>`,
                     icon: `<svg style="width:14px;height:14px;vertical-align:middle;" viewBox="0 0 24 24" fill="none" stroke="${methodColor}" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`,

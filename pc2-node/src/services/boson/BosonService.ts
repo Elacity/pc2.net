@@ -12,6 +12,7 @@ import { IdentityService, IdentityConfig } from './IdentityService.js';
 import { UsernameService, UsernameConfig } from './UsernameService.js';
 import { ConnectivityService, ConnectivityConfig, ConnectionStatus } from './ConnectivityService.js';
 import { WireGuardService, type WireGuardStatus } from '../wireguard/WireGuardService.js';
+import { AmneziaWGService, type AmneziaWGStatus } from '../wireguard/AmneziaWGService.js';
 import { logger } from '../../utils/logger.js';
 
 export interface BosonConfig {
@@ -20,6 +21,7 @@ export interface BosonConfig {
   publicDomain?: string;
   localPort?: number;
   autoConnect?: boolean;
+  stealthMode?: boolean;
   superNodes?: ConnectivityConfig['superNodes'];
 }
 
@@ -37,6 +39,7 @@ export interface BosonStatus {
   };
   connectivity: ConnectionStatus;
   wireguard: WireGuardStatus | null;
+  amneziaWG: AmneziaWGStatus | null;
 }
 
 export class BosonService {
@@ -45,6 +48,7 @@ export class BosonService {
   private usernameService: UsernameService;
   private connectivityService: ConnectivityService;
   private wireGuardService: WireGuardService | null;
+  private amneziaWGService: AmneziaWGService | null;
   private initialized: boolean = false;
   private firstRunMnemonic: string | null = null;
 
@@ -74,8 +78,8 @@ export class BosonService {
       localPort: this.config.localPort,
     });
 
-    // WireGuard is initialized later in initialize() once nodeId is known
     this.wireGuardService = null;
+    this.amneziaWGService = null;
   }
 
   /**
@@ -127,6 +131,26 @@ export class BosonService {
       logger.info('[Boson] WireGuard not installed -- will use Boson ActiveProxy for NAT traversal');
     }
 
+    // 4b. Initialize AmneziaWG (stealth fallback transport)
+    this.amneziaWGService = new AmneziaWGService({
+      dataDir: this.config.dataDir,
+      gatewayUrl: this.config.gatewayUrl!,
+      nodeId,
+      localPort: this.config.localPort!,
+    });
+
+    if (this.amneziaWGService.isAvailable()) {
+      logger.info('[Boson] AmneziaWG stealth transport detected -- available as DPI-resistant fallback');
+      this.connectivityService.setAmneziaWGService(this.amneziaWGService);
+    }
+
+    // Apply stealth mode config
+    const stealthMode = this.config.stealthMode ?? false;
+    if (stealthMode) {
+      logger.info('[Boson] 🔒 Stealth mode enabled -- will bypass standard WireGuard');
+      this.connectivityService.setStealthMode(true);
+    }
+
     // 5. Auto-connect if enabled
     if (this.config.autoConnect) {
       await this.connectivityService.start();
@@ -141,6 +165,9 @@ export class BosonService {
    */
   async stop(): Promise<void> {
     await this.connectivityService.stop();
+    if (this.amneziaWGService?.isConnected()) {
+      await this.amneziaWGService.disconnect();
+    }
     if (this.wireGuardService?.isConnected()) {
       await this.wireGuardService.disconnect();
     }
@@ -187,6 +214,7 @@ export class BosonService {
       },
       connectivity: connectivityStatus,
       wireguard: this.wireGuardService ? this.wireGuardService.getStatus() : null,
+      amneziaWG: this.amneziaWGService ? this.amneziaWGService.getStatus() : null,
     };
   }
 

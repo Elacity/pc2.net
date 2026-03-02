@@ -260,8 +260,135 @@ function syncWGPeers() {
 
 function isWireGuardIP(endpoint) {
   if (!endpoint) return false;
-  const match = endpoint.match(/^https?:\/\/(10\.100\.\d+\.\d+)/);
+  const match = endpoint.match(/^https?:\/\/(10\.10[01]\.\d+\.\d+)/);
   return !!match;
+}
+
+// ============================================================================
+// AmneziaWG (Stealth) Peer Management
+// ============================================================================
+
+const AWG_CONFIG = {
+  enabled: process.env.AWG_ENABLED !== 'false',
+  interface: process.env.AWG_INTERFACE || 'awg0',
+  subnet: process.env.AWG_SUBNET || '10.101.0.0/16',
+  serverIP: process.env.AWG_SERVER_IP || '10.101.0.1',
+  listenPort: parseInt(process.env.AWG_PORT || '51821', 10),
+  peersFile: process.env.AWG_PEERS_FILE || path.join(CONFIG.dataDir, 'awg-peers.json'),
+  paramsFile: process.env.AWG_PARAMS_FILE || '/etc/amneziawg/obfuscation-params.json',
+  serverPubkeyFile: '/etc/amneziawg/server-public.key',
+};
+
+const awgPeers = { nextIP: 2, peers: {} };
+let awgObfuscationParams = null;
+
+function loadAWGPeers() {
+  try {
+    if (fs.existsSync(AWG_CONFIG.peersFile)) {
+      const data = JSON.parse(fs.readFileSync(AWG_CONFIG.peersFile, 'utf8'));
+      awgPeers.nextIP = data.nextIP || 2;
+      awgPeers.peers = data.peers || {};
+      console.log(`[AmneziaWG] Loaded ${Object.keys(awgPeers.peers).length} peers from ${AWG_CONFIG.peersFile}`);
+    }
+  } catch (error) {
+    console.error('[AmneziaWG] Failed to load peers:', error.message);
+  }
+}
+
+function loadAWGParams() {
+  try {
+    if (fs.existsSync(AWG_CONFIG.paramsFile)) {
+      awgObfuscationParams = JSON.parse(fs.readFileSync(AWG_CONFIG.paramsFile, 'utf8'));
+      console.log('[AmneziaWG] Loaded obfuscation parameters');
+    }
+  } catch (error) {
+    console.error('[AmneziaWG] Failed to load obfuscation params:', error.message);
+  }
+}
+
+function saveAWGPeers() {
+  try {
+    fs.writeFileSync(AWG_CONFIG.peersFile, JSON.stringify(awgPeers, null, 2));
+  } catch (error) {
+    console.error('[AmneziaWG] Failed to save peers:', error.message);
+  }
+}
+
+function allocateAWGIP() {
+  const ip = awgPeers.nextIP;
+  if (ip > 65534) {
+    throw new Error('AmneziaWG IP pool exhausted (10.101.0.0/16 range full)');
+  }
+  awgPeers.nextIP = ip + 1;
+  const octet3 = Math.floor(ip / 256);
+  const octet4 = ip % 256;
+  return `10.101.${octet3}.${octet4}`;
+}
+
+function isAmneziaWGAvailable() {
+  if (!AWG_CONFIG.enabled) return false;
+  try {
+    execSync(`ip link show ${AWG_CONFIG.interface} 2>/dev/null`, { stdio: 'pipe' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function getAWGServerPublicKey() {
+  try {
+    if (fs.existsSync(AWG_CONFIG.serverPubkeyFile)) {
+      return fs.readFileSync(AWG_CONFIG.serverPubkeyFile, 'utf8').trim();
+    }
+  } catch (error) {
+    console.error('[AmneziaWG] Failed to read server public key:', error.message);
+  }
+  return null;
+}
+
+function addAWGPeer(publicKey, allowedIP) {
+  try {
+    const tool = fs.existsSync('/usr/local/bin/awg') ? 'awg' : 'wg';
+    execSync(
+      `${tool} set ${AWG_CONFIG.interface} peer ${publicKey} allowed-ips ${allowedIP}/32`,
+      { stdio: 'pipe', timeout: 5000 }
+    );
+    return true;
+  } catch (error) {
+    console.error(`[AmneziaWG] Failed to add peer: ${error.message}`);
+    return false;
+  }
+}
+
+function removeAWGPeer(publicKey) {
+  try {
+    const tool = fs.existsSync('/usr/local/bin/awg') ? 'awg' : 'wg';
+    execSync(
+      `${tool} set ${AWG_CONFIG.interface} peer ${publicKey} remove`,
+      { stdio: 'pipe', timeout: 5000 }
+    );
+    return true;
+  } catch (error) {
+    console.error(`[AmneziaWG] Failed to remove peer: ${error.message}`);
+    return false;
+  }
+}
+
+function syncAWGPeers() {
+  if (!isAmneziaWGAvailable()) {
+    console.log('[AmneziaWG] Interface not available, skipping peer sync');
+    return;
+  }
+
+  let synced = 0;
+  for (const [username, peer] of Object.entries(awgPeers.peers)) {
+    if (peer.publicKey && peer.assignedIP) {
+      if (addAWGPeer(peer.publicKey, peer.assignedIP)) {
+        synced++;
+      }
+    }
+  }
+  console.log(`[AmneziaWG] Synced ${synced}/${Object.keys(awgPeers.peers).length} peers to interface`);
 }
 
 let _cachedPublicIP = null;
@@ -2005,6 +2132,159 @@ async function handleApiRequest(req, res) {
     return;
   }
 
+  // ========================================================================
+  // AmneziaWG (Stealth) Peer Provisioning API
+  // ========================================================================
+
+  if (url.pathname === "/api/awg/register" && req.method === "POST") {
+    if (!checkRateLimit('register', clientIP)) {
+      res.writeHead(429, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Rate limit exceeded", retryAfter: 60 }));
+      return;
+    }
+
+    if (!isAmneziaWGAvailable()) {
+      res.writeHead(503, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "AmneziaWG not available on this gateway" }));
+      return;
+    }
+
+    const awgServerPubKey = getAWGServerPublicKey();
+    if (!awgServerPubKey) {
+      res.writeHead(503, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "AmneziaWG server key not configured" }));
+      return;
+    }
+
+    if (!awgObfuscationParams) {
+      res.writeHead(503, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "AmneziaWG obfuscation parameters not configured" }));
+      return;
+    }
+
+    let body = "";
+    req.on("data", (chunk) => (body += chunk));
+    req.on("end", () => {
+      try {
+        const { username, nodeId, publicKey } = JSON.parse(body);
+
+        if (!username || !publicKey) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Missing required fields: username, publicKey" }));
+          return;
+        }
+
+        if (!/^[A-Za-z0-9+/]{42,43}=?$/.test(publicKey)) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Invalid public key format" }));
+          return;
+        }
+
+        const normalizedUsername = username.toLowerCase();
+        const resolvedNodeId = nodeId || (registry.get(normalizedUsername) || {}).nodeId || 'unknown';
+
+        const existingPeer = awgPeers.peers[normalizedUsername];
+        if (existingPeer) {
+          if (existingPeer.publicKey !== publicKey) {
+            removeAWGPeer(existingPeer.publicKey);
+            existingPeer.publicKey = publicKey;
+            existingPeer.lastSeen = new Date().toISOString();
+            addAWGPeer(publicKey, existingPeer.assignedIP);
+            saveAWGPeers();
+            console.log(`[AmneziaWG] Updated key for ${normalizedUsername} (${existingPeer.assignedIP})`);
+          } else {
+            existingPeer.lastSeen = new Date().toISOString();
+            addAWGPeer(publicKey, existingPeer.assignedIP);
+            saveAWGPeers();
+          }
+
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({
+            assignedIP: existingPeer.assignedIP,
+            serverPublicKey: awgServerPubKey,
+            serverEndpoint: `${getPublicIP()}:${AWG_CONFIG.listenPort}`,
+            serverIP: AWG_CONFIG.serverIP,
+            obfuscation: awgObfuscationParams,
+          }));
+          return;
+        }
+
+        const assignedIP = allocateAWGIP();
+
+        awgPeers.peers[normalizedUsername] = {
+          nodeId: resolvedNodeId,
+          publicKey,
+          assignedIP,
+          registeredAt: new Date().toISOString(),
+          lastSeen: new Date().toISOString(),
+        };
+
+        if (!addAWGPeer(publicKey, assignedIP)) {
+          delete awgPeers.peers[normalizedUsername];
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Failed to configure AmneziaWG peer" }));
+          return;
+        }
+
+        saveAWGPeers();
+        console.log(`[AmneziaWG] Registered ${normalizedUsername}: ${assignedIP} (pubkey: ${publicKey.slice(0, 8)}...)`);
+
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({
+          assignedIP,
+          serverPublicKey: awgServerPubKey,
+          serverEndpoint: `${getPublicIP()}:${AWG_CONFIG.listenPort}`,
+          serverIP: AWG_CONFIG.serverIP,
+          obfuscation: awgObfuscationParams,
+        }));
+      } catch (error) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Invalid JSON" }));
+      }
+    });
+    return;
+  }
+
+  if (url.pathname === "/api/awg/status" && req.method === "GET") {
+    const awgAvailable = isAmneziaWGAvailable();
+    let awgDump = null;
+
+    if (awgAvailable) {
+      try {
+        const tool = fs.existsSync('/usr/local/bin/awg') ? 'awg' : 'wg';
+        const raw = execSync(`${tool} show ${AWG_CONFIG.interface} dump`, { stdio: 'pipe', timeout: 5000 }).toString();
+        const lines = raw.trim().split('\n');
+        const peers = lines.slice(1).map(line => {
+          const parts = line.split('\t');
+          return {
+            publicKey: parts[0],
+            endpoint: parts[2] || 'none',
+            latestHandshake: parts[4] ? parseInt(parts[4], 10) : 0,
+            transferRx: parts[5] ? parseInt(parts[5], 10) : 0,
+            transferTx: parts[6] ? parseInt(parts[6], 10) : 0,
+          };
+        });
+        awgDump = { peerCount: peers.length, peers };
+      } catch (error) {
+        awgDump = { error: error.message };
+      }
+    }
+
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({
+      amneziaWG: {
+        available: awgAvailable,
+        interface: AWG_CONFIG.interface,
+        serverIP: AWG_CONFIG.serverIP,
+        listenPort: AWG_CONFIG.listenPort,
+        registeredPeers: Object.keys(awgPeers.peers).length,
+        obfuscation: awgObfuscationParams ? true : false,
+        live: awgDump,
+      },
+    }));
+    return;
+  }
+
   // Default: 404
   res.writeHead(404, { "Content-Type": "application/json" });
   res.end(JSON.stringify({ error: "Not found" }));
@@ -2256,6 +2536,17 @@ if (isWireGuardAvailable()) {
 } else {
   console.log('[WireGuard] Interface not detected - WireGuard endpoints will not be available');
   console.log('[WireGuard] Run scripts/setup-wireguard-server.sh on the supernode to enable');
+}
+
+// Initialize AmneziaWG (stealth transport) peer management
+loadAWGPeers();
+loadAWGParams();
+if (isAmneziaWGAvailable()) {
+  syncAWGPeers();
+  console.log(`[AmneziaWG] Stealth transport ready on ${AWG_CONFIG.interface} (${AWG_CONFIG.serverIP})`);
+} else {
+  console.log('[AmneziaWG] Interface not detected - stealth endpoints will not be available');
+  console.log('[AmneziaWG] Run scripts/setup-amneziawg-server.sh on the supernode to enable');
 }
 
 // Load SSL first to know if we should redirect

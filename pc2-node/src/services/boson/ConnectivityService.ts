@@ -13,6 +13,7 @@ import { UsernameService } from './UsernameService.js';
 import { NetworkDetector, type NATType } from './NetworkDetector.js';
 import { ActiveProxyClient, ConnectionState, type ProxyConnection } from './ActiveProxyClient.js';
 import { WireGuardService } from '../wireguard/WireGuardService.js';
+import { AmneziaWGService } from '../wireguard/AmneziaWGService.js';
 import { fromBase58 } from './IdentityService.js';
 import { execSync } from 'child_process';
 import net, { type Server, type Socket } from 'net';
@@ -41,7 +42,7 @@ export interface ConnectionStatus {
   connectedAt: string | null;
   lastHeartbeat: string | null;
   publicEndpoint: string | null;
-  natType: 'direct' | 'upnp' | 'relay' | 'wireguard' | 'unknown';
+  natType: 'direct' | 'upnp' | 'relay' | 'wireguard' | 'amnezia-wireguard' | 'unknown';
 }
 
 // Default super nodes - multiple nodes for failover
@@ -137,8 +138,11 @@ export class ConnectivityService {
   private networkDetector: NetworkDetector;
   private activeProxyClient: ActiveProxyClient | null = null;
   private wireGuardService: WireGuardService | null = null;
+  private amneziaWGService: AmneziaWGService | null = null;
   private wireGuardRetryTimer: NodeJS.Timeout | null = null;
   private wireGuardRetryAttempts: number = 0;
+  private wgBlockedByDPI: boolean = false;
+  private stealthMode: boolean = false;
   private lastGatewayIP: string | null = null;
   private currentSuperNodeIndex: number = 0;
   private failedSuperNodes: Set<string> = new Set();
@@ -194,6 +198,14 @@ export class ConnectivityService {
     this.wireGuardService = service;
   }
 
+  setAmneziaWGService(service: AmneziaWGService): void {
+    this.amneziaWGService = service;
+  }
+
+  setStealthMode(enabled: boolean): void {
+    this.stealthMode = enabled;
+  }
+
   /**
    * Attempt to connect via WireGuard tunnel.
    * Returns true if the tunnel is established and the endpoint is registered.
@@ -247,6 +259,56 @@ export class ConnectivityService {
   }
 
   /**
+   * Attempt to connect via AmneziaWG stealth tunnel.
+   * Used when standard WireGuard is blocked by DPI or stealth mode is enabled.
+   */
+  private async connectViaAmneziaWG(): Promise<boolean> {
+    if (!this.amneziaWGService || !this.amneziaWGService.isAvailable()) {
+      return false;
+    }
+
+    if (!this.usernameService || !this.usernameService.hasUsername()) {
+      logger.debug('[AmneziaWG] No username registered, skipping');
+      return false;
+    }
+
+    try {
+      logger.info('[Connectivity] Attempting AmneziaWG stealth tunnel...');
+      await this.amneziaWGService.connect();
+
+      const awgIP = this.amneziaWGService.getAssignedIP();
+      if (!awgIP) {
+        throw new Error('No IP assigned after AmneziaWG connect');
+      }
+
+      const endpoint = `http://${awgIP}:${this.config.localPort}`;
+      const result = await this.usernameService.updateEndpoint(endpoint);
+
+      if (result.success) {
+        this.status.connected = true;
+        this.status.natType = 'amnezia-wireguard';
+        this.status.publicEndpoint = this.usernameService.getPublicUrl();
+        this.status.connectedAt = new Date().toISOString();
+        logger.info(`[Connectivity] AmneziaWG stealth tunnel active: ${endpoint}`);
+        logger.info(`[Connectivity] Public URL: ${this.status.publicEndpoint}`);
+
+        const serverIP = this.amneziaWGService.getServerIP();
+        if (serverIP) {
+          this.amneziaWGService.setOnTunnelDown(() => this.handleAmneziaWGDown());
+          this.amneziaWGService.startHealthCheck(serverIP);
+        }
+        return true;
+      }
+
+      logger.warn(`[Connectivity] AmneziaWG connected but endpoint registration failed: ${result.error}`);
+      return false;
+    } catch (error) {
+      logger.warn(`[Connectivity] AmneziaWG failed: ${error}`);
+      return false;
+    }
+  }
+
+  /**
    * Start connectivity service
    */
   async start(): Promise<void> {
@@ -285,17 +347,30 @@ export class ConnectivityService {
       this.status.natType = 'relay';
     }
 
-    // Attempt initial connection
+    // Three-tier transport cascade: WireGuard > AmneziaWG > ActiveProxy
     if (needsProxy) {
-      // Priority: WireGuard > Boson ActiveProxy
-      // WireGuard gives near-localhost speed; Boson is the fallback
       let connected = false;
 
-      // Try WireGuard first (requires wg tools installed + username registered)
-      if (this.wireGuardService && this.wireGuardService.isAvailable()) {
-        connected = await this.connectViaWireGuard();
+      // Stealth mode skips standard WireGuard entirely
+      if (!this.stealthMode) {
+        if (this.wireGuardService && this.wireGuardService.isAvailable()) {
+          connected = await this.connectViaWireGuard();
+          if (connected) {
+            logger.info('🚀 Connected via WireGuard tunnel (high-performance mode)');
+          } else {
+            this.wgBlockedByDPI = true;
+            logger.info('[Connectivity] WireGuard failed, flagging potential DPI block');
+          }
+        }
+      } else {
+        logger.info('🔒 Stealth mode enabled - skipping standard WireGuard');
+      }
+
+      // Try AmneziaWG stealth tunnel (fallback or primary in stealth mode)
+      if (!connected && this.amneziaWGService && this.amneziaWGService.isAvailable()) {
+        connected = await this.connectViaAmneziaWG();
         if (connected) {
-          logger.info('🚀 Connected via WireGuard tunnel (high-performance mode)');
+          logger.info('🕵️ Connected via AmneziaWG stealth tunnel (DPI-resistant)');
         }
       }
 
@@ -305,8 +380,6 @@ export class ConnectivityService {
           await this.connectViaActiveProxy();
         } catch (error) {
           logger.warn(`⚠️ Active Proxy connection failed: ${error}. Will retry via heartbeat.`);
-          // Still connect to gateway for health monitoring, but natType stays 'relay'
-          // so registerWithGateway() won't register an unreachable public IP
           await this.connect();
         }
       } else if (!connected) {
@@ -851,8 +924,12 @@ export class ConnectivityService {
       if (this.lastGatewayIP && this.lastGatewayIP !== currentGateway) {
         logger.info(`[Network] Gateway changed: ${this.lastGatewayIP} → ${currentGateway} -- triggering reconnect`);
         this.networkDetector.clearCache();
+        this.wgBlockedByDPI = false;
 
-        if (this.wireGuardService?.isConnected()) {
+        if (this.amneziaWGService?.isConnected()) {
+          this.amneziaWGService.disconnect().catch(() => {});
+          this.handleAmneziaWGDown();
+        } else if (this.wireGuardService?.isConnected()) {
           this.wireGuardService.disconnect().catch(() => {});
           this.handleWireGuardDown();
         } else if (this.status.connected) {
@@ -879,11 +956,24 @@ export class ConnectivityService {
     this.reconnectTimer = setTimeout(async () => {
       this.reconnectTimer = null;
 
-      // Try WireGuard first -- it may have recovered since last attempt
-      if (this.wireGuardService && this.wireGuardService.isAvailable()) {
+      // Try WireGuard first (skip if DPI blocked or stealth mode)
+      if (!this.stealthMode && !this.wgBlockedByDPI && this.wireGuardService && this.wireGuardService.isAvailable()) {
         const wgConnected = await this.connectViaWireGuard();
         if (wgConnected) {
           logger.info('🚀 Reconnected via WireGuard tunnel');
+          if (this.activeProxyClient) {
+            await this.activeProxyClient.disconnect();
+            this.activeProxyClient = null;
+          }
+          return;
+        }
+      }
+
+      // Try AmneziaWG stealth tunnel
+      if (this.amneziaWGService && this.amneziaWGService.isAvailable()) {
+        const awgConnected = await this.connectViaAmneziaWG();
+        if (awgConnected) {
+          logger.info('🕵️ Reconnected via AmneziaWG stealth tunnel');
           if (this.activeProxyClient) {
             await this.activeProxyClient.disconnect();
             this.activeProxyClient = null;
@@ -941,15 +1031,48 @@ export class ConnectivityService {
    * and schedules a background WireGuard retry with exponential backoff.
    */
   private handleWireGuardDown(): void {
-    logger.warn('⚠️ WireGuard tunnel lost -- falling back to Boson relay');
+    logger.warn('⚠️ WireGuard tunnel lost -- falling back to AmneziaWG/Boson');
+    this.status.connected = false;
+    this.status.natType = 'unknown';
+    this.wgBlockedByDPI = true;
+
+    // Try AmneziaWG stealth tunnel before falling back to ActiveProxy
+    if (this.amneziaWGService && this.amneziaWGService.isAvailable()) {
+      this.connectViaAmneziaWG().then((ok) => {
+        if (ok) {
+          logger.info('🕵️ Fell back to AmneziaWG stealth tunnel after WireGuard loss');
+        } else {
+          this.fallbackToActiveProxy();
+        }
+      }).catch(() => {
+        this.fallbackToActiveProxy();
+      });
+    } else {
+      this.fallbackToActiveProxy();
+    }
+
+    // Schedule a background WireGuard retry with exponential backoff
+    this.wireGuardRetryAttempts = 0;
+    this.scheduleWireGuardRetry();
+  }
+
+  private handleAmneziaWGDown(): void {
+    logger.warn('⚠️ AmneziaWG stealth tunnel lost -- falling back to Boson relay');
     this.status.connected = false;
     this.status.natType = 'unknown';
 
-    // Immediate fallback to ActiveProxy
+    this.fallbackToActiveProxy();
+
+    // Schedule retry: try AmneziaWG again in background, then WireGuard
+    this.wireGuardRetryAttempts = 0;
+    this.scheduleWireGuardRetry();
+  }
+
+  private fallbackToActiveProxy(): void {
     if (this.publicKey && this.privateKey && this.nodeId) {
       this.connectViaActiveProxy().then((ok) => {
         if (ok) {
-          logger.info('🔄 Fell back to Boson Active Proxy after WireGuard loss');
+          logger.info('🔄 Fell back to Boson Active Proxy');
         } else {
           this.scheduleReconnect();
         }
@@ -959,10 +1082,6 @@ export class ConnectivityService {
     } else {
       this.scheduleReconnect();
     }
-
-    // Schedule a background WireGuard retry with exponential backoff
-    this.wireGuardRetryAttempts = 0;
-    this.scheduleWireGuardRetry();
   }
 
   /**
@@ -978,33 +1097,55 @@ export class ConnectivityService {
     const WG_RETRY_MAX_MS = 300_000;
     const delayMs = Math.min(WG_RETRY_BASE_MS * (2 ** this.wireGuardRetryAttempts), WG_RETRY_MAX_MS);
 
-    logger.info(`[Connectivity] WireGuard retry scheduled in ${delayMs / 1000}s (attempt ${this.wireGuardRetryAttempts + 1})`);
+    logger.info(`[Connectivity] Transport upgrade retry scheduled in ${delayMs / 1000}s (attempt ${this.wireGuardRetryAttempts + 1})`);
 
     this.wireGuardRetryTimer = setTimeout(async () => {
       this.wireGuardRetryTimer = null;
-      if (!this.wireGuardService || !this.isRunning) return;
+      if (!this.isRunning) return;
 
-      logger.info('🔄 Attempting WireGuard re-establishment...');
-      try {
-        await this.wireGuardService.disconnect();
-        const connected = await this.connectViaWireGuard();
-        if (connected) {
-          if (this.activeProxyClient) {
-            await this.activeProxyClient.disconnect();
-            this.activeProxyClient = null;
+      // Try WireGuard first (unless stealth mode or DPI-blocked)
+      if (!this.stealthMode && !this.wgBlockedByDPI && this.wireGuardService) {
+        logger.info('🔄 Attempting WireGuard re-establishment...');
+        try {
+          await this.wireGuardService.disconnect();
+          const connected = await this.connectViaWireGuard();
+          if (connected) {
+            if (this.activeProxyClient) {
+              await this.activeProxyClient.disconnect();
+              this.activeProxyClient = null;
+            }
+            if (this.amneziaWGService?.isConnected()) {
+              await this.amneziaWGService.disconnect();
+            }
+            logger.info('🚀 WireGuard tunnel re-established');
+            return;
           }
-          logger.info('🚀 WireGuard tunnel re-established');
-          // wireGuardRetryAttempts reset inside connectViaWireGuard on success
-        } else {
-          this.wireGuardRetryAttempts++;
-          logger.info('[Connectivity] WireGuard retry failed, staying on Boson');
-          this.scheduleWireGuardRetry();
+        } catch (error) {
+          logger.warn(`[Connectivity] WireGuard retry error: ${error}`);
         }
-      } catch (error) {
-        this.wireGuardRetryAttempts++;
-        logger.warn(`[Connectivity] WireGuard retry error: ${error}`);
-        this.scheduleWireGuardRetry();
       }
+
+      // Try AmneziaWG
+      if (this.amneziaWGService && this.amneziaWGService.isAvailable() && !this.amneziaWGService.isConnected()) {
+        logger.info('🔄 Attempting AmneziaWG stealth tunnel...');
+        try {
+          const connected = await this.connectViaAmneziaWG();
+          if (connected) {
+            if (this.activeProxyClient) {
+              await this.activeProxyClient.disconnect();
+              this.activeProxyClient = null;
+            }
+            logger.info('🕵️ AmneziaWG stealth tunnel established');
+            return;
+          }
+        } catch (error) {
+          logger.warn(`[Connectivity] AmneziaWG retry error: ${error}`);
+        }
+      }
+
+      this.wireGuardRetryAttempts++;
+      logger.info('[Connectivity] Transport upgrade retry failed, staying on current transport');
+      this.scheduleWireGuardRetry();
     }, delayMs);
   }
 

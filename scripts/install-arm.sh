@@ -344,6 +344,96 @@ SUDOERS_EOF
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Install AmneziaWG stealth transport (DPI-resistant fallback)
+#
+# AmneziaWG is a WireGuard fork that adds transport-layer obfuscation,
+# making tunnels undetectable by Deep Packet Inspection (used by China GFW,
+# Russian ISP blocks, etc). It uses the same Go compiler already needed
+# for wireguard-go, so this adds minimal overhead.
+# ─────────────────────────────────────────────────────────────────────────────
+
+AWG_READY=false
+
+install_amneziawg() {
+    echo ""
+    print_step "Setting up AmneziaWG stealth transport (optional DPI-resistant fallback)..."
+
+    # Check if already installed
+    if command -v amneziawg-go &>/dev/null || test -x /usr/local/bin/amneziawg-go; then
+        print_ok "AmneziaWG binary already installed"
+        AWG_READY=true
+    else
+        # Requires Go compiler (should already be installed from wireguard-go step)
+        if ! command -v go &>/dev/null; then
+            print_step "Installing Go compiler for AmneziaWG build..."
+            sudo apt-get install -y -qq golang-go 2>/dev/null || sudo snap install go --classic 2>/dev/null || true
+        fi
+
+        if command -v go &>/dev/null; then
+            print_step "Building amneziawg-go from source (takes 1-2 minutes)..."
+            GOBIN=/usr/local/bin sudo -E go install github.com/amnezia-vpn/amneziawg-go@latest 2>&1 || true
+            if test -x /usr/local/bin/amneziawg-go; then
+                print_ok "AmneziaWG binary built and installed"
+                AWG_READY=true
+            else
+                print_warn "AmneziaWG build failed -- stealth transport will not be available"
+            fi
+        else
+            print_warn "Go compiler not available, cannot build AmneziaWG"
+        fi
+    fi
+
+    # Install awg-quick (AmneziaWG interface manager)
+    if command -v awg-quick &>/dev/null || test -x /usr/local/bin/awg-quick; then
+        print_ok "AmneziaWG tools already installed"
+    else
+        print_step "Building AmneziaWG tools (awg, awg-quick)..."
+        AWG_TOOLS_TMP=$(mktemp -d)
+        if git clone --depth 1 https://github.com/amnezia-vpn/amnezia-wg-tools.git "$AWG_TOOLS_TMP" 2>/dev/null; then
+            if [[ -d "$AWG_TOOLS_TMP/src" ]]; then
+                (cd "$AWG_TOOLS_TMP/src" && make 2>&1 && sudo make install 2>&1) || true
+            fi
+        fi
+        rm -rf "$AWG_TOOLS_TMP"
+        if command -v awg-quick &>/dev/null || test -x /usr/local/bin/awg-quick; then
+            print_ok "AmneziaWG tools installed"
+        else
+            print_warn "AmneziaWG tools build failed"
+            AWG_READY=false
+        fi
+    fi
+
+    # Configure passwordless sudo for awg-quick
+    if command -v awg-quick &>/dev/null || test -x /usr/local/bin/awg-quick; then
+        SUDOERS_FILE="/etc/sudoers.d/pc2-amneziawg"
+        AWG_QUICK_PATH=$(which awg-quick 2>/dev/null || echo "/usr/local/bin/awg-quick")
+
+        if [ -f "$SUDOERS_FILE" ]; then
+            print_ok "AmneziaWG permissions already configured"
+        else
+            sudo tee "$SUDOERS_FILE" > /dev/null << SUDOERS_EOF
+# PC2: Allow awg-quick without password (SETENV for amneziawg-go)
+ALL ALL=(root) NOPASSWD: SETENV: ${AWG_QUICK_PATH} up *, ${AWG_QUICK_PATH} down *
+SUDOERS_EOF
+            sudo chmod 440 "$SUDOERS_FILE"
+
+            if sudo visudo -c -f "$SUDOERS_FILE" &>/dev/null; then
+                print_ok "AmneziaWG permissions configured"
+            else
+                print_error "Invalid sudoers file, removing"
+                sudo rm -f "$SUDOERS_FILE"
+            fi
+        fi
+    fi
+
+    if [ "$AWG_READY" = true ]; then
+        print_ok "AmneziaWG stealth transport ready (DPI-resistant fallback)"
+    else
+        print_warn "AmneziaWG not available -- not a problem unless you're behind DPI (China/Russia)"
+    fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Install voice AI tools (Whisper STT + Piper TTS + ffmpeg)
 # Opt-in only — enable with INSTALL_VOICE=1
 # Whisper uses ~500MB+ GPU memory which competes with Ollama on Jetson
@@ -667,6 +757,7 @@ main() {
     install_nodejs
     install_pm2
     install_wireguard
+    install_amneziawg
     install_voice_tools
     install_pc2
     start_pc2

@@ -110,6 +110,26 @@ export default {
                             </div>
                         </div>
                     </div>
+                    <div class="pc2-group-row">
+                        <div class="pc2-card-row">
+                            <span class="pc2-card-label">Transport</span>
+                            <span id="pc2-transport-type" class="pc2-card-value">-</span>
+                        </div>
+                    </div>
+                    <div class="pc2-group-row">
+                        <div class="pc2-card-row">
+                            <span class="pc2-card-label">Stealth Mode</span>
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <span id="pc2-stealth-label" style="font-size:12px; color:#888;">Off</span>
+                                <label style="position:relative; display:inline-block; width:34px; height:18px; cursor:pointer;">
+                                    <input type="checkbox" id="pc2-stealth-toggle" style="opacity:0; width:0; height:0;">
+                                    <span style="position:absolute; top:0; left:0; right:0; bottom:0; background:#ccc; border-radius:9px; transition:0.3s;"></span>
+                                    <span style="position:absolute; top:2px; left:2px; width:14px; height:14px; background:#fff; border-radius:50%; transition:0.3s;"></span>
+                                </label>
+                            </div>
+                        </div>
+                        <p style="margin:4px 0 0; font-size:11px; color:#999;">Forces AmneziaWG stealth tunnel, bypassing standard WireGuard. Use if behind DPI (China, Russia).</p>
+                    </div>
                 </div>
             </div>
             
@@ -1007,6 +1027,37 @@ export default {
                     loadSystemResources(),
                     loadWasmStats()
                 ]);
+
+                // Load transport status from connectivity API
+                if (pc2Mode && window.api_origin) {
+                    try {
+                        const authToken = getAuthToken();
+                        const headers = { 'Content-Type': 'application/json' };
+                        if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+                        const connResp = await fetch(new URL('/api/boson/connectivity', window.api_origin).toString(), { method: 'GET', headers });
+                        if (connResp.ok) {
+                            const connData = await connResp.json();
+                            const natType = connData.natType || 'unknown';
+                            const transportLabels = {
+                                'wireguard': 'WireGuard',
+                                'amnezia-wireguard': 'AmneziaWG (Stealth)',
+                                'relay': 'Active Proxy',
+                                'direct': 'Direct',
+                            };
+                            const transportColors = {
+                                'wireguard': '#22c55e',
+                                'amnezia-wireguard': '#a78bfa',
+                                'relay': '#f59e0b',
+                                'direct': '#22c55e',
+                            };
+                            const label = transportLabels[natType] || natType;
+                            const color = transportColors[natType] || '#888';
+                            $el_window.find('#pc2-transport-type').html(`<span style="color:${color}; font-weight:500;">${label}</span>`);
+                        }
+                    } catch (err) {
+                        logger.debug('[PC2Tab] Could not fetch connectivity status:', err);
+                    }
+                }
                 
                 // Start real-time polling for system resources
                 startSystemResourcesPolling();
@@ -1018,6 +1069,37 @@ export default {
             }
         }
         
+        // Stealth mode toggle handler
+        const $stealthToggle = $el_window.find('#pc2-stealth-toggle');
+        const $stealthLabel = $el_window.find('#pc2-stealth-label');
+        const $stealthTrack = $stealthToggle.parent().find('span').eq(0);
+        const $stealthKnob = $stealthToggle.parent().find('span').eq(1);
+
+        function updateStealthVisual(on) {
+            $stealthTrack.css('background', on ? '#22c55e' : '#ccc');
+            $stealthKnob.css('left', on ? '18px' : '2px');
+            $stealthLabel.text(on ? 'On' : 'Off').css('color', on ? '#22c55e' : '#888');
+        }
+
+        $stealthToggle.on('change', async function() {
+            const enabled = this.checked;
+            updateStealthVisual(enabled);
+            if (isPC2Mode() && window.api_origin) {
+                try {
+                    const authToken = getAuthToken();
+                    const headers = { 'Content-Type': 'application/json' };
+                    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+                    await fetch(new URL('/api/boson/stealth-mode', window.api_origin).toString(), {
+                        method: 'POST',
+                        headers,
+                        body: JSON.stringify({ enabled }),
+                    });
+                } catch (err) {
+                    logger.warn('[PC2Tab] Failed to set stealth mode:', err);
+                }
+            }
+        });
+
         // Load storage stats from PC2
         async function loadStorageStats() {
             try {

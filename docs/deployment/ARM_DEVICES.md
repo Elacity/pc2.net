@@ -192,9 +192,17 @@ ping 10.100.0.1                       # Test tunnel connectivity
 pm2 logs pc2                          # Node logs (look for "[WireGuard]")
 ```
 
-### Automatic Fallback
+### Automatic Fallback (Three-Tier Cascade)
 
-If WireGuard is blocked (e.g. restrictive network, DPI firewall) or fails (3 consecutive health check failures), the node automatically falls back to Boson Active Proxy relay. This is slower (TCP relay) but works everywhere, including networks that block VPN traffic. No user action needed -- the `ConnectivityService` handles failover transparently.
+PC2 uses a three-tier transport cascade that automatically finds the best connection:
+
+1. **WireGuard** (primary) — fastest, audited, works on most networks
+2. **AmneziaWG** (stealth fallback) — DPI-resistant WireGuard fork, for censored networks (China GFW, Russia, Iran)
+3. **ActiveProxy** (relay) — TCP relay via Boson supernode, works everywhere
+
+If WireGuard fails (3 consecutive health check failures), the node tries AmneziaWG stealth tunnel first. If that also fails, it falls back to ActiveProxy. The system periodically retries higher-tier transports in the background.
+
+For users behind DPI firewalls, enable **Stealth Mode** in Settings → Personal Cloud to skip standard WireGuard entirely and go straight to AmneziaWG. See [STEALTH_MODE.md](STEALTH_MODE.md) for details.
 
 ### Option C: Port Forwarding
 

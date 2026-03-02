@@ -172,6 +172,30 @@ router.get('/connectivity', (req: Request, res: Response) => {
 });
 
 /**
+ * POST /api/boson/stealth-mode
+ * Toggle stealth mode (forces AmneziaWG stealth tunnel)
+ */
+router.post('/stealth-mode', (req: Request, res: Response) => {
+  const bosonService = getBosonService(req);
+
+  if (!bosonService) {
+    return res.status(503).json({
+      error: 'Boson service not available',
+    });
+  }
+
+  const { enabled } = req.body;
+  if (typeof enabled !== 'boolean') {
+    return res.status(400).json({ error: 'enabled must be a boolean' });
+  }
+
+  const connectivityService = bosonService.getConnectivityService();
+  connectivityService.setStealthMode(enabled);
+
+  res.json({ success: true, stealthMode: enabled });
+});
+
+/**
  * POST /api/boson/reconnect
  * Force reconnection to super node
  */

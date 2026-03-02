@@ -36,6 +36,11 @@ export interface Config {
     public_domain?: string;
     auto_connect?: boolean;
     privacy_mode?: boolean;
+    stealth_mode?: boolean;
+    amnezia_wg?: {
+      enabled?: boolean;
+      auto_fallback?: boolean;
+    };
     supernodes?: Array<{
       id: string;
       address: string;

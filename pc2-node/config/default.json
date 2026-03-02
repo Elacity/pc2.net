@@ -21,7 +21,12 @@
     "gateway_url": "https://69.164.241.210",
     "public_domain": "ela.city",
     "auto_connect": true,
-    "privacy_mode": false
+    "privacy_mode": false,
+    "stealth_mode": false,
+    "amnezia_wg": {
+      "enabled": true,
+      "auto_fallback": true
+    }
   },
   "ai": {
     "enabled": true,

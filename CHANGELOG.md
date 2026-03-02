@@ -32,6 +32,17 @@
 - **Settings UI**: Single-row Voice AI control with Install button or Enable toggle
 - **Opt-in on ARM**: Voice AI tools not auto-installed on Jetson (saves ~500MB GPU memory)
 
+#### AmneziaWG Stealth Transport (2026-03-02)
+- **DPI-Resistant Tunnel**: AmneziaWG (WireGuard fork) as a stealth fallback for censored networks
+- **Three-Tier Cascade**: WireGuard > AmneziaWG > ActiveProxy, automatic failover and upgrade
+- **DPI Detection**: Automatic detection of DPI blocks (WireGuard connects but traffic is dropped)
+- **Stealth Mode**: Toggle in Settings to force AmneziaWG, bypassing standard WireGuard
+- **Supernode Support**: Separate AWG interface (awg0) on port 51821 with 10.101.0.0/16 subnet
+- **Provisioning API**: `/api/awg/register` and `/api/awg/status` endpoints with obfuscation params
+- **Install Scripts**: Both `start-local.sh` and `install-arm.sh` build `amneziawg-go` from source
+- **Cloud Dropdown**: Transport indicator shows "AmneziaWG (Stealth)" in purple when active
+- **Documentation**: New `docs/deployment/STEALTH_MODE.md` guide for users behind DPI
+
 #### WireGuard macOS Support (2026-03-01)
 - **Cross-platform WireGuard**: Full support for macOS alongside Linux
 - **Auto-install**: `start-local.sh` automatically installs Homebrew + WireGuard tools on macOS

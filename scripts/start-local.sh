@@ -340,6 +340,85 @@ PARTICLE_EOF
         fi
     fi
 
+    # Install AmneziaWG stealth transport (DPI-resistant fallback)
+    # On macOS, install to Homebrew prefix (no sudo needed).
+    # On Linux, install to /usr/local/bin (sudo only on Linux where user expects it).
+    if ! command -v amneziawg-go &> /dev/null; then
+        echo -e "${CYAN}Installing AmneziaWG stealth transport (DPI-resistant fallback)...${NC}"
+
+        if [[ "$OS" == "macos" ]]; then
+            AWG_BIN_DIR="$(brew --prefix 2>/dev/null)/bin"
+            [[ -z "$AWG_BIN_DIR" || "$AWG_BIN_DIR" == "/bin" ]] && AWG_BIN_DIR="/usr/local/bin"
+        else
+            AWG_BIN_DIR="/usr/local/bin"
+        fi
+
+        if ! command -v go &> /dev/null; then
+            echo -e "${YELLOW}Go compiler not found -- installing Go to build AmneziaWG...${NC}"
+            if [[ "$OS" == "macos" ]]; then
+                brew install go 2>&1 || true
+            elif command -v apt-get &> /dev/null; then
+                sudo apt-get install -y -qq golang-go 2>&1 || true
+            elif command -v yum &> /dev/null; then
+                sudo yum install -y golang 2>&1 || true
+            fi
+        fi
+
+        if command -v go &> /dev/null; then
+            echo -e "${CYAN}Building amneziawg-go from source...${NC}"
+            AWG_BUILD_DIR=$(mktemp -d)
+            (cd "$AWG_BUILD_DIR" && git clone --depth 1 https://github.com/amnezia-vpn/amneziawg-go.git 2>&1 && cd amneziawg-go && make 2>&1 && cp amneziawg-go "$AWG_BIN_DIR/amneziawg-go" && chmod 755 "$AWG_BIN_DIR/amneziawg-go") || true
+            rm -rf "$AWG_BUILD_DIR"
+        fi
+
+        if command -v amneziawg-go &> /dev/null; then
+            echo -e "${GREEN}✓ AmneziaWG binary installed${NC}"
+        else
+            echo -e "${YELLOW}⚠ AmneziaWG build failed -- stealth transport will not be available${NC}"
+        fi
+    else
+        echo -e "${GREEN}✓ AmneziaWG binary detected${NC}"
+    fi
+
+    # Install awg-quick (AmneziaWG interface manager)
+    if ! command -v awg-quick &> /dev/null; then
+        echo -e "${CYAN}Installing AmneziaWG tools (awg-quick)...${NC}"
+
+        if [[ "$OS" == "macos" ]]; then
+            AWG_BIN_DIR="$(brew --prefix 2>/dev/null)/bin"
+            [[ -z "$AWG_BIN_DIR" || "$AWG_BIN_DIR" == "/bin" ]] && AWG_BIN_DIR="/usr/local/bin"
+            AWG_QUICK_SCRIPT="darwin.bash"
+        else
+            AWG_BIN_DIR="/usr/local/bin"
+            AWG_QUICK_SCRIPT="linux.bash"
+        fi
+
+        AWG_TOOLS_TMP=$(mktemp -d)
+        git clone --depth 1 https://github.com/amnezia-vpn/amnezia-wg-tools.git "$AWG_TOOLS_TMP" 2>&1 || true
+        if [[ -d "$AWG_TOOLS_TMP/src" ]]; then
+            (cd "$AWG_TOOLS_TMP/src" && make 2>&1 && cp wg "$AWG_BIN_DIR/awg" && cp "wg-quick/$AWG_QUICK_SCRIPT" "$AWG_BIN_DIR/awg-quick" && chmod 755 "$AWG_BIN_DIR/awg" "$AWG_BIN_DIR/awg-quick") || true
+        fi
+        rm -rf "$AWG_TOOLS_TMP"
+
+        if command -v awg-quick &> /dev/null; then
+            echo -e "${GREEN}✓ AmneziaWG tools installed${NC}"
+        else
+            echo -e "${YELLOW}⚠ AmneziaWG tools build failed -- stealth transport will not be available${NC}"
+        fi
+    else
+        echo -e "${GREEN}✓ AmneziaWG tools detected${NC}"
+    fi
+
+    # Configure passwordless sudo for awg-quick (needed for interface management)
+    if command -v awg-quick &> /dev/null; then
+        AWG_QUICK_PATH=$(which awg-quick 2>/dev/null)
+        if [[ -x "$AWG_QUICK_PATH" ]] && [[ ! -f /etc/sudoers.d/amneziawg ]]; then
+            echo -e "${CYAN}Configuring AmneziaWG permissions...${NC}"
+            sudo sh -c "echo '$(whoami) ALL=(ALL) NOPASSWD: ${AWG_QUICK_PATH}' > /etc/sudoers.d/amneziawg && chmod 440 /etc/sudoers.d/amneziawg"
+            echo -e "${GREEN}✓ AmneziaWG permissions configured${NC}"
+        fi
+    fi
+
     # Detect if running on VPS (no DISPLAY) or local machine
     # Also get public IP for VPS users
     LOCAL_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "")

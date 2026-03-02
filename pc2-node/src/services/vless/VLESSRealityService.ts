@@ -161,7 +161,7 @@ export class VLESSRealityService {
         server: serverHost,
         server_port: serverPort,
         uuid: provision.uuid,
-        packet_encoding: 'packetaddr',
+        packet_encoding: 'xudp',
         tls: {
           enabled: true,
           server_name: provision.serverName,

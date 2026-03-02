@@ -6999,10 +6999,21 @@ html:not([data-theme="light"]) .path-seperator,
     background-color: transparent !important;
     color: var(--color-menu-text) !important;
 }
-.context-menu[data-id="user-options-menu"] .context-menu-item-disabled:hover {
+.context-menu[data-id="user-options-menu"] .context-menu-item-disabled:hover,
+.context-menu[data-id="pc2-menu"] .context-menu-item-disabled:hover {
     opacity: 1;
     background-color: transparent !important;
     color: var(--color-menu-text) !important;
+}
+.context-menu[data-id="pc2-menu"] .context-menu-item-disabled {
+    opacity: 1;
+    pointer-events: none;
+    cursor: default;
+    background-color: transparent !important;
+}
+.context-menu[data-id="pc2-menu"] .pc2-privacy-toggle {
+    pointer-events: auto;
+    cursor: pointer;
 }
 /* Dark mode: ensure disabled rows and their inner text/spans are light (override color: initial) */
 html:not([data-theme="light"]) .context-menu[data-id="user-options-menu"] .context-menu-item-disabled,
@@ -7258,7 +7269,10 @@ label {
     opacity: 0.8;
 }
 
-.toolbar-btn:hover {
+.toolbar-btn:hover:not(.toolbar-puter-logo) {
+    opacity: 1 !important;
+}
+.toolbar-puter-logo {
     opacity: 1 !important;
 }
 
@@ -7289,7 +7303,7 @@ label {
     padding: 0 15px;
 }
 
-.toolbar-btn:hover:not(.has-open-contextmenu) {
+.toolbar-btn:hover:not(.has-open-contextmenu):not(.toolbar-puter-logo) {
     background-color: rgb(255 255 255 / 15%);
     border-radius: 3px;
 }

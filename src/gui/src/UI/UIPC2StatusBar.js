@@ -91,13 +91,16 @@ function initPC2StatusBar() {
     let currentStatus = 'disconnected';
     let currentError = null;
 
+    const copyIcon = `<svg style="width:12px;height:12px;vertical-align:middle;cursor:pointer;opacity:0.6;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>`;
+    let privacyHidden = true;
+
+    const maskValue = (val) => privacyHidden ? val.replace(/[a-zA-Z0-9]/g, '•') : val;
+
     // Build menu items based on current status
-    const getMenuItems = (stats = null) => {
+    const getMenuItems = (stats = null, nodeInfo = null, connectivity = null) => {
         const items = [];
         const session = pc2Service.getSession?.() || {};
         
-        // SIMPLIFIED AUTH: In "Puter on PC2" mode, connection status = authentication status
-        // If we're accessing the PC2 node directly, we're already "connected" - status reflects auth
         const isAuthenticated = window.is_auth && window.is_auth();
         const isPC2Mode = window.api_origin && (
             window.api_origin.includes('127.0.0.1:4200') || 
@@ -105,14 +108,12 @@ function initPC2StatusBar() {
             window.location.origin === window.api_origin
         );
         
-        // In PC2 mode, use authentication status instead of separate connection status
         let effectiveStatus = currentStatus;
         let effectiveStatusText = currentStatus === 'connected' ? i18n('connected') :
                                  currentStatus === 'connecting' ? i18n('connecting') :
                                  currentStatus === 'error' ? (currentError || i18n('error')) : i18n('not_connected');
         
         if (isPC2Mode) {
-            // In PC2 mode: authenticated = connected, not authenticated = not connected
             if (isAuthenticated) {
                 effectiveStatus = 'connected';
                 effectiveStatusText = i18n('connected');
@@ -122,7 +123,6 @@ function initPC2StatusBar() {
             }
         }
 
-        // Status dot color: orange if not connected, green if connected
         const dotColor = effectiveStatus === 'connected' ? '#22c55e' : '#f59e0b';
 
         items.push({
@@ -137,13 +137,45 @@ function initPC2StatusBar() {
             disabled: true
         });
 
-        if (effectiveStatus === 'connected' && (session.nodeName || isPC2Mode)) {
-            const nodeName = session.nodeName || (isPC2Mode ? i18n('this_pc2_node') : i18n('pc2_node'));
-            items.push({
-                html: `<span style="color: #fff;">${i18n('node')}: ${nodeName}</span>`,
-                icon: `<svg style="width:16px; height:16px; vertical-align:middle;" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>`,
-                disabled: true
-            });
+        // Domain, IP, and connection method
+        if (effectiveStatus === 'connected' && nodeInfo) {
+            items.push('-');
+
+            const domainDisplay = privacyHidden ? maskValue(nodeInfo.publicUrl || '') : (nodeInfo.publicUrl || '');
+            const ipDisplay = privacyHidden ? maskValue(nodeInfo.localIp || '') : (nodeInfo.localIp || '');
+
+            if (nodeInfo.publicUrl) {
+                items.push({
+                    html: `<span style="color:#ccc; font-size:12px;"><span class="pc2-masked-value" data-real="${nodeInfo.publicUrl}">${domainDisplay}</span> <span class="pc2-copy-icon">${copyIcon}</span></span>`,
+                    icon: `<svg style="width:14px;height:14px;vertical-align:middle;" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>`,
+                    onClick: () => {
+                        navigator.clipboard.writeText(nodeInfo.publicUrl);
+                    }
+                });
+            }
+
+            if (nodeInfo.localIp) {
+                const localUrl = `http://${nodeInfo.localIp}:${window.location.port || '4200'}`;
+                items.push({
+                    html: `<span style="color:#ccc; font-size:12px;">IP: <span class="pc2-masked-value" data-real="${nodeInfo.localIp}">${ipDisplay}</span> <span class="pc2-copy-icon">${copyIcon}</span></span>`,
+                    icon: `<svg style="width:14px;height:14px;vertical-align:middle;" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>`,
+                    onClick: () => {
+                        navigator.clipboard.writeText(localUrl);
+                    }
+                });
+            }
+
+            if (connectivity) {
+                const natType = connectivity.natType || 'unknown';
+                const isWireGuard = natType === 'wireguard';
+                const methodLabel = isWireGuard ? 'WireGuard' : (natType === 'relay' ? 'Active Proxy' : (natType === 'direct' ? 'Direct' : natType));
+                const methodColor = isWireGuard ? '#22c55e' : (natType === 'relay' ? '#f59e0b' : '#fff');
+                items.push({
+                    html: `<span style="color:#ccc; font-size:12px;">Access: <span style="color:${methodColor}; font-weight:500;">${methodLabel}</span></span>`,
+                    icon: `<svg style="width:14px;height:14px;vertical-align:middle;" viewBox="0 0 24 24" fill="none" stroke="${methodColor}" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`,
+                    disabled: true
+                });
+            }
         }
 
         // Show stats if connected
@@ -355,6 +387,22 @@ function initPC2StatusBar() {
     // Initialize
     insertStatusBar();
 
+    // Privacy toggle: update masked values and switch in-place
+    $(document).on('click', '.pc2-privacy-toggle', function(e) {
+        e.stopPropagation();
+        e.preventDefault();
+        privacyHidden = !privacyHidden;
+        const $menu = $(this).closest('.context-menu');
+        $menu.find('.pc2-masked-value').each(function() {
+            const real = $(this).attr('data-real');
+            $(this).text(privacyHidden ? maskValue(real) : real);
+        });
+        const $track = $(this).find('.pc2-toggle-track');
+        const $knob = $track.children('span');
+        $track.css('background', privacyHidden ? '#555' : '#22c55e');
+        $knob.css({ left: privacyHidden ? '2px' : 'auto', right: privacyHidden ? 'auto' : '2px' });
+    });
+
     // Use delegated event for click - opens UIContextMenu
     $(document).on('click', '.pc2-status-bar', async function(e) {
         e.stopPropagation();
@@ -367,15 +415,28 @@ function initPC2StatusBar() {
             return;
         }
 
-        // Fetch stats if connected
+        // Fetch stats, node info, and connectivity in parallel
         let stats = null;
+        let nodeInfo = null;
+        let connectivity = null;
+
+        const fetches = [];
+        fetches.push(
+            fetch(`${window.api_origin}/api/boson/full-identity`, {
+                headers: { 'Authorization': `Bearer ${window.auth_token}` }
+            }).then(r => r.ok ? r.json() : null).then(d => { nodeInfo = d; }).catch(() => {})
+        );
+        fetches.push(
+            fetch(`${window.api_origin}/api/boson/connectivity`, {
+                headers: { 'Authorization': `Bearer ${window.auth_token}` }
+            }).then(r => r.ok ? r.json() : null).then(d => { connectivity = d; }).catch(() => {})
+        );
         if (currentStatus === 'connected') {
-            try {
-                stats = await pc2Service.getStats?.();
-            } catch (err) {
-                logger.log('[PC2]: Failed to get stats:', err);
-            }
+            fetches.push(
+                Promise.resolve(pc2Service.getStats?.()).then(s => { stats = s; }).catch(() => {})
+            );
         }
+        await Promise.all(fetches);
 
         UIContextMenu({
             id: 'pc2-menu',
@@ -384,8 +445,31 @@ function initPC2StatusBar() {
                 top: pos.bottom + 10, 
                 left: pos.left + (pos.width / 2) - 100
             },
-            items: getMenuItems(stats)
+            items: getMenuItems(stats, nodeInfo, connectivity)
         });
+
+        // Inject privacy toggle directly into the menu DOM (not as a menu item)
+        if (nodeInfo) {
+            requestAnimationFrame(() => {
+                const $menu = $('.context-menu[data-id="pc2-menu"]');
+                if ($menu.length) {
+                    const toggleOn = !privacyHidden;
+                    const toggleHtml = `<div class="pc2-privacy-toggle" style="display:flex; align-items:center; justify-content:space-between; padding:6px 12px; cursor:pointer; user-select:none;">
+                        <span style="color:#fff; font-size:12px;">Show details</span>
+                        <span class="pc2-toggle-track" style="width:34px; height:18px; border-radius:9px; background:${toggleOn ? '#22c55e' : '#555'}; position:relative; display:inline-flex; align-items:center; flex-shrink:0;">
+                            <span class="pc2-toggle-knob" style="width:14px; height:14px; border-radius:50%; background:#fff; position:absolute; top:2px; ${toggleOn ? 'right:2px;' : 'left:2px;'} transition:all 0.2s;"></span>
+                        </span>
+                    </div>`;
+                    // Insert before the last divider (before PC2 Settings)
+                    const $lastDivider = $menu.find('.context-menu-divider').last();
+                    if ($lastDivider.length) {
+                        $lastDivider.before(toggleHtml);
+                    } else {
+                        $menu.append(toggleHtml);
+                    }
+                }
+            });
+        }
     });
 
     // Auto-reconnect if we have saved config (silent mode - no signature prompts)

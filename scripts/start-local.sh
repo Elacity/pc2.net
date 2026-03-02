@@ -235,9 +235,14 @@ main() {
         # Need to clone
         echo -e "${CYAN}Downloading PC2...${NC}"
         cd "$HOME"
-        git clone https://github.com/Elacity/pc2.net.git
+        if [[ -n "${PC2_BRANCH}" ]]; then
+            git clone -b "${PC2_BRANCH}" https://github.com/Elacity/pc2.net.git
+            echo -e "${GREEN}✓ Downloaded PC2 (branch: ${PC2_BRANCH})${NC}"
+        else
+            git clone https://github.com/Elacity/pc2.net.git
+            echo -e "${GREEN}✓ Downloaded PC2${NC}"
+        fi
         PC2_DIR="$HOME/pc2.net/pc2-node"
-        echo -e "${GREEN}✓ Downloaded PC2${NC}"
     fi
     
     echo ""

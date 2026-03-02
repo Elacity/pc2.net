@@ -409,13 +409,21 @@ PARTICLE_EOF
         echo -e "${GREEN}✓ AmneziaWG tools detected${NC}"
     fi
 
-    # Configure passwordless sudo for awg-quick (needed for interface management)
-    # SETENV allows passing WG_QUICK_USERSPACE_IMPLEMENTATION env var through sudo
+    # Configure passwordless sudo for AmneziaWG operations:
+    # - awg-quick for interface management
+    # - killall amneziawg-go for cleaning stale processes
+    # - rm for cleaning stale runtime files
     if command -v awg-quick &> /dev/null; then
         AWG_QUICK_PATH=$(which awg-quick 2>/dev/null)
+        KILLALL_PATH=$(which killall 2>/dev/null || echo "/usr/bin/killall")
         if [[ -x "$AWG_QUICK_PATH" ]]; then
             echo -e "${CYAN}Configuring AmneziaWG permissions...${NC}"
-            sudo sh -c "echo '$(whoami) ALL=(ALL) NOPASSWD:SETENV: ${AWG_QUICK_PATH}' > /etc/sudoers.d/amneziawg && chmod 440 /etc/sudoers.d/amneziawg"
+            sudo sh -c "cat > /etc/sudoers.d/amneziawg << 'SUDOEOF'
+$(whoami) ALL=(ALL) NOPASSWD:SETENV: ${AWG_QUICK_PATH}
+$(whoami) ALL=(ALL) NOPASSWD: ${KILLALL_PATH} amneziawg-go
+$(whoami) ALL=(ALL) NOPASSWD: /bin/rm -rf /var/run/amneziawg/
+SUDOEOF
+chmod 440 /etc/sudoers.d/amneziawg"
             echo -e "${GREEN}✓ AmneziaWG permissions configured${NC}"
         fi
     fi

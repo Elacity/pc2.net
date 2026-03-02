@@ -131,9 +131,23 @@ export class AmneziaWGService {
    */
   private awgQuickCmd(action: 'up' | 'down', confPath: string): string {
     const absConf = resolve(confPath);
-    // awg-quick defaults to amneziawg-go and adds its own directory to PATH,
-    // so no env var is needed when both are in the same directory (e.g. /opt/homebrew/bin).
     return `sudo awg-quick ${action} ${absConf}`;
+  }
+
+  /**
+   * Force cleanup of stale AmneziaWG state: bring down the interface,
+   * kill orphaned amneziawg-go processes, and remove stale runtime files.
+   */
+  private forceCleanup(confPath: string): void {
+    try {
+      execSync(`${this.awgQuickCmd('down', confPath)} 2>/dev/null`, { stdio: 'pipe', shell: '/bin/sh' });
+    } catch { /* may not be up */ }
+    try {
+      execSync('sudo killall amneziawg-go 2>/dev/null', { stdio: 'pipe', shell: '/bin/sh' });
+    } catch { /* may not exist */ }
+    try {
+      execSync('sudo rm -rf /var/run/amneziawg/ 2>/dev/null', { stdio: 'pipe', shell: '/bin/sh' });
+    } catch { /* may not exist */ }
   }
 
   /**
@@ -257,11 +271,8 @@ export class AmneziaWGService {
 
     writeFileSync(confPath, conf + '\n', { mode: 0o600 });
 
-    try {
-      execSync(`${this.awgQuickCmd('down', confPath)} 2>/dev/null`, { stdio: 'pipe', shell: '/bin/sh' });
-    } catch {
-      // Interface may not be up
-    }
+    // Clean up any existing interface and stale state from previous attempts
+    this.forceCleanup(confPath);
 
     try {
       execSync(this.awgQuickCmd('up', confPath), { stdio: 'pipe', timeout: 15_000, shell: '/bin/sh' });

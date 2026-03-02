@@ -28,8 +28,9 @@ async function UIWindowDesktopBGSettings (options) {
         let bg_url = window.desktop_bg_url,
             bg_color = window.desktop_bg_color,
             bg_fit = window.desktop_bg_fit;
+        let bg_display_url = bg_url;
 
-        h += '<div style="padding: 10px; border-bottom: 1px solid #ced7e1;">';
+        h += '<div>';
 
         // Wallpaper presets
         h += '<div class="desktop-bg-presets" style="display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap;">';
@@ -57,7 +58,7 @@ async function UIWindowDesktopBGSettings (options) {
 
         // Background color
         h += `<label style="margin-top: 16px;">${i18n('background')} ${i18n('color')}:</label>`;
-        h += '<div class="desktop-bg-color-blocks" style="margin-bottom: 4px;">';
+        h += '<div class="desktop-bg-color-blocks" style="margin-bottom: 4px; overflow: hidden;">';
         h += '<div class="desktop-bg-color-block" data-color="#4F7BB5" style="background-color: #4F7BB5"></div>';
         h += '<div class="desktop-bg-color-block" data-color="#545554" style="background-color: #545554"></div>';
         h += '<div class="desktop-bg-color-block" data-color="#F5D3CE" style="background-color: #F5D3CE"></div>';
@@ -72,9 +73,9 @@ async function UIWindowDesktopBGSettings (options) {
                     background-position: center;"><input type="color" style="width:25px; height: 25px; opacity:0;"></div>`;
         h += '</div>';
 
-        h += '<div style="padding-top: 5px; overflow:hidden; margin-top: 20px; border-top: 1px solid #CCC;">';
-        h += `<button class="button button-primary apply" style="float:right;">${i18n('apply')}</button>`;
-        h += `<button class="button button-default cancel" style="float:right; margin-right: 10px;">${i18n('cancel')}</button>`;
+        h += '<div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; padding-top: 12px;">';
+        h += `<button class="button button-default cancel">${i18n('cancel')}</button>`;
+        h += `<button class="button button-primary apply">${i18n('apply')}</button>`;
         h += '</div>';
 
         h += '</div>';
@@ -97,16 +98,22 @@ async function UIWindowDesktopBGSettings (options) {
             onAppend: function (this_window) {
                 $(this_window).find('.access-recipient').focus();
             },
-            window_class: 'window-give-access',
+            window_class: 'window-alert',
+            center: true,
+            show_in_taskbar: false,
             width: 380,
+            height: 410,
             window_css: {
                 height: 'initial',
             },
             body_css: {
                 width: 'initial',
-                height: 'auto',
-                'overflow-y': 'auto',
-                'background-color': 'rgb(245 247 249)',
+                padding: '20px',
+                'background-color': `hsla(
+                    var(--primary-hue),
+                    var(--primary-saturation),
+                    var(--primary-lightness),
+                    var(--primary-alpha))`,
                 'backdrop-filter': 'blur(3px)',
             },
             ...options.window_options,
@@ -126,12 +133,14 @@ async function UIWindowDesktopBGSettings (options) {
 
         $(el_window).find('.desktop-bg-color-block:not(.desktop-bg-color-block-palette)').on('click', async function (e) {
             bg_url = null;
+            bg_display_url = null;
             bg_color = $(this).attr('data-color');
             $(el_window).find('.desktop-bg-preset').css('border-color', 'transparent');
             window.set_desktop_background({ url: null, color: bg_color });
         });
         $(el_window).find('.desktop-bg-color-block-palette input').on('change', async function (e) {
             bg_url = null;
+            bg_display_url = null;
             bg_color = $(this).val();
             $(el_window).find('.desktop-bg-preset').css('border-color', 'transparent');
             window.set_desktop_background({ url: null, color: bg_color });
@@ -202,24 +211,19 @@ async function UIWindowDesktopBGSettings (options) {
             }
             
             if (signed_url) {
-                // Store the file path for saving (not the signed URL)
-                // We'll regenerate signed URLs on page load in refresh_desktop_background
-                bg_url = selected_file.path || null; // Save path, not URL
+                bg_url = selected_file.path || null;
+                bg_display_url = signed_url;
                 bg_fit = fit;
                 bg_color = undefined;
-                console.log('[UIWindowDesktopBGSettings] Setting background - path:', bg_url, 'signed_url:', signed_url, 'fit:', bg_fit);
-                // Use signed URL for immediate display
                 window.set_desktop_background({ url: signed_url, fit: bg_fit });
-            } else {
-                console.warn('[UIWindowDesktopBGSettings] No signed URL available for file. File object:', selected_file);
             }
         });
 
         $(el_window).find('.desktop-bg-fit').on('change', function (e) {
             const fit = $(this).val();
             bg_fit = fit;
-            if (bg_url) {
-                window.set_desktop_background({ url: bg_url, fit });
+            if (bg_display_url) {
+                window.set_desktop_background({ url: bg_display_url, fit });
             }
         });
 
@@ -287,6 +291,7 @@ async function UIWindowDesktopBGSettings (options) {
         $(el_window).find('.desktop-bg-preset').on('click', function () {
             const url = $(this).attr('data-url');
             bg_url = url;
+            bg_display_url = url;
             bg_color = undefined;
             bg_fit = $(el_window).find('.desktop-bg-fit').val() || 'cover';
             window.set_desktop_background({ url, fit: bg_fit });

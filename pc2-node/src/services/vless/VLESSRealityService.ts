@@ -161,7 +161,7 @@ export class VLESSRealityService {
         server: serverHost,
         server_port: serverPort,
         uuid: provision.uuid,
-        packet_encoding: 'xudp',
+        packet_encoding: 'packetaddr',
         tls: {
           enabled: true,
           server_name: provision.serverName,
@@ -171,11 +171,6 @@ export class VLESSRealityService {
             public_key: provision.serverPublicKey,
             short_id: provision.shortId,
           },
-        },
-        multiplex: {
-          enabled: true,
-          protocol: 'h2mux',
-          padding: true,
         },
       }],
       route: { final: 'vless-out' },

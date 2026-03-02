@@ -33,15 +33,16 @@
 - **Opt-in on ARM**: Voice AI tools not auto-installed on Jetson (saves ~500MB GPU memory)
 
 #### VLESS Reality TCP Stealth Transport (2026-03-02)
-- **TCP Stealth Layer**: VLESS Reality (via sing-box) wraps AWG traffic in TLS 1.3 mimicry when all UDP is blocked
+- **TCP Stealth Layer**: VLESS Reality (via sing-box 1.13.0+) wraps AWG traffic in TLS 1.3 mimicry when all UDP is blocked
 - **Chaining Architecture**: AWG provides the tunnel, VLESS Reality provides the stealth TCP transport — double obfuscation
 - **TLS Mimicry**: Connections appear as HTTPS to www.microsoft.com with Chrome JA3/JA4 fingerprint
-- **XUDP Encapsulation**: AWG UDP packets carried transparently inside the VLESS tunnel
+- **XUDP Encapsulation**: AWG UDP packets carried transparently inside the VLESS tunnel with h2mux multiplexing
 - **Four-Tier Cascade**: WireGuard > AmneziaWG > VLESS Reality + AWG > ActiveProxy
 - **Supernode Setup**: sing-box server on port 8443, systemd service, watchdog cron, peer management
 - **Provisioning API**: `/api/vless/register` and `/api/vless/status` gateway endpoints
-- **Auto-install**: sing-box installed by `start-local.sh` (brew/binary) and `install-arm.sh`
-- **UI**: Transport shows "VLESS Reality (TCP Stealth)" in blue when active
+- **Auto-install**: sing-box installed by `start-local.sh` (brew/binary) and `install-arm.sh` with auto-upgrade
+- **UI**: Transport label updates dynamically — "VLESS Reality" in blue when active, "Switching..." / "Reconnecting..." feedback during transport changes
+- **Stealth sub-toggle**: VLESS Reality appears as a sub-toggle under Stealth Mode, synced between dropdown and Settings
 
 #### AmneziaWG Stealth Transport (2026-03-02)
 - **DPI-Resistant Tunnel**: AmneziaWG (WireGuard fork) as a stealth fallback for censored networks
@@ -68,6 +69,12 @@
 
 ### 🔧 Bug Fixes (v1.1.0)
 
+- **VLESS Reality sing-box version**: Pinned to 1.13.0+ — older 1.11.x versions have critical XUDP/multiplex bugs that cause tunnel to connect but silently drop all packets
+- **VLESS Reality sniffing conflict**: Disabled sing-box protocol sniffing on direct inbound — AWG 2.0's I1 QUIC signature was triggering misdetection, overriding packet destinations
+- **VLESS Reality multiplex**: Added h2mux protocol with padding to XUDP multiplexing for reliable UDP-over-TCP encapsulation
+- **ARM install sudo fix**: `install-arm.sh` now detects `$SUDO_USER` and installs to the real user's home directory instead of `/root`, preventing duplicate PC2 installations and PM2 conflicts
+- **ARM install rogue cleanup**: Auto-detects and removes previous faulty `/root/pc2.net` installations from `sudo` runs
+- **sing-box auto-upgrade**: Install scripts detect older sing-box versions and upgrade to 1.13.0 automatically
 - **Mobile Taskbar Z-index**: Full-screen windows (Settings, Explorer, Apps) no longer hidden behind mobile taskbar
 - **Sidebar Icon Hover**: Light mode sidebar icons now tint dark on hover instead of white
 - **WireGuard Retry**: Reduced retry interval from 60s to 15s with exponential backoff

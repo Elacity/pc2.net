@@ -105,13 +105,18 @@ If you don't want AmneziaWG available even as a fallback:
 
 AmneziaWG and sing-box (for VLESS Reality) are automatically installed by the PC2 install scripts:
 
-- **macOS/Linux desktop:** `start-local.sh` builds `amneziawg-go` from source using Go
-- **ARM/Jetson devices:** `install-arm.sh` does the same
+- **macOS/Linux desktop:** `start-local.sh` builds `amneziawg-go` from source using Go, installs sing-box via Homebrew (macOS) or binary download (Linux)
+- **ARM/Jetson devices:** `install-arm.sh` does the same, auto-detecting the correct architecture
 
 ### Requirements
 
-- **Go compiler** (automatically installed if not present)
+- **Go 1.24+** for `amneziawg-go` (automatically installed if system Go is too old)
+- **sing-box 1.13.0+** — critical version requirement (see Troubleshooting if using older versions)
 - **Git** (for cloning `amnezia-wg-tools` source)
+
+### sing-box Version Requirement
+
+**sing-box must be version 1.13.0 or later.** Older versions (1.11.x) have bugs in XUDP packet encoding and multiplex stream handling that cause VLESS Reality tunnels to connect but fail to pass traffic. The install scripts pin to 1.13.0 and auto-upgrade older installations.
 
 ### Manual Installation
 
@@ -122,15 +127,22 @@ If automatic installation fails:
 brew install go          # macOS
 sudo apt install golang  # Ubuntu/Debian
 
-# Build amneziawg-go
-sudo GOBIN=/usr/local/bin go install github.com/amnezia-vpn/amneziawg-go@latest
+# Build amneziawg-go from source (must be built from HEAD for AWG 2.0 support)
+git clone --depth 1 https://github.com/amnezia-vpn/amneziawg-go.git /tmp/amneziawg-go
+cd /tmp/amneziawg-go && make
+sudo cp amneziawg-go /usr/local/bin/
 
 # Build amnezia-wg-tools (awg, awg-quick)
 git clone --depth 1 https://github.com/amnezia-vpn/amnezia-wg-tools.git /tmp/awg-tools
 cd /tmp/awg-tools/src && make && sudo make install
 
+# Install sing-box 1.13.0
+brew install sing-box  # macOS
+# Or download binary for Linux:
+# wget https://github.com/SagerNet/sing-box/releases/download/v1.13.0/sing-box-1.13.0-linux-amd64.tar.gz
+
 # Configure passwordless sudo for awg-quick
-echo "$(whoami) ALL=(ALL) NOPASSWD: $(which awg-quick)" | sudo tee /etc/sudoers.d/amneziawg
+echo "$(whoami) ALL=(ALL) NOPASSWD:SETENV: $(which awg-quick) up *, $(which awg-quick) down *" | sudo tee /etc/sudoers.d/amneziawg
 sudo chmod 440 /etc/sudoers.d/amneziawg
 ```
 
@@ -148,7 +160,7 @@ The supernode infrastructure includes:
 - **Gateway healthcheck** — probes both WireGuard (`10.100.*`) and AmneziaWG (`10.101.*`) peers every 60s, flushing stale sockets for unreachable peers
 - **Provisioning API** (`/api/awg/register`) — handles client registration, IP allocation, and distributes obfuscation + I1 parameters
 
-**VLESS Reality (sing-box):**
+**VLESS Reality (sing-box 1.13.0+):**
 - **sing-box server** on port `8443` — VLESS Reality inbound with TLS 1.3 mimicry (www.microsoft.com), direct outbound to forward decapsulated AWG UDP packets to port `51821`
 - **Systemd service** (`pc2-vless-reality.service`) — manages sing-box, auto-restarts on crash (RestartSec=5)
 - **Crash watchdog** (`/etc/cron.d/vless-reality-watchdog`) — checks every minute if `sing-box` is alive
@@ -261,8 +273,19 @@ Every PC2 node already participates in the Boson DHT as a peer, contributing to 
 
 In the PC2 cloud dropdown (top bar), the "Access" line shows:
 - **WireGuard** (green) — standard tunnel
-- **AmneziaWG (Stealth)** (purple) — obfuscated tunnel  
+- **AmneziaWG** (purple) — obfuscated UDP tunnel  
+- **VLESS Reality** (blue) — TCP stealth tunnel (AWG chained through VLESS)
 - **Active Proxy** (amber) — TCP relay
+
+The transport label updates dynamically when switching. During a switch, you'll briefly see "Switching..." and "Reconnecting..." status in the dropdown.
+
+### Force a Specific Transport
+
+From the cloud dropdown or Settings panel:
+1. Enable **Stealth Mode** toggle to activate stealth transports
+2. When Stealth Mode is on, a sub-toggle appears for **VLESS Reality**
+3. Enable the VLESS Reality toggle to force TCP stealth (Tier 3)
+4. Disable it to use AmneziaWG UDP stealth (Tier 2)
 
 ### Check AmneziaWG Status
 
@@ -277,6 +300,24 @@ sudo awg show awg0
 ping 10.101.0.1
 ```
 
+### Check VLESS Reality Status
+
+```bash
+# Check sing-box version
+sing-box version  # Must be 1.13.0+
+
+# Check if sing-box process is running
+pgrep -a sing-box
+
+# Check if local tunnel port is listening (client-side)
+ss -ulnp | grep 51822
+
+# Test connectivity through the tunnel
+curl -s http://10.101.0.7:4200/  # Replace with your AWG IP
+```
+
+**Note:** ICMP ping may not work through VLESS Reality tunnels since VLESS transports TCP-encapsulated UDP. Use HTTP requests (`curl`) to verify tunnel connectivity instead of ping.
+
 ## Troubleshooting
 
 ### AmneziaWG not available
@@ -285,9 +326,12 @@ Check installation:
 ```bash
 ls -la /usr/local/bin/amneziawg-go
 which awg-quick
+amneziawg-go --version  # Should show 0.0.20250522 or later for AWG 2.0
 ```
 
 If missing, re-run the install script or follow manual installation above.
+
+**Important:** `amneziawg-go` must be built from source (`git clone` + `make`), not via `go install @latest`, because `go install` pulls an older tagged release that doesn't support AWG 2.0 parameters (S3, S4, I1).
 
 ### Tunnel up but no connectivity
 
@@ -299,7 +343,7 @@ pm2 restart pc2
 
 ### Port 51821 blocked
 
-Some networks may block UDP entirely. In this case, AmneziaWG will fail and PC2 will fall back to ActiveProxy (TCP relay).
+Some networks may block UDP entirely. In this case, AmneziaWG will fail and PC2 will try VLESS Reality (Tier 3) before falling to ActiveProxy (TCP relay).
 
 ### Stale processes after crash
 
@@ -307,6 +351,53 @@ If `amneziawg-go` crashed and left orphaned processes, the service handles clean
 ```bash
 sudo killall amneziawg-go
 sudo rm -rf /var/run/amneziawg/
+```
+
+### VLESS Reality connects but no traffic
+
+**Check sing-box version first** — this is the most common cause:
+```bash
+sing-box version  # Must be 1.13.0+
+```
+
+If running 1.11.x, upgrade immediately. Version 1.11.0 has critical bugs in XUDP/multiplex that cause the tunnel to appear connected while silently dropping all packets. The install scripts auto-upgrade, but manual installations may be stale.
+
+**Symptoms of version mismatch:**
+- Server logs show `mux connection closed: read frame header: EOF` or `use of closed network connection`
+- Client reports `natType: "vless-reality"` and `connected: true` but ping to `10.101.0.1` shows 100% packet loss
+- sing-box process is running and listening on port 51822
+
+**Fix:** Upgrade sing-box on both client and server to 1.13.0+:
+```bash
+# Linux AMD64
+curl -sL https://github.com/SagerNet/sing-box/releases/download/v1.13.0/sing-box-1.13.0-linux-amd64.tar.gz | tar xz
+sudo cp sing-box-1.13.0-linux-amd64/sing-box /usr/local/bin/
+
+# Linux ARM64 (Jetson/Pi)
+curl -sL https://github.com/SagerNet/sing-box/releases/download/v1.13.0/sing-box-1.13.0-linux-arm64.tar.gz | tar xz
+sudo cp sing-box-1.13.0-linux-arm64/sing-box /usr/local/bin/
+
+# macOS (Homebrew keeps it current)
+brew upgrade sing-box
+```
+
+After upgrading, delete the cached client config and restart:
+```bash
+rm -f <data-dir>/vless-reality/client.json
+pm2 restart pc2
+```
+
+### AWG QUIC signature causes sing-box misdetection
+
+AWG 2.0's I1 parameter makes handshake packets look like QUIC traffic. If sing-box's protocol sniffer is enabled on the direct inbound, it will misidentify AWG packets as real QUIC and override the destination address, breaking the tunnel. The PC2 client config disables sniffing (`sniff: false`) on the direct inbound to prevent this. If you're running a custom config, ensure sniffing is disabled.
+
+### Install script creates duplicate PC2 under /root
+
+Running `sudo bash scripts/install-arm.sh` on older versions of the script would create a second PC2 at `/root/pc2.net` because `$HOME` resolves to `/root` under sudo. This has been fixed — the script now detects `$SUDO_USER` and installs to the real user's home directory. If you already have a rogue installation:
+```bash
+sudo pm2 kill
+sudo rm -rf /root/pc2.net
+cd ~/pc2.net && pm2 start ecosystem.config.cjs && pm2 save
 ```
 
 ## Elastos Launcher Integration (v1.1)

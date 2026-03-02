@@ -189,20 +189,27 @@ Last resort. Routes through Boson network relay nodes over TCP.
 Users can control the transport from the PC2 cloud dropdown or Settings:
 
 ```
-┌─────────────────────────────────┐
-│  Personal Cloud Compute        │
-│  ● Connected                   │
-│                                │
-│  Access: VLESS Reality (TCP)   │  ◄── Current transport
-│                                │
-│  Stealth Mode          [ON]    │  ◄── Enable stealth transports
-│  Transport   [VLESS Reality ▼] │  ◄── Force specific transport
-│                                │
-│  Auto = let the cascade decide │
-│  AmneziaWG = force UDP stealth │
-│  VLESS Reality = force TCP     │
-└─────────────────────────────────┘
+┌──────────────────────────────────────┐
+│  Personal Cloud Compute             │
+│  ● Connected                        │
+│                                     │
+│  Access: VLESS Reality              │  ◄── Dynamic transport label
+│                                     │
+│  Stealth Mode          [ON]         │  ◄── Enable stealth transports
+│    └ VLESS Reality     [ON]         │  ◄── Sub-toggle (TCP stealth)
+│                                     │
+└──────────────────────────────────────┘
+
+Transport labels update dynamically:
+  Stealth OFF  → "WireGuard" (green)
+  Stealth ON   → "AmneziaWG" (purple)
+  VLESS ON     → "VLESS Reality" (blue)
+  Fallback     → "Active Proxy" (amber)
+
+During switches: "Switching..." → "Reconnecting..."
 ```
+
+The Stealth Mode and VLESS Reality toggle states persist across dropdown open/close and are synced between the cloud dropdown and the Settings panel.
 
 ---
 
@@ -248,7 +255,7 @@ Each supernode runs all transport services:
 Supernode (69.164.241.210)
 ├── WireGuard         UDP:51820   wg0    (10.100.0.0/16)
 ├── AmneziaWG         UDP:51821   awg0   (10.101.0.0/16)
-├── sing-box (VLESS)  TCP:8443    VLESS Reality server
+├── sing-box (VLESS)  TCP:8443    VLESS Reality server (v1.13.0+)
 ├── Active Proxy      TCP:8090    Boson relay
 └── Web Gateway       TCP:443     Routes *.ela.city → nodes
 ```
@@ -257,6 +264,20 @@ All services have:
 - **systemd** units for process management
 - **Cron watchdogs** for crash recovery (checks every 60s)
 - **Health checks** to detect and flush stale connections
+
+### Version Requirements
+
+| Component | Minimum Version | Why |
+|-----------|----------------|-----|
+| sing-box | **1.13.0** | Fixes XUDP/multiplex bugs that silently drop packets |
+| amneziawg-go | Built from HEAD | Tagged releases lack AWG 2.0 (S3/S4/I1) support |
+| Go compiler | **1.24+** | Required by amneziawg-go dependencies |
+
+### Key Configuration Notes
+
+- **Sniffing must be disabled** on sing-box direct inbound: AWG 2.0's I1 QUIC signature triggers sing-box's protocol sniffer, which overrides the packet destination and breaks the tunnel
+- **XUDP encoding** is used for UDP-over-TCP encapsulation with `h2mux` multiplexing and padding
+- **Client and server sing-box versions must match** — a 1.11.x client connecting to a 1.13.0 server (or vice versa) will fail with multiplex stream errors
 
 ---
 
@@ -273,10 +294,19 @@ All services have:
 
 ## Status
 
-- **Live and tested** on test40.ela.city (March 2, 2026)
+- **Live and tested** on test40.ela.city — macOS and Jetson ARM64 (March 2, 2026)
 - **Confirmed**: DPI sees TLS 1.3 to www.microsoft.com on port 8443
 - **Confirmed**: AWG tunnel active through VLESS with 1-second handshakes
+- **Confirmed**: HTTP traffic (`curl http://10.101.x.x:4200/`) works through VLESS Reality tunnel
 - **Auto-cascade** and **manual selection** both working from UI
+- **sing-box 1.13.0** required on all platforms — 1.11.x has critical XUDP/multiplex bugs
+- **Install scripts** (`start-local.sh`, `install-arm.sh`) auto-install and auto-upgrade sing-box
+
+### Known Limitations
+
+- **ICMP ping** may not work through VLESS Reality tunnels (use HTTP/`curl` to test connectivity)
+- **Jetson Go compiler**: System Go on JetPack is typically older than 1.24; the install script auto-installs Go 1.24.1 to `/usr/local/go`
+- **sudo install**: Running `install-arm.sh` with `sudo` now correctly detects the real user's home directory to avoid creating duplicate installations under `/root`
 
 ---
 

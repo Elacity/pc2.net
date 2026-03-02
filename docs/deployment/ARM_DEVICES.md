@@ -58,8 +58,9 @@ curl -sSL https://raw.githubusercontent.com/Elacity/pc2.net/main/scripts/install
 This will:
 1. Install Node.js 20, PM2, build tools
 2. Install WireGuard (kernel module on Pi, wireguard-go on Jetson)
-3. Clone and build PC2
-4. Start PC2 with PM2 (auto-starts on boot)
+3. Install Go 1.24+, AmneziaWG, and sing-box 1.13.0 (for stealth transports)
+4. Clone and build PC2
+5. Start PC2 with PM2 (auto-starts on boot)
 
 **Installation takes 10-15 minutes on Pi 4/5.**
 
@@ -117,6 +118,17 @@ https://docs.kinesis.network/blog/enable-wireguard-on-nvidia-jetson
 - Voice AI tools (Whisper STT + Piper TTS) are **opt-in** on Jetson — install via Settings > AI > Voice AI
 - Voice AI uses ~500MB+ GPU memory; on 8GB Jetson this may prevent larger Ollama models from loading
 - For best AI performance on Jetson, close desktop environment (Firefox, GNOME) to free GPU memory
+- **AmneziaWG + sing-box** are auto-installed for stealth transport support (Go 1.24+ is installed automatically if system Go is too old)
+- **sing-box 1.13.0+** is required for VLESS Reality — the install script auto-detects and upgrades older versions
+
+### Running install-arm.sh with sudo
+
+The install script correctly handles being run via `sudo`:
+- Detects `$SUDO_USER` and installs to the real user's home directory (not `/root`)
+- PM2 processes run under the real user's context
+- If a previous `sudo` run created a rogue `/root/pc2.net`, the script auto-cleans it up
+
+**Important:** Always run as `sudo bash scripts/install-arm.sh` (not `sudo su` first). The script needs `$SUDO_USER` to resolve the correct home directory.
 
 ---
 
@@ -192,17 +204,18 @@ ping 10.100.0.1                       # Test tunnel connectivity
 pm2 logs pc2                          # Node logs (look for "[WireGuard]")
 ```
 
-### Automatic Fallback (Three-Tier Cascade)
+### Automatic Fallback (Four-Tier Cascade)
 
-PC2 uses a three-tier transport cascade that automatically finds the best connection:
+PC2 uses a four-tier transport cascade that automatically finds the best connection:
 
 1. **WireGuard** (primary) — fastest, audited, works on most networks
-2. **AmneziaWG** (stealth fallback) — DPI-resistant WireGuard fork, for censored networks (China GFW, Russia, Iran)
-3. **ActiveProxy** (relay) — TCP relay via Boson supernode, works everywhere
+2. **AmneziaWG** (UDP stealth) — DPI-resistant WireGuard fork, for censored networks (China GFW, Russia, Iran)
+3. **VLESS Reality + AWG** (TCP stealth) — wraps AWG inside a VLESS Reality tunnel that looks like HTTPS to microsoft.com, for networks blocking all UDP
+4. **ActiveProxy** (relay) — TCP relay via Boson supernode, works everywhere
 
-If WireGuard fails (3 consecutive health check failures), the node tries AmneziaWG stealth tunnel first. If that also fails, it falls back to ActiveProxy. The system periodically retries higher-tier transports in the background.
+If WireGuard fails (3 consecutive health check failures), the node tries AmneziaWG. If all UDP is blocked, it chains AWG through VLESS Reality over TCP. As a last resort, it falls to ActiveProxy. The system periodically retries higher-tier transports in the background.
 
-For users behind DPI firewalls, enable **Stealth Mode** in Settings → Personal Cloud to skip standard WireGuard entirely and go straight to AmneziaWG. See [STEALTH_MODE.md](STEALTH_MODE.md) for details.
+For users behind DPI firewalls, enable **Stealth Mode** in Settings → Personal Cloud to skip standard WireGuard entirely. Enable the **VLESS Reality** sub-toggle to force TCP stealth mode. See [STEALTH_MODE.md](STEALTH_MODE.md) and [TRANSPORT_ARCHITECTURE.md](TRANSPORT_ARCHITECTURE.md) for details.
 
 ### Option C: Port Forwarding
 

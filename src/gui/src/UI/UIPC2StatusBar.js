@@ -156,8 +156,8 @@ function initPC2StatusBar() {
         });
 
         items.push({
-            html: `<span style="color: #fff;">${effectiveStatusText}</span>`,
-            icon: `<span style="display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; vertical-align:middle;"><span style="width:8px; height:8px; border-radius:50%; background:${dotColor};"></span></span>`,
+            html: `<span data-pc2-status style="color: #fff;">${effectiveStatusText}</span>`,
+            icon: `<span data-pc2-status-dot style="display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; vertical-align:middle;"><span style="width:8px; height:8px; border-radius:50%; background:${dotColor};"></span></span>`,
             disabled: true
         });
 
@@ -456,9 +456,10 @@ function initPC2StatusBar() {
     async function applyStealthFromDropdown($menu) {
         if (!window.api_origin) return;
         const vlessOn = !!$menu.find('.pc2-vless-toggle').data('on');
-        const transport = stealthModeEnabled && vlessOn ? 'vless-reality' : undefined;
-        const targetLabel = transport ? (tLabels[transport]?.[0] || transport) : (stealthModeEnabled ? 'AmneziaWG' : 'WireGuard');
-        $menu.find('[data-pc2-access]').html(`Access: <span style="color:#f59e0b; font-weight:500;">Switching to ${targetLabel}...</span>`);
+        const transport = stealthModeEnabled ? (vlessOn ? 'vless-reality' : 'amnezia-wireguard') : undefined;
+        $menu.find('[data-pc2-access]').html(`Access: <span style="color:#f59e0b; font-weight:500;">Switching...</span>`);
+        $menu.find('[data-pc2-status]').html(`<span style="color:#f59e0b;">Reconnecting...</span>`);
+        $menu.find('[data-pc2-status-dot] span').css('background', '#f59e0b');
 
         try {
             const resp = await fetch(`${window.api_origin}/api/boson/stealth-mode`, {
@@ -468,7 +469,7 @@ function initPC2StatusBar() {
             });
             if (!resp.ok) return;
 
-            const expectedType = transport === 'vless-reality' ? 'vless-reality' : (stealthModeEnabled ? 'amnezia-wireguard' : 'wireguard');
+            const expectedType = transport || 'wireguard';
             for (let i = 0; i < 10; i++) {
                 await new Promise(r => setTimeout(r, 2000));
                 try {
@@ -477,9 +478,11 @@ function initPC2StatusBar() {
                     });
                     if (r.ok) {
                         const d = await r.json();
-                        if (d.natType === expectedType || (!expectedType && d.connected)) {
+                        if (d.natType === expectedType) {
                             const [label, color] = tLabels[d.natType] || [d.natType, '#fff'];
                             $menu.find('[data-pc2-access]').html(`Access: <span style="color:${color}; font-weight:500;">${label}</span>`);
+                            $menu.find('[data-pc2-status]').html(`<span style="color:#fff;">Connected</span>`);
+                            $menu.find('[data-pc2-status-dot] span').css('background', '#22c55e');
                             return;
                         }
                     }
@@ -491,6 +494,8 @@ function initPC2StatusBar() {
             if (fb) {
                 const [label, color] = tLabels[fb.natType] || [fb.natType, '#fff'];
                 $menu.find('[data-pc2-access]').html(`Access: <span style="color:${color}; font-weight:500;">${label}</span>`);
+                $menu.find('[data-pc2-status]').html(`<span style="color:#fff;">${fb.connected ? 'Connected' : 'Disconnected'}</span>`);
+                $menu.find('[data-pc2-status-dot] span').css('background', fb.connected ? '#22c55e' : '#ef4444');
             }
         } catch {}
     }

@@ -170,9 +170,6 @@ export class VLESSRealityService {
             short_id: provision.shortId,
           },
         },
-        multiplex: {
-          enabled: true,
-        },
       }],
       route: { final: 'vless-out' },
     };

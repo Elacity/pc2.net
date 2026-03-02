@@ -170,6 +170,11 @@ export class VLESSRealityService {
             short_id: provision.shortId,
           },
         },
+        multiplex: {
+          enabled: true,
+          protocol: 'h2mux',
+          padding: true,
+        },
       }],
       route: { final: 'vless-out' },
     };

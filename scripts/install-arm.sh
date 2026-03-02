@@ -371,12 +371,20 @@ install_amneziawg() {
 
         if command -v go &>/dev/null; then
             print_step "Building amneziawg-go from source (takes 1-2 minutes)..."
-            GOBIN=/usr/local/bin sudo -E go install github.com/amnezia-vpn/amneziawg-go@latest 2>&1 || true
+            AWG_BUILD_TMP=$(mktemp -d)
+            if sudo bash -c "export GOPATH='$AWG_BUILD_TMP' GOBIN='$AWG_BUILD_TMP/bin' && go install github.com/amnezia-vpn/amneziawg-go@latest" 2>&1; then
+                if test -x "$AWG_BUILD_TMP/bin/amneziawg-go"; then
+                    sudo cp "$AWG_BUILD_TMP/bin/amneziawg-go" /usr/local/bin/amneziawg-go
+                    sudo chmod 755 /usr/local/bin/amneziawg-go
+                fi
+            fi
+            rm -rf "$AWG_BUILD_TMP"
             if test -x /usr/local/bin/amneziawg-go; then
                 print_ok "AmneziaWG binary built and installed"
                 AWG_READY=true
             else
                 print_warn "AmneziaWG build failed -- stealth transport will not be available"
+                print_warn "Try manually: sudo GOBIN=/usr/local/bin go install github.com/amnezia-vpn/amneziawg-go@latest"
             fi
         else
             print_warn "Go compiler not available, cannot build AmneziaWG"

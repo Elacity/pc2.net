@@ -6,7 +6,70 @@
 
 ---
 
-## [UNRELEASED] PC2 v1.0.0-alpha
+## [UNRELEASED] PC2 v1.1.0
+
+> Branch: `feature/jetson-gpu-acceleration` — 55+ commits ahead of v1.0.0
+
+### 🎉 New Features (v1.1.0)
+
+#### Ubuntu/macOS-Style Desktop UI (2026-02-27)
+- **Top Bar**: System bar with clock, status indicators, and profile menu
+- **Dock/Taskbar**: macOS-style dock with app icons, responsive on mobile
+- **Window Chrome**: Refined window title bars, rounded corners, proper shadows
+- **File Explorer**: Path bar, list view with Modified column, proper light/dark styling
+- **Search Modal**: Even padding, icon aligned with text
+
+#### Virtual Desktops / Spaces (2026-02-27)
+- **Multiple Workspaces**: Create, switch, and delete virtual desktops
+- **Mission Control**: Overview of all workspaces with live window previews
+- **Keyboard Shortcuts**: Navigate between workspaces with keyboard
+- **Taskbar Integration**: Workspace indicator dots in the taskbar
+
+#### Voice AI Pipeline (2026-02-26)
+- **Whisper STT**: Local speech-to-text via whisper.cpp server
+- **Piper TTS**: Local text-to-speech for voice responses
+- **Voice Button**: Mic button in AI chat with waveform visualizer
+- **Settings UI**: Single-row Voice AI control with Install button or Enable toggle
+- **Opt-in on ARM**: Voice AI tools not auto-installed on Jetson (saves ~500MB GPU memory)
+
+#### WireGuard macOS Support (2026-03-01)
+- **Cross-platform WireGuard**: Full support for macOS alongside Linux
+- **Auto-install**: `start-local.sh` automatically installs Homebrew + WireGuard tools on macOS
+- **Passwordless sudo**: Configures `/etc/sudoers.d/wireguard` for non-interactive `wg-quick`
+- **Network Change Detection**: Detects gateway changes (laptop mobility) and triggers reconnect
+- **Branch Support**: `PC2_BRANCH` env var lets users install a specific branch
+
+#### AI Improvements (2026-02-26)
+- **Ollama Tool Fallback**: Models that reject tool definitions automatically retry without tools
+- **Thinking Block Scroll**: AI reasoning/thinking section is scrollable with auto-scroll
+- **Community Models**: Added gemma3, qwen3, phi4-mini, llama3.2, and custom model pull input
+- **Model Download Progress**: Fixed SSE streaming for real-time download progress
+
+### 🔧 Bug Fixes (v1.1.0)
+
+- **Mobile Taskbar Z-index**: Full-screen windows (Settings, Explorer, Apps) no longer hidden behind mobile taskbar
+- **Sidebar Icon Hover**: Light mode sidebar icons now tint dark on hover instead of white
+- **WireGuard Retry**: Reduced retry interval from 60s to 15s with exponential backoff
+- **WireGuard PATH**: Detection works under PM2/systemd restricted PATH environments
+- **Large File Upload**: Progress bar no longer doubles total size; IPFS size verification added
+- **AV1/Firefox**: Proper error handling and format support for video playback
+- **IPFS DHT**: Client mode with connection limits to prevent bandwidth saturation
+- **Gateway Keep-alive**: Hardened keep-alive for persistent ActiveProxy connections
+- **Particle Auth Build**: Removed compiled .js artifacts that broke Vite 6.x strict mode
+- **Canvas Build**: Resilient native dependency build for ARM devices
+- **Startup Performance**: Parallelized AI/Gateway/Boson initialization for faster cold start
+
+### 📝 Documentation (v1.1.0)
+
+- Strategic roadmap aligned with DAO proposal and Rong Chen's vision
+- Architecture convergence plan (PC2 v1 → ElastOS Runtime v2)
+- ARM devices deployment guide (Jetson + Raspberry Pi)
+- Network hardening roadmap for supernode decentralization
+- Weekly shipping report template and cadence established
+
+---
+
+## [RELEASED] PC2 v1.0.0
 
 ### 🎉 Major Features
 
@@ -95,14 +158,15 @@
 - Some filesystem provider errors under WASM branch (non-critical)
 - WASI file I/O still in progress
 
-### 🔜 Coming Next
-- Docker image for easy deployment
-- Raspberry Pi / Jetson Nano images
-- SSL/TLS auto-configuration
-- OpenAI, Gemini, xAI provider support
-- Agent-to-agent communication
-- WhatsApp/Telegram channel integration
-- dDRM (decentralized Digital Rights Management)
+### 🔜 Coming Next (v1.2+)
+- Apple code-signed macOS launcher (no `xattr` required)
+- Windows `.exe` installer via Electron
+- Pre-built Raspberry Pi / Jetson images (zero-terminal install)
+- Linux `.deb` package
+- ActiveProxy auto-connect in Desktop Launcher
+- P2P messaging between PC2 nodes
+- dDRM marketplace integration
+- Mobile companion app (iOS/Android)
 
 ---
 

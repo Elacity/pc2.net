@@ -1,6 +1,6 @@
 # PC2 Post-Launch Roadmap
 
-**Status:** v1.0.0 Launched | **Date:** February 2026
+**Status:** v1.0.0 Launched, v1.1.0 on branch | **Date:** March 2026 | **Last Updated:** March 2, 2026
 
 ---
 
@@ -29,21 +29,23 @@ Today, every installation path requires terminal commands. This excludes 95% of 
 
 | Platform | User Experience | Status |
 |----------|----------------|--------|
-| **macOS** | Download .dmg → Double-click → Drag to Applications → Run | ⚠️ Needs Apple cert |
+| **macOS** | Download .dmg → Double-click → Drag to Applications → Run | ⚠️ Needs Apple cert ($99) |
+| **macOS (Terminal)** | `curl ... \| bash` → auto-installs everything including WireGuard | ✅ Done |
 | **Windows** | Download .exe → Double-click → Install → Run | ⚠️ Needs building |
 | **Linux (Ubuntu/Jetson)** | Download .deb → Double-click → Install → Run | ⚠️ Needs packaging |
+| **Linux (Terminal)** | One-command install script for ARM devices | ✅ Done |
 | **Hardware (Pi/Jetson)** | Flash image → Plug in → Open browser → Done | ⚠️ Needs image |
 | **Pre-built Hardware** | Unbox → Plug in → Open browser → Done | ⚠️ Needs DePIN partnership |
 
 ### 0.1 Signed macOS App (Effort: Low | ETA: 1-2 weeks)
 
-**Current state:** ElastOS Launcher works but requires `xattr -cr` terminal command due to missing Apple code signing.
+**Current state:** ElastOS Launcher works but requires `xattr -cr` terminal command due to missing Apple code signing. Meanwhile, `start-local.sh` provides a zero-friction terminal install on macOS that auto-installs Homebrew + WireGuard.
 
 **What's needed:**
 - [ ] Apple Developer Program enrollment ($99/year)
-- [ ] Code signing certificate setup
+- [ ] Code signing certificate setup (Developer ID Application)
 - [ ] Notarization with Apple (automated via `electron-builder`)
-- [ ] Update GitHub Actions to sign builds
+- [ ] Update GitHub Actions to sign builds (CSC_LINK, APPLE_ID secrets)
 - [ ] Result: Download .dmg → Double-click → Works
 
 **Cost:** $99/year
@@ -105,7 +107,7 @@ Today, every installation path requires terminal commands. This excludes 95% of 
 
 **Community Question:** "When I run on my laptop, can people access it from outside, not just localhost?"
 
-**Answer: YES - via ActiveProxy.** We already have the technology.
+**Answer: YES - via WireGuard (fast) + ActiveProxy (NAT fallback).** Both are working.
 
 ```
 ┌──────────────────────────────────────────────────────┐
@@ -128,13 +130,16 @@ Today, every installation path requires terminal commands. This excludes 95% of 
 └──────────────────────────────────────────────────────┘
 ```
 
-**What's missing:** The Desktop Launcher doesn't auto-enable ActiveProxy yet.
+**What's been done:**
+- [x] WireGuard macOS support — auto-install via `start-local.sh`, passwordless sudo, network change detection
+- [x] ActiveProxy protocol rewrite — complete and tested
+- [x] Auto-connect to WireGuard/ActiveProxy on PC2 startup (terminal install)
 
-**Tasks:**
-- [ ] Auto-connect to ActiveProxy on PC2 startup
+**What's remaining for the Desktop Launcher:**
+- [ ] Auto-connect to WireGuard/ActiveProxy in Electron Launcher
 - [ ] Register `username.ela.city` from the setup wizard (already exists on VPS)
 - [ ] Show connection status in Desktop Launcher UI (connected/offline)
-- [ ] Result: Mac/Windows user runs app → accessible at `username.ela.city` while running
+- [ ] Result: Mac/Windows user runs Launcher → accessible at `username.ela.city` while running
 
 **With this, the Mac/Windows experience becomes:**
 ```
@@ -176,11 +181,11 @@ The ActiveProxy protocol (Boson NAT traversal enabling `username.ela.city` domai
 | Remove domain from AUTH (crashes Java helper) | ✅ Done | `bf3cf033` |
 | Gateway uses http-proxy for relay endpoints | ✅ Done | `8514f466` |
 | Chunk sendData to prevent 65535 overflow | ✅ Done | `91ec216b` |
-| **Community verification on Jetson** | 🔄 Testing | — |
-| **Merge to main** | ⏳ Pending | — |
-| **Deploy updated web-gateway to supernode** | ⏳ Pending | — |
+| **Community verification on Jetson** | ✅ Done | Tested on 2 Jetson devices |
+| **Merge to main** | ⏳ Pending | Blocked on Sash's validation |
+| **Deploy updated web-gateway to supernode** | ✅ Done | Live on supernode |
 
-**Latest test (Feb 8):** AUTH succeeds, port allocated, endpoint registered, browser CONNECT received. Crashed on large DATA relay (fixed in `91ec216b`). Awaiting community re-test.
+**Latest (Mar 2):** Fully working on EverlastingOS Jetson + Anders' alm.ela.city Jetson. WireGuard provides fast direct access; ActiveProxy works as fallback. Merge to main blocked on Sash's own Jetson validation.
 
 ---
 
@@ -191,10 +196,13 @@ The ActiveProxy protocol (Boson NAT traversal enabling `username.ela.city` domai
 | Task | Priority | Status | Notes |
 |------|----------|--------|-------|
 | Fix "Copy & Save" recovery phrase button | High | Pending | Mnemonic API returns null after server restart |
-| Auto-install build deps on Ubuntu/Debian | High | ✅ Done | Commit `4df6f0c6` - fixes node-pty error |
-| ActiveProxy NAT traversal | High | 🔄 Testing | See Track 0.7 above |
+| Auto-install build deps on Ubuntu/Debian | High | ✅ Done | Commit `4df6f0c6` |
+| ActiveProxy NAT traversal | High | ✅ Done | Tested on 2 Jetson devices |
+| WireGuard macOS support | High | ✅ Done | Auto-install, passwordless sudo, network detection |
+| Ollama tool fallback | Medium | ✅ Done | Retry without tools for incompatible models |
+| Mobile taskbar z-index | Medium | ✅ Done | Windows no longer hidden behind taskbar |
 | Monitor community feedback | High | Ongoing | Triage bugs from real users |
-| Documentation sync | Medium | Pending | Ensure docs.ela.city matches v1.0 |
+| Documentation sync | Medium | 🔄 In Progress | Updating all docs to match shipped features |
 
 ### 1.2 Quality Assurance
 
@@ -375,14 +383,21 @@ Offer pre-configured PC2 hardware for users who want plug-and-play sovereignty. 
 | Voice-mode system prompt | ✅ Done | Natural conversational responses |
 | ARM install script (voice tools) | ✅ Done | Auto-installs Whisper + Piper on Jetson |
 
+### Additional Shipped (Feb 27 – Mar 2, 2026)
+
+| Component | Status | Details |
+|-----------|--------|---------|
+| Voice settings toggle in UI | ✅ Done | Install button + Enable/Disable toggle in Settings |
+| Ollama model loading on Jetson | ✅ Done | Fixed with tool fallback; tested deepseek, qwen3, gemma3 |
+| Voice AI opt-in on ARM | ✅ Done | `INSTALL_VOICE=1` flag; saves ~500MB GPU memory on Jetson |
+| Ollama download progress | ✅ Done | SSE streaming with `flushHeaders()` |
+
 ### Pending
 
 | Task | Status | Notes |
 |------|--------|-------|
-| Jetson end-to-end voice test | ⏳ Pending | Needs community verification on Jetson hardware |
-| Ollama model loading on Jetson | 🔄 Debugging | Anders reports model download/load issues |
-| Voice settings toggle in UI | ⏳ Future | Enable/disable voice from AI settings panel |
 | Multi-turn voice conversation | ⏳ Future | Maintain conversation history across voice turns |
+| Jetson end-to-end voice test | ⏳ Pending | Whisper disabled by default on Jetson to save GPU memory |
 
 ---
 

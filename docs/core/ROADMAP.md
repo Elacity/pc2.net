@@ -86,21 +86,26 @@ These diagrams from Rong define the north star. Every work stream should move us
 **Goal:** Continuity. Keep shipping. Merge the tested branch to main.
 
 - [ ] Merge `feature/jetson-gpu-acceleration` to `main` after Sash validates on own Jetson hardware
-- [ ] Establish weekly shipping report cadence (GitHub-based)
+- [x] Establish weekly shipping report cadence (GitHub-based)
 - [x] Set up public expenditure tracking portal
 - [ ] First monthly release (v1.1.0) — after Jetson validation
 - [x] Publish WCI ecosystem update article
 
-**Status (2026-02-26):**
+**Status (2026-03-02):**
 - WireGuard reconnect after reboot: confirmed working (EverlastingOS + Anders)
-- Large file upload: confirmed working — was a display bug (progress bar doubled total), NOT actual truncation
+- WireGuard macOS support: ✅ shipped — auto-install via `start-local.sh`, passwordless sudo, network change detection
+- Large file upload: confirmed working — was a display bug (total_size*2 removed), NOT actual truncation
 - WCI update article: published
 - Expenditure portal: live
 - One-command Jetson install: validated on 2 independent Jetsons (EverlastingOS + Anders/alm.ela.city)
+- One-command macOS install: ✅ shipped — `start-local.sh` auto-installs Homebrew + WireGuard
 - Weekly shipping reports: established on GitHub Discussions (#1, #2, #3)
 - v1.1.0 release: blocked on Sash's own Jetson hardware test
 - Anders' WalletConnect/Essentials issue: ✅ resolved — Anders was on an older wallet version
-- Anders' Ollama model download issue: pending (needs Ollama installed/running)
+- Anders' Ollama model download issue: ✅ resolved — tool fallback + SSE streaming fixed
+- Voice AI pipeline: ✅ shipped — Whisper STT + Piper TTS with Settings UI
+- Virtual desktops: ✅ shipped — workspaces, Mission Control, keyboard shortcuts
+- Ubuntu-style desktop UI: ✅ shipped — top bar, dock, window chrome, file explorer
 
 ---
 
@@ -114,14 +119,14 @@ These diagrams from Rong define the north star. Every work stream should move us
 - [ ] AV1/Firefox — server-side remuxing for MKV→MP4 (beyond the error message)
 - [ ] Performance profiling on Jetson (memory, CPU, IPFS block store)
 - [x] Reduce PC2 cold-start time — parallelized AI/Gateway/Boson initialization
-- [ ] Mobile-responsive UI improvements
+- [x] Mobile-responsive UI improvements — taskbar z-index fix, responsive layouts, virtual desktops
 
 **DePIN Hardware Expansion:**
-- [ ] Validate one-command installer on fresh Jetson Orin Nano (community test)
+- [x] Validate one-command installer on fresh Jetson Orin Nano — tested on 2 devices (EverlastingOS + Anders)
 - [ ] Raspberry Pi 4/5 validation and optimization
 - [ ] Explore dedicated DePIN hardware partnerships (plug-and-play boxes)
 - [ ] Debian package (.deb) for ARM devices
-- [ ] macOS package (.dmg) for desktop users
+- [ ] macOS package (.dmg) for desktop users — needs Apple Developer cert ($99/year)
 - [ ] Windows installer (.exe) exploration
 
 **Carrier Overlay Network:**
@@ -130,11 +135,15 @@ These diagrams from Rong define the north star. Every work stream should move us
 - [ ] Automated SSL renewal with monitoring (NETWORK_HARDENING item #7)
 - [ ] Basic uptime monitoring for supernodes (NETWORK_HARDENING item #6)
 - [x] Reduce WireGuard retry interval (15s with exponential backoff) — shipped commit 0ac683b1
+- [x] WireGuard macOS support — auto-install, passwordless sudo, network change detection
+- [x] WireGuard PATH detection under PM2/systemd restricted environments
 
 **AI Integration:**
 - [ ] Integrate latest model providers as they emerge
-- [ ] Voice interaction prototype — pipeline: Whisper (STT) + Ollama (reasoning) + Kokoro/Piper (TTS)
-- [ ] Context API endpoint (`/api/context`) — accepts location, photo CIDs, voice transcripts, activity events
+- [x] Voice interaction prototype — Whisper (STT) + Ollama (reasoning) + Piper (TTS) — shipped Feb 26
+- [x] Context API endpoint (`/api/context`) — accepts location, photo CIDs, voice transcripts, activity events
+- [x] Ollama tool fallback — models rejecting tools auto-retry without tool definitions
+- [x] Voice AI settings UI — install button, enable/disable toggle, opt-in on Jetson
 - [ ] AI agent file management improvements
 - [ ] RAG retrieval optimization for personal documents
 - [ ] Evaluate PersonaPlex-7B (NVIDIA full-duplex voice) as Jetson hardware matures

@@ -114,7 +114,44 @@ https://docs.kinesis.network/blog/enable-wireguard-on-nvidia-jetson
 - Works great for AI agent workloads with local LLMs
 - Use barrel jack power for stability
 - PC2 runs via PM2 process manager -- survives SSH disconnect and reboots automatically
-- Voice AI tools (Whisper STT + Piper TTS) are auto-installed on Jetson
+- Voice AI tools (Whisper STT + Piper TTS) are **opt-in** on Jetson — install via Settings > AI > Voice AI
+- Voice AI uses ~500MB+ GPU memory; on 8GB Jetson this may prevent larger Ollama models from loading
+- For best AI performance on Jetson, close desktop environment (Firefox, GNOME) to free GPU memory
+
+---
+
+## macOS Desktop Setup
+
+PC2 also runs on macOS (Intel and Apple Silicon). The install script handles everything automatically.
+
+### Installation
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Elacity/pc2.net/main/scripts/start-local.sh | bash
+```
+
+This will:
+1. Install Homebrew (if not already installed)
+2. Install Node.js 20, PM2, build tools
+3. Install WireGuard tools (`wireguard-tools` via Homebrew)
+4. Configure passwordless sudo for `wg-quick` (required for PM2 background process)
+5. Clone and build PC2
+6. Start PC2 with PM2
+
+### WireGuard on macOS
+
+macOS uses the native `utun` driver for WireGuard (no kernel module needed). The install script:
+- Installs `wireguard-tools` via Homebrew
+- Configures `/etc/sudoers.d/wireguard` for passwordless `wg-quick` (PM2 runs non-interactively)
+- Network change detection handles laptop mobility (detects gateway changes, triggers reconnect)
+
+### Notes for macOS
+
+- Works on both Intel and Apple Silicon Macs
+- PC2 runs via PM2 — survives terminal close
+- WireGuard enables remote access via your `username.ela.city` domain
+- When laptop sleeps or changes WiFi network, WireGuard auto-reconnects
+- Your node is accessible while the laptop is on; goes offline when closed (expected)
 
 ---
 

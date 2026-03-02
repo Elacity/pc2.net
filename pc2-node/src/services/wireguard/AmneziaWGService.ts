@@ -44,6 +44,7 @@ export interface AWGObfuscationParams {
   H2: number;
   H3: number;
   H4: number;
+  I1?: string;
 }
 
 export interface AWGProvisionResponse {
@@ -245,7 +246,7 @@ export class AmneziaWGService {
     const confPath = join(this.awgDir, `${AWG_INTERFACE}.conf`);
     const obf = provision.obfuscation;
 
-    const conf = [
+    const interfaceLines = [
       '[Interface]',
       `Address = ${provision.assignedIP}/32`,
       `PrivateKey = ${privateKey}`,
@@ -261,6 +262,14 @@ export class AmneziaWGService {
       `H2 = ${obf.H2}`,
       `H3 = ${obf.H3}`,
       `H4 = ${obf.H4}`,
+    ];
+
+    if (obf.I1) {
+      interfaceLines.push(`I1 = ${obf.I1}`);
+    }
+
+    const conf = [
+      ...interfaceLines,
       '',
       '[Peer]',
       `PublicKey = ${provision.serverPublicKey}`,

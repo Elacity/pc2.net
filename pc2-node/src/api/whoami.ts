@@ -259,7 +259,7 @@ export function handleWhoami(req: AuthenticatedRequest, res: Response): void {
 
   // Get desktop background settings from KV store
   // Default to flint-2.jpg if not set (original default)
-  const desktopBgUrl = db.getSetting(`${walletAddress}:user_preferences.desktop_bg_url`) || '/images/flint-2.jpg';
+  const desktopBgUrl = db.getSetting(`${walletAddress}:user_preferences.desktop_bg_url`) || '/images/wallpaper-elacity.png';
   const desktopBgColor = db.getSetting(`${walletAddress}:user_preferences.desktop_bg_color`) || null;
   const desktopBgFit = db.getSetting(`${walletAddress}:user_preferences.desktop_bg_fit`) || 'cover';
   

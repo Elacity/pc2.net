@@ -2000,7 +2000,7 @@ window.refresh_desktop_background = async function() {
         
         // If bg_url is null or the default wallpaper, use it directly (no signing needed)
         // Always use 'cover' fit for default wallpapers, regardless of saved fit
-        if (!bg_url || bg_url === '/images/wallpaper-elacity.png' || bg_url === '/images/wallpaper-elastos.jpg' || bg_url === '/images/flint-2.jpg') {
+        if (!bg_url || bg_url === '/images/wallpaper-elacity.png' || bg_url === '/images/wallpaper-elastos.jpg' || bg_url === '/images/wallpaper-elastos-branded.png' || bg_url === '/images/flint-2.jpg') {
             false && console.log('[refresh_desktop_background] Using default wallpaper:', bg_url);
             window.set_desktop_background({
                 url: bg_url,

@@ -88,7 +88,6 @@ export default {
                 window_options: {
                     parent_uuid: $el_window.attr('data-element_uuid'),
                     disable_parent_window: true,
-                    parent_center: true,
                 },
             });
         });
@@ -97,7 +96,6 @@ export default {
                 window_options: {
                     parent_uuid: $el_window.attr('data-element_uuid'),
                     disable_parent_window: true,
-                    parent_center: true,
                 },
             });
         });

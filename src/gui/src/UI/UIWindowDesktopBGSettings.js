@@ -104,7 +104,8 @@ async function UIWindowDesktopBGSettings (options) {
             },
             body_css: {
                 width: 'initial',
-                height: '100%',
+                height: 'auto',
+                'overflow-y': 'auto',
                 'background-color': 'rgb(245 247 249)',
                 'backdrop-filter': 'blur(3px)',
             },

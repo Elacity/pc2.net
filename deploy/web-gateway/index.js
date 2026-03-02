@@ -48,12 +48,12 @@ setInterval(() => {
   }
 }, 30_000);
 
-// WireGuard peer health-check: probe registered WireGuard endpoints every 60s.
+// Tunnel peer health-check: probe registered WireGuard (10.100) and AmneziaWG (10.101) endpoints every 60s.
 // If a peer is unreachable (connection refused / timeout), destroy its pooled
 // sockets so the next real request gets a clean connection or a fast 502.
 setInterval(() => {
   for (const [username, info] of registry) {
-    if (!info.endpoint || !info.endpoint.startsWith("http://10.100.")) continue;
+    if (!info.endpoint || !(info.endpoint.startsWith("http://10.100.") || info.endpoint.startsWith("http://10.101."))) continue;
 
     const url = new URL(info.endpoint);
     const probe = http.request({
@@ -2602,5 +2602,5 @@ if (httpsAvailable) {
 }
 
 console.log(`[Gateway] PC2 Web Gateway started for *.${CONFIG.domain}`);
-console.log(`[Gateway] Proxy endpoint support: http://, proxy://, wireguard (10.100.0.0/16)`);
+console.log(`[Gateway] Proxy endpoint support: http://, proxy://, wireguard (10.100.0.0/16), amneziawg (10.101.0.0/16)`);
 console.log(`[Gateway] Security: Rate limiting enabled, CORS restricted to *.ela.city`);

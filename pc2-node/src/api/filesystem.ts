@@ -12,7 +12,8 @@ import { broadcastFileChange, broadcastDirectoryChange, broadcastItemRemoved, br
 import { FileStat, DirectoryEntry, ReadFileRequest, WriteFileRequest, CreateDirectoryRequest, DeleteRequest, MoveRequest } from '../types/api.js';
 import { FileMetadata } from '../storage/database.js';
 import { Server as SocketIOServer } from 'socket.io';
-import { logger } from '../utils/logger.js';
+import { logger, createLogger } from '../utils/logger.js';
+const log = createLogger('api-filesystem');
 
 /**
  * Get file/folder stat
@@ -1732,7 +1733,7 @@ export async function handleMove(req: AuthenticatedRequest, res: Response): Prom
     });
     
     // Also log to console for immediate visibility
-    console.error('[Move] Detailed error:', errorDetails);
+    log.error('[Move] Detailed error:', errorDetails);
     
     // Check if it's a "destination already exists" error - return 409 Conflict
     if (errorMessage.includes('Destination already exists')) {

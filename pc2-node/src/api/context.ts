@@ -9,6 +9,8 @@
 import { Router, Response } from 'express';
 import { authenticate, AuthenticatedRequest } from './middleware.js';
 import { ContextStore, ContextEvent } from '../storage/context.js';
+import { createLogger } from '../utils/logger.js';
+const log = createLogger('api-context');
 
 const router = Router();
 
@@ -71,7 +73,7 @@ router.post('/', authenticate, async (req: AuthenticatedRequest, res: Response) 
       ids,
     });
   } catch (error: any) {
-    console.error('[Context API] Store error:', error.message);
+    log.error('[Context API] Store error:', error.message);
     res.status(500).json({ error: 'Failed to store context events' });
   }
 });
@@ -95,7 +97,7 @@ router.get('/recent', authenticate, async (req: AuthenticatedRequest, res: Respo
 
     res.json({ events, count: events.length });
   } catch (error: any) {
-    console.error('[Context API] Recent error:', error.message);
+    log.error('[Context API] Recent error:', error.message);
     res.status(500).json({ error: 'Failed to fetch recent context' });
   }
 });
@@ -117,7 +119,7 @@ router.get('/summary', authenticate, async (req: AuthenticatedRequest, res: Resp
 
     res.json({ summary, hasContext: summary.length > 0 });
   } catch (error: any) {
-    console.error('[Context API] Summary error:', error.message);
+    log.error('[Context API] Summary error:', error.message);
     res.status(500).json({ error: 'Failed to generate context summary' });
   }
 });
@@ -144,7 +146,7 @@ router.get('/trajectory', authenticate, async (req: AuthenticatedRequest, res: R
 
     res.json({ trajectory, count: trajectory.length });
   } catch (error: any) {
-    console.error('[Context API] Trajectory error:', error.message);
+    log.error('[Context API] Trajectory error:', error.message);
     res.status(500).json({ error: 'Failed to fetch trajectory' });
   }
 });

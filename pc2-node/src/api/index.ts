@@ -8,7 +8,8 @@ import { DatabaseManager, FilesystemManager } from '../storage/index.js';
 import { Config } from '../config/loader.js';
 import { Server as SocketIOServer } from 'socket.io';
 import { authenticate, corsMiddleware, errorHandler, AuthenticatedRequest } from './middleware.js';
-import { logger } from '../utils/logger.js';
+import { logger, createLogger } from '../utils/logger.js';
+const log = createLogger('api-index');
 import { handleWhoami } from './whoami.js';
 import { handleParticleAuth, handleGrantUserApp, handleGetUserAppToken } from './auth.js';
 import { handleStat, handleReaddir, handleRead, handleWrite, handleMkdir, handleDelete, handleMove, handleRename, handleCopy } from './filesystem.js';
@@ -215,7 +216,7 @@ export function setupAPI(app: Express): void {
       
       res.json({ success: true });
     } catch (error) {
-      console.error('[User Profile] Error:', error);
+      log.error('[User Profile] Error:', error);
       res.status(500).json({ error: 'Failed to save profile' });
     }
   });
@@ -232,7 +233,7 @@ export function setupAPI(app: Express): void {
       
       res.json({ display_name: displayName });
     } catch (error) {
-      console.error('[User Profile] Error:', error);
+      log.error('[User Profile] Error:', error);
       res.status(500).json({ error: 'Failed to get profile' });
     }
   });
@@ -266,7 +267,7 @@ export function setupAPI(app: Express): void {
       
       res.json({ logins });
     } catch (error) {
-      console.error('[Login History] Error:', error);
+      log.error('[Login History] Error:', error);
       res.json({ logins: [] });
     }
   });
@@ -301,7 +302,7 @@ export function setupAPI(app: Express): void {
       
       res.json(result);
     } catch (error) {
-      console.error('[List Sessions] Error:', error);
+      log.error('[List Sessions] Error:', error);
       res.json([]);
     }
   });
@@ -325,7 +326,7 @@ export function setupAPI(app: Express): void {
       
       res.json({ success: true });
     } catch (error) {
-      console.error('[Revoke Session] Error:', error);
+      log.error('[Revoke Session] Error:', error);
       res.status(500).json({ error: 'Failed to revoke session' });
     }
   });

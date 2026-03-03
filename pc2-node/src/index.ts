@@ -25,7 +25,9 @@ process.on('uncaughtException', (error: Error) => {
 import { createServer } from './server.js';
 import { DatabaseManager, IPFSStorage, FilesystemManager, type IPFSNetworkMode, setGlobalDatabase } from './storage/index.js';
 import { loadConfig, type Config } from './config/loader.js';
-import { logger } from './utils/logger.js';
+import { logger, createLogger } from './utils/logger.js';
+
+const log = createLogger('pc2');
 import { AIChatService } from './services/ai/AIChatService.js';
 import { BosonService } from './services/boson/index.js';
 import { getGatewayService, createChannelBridge } from './services/gateway/index.js';

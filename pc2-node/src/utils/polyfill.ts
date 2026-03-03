@@ -7,6 +7,10 @@
  * the polyfilled features (e.g., ipfs-core)
  */
 
+import { createLogger } from './logger.js';
+
+const log = createLogger('polyfill');
+
 // Polyfill for Promise.withResolvers() (Node.js 20 compatibility)
 // Promise.withResolvers() was added in Node.js 22, but ipfs-core requires it
 // This polyfill allows IPFS to work on Node.js 20+
@@ -40,7 +44,7 @@ if (typeof (Promise as any).withResolvers === 'undefined') {
   
   // Log that polyfill was applied (only in development)
   if (process.env.NODE_ENV !== 'production') {
-    console.log('🔧 Applied Promise.withResolvers polyfill for Node.js 20 compatibility');
+    log.info('Applied Promise.withResolvers polyfill for Node.js 20 compatibility');
   }
 }
 

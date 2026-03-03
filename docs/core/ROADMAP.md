@@ -275,6 +275,10 @@ These diagrams from Rong define the north star. Every work stream should move us
 - [ ] Investable agents with dDRM-protected capabilities
 - [ ] Tradeable skill capsules (agent expertise as distributable CIDs)
 - [ ] Agent marketplace (deploy, discover, interact)
+- [ ] Evaluate ERC-8004 agent registry for node/agent identity and discovery
+- [ ] Register PC2 nodes and Flint agent in ERC-8004 Identity Registry (ERC-721)
+- [ ] Integrate ERC-8004 Reputation Registry for dApp Store app/agent ratings
+- [ ] Expose MCP/A2A endpoints in agent registration files for cross-agent discovery
 
 **Carrier Network:**
 - [ ] Multi-supernode WireGuard with load balancing (NETWORK_HARDENING Phase 2)
@@ -358,6 +362,35 @@ Phase 2 (M4-M6):
 Phase 3 (M7+):
   dDRM as a capsule → independent versioning → third-party DRM providers
   → cross-node content licensing → autonomous commerce
+```
+
+### ERC-8004 Agent Registry Integration Path
+
+> **Standard:** [ERC-8004: Trustless Agents](https://eips.ethereum.org/EIPS/eip-8004) (Draft, Aug 2025)
+> **Authors:** MetaMask, Ethereum Foundation, Google, Coinbase
+> **Status:** Draft, ~1,500 agents registered on Sepolia testnet (Mar 2026)
+> **CTO Note:** Evaluate alongside bankr/BNKR trend — autonomous on-chain agents with identity + reputation are seeing massive market growth ($100M+ market cap).
+
+Three on-chain registries: Identity (ERC-721 per agent), Reputation (feedback signals), Validation (zkML/TEE/re-execution proofs). Complementary to Elacity SDK — ERC-8004 handles agent discovery/trust, Elacity handles content rights/marketplace.
+
+```
+Phase 1 (M2-M5) — Forward-Compatible Design:
+  Design app.json manifest services[] field to align with ERC-8004
+  registration file format → zero rework when adopting the standard later
+  Ensure DID integration can serve as identity layer for ERC-8004
+
+Phase 2 (M5-M7) — Node Identity & Reputation:
+  Register PC2 nodes as ERC-8004 agents (ERC-721 NFT per node)
+  → node registration file advertises ela.city URL, MCP endpoint, DID
+  Wire dApp Store ratings to Reputation Registry (on-chain feedback)
+  → app quality, uptime, success rate as on-chain signals
+
+Phase 3 (M7+) — Agent Economy:
+  Register Flint AI agent in Identity Registry with A2A/MCP endpoints
+  → other agents discover and interact with Flint via ERC-8004
+  Agent-to-agent trust via Reputation + Validation registries
+  → capability-gated agent interactions with on-chain reputation
+  Content creators as registered agents with reputation scores
 ```
 
 ### Network Hardening (from NETWORK_HARDENING.md)

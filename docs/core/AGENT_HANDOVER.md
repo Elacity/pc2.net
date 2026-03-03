@@ -270,7 +270,7 @@ npm start
 ```bash
 # SSH access
 ssh root@38.242.211.112
-# Password: Bella2822!
+# Password: [ROTATED -- stored in password manager, not in git]
 
 # Update and restart
 cd ~/pc2.net
@@ -386,7 +386,7 @@ Located in `.cursor/rules/`:
 ## Key Contacts & Resources
 
 - **Repository:** github.com/Elacity/pc2.net
-- **Supernode SSH:** root@38.242.211.112 (Bella2822!)
+- **Supernode SSH:** root@38.242.211.112 (password rotated -- see password manager)
 - **Flagship Supernode:** 69.164.241.210
 - **Test URL:** https://test7.ela.city
 

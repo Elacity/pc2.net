@@ -6,9 +6,9 @@
 
 ---
 
-## [UNRELEASED] PC2 v1.1.0
+## [1.1.0] - 2026-03-03
 
-> Branch: `feature/jetson-gpu-acceleration` — 55+ commits ahead of v1.0.0
+> 133 commits since v1.0.0 — squash merged from `feature/jetson-gpu-acceleration`
 
 ### 🎉 New Features (v1.1.0)
 

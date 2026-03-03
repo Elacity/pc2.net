@@ -23,6 +23,8 @@ import { FsBlockstore } from 'blockstore-fs';
 import { FsDatastore } from 'datastore-fs';
 import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
+import { createLogger } from '../utils/logger.js';
+const log = createLogger('ipfs');
 
 /**
  * IPFS Network Modes:
@@ -102,9 +104,9 @@ export class IPFSStorage {
         throw new Error('Promise.withResolvers polyfill not loaded. Helia requires Node.js 22+ or the polyfill.');
       }
       
-      console.log('🌐 Initializing Helia IPFS node...');
-      console.log(`   Repo path: ${this.repoPath}`);
-      console.log(`   Network mode: ${this.networkMode}`);
+      log.info('🌐 Initializing Helia IPFS node...');
+      log.info(`   Repo path: ${this.repoPath}`);
+      log.info(`   Network mode: ${this.networkMode}`);
 
       // Create blockstore and datastore
       this.blockstore = new FsBlockstore(blockstorePath);
@@ -141,9 +143,9 @@ export class IPFSStorage {
 
       // Add network services for public/hybrid modes
       if (enableNetwork) {
-        console.log(`   DHT: ${enableDHT ? 'enabled (client mode)' : 'disabled'}`);
-        console.log(`   Bootstrap: ${enableBootstrap ? 'enabled' : 'disabled'}`);
-        console.log(`   Max connections: 50`);
+        log.info(`   DHT: ${enableDHT ? 'enabled (client mode)' : 'disabled'}`);
+        log.info(`   Bootstrap: ${enableBootstrap ? 'enabled' : 'disabled'}`);
+        log.info(`   Max connections: 50`);
 
         // Add identify service (required for DHT)
         (libp2pConfig.services as any).identify = identify();
@@ -174,7 +176,7 @@ export class IPFSStorage {
           ];
         }
       } else {
-        console.log('   Network: disabled (private mode)');
+        log.info('   Network: disabled (private mode)');
       }
 
       // Create libp2p instance
@@ -193,13 +195,13 @@ export class IPFSStorage {
 
       // Get node info
       const peerId = this.helia.libp2p.peerId;
-      console.log(`✅ Helia IPFS node initialized`);
-      console.log(`   Node ID: ${peerId.toString()}`);
+      log.info(`✅ Helia IPFS node initialized`);
+      log.info(`   Node ID: ${peerId.toString()}`);
       
       const addresses = this.helia.libp2p.getMultiaddrs();
-      console.log(`   Addresses: ${addresses.length} configured`);
+      log.info(`   Addresses: ${addresses.length} configured`);
       if (addresses.length > 0) {
-        console.log(`   First address: ${addresses[0].toString()}`);
+        log.info(`   First address: ${addresses[0].toString()}`);
       }
 
       this.isInitialized = true;
@@ -219,25 +221,25 @@ export class IPFSStorage {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       const errorStack = error instanceof Error ? error.stack : undefined;
       
-      console.error('❌ Failed to initialize Helia IPFS:', errorMessage);
+      log.error('❌ Failed to initialize Helia IPFS:', errorMessage);
       
       // Provide helpful error messages for common issues
       if (errorMessage.includes('withResolvers')) {
-        console.error('   ⚠️  This error suggests Node.js version < 22');
-        console.error('   💡 A polyfill has been added, but Helia may still require Node.js 22+');
-        console.error('   💡 Consider upgrading Node.js: nvm install 22 && nvm use 22');
+        log.error('   ⚠️  This error suggests Node.js version < 22');
+        log.error('   💡 A polyfill has been added, but Helia may still require Node.js 22+');
+        log.error('   💡 Consider upgrading Node.js: nvm install 22 && nvm use 22');
       } else if (errorMessage.includes('EADDRINUSE')) {
-        console.error('   ⚠️  IPFS ports (4001, 4002) are already in use');
-        console.error('   💡 Another IPFS instance may be running');
-        console.error('   💡 Try stopping other IPFS processes or change ports in config');
+        log.error('   ⚠️  IPFS ports (4001, 4002) are already in use');
+        log.error('   💡 Another IPFS instance may be running');
+        log.error('   💡 Try stopping other IPFS processes or change ports in config');
       } else if (errorMessage.includes('repo') || errorMessage.includes('datastore') || errorMessage.includes('blockstore')) {
-        console.error('   ⚠️  IPFS repository issue');
-        console.error(`   💡 Repo path: ${this.repoPath}`);
-        console.error('   💡 Try deleting the repo directory and restarting');
+        log.error('   ⚠️  IPFS repository issue');
+        log.error(`   💡 Repo path: ${this.repoPath}`);
+        log.error('   💡 Try deleting the repo directory and restarting');
       }
       
       if (errorStack && process.env.NODE_ENV !== 'production') {
-        console.error('   Stack trace:', errorStack);
+        log.error('   Stack trace:', errorStack);
       }
       
       throw error;
@@ -296,7 +298,7 @@ export class IPFSStorage {
 
       return cid.toString();
     } catch (error) {
-      console.error('Error storing file in Helia IPFS:', error);
+      log.error('Error storing file in Helia IPFS:', error);
       throw new Error(`Failed to store file in IPFS: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -328,7 +330,7 @@ export class IPFSStorage {
 
       return cid.toString();
     } catch (error) {
-      console.error('Error storing file stream in Helia IPFS:', error);
+      log.error('Error storing file stream in Helia IPFS:', error);
       throw new Error(`Failed to store file stream in IPFS: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -376,7 +378,7 @@ export class IPFSStorage {
 
       // Log chunk info for debugging
       const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
-      console.log(`[IPFS] Retrieved ${chunks.length} chunks, total size: ${totalLength} bytes for CID: ${cid}`);
+      log.debug(`[IPFS] Retrieved ${chunks.length} chunks, total size: ${totalLength} bytes for CID: ${cid}`);
       
       // Concatenate all chunks into a single buffer
       const buffer = Buffer.allocUnsafe(totalLength);
@@ -389,7 +391,7 @@ export class IPFSStorage {
 
       return buffer;
     } catch (error) {
-      console.error(`Error retrieving file from Helia IPFS (CID: ${cid}):`, error);
+      log.error(`Error retrieving file from Helia IPFS (CID: ${cid}):`, error);
       throw new Error(`Failed to retrieve file from IPFS: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -486,7 +488,7 @@ export class IPFSStorage {
       // In the future, we can use @helia/remote-pinning for proper pinning
       await helia.blockstore.get(cidObj);
     } catch (error) {
-      console.error(`Error pinning file (CID: ${cid}):`, error);
+      log.error(`Error pinning file (CID: ${cid}):`, error);
       throw new Error(`Failed to pin file: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -498,7 +500,7 @@ export class IPFSStorage {
     // In Helia, unpinning is typically handled by garbage collection
     // For now, we'll just log - actual unpinning would require
     // tracking pinned CIDs separately or using @helia/remote-pinning
-    console.log(`Unpinning file (CID: ${cid}) - GC will handle cleanup`);
+    log.debug(`Unpinning file (CID: ${cid}) - GC will handle cleanup`);
   }
 
   /**
@@ -569,7 +571,7 @@ export class IPFSStorage {
     }, timeoutMs);
 
     try {
-      console.log(`[IPFS] Fetching remote CID from network: ${cidString} (timeout: ${timeoutMs}ms)`);
+      log.debug(`[IPFS] Fetching remote CID from network: ${cidString} (timeout: ${timeoutMs}ms)`);
 
       // Helper to wrap operations with timeout check
       const checkAbort = () => {
@@ -583,7 +585,7 @@ export class IPFSStorage {
       let localContent: Uint8Array | null = null;
       
       try {
-        console.log(`[IPFS] Trying quick local fetch for ${cidString}...`);
+        log.debug(`[IPFS] Trying quick local fetch for ${cidString}...`);
         const chunks: Uint8Array[] = [];
         let totalSize = 0;
         
@@ -611,7 +613,7 @@ export class IPFSStorage {
             offset += chunk.length;
           }
           localContent = combined;
-          console.log(`[IPFS] ✅ Found locally: ${cidString} (${totalSize} bytes)`);
+          log.debug(`[IPFS] ✅ Found locally: ${cidString} (${totalSize} bytes)`);
           
           const timeMs = Date.now() - startTime;
           return {
@@ -625,16 +627,16 @@ export class IPFSStorage {
           };
         }
       } catch (localError: any) {
-        console.log(`[IPFS] Quick local fetch failed: ${localError.message}`);
+        log.debug(`[IPFS] Quick local fetch failed: ${localError.message}`);
       }
       
       // Not found locally, try gateway directly (skip slow DHT stat)
-      console.log(`[IPFS] Content not cached locally, trying gateways...`);
+      log.debug(`[IPFS] Content not cached locally, trying gateways...`);
       try {
         const gatewayResult = await this.fetchViaGateway(cidString, timeoutMs - (Date.now() - startTime));
         if (gatewayResult.success) {
           const timeMs = Date.now() - startTime;
-          console.log(`[IPFS] ✅ Fetched via gateway: ${cidString} (${gatewayResult.size} bytes, ${timeMs}ms)`);
+          log.debug(`[IPFS] ✅ Fetched via gateway: ${cidString} (${gatewayResult.size} bytes, ${timeMs}ms)`);
           return {
             success: true,
             cid: cidString,
@@ -646,7 +648,7 @@ export class IPFSStorage {
           };
         }
       } catch (gatewayError: any) {
-        console.log(`[IPFS] Gateway fallback failed: ${gatewayError.message}`);
+        log.debug(`[IPFS] Gateway fallback failed: ${gatewayError.message}`);
       }
       
       // Last resort: try stat + cat with remaining timeout (for directories or special cases)
@@ -655,7 +657,7 @@ export class IPFSStorage {
       
       try {
         checkAbort();
-        console.log(`[IPFS] Trying DHT stat for ${cidString}...`);
+        log.debug(`[IPFS] Trying DHT stat for ${cidString}...`);
         
         const statPromise = fs.stat(cid);
         const timeoutPromise = new Promise((_, reject) => 
@@ -663,10 +665,10 @@ export class IPFSStorage {
         );
         
         stats = await Promise.race([statPromise, timeoutPromise]);
-        console.log(`[IPFS] CID type: ${stats.type}`);
+        log.debug(`[IPFS] CID type: ${stats.type}`);
       } catch (error: any) {
         const errorMsg = error instanceof Error ? error.message : String(error);
-        console.log(`[IPFS] DHT stat failed: ${errorMsg}`);
+        log.debug(`[IPFS] DHT stat failed: ${errorMsg}`);
         
         throw Object.assign(
           new Error(`Content not found: Could not retrieve from local cache, gateways, or DHT`),
@@ -679,16 +681,16 @@ export class IPFSStorage {
 
       if (stats.type === 'directory') {
         // Handle directory: recursively fetch all files
-        console.log(`[IPFS] Fetching directory contents...`);
+        log.debug(`[IPFS] Fetching directory contents...`);
         const result = await this.fetchDirectoryRecursive(fs, cid, controller.signal, maxFiles, 0);
         totalSize = result.size;
         fileCount = result.files;
 
         if (result.truncated) {
-          console.warn(`[IPFS] ⚠️ Directory fetch truncated at ${maxFiles} files`);
+          log.warn(`[IPFS] ⚠️ Directory fetch truncated at ${maxFiles} files`);
         }
 
-        console.log(`[IPFS] ✅ Pinned remote directory: ${cidString} (${fileCount} files, ${totalSize} bytes)`);
+        log.debug(`[IPFS] ✅ Pinned remote directory: ${cidString} (${fileCount} files, ${totalSize} bytes)`);
       } else {
         // Handle file or raw: use cat() without signal
         const chunks: Uint8Array[] = [];
@@ -700,7 +702,7 @@ export class IPFSStorage {
         }
 
         fileCount = 1;
-        console.log(`[IPFS] ✅ Pinned remote file: ${cidString} (${totalSize} bytes, ${chunks.length} chunks)`);
+        log.debug(`[IPFS] ✅ Pinned remote file: ${cidString} (${totalSize} bytes, ${chunks.length} chunks)`);
       }
 
       const timeMs = Date.now() - startTime;
@@ -719,7 +721,7 @@ export class IPFSStorage {
         // Try gateway fallback for NOT_FOUND and NETWORK_ERROR
         if (error.type === IPFSStorage.PinErrorType.NOT_FOUND || 
             error.type === IPFSStorage.PinErrorType.NETWORK_ERROR) {
-          console.log(`[IPFS] DHT fetch failed, trying gateway fallback...`);
+          log.debug(`[IPFS] DHT fetch failed, trying gateway fallback...`);
           try {
             const gatewayResult = await this.fetchViaGateway(cidString, timeoutMs - (Date.now() - startTime));
             if (gatewayResult.success) {
@@ -735,7 +737,7 @@ export class IPFSStorage {
               };
             }
           } catch (gatewayError: any) {
-            console.log(`[IPFS] Gateway fallback also failed: ${gatewayError.message}`);
+            log.debug(`[IPFS] Gateway fallback also failed: ${gatewayError.message}`);
           }
         }
         throw error;
@@ -750,8 +752,8 @@ export class IPFSStorage {
       }
 
       // Handle other errors - try gateway fallback
-      console.error(`[IPFS] Failed to pin remote CID ${cidString}:`, error);
-      console.log(`[IPFS] Trying gateway fallback...`);
+      log.error(`[IPFS] Failed to pin remote CID ${cidString}:`, error);
+      log.debug(`[IPFS] Trying gateway fallback...`);
       
       try {
         const gatewayResult = await this.fetchViaGateway(cidString, timeoutMs - (Date.now() - startTime));
@@ -768,7 +770,7 @@ export class IPFSStorage {
           };
         }
       } catch (gatewayError: any) {
-        console.log(`[IPFS] Gateway fallback also failed: ${gatewayError.message}`);
+        log.debug(`[IPFS] Gateway fallback also failed: ${gatewayError.message}`);
       }
       
       throw Object.assign(
@@ -809,13 +811,13 @@ export class IPFSStorage {
     // Try each gateway with retries
     for (let attempt = 0; attempt < 2; attempt++) {
       if (attempt > 0) {
-        console.log(`[IPFS] Gateway retry attempt ${attempt + 1}...`);
+        log.debug(`[IPFS] Gateway retry attempt ${attempt + 1}...`);
         await new Promise(r => setTimeout(r, 2000)); // Wait 2s before retry
       }
 
       for (const gateway of GATEWAYS) {
         try {
-          console.log(`[IPFS] Trying gateway: ${gateway}${cidString}`);
+          log.debug(`[IPFS] Trying gateway: ${gateway}${cidString}`);
           
           const response = await fetch(`${gateway}${cidString}`, {
             signal: AbortSignal.timeout(timeoutMs),
@@ -825,7 +827,7 @@ export class IPFSStorage {
           });
 
           if (!response.ok) {
-            console.log(`[IPFS] Gateway ${gateway} returned ${response.status}`);
+            log.debug(`[IPFS] Gateway ${gateway} returned ${response.status}`);
             continue;
           }
 
@@ -833,15 +835,15 @@ export class IPFSStorage {
           const buffer = await response.arrayBuffer();
           const content = new Uint8Array(buffer);
           
-          console.log(`[IPFS] ✅ Fetched ${content.length} bytes from gateway ${gateway}`);
+          log.debug(`[IPFS] ✅ Fetched ${content.length} bytes from gateway ${gateway}`);
 
           // Add to local IPFS
           const addedCid = await fs.addBytes(content);
-          console.log(`[IPFS] ✅ Added to local IPFS: ${addedCid.toString()}`);
+          log.debug(`[IPFS] ✅ Added to local IPFS: ${addedCid.toString()}`);
 
           // CID version may differ (v0 vs v1), but content is the same
           if (addedCid.toString() !== cidString) {
-            console.log(`[IPFS] CID versions differ: requested ${cidString.substring(0, 12)}..., stored as ${addedCid.toString().substring(0, 12)}...`);
+            log.debug(`[IPFS] CID versions differ: requested ${cidString.substring(0, 12)}..., stored as ${addedCid.toString().substring(0, 12)}...`);
           }
 
           return {
@@ -854,9 +856,9 @@ export class IPFSStorage {
           const errMsg = error.message || 'Unknown error';
           // Only log brief error for cleaner output
           if (errMsg.includes('timeout') || errMsg.includes('abort')) {
-            console.log(`[IPFS] Gateway ${gateway} timed out`);
+            log.debug(`[IPFS] Gateway ${gateway} timed out`);
           } else {
-            console.log(`[IPFS] Gateway ${gateway} failed: ${errMsg.substring(0, 100)}`);
+            log.debug(`[IPFS] Gateway ${gateway} failed: ${errMsg.substring(0, 100)}`);
           }
           continue;
         }
@@ -1008,34 +1010,34 @@ export class IPFSStorage {
    */
   async announceCID(cid: string): Promise<boolean> {
     if (this.networkMode === 'private') {
-      console.log(`[IPFS] Skipping DHT announcement (private mode): ${cid}`);
+      log.debug(`[IPFS] Skipping DHT announcement (private mode): ${cid}`);
       return false;
     }
 
     if (!this.helia || !this.isInitialized) {
-      console.warn(`[IPFS] Cannot announce CID - IPFS not initialized`);
+      log.warn(`[IPFS] Cannot announce CID - IPFS not initialized`);
       return false;
     }
 
     try {
       const dht = (this.helia.libp2p.services as any).dht;
       if (!dht) {
-        console.warn(`[IPFS] DHT service not available`);
+        log.warn(`[IPFS] DHT service not available`);
         return false;
       }
 
       const { CID } = await import('multiformats/cid');
       const cidObj = CID.parse(cid);
       
-      console.log(`[IPFS] Announcing CID to DHT: ${cid}`);
+      log.debug(`[IPFS] Announcing CID to DHT: ${cid}`);
       
       // Use the DHT provide method to announce we have this content
       await dht.provide(cidObj);
       
-      console.log(`[IPFS] ✅ Successfully announced CID to DHT: ${cid}`);
+      log.debug(`[IPFS] ✅ Successfully announced CID to DHT: ${cid}`);
       return true;
     } catch (error) {
-      console.error(`[IPFS] Failed to announce CID ${cid}:`, error);
+      log.error(`[IPFS] Failed to announce CID ${cid}:`, error);
       return false;
     }
   }
@@ -1046,14 +1048,14 @@ export class IPFSStorage {
    */
   async announceMultipleCIDs(cids: string[]): Promise<{ success: number; failed: number }> {
     if (this.networkMode === 'private') {
-      console.log(`[IPFS] Skipping batch DHT announcement (private mode)`);
+      log.debug(`[IPFS] Skipping batch DHT announcement (private mode)`);
       return { success: 0, failed: 0 };
     }
 
     let success = 0;
     let failed = 0;
 
-    console.log(`[IPFS] Starting batch announcement of ${cids.length} CIDs...`);
+    log.debug(`[IPFS] Starting batch announcement of ${cids.length} CIDs...`);
 
     for (const cid of cids) {
       try {
@@ -1067,11 +1069,11 @@ export class IPFSStorage {
         await new Promise(resolve => setTimeout(resolve, 100));
       } catch (error) {
         failed++;
-        console.error(`[IPFS] Failed to announce CID ${cid}:`, error);
+        log.error(`[IPFS] Failed to announce CID ${cid}:`, error);
       }
     }
 
-    console.log(`[IPFS] Batch announcement complete: ${success} success, ${failed} failed`);
+    log.info(`[IPFS] Batch announcement complete: ${success} success, ${failed} failed`);
     return { success, failed };
   }
 
@@ -1112,14 +1114,14 @@ export class IPFSStorage {
   async stop(): Promise<void> {
     if (this.helia && this.isInitialized) {
       try {
-        console.log('🛑 Stopping Helia IPFS node...');
+        log.info('🛑 Stopping Helia IPFS node...');
         await this.helia.stop();
         this.helia = null;
         this.fs = null;
         this.isInitialized = false;
-        console.log('✅ Helia IPFS node stopped');
+        log.info('✅ Helia IPFS node stopped');
       } catch (error) {
-        console.error('Error stopping Helia IPFS node:', error);
+        log.error('Error stopping Helia IPFS node:', error);
         throw error;
       }
     }

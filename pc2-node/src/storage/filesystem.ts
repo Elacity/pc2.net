@@ -9,7 +9,9 @@ import { IPFSStorage } from './ipfs.js';
 import { DatabaseManager, FileMetadata } from './database.js';
 import { normalize, join, dirname } from 'path';
 import { createReadStream, statSync, unlinkSync } from 'fs';
-import { logger } from '../utils/logger.js';
+import { logger, createLogger } from '../utils/logger.js';
+
+const log = createLogger('filesystem');
 import { generateThumbnail, supportsThumbnails } from './thumbnail.js';
 
 export interface FileContent {
@@ -626,7 +628,7 @@ export class FilesystemManager {
           await this.ipfs.unpinFile(metadata.ipfs_hash);
         } catch (error) {
           // Non-critical - continue with deletion
-          console.warn(`Failed to unpin directory ${metadata.ipfs_hash}:`, error);
+          log.warn(`Failed to unpin directory ${metadata.ipfs_hash}:`, error);
         }
       }
     } else {
@@ -634,10 +636,10 @@ export class FilesystemManager {
       if (metadata.ipfs_hash && this.isIPFSAvailable() && this.ipfs) {
         try {
           await this.ipfs.unpinFile(metadata.ipfs_hash);
-          console.log(`[Delete] Unpinned file from IPFS: ${metadata.ipfs_hash}`);
+          log.info(`[Delete] Unpinned file from IPFS: ${metadata.ipfs_hash}`);
         } catch (error) {
           // Non-critical - continue with deletion
-          console.warn(`Failed to unpin file ${metadata.ipfs_hash}:`, error);
+          log.warn(`Failed to unpin file ${metadata.ipfs_hash}:`, error);
         }
       }
     }
@@ -646,7 +648,7 @@ export class FilesystemManager {
     // Also delete all version history for this file
     this.db.deleteFileVersions(normalizedPath, walletAddress);
     this.db.deleteFile(normalizedPath, walletAddress);
-    console.log(`[Delete] Removed file and version history from database: ${normalizedPath}`);
+    log.info(`[Delete] Removed file and version history from database: ${normalizedPath}`);
   }
 
   /**
@@ -680,7 +682,7 @@ export class FilesystemManager {
         // Only fail if it's a file (we can't overwrite files without explicit overwrite flag)
         if (!existingNew.is_dir) {
           // Log details for debugging
-          console.log('[Filesystem] Destination already exists check:', {
+          log.debug('[Filesystem] Destination already exists check:', {
             oldPath: normalizedOldPath,
             newPath: normalizedNewPath,
             existingFile: {
@@ -693,7 +695,7 @@ export class FilesystemManager {
           throw new Error(`Destination already exists: ${newPath}`);
         } else {
           // Destination is a directory - that's fine, we're moving the file INTO it
-          console.log('[Filesystem] Destination is a directory, allowing move into it:', {
+          log.debug('[Filesystem] Destination is a directory, allowing move into it:', {
             oldPath: normalizedOldPath,
             newPath: normalizedNewPath,
             destinationDir: existingNew.path

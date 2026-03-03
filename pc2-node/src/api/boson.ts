@@ -7,6 +7,8 @@
 import { Router, Request, Response } from 'express';
 import { BosonService } from '../services/boson/index.js';
 import os from 'os';
+import { createLogger } from '../utils/logger.js';
+const log = createLogger('api-boson');
 
 const router = Router();
 
@@ -539,7 +541,7 @@ router.post('/secure-mnemonic', async (req: Request, res: Response) => {
       adminWallet: walletAddress,
     });
   } catch (error) {
-    console.error('[Boson API] Failed to secure mnemonic:', error);
+    log.error('[Boson API] Failed to secure mnemonic:', error);
     res.status(500).json({
       error: 'Failed to encrypt mnemonic',
     });
@@ -637,7 +639,7 @@ router.post('/encrypt-mnemonic', async (req: Request, res: Response) => {
       adminWallet: walletAddress,
     });
   } catch (error) {
-    console.error('[Boson API] Failed to encrypt mnemonic:', error);
+    log.error('[Boson API] Failed to encrypt mnemonic:', error);
     res.status(500).json({
       error: 'Failed to encrypt mnemonic',
     });

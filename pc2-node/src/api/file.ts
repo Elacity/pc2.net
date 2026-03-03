@@ -8,6 +8,8 @@ import { Request, Response } from 'express';
 import { Readable, pipeline } from 'stream';
 import { FilesystemManager } from '../storage/filesystem.js';
 import { AuthenticatedRequest } from './middleware.js';
+import { createLogger } from '../utils/logger.js';
+const log = createLogger('api-file');
 
 /**
  * Get file by UID (signed access)
@@ -28,7 +30,7 @@ export async function handleFile(req: Request, res: Response): Promise<void> {
   }
 
   try {
-    console.log('[File] Request received, uid:', uid);
+    log.debug('[File] Request received, uid:', uid);
     
     // Convert UUID back to path (uuid-/path/to/file -> /path/to/file)
     // UUID format: uuid-${path.replace(/\//g, '-')}
@@ -39,7 +41,7 @@ export async function handleFile(req: Request, res: Response): Promise<void> {
     // Extract wallet address (first segment, starts with 0x)
     const walletMatch = uuidPath.match(/^(0x[a-fA-F0-9]{40})(?:-(.+))?$/);
     if (!walletMatch) {
-      console.error('[File] Invalid UUID format, cannot extract wallet address:', uid);
+      log.error('[File] Invalid UUID format, cannot extract wallet address:', uid);
       res.status(400).json({ error: 'Invalid UUID format' });
       return;
     }
@@ -47,7 +49,7 @@ export async function handleFile(req: Request, res: Response): Promise<void> {
     const walletAddress = walletMatch[1];
     const remainingPath = walletMatch[2] || '';
     
-    console.log('[File] Extracted wallet:', walletAddress, 'remaining:', remainingPath);
+    log.debug('[File] Extracted wallet:', walletAddress, 'remaining:', remainingPath);
     
     // Try to find the file by searching directories
     // Common directory structure: /0x.../Desktop/filename or /0x.../Videos/filename etc.
@@ -62,30 +64,30 @@ export async function handleFile(req: Request, res: Response): Promise<void> {
       const dirPrefix = dir + '-';
       if (remainingPath.startsWith(dirPrefix)) {
         const expectedFilename = remainingPath.substring(dirPrefix.length);
-        console.log('[File] Looking for file in', dir, 'with expected filename:', expectedFilename);
+        log.debug('[File] Looking for file in', dir, 'with expected filename:', expectedFilename);
         
         try {
           const dirPath = `/${walletAddress}/${dir}`;
           const files = filesystem.listDirectory(dirPath, walletAddress);
-          console.log('[File] Listing directory:', dirPath, 'found', files.length, 'files');
+          log.debug('[File] Listing directory:', dirPath, 'found', files.length, 'files');
           
           // Try to find matching file
           const matchingFile = files.find(f => {
             const fName = f.path.split('/').pop() || '';
             // Exact match (most common case)
             if (fName === expectedFilename) {
-              console.log('[File] Exact filename match:', fName);
+              log.debug('[File] Exact filename match:', fName);
               return true;
             }
             // Case-insensitive match
             if (fName.toLowerCase() === expectedFilename.toLowerCase()) {
-              console.log('[File] Case-insensitive filename match:', fName);
+              log.debug('[File] Case-insensitive filename match:', fName);
               return true;
             }
             // Handle URL encoding differences (spaces might be %20 in some cases)
             const decodedExpected = decodeURIComponent(expectedFilename);
             if (fName === decodedExpected || fName.toLowerCase() === decodedExpected.toLowerCase()) {
-              console.log('[File] Decoded filename match:', fName, 'vs', decodedExpected);
+              log.debug('[File] Decoded filename match:', fName, 'vs', decodedExpected);
               return true;
             }
             return false;
@@ -94,19 +96,19 @@ export async function handleFile(req: Request, res: Response): Promise<void> {
           if (matchingFile) {
             metadata = matchingFile;
             filePath = matchingFile.path;
-            console.log('[File] Found file via directory search:', filePath);
+            log.debug('[File] Found file via directory search:', filePath);
             break;
           } else {
-            console.log('[File] No matching file found in', dir, 'for expected filename:', expectedFilename);
+            log.debug('[File] No matching file found in', dir, 'for expected filename:', expectedFilename);
             // Log available filenames for debugging
             if (files.length > 0) {
               const availableNames = files.map(f => f.path.split('/').pop()).slice(0, 5);
-              console.log('[File] Available filenames (first 5):', availableNames);
+              log.debug('[File] Available filenames (first 5):', availableNames);
             }
           }
         } catch (e) {
           // Directory doesn't exist or error, continue
-          console.log('[File] Error listing', dir, ':', e instanceof Error ? e.message : String(e));
+          log.debug('[File] Error listing', dir, ':', e instanceof Error ? e.message : String(e));
         }
       }
     }
@@ -117,16 +119,16 @@ export async function handleFile(req: Request, res: Response): Promise<void> {
         if (remainingPath.startsWith(dir + '-')) {
           const afterDir = remainingPath.substring(dir.length + 1);
           const potentialPath = `/${walletAddress}/${dir}/${afterDir}`;
-          console.log('[File] Fallback: Trying direct path:', potentialPath);
+          log.debug('[File] Fallback: Trying direct path:', potentialPath);
           try {
             metadata = filesystem.getFileMetadata(potentialPath, walletAddress);
             if (metadata) {
               filePath = metadata.path;
-              console.log('[File] Found file via direct path:', filePath);
+              log.debug('[File] Found file via direct path:', filePath);
               break;
             }
           } catch (e) {
-            console.log('[File] Direct path lookup failed:', e instanceof Error ? e.message : String(e));
+            log.debug('[File] Direct path lookup failed:', e instanceof Error ? e.message : String(e));
           }
         }
       }
@@ -140,7 +142,7 @@ export async function handleFile(req: Request, res: Response): Promise<void> {
       } catch (e) {
         // Ignore
       }
-      console.log('[File] Trying naive path conversion:', naivePath);
+      log.debug('[File] Trying naive path conversion:', naivePath);
       const pathParts = naivePath.split('/').filter(p => p);
       if (pathParts.length > 0 && pathParts[0].startsWith('0x')) {
         metadata = filesystem.getFileMetadata(naivePath, pathParts[0]);
@@ -150,15 +152,15 @@ export async function handleFile(req: Request, res: Response): Promise<void> {
       }
     }
     
-    console.log('[File] Final filePath:', filePath);
+    log.debug('[File] Final filePath:', filePath);
     
     if (!metadata) {
-      console.error('[File] File not found:', { uid, filePath, walletAddress });
+      log.error('[File] File not found:', { uid, filePath, walletAddress });
       res.status(404).json({ error: 'File not found', uid, filePath });
       return;
     }
     
-    console.log('[File] File found:', metadata.path);
+    log.debug('[File] File found:', metadata.path);
 
     const finalWalletAddress = walletAddress || (metadata.path.split('/').filter(p => p)[0]?.startsWith('0x') ? metadata.path.split('/').filter(p => p)[0] : '');
     const mimeType = metadata.mime_type || 'application/octet-stream';
@@ -202,7 +204,7 @@ export async function handleFile(req: Request, res: Response): Promise<void> {
       });
       pipeline(Readable.from(stream), res, (err) => {
         if (err && err.code !== 'ERR_STREAM_PREMATURE_CLOSE') {
-          console.error('[File] Stream error:', err.message);
+          log.error('[File] Stream error:', err.message);
         }
       });
       return;
@@ -215,7 +217,7 @@ export async function handleFile(req: Request, res: Response): Promise<void> {
       const stream = filesystem.readFileStream(metadata.path, finalWalletAddress);
       pipeline(Readable.from(stream), res, (err) => {
         if (err && err.code !== 'ERR_STREAM_PREMATURE_CLOSE') {
-          console.error('[File] Stream error:', err.message);
+          log.error('[File] Stream error:', err.message);
         }
       });
     } else {
@@ -224,7 +226,7 @@ export async function handleFile(req: Request, res: Response): Promise<void> {
       res.send(content);
     }
   } catch (error) {
-    console.error('[File] File access error:', error, { uid });
+    log.error('[File] File access error:', error, { uid });
     res.status(500).json({
       error: 'Failed to access file',
       message: error instanceof Error ? error.message : 'Unknown error'

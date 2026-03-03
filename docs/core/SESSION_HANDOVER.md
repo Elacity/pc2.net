@@ -65,7 +65,7 @@ From the roadmap (Milestone 2), items that don't need hardware:
 
 ```
 SSH: root@69.164.241.210
-Password: MIT11056708@silk!
+Password: [ROTATED -- stored in password manager, not in git]
 ```
 
 - Gateway runs under systemd (`pc2-gateway.service`)

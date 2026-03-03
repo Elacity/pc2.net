@@ -879,5 +879,166 @@ The [Keystone Fund DAO proposal](https://elastos.com/proposals/69a24f49247f13007
 
 ---
 
-*Last updated: 2026-02-28*
+## Part 14: ERC-8004 Agent Registry — Research & Future Integration
+
+> **Research initiated by:** CTO (March 2026)
+> **Standard:** [ERC-8004: Trustless Agents](https://eips.ethereum.org/EIPS/eip-8004) — Draft, created Aug 2025
+> **Authors:** Marco De Rossi (MetaMask), Davide Crapis (Ethereum Foundation), Jordan Ellis (Google), Erik Reppel (Coinbase)
+> **Current state:** ~1,525 agents registered on Sepolia testnet as of March 2026. No mainnet deployment yet.
+
+### What ERC-8004 Is
+
+ERC-8004 defines three lightweight on-chain registries for AI agent discovery, trust, and verification — deployable on any L2 or Mainnet as per-chain singletons:
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                    ERC-8004: Three Registries                      │
+│                                                                   │
+│  ┌─────────────────────┐                                         │
+│  │  Identity Registry  │  ERC-721 NFT per agent                  │
+│  │                     │  agentURI → registration file (JSON)     │
+│  │                     │  Supports IPFS, HTTPS, or on-chain URI  │
+│  │                     │  Transferable, censorship-resistant      │
+│  └─────────────────────┘                                         │
+│                                                                   │
+│  ┌─────────────────────┐                                         │
+│  │  Reputation Registry│  Feedback signals from clients           │
+│  │                     │  On-chain: value, tags, composability    │
+│  │                     │  Off-chain: rich JSON via IPFS            │
+│  │                     │  Sybil-resistant via reviewer filtering  │
+│  └─────────────────────┘                                         │
+│                                                                   │
+│  ┌─────────────────────┐                                         │
+│  │  Validation Registry│  Independent verification hooks          │
+│  │                     │  Stake-secured re-execution              │
+│  │                     │  zkML proofs, TEE oracles                │
+│  │                     │  Binary or spectrum responses (0-100)    │
+│  └─────────────────────┘                                         │
+│                                                                   │
+│  Trust models are pluggable and tiered — proportional to value   │
+│  at risk (ordering pizza vs medical diagnosis).                  │
+│  Payments are orthogonal (not covered by the standard).          │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+The agent registration file is flexible — an agent can advertise MCP endpoints, A2A agent cards, ENS names, DIDs, wallet addresses, and IPFS URIs all in one JSON document:
+
+```json
+{
+  "type": "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
+  "name": "zzz.ela.city",
+  "description": "Personal cloud running Flint AI agent with media services",
+  "services": [
+    { "name": "web", "endpoint": "https://zzz.ela.city" },
+    { "name": "MCP", "endpoint": "https://zzz.ela.city/mcp" },
+    { "name": "A2A", "endpoint": "https://zzz.ela.city/.well-known/agent-card.json" },
+    { "name": "DID", "endpoint": "did:elastos:iXyz..." }
+  ],
+  "active": true,
+  "supportedTrust": ["reputation"]
+}
+```
+
+### How ERC-8004 Maps to PC2 Architecture
+
+```
+ERC-8004 Concept               PC2 / ElastOS Equivalent
+────────────────────────────    ────────────────────────────────────
+Agent Identity (ERC-721)    →   PC2 Node Identity (wallet + DID)
+Agent Registration File     →   App/Capsule Manifest (app.json)
+  services[].endpoint      →   yourname.ela.city
+  services[].name = "MCP"  →   PC2 node exposes MCP tools
+  services[].name = "A2A"  →   Flint AI agent
+  services[].name = "DID"  →   Elastos DID
+Reputation Registry         →   dApp Store app ratings / agent trust
+Validation Registry         →   Capsule verification (signed manifests)
+agentWallet                 →   Particle Auth wallet (already exists)
+```
+
+**Four natural integration points:**
+
+1. **PC2 Nodes as Registered Agents** — Every PC2 node already has a wallet address and a public `ela.city` URL. Registering nodes in the ERC-8004 Identity Registry gives them discoverable, on-chain identities without a centralized directory.
+
+2. **Flint as a Registered Agent** — The PC2 AI agent can be registered with MCP/A2A endpoints. Other agents anywhere on the internet discover Flint by querying the registry, check its reputation, and interact.
+
+3. **dApp Store Apps as Agents** — Apps in the marketplace can have on-chain reputation scores (playback quality, DRM success rate, response time). Users choose apps partly based on reputation.
+
+4. **Content Creators as Agents** — Creators who upload via Elacity SDK register as agents. Buyers check creator reputation before purchasing.
+
+### Relationship to Elacity SDK Contracts
+
+ERC-8004 and the Elacity SDK operate at **different layers** and are complementary:
+
+```
+┌─────────────────┬──────────────────────────┬───────────────────────┐
+│   Concern        │  Elacity SDK              │  ERC-8004              │
+├─────────────────┼──────────────────────────┼───────────────────────┤
+│ What it registers│ Content (NFTs, channels)  │ Agents (services, caps)│
+│ Token standard   │ ERC-1155 (StandardChannel)│ ERC-721 (Identity)     │
+│ Purpose          │ Buy/sell/play content     │ Discover/trust agents  │
+│ DRM              │ Lit Protocol + Web3 DRM   │ Not covered            │
+│ Marketplace      │ TradeGateway, Authority   │ Not covered            │
+│ Reputation       │ Not covered              │ Core feature           │
+│ Agent discovery  │ Not covered              │ Core feature           │
+└─────────────────┴──────────────────────────┴───────────────────────┘
+```
+
+They don't overlap — they stack. Elacity handles "what content exists and who can access it." ERC-8004 handles "what agents exist and can you trust them."
+
+### Market Context: Why This Matters Now
+
+The CTO flagged bankr/BNKR as a market signal. BankrCoin ($BNKR) is an AI agent platform on Solana doing "agentic finance" — natural language trading via social platforms. Key data points as of March 2026:
+
+- Surpassed $100M market cap
+- AI agents deploying tokens autonomously on Raydium
+- "Agentic Finance" enables conversational trading on Farcaster and X
+- Revenue-sharing model: 50% creators, 40% platform, 10% burned
+
+**The relevance:** PC2 nodes with registered AI agents (via ERC-8004) that transact autonomously (via Elacity contracts + Particle UA) follow the same pattern — but running on hardware the user owns, not a centralized platform. The agent has an on-chain identity, reputation, and can execute transactions. Bankr validates the demand; PC2 provides the sovereign infrastructure.
+
+### Why Phase 2-3 Timing (Not Now)
+
+1. **Standard is Draft** — not finalized, still under peer review
+2. **Testnet only** — deployed on Sepolia, no mainnet deployments yet
+3. **No multi-agent interaction yet** — Flint doesn't talk to other agents
+4. **Prerequisites missing** — dApp Store and Media Market need to exist first; ERC-8004 adds discoverability and trust ON TOP of those features
+5. **Infrastructure before identity** — building the agent registry for capabilities that don't exist yet would be premature
+
+### Forward-Compatibility: What to Do Now
+
+**Design decisions to make in V1 that avoid rework later:**
+
+1. **App manifest `services` field** — When designing `app.json` for the dApp Store, include a `services` array that mirrors the ERC-8004 registration file format. This is just a JSON structure decision, zero implementation cost.
+
+2. **DID integration** — Ensure the Elastos DID work can serve as the identity layer when ERC-8004 support is added. The registration file supports `"name": "DID"` as a service type.
+
+3. **Rating system data model** — If building app ratings in SQLite for the dApp Store, structure the schema to be exportable to ERC-8004's `giveFeedback()` format (value + valueDecimals + tags).
+
+4. **MCP endpoint** — When/if PC2 exposes MCP tools, the endpoint URL is directly registerable in an ERC-8004 agent registration file.
+
+### Integration Roadmap
+
+```
+Phase 1 (M2-M5) — Forward-Compatible Design:
+  app.json services[] field aligned with ERC-8004 registration format
+  DID integration as identity foundation
+  Rating schema compatible with Reputation Registry format
+
+Phase 2 (M5-M7) — Node Identity & Reputation:
+  Register PC2 nodes as ERC-8004 agents (ERC-721 NFT)
+  Node registration files: ela.city URL + MCP + DID
+  dApp Store ratings → on-chain Reputation Registry
+  App quality signals: uptime, success rate, response time
+
+Phase 3 (M7+) — Agent Economy:
+  Flint registered as agent with A2A/MCP endpoints
+  Agent-to-agent discovery via registry queries
+  Validation Registry for capsule verification
+  Cross-node agent trust via reputation + validation
+  Content creators as registered agents with ratings
+```
+
+---
+
+*Last updated: 2026-03-03*
 *Author: AI Development Assistant for Sasha Mitchell*

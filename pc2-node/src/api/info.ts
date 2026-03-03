@@ -9,7 +9,8 @@ import { AuthenticatedRequest } from './middleware.js';
 import { FilesystemManager } from '../storage/filesystem.js';
 import { Server as SocketIOServer } from 'socket.io';
 import { broadcastFileChange, broadcastItemAdded } from '../websocket/events.js';
-import { logger } from '../utils/logger.js';
+import { logger, createLogger } from '../utils/logger.js';
+const log = createLogger('api-info');
 import path from 'path';
 import { existsSync, readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
@@ -850,7 +851,7 @@ export function handleStats(req: AuthenticatedRequest, res: Response): void {
       directories: directoryCount
     });
   } catch (error) {
-    console.error('[handleStats] Error:', error);
+    log.error('[handleStats] Error:', error);
     res.status(500).json({
       error: 'Failed to get storage stats',
       message: error instanceof Error ? error.message : 'Unknown error'

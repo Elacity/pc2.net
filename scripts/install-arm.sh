@@ -97,8 +97,46 @@ IS_JETSON=false
 detect_platform() {
     if [ -f /etc/nv_tegra_release ]; then
         IS_JETSON=true
-        JETPACK_VERSION=$(dpkg -l 2>/dev/null | grep nvidia-jetpack | awk '{print $3}' | head -1 || echo "unknown")
-        print_step "Platform: NVIDIA Jetson (JetPack $JETPACK_VERSION)"
+
+        # Detect JetPack version from multiple sources
+        JETPACK_VERSION=""
+        L4T_VERSION=""
+
+        # Source 1: nvidia-jetpack metapackage (not always installed)
+        JETPACK_VERSION=$(dpkg -l 2>/dev/null | grep nvidia-jetpack | awk '{print $3}' | head -1)
+
+        # Source 2: nvidia-l4t-core package version (more reliable)
+        if [ -z "$JETPACK_VERSION" ]; then
+            L4T_VERSION=$(dpkg -l 2>/dev/null | grep nvidia-l4t-core | awk '{print $3}' | head -1 | grep -oP '^\d+\.\d+')
+        fi
+
+        # Source 3: /etc/nv_tegra_release (always present)
+        if [ -z "$L4T_VERSION" ]; then
+            L4T_VERSION=$(head -1 /etc/nv_tegra_release | grep -oP 'R\K\d+' 2>/dev/null)
+            [ -n "$L4T_VERSION" ] && L4T_VERSION="${L4T_VERSION}.0"
+        fi
+
+        # Map L4T version to JetPack version
+        if [ -z "$JETPACK_VERSION" ] && [ -n "$L4T_VERSION" ]; then
+            L4T_MAJOR=$(echo "$L4T_VERSION" | cut -d. -f1)
+            case "$L4T_MAJOR" in
+                36) JETPACK_VERSION="6.x (L4T ${L4T_VERSION})" ;;
+                35) JETPACK_VERSION="5.x (L4T ${L4T_VERSION})" ;;
+                32) JETPACK_VERSION="4.x (L4T ${L4T_VERSION})" ;;
+                *)  JETPACK_VERSION="unknown (L4T ${L4T_VERSION})" ;;
+            esac
+        fi
+
+        JETSON_MODEL=$(tr -d '\0' < /proc/device-tree/model 2>/dev/null | sed 's/NVIDIA //' || echo "Jetson")
+        print_step "Platform: ${JETSON_MODEL} (JetPack ${JETPACK_VERSION:-unknown})"
+
+        # Warn if JetPack is old
+        if [ -n "$L4T_VERSION" ]; then
+            L4T_MAJOR=$(echo "$L4T_VERSION" | cut -d. -f1)
+            if [ "$L4T_MAJOR" -lt 35 ] 2>/dev/null; then
+                print_warn "JetPack ${JETPACK_VERSION} is old -- JetPack 6.x (L4T R36+) recommended for best performance"
+            fi
+        fi
     elif [ -f /proc/device-tree/model ] && grep -qi "raspberry" /proc/device-tree/model 2>/dev/null; then
         PI_MODEL=$(tr -d '\0' < /proc/device-tree/model)
         print_step "Platform: $PI_MODEL"

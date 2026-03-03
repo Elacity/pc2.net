@@ -18,16 +18,27 @@ Essential reading for understanding PC2's vision, architecture, and strategy.
 
 | Document | Description |
 |----------|-------------|
-| [Strategic Implementation Plan](core/STRATEGIC_IMPLEMENTATION_PLAN.md) | Project roadmap, phases, and key learnings |
+| [The Big Picture](core/THE_BIG_PICTURE.md) | ElastOS + Elacity dDRM vision, three-layer model |
+| [Architecture Convergence](core/ARCHITECTURE_CONVERGENCE.md) | PC2 v1 → ElastOS Runtime v2 technical path |
+| [Strategic Roadmap](core/ROADMAP.md) | Keystone Fund milestones M1–M13, monthly releases |
 | [Architecture Overview](core/PC2_ARCHITECTURE_OVERVIEW.md) | High-level system architecture |
-| [Network Specification](core/PC2_NETWORK_SPECIFICATION.md) | Decentralized access and self-updating design |
+| [Strategic Implementation Plan](core/STRATEGIC_IMPLEMENTATION_PLAN.md) | Project phases and key learnings |
 | [PC2 Narrative](core/PC2_NARRATIVE.md) | Vision and storytelling |
+| [Session Handover](core/SESSION_HANDOVER.md) | AI agent session context |
+| [Agent Handover](core/AGENT_HANDOVER.md) | Complete context for AI agents and new developers |
 
 ### Plans & Roadmaps
 
 | Plan | Description |
 |------|-------------|
 | [Decentralized Network Architecture](core/plans/decentralized_network_architecture.plan.md) | Scaling supernodes, multi-domain support, P2P communication |
+
+### Strategy
+
+| Document | Description |
+|----------|-------------|
+| [Elastos Strategy](core/IMPORTANT/ELASTOS_STRATEGY.md) | Elastos ecosystem strategy |
+| [Why Elastos Matters](core/IMPORTANT/WHY_ELASTOS_MATTERS.md) | The case for Elastos |
 
 ---
 
@@ -46,12 +57,12 @@ Documentation for running and operating PC2 infrastructure.
 
 ---
 
-## Guides
-
-Step-by-step guides for developers and operators.
+## Deployment
 
 | Guide | Description |
 |-------|-------------|
+| [ARM Devices](deployment/ARM_DEVICES.md) | Raspberry Pi, Jetson, and other ARM devices |
+| [VPS Guide](deployment/VPS_GUIDE.md) | Deploy on Contabo, Hetzner, etc. |
 | [Quick Start](QUICKSTART.md) | Get PC2 running quickly |
 | [Deployment](DEPLOYMENT.md) | Production deployment guide |
 
@@ -105,4 +116,4 @@ Integration documentation for connecting PC2 with other systems.
 
 ---
 
-*Last updated: January 2026*
+*Last updated: March 2026*

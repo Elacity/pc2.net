@@ -9,7 +9,9 @@ import { DatabaseManager, FilesystemManager, IPFSStorage } from './storage/index
 import { Config } from './config/loader.js';
 import { IndexingWorker } from './storage/indexer.js';
 import { AIChatService } from './services/ai/AIChatService.js';
-import { logger } from './utils/logger.js';
+import { logger, createLogger } from './utils/logger.js';
+
+const log = createLogger('server');
 
 export interface ServerOptions {
   port: number;
@@ -57,7 +59,7 @@ export function createServer(options: ServerOptions): { app: Express; server: Se
       } catch (e) {
         // Only log if body is not empty (to avoid noise from empty requests)
         if ((req as any).body && (req as any).body.trim().length > 0) {
-          console.error('[Middleware] Failed to parse text/plain;actually=json:', e);
+          log.error('[Middleware] Failed to parse text/plain;actually=json:', e);
         }
         (req as any).rawBody = (req as any).body;
         (req as any).body = {};
@@ -67,10 +69,10 @@ export function createServer(options: ServerOptions): { app: Express; server: Se
     // Capture raw body for /mkdir requests to debug body parsing issues
     if (req.path === '/mkdir' && req.method === 'POST') {
       const rawBody = (req as any).rawBody || (req as any).body;
-      console.log('[Server] /mkdir request - Content-Type:', contentType);
-      console.log('[Server] /mkdir request - Body type:', typeof rawBody);
-      console.log('[Server] /mkdir request - Body value:', rawBody);
-      console.log('[Server] /mkdir request - Query:', req.query);
+      log.debug('[Server] /mkdir request - Content-Type:', contentType);
+      log.debug('[Server] /mkdir request - Body type:', typeof rawBody);
+      log.debug('[Server] /mkdir request - Body value:', rawBody);
+      log.debug('[Server] /mkdir request - Query:', req.query);
     }
     
     next();
@@ -81,7 +83,7 @@ export function createServer(options: ServerOptions): { app: Express; server: Se
   // The viewer app sends Blobs which may have various content types
   app.use('/writeFile', express.raw({ 
     type: '*/*', // Accept all content types for /writeFile
-    limit: '100mb' // Allow large files
+    limit: '10gb' // User's hardware -- no practical limit
   }));
   
   app.use(express.json({ 
@@ -91,8 +93,8 @@ export function createServer(options: ServerOptions): { app: Express; server: Se
       if (req.path === '/drivers/call' || req.path === '/mkdir') {
         req.rawBody = buf.toString('utf8');
         if (req.path === '/mkdir') {
-          console.log('[Server] /mkdir raw body buffer:', req.rawBody);
-          console.log('[Server] /mkdir raw body length:', buf.length);
+          log.debug('[Server] /mkdir raw body buffer:', req.rawBody);
+          log.debug('[Server] /mkdir raw body length:', buf.length);
         }
       }
     }
@@ -133,6 +135,11 @@ export function createServer(options: ServerOptions): { app: Express; server: Se
   
   // Create HTTP server
   const server = new Server(app);
+  
+  // Allow long-running uploads (45 min) -- prevents Node.js default 2 min timeout
+  // from killing large file uploads mid-transfer
+  server.timeout = 45 * 60 * 1000;
+  server.keepAliveTimeout = 45 * 60 * 1000;
   
   // Determine user homes base directory for terminal isolation
   // Use data directory from config or derive from database path
@@ -181,7 +188,7 @@ export function createServer(options: ServerOptions): { app: Express; server: Se
   if (options.database && options.filesystem) {
     const indexer = new IndexingWorker(options.database, options.filesystem);
     indexer.start().catch((error) => {
-      console.error('[Server] Failed to start indexing worker:', error);
+        log.error('[Server] Failed to start indexing worker:', error);
     });
     // Store indexer in app.locals for potential API access
     app.locals.indexer = indexer;

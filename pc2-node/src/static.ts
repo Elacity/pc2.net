@@ -10,6 +10,8 @@ import { isAPIRoute, isStaticAsset } from './utils/routes.js';
 import { verifyAntiSnipeSession } from './api/access-control.js';
 import { getNodeConfig } from './api/setup.js';
 import { getBaseUrl } from './utils/urlUtils.js';
+import { createLogger } from './utils/logger.js';
+const log = createLogger('static');
 
 // Data directory from environment or default
 const DATA_DIR = process.env.PC2_DATA_DIR || './data';
@@ -42,9 +44,9 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
 
   // Verify frontend directory exists
   if (!existsSync(frontendPath)) {
-    console.warn(`⚠️  Frontend directory not found: ${frontendPath}`);
-    console.warn('   Static file serving will not work until frontend is built.');
-    console.warn('   Run: npm run build:frontend');
+    log.warn(`⚠️  Frontend directory not found: ${frontendPath}`);
+    log.warn('   Static file serving will not work until frontend is built.');
+    log.warn('   Run: npm run build:frontend');
   }
 
   // IMPORTANT: Register /apps/* route BEFORE express.static()
@@ -65,7 +67,7 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
     }
     
     // SDK file not found locally - proxy to api.puter.com
-    console.warn(`⚠️  SDK file not found locally: ${sdkPath}, proxying to api.puter.com`);
+    log.warn(`⚠️  SDK file not found locally: ${sdkPath}, proxying to api.puter.com`);
     try {
       const httpsGet = (url: string): Promise<string> => {
         return new Promise((resolve, reject) => {
@@ -88,7 +90,7 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
       res.send(sdkContent);
       return;
     } catch (error) {
-      console.error('Failed to proxy SDK from api.puter.com:', error);
+      log.error('Failed to proxy SDK from api.puter.com:', error);
     }
     
     next();
@@ -101,7 +103,7 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
   // Log all requests to help debug routing
   app.use((req: Request, res: Response, next: NextFunction) => {
     if (req.path.includes('phoenix') || req.path.includes('terminal')) {
-      console.log(`[static.ts] 🔍 Request: ${req.method} ${req.path} (from ${req.get('referer') || 'direct'})`);
+      log.debug(`[static.ts] 🔍 Request: ${req.method} ${req.path} (from ${req.get('referer') || 'direct'})`);
     }
     next();
   });
@@ -185,7 +187,7 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
       
       if (!hasUsername) {
         // Redirect to setup wizard
-        console.log(`[Setup] Redirecting ${req.path} to /setup (needs username setup)`);
+        log.info(`[Setup] Redirecting ${req.path} to /setup (needs username setup)`);
         return res.redirect('/setup');
       }
     }
@@ -201,7 +203,7 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
       // Check for valid session cookie
       const sessionToken = req.cookies?.antiSnipeSession;
       if (!sessionToken || !verifyAntiSnipeSession(sessionToken)) {
-        console.log(`[AntiSnipe] Redirecting ${req.path} to /access-gate (password required)`);
+        log.info(`[AntiSnipe] Redirecting ${req.path} to /access-gate (password required)`);
         return res.redirect('/access-gate');
       }
     }
@@ -219,7 +221,7 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
   // Wrap static middleware to skip /apps/* and /builtin/* paths
   app.use((req: Request, res: Response, next: NextFunction) => {
     if (req.path.startsWith('/apps/') || req.path.startsWith('/builtin/')) {
-      console.log(`[static.ts] ⏭️  Skipping express.static() for ${req.path} - will be handled by route`);
+      log.debug(`[static.ts] ⏭️  Skipping express.static() for ${req.path} - will be handled by route`);
       return next(); // Skip static file serving, continue to route handlers
     }
     // For other paths, use the static middleware
@@ -272,7 +274,7 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
     if (existsSync(filePath)) {
       res.sendFile(filePath, (err) => {
         if (err) {
-          console.error(`Error serving ${actualPath}:`, err);
+          log.error(`Error serving ${actualPath}:`, err);
           return next();
         }
       });
@@ -303,13 +305,13 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
         const normalizedPath = path.normalize(possiblePath);
         if (existsSync(normalizedPath)) {
           particleAuthPath = normalizedPath;
-          console.log(`[Particle Auth]: ✅ Found at: ${particleAuthPath}`);
+          log.info(`[Particle Auth]: ✅ Found at: ${particleAuthPath}`);
           break;
         }
       }
       
       if (!particleAuthPath) {
-        console.error(`[Particle Auth]: ❌ Not found in any of these locations:`, possiblePaths);
+        log.error(`[Particle Auth]: ❌ Not found in any of these locations:`, possiblePaths);
         return res.status(404).json({ 
           error: 'Particle Auth not found',
           message: 'Please ensure particle-auth is built and available',
@@ -321,7 +323,7 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
       try {
         html = readFileSync(particleAuthPath, 'utf8');
       } catch (readError) {
-        console.error(`[Particle Auth]: ❌ Error reading file:`, readError);
+        log.error(`[Particle Auth]: ❌ Error reading file:`, readError);
         return res.status(500).json({ 
           error: 'Failed to read Particle Auth file',
           message: readError instanceof Error ? readError.message : 'Unknown error'
@@ -337,7 +339,7 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
         const url = new URL(fullUrl);
         apiOrigin = url.searchParams.get('api_origin') || getBaseUrl(req, bosonService);
       } catch (urlError) {
-        console.error(`[Particle Auth]: ❌ Error parsing URL:`, urlError);
+        log.error(`[Particle Auth]: ❌ Error parsing URL:`, urlError);
         apiOrigin = getBaseUrl(req, bosonService);
       }
       
@@ -398,7 +400,7 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
       res.send(html);
       return;
     } catch (error) {
-      console.error(`[Particle Auth]: ❌ Unexpected error:`, error);
+      log.error(`[Particle Auth]: ❌ Unexpected error:`, error);
       return res.status(500).json({ 
         error: 'Internal server error',
         message: error instanceof Error ? error.message : 'Unknown error'
@@ -428,7 +430,7 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
       }
     }
     
-    console.warn(`[Particle Auth]: Asset not found: ${assetPath}`);
+    log.warn(`[Particle Auth]: Asset not found: ${assetPath}`);
     next();
   });
 
@@ -441,14 +443,14 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
     // Handle both /apps/* and /builtin/* paths
     const isBuiltin = req.path.startsWith('/builtin/');
     const isApps = req.path.startsWith('/apps/');
-    console.log(`[static.ts] 📱 ${isBuiltin ? '/builtin/*' : '/apps/*'} route hit! Path: ${req.path}, Full URL: ${req.url}`);
-    console.log(`[static.ts] 📱 Request method: ${req.method}`);
-    console.log(`[static.ts] 📱 This route should process app HTML files`);
+    log.debug(`[static.ts] 📱 ${isBuiltin ? '/builtin/*' : '/apps/*'} route hit! Path: ${req.path}, Full URL: ${req.url}`);
+    log.debug(`[static.ts] 📱 Request method: ${req.method}`);
+    log.debug(`[static.ts] 📱 This route should process app HTML files`);
     const appPath = isBuiltin ? req.path.replace('/builtin/', '') : req.path.replace('/apps/', '');
-    console.log(`[static.ts] 📱 Extracted appPath: ${appPath}`);
+    log.debug(`[static.ts] 📱 Extracted appPath: ${appPath}`);
     const projectRoot = path.resolve(__dirname, '../..');
     
-    console.log(`[static.ts] 📦 Serving app: ${appPath} (full path: ${req.path})`);
+    log.debug(`[static.ts] 📦 Serving app: ${appPath} (full path: ${req.path})`);
     
     // Special handling for terminal app (located in src/terminal/ instead of src/backend/apps/terminal/)
     const isTerminal = appPath.startsWith('terminal/') || appPath === 'terminal' || appPath === 'terminal/index.html';
@@ -463,11 +465,11 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
     const calculatorRelativePath = isCalculator ? appPath.replace(/^calculator\/?/, '') || 'index.html' : null;
     
     if (isPhoenix) {
-      console.log(`[static.ts] 🐦 Phoenix detected! appPath: ${appPath}, phoenixRelativePath: ${phoenixRelativePath}`);
+      log.debug(`[static.ts] 🐦 Phoenix detected! appPath: ${appPath}, phoenixRelativePath: ${phoenixRelativePath}`);
     }
     
     if (isCalculator) {
-      console.log(`[static.ts] 🧮 Calculator detected! appPath: ${appPath}, calculatorRelativePath: ${calculatorRelativePath}`);
+      log.debug(`[static.ts] 🧮 Calculator detected! appPath: ${appPath}, calculatorRelativePath: ${calculatorRelativePath}`);
     }
     
     const possiblePaths = [
@@ -524,7 +526,7 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
         // Special handling for app HTML files - inject correct SDK URL
         // This applies to all apps (terminal, phoenix, player, viewer, pdf, editor, etc.)
         if (ext === '.html') {
-          console.log(`[static.ts] 📄 Processing HTML file: ${normalizedPath}, isPhoenix: ${isPhoenix}, isTerminal: ${isTerminal}, isCalculator: ${isCalculator}`);
+          log.debug(`[static.ts] 📄 Processing HTML file: ${normalizedPath}, isPhoenix: ${isPhoenix}, isTerminal: ${isTerminal}, isCalculator: ${isCalculator}`);
           // Use getBaseUrl to correctly handle Active Proxy (which may not preserve Host header)
           const bosonService = req.app?.locals?.bosonService;
           const baseUrl = getBaseUrl(req, bosonService);
@@ -533,7 +535,7 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
           // Replace any hardcoded SDK URL with the local server's SDK URL
           // This ensures apps work with PC2 node's local SDK
           htmlContent = htmlContent.replace(/https?:\/\/[^'"]*\/puter\.js\/v2/g, sdkUrl);
-          console.log(`[static.ts] ✅ SDK URL replaced in HTML`);
+          log.debug(`[static.ts] ✅ SDK URL replaced in HTML`);
           
           // For calculator app, add SDK initialization script to set API origin
           if (isCalculator) {
@@ -547,7 +549,7 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
 `;
             // Insert before the SDK script tag
             htmlContent = htmlContent.replace(/(<script[^>]*src=["']\/puter\.js\/v2["'][^>]*>)/i, sdkInitScript + '$1');
-            console.log(`[static.ts] ✅ Calculator SDK initialization added`);
+            log.debug(`[static.ts] ✅ Calculator SDK initialization added`);
           }
           
           // For terminal app, add SDK initialization script to set API origin
@@ -665,7 +667,7 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
           
           // For phoenix app, add SDK initialization script to set API origin
           if (isPhoenix) {
-            console.log('[static.ts] 🐦 Processing phoenix app HTML, injecting SDK initialization...');
+            log.debug('[static.ts] 🐦 Processing phoenix app HTML, injecting SDK initialization...');
             const sdkInitScript = `
     <script>
         // IMMEDIATE visual indicator - show this as soon as possible
@@ -779,9 +781,9 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
             }`
             );
             if (htmlContent === beforeInitReplace) {
-              console.warn('[static.ts] ⚠️ Phoenix initialization code replacement failed - pattern not found in HTML');
+              log.warn('[static.ts] ⚠️ Phoenix initialization code replacement failed - pattern not found in HTML');
             } else {
-              console.log('[static.ts] ✅ Phoenix initialization code enhanced');
+              log.info('[static.ts] ✅ Phoenix initialization code enhanced');
             }
           }
           
@@ -1157,7 +1159,7 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
     const indexPath = path.join(frontendPath, 'index.html');
     
     if (!existsSync(indexPath)) {
-      console.error(`❌ index.html not found: ${indexPath}`);
+      log.error(`❌ index.html not found: ${indexPath}`);
       return res.status(404).json({ 
         error: 'Frontend not built',
         message: 'Please run: npm run build:frontend'
@@ -1178,7 +1180,7 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
 
     res.sendFile(indexPath, (err) => {
       if (err) {
-        console.error('Error serving index.html:', err);
+        log.error('Error serving index.html:', err);
         if (!res.headersSent) {
           res.status(500).json({ error: 'Failed to serve frontend' });
         }

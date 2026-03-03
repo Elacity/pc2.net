@@ -1,7 +1,8 @@
 /**
  * Logger Utility
  * 
- * Simple logging system with levels and optional file output
+ * Structured logging with levels and module prefixes.
+ * Set LOG_LEVEL=DEBUG for verbose output, defaults to INFO.
  */
 
 export enum LogLevel {
@@ -11,62 +12,45 @@ export enum LogLevel {
   ERROR = 3
 }
 
+const logLevel: LogLevel = process.env.LOG_LEVEL
+  ? (LogLevel[process.env.LOG_LEVEL.toUpperCase() as keyof typeof LogLevel] ?? LogLevel.INFO)
+  : (process.env.PC2_DEBUG ? LogLevel.DEBUG : LogLevel.INFO);
+
+function shouldLog(level: LogLevel): boolean {
+  return level >= logLevel;
+}
+
+function formatPrefix(level: string, module?: string): string {
+  const timestamp = new Date().toISOString();
+  return module ? `[${timestamp}] [${level}] [${module}]` : `[${timestamp}] [${level}]`;
+}
+
 class Logger {
-  private level: LogLevel;
-  private isProduction: boolean;
+  private module?: string;
 
-  constructor(level: LogLevel = LogLevel.INFO, isProduction: boolean = false) {
-    this.level = level;
-    this.isProduction = isProduction;
+  constructor(module?: string) {
+    this.module = module;
   }
 
-  setLevel(level: LogLevel): void {
-    this.level = level;
+  debug(...args: unknown[]): void {
+    if (shouldLog(LogLevel.DEBUG)) console.log(formatPrefix('DEBUG', this.module), ...args);
   }
 
-  private formatMessage(level: string, message: string, ...args: any[]): string {
-    const timestamp = new Date().toISOString();
-    const formattedArgs = args.length > 0 ? ' ' + args.map(arg => 
-      typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
-    ).join(' ') : '';
-    return `[${timestamp}] [${level}] ${message}${formattedArgs}`;
+  info(...args: unknown[]): void {
+    if (shouldLog(LogLevel.INFO)) console.log(formatPrefix('INFO', this.module), ...args);
   }
 
-  private log(level: LogLevel, levelName: string, message: string, ...args: any[]): void {
-    if (level >= this.level) {
-      const formatted = this.formatMessage(levelName, message, ...args);
-      if (level === LogLevel.ERROR) {
-        console.error(formatted);
-      } else if (level === LogLevel.WARN) {
-        console.warn(formatted);
-      } else {
-        console.log(formatted);
-      }
-    }
+  warn(...args: unknown[]): void {
+    if (shouldLog(LogLevel.WARN)) console.warn(formatPrefix('WARN', this.module), ...args);
   }
 
-  debug(message: string, ...args: any[]): void {
-    this.log(LogLevel.DEBUG, 'DEBUG', message, ...args);
-  }
-
-  info(message: string, ...args: any[]): void {
-    this.log(LogLevel.INFO, 'INFO', message, ...args);
-  }
-
-  warn(message: string, ...args: any[]): void {
-    this.log(LogLevel.WARN, 'WARN', message, ...args);
-  }
-
-  error(message: string, ...args: any[]): void {
-    this.log(LogLevel.ERROR, 'ERROR', message, ...args);
+  error(...args: unknown[]): void {
+    console.error(formatPrefix('ERROR', this.module), ...args);
   }
 }
 
-// Create singleton logger instance
-const logLevel = process.env.LOG_LEVEL 
-  ? (LogLevel[process.env.LOG_LEVEL.toUpperCase() as keyof typeof LogLevel] ?? LogLevel.INFO)
-  : LogLevel.INFO;
+export function createLogger(module: string): Logger {
+  return new Logger(module);
+}
 
-const isProduction = process.env.NODE_ENV === 'production';
-
-export const logger = new Logger(logLevel, isProduction);
+export const logger = new Logger();

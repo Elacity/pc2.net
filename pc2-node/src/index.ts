@@ -25,7 +25,9 @@ process.on('uncaughtException', (error: Error) => {
 import { createServer } from './server.js';
 import { DatabaseManager, IPFSStorage, FilesystemManager, type IPFSNetworkMode, setGlobalDatabase } from './storage/index.js';
 import { loadConfig, type Config } from './config/loader.js';
-import { logger } from './utils/logger.js';
+import { logger, createLogger } from './utils/logger.js';
+
+const log = createLogger('pc2');
 import { AIChatService } from './services/ai/AIChatService.js';
 import { BosonService } from './services/boson/index.js';
 import { getGatewayService, createChannelBridge } from './services/gateway/index.js';
@@ -114,12 +116,18 @@ async function main() {
     // Don't exit - server can still run without IPFS (for development)
   }
 
-  // Initialize AI service
-  if (config.ai?.enabled !== false) {
+  // Initialize AI, Gateway, and Boson in parallel — they're independent of each other,
+  // only require DB (sync, already done) and optionally IPFS (already done).
+  // This cuts cold-start time significantly vs sequential initialization.
+
+  const initAI = async () => {
+    if (config.ai?.enabled === false) {
+      logger.info('ℹ️  AI service disabled in config');
+      return;
+    }
     try {
-      aiService = new AIChatService(config.ai, db);
+      aiService = new AIChatService(config.ai, db!);
       await aiService.initialize();
-      
       if (aiService.isAvailable()) {
         const providers = aiService.listProviders();
         logger.info(`🤖 AI service initialized (providers: ${providers.join(', ')})`);
@@ -132,42 +140,25 @@ async function main() {
       logger.error('❌ Failed to initialize AI service:', error);
       logger.warn('   AI features will not be available');
     }
-  } else {
-    logger.info('ℹ️  AI service disabled in config');
-  }
+  };
 
-  // Initialize Gateway service (messaging channels)
-  try {
-    const gatewayService = getGatewayService(db);
-    await gatewayService.initialize();
-    
-    // Connect the channel bridge if AI service is available
-    if (aiService) {
-      // Get owner wallet from node config (set during first auth)
-      const nodeConfig = getNodeConfig();
-      const ownerWallet = nodeConfig.ownerWallet || config.owner.wallet_address || undefined;
-      
-      const channelBridge = createChannelBridge(aiService, { 
-        db, 
-        filesystem: filesystem || undefined,
-        ownerWalletAddress: ownerWallet,
-      });
-      
-      if (ownerWallet) {
-        logger.info(`📡 Gateway service initialized with AI bridge (owner: ${ownerWallet.substring(0, 10)}...)`);
-      } else {
-        logger.warn('📡 Gateway service initialized with AI bridge (no owner wallet - AI providers may not load)');
-      }
-    } else {
-      logger.info('📡 Gateway service initialized (no AI bridge - AI service unavailable)');
+  const initGateway = async () => {
+    try {
+      const gatewayService = getGatewayService(db!);
+      await gatewayService.initialize();
+      return gatewayService;
+    } catch (error) {
+      logger.error('❌ Failed to initialize gateway service:', error);
+      return null;
     }
-  } catch (error) {
-    logger.error('❌ Failed to initialize gateway service:', error);
-  }
+  };
 
-  // Initialize Boson service (identity, connectivity)
-  const bosonConfig = (config as any).boson || {};
-  if (bosonConfig.enabled !== false) {
+  const initBoson = async () => {
+    const bosonConfig = (config as any).boson || {};
+    if (bosonConfig.enabled === false) {
+      logger.info('ℹ️  Boson service disabled in config');
+      return;
+    }
     try {
       const dataDir = dirname(DB_PATH);
       bosonService = new BosonService({
@@ -176,6 +167,8 @@ async function main() {
         publicDomain: bosonConfig.public_domain || 'ela.city',
         localPort: PORT,
         autoConnect: bosonConfig.auto_connect !== false,
+        stealthMode: bosonConfig.stealth_mode === true,
+        superNodes: bosonConfig.supernodes,
       });
       
       await bosonService.initialize();
@@ -201,9 +194,6 @@ async function main() {
           logger.info('║  This phrase is only shown ONCE. Store it safely!              ║');
           logger.info('╚════════════════════════════════════════════════════════════════╝');
           logger.info('');
-          
-          // Don't clear mnemonic here - let setup wizard clear it when user acknowledges
-          // The mnemonic will be cleared via /api/setup/acknowledge-mnemonic
         }
       }
       
@@ -220,8 +210,30 @@ async function main() {
       logger.error('❌ Failed to initialize Boson service:', error);
       logger.warn('   Node identity and connectivity features will not be available');
     }
-  } else {
-    logger.info('ℹ️  Boson service disabled in config');
+  };
+
+  // Run all three in parallel
+  await Promise.allSettled([initAI(), initGateway(), initBoson()]);
+
+  // Wire up the AI-Gateway bridge now that both are initialized
+  if (aiService) {
+    try {
+      const gatewayService = getGatewayService(db);
+      const nodeConfig = getNodeConfig();
+      const ownerWallet = nodeConfig.ownerWallet || config.owner.wallet_address || undefined;
+      
+      const channelBridge = createChannelBridge(aiService, { 
+        db, 
+        filesystem: filesystem || undefined,
+        ownerWalletAddress: ownerWallet,
+      });
+      
+      if (ownerWallet) {
+        logger.info(`📡 Gateway AI bridge connected (owner: ${ownerWallet.substring(0, 10)}...)`);
+      }
+    } catch (error) {
+      logger.warn(`📡 Gateway AI bridge unavailable: ${error}`);
+    }
   }
 
   // Check owner status

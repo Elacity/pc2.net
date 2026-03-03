@@ -47,6 +47,8 @@ import UIAccountSidebar from "./UIAccountSidebar.js"
 import walletService from "../services/WalletService.js"
 import initPC2StatusBar from "./UIPC2StatusBar.js"
 import UIAIChat from "./AI/UIAIChat.js"
+import WorkspaceManager from "../helpers/WorkspaceManager.js"
+import { toggleMissionControl } from "./UIMissionControl.js"
 
 async function UIDesktop(options) {
     // Guard against multiple UIDesktop calls
@@ -1165,11 +1167,13 @@ async function UIDesktop(options) {
     // Fetch from server, but fallback to existing localStorage values if null
     const serverLanguage = await puter.kv.get('user_preferences.language');
     const serverClockVisible = await puter.kv.get('user_preferences.clock_visible');
+    const serverDesktopLayout = await puter.kv.get('user_preferences.desktop_layout');
     
     const user_preferences = {
         show_hidden_files: showHiddenFiles,
         language: serverLanguage ?? existingPrefs.language ?? 'en',
-        clock_visible: serverClockVisible ?? existingPrefs.clock_visible ?? 'auto',
+        clock_visible: serverClockVisible ?? existingPrefs.clock_visible ?? 'hide',
+        desktop_layout: serverDesktopLayout ?? existingPrefs.desktop_layout ?? 'topbar',
     };
 
     // update default apps
@@ -1789,7 +1793,6 @@ async function UIDesktop(options) {
     // logo
     ht += `<div class="toolbar-btn toolbar-puter-logo" title="ElastOS" style="margin-left: 10px; width:107px;"><img src="/images/elastos-logo.webp" draggable="false" style="display:block; width:107px; height:17px"></div>`;
 
-
     // clock spacer
     ht += `<div class="toolbar-spacer"></div>`;
 
@@ -1808,6 +1811,11 @@ async function UIDesktop(options) {
 
     // github
     // ht += `<a href="https://github.com/HeyPuter/puter" target="_blank" class="toolbar-btn" title="GitHub" style="background-image:url(${window.icons['logo-github-white.svg']});"></a>`;
+
+    // workspace indicator dots (right side, next to mission control)
+    ht += `<div class="workspace-indicator" id="toolbar-workspace-indicator"><span class="workspace-dot active" data-workspace-id="1" title="Desktop 1"></span></div>`;
+    // mission control button
+    ht += `<div class="toolbar-btn mission-control-btn" title="Mission Control (F3)" style="background-image:url('${`data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>')}`}')"></div>`;
 
     // do not show the fullscreen button on mobile devices since it's broken
     if (!isMobile.phone) {
@@ -1839,6 +1847,29 @@ async function UIDesktop(options) {
     // prepend toolbar to desktop
     $(ht).insertBefore(el_desktop);
 
+    // Build full-width top bar (hidden by default, toggled via Settings > Desktop Layout)
+    let topbar_ht = '';
+    topbar_ht += `<div class="topbar">`;
+    topbar_ht += `<div class="topbar-left">`;
+    topbar_ht += `<div class="toolbar-btn toolbar-puter-logo" title="ElastOS" style="margin-left: 4px; width:22px; height:22px;"><img src="/images/elastos-icon.svg" draggable="false" style="display:block; width:22px; height:22px;"></div>`;
+    topbar_ht += `</div>`;
+    topbar_ht += `<div class="topbar-right">`;
+    const missionControlSvg = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>')}`;
+    topbar_ht += `<div class="workspace-indicator" id="topbar-workspace-indicator"><span class="workspace-dot active" data-workspace-id="1" title="Desktop 1"></span></div>`;
+    topbar_ht += `<div class="toolbar-btn mission-control-btn" title="Mission Control (F3)" style="background-image:url('${missionControlSvg}')"></div>`;
+    if (!isMobile.phone) {
+        topbar_ht += `<div class="toolbar-btn fullscreen-btn" title="${i18n('toolbar.enter_fullscreen')}" style="background-image:url(${window.icons['fullscreen.svg']})"></div>`;
+    }
+    topbar_ht += `<div class="toolbar-btn search-btn" title="${i18n('toolbar.search')}" style="background-image:url('${window.icons['search.svg']}')"></div>`;
+    topbar_ht += `<div class="toolbar-btn wallet-btn" title="${i18n('wallet') || 'Wallet'}" style="background-image:url('${walletSvg}')"></div>`;
+    topbar_ht += `<div class="toolbar-btn user-options-menu-btn profile-pic" style="display:block;">`;
+    topbar_ht += `<div class="profile-image ${window.user?.profile?.picture && 'profile-image-has-picture'}" style="border-radius: 50%; background-image:url(${window.user?.profile?.picture || window.icons['profile.svg']}); box-sizing: border-box; width: 17px !important; height: 17px !important; background-size: contain; background-repeat: no-repeat; background-position: center; background-size: cover;"></div>`;
+    topbar_ht += `</div>`;
+    topbar_ht += `<div id="topbar-clock" class="topbar-clock">12:00 AM Sun, Jan 01</div>`;
+    topbar_ht += `</div>`;
+    topbar_ht += `</div>`;
+    $(topbar_ht).insertBefore(el_desktop);
+
     // If auto-hide is disabled, ensure toolbar is visible on load
     if (!window.toolbar_auto_hide_enabled) {
         // Make sure toolbar is visible when auto-hide is disabled
@@ -1853,6 +1884,42 @@ async function UIDesktop(options) {
     window.dispatchEvent(new CustomEvent('toolbar:ready'));
     // init clock visibility
     window.change_clock_visible();
+    // init desktop layout
+    window.change_desktop_layout();
+
+    // init workspace manager
+    window.workspace_manager = new WorkspaceManager();
+    window.workspace_manager.on('switch', () => window.updateWorkspaceIndicator());
+    window.workspace_manager.on('add', () => window.updateWorkspaceIndicator());
+    window.workspace_manager.on('remove', () => window.updateWorkspaceIndicator());
+    window.workspace_manager.on('reorder', () => window.updateWorkspaceIndicator());
+
+    window.updateWorkspaceIndicator = function () {
+        const wm = window.workspace_manager;
+        if (!wm) return;
+        const renderDots = (containerId) => {
+            const $container = $(`#${containerId}`);
+            if ($container.length === 0) return;
+            let html = '';
+            wm.workspaces.forEach(ws => {
+                const isActive = ws.id === wm.activeWorkspaceId;
+                html += `<span class="workspace-dot${isActive ? ' active' : ''}" data-workspace-id="${ws.id}" title="${ws.name}"></span>`;
+            });
+            $container.html(html);
+            $container.find('.workspace-dot').on('click', function () {
+                const id = parseInt($(this).attr('data-workspace-id'));
+                wm.switchTo(id);
+            });
+        };
+        renderDots('topbar-workspace-indicator');
+        renderDots('toolbar-workspace-indicator');
+    };
+
+    window.updateWorkspaceIndicator();
+
+    $(document).on('click', '.mission-control-btn', function () {
+        if (window.toggleMissionControl) window.toggleMissionControl();
+    });
 
     // notification container
     $('body').append(`<div class="notification-container"><div class="notifications-close-all">${i18n('close_all')}</div></div>`);
@@ -2000,6 +2067,7 @@ async function UIDesktop(options) {
         var x1 = day + ", " + month + " " + dt;
         x1 = hours + ":" + minutes + ampm + " " + x1;
         $('#clock').html(x1);
+        $('#topbar-clock').html(x1);
     }
     display_ct()
     setInterval(display_ct, 1000);
@@ -2605,34 +2673,31 @@ $(document).on('click', '.user-options-menu-btn', async function (e) {
         // EOA Wallet icon (key symbol)
         const eoaIconSvg = `<svg style="width:16px;height:16px;vertical-align:middle;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>`;
         
-        // Show wallet_address (EOA wallet) first if it exists
+        // Show wallet_address (EOA wallet) first if it exists (display-only, no hover/click)
         if (window.user.wallet_address) {
             const displayName = window.user.wallet_address.slice(0, 10) + '...' + window.user.wallet_address.slice(-8);
             items.push({
                 html: displayName,
                 icon: eoaIconSvg,
-                onClick: async function () {
-                    // Already on this wallet, do nothing
-                }
+                disabled: true,
+                onClick: async function () {}
             });
         }
         
-        // Show smart_account_address (UniversalX) second if it exists
+        // Show smart_account_address (UniversalX) second if it exists (display-only, no hover/click)
         if (window.user.smart_account_address) {
             const displayName = window.user.smart_account_address.slice(0, 10) + '...' + window.user.smart_account_address.slice(-8);
-            const subtitle = '<span style="display:block;font-size:10px;color:#666;margin-top:2px;margin-left:0;padding-left:0;text-align:left;">UniversalX Smart Account</span>';
+            const subtitle = '<span style="display:block;font-size:10px;color:#666;margin-top:2px;margin-left:25px;padding-left:0;text-align:left;">UniversalX Smart Account</span>';
             // Smart Account icon (shield with bolt)
             const smartIconSvg = `<svg style="width:16px;height:16px;vertical-align:middle;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M13 6l-4 6h3l-1 6 4-6h-3l1-6z" fill="currentColor" stroke="none"/></svg>`;
             items.push({
                 html: displayName + subtitle,
                 icon: smartIconSvg,
-                onClick: async function () {
-                    // Already on this account, do nothing
-                }
+                disabled: true,
+                onClick: async function () {}
             });
         }
-        
-        // Add separator if there are other logged in users or other accounts on node
+        // Invisible spacer (no visible line) so UniversalX Smart Account text is not obscured by Switch Account
         if (window.logged_in_users.length > 0 || otherAccounts.length > 0) {
             items.push('-');
         }
@@ -2643,8 +2708,9 @@ $(document).on('click', '.user-options-menu-btn', async function (e) {
     // -------------------------------------------
     if (isPC2Mode && otherAccounts.length > 0) {
         items.push({
-            html: '<span style="font-size:11px;color:#666;font-weight:500;">Switch Account</span>',
-            disabled: true
+            html: '<span data-section="switch-account" style="font-size:11px;color:#666;font-weight:500;">Switch Account</span>',
+            disabled: true,
+            icon: ''
         });
         
         otherAccounts.forEach(account => {
@@ -2706,7 +2772,7 @@ $(document).on('click', '.user-options-menu-btn', async function (e) {
             if (l_user.smart_account_address) {
                 // Show Smart Account (truncated) with "Smart" label
                 displayName = l_user.smart_account_address.slice(0, 10) + '...' + l_user.smart_account_address.slice(-8);
-                subtitle = '<span style="display:block;font-size:10px;color:#666;margin-top:2px;margin-left:0;padding-left:0;text-align:left;">UniversalX Smart Account</span>';
+                subtitle = '<span style="display:block;font-size:10px;color:#666;margin-top:2px;margin-left:25px;padding-left:0;text-align:left;">UniversalX Smart Account</span>';
             } else if (l_user.wallet_address) {
                 // Show EOA address (truncated)
                 displayName = l_user.wallet_address.slice(0, 10) + '...' + l_user.wallet_address.slice(-8);
@@ -2748,10 +2814,11 @@ $(document).on('click', '.user-options-menu-btn', async function (e) {
         ) */
 
         // -------------------------------------------
-        // -
+        // Single divider before Settings (avoid double divider)
         // -------------------------------------------
-        items.push('-')
-
+        if (items[items.length - 1] !== '-') {
+            items.push('-');
+        }
     }
 
     // -------------------------------------------
@@ -2921,7 +2988,7 @@ $(document).on('click', '.wallet-btn', function () {
 
 $(document).on('click', '.toolbar-puter-logo', function () {
     UIWindowSettings();
-})
+});
 
 $(document).on('click', '.user-options-create-account-btn', async function (e) {
     UIWindowSaveAccount({
@@ -3061,10 +3128,17 @@ window.set_desktop_background = function (options) {
         window.desktop_bg_fit = fit;
     }
 
+    if (options.color) {
+        $('body').css('background-color', options.color);
+        window.desktop_bg_color = options.color;
+        if (!options.url) {
+            $('body').css('background-image', 'none');
+            window.desktop_bg_url = undefined;
+        }
+    }
+
     if (options.url) {
-        false && console.log('[set_desktop_background] Setting background-image to:', options.url);
         $('body').css('background-image', `url("${options.url}")`);
-        // Also set background-size and position for proper display
         if (options.fit) {
             if (options.fit === 'cover' || options.fit === 'contain') {
                 $('body').css('background-size', options.fit);
@@ -3080,16 +3154,6 @@ window.set_desktop_background = function (options) {
             }
         }
         window.desktop_bg_url = options.url;
-        window.desktop_bg_color = undefined;
-        false && console.log('[set_desktop_background] Background set, checking computed style:', $('body').css('background-image'));
-    }
-    else if (options.color) {
-        $('body').css({
-            'background-image': `none`,
-            'background-color': options.color,
-        });
-        window.desktop_bg_color = options.color;
-        window.desktop_bg_url = undefined;
     }
 }
 

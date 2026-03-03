@@ -125,22 +125,20 @@ async function UITaskbar (options) {
         // Position relative to viewport, not desktop container
         // CRITICAL: Keep centered positioning (left: 50%, transform: translateX(-50%)) but ensure visibility
         $taskbar.css({
-            'position': 'fixed !important', // Use fixed instead of absolute to position relative to viewport
-            'bottom': '5px !important', // Match CSS default bottom position
-            'left': '50% !important', // Center horizontally
-            'right': 'auto !important',
-            'width': 'auto !important', // Let CSS handle width based on content
-            'transform': 'translateX(-50%) !important', // Center the taskbar
-            'z-index': '10000 !important', // High z-index to ensure it's on top
-            'display': 'flex !important', // Force display
-            'flex-direction': 'row !important',
-            'align-items': 'center !important',
-            'justify-content': 'center !important',
-            'visibility': 'visible !important', // Force visibility
-            'opacity': '1 !important', // Force opacity
-            'background-color': 'rgba(0, 0, 0, 0.9) !important', // Ensure taskbar has visible background
-            'min-height': `${window.taskbar_height || 50}px !important`, // Ensure minimum height
-            'height': `${window.taskbar_height || 50}px !important` // Force height
+            'position': 'fixed',
+            'bottom': '5px',
+            'left': '50%',
+            'right': 'auto',
+            'width': 'auto',
+            'transform': 'translateX(-50%)',
+            'display': 'flex',
+            'flex-direction': 'row',
+            'align-items': 'center',
+            'justify-content': 'center',
+            'visibility': 'visible',
+            'opacity': '1',
+            'min-height': `${window.taskbar_height || 50}px`,
+            'height': `${window.taskbar_height || 50}px`
         });
         
         // Ensure taskbar-sortable takes available space
@@ -176,8 +174,11 @@ async function UITaskbar (options) {
         sortable: false,
         keep_in_taskbar: true,
         disable_context_menu: true,
+        onHover: function (item) {
+            if ( $(item).hasClass('has-open-popover') ) return;
+            $(item).trigger('click');
+        },
         onClick: async function (item) {
-            // skip if popover already open
             if ( $(item).hasClass('has-open-popover') )
             {
                 return;
@@ -195,8 +196,7 @@ async function UITaskbar (options) {
             });
 
             // In the rare case that launch_apps is not populated yet, get it from the server
-            // then populate the popover
-            if ( !window.launch_apps || !window.launch_apps.recent || window.launch_apps.recent.length === 0 ) {
+            if ( !window.launch_apps || !window.launch_apps.recommended ) {
                 // get launch apps
                 window.launch_apps = await $.ajax({
                     url: `${window.api_origin }/get-launch-apps?icon_size=64`,
@@ -217,31 +217,11 @@ async function UITaskbar (options) {
             apps_str += '</div>';
 
             // -------------------------------------------
-            // Recent apps
-            // -------------------------------------------
-            if ( window.launch_apps.recent.length > 0 ) {
-                // heading
-                apps_str += `<h1 class="start-section-heading start-section-heading-recent">${i18n('recent')}</h1>`;
-
-                // apps
-                apps_str += '<div class="launch-apps-recent">';
-                for ( let index = 0; index < window.launch_recent_apps_count && index < window.launch_apps.recent.length; index++ ) {
-                    const app_info = window.launch_apps.recent[index];
-                    apps_str += `<div title="${html_encode(app_info.title)}" data-name="${html_encode(app_info.name)}" class="start-app-card">`;
-                    apps_str += `<div class="start-app" data-app-name="${html_encode(app_info.name)}" data-app-uuid="${html_encode(app_info.uuid)}" data-app-icon="${html_encode(app_info.icon)}" data-app-title="${html_encode(app_info.title)}">`;
-                    apps_str += `<img class="start-app-icon" src="${html_encode(app_info.icon ? app_info.icon : window.icons['app.svg'])}">`;
-                    apps_str += `<span class="start-app-title">${html_encode(app_info.title)}</span>`;
-                    apps_str += '</div>';
-                    apps_str += '</div>';
-                }
-                apps_str += '</div>';
-            }
-            // -------------------------------------------
-            // Reccomended apps
+            // Recommended apps (recents section removed for simplicity)
             // -------------------------------------------
             if ( window.launch_apps.recommended.length > 0 ) {
                 // heading
-                apps_str += `<h1 class="start-section-heading start-section-heading-recommended" style="${window.launch_apps.recent.length > 0 ? 'padding-top: 30px;' : ''}">${i18n('recommended')}</h1>`;
+                apps_str += `<h1 class="start-section-heading start-section-heading-recommended">${i18n('recommended')}</h1>`;
                 // apps
                 apps_str += '<div class="launch-apps-recommended">';
                 for ( let index = 0; index < window.launch_apps.recommended.length; index++ ) {
@@ -282,6 +262,28 @@ async function UITaskbar (options) {
                 },
                 stop: function () {
                 },
+            });
+
+            // Close popover when mouse leaves both the popover and the start button
+            let _popoverCloseTimer = null;
+            const startCloseTimer = function () {
+                clearTimeout(_popoverCloseTimer);
+                _popoverCloseTimer = setTimeout(function () {
+                    $(popover).removeClass('popover-visible');
+                    setTimeout(function () {
+                        $(popover).remove();
+                    }, 200);
+                }, 300);
+            };
+            const cancelCloseTimer = function () {
+                clearTimeout(_popoverCloseTimer);
+            };
+            $(popover).on('mouseenter', cancelCloseTimer);
+            $(popover).on('mouseleave', startCloseTimer);
+            $(item).on('mouseleave.popover', startCloseTimer);
+            $(item).on('mouseenter.popover', cancelCloseTimer);
+            $(popover).on('remove', function () {
+                $(item).off('.popover');
             });
 
             $(popover).on('click', function () {

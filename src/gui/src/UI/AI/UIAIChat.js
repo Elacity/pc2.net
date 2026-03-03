@@ -21,6 +21,7 @@ import UIWindow from '../UIWindow.js';
 import UIContextMenu from '../UIContextMenu.js';
 import UIWindowSettings from '../Settings/UIWindowSettings.js';
 import UIWindowAIChat from '../UIWindowAIChat.js';
+import UIAlert from '../UIAlert.js';
 
 // Chat history storage keys (wallet-scoped for user isolation)
 const CHAT_HISTORY_KEY_PREFIX = 'pc2_ai_chat_history';
@@ -35,6 +36,9 @@ let currentWalletAddress = null;
 // Current AI request controller for cancellation
 let currentAIAbortController = null;
 let currentAIRequestState = 'idle'; // 'idle' | 'connecting' | 'thinking' | 'executing' | 'generating'
+
+// Voice service availability cache (checked once per session)
+let voiceServiceStatus = null;
 
 // Selected agent (set by UIAgentSelector in taskbar)
 // When set, all AI requests use this agent's config (model, personality, permissions)
@@ -1146,7 +1150,7 @@ export default function UIAIChat() {
         <path d="M8 10h.01M12 10h.01M16 10h.01"/>
     </svg>`;
     
-    // Insert AI button into toolbar (after cloud icon)
+    // Insert AI button into toolbar and topbar (after cloud icon)
     const insertAIButton = () => {
         const $toolbar = $('.toolbar');
         if ($toolbar.length === 0) {
@@ -1155,14 +1159,13 @@ export default function UIAIChat() {
         }
 
         // Wait for cloud button to exist first (it should insert before us)
-        const $cloudBtn = $('.pc2-status-bar');
+        const $cloudBtn = $('.toolbar .pc2-status-bar');
         if ($cloudBtn.length === 0) {
-            // Cloud button not ready yet, wait a bit
             setTimeout(insertAIButton, 150);
             return;
         }
 
-        // Remove existing AI button if any
+        // Remove existing AI buttons if any
         $('.ai-toolbar-btn').remove();
 
         const $aiBtn = $(`
@@ -1172,8 +1175,18 @@ export default function UIAIChat() {
         `);
 
         // Insert after cloud icon (pc2-status-bar), before wallet
-        // Order: Cloud | AI | Wallet
         $cloudBtn.after($aiBtn);
+
+        // Also insert into top bar (full-width mode)
+        const $topbarCloud = $('.topbar .pc2-status-bar');
+        if ($topbarCloud.length > 0) {
+            const $topbarAiBtn = $(`
+                <div class="ai-toolbar-btn toolbar-btn" role="button" aria-label="AI Assistant" tabindex="0" title="AI Assistant">
+                    ${aiButtonSvg}
+                </div>
+            `);
+            $topbarCloud.after($topbarAiBtn);
+        }
     };
 
     insertAIButton();
@@ -1200,6 +1213,7 @@ export default function UIAIChat() {
             h += `<div class="ai-chat-input-actions">`;
                 h += `<button class="ai-activity-btn" title="View Activity"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></button>`;
                 h += `<button class="ai-attach-btn" title="Attach file"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></button>`;
+                h += `<button class="ai-voice-btn" title="Voice input"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></button>`;
                 h += `<div class="ai-agent-selector-wrapper" style="position: relative;">`;
                     h += `<button class="ai-agent-btn" title="Select Agent"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></button>`;
                     h += `<div class="ai-agent-dropdown" style="display: none; position: absolute; bottom: 100%; left: 0; margin-bottom: 8px; border-radius: 8px; min-width: 220px; max-height: 300px; overflow-y: auto; z-index: 999999;">`;
@@ -2158,6 +2172,223 @@ $(document).on('click', '.ai-attach-btn', async function () {
     }
 });
 
+// Voice input handling
+let voiceMediaRecorder = null;
+let voiceAudioChunks = [];
+let voiceRecording = false;
+let voiceAudioContext = null;
+let voiceAnalyser = null;
+let voiceAnimFrame = null;
+
+async function checkVoiceStatus() {
+    if (voiceServiceStatus !== null) return voiceServiceStatus;
+    try {
+        const apiOrigin = window.api_origin || window.location.origin;
+        const authToken = window.auth_token || localStorage.getItem('puter_auth_token') || localStorage.getItem('auth_token') || '';
+        const res = await fetch(`${apiOrigin}/api/ai/voice/status?auth_token=${encodeURIComponent(authToken)}`);
+        voiceServiceStatus = await res.json();
+    } catch {
+        voiceServiceStatus = { ready: false, whisper: { available: false }, piper: { available: false }, ffmpeg: { available: false } };
+    }
+    return voiceServiceStatus;
+}
+
+function startWaveform(stream, $inputWrapper) {
+    voiceAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+    voiceAnalyser = voiceAudioContext.createAnalyser();
+    voiceAnalyser.fftSize = 64;
+    const source = voiceAudioContext.createMediaStreamSource(stream);
+    source.connect(voiceAnalyser);
+
+    const $textarea = $inputWrapper.find('.ai-chat-input');
+    $textarea.hide();
+
+    const canvas = document.createElement('canvas');
+    canvas.className = 'ai-voice-waveform-canvas';
+    canvas.style.cssText = 'width:100%;height:42px;display:block;border-radius:8px;';
+    $inputWrapper[0].appendChild(canvas);
+
+    const ctx = canvas.getContext('2d');
+    const bufferLength = voiceAnalyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+    const BAR_COUNT = 32;
+
+    function draw() {
+        voiceAnimFrame = requestAnimationFrame(draw);
+        canvas.width = canvas.offsetWidth * (window.devicePixelRatio || 1);
+        canvas.height = canvas.offsetHeight * (window.devicePixelRatio || 1);
+        ctx.scale(window.devicePixelRatio || 1, window.devicePixelRatio || 1);
+
+        const w = canvas.offsetWidth;
+        const h = canvas.offsetHeight;
+        ctx.clearRect(0, 0, w, h);
+
+        voiceAnalyser.getByteFrequencyData(dataArray);
+
+        const barWidth = Math.max(2, (w / BAR_COUNT) - 2);
+        const gap = 2;
+        const totalWidth = BAR_COUNT * (barWidth + gap) - gap;
+        const startX = (w - totalWidth) / 2;
+
+        for (let i = 0; i < BAR_COUNT; i++) {
+            const dataIdx = Math.floor(i * bufferLength / BAR_COUNT);
+            const amplitude = dataArray[dataIdx] / 255;
+            const barH = Math.max(3, amplitude * (h * 0.8));
+            const x = startX + i * (barWidth + gap);
+            const y = (h - barH) / 2;
+
+            ctx.fillStyle = `rgba(255, 255, 255, ${0.4 + amplitude * 0.6})`;
+            ctx.beginPath();
+            ctx.roundRect(x, y, barWidth, barH, 1.5);
+            ctx.fill();
+        }
+    }
+    draw();
+}
+
+function stopWaveform() {
+    if (voiceAnimFrame) {
+        cancelAnimationFrame(voiceAnimFrame);
+        voiceAnimFrame = null;
+    }
+    const canvas = document.querySelector('.ai-voice-waveform-canvas');
+    if (canvas) {
+        const $wrapper = $(canvas).closest('.ai-chat-input-wrapper');
+        canvas.remove();
+        $wrapper.find('.ai-chat-input').show();
+    }
+    if (voiceAudioContext) {
+        voiceAudioContext.close().catch(() => {});
+        voiceAudioContext = null;
+        voiceAnalyser = null;
+    }
+}
+
+$(document).on('click', '.ai-voice-btn', async function () {
+    const $btn = $(this);
+
+    if (voiceRecording) {
+        if (voiceMediaRecorder && voiceMediaRecorder.state !== 'inactive') {
+            voiceMediaRecorder.stop();
+        }
+        return;
+    }
+
+    // Pre-check voice service availability
+    const status = await checkVoiceStatus();
+    if (!status.ready) {
+        const confirmed = await UIAlert({
+            type: 'confirm',
+            message: 'Voice AI is not set up. Would you like to open Settings to enable it?',
+            buttons: [
+                { label: 'Open Settings', value: 'settings', type: 'primary' },
+                { label: 'Cancel', value: 'cancel', type: 'secondary' },
+            ]
+        });
+        if (confirmed === 'settings') {
+            UIWindowSettings({ tab: 'ai' });
+        }
+        return;
+    }
+
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        voiceAudioChunks = [];
+        voiceRecording = true;
+        $btn.addClass('ai-voice-recording');
+        $btn.attr('title', 'Stop recording');
+
+        // Start waveform visualizer
+        const $inputWrapper = $btn.closest('.ai-chat-input-container').find('.ai-chat-input-wrapper');
+        if ($inputWrapper.length) {
+            startWaveform(stream, $inputWrapper);
+        }
+
+        voiceMediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+
+        voiceMediaRecorder.ondataavailable = (e) => {
+            if (e.data.size > 0) voiceAudioChunks.push(e.data);
+        };
+
+        voiceMediaRecorder.onstop = async () => {
+            voiceRecording = false;
+            $btn.removeClass('ai-voice-recording');
+            $btn.attr('title', 'Voice input');
+            stopWaveform();
+            stream.getTracks().forEach(t => t.stop());
+
+            if (voiceAudioChunks.length === 0) return;
+
+            const audioBlob = new Blob(voiceAudioChunks, { type: 'audio/webm' });
+            voiceAudioChunks = [];
+
+            const chatInput = $('.ai-chat-input');
+            chatInput.attr('placeholder', 'Transcribing...');
+            chatInput.prop('disabled', true);
+
+            try {
+                const apiOrigin = window.api_origin || window.location.origin;
+                const authToken = window.auth_token || localStorage.getItem('puter_auth_token') || localStorage.getItem('auth_token') || '';
+
+                const formData = new FormData();
+                formData.append('audio', audioBlob, 'voice.webm');
+
+                const response = await fetch(`${apiOrigin}/api/ai/voice?auth_token=${encodeURIComponent(authToken)}`, {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                const result = await response.json();
+
+                chatInput.prop('disabled', false);
+                chatInput.attr('placeholder', 'Talk to ElastOS');
+
+                if (result.error) {
+                    console.error('[Voice]', result.message || result.error);
+                    chatInput.attr('placeholder', result.message || 'Voice unavailable');
+                    setTimeout(() => chatInput.attr('placeholder', 'Talk to ElastOS'), 3000);
+                    return;
+                }
+
+                if (result.transcript) {
+                    renderMessage('user', result.transcript);
+                    addToHistory('user', result.transcript);
+                }
+
+                if (result.response) {
+                    const msgId = 'msg-voice-' + Date.now();
+                    renderMessage('assistant', result.response, msgId);
+                    addToHistory('assistant', result.response, msgId);
+                }
+
+                if (result.audio) {
+                    try {
+                        const audio = new Audio('data:audio/wav;base64,' + result.audio);
+                        audio.play();
+                    } catch (audioErr) {
+                        console.warn('[Voice] Audio playback failed:', audioErr);
+                    }
+                }
+
+                const $msgs = $('.ai-chat-messages');
+                if ($msgs.length) $msgs.scrollTop($msgs[0].scrollHeight);
+            } catch (error) {
+                console.error('[Voice] Pipeline error:', error);
+                chatInput.prop('disabled', false);
+                chatInput.attr('placeholder', 'Voice error — try again');
+                setTimeout(() => chatInput.attr('placeholder', 'Talk to ElastOS'), 3000);
+            }
+        };
+
+        voiceMediaRecorder.start();
+    } catch (error) {
+        console.error('[Voice] Microphone access denied:', error);
+        voiceRecording = false;
+        $btn.removeClass('ai-voice-recording');
+        stopWaveform();
+    }
+});
+
 // Remove attached file
 $(document).on('click', '.ai-attached-file-remove', function (e) {
     e.stopPropagation();
@@ -3015,6 +3246,9 @@ async function sendAIMessage($container) {
                         $aiMessage.removeClass('ai-streaming');
                         // Render with thinking block support
                         $aiMessage.html(renderMessageWithThinking(fullContent, true));
+                        // Auto-scroll thinking content to bottom during streaming
+                        const thinkEl = $aiMessage.find('.ai-thinking-content')[0];
+                        if (thinkEl) thinkEl.scrollTop = thinkEl.scrollHeight;
                         scrollChatToBottom();
                     }
                     // Handle tool_use chunks - display feedback cards
@@ -3117,6 +3351,8 @@ async function sendAIMessage($container) {
                         updateLoadingState('thinking');
                         $aiMessage.removeClass('ai-streaming');
                         $aiMessage.html(renderMessageWithThinking(fullContent, true));
+                        const thinkEl2 = $aiMessage.find('.ai-thinking-content')[0];
+                        if (thinkEl2) thinkEl2.scrollTop = thinkEl2.scrollHeight;
                         scrollChatToBottom();
                     }
                     // Handle final_response_start - clear previous content to avoid duplication

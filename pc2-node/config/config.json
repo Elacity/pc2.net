@@ -17,6 +17,13 @@
     "wallet_address": null,
     "tethered_wallets": []
   },
+  "boson": {
+    "enabled": true,
+    "gateway_url": "https://69.164.241.210",
+    "public_domain": "ela.city",
+    "auto_connect": true,
+    "privacy_mode": false
+  },
   "security": {
     "session_duration_days": 30,
     "rate_limit_window_ms": 60000,

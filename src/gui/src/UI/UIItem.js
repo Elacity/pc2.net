@@ -31,6 +31,7 @@ import truncate_filename from '../helpers/truncate_filename.js';
 import launch_app from '../helpers/launch_app.js';
 import open_item from '../helpers/open_item.js';
 import mime from '../lib/mime.js';
+import { normalizeModified } from '../helpers/normalizeModified.js';
 
 function UIItem (options) {
     const matching_appendto_count = $(options.appendTo).length;
@@ -77,6 +78,7 @@ function UIItem (options) {
     // --------------------------------------------------------
     // HTML for Item
     // --------------------------------------------------------
+    const modNorm = normalizeModified(options.modified);
     let h = '';
     h += `<div  id="item-${item_id}" 
                 class="item${options.is_selected ? ' item-selected' : ''} ${options.disabled ? 'item-disabled' : ''} item-${options.visible}" 
@@ -96,7 +98,7 @@ function UIItem (options) {
                 data-sort_by = "${html_encode(options.sort_by) ?? 'name'}"
                 data-size = "${options.size ?? ''}"
                 data-type = "${html_encode(options.type) ?? ''}"
-                data-modified = "${options.modified ?? ''}"
+                data-modified = "${modNorm.sec}"
                 data-associated_app_name = "${html_encode(options.associated_app_name) ?? ''}"
                 data-ipfs_hash = "${html_encode(options.ipfs_hash) ?? ''}"
                 data-path="${html_encode(options.path)}">`;
@@ -106,7 +108,7 @@ function UIItem (options) {
     h += '</div>';
     // modified
     h += '<div class="item-attr item-attr--modified">';
-    h += `<span>${options.modified === 0 ? '-' : timeago.format(options.modified * 1000)}</span>`;
+    h += `<span>${modNorm.ms === 0 ? '-' : timeago.format(modNorm.ms)}</span>`;
     h += '</div>';
     // size
     h += '<div class="item-attr item-attr--size">';

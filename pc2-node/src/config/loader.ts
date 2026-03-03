@@ -8,6 +8,9 @@
 import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { createLogger } from '../utils/logger.js';
+
+const log = createLogger('config');
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -36,6 +39,22 @@ export interface Config {
     public_domain?: string;
     auto_connect?: boolean;
     privacy_mode?: boolean;
+    stealth_mode?: boolean;
+    amnezia_wg?: {
+      enabled?: boolean;
+      auto_fallback?: boolean;
+    };
+    vless_reality?: {
+      enabled?: boolean;
+      auto_fallback?: boolean;
+    };
+    supernodes?: Array<{
+      id: string;
+      address: string;
+      port: number;
+      proxyPort: number;
+      gatewayUrl: string;
+    }>;
   };
   ai?: {
     enabled?: boolean;
@@ -102,8 +121,8 @@ function loadUserConfig(): Partial<Config> | null {
     const content = readFileSync(USER_CONFIG_PATH, 'utf8');
     return JSON.parse(content) as Partial<Config>;
   } catch (error) {
-    console.warn(`⚠️  Failed to load user config: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    console.warn(`   Using default configuration only`);
+      log.warn(`Failed to load user config: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      log.warn(`Using default configuration only`);
     return null;
   }
 }

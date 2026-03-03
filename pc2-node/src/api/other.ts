@@ -8,7 +8,8 @@ import { Request, Response } from 'express';
 import { AuthenticatedRequest } from './middleware.js';
 import { SignRequest, SignResponse } from '../types/api.js';
 import { FilesystemManager } from '../storage/filesystem.js';
-import { logger } from '../utils/logger.js';
+import { logger, createLogger } from '../utils/logger.js';
+const log = createLogger('api-other');
 import { broadcastItemUpdated } from '../websocket/events.js';
 import { Server as SocketIOServer } from 'socket.io';
 import crypto from 'crypto';
@@ -291,20 +292,19 @@ export function handleDriversCall(req: AuthenticatedRequest, res: Response): voi
 
   // Log request for debugging - check raw body too
   const rawBody = (req as any).rawBody;
-  // Use console.log to ensure visibility in terminal
-  console.log(`[Drivers] ========== REQUEST RECEIVED ==========`);
-  console.log(`[Drivers] Request from ${req.user.wallet_address}`);
-  console.log(`[Drivers] Content-Type: ${req.get('Content-Type')}`);
-  console.log(`[Drivers] Raw body (captured): ${rawBody ? rawBody.substring(0, 500) : 'NOT CAPTURED'} (length: ${rawBody?.length || 0})`);
-  console.log(`[Drivers] Body type: ${typeof body}, is object: ${typeof body === 'object' && body !== null}`);
-  console.log(`[Drivers] Body keys: ${body && typeof body === 'object' ? Object.keys(body).join(', ') : 'N/A'}`);
-  console.log(`[Drivers] interface=${body?.interface || 'missing'}, driver=${body?.driver || 'missing'}, method=${body?.method || 'missing'}`);
-  console.log(`[Drivers] Full body:`, JSON.stringify(body || {}, null, 2));
-  console.log(`[Drivers] Raw req.body:`, JSON.stringify(req.body || {}, null, 2));
-  console.log(`[Drivers] Query params:`, JSON.stringify(req.query));
-  console.log(`[Drivers] Request URL: ${req.url}`);
-  console.log(`[Drivers] Request method: ${req.method}`);
-  console.log(`[Drivers] ========================================`);
+  log.debug(`[Drivers] ========== REQUEST RECEIVED ==========`);
+  log.debug(`[Drivers] Request from ${req.user.wallet_address}`);
+  log.debug(`[Drivers] Content-Type: ${req.get('Content-Type')}`);
+  log.debug(`[Drivers] Raw body (captured): ${rawBody ? rawBody.substring(0, 500) : 'NOT CAPTURED'} (length: ${rawBody?.length || 0})`);
+  log.debug(`[Drivers] Body type: ${typeof body}, is object: ${typeof body === 'object' && body !== null}`);
+  log.debug(`[Drivers] Body keys: ${body && typeof body === 'object' ? Object.keys(body).join(', ') : 'N/A'}`);
+  log.debug(`[Drivers] interface=${body?.interface || 'missing'}, driver=${body?.driver || 'missing'}, method=${body?.method || 'missing'}`);
+  log.debug(`[Drivers] Full body:`, JSON.stringify(body || {}, null, 2));
+  log.debug(`[Drivers] Raw req.body:`, JSON.stringify(req.body || {}, null, 2));
+  log.debug(`[Drivers] Query params:`, JSON.stringify(req.query));
+  log.debug(`[Drivers] Request URL: ${req.url}`);
+  log.debug(`[Drivers] Request method: ${req.method}`);
+  log.debug(`[Drivers] ========================================`);
   
   // Also use logger for consistency
   logger.info(`[Drivers] Request from ${req.user.wallet_address}`);
@@ -1420,7 +1420,8 @@ export async function handleOpenItem(req: AuthenticatedRequest, res: Response): 
   else if (fsname.endsWith('.mp4') || fsname.endsWith('.webm') || fsname.endsWith('.mpg') || 
            fsname.endsWith('.mpv') || fsname.endsWith('.mp3') || fsname.endsWith('.m4a') || 
            fsname.endsWith('.ogg') || fsname.endsWith('.mov') || fsname.endsWith('.avi') ||
-           fsname.endsWith('.wav') || fsname.endsWith('.flac')) {
+           fsname.endsWith('.wav') || fsname.endsWith('.flac') || fsname.endsWith('.mkv') ||
+           fsname.endsWith('.av1') || fsname.endsWith('.m4v') || fsname.endsWith('.ogv')) {
     appUid = 'app-11edfba2-1ed3-4e22-8573-47e88fb87d70';
     appName = 'player';
     appIndexUrl = `${baseUrl}/apps/player/index.html`;
@@ -1586,7 +1587,8 @@ export async function handleSuggestApps(req: AuthenticatedRequest, res: Response
   else if (fsname.endsWith('.mp4') || fsname.endsWith('.webm') || fsname.endsWith('.mpg') || 
            fsname.endsWith('.mpv') || fsname.endsWith('.mp3') || fsname.endsWith('.m4a') || 
            fsname.endsWith('.ogg') || fsname.endsWith('.mov') || fsname.endsWith('.avi') ||
-           fsname.endsWith('.wav') || fsname.endsWith('.flac')) {
+           fsname.endsWith('.wav') || fsname.endsWith('.flac') || fsname.endsWith('.mkv') ||
+           fsname.endsWith('.av1') || fsname.endsWith('.m4v') || fsname.endsWith('.ogv')) {
     appUid = 'app-11edfba2-1ed3-4e22-8573-47e88fb87d70';
     appName = 'player';
     appIndexUrl = `${baseUrl}/apps/player/index.html`;

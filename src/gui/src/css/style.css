@@ -956,6 +956,8 @@
     color: var(--ai-text-color);
     opacity: 0.8;
     border-top: 1px solid rgba(167, 139, 250, 0.15);
+    max-height: 200px;
+    overflow-y: auto;
     margin-top: 0;
     padding-top: 10px;
     max-height: 300px;
@@ -1765,6 +1767,77 @@
     height: 20px;
 }
 
+/* Voice input button - same style as attach/activity/agent buttons */
+.ai-voice-btn {
+    background: var(--ai-input-bg);
+    border: 1px solid var(--ai-border-color);
+    padding: 0;
+    cursor: pointer;
+    color: #666;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    box-sizing: border-box;
+    transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+    outline: none;
+}
+
+[data-theme="dark"] .ai-voice-btn {
+    color: #9ca3af;
+}
+
+.ai-voice-btn:hover {
+    background: var(--ai-message-user-bg);
+    color: var(--ai-text-color);
+}
+
+.ai-voice-btn:focus {
+    outline: none;
+}
+
+.ai-voice-btn svg {
+    width: 20px;
+    height: 20px;
+}
+
+.ai-voice-btn.ai-voice-recording {
+    color: #ef4444;
+    border-color: #ef4444;
+}
+
+[data-theme="dark"] .ai-voice-btn.ai-voice-recording {
+    color: #ef4444;
+    border-color: #ef4444;
+}
+
+.ai-voice-btn.ai-voice-recording svg {
+    animation: voice-pulse 1s ease-in-out infinite;
+}
+
+@keyframes voice-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
+/* Voice waveform visualizer overlay */
+.ai-voice-waveform {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    height: 100%;
+    padding: 0 12px;
+}
+
+.ai-voice-waveform canvas {
+    width: 100%;
+    height: 40px;
+}
+
 /* Chat Input - full width at top */
 .ai-chat-input {
     width: 100%;
@@ -2170,6 +2243,35 @@ pre {
     --color-info-bg: #dbeafe;
 }
 
+/* Dark mode scrollbars (default = dark; light mode keeps browser default) */
+html:not([data-theme="light"]) ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+html:not([data-theme="light"]) ::-webkit-scrollbar-track {
+    background: #2d2d2d;
+}
+html:not([data-theme="light"]) ::-webkit-scrollbar-thumb {
+    background: #555;
+    border-radius: 5px;
+}
+html:not([data-theme="light"]) ::-webkit-scrollbar-thumb:hover {
+    background: #666;
+}
+html:not([data-theme="light"]) {
+    scrollbar-color: #555 #2d2d2d;
+}
+
+/* Explorer list view: transparent scrollbar tracks so alternating row backgrounds extend to edges */
+.window[data-app="explorer"] .window-body::-webkit-scrollbar-track,
+.window[data-app="explorer"] .item-container-details::-webkit-scrollbar-track {
+    background: transparent;
+}
+.window[data-app="explorer"] .window-body,
+.window[data-app="explorer"] .item-container-details {
+    scrollbar-color: #555 transparent;
+}
+
 /* Light mode - Toolbar stays dark (like Puter), Taskbar gets light frosted glass */
 /* Puter's toolbar uses dark semi-transparent for both modes */
 /* But Puter's taskbar uses HSLA variables that create light appearance */
@@ -2182,6 +2284,9 @@ pre {
     [data-theme="light"] .taskbar {
         background-color: rgba(231, 238, 245, 0.75) !important;
         backdrop-filter: blur(10px);
+    }
+    [data-theme="light"] .taskbar.taskbar-position-bottom {
+        backdrop-filter: blur(12px);
     }
 }
 
@@ -2196,6 +2301,40 @@ pre {
 [data-theme="light"] .taskbar .taskbar-item.active .taskbar-icon,
 [data-theme="light"] .taskbar .taskbar-item:active .taskbar-icon {
     background-color: rgba(255, 255, 255, 0.8) !important;
+}
+
+/* Light mode - Full top bar matches bottom taskbar (frosted light) */
+[data-theme="light"] .topbar {
+    background-color: rgba(231, 238, 245, 0.85);
+}
+
+@supports ((backdrop-filter: blur())) {
+    [data-theme="light"] .topbar {
+        background-color: rgba(231, 238, 245, 0.75);
+        backdrop-filter: blur(14px);
+    }
+}
+
+[data-theme="light"] .topbar-clock {
+    color: #1f2937;
+    opacity: 0.9;
+}
+
+/* Top bar icons dark in light mode (invert white SVGs to dark) */
+[data-theme="light"] .topbar .toolbar-btn {
+    filter: invert(1);
+}
+/* Logo stays original brand colors - do not invert */
+[data-theme="light"] .topbar .toolbar-puter-logo {
+    filter: none;
+}
+/* Counter-invert profile photo so it stays natural */
+[data-theme="light"] .topbar .toolbar-btn .profile-image {
+    filter: invert(1);
+}
+/* Counter-invert PC2 status dot so it stays green (connected) / orange (disconnected) */
+[data-theme="light"] .topbar .pc2-status-indicator {
+    filter: invert(1);
 }
 
 /* Settings content background override */
@@ -4244,12 +4383,12 @@ pre {
  *****************************************************/
 /* Search bar wrapper background in light mode */
 [data-theme="light"] .launch-search-wrapper {
-    background: #ffffff !important;
+    background: var(--color-bg-surface) !important;
 }
 
 /* Search input in light mode */
 [data-theme="light"] .launch-search {
-    background-color: #ffffff !important;
+    background-color: var(--color-bg-surface) !important;
     border-color: #d1d5db !important;
     color: #374151 !important;
 }
@@ -4322,7 +4461,8 @@ pre {
     content: '';
     position: absolute;
     left: 24px;
-    bottom: 17px;
+    top: 50%;
+    transform: translateY(-50%);
     width: 18px;
     height: 18px;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23ffffff'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z'/%3E%3C/svg%3E");
@@ -4379,9 +4519,9 @@ pre {
 /*****************************************************
  * Launch Search (Start Menu) - Dark Mode (Default)
  *****************************************************/
-/* Dark mode - dark background, white text, white icon */
+/* Dark mode - match popover surface so search is not block solid */
 .launch-search {
-    background-color: #3a3a3c !important;
+    background-color: var(--color-bg-surface) !important;
     color: #ffffff !important;
     border-color: #4a4a4c !important;
     background-image: none !important; /* Hide original inline icon */
@@ -4410,9 +4550,9 @@ pre {
 /*****************************************************
  * Launch Search (Start Menu) - Light Mode
  *****************************************************/
-/* Light mode - white background, dark text, dark icon */
+/* Light mode - match popover surface (frosted), not block white */
 [data-theme="light"] .launch-search {
-    background-color: #ffffff !important;
+    background-color: var(--color-bg-surface) !important;
     color: #374151 !important;
     border-color: #d1d5db !important;
 }
@@ -5102,10 +5242,12 @@ input[type=text]:focus, input[type=password]:focus, input[type=email]:focus, sel
     display: grid;
     overflow-x: scroll !important;
     overflow-y: hidden !important;
-    grid-template-rows: repeat(auto-fill, 18px);
+    grid-template-rows: repeat(auto-fill, 32px);
     grid-auto-flow: column;
-    gap: 15px 70px;
+    gap: 2px 70px;
     padding-top: 5px;
+    padding-left: 0;
+    align-content: start;
 }
 
 .device-phone .item-container-list {
@@ -5154,6 +5296,7 @@ input[type=text]:focus, input[type=password]:focus, input[type=email]:focus, sel
 
 .item-container-list .item {
     height: initial;
+    min-height: 28px;
     width: max-content;
     margin: 0;
     pointer-events: all;
@@ -5161,6 +5304,7 @@ input[type=text]:focus, input[type=password]:focus, input[type=email]:focus, sel
     flex-direction: row;
     align-items: center;
     text-align: left;
+    background-color: transparent;
 }
 
 .device-phone .item-container-list .item {
@@ -5173,30 +5317,48 @@ input[type=text]:focus, input[type=password]:focus, input[type=email]:focus, sel
 }
 
 .item-container-details .item {
-    height: initial;
-    width: max-content;
-    margin: 0;
-    pointer-events: all;
+    height: 24px;
     width: 100%;
-    min-width: 795px;
-    margin-bottom: 20px;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    pointer-events: all;
+    min-width: 790px;
+    position: relative;
+    display: grid;
+    grid-template-columns: 30px 285px 15px 135px 15px 135px 15px 200px;
+    grid-auto-flow: dense;
+    align-items: center;
+    overflow: hidden;
+    text-align: left;
+    float: none;
+}
+
+.item-container-details .item > .item-spinner,
+.item-container-details .item > .item-divider,
+.item-container-details .item > .item-name-editor {
+    display: none;
 }
 
 .explore-table-headers {
     display: none;
     width: 100%;
-    min-width: 795px;
+    min-width: 790px;
     height: 25px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.15);
     background-color: var(--color-bg-tertiary, #2f2f30);
-    background-color: #fff;
-    margin-left: -10px;
+    margin-left: 0;
+    padding-left: 0;
     padding-top: 0;
     margin-top: -7px;
     margin-bottom: 8px;
     position: sticky;
     top: -7px;
     z-index: 1;
+    box-sizing: border-box;
+    grid-template-columns: 30px 285px 15px 135px 15px 135px 15px 200px;
+    display: grid;
+    align-items: center;
 }
 
 .device-phone .explore-table-headers {
@@ -5216,9 +5378,11 @@ span.header-sort-icon img {
 .explore-table-headers .explore-table-headers-th {
     font-size: 12px;
     line-height: 25px;
-    margin-left: 15px;
+    margin: 0;
+    padding: 0;
     color: rgba(255, 255, 255, 0.7);
-    display: inline-block;
+    display: block;
+    box-sizing: border-box;
 }
 
 /* Light mode - explore table headers */
@@ -5236,19 +5400,29 @@ span.header-sort-icon img {
 }
 
 .explore-table-headers-th--name {
-    width: 330px;
+    width: auto;
+    grid-column: 1 / span 2;
+    padding-left: 45px;
+    box-sizing: border-box;
 }
 
 .explore-table-headers-th--size {
-    width: 135px;
+    width: auto;
+    grid-column: 6;
 }
 
 .explore-table-headers-th--modified {
-    width: 135px;
+    width: auto;
+    grid-column: 4;
+}
+
+.explore-table-headers-th--type {
+    width: auto;
+    grid-column: 8;
 }
 
 .item-container-details .explore-table-headers {
-    display: block;
+    display: grid;
 }
 
 .item-disabled .item-icon, .item-disabled .item-name {
@@ -5285,9 +5459,13 @@ span.header-sort-icon img {
 }
 
 .item-container-details .item-icon {
-    float: left;
+    float: none;
     height: 15px;
     width: 15px;
+    padding: 0;
+    grid-column: 1;
+    align-self: center;
+    justify-self: center;
 }
 
 .device-desktop .item-container-details .item-selected .item-icon {
@@ -5411,14 +5589,17 @@ span.header-sort-icon img {
 }
 
 .item-container-details .item-name {
-    margin-top: 2px;
-    float: left;
+    margin: 0;
+    padding: 0;
+    float: none;
     text-overflow: ellipsis;
     overflow: hidden;
     white-space: nowrap;
     text-align: left;
     max-width: 220px;
-    margin-bottom: 3px;
+    grid-column: 2;
+    line-height: 24px;
+    text-shadow: none;
 }
 
 .item-name-shadow {
@@ -5483,24 +5664,38 @@ span.header-sort-icon img {
     color: #738c9f;
 }
 
+/* Dark mode list view: Apple-style — Modified/Size/Type grey (not blue) */
+html:not([data-theme="light"]) .item-container-details .item-attr {
+    color: var(--color-text-secondary);
+}
+
 .item-container-details .item-attr {
-    display: inline;
+    display: block;
+    padding: 0;
+    margin: 0;
+    position: static;
+    height: auto;
+    line-height: 24px;
 }
 
 .device-desktop .item-container-details .item-selected .item-attr {
-    color: white;
+    color: rgba(255, 255, 255, 0.72);
 }
 
 .item-container-details .item-attr--modified {
-    left: 350px;
+    grid-column: 4;
 }
 
 .item-container-details .item-attr--size {
-    left: 500px;
+    grid-column: 6;
 }
 
 .item-container-details .item-attr--type {
-    left: 650px;
+    grid-column: 8;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .window-disabled {
@@ -5550,6 +5745,11 @@ span.header-sort-icon img {
     margin-left: 3px;
 }
 
+/* Dark mode list view: Apple-style — Name column white */
+html:not([data-theme="light"]) .window-body .item .item-name {
+    color: #ffffff;
+}
+
 .window-body .item-container-list .item .item-name {
     padding: 0;
     margin: 0;
@@ -5577,9 +5777,43 @@ span.header-sort-icon img {
     color: white;
 }
 
+.device-desktop .item-container-details .item-selected .item-name {
+    background-color: transparent !important;
+    color: #ffffff !important;
+}
+
+.device-desktop .item-container-list .item-selected .item-name {
+    background-color: transparent !important;
+    color: #ffffff !important;
+}
+
+/* Light theme: Apple-style selected row text (dark primary, grey secondary) */
+[data-theme="light"] .device-desktop .item-container-details .item-selected .item-name,
+[data-theme="light"] .device-desktop .item-container-list .item-selected .item-name {
+    color: #1d1d1f !important;
+}
+
+[data-theme="light"] .device-desktop .item-container-details .item-selected .item-attr {
+    color: #6b6b6b;
+}
+
 .device-desktop .item-container-details .item-selected {
-    background-color: #3b56ee;
+    background-color: #007AFF;
     border-radius: 3px;
+}
+
+.device-desktop .item-container-list .item-selected {
+    background-color: #007AFF;
+    border-radius: 3px;
+}
+
+/* Alternating row backgrounds (Apple-style list view) */
+.item-container-details > .item:nth-child(2n+5):not(.item-selected),
+.item-container-details > .item:nth-child(2n+7):not(.item-selected) {
+    background-color: var(--color-bg-tertiary);
+}
+.item-container-details > .item:nth-child(2n+6):not(.item-selected) {
+    background-color: var(--color-bg-secondary);
 }
 
 .device-desktop .item-selected.item-blurred .item-name {
@@ -5684,8 +5918,9 @@ span.header-sort-icon img {
     padding: 0;
     border: 1px solid #9a9a9a;
     box-shadow: 0px 0px 15px #00000066;
-    border-radius: 4px;
+    border-radius: 12px;
     border: none;
+    overflow: hidden;
     transition: opacity .2s;
     user-select: none !important;
     -moz-user-select: none !important;
@@ -5766,19 +6001,25 @@ span.header-sort-icon img {
     overflow: hidden;
     flex-grow: 1;
     display: flex;
+    align-items: center;
+    min-width: 0;
 }
 
 .window-head {
     overflow: hidden !important;
     padding: 0;
+    height: 38px;
+    min-height: 38px;
+    border-radius: 12px 12px 0 0;
     background-color: hsla(var(--window-head-hue),
             var(--window-head-saturation),
             var(--window-head-lightness),
             calc(0.5 + 0.5 * var(--window-head-alpha)));
-    filter: grayscale(80%);
+    filter: grayscale(25%);
     box-shadow: inset 0px -4px 5px -7px rgb(0 0 0 / 64%);
     display: flex;
     flex-flow: row;
+    align-items: center;
     padding-left: 5px;
     margin-bottom: -1px;
 }
@@ -5801,8 +6042,7 @@ span.header-sort-icon img {
 }
 
 .window-head-title {
-    float: left;
-    line-height: 30px;
+    line-height: 1.2;
     font-size: 14px;
     /* color: #666d74; */
     margin-left: 10px;
@@ -5818,22 +6058,25 @@ span.header-sort-icon img {
 }
 
 .window-head-icon {
-    float: left;
     width: 16px;
     height: 16px;
     margin-left: 8px;
-    margin-top: 7px;
     margin-right: -5px;
+    margin-top: -1px;
+    flex-shrink: 0;
+    display: block;
     filter: drop-shadow(0px 0px 0.5px rgb(51, 51, 51));
 }
 
 .window-navbar {
     overflow: hidden;
     border-bottom: 1px solid var(--color-border);
-    padding: 5px 0 5px 1px;
+    padding: 5px 5px 5px 1px;
     background-color: var(--color-window-navbar);
     height: 48px;
     box-sizing: border-box;
+    display: flex;
+    align-items: center;
 }
 
 .window-navbar-btn {
@@ -5866,15 +6109,83 @@ span.header-sort-icon img {
     opacity: 1;
 }
 
-/* Layout settings icon in explorer also needs to be white in dark mode */
-.window-navbar-layout-settings img {
-    filter: invert(1) brightness(1.2) !important;
+/* Layout settings - Apple-style segmented toggle (Icons | List) */
+.window-navbar-layout-toggle {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    margin-left: 10px;
+    padding: 2px;
+    background: var(--color-bg-tertiary, #2d2d2d);
+    border-radius: 6px;
+    border: 1px solid var(--color-border, rgba(255,255,255,0.1));
+    box-sizing: border-box;
+}
+
+.window-navbar-layout-toggle .layout-toggle-segment {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 26px;
+    padding: 0;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.window-navbar-layout-toggle .layout-toggle-segment:hover {
+    background: rgba(255,255,255,0.08);
+}
+
+.window-navbar-layout-toggle .layout-toggle-segment.layout-toggle-segment-active {
+    background: rgba(255,255,255,0.15);
+}
+
+.window-navbar-layout-toggle .layout-toggle-segment img {
+    width: 16px;
+    height: 16px;
+    pointer-events: none;
+    filter: invert(1) brightness(1.2);
     opacity: 0.9;
 }
 
-[data-theme="light"] .window-navbar-layout-settings img {
-    filter: none !important;
-    opacity: 1;
+[data-theme="light"] .window-navbar-layout-toggle .layout-toggle-segment img {
+    filter: none;
+    opacity: 0.85;
+}
+
+[data-theme="light"] .window-navbar-layout-toggle {
+    background: #e5e7eb;
+    border-color: #d1d5db;
+}
+
+[data-theme="light"] .window-navbar-layout-toggle .layout-toggle-segment.layout-toggle-segment-active {
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+}
+
+.device-phone .window-navbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.device-phone .window-navbar-layout-toggle {
+    float: none;
+    margin-right: 10px;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+/* Legacy single icon (hide if present) */
+.window-navbar-layout-settings {
+    width: 30px;
+    height: 30px;
+    margin-left: 10px;
+    margin-top: 3px;
 }
 
 .window-navbar-path {
@@ -5885,12 +6196,13 @@ span.header-sort-icon img {
     color: var(--color-text-primary);
     text-overflow: ellipsis;
     white-space: nowrap;
-    overflow: hidden;
     -webkit-font-smoothing: antialiased;
     border: 1px solid var(--color-border);
     border-radius: 3px;
     background: var(--color-bg-tertiary);
     box-sizing: border-box;
+    flex: 1;
+    min-width: 0;
 
     user-select: none !important;
     -moz-user-select: none !important;
@@ -5902,6 +6214,7 @@ span.header-sort-icon img {
 .device-phone .window-navbar-path {
     display: none;
 }
+
 
 .window-navbar-layout-settings {
     width: 30px;
@@ -5958,9 +6271,22 @@ span.header-sort-icon img {
     text-decoration: underline;
 }
 
+/* Path segment hover: same blue as file explorer (path input focus) in dark mode */
+html:not([data-theme="light"]) .window-navbar-path-dirname:hover {
+    color: #00b6ff;
+    text-decoration: underline;
+}
+
 .path-seperator {
     width: 10px;
     opacity: 0.2;
+}
+
+/* Path separator arrows visible in dark mode (dark = no data-theme or not light) */
+html:not([data-theme="light"]) .path-seperator,
+[data-theme="dark"] .path-seperator {
+    opacity: 0.65;
+    filter: invert(1);
 }
 
 .window-body {
@@ -6044,7 +6370,9 @@ span.header-sort-icon img {
 .window-sidebar-title {
     margin: 0;
     font-weight: bold;
-    font-size: 13px;
+    font-size: 12px;
+    letter-spacing: 0.2px;
+    text-transform: uppercase;
     color: var(--primary-color);
     text-shadow: 1px 1px rgb(247 247 247 / 15%);
     -webkit-font-smoothing: antialiased;
@@ -6066,12 +6394,12 @@ span.header-sort-icon img {
 }
 
 .window-sidebar-item, .window-sidebar-item.grabbing {
-    margin-bottom: 6px;
-    margin-top: 2px;
-    padding: 4px;
-    border-radius: 3px;
+    margin-bottom: 4px;
+    margin-top: 1px;
+    padding: 4px 5px;
+    border-radius: 5px;
     color: var(--primary-color);
-    font-size: 13px;
+    font-size: 14px;
     cursor: pointer;
     transition: 0.15s background-color;
     box-sizing: border-box;
@@ -6114,25 +6442,103 @@ span.header-sort-icon img {
 }
 
 .window-sidebar-item-icon {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
     filter: drop-shadow(0px 0px 0.2px rgb(51, 51, 51));
-    margin-right: 5px;
+    margin-right: 6px;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    margin-bottom: -2px;
+    margin-bottom: -3px;
+}
+
+/* Apple-style sidebar: dark mode – unselected white, selected blue in rounded container */
+:root .window-sidebar .window-sidebar-title {
+    color: #8e8e93;
+}
+
+:root .window-sidebar .window-sidebar-item {
+    color: #ffffff;
+}
+
+:root .window-sidebar .window-sidebar-item .window-sidebar-item-icon {
+    filter: brightness(0) invert(1) drop-shadow(0 0 0.2px rgba(255,255,255,0.3));
+}
+
+:root .window-sidebar .window-sidebar-item:hover .window-sidebar-item-icon,
+:root .window-sidebar .window-sidebar-item.has-open-contextmenu .window-sidebar-item-icon {
+    filter: brightness(0) invert(1) drop-shadow(0 0 0.2px rgba(255,255,255,0.3));
+}
+
+:root .window-sidebar .window-sidebar-item-active,
+:root .window-sidebar .window-sidebar-item-active:hover,
+:root .window-sidebar .window-sidebar-item-drag-active {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    border-radius: 6px;
+    color: #007AFF !important;
+}
+
+:root .window-sidebar .window-sidebar-item-active .window-sidebar-item-icon,
+:root .window-sidebar .window-sidebar-item-active:hover .window-sidebar-item-icon,
+:root .window-sidebar .window-sidebar-item-drag-active .window-sidebar-item-icon {
+    filter: brightness(0) saturate(100%) invert(40%) sepia(98%) saturate(2000%) hue-rotate(197deg);
+}
+
+:root .window-sidebar .window-sidebar-item:hover,
+:root .window-sidebar .window-sidebar-item.has-open-contextmenu {
+    background-color: rgba(255, 255, 255, 0.06);
+}
+
+/* Apple-style sidebar: light mode – unselected dark, selected blue in rounded container */
+[data-theme="light"] .window-sidebar .window-sidebar-title {
+    color: #6b6b6b;
+}
+
+[data-theme="light"] .window-sidebar .window-sidebar-item {
+    color: #1d1d1f;
+}
+
+[data-theme="light"] .window-sidebar .window-sidebar-item .window-sidebar-item-icon {
+    filter: none;
+}
+
+[data-theme="light"] .window-sidebar .window-sidebar-item-active,
+[data-theme="light"] .window-sidebar .window-sidebar-item-active:hover,
+[data-theme="light"] .window-sidebar .window-sidebar-item-drag-active {
+    background-color: #e5e7eb !important;
+    border-radius: 6px;
+    color: #007AFF !important;
+}
+
+[data-theme="light"] .window-sidebar .window-sidebar-item-active .window-sidebar-item-icon,
+[data-theme="light"] .window-sidebar .window-sidebar-item-active:hover .window-sidebar-item-icon,
+[data-theme="light"] .window-sidebar .window-sidebar-item-drag-active .window-sidebar-item-icon {
+    filter: brightness(0) saturate(100%) invert(40%) sepia(98%) saturate(2000%) hue-rotate(197deg);
+}
+
+[data-theme="light"] .window-sidebar .window-sidebar-item:hover,
+[data-theme="light"] .window-sidebar .window-sidebar-item.has-open-contextmenu {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+[data-theme="light"] .window-sidebar .window-sidebar-item:hover .window-sidebar-item-icon,
+[data-theme="light"] .window-sidebar .window-sidebar-item.has-open-contextmenu .window-sidebar-item-icon {
+    filter: brightness(0) saturate(100%) invert(20%) sepia(10%) saturate(500%) hue-rotate(180deg);
 }
 
 .window[data-app="explorer"] .window-body {
-    height: calc(100% - 107px);
+    height: calc(100% - 115px);
 }
 
 .explorer-footer {
-    overflow: auto;
-    height: 30px;
+    overflow: hidden;
+    min-height: 38px;
+    height: 38px;
     font-size: 13px;
-    line-height: 28px;
-    padding-left: 10px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    padding: 6px 12px 14px 12px;
+    box-sizing: border-box;
     background-color: var(--color-window-navbar);
     border-top: 1px solid var(--color-border);
     color: var(--color-text-secondary);
@@ -6219,10 +6625,20 @@ span.header-sort-icon img {
 }
 
 .window-action-btn {
-    margin-right: 5px;
-    margin-left: 10px;
-    padding-bottom: 3px;
-    opacity: 0.6;
+    margin-right: 4px;
+    margin-left: 6px;
+    padding: 4px;
+    border-radius: 6px;
+    opacity: 0.75;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+
+.window-action-btn:hover {
+    background-color: rgba(0, 0, 0, 0.12);
+    opacity: 1;
 }
 
 .window-active .window-action-btn {
@@ -6230,11 +6646,10 @@ span.header-sort-icon img {
 }
 
 .window-action-btn>img {
-    width: 18px;
-    margin-top: 5px;
-    margin-right: 4px;
-    margin-left: 4px;
-    opacity: 0.5;
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    opacity: 0.85;
     -webkit-user-drag: none;
     user-select: none;
     -moz-user-select: none;
@@ -6248,9 +6663,12 @@ span.header-sort-icon img {
 }
 
 .window-scale-btn>img {
-    width: 15px;
-    height: 15px;
-    margin-top: 7px
+    width: 14px;
+    height: 14px;
+}
+
+[data-theme="light"] .window-action-btn:hover {
+    background-color: rgba(0, 0, 0, 0.08);
 }
 
 .window-app-iframe {
@@ -6405,7 +6823,7 @@ span.header-sort-icon img {
     font-family: 'PP Telegraf';
     background-color: var(--color-menu-bg);
     color: var(--color-menu-text);
-    border-radius: 2px;
+    border-radius: 12px;
     padding: 3px 0;
     min-width: 200px;
     border: 1px solid var(--color-border);
@@ -6573,6 +6991,61 @@ span.header-sort-icon img {
     cursor: initial;
 }
 
+/* Profile dropdown: wallet/smart account rows are display-only, no hover, match menu bg */
+.context-menu[data-id="user-options-menu"] .context-menu-item-disabled {
+    opacity: 1;
+    pointer-events: none;
+    cursor: default;
+    background-color: transparent !important;
+    color: var(--color-menu-text) !important;
+}
+.context-menu[data-id="user-options-menu"] .context-menu-item-disabled:hover,
+.context-menu[data-id="pc2-menu"] .context-menu-item-disabled:hover {
+    opacity: 1;
+    background-color: transparent !important;
+    color: var(--color-menu-text) !important;
+}
+.context-menu[data-id="pc2-menu"] .context-menu-item-disabled {
+    opacity: 1;
+    pointer-events: none;
+    cursor: default;
+    background-color: transparent !important;
+}
+.context-menu[data-id="pc2-menu"] .pc2-privacy-toggle {
+    pointer-events: auto;
+    cursor: pointer;
+}
+/* Dark mode: ensure disabled rows and their inner text/spans are light (override color: initial) */
+html:not([data-theme="light"]) .context-menu[data-id="user-options-menu"] .context-menu-item-disabled,
+html:not([data-theme="light"]) .context-menu[data-id="user-options-menu"] .context-menu-item-disabled span {
+    color: var(--color-menu-text) !important;
+}
+html:not([data-theme="light"]) .context-menu[data-id="user-options-menu"] .context-menu-item-disabled svg {
+    stroke: var(--color-menu-text) !important;
+    color: var(--color-menu-text) !important;
+}
+
+/* Invisible divider in profile menu: keep spacing, hide the line so UniversalX text is visible */
+.context-menu[data-id="user-options-menu"] .context-menu-divider > hr {
+    border: none !important;
+    height: 0;
+}
+.context-menu[data-id="user-options-menu"] .context-menu-divider {
+    padding-top: 6px;
+    padding-bottom: 6px;
+}
+
+/* Switch Account row: align label left with icon/address column (no extra indent) */
+.context-menu[data-id="user-options-menu"] .context-menu-item-disabled:has([data-section="switch-account"]) .context-menu-item-icon {
+    width: 0;
+    min-width: 0;
+    margin-right: 0;
+    overflow: hidden;
+}
+.context-menu[data-id="user-options-menu"] .context-menu-item-disabled:has([data-section="switch-account"]) .contextmenu-label {
+    margin-left: 0;
+}
+
 .context-menu-item-icon, .context-menu-item-icon-active {
     display: inline-block;
     width: 20px;
@@ -6709,6 +7182,70 @@ label {
     }
 }
 
+/* Full-width top bar (Ubuntu/GNOME style, optional via Settings) */
+.topbar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 36px;
+    background-color: #1a1a1a;
+    z-index: 9997;
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 14px;
+    box-sizing: border-box;
+}
+
+@supports ((backdrop-filter: blur())) {
+    .topbar {
+        background-color: #00000060;
+        backdrop-filter: blur(14px);
+    }
+}
+
+.topbar-left,
+.topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+}
+
+.topbar-right {
+    justify-content: flex-end;
+}
+
+.topbar-center {
+    flex: 0 0 auto;
+}
+
+.topbar-clock {
+    color: white;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 36px;
+    white-space: nowrap;
+    opacity: 0.9;
+    margin-left: 12px;
+}
+
+.topbar.active {
+    display: flex;
+}
+
+/* Allow PC2 status dot to show (it sits at bottom-right, avoid clipping) */
+.topbar .pc2-status-bar,
+.toolbar .pc2-status-bar {
+    overflow: visible !important;
+}
+
+.device-phone .topbar {
+    display: none !important;
+}
+
 .toolbar-btn {
     padding: 4px;
     font-size: 14px;
@@ -6732,7 +7269,10 @@ label {
     opacity: 0.8;
 }
 
-.toolbar-btn:hover {
+.toolbar-btn:hover:not(.toolbar-puter-logo) {
+    opacity: 1 !important;
+}
+.toolbar-puter-logo {
     opacity: 1 !important;
 }
 
@@ -6763,7 +7303,7 @@ label {
     padding: 0 15px;
 }
 
-.toolbar-btn:hover:not(.has-open-contextmenu) {
+.toolbar-btn:hover:not(.has-open-contextmenu):not(.toolbar-puter-logo) {
     background-color: rgb(255 255 255 / 15%);
     border-radius: 3px;
 }
@@ -7256,18 +7796,28 @@ label {
         0 4px 16px rgba(0, 0, 0, 0.2);
 }
 
-/* Bottom positioned taskbar (default) */
+/* Bottom positioned taskbar (default) – dock-style: floating pill, centered */
 .taskbar.taskbar-position-bottom {
-    bottom: 5px;
+    bottom: 12px;
     left: 50%;
     right: auto;
     top: auto;
-    width: auto;
+    width: max-content;
+    max-width: calc(100vw - 48px);
     height: 50px;
     transform: translateX(-50%);
     flex-direction: row;
     justify-content: center;
     writing-mode: initial;
+    border-radius: 24px;
+    padding-left: 12px;
+    padding-right: 12px;
+}
+
+@supports (backdrop-filter: blur(12px)) {
+    .taskbar.taskbar-position-bottom {
+        backdrop-filter: blur(12px);
+    }
 }
 
 /* Left positioned taskbar */
@@ -7335,7 +7885,8 @@ label {
 .taskbar .taskbar-item-sortable-placeholder, .taskbar .taskbar-item {
     width: 40px;
     height: 40px;
-    padding: 6px 5px 10px 5px;
+    /* Symmetric vertical padding so icons sit centered in the taskbar (was 6px 5px 10px 5px) */
+    padding: 5px;
 }
 
 .taskbar .taskbar-item .taskbar-icon {
@@ -7431,6 +7982,14 @@ label {
     border-radius: 0.5px;
 }
 
+:root .taskbar.taskbar-position-bottom .taskbar-item[data-app="separator"] .taskbar-icon::after {
+    background-color: rgba(255, 255, 255, 0.25);
+}
+
+[data-theme="light"] .taskbar.taskbar-position-bottom .taskbar-item[data-app="separator"] .taskbar-icon::after {
+    background-color: rgba(0, 0, 0, 0.3);
+}
+
 /* Horizontal separator for left/right taskbar */
 .taskbar.taskbar-position-left .taskbar-item[data-app="separator"] .taskbar-icon::after,
 .taskbar.taskbar-position-right .taskbar-item[data-app="separator"] .taskbar-icon::after {
@@ -7439,6 +7998,16 @@ label {
     height: 1px;
     background-color: rgba(0, 0, 0, 0.3);
     border-radius: 0.5px;
+}
+
+:root .taskbar.taskbar-position-left .taskbar-item[data-app="separator"] .taskbar-icon::after,
+:root .taskbar.taskbar-position-right .taskbar-item[data-app="separator"] .taskbar-icon::after {
+    background-color: rgba(255, 255, 255, 0.25);
+}
+
+[data-theme="light"] .taskbar.taskbar-position-left .taskbar-item[data-app="separator"] .taskbar-icon::after,
+[data-theme="light"] .taskbar.taskbar-position-right .taskbar-item[data-app="separator"] .taskbar-icon::after {
+    background-color: rgba(0, 0, 0, 0.3);
 }
 
 /* Hide separator on mobile devices */
@@ -7563,18 +8132,14 @@ label {
     display: none;
     color: white;
     font-size: 13px;
-    background-color: #00000056;
+    /* Seamless with toolbar: no separate pill, use toolbar background */
+    background: transparent;
     margin-right: 20px;
     margin-left: 12px;
-    /* prevent clock from moving other taskbar items */
     height: 22px;
     line-height: 22px;
-
-    /* line-height above handles vertical padding */
     padding: 0 5px;
-
-    border-radius: 5px;
-    opacity: 0.8;
+    opacity: 0.9;
 }
 
 .toolbar-spacer {
@@ -7629,7 +8194,7 @@ label {
         height: 40px !important;
         margin-right: 5px;
         overflow: visible !important;
-        padding: 5px 5px 10px 5px;
+        padding: 5px !important;
     }
 
     .taskbar-icon {
@@ -7829,12 +8394,20 @@ label {
     overflow: hidden;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
     background: transparent;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity 0.2s ease-out, transform 0.2s ease-out;
+}
+
+.popover.popover-visible {
+    opacity: 1;
+    transform: translateY(0);
 }
 
 @supports ((backdrop-filter: blur())) {
     .launch-popover {
         background-color: var(--color-bg-surface);
-        backdrop-filter: blur(10px);
+        backdrop-filter: blur(12px);
     }
 }
 
@@ -7999,8 +8572,8 @@ label {
     padding: 20px 20px 20px;
     border: 1px solid var(--color-border);
     border-radius: 16px;
-    background-color: var(--color-bg-secondary);
-    backdrop-filter: blur(10px);
+    background-color: var(--color-bg-surface);
+    backdrop-filter: blur(12px);
     box-sizing: border-box;
     overflow-y: scroll;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
@@ -8389,7 +8962,11 @@ fieldset[name=number-code] {
 
     .context-menu {
         background-color: var(--color-menu-bg);
-        backdrop-filter: blur(3px);
+        backdrop-filter: blur(12px);
+    }
+
+    [data-theme="light"] .context-menu {
+        background-color: rgba(255, 255, 255, 0.92) !important;
     }
 
     .popover:not(.device-phone .popover) {
@@ -8465,15 +9042,25 @@ fieldset[name=number-code] {
     background-repeat: no-repeat;
     width: 100%;
     box-sizing: border-box;
-    background-color: #3a3a3c;
-    color: #ffffff;
+    background-color: var(--color-bg-surface);
+    color: var(--color-text-primary);
     padding: 5px;
     background-size: 20px;
     background-position-y: center;
     background-position-x: 5px;
     padding-left: 35px;
     padding-right: 35px;
-    border: 2px solid #4a4a4c;
+    border: 2px solid var(--color-border);
+}
+
+.launch-search:focus,
+.launch-search:focus-visible {
+    outline: none;
+    border-color: var(--color-border);
+    box-shadow: none;
+    padding: 5px;
+    padding-left: 35px;
+    padding-right: 35px;
 }
 
 .launch-search::placeholder {
@@ -10033,8 +10620,8 @@ fieldset[name=number-code] {
 .search-input-wrapper {
     width: 100%;
     border-radius: 5px;
-    padding-bottom: 10px;
-    padding-top: 20px;
+    padding-bottom: 15px;
+    padding-top: 15px;
     position: absolute;
     padding-left: 15px;
     padding-right: 15px;
@@ -10089,7 +10676,7 @@ fieldset[name=number-code] {
 
 .device-phone .window.window-explore {
     border-radius: 0;
-    height: 100dvh !important;
+    height: calc(100dvh - 62px) !important;
 }
 
 .device-phone .window.window-search {
@@ -10131,8 +10718,8 @@ fieldset[name=number-code] {
     transform: none;
     width: 100% !important;
     left: 0 !important;
-    min-height: 100dvh;
-    height: 100dvh;
+    min-height: calc(100dvh - 62px);
+    height: calc(100dvh - 62px);
     top: 0 !important;
     border-radius: 0 !important;
 }
@@ -10141,8 +10728,8 @@ fieldset[name=number-code] {
     transform: none;
     width: 100%;
     left: 0;
-    height: 100dvh;
-    min-height: 100dvh;
+    height: calc(100dvh - 62px);
+    min-height: calc(100dvh - 62px);
     top: 0 !important;
     border-radius: 0;
 }
@@ -10158,8 +10745,8 @@ fieldset[name=number-code] {
     transform: none;
     width: 100%;
     left: 0;
-    min-height: 100dvh;
-    height: 100dvh;
+    min-height: calc(100dvh - 62px);
+    height: calc(100dvh - 62px);
     top: 0 !important;
     border-radius: 0 !important;
 }
@@ -10169,7 +10756,7 @@ fieldset[name=number-code] {
     transform: none;
     width: 100% !important;
     left: 0 !important;
-    height: 100dvh;
+    height: calc(100dvh - 62px);
     top: 0 !important;
     border-radius: 0;
 }
@@ -10203,7 +10790,9 @@ fieldset[name=number-code] {
     writing-mode: initial !important;
     padding: 0 7px !important;
     border-radius: 10px !important;
-    
+    /* Above windows on mobile so taskbar is always visible (persistent bottom nav) */
+    z-index: 100000000 !important;
+
     /* Enable smooth scrolling */
     -webkit-overflow-scrolling: touch;
     /* Allow horizontal touch scrolling */
@@ -10286,7 +10875,7 @@ fieldset[name=number-code] {
     position: sticky;
     top: -20px;
     z-index: 1;
-    background: var(--color-bg-tertiary);
+    background: var(--color-bg-surface);
     padding-top: 7px;
     border-radius: 6px;
 }
@@ -10367,7 +10956,7 @@ fieldset[name=number-code] {
 
 [data-theme="light"] .device-phone .launch-search-wrapper,
 [data-theme="light"] .device-tablet .launch-search-wrapper {
-    background: #ffffff !important;
+    background: var(--color-bg-surface) !important;
 }
 
 [data-theme="light"] .device-phone .start-app:hover,
@@ -10711,7 +11300,7 @@ fieldset[name=number-code] {
     align-items: center;
     gap: 8px;
     padding: 10px 15px;
-    margin: 10px 10px 0 10px;
+    margin: 6px 10px 14px 10px;
     background: #fff3cd !important;
     border: 1px solid #ffc107 !important;
     border-radius: 6px;
@@ -10965,3 +11554,291 @@ fieldset[name=number-code] {
 [data-theme="light"] .agent-row > .ai-card-row > div > div:last-child {
     color: #999;
 }
+
+/* ========================================
+   Workspace Indicator (dots in topbar/toolbar)
+   ======================================== */
+.workspace-indicator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 10px;
+    padding: 3px 8px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.workspace-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.3);
+    cursor: pointer;
+    transition: background 0.15s, transform 0.15s;
+}
+
+.workspace-dot:hover {
+    background: rgba(255, 255, 255, 0.6);
+    transform: scale(1.2);
+}
+
+.workspace-dot.active {
+    background: #fff;
+}
+
+[data-theme="light"] .workspace-indicator {
+    background: rgba(0, 0, 0, 0.06);
+}
+
+.device-phone .workspace-indicator,
+.device-phone .mission-control-btn {
+    display: none !important;
+}
+
+[data-theme="light"] .workspace-dot {
+    background: rgba(0, 0, 0, 0.2);
+}
+
+[data-theme="light"] .workspace-dot:hover {
+    background: rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="light"] .workspace-dot.active {
+    background: #333;
+}
+
+/* ========================================
+   Mission Control Overlay
+   ======================================== */
+.mc-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 99999;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    display: flex;
+    flex-direction: column;
+    opacity: 0;
+    transition: opacity 0.25s ease;
+    overflow: hidden;
+}
+
+.mc-overlay.mc-visible {
+    opacity: 1;
+}
+
+/* Workspace strip at top */
+.mc-workspace-strip {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 20px 30px 16px;
+    overflow-x: auto;
+    flex-shrink: 0;
+    justify-content: center;
+}
+
+.mc-workspace-thumb {
+    position: relative;
+    min-width: 160px;
+    max-width: 200px;
+    height: 110px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 2px solid rgba(255, 255, 255, 0.15);
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    overflow: visible;
+    transition: border-color 0.15s, transform 0.15s, background 0.15s;
+    flex-shrink: 0;
+}
+
+.mc-workspace-thumb:hover {
+    border-color: rgba(255, 255, 255, 0.35);
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.mc-workspace-thumb.active {
+    border-color: #3b82f6;
+    background: rgba(59, 130, 246, 0.12);
+}
+
+.mc-workspace-thumb.mc-drag-over {
+    border-color: #22c55e;
+    background: rgba(34, 197, 94, 0.15);
+    transform: scale(1.05);
+}
+
+.mc-workspace-thumb-label {
+    padding: 6px 10px 2px;
+    font-size: 11px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.85);
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mc-workspace-thumb-preview {
+    flex: 1;
+    min-height: 75px;
+    position: relative;
+    overflow: hidden;
+    border-radius: 0 0 8px 8px;
+}
+
+.mc-thumb-clone {
+    pointer-events: none !important;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.35) !important;
+    border-radius: 6px !important;
+    overflow: hidden !important;
+}
+
+.mc-thumb-clone * {
+    pointer-events: none !important;
+    animation: none !important;
+    transition: none !important;
+}
+
+.mc-thumb-iframe-placeholder {
+    width: 100% !important;
+    height: 100% !important;
+    background: linear-gradient(135deg, rgba(240,240,245,0.95) 0%, rgba(225,228,235,0.9) 100%);
+    display: flex !important;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.mc-workspace-remove {
+    position: absolute;
+    top: -8px;
+    left: -8px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #ef4444;
+    color: white;
+    font-size: 14px;
+    line-height: 20px;
+    text-align: center;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 10;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+
+.mc-workspace-thumb:hover .mc-workspace-remove {
+    opacity: 1;
+}
+
+.mc-workspace-add {
+    min-width: 44px;
+    height: 110px;
+    border-radius: 10px;
+    border: 2px dashed rgba(255, 255, 255, 0.25);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    color: rgba(255, 255, 255, 0.4);
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+    flex-shrink: 0;
+}
+
+.mc-workspace-add:hover {
+    border-color: rgba(255, 255, 255, 0.5);
+    color: rgba(255, 255, 255, 0.8);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+/* Window spread area */
+.mc-window-spread {
+    flex: 1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 30px;
+    padding: 30px 50px;
+    align-items: center;
+    justify-content: center;
+    align-content: center;
+    overflow-y: auto;
+}
+
+
+/* Spread windows - actual window elements repositioned */
+.mc-spread-window {
+    pointer-events: none !important;
+}
+
+/* Click-target overlays above each spread window */
+.mc-click-target {
+    background: transparent;
+    transition: background 0.15s;
+}
+
+.mc-click-target:hover {
+    background: rgba(59, 130, 246, 0.08);
+}
+
+.mc-empty-label {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.4);
+    text-align: center;
+}
+
+/* Light mode variants */
+[data-theme="light"] .mc-overlay {
+    background: rgba(230, 230, 230, 0.82);
+}
+
+[data-theme="light"] .mc-workspace-thumb {
+    background: rgba(0, 0, 0, 0.05);
+    border-color: rgba(0, 0, 0, 0.12);
+}
+
+[data-theme="light"] .mc-workspace-thumb:hover {
+    border-color: rgba(0, 0, 0, 0.25);
+    background: rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .mc-workspace-thumb.active {
+    border-color: #3b82f6;
+    background: rgba(59, 130, 246, 0.08);
+}
+
+[data-theme="light"] .mc-workspace-thumb-label {
+    color: rgba(0, 0, 0, 0.8);
+}
+
+
+[data-theme="light"] .mc-workspace-remove {
+    background: #dc2626;
+}
+
+[data-theme="light"] .mc-workspace-add {
+    border-color: rgba(0, 0, 0, 0.2);
+    color: rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="light"] .mc-workspace-add:hover {
+    border-color: rgba(0, 0, 0, 0.4);
+    color: rgba(0, 0, 0, 0.6);
+    background: rgba(0, 0, 0, 0.04);
+}
+
+[data-theme="light"] .mc-empty-label {
+    color: rgba(0, 0, 0, 0.35);
+}
+

@@ -81,6 +81,11 @@ export default {
                                 <button class="button ai-btn" id="ai-download-selected-btn" style="background: #10b981; color: white;">Download</button>
                             </div>
                             <div id="ai-selected-model-info" style="font-size: 10px; color: #666; display: none;"></div>
+                            <div style="display: flex; gap: 6px; align-items: center; margin-top: 6px; padding-top: 6px; border-top: 1px solid #e5e5e5;">
+                                <input type="text" id="ai-custom-model-input" placeholder="Or type any model e.g. orieg/gemma3-tools:4b" style="flex: 1; padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 11px;">
+                                <button class="button ai-btn" id="ai-custom-model-pull-btn" style="background: #3b82f6; color: white; white-space: nowrap;">Pull</button>
+                            </div>
+                            <div style="font-size: 9px; color: #999; margin-top: 2px;">Browse models at <a href="https://ollama.com/library" target="_blank" style="color: #3b82f6; text-decoration: none;">ollama.com/library</a></div>
                         </div>
                     </div>
                 </div>
@@ -95,6 +100,37 @@ export default {
                         <div id="ai-download-progress-bar" style="background: #3b82f6; height: 100%; width: 0%; transition: width 0.3s;"></div>
                     </div>
                     <p id="ai-download-status" style="font-size: 10px; color: #666; margin: 4px 0 0;"></p>
+                </div>
+            </div>
+            
+            <!-- Voice AI -->
+            <div class="ai-section">
+                <div class="ai-section-title">Voice AI</div>
+                <div class="ai-group">
+                    <div class="ai-group-row" style="background: #fffbeb; border-bottom: 1px solid #fde68a;">
+                        <div style="display: flex; align-items: flex-start; gap: 8px;">
+                            <span style="font-size: 14px; line-height: 1;">&#9888;</span>
+                            <span style="font-size: 10px; color: #92400e; line-height: 1.4;">Voice AI uses ~500MB+ GPU memory. On devices with limited memory (e.g. Jetson), this may prevent Ollama models from loading.</span>
+                        </div>
+                    </div>
+                    <div class="ai-group-row" id="voice-actions-row">
+                        <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+                            <span class="ai-card-label">Voice AI (Whisper)</span>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <span id="voice-install-status" style="font-size: 10px; color: #666; display: none;"></span>
+                                <div id="voice-toggle-container" style="display: none; align-items: center; gap: 8px;">
+                                    <label style="font-size: 12px; font-weight: 500; color: #333; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                                        <span>Enabled</span>
+                                        <input type="checkbox" id="voice-toggle" style="width: 16px; height: 16px; cursor: pointer;">
+                                    </label>
+                                </div>
+                                <div id="voice-install-container" style="display: none;">
+                                    <button class="button ai-btn" id="voice-install-btn" style="background: #3b82f6; color: white;">Install</button>
+                                </div>
+                                <span id="voice-status-label" class="ai-card-value" style="font-size: 11px;">Checking...</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
             
@@ -203,7 +239,7 @@ export default {
                 .ai-status-dot.available {
                     background: #10b981;
                 }
-                .ai-status-dot.error {
+                .ai-status-dot.unavailable {
                     background: #dc2626;
                 }
                 .ai-status-dot.no-models {
@@ -297,12 +333,12 @@ export default {
                 const statusDot = $el_window.find('#ai-status-dot');
                 const statusText = $el_window.find('#ai-status-text');
                 
-                statusDot.removeClass('available error no-models');
+                statusDot.removeClass('available unavailable no-models');
                 if (config.provider_status === 'available') {
                     statusDot.addClass('available');
                     statusText.text('Available');
                 } else if (config.provider_status === 'error') {
-                    statusDot.addClass('error');
+                    statusDot.addClass('unavailable');
                     statusText.text('Error');
                 } else if (config.provider_status === 'no_models') {
                     statusDot.addClass('no-models');
@@ -334,7 +370,7 @@ export default {
                 $el_window.find('#ai-current-model').text('deepseek-r1:1.5b');
                 const statusDot = $el_window.find('#ai-status-dot');
                 const statusText = $el_window.find('#ai-status-text');
-                statusDot.removeClass('available error no-models').addClass('no-models');
+                statusDot.removeClass('available unavailable no-models').addClass('no-models');
                 statusText.text('Unable to connect to server');
             }
         }
@@ -915,8 +951,10 @@ export default {
         // Populate dropdown with default models if API fails
         function populateDefaultDropdown() {
             const defaultModels = [
+                { id: 'orieg/gemma3-tools:4b', name: 'Gemma 3 Tools 4B', size: '3.3GB', recommended: true, communityPick: true },
                 { id: 'gemma3:4b-it-qat', name: 'Gemma 3 4B IT QAT', size: '2.5GB', recommended: true, communityPick: true },
                 { id: 'qwen3:4b', name: 'Qwen 3 4B', size: '2.6GB', recommended: true },
+                { id: 'qwen3.5:35b-a3b', name: 'Qwen 3.5 35B-A3B (MoE)', size: '24GB', communityPick: true },
                 { id: 'llama3.2:3b', name: 'Llama 3.2 3B', size: '2.0GB', recommended: true },
                 { id: 'deepseek-r1:1.5b', name: 'DeepSeek R1 1.5B', size: '1.1GB' },
                 { id: 'deepseek-r1:7b', name: 'DeepSeek R1 7B', size: '4.7GB' },
@@ -1070,36 +1108,35 @@ export default {
                     
                     for (const line of lines) {
                         if (line.startsWith('data: ')) {
+                            let data;
                             try {
-                                const data = JSON.parse(line.slice(6));
-                                
-                                if (data.error) {
-                                    throw new Error(data.error);
-                                }
-                                
-                                if (data.status === 'success') {
-                                    $progressBar.css('width', '100%');
-                                    $status.text('Download complete!');
-                                    setTimeout(() => {
-                                        $progress.hide();
-                                        loadModelLibrary();
-                                    }, 1500);
-                                    return;
-                                }
-                                
-                                // Update progress
-                                if (data.total && data.completed) {
-                                    const percent = Math.round((data.completed / data.total) * 100);
-                                    $progressBar.css('width', `${percent}%`);
-                                    const completedMB = (data.completed / 1024 / 1024).toFixed(1);
-                                    const totalMB = (data.total / 1024 / 1024).toFixed(1);
-                                    $status.text(`${completedMB}MB / ${totalMB}MB (${percent}%)`);
-                                } else if (data.status) {
-                                    $status.text(data.status);
-                                }
-                                
-                            } catch (parseError) {
-                                // Ignore parse errors
+                                data = JSON.parse(line.slice(6));
+                            } catch {
+                                continue;
+                            }
+
+                            if (data.error) {
+                                throw new Error(data.error);
+                            }
+
+                            if (data.status === 'success') {
+                                $progressBar.css('width', '100%');
+                                $status.text('Download complete!');
+                                setTimeout(() => {
+                                    $progress.hide();
+                                    loadModelLibrary();
+                                }, 1500);
+                                return;
+                            }
+
+                            if (data.total && data.completed) {
+                                const percent = Math.round((data.completed / data.total) * 100);
+                                $progressBar.css('width', `${percent}%`);
+                                const completedMB = (data.completed / 1024 / 1024).toFixed(1);
+                                const totalMB = (data.total / 1024 / 1024).toFixed(1);
+                                $status.text(`${data.status || 'Downloading'}: ${completedMB}MB / ${totalMB}MB (${percent}%)`);
+                            } else if (data.status) {
+                                $status.text(data.status);
                             }
                         }
                     }
@@ -1272,8 +1309,162 @@ export default {
             await downloadModel(modelId, modelName);
         });
         
+        // Custom model pull button
+        $el_window.find('#ai-custom-model-pull-btn').off('click').on('click', async function() {
+            const customModel = $el_window.find('#ai-custom-model-input').val()?.trim();
+            if (!customModel) {
+                alert('Please enter a model name (e.g. orieg/gemma3-tools:4b)');
+                return;
+            }
+            $el_window.find('#ai-custom-model-input').val('');
+            await downloadModel(customModel, customModel);
+        });
+        
+        // Allow Enter key in custom model input
+        $el_window.find('#ai-custom-model-input').off('keydown').on('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                $el_window.find('#ai-custom-model-pull-btn').click();
+            }
+        });
+        
         // Load model library on init
         loadModelLibrary();
+
+        // ============================================================
+        // VOICE AI HANDLERS
+        // ============================================================
+
+        async function loadVoiceStatus() {
+            try {
+                const apiOrigin = getAPIOrigin();
+                const url = new URL('/api/ai/voice/status', apiOrigin);
+                const authToken = getAuthToken();
+
+                const headers = { 'Content-Type': 'application/json' };
+                if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+                const response = await fetch(url.toString(), { method: 'GET', headers });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                const installed = data.whisper?.available;
+                const $toggleContainer = $el_window.find('#voice-toggle-container');
+                const $installContainer = $el_window.find('#voice-install-container');
+                const $statusLabel = $el_window.find('#voice-status-label');
+
+                if (installed) {
+                    $toggleContainer.css('display', 'flex');
+                    $installContainer.hide();
+                    $el_window.find('#voice-toggle').prop('checked', data.ready);
+                    $statusLabel.text(data.ready ? 'Running' : 'Installed');
+                } else {
+                    $toggleContainer.hide();
+                    $installContainer.show();
+                    $statusLabel.text('Not installed');
+                }
+
+                return data;
+            } catch (error) {
+                console.error('[AI Settings] Error loading voice status:', error);
+                $el_window.find('#voice-install-container').show();
+                $el_window.find('#voice-status-label').text('Not installed');
+                return null;
+            }
+        }
+
+        $el_window.find('#voice-toggle').off('change').on('change', async function() {
+            const enabled = $(this).prop('checked');
+            const action = enabled ? 'enable' : 'disable';
+            const $installStatus = $el_window.find('#voice-install-status');
+
+            try {
+                $(this).prop('disabled', true);
+                $installStatus.text(enabled ? 'Starting whisper-server...' : 'Stopping whisper-server...').show();
+
+                const apiOrigin = getAPIOrigin();
+                const url = new URL(`/api/ai/voice/${action}`, apiOrigin);
+                const authToken = getAuthToken();
+
+                const headers = { 'Content-Type': 'application/json' };
+                if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+                const response = await fetch(url.toString(), { method: 'POST', headers });
+                const data = await response.json();
+
+                if (!data.success) {
+                    throw new Error(data.error || `Failed to ${action} voice`);
+                }
+
+                $installStatus.text(enabled ? 'Voice AI enabled' : 'Voice AI disabled');
+                setTimeout(() => $installStatus.hide(), 2000);
+                await loadVoiceStatus();
+            } catch (error) {
+                console.error(`[AI Settings] Error ${action} voice:`, error);
+                $installStatus.text(`Error: ${error.message}`);
+                $(this).prop('checked', !enabled);
+            } finally {
+                $(this).prop('disabled', false);
+            }
+        });
+
+        $el_window.find('#voice-install-btn').off('click').on('click', async function() {
+            const $btn = $(this);
+            const $installStatus = $el_window.find('#voice-install-status');
+
+            try {
+                $btn.prop('disabled', true).text('Installing...');
+                $installStatus.text('Installation started. This may take 10-15 minutes...').show();
+
+                const apiOrigin = getAPIOrigin();
+                const url = new URL('/api/ai/voice/install', apiOrigin);
+                const authToken = getAuthToken();
+
+                const headers = { 'Content-Type': 'application/json' };
+                if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+                const response = await fetch(url.toString(), { method: 'POST', headers });
+                const data = await response.json();
+
+                if (!data.success) {
+                    throw new Error(data.error || 'Install failed');
+                }
+
+                $installStatus.text(data.message || 'Installing... Check back in a few minutes.');
+
+                // Poll voice status every 30s until ready
+                const pollInterval = setInterval(async () => {
+                    const status = await loadVoiceStatus();
+                    if (status && status.ready) {
+                        clearInterval(pollInterval);
+                        $btn.prop('disabled', false).text('Install Voice AI');
+                        $installStatus.text('Voice AI installed successfully!');
+                        setTimeout(() => $installStatus.hide(), 3000);
+                    }
+                }, 30000);
+
+                // Stop polling after 20 minutes
+                setTimeout(() => {
+                    clearInterval(pollInterval);
+                    $btn.prop('disabled', false).text('Install Voice AI');
+                    if ($installStatus.is(':visible')) {
+                        $installStatus.text('Installation may still be running. Refresh to check status.');
+                    }
+                }, 20 * 60 * 1000);
+
+            } catch (error) {
+                console.error('[AI Settings] Voice install error:', error);
+                $installStatus.text(`Error: ${error.message}`);
+                $btn.prop('disabled', false).text('Install Voice AI');
+            }
+        });
+
+        // Load voice status on init
+        loadVoiceStatus();
 
         // ============================================================
         // MESSAGING CHANNELS HANDLERS

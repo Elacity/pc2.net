@@ -14,8 +14,88 @@ import http from "http";
 import https from "https";
 import path from "path";
 import net from "net";
+import zlib from "zlib";
+import { execSync } from "child_process";
 import httpProxy from "http-proxy";
 const { createProxyServer } = httpProxy;
+
+// ============================================================================
+// Performance: Keep-alive agent for WireGuard / direct HTTP proxy targets.
+// Reuses TCP connections to PC2 nodes instead of opening one per request.
+// NOT used for Boson ActiveProxy (requires Connection: close).
+// ============================================================================
+const keepAliveAgent = new http.Agent({
+  keepAlive: true,
+  maxSockets: 64,
+  maxFreeSockets: 8,
+  timeout: 30_000,
+  freeSocketTimeout: 15_000,
+});
+
+// Periodically destroy free (idle) sockets so stale connections from
+// rebooted WireGuard peers do not accumulate and block new requests.
+setInterval(() => {
+  const freeSockets = keepAliveAgent.freeSockets;
+  let destroyed = 0;
+  for (const [key, sockets] of Object.entries(freeSockets)) {
+    for (const sock of sockets) {
+      sock.destroy();
+      destroyed++;
+    }
+  }
+  if (destroyed > 0) {
+    console.log(`[Gateway] Evicted ${destroyed} idle keep-alive sockets`);
+  }
+}, 30_000);
+
+// Tunnel peer health-check: probe registered WireGuard (10.100) and AmneziaWG (10.101) endpoints every 60s.
+// If a peer is unreachable (connection refused / timeout), destroy its pooled
+// sockets so the next real request gets a clean connection or a fast 502.
+setInterval(() => {
+  for (const [username, info] of registry) {
+    if (!info.endpoint || !(info.endpoint.startsWith("http://10.100.") || info.endpoint.startsWith("http://10.101."))) continue;
+
+    const url = new URL(info.endpoint);
+    const probe = http.request({
+      hostname: url.hostname,
+      port: url.port || 4200,
+      path: "/?healthcheck=gateway",
+      method: "HEAD",
+      timeout: 5000,
+    }, (res) => {
+      res.resume();
+    });
+
+    probe.on("error", () => {
+      // Peer is down -- flush any pooled sockets for this host
+      const hostKey = url.hostname + ":" + (url.port || 4200) + ":";
+      const freeSockets = keepAliveAgent.freeSockets;
+      for (const [key, sockets] of Object.entries(freeSockets)) {
+        if (key.includes(hostKey)) {
+          for (const sock of sockets) sock.destroy();
+          console.log(`[Gateway] Health-check: flushed stale sockets for ${username} (${info.endpoint})`);
+        }
+      }
+    });
+
+    probe.on("timeout", () => {
+      probe.destroy();
+    });
+
+    probe.end();
+  }
+}, 60_000);
+
+// ============================================================================
+// Performance: Compression + cache header configuration
+// ============================================================================
+const COMPRESSIBLE_TYPES = /^text\/|\/json|\/javascript|\/xml|\+xml|\/svg/;
+const MIN_COMPRESS_SIZE = 1024; // Don't compress responses under 1KB
+
+const STATIC_CACHE_RULES = {
+  long:  { maxAge: 604800, extensions: /\.(png|jpe?g|gif|webp|ico|woff2?|ttf|eot)$/i },
+  medium: { maxAge: 86400, extensions: /\.(js|css|svg|map)$/i },
+};
 
 // Configuration (supports environment variables for multi-gateway deployment)
 const CONFIG = {
@@ -65,6 +145,259 @@ const registry = new Map();
 
 // Rate limiting store
 const rateLimitStore = new Map();
+
+// ============================================================================
+// WireGuard Peer Management
+// ============================================================================
+
+const WG_CONFIG = {
+  enabled: process.env.WG_ENABLED !== 'false',
+  interface: process.env.WG_INTERFACE || 'wg0',
+  subnet: process.env.WG_SUBNET || '10.100.0.0/16',
+  serverIP: process.env.WG_SERVER_IP || '10.100.0.1',
+  listenPort: parseInt(process.env.WG_PORT || '51820', 10),
+  peersFile: process.env.WG_PEERS_FILE || path.join(CONFIG.dataDir, 'wg-peers.json'),
+  serverPubkeyFile: '/etc/wireguard/server-public.key',
+};
+
+const wgPeers = { nextIP: 2, peers: {} };
+
+function loadWGPeers() {
+  try {
+    if (fs.existsSync(WG_CONFIG.peersFile)) {
+      const data = JSON.parse(fs.readFileSync(WG_CONFIG.peersFile, 'utf8'));
+      wgPeers.nextIP = data.nextIP || 2;
+      wgPeers.peers = data.peers || {};
+      console.log(`[WireGuard] Loaded ${Object.keys(wgPeers.peers).length} peers from ${WG_CONFIG.peersFile}`);
+    }
+  } catch (error) {
+    console.error('[WireGuard] Failed to load peers:', error.message);
+  }
+}
+
+function saveWGPeers() {
+  try {
+    fs.writeFileSync(WG_CONFIG.peersFile, JSON.stringify(wgPeers, null, 2));
+  } catch (error) {
+    console.error('[WireGuard] Failed to save peers:', error.message);
+  }
+}
+
+function allocateWGIP() {
+  const ip = wgPeers.nextIP;
+  if (ip > 65534) {
+    throw new Error('WireGuard IP pool exhausted (10.100.0.0/16 range full)');
+  }
+  wgPeers.nextIP = ip + 1;
+  const octet3 = Math.floor(ip / 256);
+  const octet4 = ip % 256;
+  return `10.100.${octet3}.${octet4}`;
+}
+
+function isWireGuardAvailable() {
+  if (!WG_CONFIG.enabled) return false;
+  try {
+    execSync(`ip link show ${WG_CONFIG.interface} 2>/dev/null`, { stdio: 'pipe' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function getServerPublicKey() {
+  try {
+    if (fs.existsSync(WG_CONFIG.serverPubkeyFile)) {
+      return fs.readFileSync(WG_CONFIG.serverPubkeyFile, 'utf8').trim();
+    }
+  } catch (error) {
+    console.error('[WireGuard] Failed to read server public key:', error.message);
+  }
+  return null;
+}
+
+function addWGPeer(publicKey, allowedIP) {
+  try {
+    execSync(
+      `wg set ${WG_CONFIG.interface} peer ${publicKey} allowed-ips ${allowedIP}/32`,
+      { stdio: 'pipe', timeout: 5000 }
+    );
+    return true;
+  } catch (error) {
+    console.error(`[WireGuard] Failed to add peer: ${error.message}`);
+    return false;
+  }
+}
+
+function removeWGPeer(publicKey) {
+  try {
+    execSync(
+      `wg set ${WG_CONFIG.interface} peer ${publicKey} remove`,
+      { stdio: 'pipe', timeout: 5000 }
+    );
+    return true;
+  } catch (error) {
+    console.error(`[WireGuard] Failed to remove peer: ${error.message}`);
+    return false;
+  }
+}
+
+function syncWGPeers() {
+  if (!isWireGuardAvailable()) {
+    console.log('[WireGuard] Interface not available, skipping peer sync');
+    return;
+  }
+
+  let synced = 0;
+  for (const [username, peer] of Object.entries(wgPeers.peers)) {
+    if (peer.publicKey && peer.assignedIP) {
+      if (addWGPeer(peer.publicKey, peer.assignedIP)) {
+        synced++;
+      }
+    }
+  }
+  console.log(`[WireGuard] Synced ${synced}/${Object.keys(wgPeers.peers).length} peers to interface`);
+}
+
+function isWireGuardIP(endpoint) {
+  if (!endpoint) return false;
+  const match = endpoint.match(/^https?:\/\/(10\.10[01]\.\d+\.\d+)/);
+  return !!match;
+}
+
+// ============================================================================
+// AmneziaWG (Stealth) Peer Management
+// ============================================================================
+
+const AWG_CONFIG = {
+  enabled: process.env.AWG_ENABLED !== 'false',
+  interface: process.env.AWG_INTERFACE || 'awg0',
+  subnet: process.env.AWG_SUBNET || '10.101.0.0/16',
+  serverIP: process.env.AWG_SERVER_IP || '10.101.0.1',
+  listenPort: parseInt(process.env.AWG_PORT || '51821', 10),
+  peersFile: process.env.AWG_PEERS_FILE || path.join(CONFIG.dataDir, 'awg-peers.json'),
+  paramsFile: process.env.AWG_PARAMS_FILE || '/etc/amneziawg/obfuscation-params.json',
+  serverPubkeyFile: '/etc/amneziawg/server-public.key',
+};
+
+const awgPeers = { nextIP: 2, peers: {} };
+let awgObfuscationParams = null;
+
+function loadAWGPeers() {
+  try {
+    if (fs.existsSync(AWG_CONFIG.peersFile)) {
+      const data = JSON.parse(fs.readFileSync(AWG_CONFIG.peersFile, 'utf8'));
+      awgPeers.nextIP = data.nextIP || 2;
+      awgPeers.peers = data.peers || {};
+      console.log(`[AmneziaWG] Loaded ${Object.keys(awgPeers.peers).length} peers from ${AWG_CONFIG.peersFile}`);
+    }
+  } catch (error) {
+    console.error('[AmneziaWG] Failed to load peers:', error.message);
+  }
+}
+
+function loadAWGParams() {
+  try {
+    if (fs.existsSync(AWG_CONFIG.paramsFile)) {
+      awgObfuscationParams = JSON.parse(fs.readFileSync(AWG_CONFIG.paramsFile, 'utf8'));
+      console.log('[AmneziaWG] Loaded obfuscation parameters');
+    }
+  } catch (error) {
+    console.error('[AmneziaWG] Failed to load obfuscation params:', error.message);
+  }
+}
+
+function saveAWGPeers() {
+  try {
+    fs.writeFileSync(AWG_CONFIG.peersFile, JSON.stringify(awgPeers, null, 2));
+  } catch (error) {
+    console.error('[AmneziaWG] Failed to save peers:', error.message);
+  }
+}
+
+function allocateAWGIP() {
+  const ip = awgPeers.nextIP;
+  if (ip > 65534) {
+    throw new Error('AmneziaWG IP pool exhausted (10.101.0.0/16 range full)');
+  }
+  awgPeers.nextIP = ip + 1;
+  const octet3 = Math.floor(ip / 256);
+  const octet4 = ip % 256;
+  return `10.101.${octet3}.${octet4}`;
+}
+
+function isAmneziaWGAvailable() {
+  if (!AWG_CONFIG.enabled) return false;
+  try {
+    execSync(`ip link show ${AWG_CONFIG.interface} 2>/dev/null`, { stdio: 'pipe' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function getAWGServerPublicKey() {
+  try {
+    if (fs.existsSync(AWG_CONFIG.serverPubkeyFile)) {
+      return fs.readFileSync(AWG_CONFIG.serverPubkeyFile, 'utf8').trim();
+    }
+  } catch (error) {
+    console.error('[AmneziaWG] Failed to read server public key:', error.message);
+  }
+  return null;
+}
+
+function addAWGPeer(publicKey, allowedIP) {
+  try {
+    const tool = fs.existsSync('/usr/local/bin/awg') ? 'awg' : 'wg';
+    execSync(
+      `${tool} set ${AWG_CONFIG.interface} peer ${publicKey} allowed-ips ${allowedIP}/32`,
+      { stdio: 'pipe', timeout: 5000 }
+    );
+    return true;
+  } catch (error) {
+    console.error(`[AmneziaWG] Failed to add peer: ${error.message}`);
+    return false;
+  }
+}
+
+function removeAWGPeer(publicKey) {
+  try {
+    const tool = fs.existsSync('/usr/local/bin/awg') ? 'awg' : 'wg';
+    execSync(
+      `${tool} set ${AWG_CONFIG.interface} peer ${publicKey} remove`,
+      { stdio: 'pipe', timeout: 5000 }
+    );
+    return true;
+  } catch (error) {
+    console.error(`[AmneziaWG] Failed to remove peer: ${error.message}`);
+    return false;
+  }
+}
+
+function syncAWGPeers() {
+  if (!isAmneziaWGAvailable()) {
+    console.log('[AmneziaWG] Interface not available, skipping peer sync');
+    return;
+  }
+
+  let synced = 0;
+  for (const [username, peer] of Object.entries(awgPeers.peers)) {
+    if (peer.publicKey && peer.assignedIP) {
+      if (addAWGPeer(peer.publicKey, peer.assignedIP)) {
+        synced++;
+      }
+    }
+  }
+  console.log(`[AmneziaWG] Synced ${synced}/${Object.keys(awgPeers.peers).length} peers to interface`);
+}
+
+let _cachedPublicIP = null;
+function getPublicIP() {
+  if (_cachedPublicIP) return _cachedPublicIP;
+  // Use the first supernode address as the public IP (this gateway runs on the supernode)
+  _cachedPublicIP = DEFAULT_SUPERNODES[0]?.address || '69.164.241.210';
+  return _cachedPublicIP;
+}
 
 // ============================================================================
 // Phase 1: LRU Cache for Registry Lookups
@@ -1209,11 +1542,82 @@ function saveRegistry() {
   }
 }
 
-// Create proxy server for direct HTTP endpoints
+// Create proxy server for direct HTTP endpoints (Boson relay + WebSocket upgrades)
 const proxy = createProxyServer({
   changeOrigin: true,
   ws: true,
   xfwd: true,
+});
+
+// Separate proxy for WireGuard/direct targets with response compression.
+// selfHandleResponse gives us full control over the response stream so we
+// can pipe through gzip without fighting http-proxy's internal pipe().
+const compressingProxy = createProxyServer({
+  changeOrigin: true,
+  xfwd: true,
+  selfHandleResponse: true,
+});
+
+compressingProxy.on("proxyRes", (proxyRes, req, res) => {
+  const headers = { ...proxyRes.headers };
+  const reqUrl = req.url || '';
+  const contentType = headers['content-type'] || '';
+
+  // Cache headers for static assets (only if node didn't set its own)
+  if (!headers['cache-control']) {
+    for (const rule of Object.values(STATIC_CACHE_RULES)) {
+      if (rule.extensions.test(reqUrl)) {
+        headers['cache-control'] = `public, max-age=${rule.maxAge}`;
+        break;
+      }
+    }
+  }
+
+  const acceptEncoding = req.headers['accept-encoding'] || '';
+  const alreadyEncoded = !!headers['content-encoding'];
+  const isCompressible = COMPRESSIBLE_TYPES.test(contentType);
+  const contentLength = parseInt(headers['content-length'] || '0', 10);
+  const tooSmall = contentLength > 0 && contentLength < MIN_COMPRESS_SIZE;
+  const supportsGzip = acceptEncoding.includes('gzip');
+
+  if (!alreadyEncoded && isCompressible && !tooSmall && supportsGzip) {
+    delete headers['content-length'];
+    headers['content-encoding'] = 'gzip';
+    headers['vary'] = 'Accept-Encoding';
+    res.writeHead(proxyRes.statusCode, headers);
+    proxyRes.pipe(zlib.createGzip({ level: 6 })).pipe(res);
+  } else {
+    res.writeHead(proxyRes.statusCode, headers);
+    proxyRes.pipe(res);
+  }
+});
+
+compressingProxy.on("error", (err, req, res) => {
+  console.error("[Proxy] Compressing proxy error:", err.message);
+
+  // On connection-level failures, destroy all free sockets for the target
+  // so the agent stops reusing dead connections from rebooted peers.
+  if (err.code === "ECONNREFUSED" || err.code === "ECONNRESET" || err.code === "EPIPE" || err.message.includes("socket hang up")) {
+    const target = req._proxyTarget || "";
+    const freeSockets = keepAliveAgent.freeSockets;
+    let flushed = 0;
+    for (const [key, sockets] of Object.entries(freeSockets)) {
+      if (key.includes(target) || !target) {
+        for (const sock of sockets) {
+          sock.destroy();
+          flushed++;
+        }
+      }
+    }
+    if (flushed > 0) {
+      console.log(`[Gateway] Flushed ${flushed} stale sockets after ${err.code || err.message}`);
+    }
+  }
+
+  if (res.writeHead) {
+    res.writeHead(502, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "Bad Gateway", message: err.message }));
+  }
 });
 
 // Network Map proxy (map.ela.city → localhost:3100)
@@ -1237,6 +1641,20 @@ proxy.on("error", (err, req, res) => {
   if (res.writeHead) {
     res.writeHead(502, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "Bad Gateway", message: err.message }));
+  }
+});
+
+// Cache headers for Boson ActiveProxy responses (no compression -- serial relay
+// protocol doesn't benefit and the proxy uses selfHandleResponse:false)
+proxy.on("proxyRes", (proxyRes, req) => {
+  if (!proxyRes.headers['cache-control']) {
+    const reqUrl = req.url || '';
+    for (const rule of Object.values(STATIC_CACHE_RULES)) {
+      if (rule.extensions.test(reqUrl)) {
+        proxyRes.headers['cache-control'] = `public, max-age=${rule.maxAge}`;
+        break;
+      }
+    }
   }
 });
 
@@ -1306,52 +1724,38 @@ async function handleRequest(req, res) {
   }
 
   // Check if this is a proxy:// endpoint
+  // The Java ActiveProxy server's allocated port accepts plain TCP connections
+  // and transparently relays them through the encrypted tunnel to the PC2 node.
+  // We just need to HTTP proxy to host:allocatedPort - no custom protocol needed.
+  //
+  // CRITICAL: Force Connection: close. The Boson ActiveProxy protocol handles one
+  // TCP connection at a time per session (DATA packets have no connectionId).
+  // HTTP keep-alive would hold the relay open indefinitely, blocking all subsequent
+  // browser requests (CSS, JS, images) which queue on the allocated port.
+  // Connection: close ensures each request completes its CONNECT→DATA→DISCONNECT
+  // cycle so the next queued connection can proceed.
   if (nodeInfo.endpoint.startsWith("proxy://")) {
-    // Relay through Active Proxy
-    try {
-      console.log(`[Gateway] Relaying ${username} via Active Proxy: ${nodeInfo.endpoint}`);
-      const session = await getProxySession(nodeInfo.endpoint);
-      const responseData = await session.relayRequest(req, res);
-
-      // Parse and send HTTP response
-      const responseStr = responseData.toString("utf8");
-      const headerEnd = responseStr.indexOf("\r\n\r\n");
-
-      if (headerEnd !== -1) {
-        const headerLines = responseStr.slice(0, headerEnd).split("\r\n");
-        const statusLine = headerLines[0];
-        const statusMatch = statusLine.match(/HTTP\/\d\.\d (\d+)/);
-        const statusCode = statusMatch ? parseInt(statusMatch[1], 10) : 200;
-
-        // Parse headers
-        const headers = {};
-        for (let i = 1; i < headerLines.length; i++) {
-          const colonIdx = headerLines[i].indexOf(":");
-          if (colonIdx > 0) {
-            const key = headerLines[i].slice(0, colonIdx).trim();
-            const value = headerLines[i].slice(colonIdx + 1).trim();
-            headers[key] = value;
-          }
-        }
-
-        // Send response
-        res.writeHead(statusCode, headers);
-        res.end(responseData.slice(headerEnd + 4));
-      } else {
-        res.writeHead(502, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: "Invalid response from node" }));
-      }
-    } catch (error) {
-      console.error(`[Gateway] Proxy relay error: ${error.message}`);
+    const parsed = parseProxyEndpoint(nodeInfo.endpoint);
+    if (!parsed) {
       res.writeHead(502, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Bad Gateway", message: error.message }));
+      res.end(JSON.stringify({ error: "Invalid proxy endpoint" }));
+      return;
     }
+    const target = `http://${parsed.host}:${parsed.port}`;
+    req.headers['connection'] = 'close';
+    delete req.headers['keep-alive'];
+    console.log(`[Gateway] Proxying ${username} via ActiveProxy relay: ${target}`);
+    proxy.web(req, res, { target });
     return;
   }
 
-  // Direct HTTP proxy
-  console.log(`[Gateway] Proxying ${username} -> ${nodeInfo.endpoint}`);
-  proxy.web(req, res, { target: nodeInfo.endpoint });
+  // Direct HTTP proxy (includes WireGuard tunnel endpoints at 10.100.x.x).
+  // Uses compressingProxy (selfHandleResponse) for gzip + cache headers,
+  // and keep-alive agent to reuse TCP connections to the PC2 node.
+  const viaWG = isWireGuardIP(nodeInfo.endpoint);
+  console.log(`[Gateway] Proxying ${username} -> ${nodeInfo.endpoint}${viaWG ? ' (WireGuard tunnel)' : ''}`);
+  req._proxyTarget = nodeInfo.endpoint;
+  compressingProxy.web(req, res, { target: nodeInfo.endpoint, agent: keepAliveAgent });
 }
 
 // API request handler
@@ -1394,6 +1798,10 @@ async function handleApiRequest(req, res) {
       cacheHitRate: cacheStats.hitRate,
       proxyConnections: proxyConnections.size,
       supernodes: getActiveSuperNodes().length,
+      wireguard: {
+        available: isWireGuardAvailable(),
+        peers: Object.keys(wgPeers.peers).length,
+      },
     }));
     return;
   }
@@ -1554,6 +1962,414 @@ async function handleApiRequest(req, res) {
     return;
   }
 
+  // ========================================================================
+  // WireGuard Peer Provisioning API
+  // ========================================================================
+
+  if (url.pathname === "/api/wg/register" && req.method === "POST") {
+    if (!checkRateLimit('register', clientIP)) {
+      res.writeHead(429, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Rate limit exceeded", retryAfter: 60 }));
+      return;
+    }
+
+    if (!isWireGuardAvailable()) {
+      res.writeHead(503, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "WireGuard not available on this gateway" }));
+      return;
+    }
+
+    const serverPubKey = getServerPublicKey();
+    if (!serverPubKey) {
+      res.writeHead(503, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "WireGuard server key not configured" }));
+      return;
+    }
+
+    let body = "";
+    req.on("data", (chunk) => (body += chunk));
+    req.on("end", () => {
+      try {
+        const { username, nodeId, publicKey } = JSON.parse(body);
+
+        if (!username || !publicKey) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Missing required fields: username, publicKey" }));
+          return;
+        }
+
+        // nodeId is optional -- look up from registry if not provided
+        const resolvedNodeId = nodeId || (registry.get(username.toLowerCase()) || {}).nodeId || 'unknown';
+
+        // Validate WireGuard public key format (base64, 44 chars with = padding)
+        if (!/^[A-Za-z0-9+/]{42,43}=?$/.test(publicKey)) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Invalid WireGuard public key format" }));
+          return;
+        }
+
+        const normalizedUsername = username.toLowerCase();
+
+        // Check if this node already has a WireGuard peer assignment
+        const existingPeer = wgPeers.peers[normalizedUsername];
+        if (existingPeer) {
+          // Same node re-registering: update public key if changed
+          if (existingPeer.publicKey !== publicKey) {
+            removeWGPeer(existingPeer.publicKey);
+            existingPeer.publicKey = publicKey;
+            existingPeer.lastSeen = new Date().toISOString();
+            addWGPeer(publicKey, existingPeer.assignedIP);
+            saveWGPeers();
+            console.log(`[WireGuard] Updated key for ${normalizedUsername} (${existingPeer.assignedIP})`);
+          } else {
+            existingPeer.lastSeen = new Date().toISOString();
+            addWGPeer(publicKey, existingPeer.assignedIP);
+            saveWGPeers();
+          }
+
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({
+            assignedIP: existingPeer.assignedIP,
+            serverPublicKey: serverPubKey,
+            serverEndpoint: `${getPublicIP()}:${WG_CONFIG.listenPort}`,
+            serverIP: WG_CONFIG.serverIP,
+          }));
+          return;
+        }
+
+        // New peer: allocate IP
+        const assignedIP = allocateWGIP();
+
+        wgPeers.peers[normalizedUsername] = {
+          nodeId: resolvedNodeId,
+          publicKey,
+          assignedIP,
+          registeredAt: new Date().toISOString(),
+          lastSeen: new Date().toISOString(),
+        };
+
+        if (!addWGPeer(publicKey, assignedIP)) {
+          delete wgPeers.peers[normalizedUsername];
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Failed to configure WireGuard peer" }));
+          return;
+        }
+
+        saveWGPeers();
+        console.log(`[WireGuard] Registered ${normalizedUsername}: ${assignedIP} (pubkey: ${publicKey.slice(0, 8)}...)`);
+
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({
+          assignedIP,
+          serverPublicKey: serverPubKey,
+          serverEndpoint: `${getPublicIP()}:${WG_CONFIG.listenPort}`,
+          serverIP: WG_CONFIG.serverIP,
+        }));
+      } catch (error) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Invalid JSON" }));
+      }
+    });
+    return;
+  }
+
+  if (url.pathname === "/api/wg/status" && req.method === "GET") {
+    const wgAvailable = isWireGuardAvailable();
+    let wgDump = null;
+
+    if (wgAvailable) {
+      try {
+        const raw = execSync(`wg show ${WG_CONFIG.interface} dump`, { stdio: 'pipe', timeout: 5000 }).toString();
+        const lines = raw.trim().split('\n');
+        // First line is interface info, subsequent lines are peers
+        const peers = lines.slice(1).map(line => {
+          const parts = line.split('\t');
+          return {
+            publicKey: parts[0],
+            endpoint: parts[2] || 'none',
+            latestHandshake: parts[4] ? parseInt(parts[4], 10) : 0,
+            transferRx: parts[5] ? parseInt(parts[5], 10) : 0,
+            transferTx: parts[6] ? parseInt(parts[6], 10) : 0,
+          };
+        });
+        wgDump = { peerCount: peers.length, peers };
+      } catch (error) {
+        wgDump = { error: error.message };
+      }
+    }
+
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({
+      wireguard: {
+        available: wgAvailable,
+        interface: WG_CONFIG.interface,
+        serverIP: WG_CONFIG.serverIP,
+        listenPort: WG_CONFIG.listenPort,
+        registeredPeers: Object.keys(wgPeers.peers).length,
+        live: wgDump,
+      },
+    }));
+    return;
+  }
+
+  if (url.pathname.startsWith("/api/wg/peer/") && req.method === "DELETE") {
+    const targetUsername = url.pathname.slice("/api/wg/peer/".length).toLowerCase();
+    const peer = wgPeers.peers[targetUsername];
+
+    if (!peer) {
+      res.writeHead(404, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Peer not found" }));
+      return;
+    }
+
+    removeWGPeer(peer.publicKey);
+    delete wgPeers.peers[targetUsername];
+    saveWGPeers();
+    console.log(`[WireGuard] Removed peer ${targetUsername} (${peer.assignedIP})`);
+
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ success: true, removed: targetUsername }));
+    return;
+  }
+
+  // ========================================================================
+  // AmneziaWG (Stealth) Peer Provisioning API
+  // ========================================================================
+
+  if (url.pathname === "/api/awg/register" && req.method === "POST") {
+    if (!checkRateLimit('register', clientIP)) {
+      res.writeHead(429, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Rate limit exceeded", retryAfter: 60 }));
+      return;
+    }
+
+    if (!isAmneziaWGAvailable()) {
+      res.writeHead(503, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "AmneziaWG not available on this gateway" }));
+      return;
+    }
+
+    const awgServerPubKey = getAWGServerPublicKey();
+    if (!awgServerPubKey) {
+      res.writeHead(503, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "AmneziaWG server key not configured" }));
+      return;
+    }
+
+    if (!awgObfuscationParams) {
+      res.writeHead(503, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "AmneziaWG obfuscation parameters not configured" }));
+      return;
+    }
+
+    let body = "";
+    req.on("data", (chunk) => (body += chunk));
+    req.on("end", () => {
+      try {
+        const { username, nodeId, publicKey } = JSON.parse(body);
+
+        if (!username || !publicKey) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Missing required fields: username, publicKey" }));
+          return;
+        }
+
+        if (!/^[A-Za-z0-9+/]{42,43}=?$/.test(publicKey)) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Invalid public key format" }));
+          return;
+        }
+
+        const normalizedUsername = username.toLowerCase();
+        const resolvedNodeId = nodeId || (registry.get(normalizedUsername) || {}).nodeId || 'unknown';
+
+        const existingPeer = awgPeers.peers[normalizedUsername];
+        if (existingPeer) {
+          if (existingPeer.publicKey !== publicKey) {
+            removeAWGPeer(existingPeer.publicKey);
+            existingPeer.publicKey = publicKey;
+            existingPeer.lastSeen = new Date().toISOString();
+            addAWGPeer(publicKey, existingPeer.assignedIP);
+            saveAWGPeers();
+            console.log(`[AmneziaWG] Updated key for ${normalizedUsername} (${existingPeer.assignedIP})`);
+          } else {
+            existingPeer.lastSeen = new Date().toISOString();
+            addAWGPeer(publicKey, existingPeer.assignedIP);
+            saveAWGPeers();
+          }
+
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({
+            assignedIP: existingPeer.assignedIP,
+            serverPublicKey: awgServerPubKey,
+            serverEndpoint: `${getPublicIP()}:${AWG_CONFIG.listenPort}`,
+            serverIP: AWG_CONFIG.serverIP,
+            obfuscation: awgObfuscationParams,
+          }));
+          return;
+        }
+
+        const assignedIP = allocateAWGIP();
+
+        awgPeers.peers[normalizedUsername] = {
+          nodeId: resolvedNodeId,
+          publicKey,
+          assignedIP,
+          registeredAt: new Date().toISOString(),
+          lastSeen: new Date().toISOString(),
+        };
+
+        if (!addAWGPeer(publicKey, assignedIP)) {
+          delete awgPeers.peers[normalizedUsername];
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Failed to configure AmneziaWG peer" }));
+          return;
+        }
+
+        saveAWGPeers();
+        console.log(`[AmneziaWG] Registered ${normalizedUsername}: ${assignedIP} (pubkey: ${publicKey.slice(0, 8)}...)`);
+
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({
+          assignedIP,
+          serverPublicKey: awgServerPubKey,
+          serverEndpoint: `${getPublicIP()}:${AWG_CONFIG.listenPort}`,
+          serverIP: AWG_CONFIG.serverIP,
+          obfuscation: awgObfuscationParams,
+        }));
+      } catch (error) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Invalid JSON" }));
+      }
+    });
+    return;
+  }
+
+  if (url.pathname === "/api/awg/status" && req.method === "GET") {
+    const awgAvailable = isAmneziaWGAvailable();
+    let awgDump = null;
+
+    if (awgAvailable) {
+      try {
+        const tool = fs.existsSync('/usr/local/bin/awg') ? 'awg' : 'wg';
+        const raw = execSync(`${tool} show ${AWG_CONFIG.interface} dump`, { stdio: 'pipe', timeout: 5000 }).toString();
+        const lines = raw.trim().split('\n');
+        const peers = lines.slice(1).map(line => {
+          const parts = line.split('\t');
+          return {
+            publicKey: parts[0],
+            endpoint: parts[2] || 'none',
+            latestHandshake: parts[4] ? parseInt(parts[4], 10) : 0,
+            transferRx: parts[5] ? parseInt(parts[5], 10) : 0,
+            transferTx: parts[6] ? parseInt(parts[6], 10) : 0,
+          };
+        });
+        awgDump = { peerCount: peers.length, peers };
+      } catch (error) {
+        awgDump = { error: error.message };
+      }
+    }
+
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({
+      amneziaWG: {
+        available: awgAvailable,
+        interface: AWG_CONFIG.interface,
+        serverIP: AWG_CONFIG.serverIP,
+        listenPort: AWG_CONFIG.listenPort,
+        registeredPeers: Object.keys(awgPeers.peers).length,
+        obfuscation: awgObfuscationParams ? true : false,
+        live: awgDump,
+      },
+    }));
+    return;
+  }
+
+  // ==========================================
+  // VLESS Reality API
+  // ==========================================
+
+  if (url.pathname === "/api/vless/register" && req.method === "POST") {
+    const credentialsFile = '/etc/vless-reality/credentials.json';
+    if (!fs.existsSync(credentialsFile)) {
+      res.writeHead(503, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "VLESS Reality not configured on this supernode" }));
+      return;
+    }
+
+    let body = "";
+    req.on("data", (chunk) => (body += chunk));
+    req.on("end", () => {
+      try {
+        const { username } = JSON.parse(body);
+        if (!username) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "username required" }));
+          return;
+        }
+
+        const credentials = JSON.parse(fs.readFileSync(credentialsFile, 'utf8'));
+        const normalizedUsername = username.toLowerCase().trim();
+
+        let uuid;
+        const peersFile = '/etc/vless-reality/peers.json';
+        const peers = fs.existsSync(peersFile) ? JSON.parse(fs.readFileSync(peersFile, 'utf8')) : { peers: {} };
+
+        if (peers.peers[normalizedUsername]) {
+          uuid = peers.peers[normalizedUsername].uuid;
+        } else {
+          try {
+            uuid = execSync(`/etc/vless-reality/manage-peers.sh add "${normalizedUsername}"`, { stdio: 'pipe', timeout: 10000 }).toString().trim();
+          } catch (err) {
+            console.error('[VLESS] Failed to add peer:', err.message);
+            res.writeHead(500, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Failed to provision VLESS peer" }));
+            return;
+          }
+        }
+
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({
+          uuid,
+          serverEndpoint: `69.164.241.210:${credentials.listen_port}`,
+          serverPublicKey: credentials.public_key,
+          shortId: credentials.short_id,
+          serverName: credentials.server_name,
+        }));
+      } catch (err) {
+        console.error('[VLESS] Register error:', err);
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+    return;
+  }
+
+  if (url.pathname === "/api/vless/status" && req.method === "GET") {
+    const credentialsFile = '/etc/vless-reality/credentials.json';
+    const available = fs.existsSync(credentialsFile) && fs.existsSync('/usr/local/bin/sing-box');
+    let peerCount = 0;
+    try {
+      const peers = JSON.parse(fs.readFileSync('/etc/vless-reality/peers.json', 'utf8'));
+      peerCount = Object.keys(peers.peers || {}).length;
+    } catch {}
+
+    let processRunning = false;
+    try { execSync('pgrep -x sing-box', { stdio: 'pipe' }); processRunning = true; } catch {}
+
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({
+      vlessReality: {
+        available,
+        listenPort: 8443,
+        registeredPeers: peerCount,
+        processRunning,
+        serverName: "www.microsoft.com",
+      },
+    }));
+    return;
+  }
+
   // Default: 404
   res.writeHead(404, { "Content-Type": "application/json" });
   res.end(JSON.stringify({ error: "Not found" }));
@@ -1582,20 +2398,21 @@ async function handleUpgrade(req, socket, head) {
     return;
   }
 
-  // Phase 2: WebSocket via Active Proxy
+  // proxy:// endpoints: Java server's allocated port accepts plain TCP/WebSocket
   if (nodeInfo.endpoint.startsWith("proxy://")) {
-    console.log(`[Gateway] WebSocket via Active Proxy for ${username}`);
-    
-    try {
-      await handleWebSocketViaProxy(req, socket, head, nodeInfo.endpoint, username);
-    } catch (error) {
-      console.error(`[Gateway] WebSocket proxy error for ${username}: ${error.message}`);
+    const parsed = parseProxyEndpoint(nodeInfo.endpoint);
+    if (!parsed) {
       socket.destroy();
+      return;
     }
+    const target = `http://${parsed.host}:${parsed.port}`;
+    console.log(`[Gateway] WS upgrade for ${username} via ActiveProxy relay: ${target}`);
+    proxy.ws(req, socket, head, { target });
     return;
   }
 
-  console.log(`[Gateway] WS upgrade for ${username} -> ${nodeInfo.endpoint}`);
+  const viaWG = isWireGuardIP(nodeInfo.endpoint);
+  console.log(`[Gateway] WS upgrade for ${username} -> ${nodeInfo.endpoint}${viaWG ? ' (WireGuard tunnel)' : ''}`);
   proxy.ws(req, socket, head, { target: nodeInfo.endpoint });
 }
 
@@ -1796,6 +2613,27 @@ function loadSSL() {
 // Start servers
 loadRegistry();
 
+// Initialize WireGuard peer management
+loadWGPeers();
+if (isWireGuardAvailable()) {
+  syncWGPeers();
+  console.log(`[WireGuard] Server ready on ${WG_CONFIG.interface} (${WG_CONFIG.serverIP})`);
+} else {
+  console.log('[WireGuard] Interface not detected - WireGuard endpoints will not be available');
+  console.log('[WireGuard] Run scripts/setup-wireguard-server.sh on the supernode to enable');
+}
+
+// Initialize AmneziaWG (stealth transport) peer management
+loadAWGPeers();
+loadAWGParams();
+if (isAmneziaWGAvailable()) {
+  syncAWGPeers();
+  console.log(`[AmneziaWG] Stealth transport ready on ${AWG_CONFIG.interface} (${AWG_CONFIG.serverIP})`);
+} else {
+  console.log('[AmneziaWG] Interface not detected - stealth endpoints will not be available');
+  console.log('[AmneziaWG] Run scripts/setup-amneziawg-server.sh on the supernode to enable');
+}
+
 // Load SSL first to know if we should redirect
 const sslOptions = loadSSL();
 const httpsAvailable = !!sslOptions;
@@ -1849,5 +2687,5 @@ if (httpsAvailable) {
 }
 
 console.log(`[Gateway] PC2 Web Gateway started for *.${CONFIG.domain}`);
-console.log(`[Gateway] Proxy endpoint support: http://, proxy://`);
+console.log(`[Gateway] Proxy endpoint support: http://, proxy://, wireguard (10.100.0.0/16), amneziawg (10.101.0.0/16), vless-reality (port 8443)`);
 console.log(`[Gateway] Security: Rate limiting enabled, CORS restricted to *.ela.city`);

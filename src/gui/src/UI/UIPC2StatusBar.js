@@ -38,6 +38,18 @@ function initPC2StatusBar() {
                     z-index: 1;
                 }
 
+                /* In topbar (single bar mode) keep dot fully inside to avoid clipping */
+                .topbar .pc2-status-indicator {
+                    bottom: 0;
+                    right: 0;
+                }
+
+                /* In floating toolbar (smaller top bar) same fix */
+                .toolbar .pc2-status-indicator {
+                    bottom: 0;
+                    right: 0;
+                }
+
                 .pc2-status-indicator.disconnected {
                     background: #f59e0b;
                 }
@@ -59,6 +71,27 @@ function initPC2StatusBar() {
                     0%, 100% { opacity: 1; }
                     50% { opacity: 0.5; }
                 }
+
+                .pc2-tip {
+                    display: inline-flex;
+                    align-items: center;
+                    margin-left: 6px;
+                    cursor: help;
+                }
+                #pc2-floating-tip {
+                    position: fixed;
+                    background: #1a1a1a;
+                    color: #ddd;
+                    padding: 8px 10px;
+                    border-radius: 6px;
+                    font-size: 11px;
+                    line-height: 1.4;
+                    max-width: 240px;
+                    z-index: 2147483647;
+                    pointer-events: none;
+                    border: 1px solid #555;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+                }
             </style>
         `);
     }
@@ -79,13 +112,19 @@ function initPC2StatusBar() {
     let currentStatus = 'disconnected';
     let currentError = null;
 
+    const copyIcon = `<svg style="width:12px;height:12px;vertical-align:middle;cursor:pointer;opacity:0.6;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>`;
+    let privacyHidden = true;
+    if (!window._pc2Stealth) window._pc2Stealth = { stealth: false, vless: false, initialized: false };
+    let stealthModeEnabled = window._pc2Stealth.stealth;
+    let vlessEnabled = window._pc2Stealth.vless;
+
+    const maskValue = (val) => privacyHidden ? val.replace(/[a-zA-Z0-9]/g, '•') : val;
+
     // Build menu items based on current status
-    const getMenuItems = (stats = null) => {
+    const getMenuItems = (stats = null, nodeInfo = null, connectivity = null) => {
         const items = [];
         const session = pc2Service.getSession?.() || {};
         
-        // SIMPLIFIED AUTH: In "Puter on PC2" mode, connection status = authentication status
-        // If we're accessing the PC2 node directly, we're already "connected" - status reflects auth
         const isAuthenticated = window.is_auth && window.is_auth();
         const isPC2Mode = window.api_origin && (
             window.api_origin.includes('127.0.0.1:4200') || 
@@ -93,14 +132,12 @@ function initPC2StatusBar() {
             window.location.origin === window.api_origin
         );
         
-        // In PC2 mode, use authentication status instead of separate connection status
         let effectiveStatus = currentStatus;
         let effectiveStatusText = currentStatus === 'connected' ? i18n('connected') :
                                  currentStatus === 'connecting' ? i18n('connecting') :
                                  currentStatus === 'error' ? (currentError || i18n('error')) : i18n('not_connected');
         
         if (isPC2Mode) {
-            // In PC2 mode: authenticated = connected, not authenticated = not connected
             if (isAuthenticated) {
                 effectiveStatus = 'connected';
                 effectiveStatusText = i18n('connected');
@@ -110,7 +147,6 @@ function initPC2StatusBar() {
             }
         }
 
-        // Status dot color: orange if not connected, green if connected
         const dotColor = effectiveStatus === 'connected' ? '#22c55e' : '#f59e0b';
 
         items.push({
@@ -120,18 +156,52 @@ function initPC2StatusBar() {
         });
 
         items.push({
-            html: `<span style="color: #fff;">${effectiveStatusText}</span>`,
-            icon: `<span style="display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; vertical-align:middle;"><span style="width:8px; height:8px; border-radius:50%; background:${dotColor};"></span></span>`,
+            html: `<span data-pc2-status style="color: #fff;">${effectiveStatusText}</span>`,
+            icon: `<span data-pc2-status-dot style="display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; vertical-align:middle;"><span style="width:8px; height:8px; border-radius:50%; background:${dotColor};"></span></span>`,
             disabled: true
         });
 
-        if (effectiveStatus === 'connected' && (session.nodeName || isPC2Mode)) {
-            const nodeName = session.nodeName || (isPC2Mode ? i18n('this_pc2_node') : i18n('pc2_node'));
-            items.push({
-                html: `<span style="color: #fff;">${i18n('node')}: ${nodeName}</span>`,
-                icon: `<svg style="width:16px; height:16px; vertical-align:middle;" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>`,
-                disabled: true
-            });
+        // Domain, IP, and connection method
+        if (effectiveStatus === 'connected' && nodeInfo) {
+            items.push('-');
+
+            const domainDisplay = privacyHidden ? maskValue(nodeInfo.publicUrl || '') : (nodeInfo.publicUrl || '');
+            const ipDisplay = privacyHidden ? maskValue(nodeInfo.localIp || '') : (nodeInfo.localIp || '');
+
+            if (nodeInfo.publicUrl) {
+                items.push({
+                    html: `<span style="color:#ccc; font-size:12px;"><span class="pc2-masked-value" data-real="${nodeInfo.publicUrl}">${domainDisplay}</span> <span class="pc2-copy-icon">${copyIcon}</span></span>`,
+                    icon: `<svg style="width:14px;height:14px;vertical-align:middle;" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>`,
+                    onClick: () => {
+                        navigator.clipboard.writeText(nodeInfo.publicUrl);
+                    }
+                });
+            }
+
+            if (nodeInfo.localIp) {
+                const localUrl = `http://${nodeInfo.localIp}:${window.location.port || '4200'}`;
+                items.push({
+                    html: `<span style="color:#ccc; font-size:12px;">IP: <span class="pc2-masked-value" data-real="${nodeInfo.localIp}">${ipDisplay}</span> <span class="pc2-copy-icon">${copyIcon}</span></span>`,
+                    icon: `<svg style="width:14px;height:14px;vertical-align:middle;" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>`,
+                    onClick: () => {
+                        navigator.clipboard.writeText(localUrl);
+                    }
+                });
+            }
+
+            if (connectivity) {
+                const natType = connectivity.natType || 'unknown';
+                const isWireGuard = natType === 'wireguard';
+                const isAmneziaWG = natType === 'amnezia-wireguard';
+                const isVLESSReality = natType === 'vless-reality';
+                const methodLabel = isVLESSReality ? 'VLESS Reality' : (isAmneziaWG ? 'AmneziaWG (Stealth)' : (isWireGuard ? 'WireGuard' : (natType === 'relay' ? 'Active Proxy' : (natType === 'direct' ? 'Direct' : natType))));
+                const methodColor = isVLESSReality ? '#3b82f6' : (isAmneziaWG ? '#a78bfa' : (isWireGuard ? '#22c55e' : (natType === 'relay' ? '#f59e0b' : '#fff')));
+                items.push({
+                    html: `<span data-pc2-access style="color:#ccc; font-size:12px;">Access: <span style="color:${methodColor}; font-weight:500;">${methodLabel}</span></span>`,
+                    icon: `<svg style="width:14px;height:14px;vertical-align:middle;" viewBox="0 0 24 24" fill="none" stroke="${methodColor}" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`,
+                    disabled: true
+                });
+            }
         }
 
         // Show stats if connected
@@ -202,8 +272,8 @@ function initPC2StatusBar() {
 
         items.push({
             html: i18n('pc2_settings'),
+            icon: `<svg style="width:14px;height:14px;vertical-align:middle;" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M12.22 2h-.44a2 2 0 00-2 2v.18a2 2 0 01-1 1.73l-.43.25a2 2 0 01-2 0l-.15-.08a2 2 0 00-2.73.73l-.22.38a2 2 0 00.73 2.73l.15.1a2 2 0 011 1.72v.51a2 2 0 01-1 1.74l-.15.09a2 2 0 00-.73 2.73l.22.38a2 2 0 002.73.73l.15-.08a2 2 0 012 0l.43.25a2 2 0 011 1.73V20a2 2 0 002 2h.44a2 2 0 002-2v-.18a2 2 0 011-1.73l.43-.25a2 2 0 012 0l.15.08a2 2 0 002.73-.73l.22-.39a2 2 0 00-.73-2.73l-.15-.08a2 2 0 01-1-1.74v-.5a2 2 0 011-1.74l.15-.09a2 2 0 00.73-2.73l-.22-.38a2 2 0 00-2.73-.73l-.15.08a2 2 0 01-2 0l-.43-.25a2 2 0 01-1-1.73V4a2 2 0 00-2-2z"/><circle cx="12" cy="12" r="3"/></svg>`,
             onClick: () => {
-                // Open Settings window with PC2 tab selected
                 import('./Settings/UIWindowSettings.js').then(({ default: UIWindowSettings }) => {
                     UIWindowSettings({ tab: 'pc2' });
                 }).catch((err) => {
@@ -215,7 +285,7 @@ function initPC2StatusBar() {
         return items;
     };
 
-    // Insert status bar into toolbar
+    // Insert status bar into toolbar and topbar
     const insertStatusBar = () => {
         // Remove existing
         $('.pc2-status-bar').remove();
@@ -252,9 +322,21 @@ function initPC2StatusBar() {
             }
         }
 
+        // Also insert into top bar (full-width mode)
+        const $topbar = $('.topbar');
+        if ($topbar.length > 0) {
+            const $topbarStatusBar = createStatusBar();
+            const $topbarWallet = $topbar.find('.topbar-right .wallet-btn');
+            if ($topbarWallet.length > 0) {
+                $topbarWallet.before($topbarStatusBar);
+            } else {
+                $topbar.find('.topbar-right').prepend($topbarStatusBar);
+            }
+        }
+
         logger.log('[PC2]: Status bar inserted');
 
-        // Update status display
+        // Update status display (updates all instances across toolbar and topbar)
         const updateStatus = (status, error) => {
             currentStatus = status;
             currentError = error;
@@ -272,9 +354,9 @@ function initPC2StatusBar() {
                 effectiveStatus = window.is_auth() ? 'connected' : 'disconnected';
             }
             
-            const $indicator = $statusBar.find('.pc2-status-indicator');
-            $indicator.removeClass('disconnected connecting connected error');
-            $indicator.addClass(effectiveStatus);
+            const $allIndicators = $('.pc2-status-bar .pc2-status-indicator');
+            $allIndicators.removeClass('disconnected connecting connected error');
+            $allIndicators.addClass(effectiveStatus);
 
             const session = pc2Service.getSession?.() || {};
             let statusText = effectiveStatus === 'connected' ? (session.nodeName || i18n('connected')) :
@@ -286,7 +368,7 @@ function initPC2StatusBar() {
                 statusText = window.is_auth && window.is_auth() ? i18n('connected') : i18n('not_connected');
             }
             
-            $statusBar.attr('title', `${i18n('personal_cloud_status')} (${statusText})`);
+            $('.pc2-status-bar').attr('title', `${i18n('personal_cloud_status')} (${statusText})`);
         };
         
         // Also listen for authentication changes in PC2 mode
@@ -331,6 +413,129 @@ function initPC2StatusBar() {
     // Initialize
     insertStatusBar();
 
+    // Privacy toggle: update masked values and switch in-place
+    $(document).on('click', '.pc2-privacy-toggle', function(e) {
+        e.stopPropagation();
+        e.preventDefault();
+        privacyHidden = !privacyHidden;
+        const $menu = $(this).closest('.context-menu');
+        $menu.find('.pc2-masked-value').each(function() {
+            const real = $(this).attr('data-real');
+            $(this).text(privacyHidden ? maskValue(real) : real);
+        });
+        const $track = $(this).find('.pc2-toggle-track');
+        const $knob = $track.children('span');
+        $track.css('background', privacyHidden ? '#555' : '#22c55e');
+        $knob.css({ left: privacyHidden ? '2px' : 'auto', right: privacyHidden ? 'auto' : '2px' });
+    });
+
+    const tLabels = { 'wireguard': ['WireGuard', '#22c55e'], 'amnezia-wireguard': ['AmneziaWG (Stealth)', '#a78bfa'], 'vless-reality': ['VLESS Reality', '#3b82f6'], 'relay': ['Active Proxy', '#f59e0b'] };
+
+    // Floating tooltip for .pc2-tip elements (avoids overflow clipping)
+    $(document).on('mouseenter', '.pc2-tip', function() {
+        const tip = $(this).attr('data-tip');
+        if (!tip) return;
+        const rect = this.getBoundingClientRect();
+        const $tip = $('<div id="pc2-floating-tip"></div>').text(tip).appendTo('body');
+        const tipW = $tip.outerWidth();
+        let left = rect.left + rect.width / 2 - tipW / 2;
+        if (left < 8) left = 8;
+        if (left + tipW > window.innerWidth - 8) left = window.innerWidth - 8 - tipW;
+        $tip.css({ top: rect.top - $tip.outerHeight() - 6, left });
+    });
+    $(document).on('mouseleave', '.pc2-tip', function() {
+        $('#pc2-floating-tip').remove();
+    });
+
+    // Prevent info icon clicks from toggling the parent switch
+    $(document).on('click', '.pc2-info-icon', function(e) {
+        e.stopPropagation();
+        e.preventDefault();
+    });
+
+    async function applyStealthFromDropdown($menu) {
+        if (!window.api_origin) return;
+        const vlessOn = !!$menu.find('.pc2-vless-toggle').data('on');
+        const transport = stealthModeEnabled ? (vlessOn ? 'vless-reality' : 'amnezia-wireguard') : undefined;
+        $menu.find('[data-pc2-access]').html(`Access: <span style="color:#f59e0b; font-weight:500;">Switching...</span>`);
+        $menu.find('[data-pc2-status]').html(`<span style="color:#f59e0b;">Reconnecting...</span>`);
+        $menu.find('[data-pc2-status-dot] span').css('background', '#f59e0b');
+
+        try {
+            const resp = await fetch(`${window.api_origin}/api/boson/stealth-mode`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${window.auth_token}` },
+                body: JSON.stringify({ enabled: stealthModeEnabled, transport }),
+            });
+            if (!resp.ok) return;
+
+            const expectedType = transport || 'wireguard';
+            for (let i = 0; i < 10; i++) {
+                await new Promise(r => setTimeout(r, 2000));
+                try {
+                    const r = await fetch(`${window.api_origin}/api/boson/connectivity`, {
+                        headers: { 'Authorization': `Bearer ${window.auth_token}` }
+                    });
+                    if (r.ok) {
+                        const d = await r.json();
+                        if (d.natType === expectedType) {
+                            const [label, color] = tLabels[d.natType] || [d.natType, '#fff'];
+                            $menu.find('[data-pc2-access]').html(`Access: <span style="color:${color}; font-weight:500;">${label}</span>`);
+                            $menu.find('[data-pc2-status]').html(`<span style="color:#fff;">Connected</span>`);
+                            $menu.find('[data-pc2-status-dot] span').css('background', '#22c55e');
+                            return;
+                        }
+                    }
+                } catch {}
+            }
+            const fb = await fetch(`${window.api_origin}/api/boson/connectivity`, {
+                headers: { 'Authorization': `Bearer ${window.auth_token}` }
+            }).then(r => r.ok ? r.json() : null);
+            if (fb) {
+                const [label, color] = tLabels[fb.natType] || [fb.natType, '#fff'];
+                $menu.find('[data-pc2-access]').html(`Access: <span style="color:${color}; font-weight:500;">${label}</span>`);
+                $menu.find('[data-pc2-status]').html(`<span style="color:#fff;">${fb.connected ? 'Connected' : 'Disconnected'}</span>`);
+                $menu.find('[data-pc2-status-dot] span').css('background', fb.connected ? '#22c55e' : '#ef4444');
+            }
+        } catch {}
+    }
+
+    // Stealth mode toggle handler
+    $(document).on('click', '.pc2-stealth-toggle', function(e) {
+        e.stopPropagation();
+        e.preventDefault();
+        stealthModeEnabled = !stealthModeEnabled;
+        window._pc2Stealth.stealth = stealthModeEnabled;
+        const $track = $(this).find('.pc2-stealth-track');
+        const $knob = $(this).find('.pc2-stealth-knob');
+        $track.css('background', stealthModeEnabled ? '#a78bfa' : '#555');
+        $knob.css({ left: stealthModeEnabled ? 'auto' : '2px', right: stealthModeEnabled ? '2px' : 'auto' });
+
+        if (!stealthModeEnabled) {
+            vlessEnabled = false;
+            window._pc2Stealth.vless = false;
+        }
+
+        const $menu = $(this).closest('.context-menu');
+        $menu.find('.pc2-vless-row').toggle(stealthModeEnabled);
+        applyStealthFromDropdown($menu);
+    });
+
+    // VLESS Reality sub-toggle handler
+    $(document).on('click', '.pc2-vless-toggle', function(e) {
+        e.stopPropagation();
+        e.preventDefault();
+        const isOn = !$(this).data('on');
+        $(this).data('on', isOn);
+        vlessEnabled = isOn;
+        window._pc2Stealth.vless = isOn;
+        const $track = $(this).find('.pc2-vless-track');
+        const $knob = $(this).find('.pc2-vless-knob');
+        $track.css('background', isOn ? '#3b82f6' : '#555');
+        $knob.css({ left: isOn ? 'auto' : '2px', right: isOn ? '2px' : 'auto' });
+        applyStealthFromDropdown($(this).closest('.context-menu'));
+    });
+
     // Use delegated event for click - opens UIContextMenu
     $(document).on('click', '.pc2-status-bar', async function(e) {
         e.stopPropagation();
@@ -343,15 +548,28 @@ function initPC2StatusBar() {
             return;
         }
 
-        // Fetch stats if connected
+        // Fetch stats, node info, and connectivity in parallel
         let stats = null;
+        let nodeInfo = null;
+        let connectivity = null;
+
+        const fetches = [];
+        fetches.push(
+            fetch(`${window.api_origin}/api/boson/full-identity`, {
+                headers: { 'Authorization': `Bearer ${window.auth_token}` }
+            }).then(r => r.ok ? r.json() : null).then(d => { nodeInfo = d; }).catch(() => {})
+        );
+        fetches.push(
+            fetch(`${window.api_origin}/api/boson/connectivity`, {
+                headers: { 'Authorization': `Bearer ${window.auth_token}` }
+            }).then(r => r.ok ? r.json() : null).then(d => { connectivity = d; }).catch(() => {})
+        );
         if (currentStatus === 'connected') {
-            try {
-                stats = await pc2Service.getStats?.();
-            } catch (err) {
-                logger.log('[PC2]: Failed to get stats:', err);
-            }
+            fetches.push(
+                Promise.resolve(pc2Service.getStats?.()).then(s => { stats = s; }).catch(() => {})
+            );
         }
+        await Promise.all(fetches);
 
         UIContextMenu({
             id: 'pc2-menu',
@@ -360,7 +578,68 @@ function initPC2StatusBar() {
                 top: pos.bottom + 10, 
                 left: pos.left + (pos.width / 2) - 100
             },
-            items: getMenuItems(stats)
+            items: getMenuItems(stats, nodeInfo, connectivity)
+        });
+
+        // Read stealth state from connectivity on first open only
+        if (connectivity && !window._pc2Stealth.initialized) {
+            stealthModeEnabled = !!connectivity.stealthMode;
+            vlessEnabled = connectivity.forcedTransport === 'vless-reality';
+            window._pc2Stealth.stealth = stealthModeEnabled;
+            window._pc2Stealth.vless = vlessEnabled;
+            window._pc2Stealth.initialized = true;
+        }
+
+        // Inject toggles directly into the menu DOM (not as menu items)
+        requestAnimationFrame(() => {
+            const $menu = $('.context-menu[data-id="pc2-menu"]');
+            if (!$menu.length) return;
+
+            const $lastDivider = $menu.find('.context-menu-divider').last();
+
+            if (nodeInfo) {
+                const toggleOn = !privacyHidden;
+                const privacyHtml = `<div class="pc2-privacy-toggle" style="display:flex; align-items:center; justify-content:space-between; padding:6px 12px; cursor:pointer; user-select:none;">
+                    <span style="color:#fff; font-size:12px;">Show details</span>
+                    <span class="pc2-toggle-track" style="width:34px; height:18px; border-radius:9px; background:${toggleOn ? '#22c55e' : '#555'}; position:relative; display:inline-flex; align-items:center; flex-shrink:0;">
+                        <span class="pc2-toggle-knob" style="width:14px; height:14px; border-radius:50%; background:#fff; position:absolute; top:2px; ${toggleOn ? 'right:2px;' : 'left:2px;'} transition:all 0.2s;"></span>
+                    </span>
+                </div>`;
+                if ($lastDivider.length) {
+                    $lastDivider.before(privacyHtml);
+                } else {
+                    $menu.append(privacyHtml);
+                }
+            }
+
+            const stealthOn = stealthModeEnabled;
+            const vlessOn = vlessEnabled;
+            const stealthTip = 'Routes traffic through obfuscated tunnels to bypass Deep Packet Inspection (DPI). Auto-detects blocking and selects the best stealth transport.';
+            const vlessTip = 'Wraps your connection in a TLS tunnel that mimics HTTPS traffic to legitimate websites (e.g. microsoft.com). Use when all UDP is blocked.';
+
+            const stealthHtml = `<div class="pc2-stealth-toggle" style="display:flex; align-items:center; justify-content:space-between; padding:6px 12px; cursor:pointer; user-select:none;">
+                <span style="color:#fff; font-size:12px; display:flex; align-items:center;">Stealth Mode<span class="pc2-tip pc2-info-icon" data-tip="${stealthTip}"><svg style="width:12px;height:12px;opacity:0.4;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></span></span>
+                <span class="pc2-stealth-track" style="width:34px; height:18px; border-radius:9px; background:${stealthOn ? '#a78bfa' : '#555'}; position:relative; display:inline-flex; align-items:center; flex-shrink:0;">
+                    <span class="pc2-stealth-knob" style="width:14px; height:14px; border-radius:50%; background:#fff; position:absolute; top:2px; ${stealthOn ? 'right:2px;' : 'left:2px;'} transition:all 0.2s;"></span>
+                </span>
+            </div>`;
+
+            const vlessHtml = `<div class="pc2-vless-row" style="display:${stealthOn ? 'flex' : 'none'}; align-items:center; justify-content:space-between; padding:6px 12px; cursor:pointer; user-select:none;">
+                <div class="pc2-vless-toggle" data-on="${vlessOn ? 'true' : ''}" style="display:flex; align-items:center; justify-content:space-between; width:100%;">
+                    <span style="color:#fff; font-size:12px; display:flex; align-items:center;">VLESS Reality<span class="pc2-tip pc2-info-icon" data-tip="${vlessTip}"><svg style="width:12px;height:12px;opacity:0.4;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></span></span>
+                    <span class="pc2-vless-track" style="width:34px; height:18px; border-radius:9px; background:${vlessOn ? '#3b82f6' : '#555'}; position:relative; display:inline-flex; align-items:center; flex-shrink:0;">
+                        <span class="pc2-vless-knob" style="width:14px; height:14px; border-radius:50%; background:#fff; position:absolute; top:2px; ${vlessOn ? 'right:2px;' : 'left:2px;'} transition:all 0.2s;"></span>
+                    </span>
+                </div>
+            </div>`;
+
+            if ($lastDivider.length) {
+                $lastDivider.before(stealthHtml);
+                $lastDivider.before(vlessHtml);
+            } else {
+                $menu.append(stealthHtml);
+                $menu.append(vlessHtml);
+            }
         });
     });
 

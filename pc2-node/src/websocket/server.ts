@@ -10,6 +10,8 @@ import { Server as SocketIOServer, Socket } from 'socket.io';
 import { DatabaseManager } from '../storage/database.js';
 import { SocketUser, setEventQueue } from './events.js';
 import { initializeTerminalHandlers, getTerminalService } from './terminal.js';
+import { createLogger } from '../utils/logger.js';
+const log = createLogger('ws');
 
 export interface TerminalConfigOptions {
   isolationMode?: 'none' | 'namespace' | 'disabled';
@@ -107,7 +109,7 @@ export function setupWebSocket(
                 wallet: session.wallet_address.toLowerCase(),
                 lastPoll: Date.now()
               });
-              console.log(`🔍 [allowRequest] Polling request with auth: ${session.wallet_address.slice(0, 6)}...${session.wallet_address.slice(-4)}, sid: ${sid.substring(0, 10)}...`);
+              log.debug(`🔍 [allowRequest] Polling request with auth: ${session.wallet_address.slice(0, 6)}...${session.wallet_address.slice(-4)}, sid: ${sid.substring(0, 10)}...`);
             }
           }
         }
@@ -121,9 +123,9 @@ export function setupWebSocket(
             token: null // We don't have the token, but we have the wallet
           };
           storedSession.lastPoll = Date.now();
-          console.log(`✅ [allowRequest] Restored session from sid: ${sid.substring(0, 10)}... (wallet: ${storedSession.wallet.slice(0, 6)}...${storedSession.wallet.slice(-4)})`);
+          log.debug(`✅ [allowRequest] Restored session from sid: ${sid.substring(0, 10)}... (wallet: ${storedSession.wallet.slice(0, 6)}...${storedSession.wallet.slice(-4)})`);
         } else {
-          console.log(`⚠️  [allowRequest] Polling request WITHOUT Authorization header and no stored session: ${url.substring(0, 100)}`);
+          log.warn(`⚠️  [allowRequest] Polling request WITHOUT Authorization header and no stored session: ${url.substring(0, 100)}`);
         }
       }
       // Always allow connection (authentication happens in middleware)
@@ -145,7 +147,7 @@ export function setupWebSocket(
                   socket.handshake.query?.token as string ||
                   socket.handshake.query?.auth_token as string;
     
-    console.log(`🔌 WebSocket: Client connecting`, {
+    log.debug(`🔌 WebSocket: Client connecting`, {
       socketId: socket.id,
       hasToken: !!token,
       hasAuthenticatedSession: !!authenticatedSession,
@@ -181,7 +183,7 @@ export function setupWebSocket(
             token: sessionByWallet.token,
             lastSeen: Date.now()
           });
-          console.log(`✅ WebSocket: Auto-authenticated from stored session: ${socket.id} (wallet: ${sessionByWallet.wallet_address.slice(0, 6)}...${sessionByWallet.wallet_address.slice(-4)})`);
+          log.info(`✅ WebSocket: Auto-authenticated from stored session: ${socket.id} (wallet: ${sessionByWallet.wallet_address.slice(0, 6)}...${sessionByWallet.wallet_address.slice(-4)})`);
           return next();
         }
       }
@@ -207,18 +209,18 @@ export function setupWebSocket(
               token: headerToken,
               lastSeen: Date.now()
             });
-            console.log(`✅ WebSocket: Auto-authenticated from HTTP headers: ${socket.id} (wallet: ${session.wallet_address.slice(0, 6)}...${session.wallet_address.slice(-4)})`);
+            log.info(`✅ WebSocket: Auto-authenticated from HTTP headers: ${socket.id} (wallet: ${session.wallet_address.slice(0, 6)}...${session.wallet_address.slice(-4)})`);
             return next();
           }
         }
       }
       
-      console.log(`🔌 WebSocket: Client connecting without auth (will require auth for operations): ${socket.id}`);
+      log.info(`🔌 WebSocket: Client connecting without auth (will require auth for operations): ${socket.id}`);
       return next();
     }
 
     if (!database) {
-      console.warn('⚠️  WebSocket: Database not available, skipping authentication');
+      log.warn('⚠️  WebSocket: Database not available, skipping authentication');
       return next();
     }
 
@@ -226,13 +228,13 @@ export function setupWebSocket(
     const session = database.getSession(token);
     if (!session) {
       // Don't reject connection - just don't attach user
-      console.warn(`⚠️  WebSocket: Invalid session token for ${socket.id}`);
+      log.warn(`⚠️  WebSocket: Invalid session token for ${socket.id}`);
       return next();
     }
 
     // Check if session is expired
     if (session.expires_at < Date.now()) {
-      console.warn(`⚠️  WebSocket: Expired session token for ${socket.id}`);
+      log.warn(`⚠️  WebSocket: Expired session token for ${socket.id}`);
       return next();
     }
 
@@ -255,7 +257,7 @@ export function setupWebSocket(
       lastSeen: Date.now()
     });
     
-    console.log(`✅ WebSocket: Client authenticated during handshake: ${socket.id} (wallet: ${session.wallet_address.slice(0, 6)}...${session.wallet_address.slice(-4)})`);
+    log.info(`✅ WebSocket: Client authenticated during handshake: ${socket.id} (wallet: ${session.wallet_address.slice(0, 6)}...${session.wallet_address.slice(-4)})`);
 
     next();
   });
@@ -264,7 +266,7 @@ export function setupWebSocket(
   io.on('connection', (socket: AuthenticatedSocket) => {
     // Allow connection without auth (client will authenticate later)
     if (!socket.user) {
-      console.log(`🔌 WebSocket: Client connected without authentication: ${socket.id}`);
+      log.info(`🔌 WebSocket: Client connected without authentication: ${socket.id}`);
       
       // Try to authenticate using stored wallet session (for reconnections)
       // Check if we have a recent session for this IP/wallet combination
@@ -291,7 +293,7 @@ export function setupWebSocket(
               token: headerToken,
               lastSeen: Date.now()
             });
-            console.log(`✅ WebSocket: Auto-authenticated from HTTP headers on connection: ${socket.id} (wallet: ${session.wallet_address.slice(0, 6)}...${session.wallet_address.slice(-4)})`);
+            log.info(`✅ WebSocket: Auto-authenticated from HTTP headers on connection: ${socket.id} (wallet: ${session.wallet_address.slice(0, 6)}...${session.wallet_address.slice(-4)})`);
             
             // Join room immediately
             // Normalize wallet address to lowercase for room matching (must match broadcast functions)
@@ -300,7 +302,7 @@ export function setupWebSocket(
             socket.join(room);
             const roomSockets = io.sockets.adapter.rooms.get(room);
             const connectedCount = roomSockets ? roomSockets.size : 0;
-            console.log(`✅ WebSocket client auto-authenticated and joined room: ${socket.id} (wallet: ${session.wallet_address.slice(0, 6)}...${session.wallet_address.slice(-4)}, room: ${room}, total clients: ${connectedCount})`);
+            log.debug(`✅ WebSocket client auto-authenticated and joined room: ${socket.id} (wallet: ${session.wallet_address.slice(0, 6)}...${session.wallet_address.slice(-4)}, room: ${room}, total clients: ${connectedCount})`);
             
             socket.emit('connected', {
               authenticated: true,
@@ -314,9 +316,9 @@ export function setupWebSocket(
               try {
                 initializeTerminalHandlers(socket, session.wallet_address, userHomesBase, terminalConfig);
                 terminalInitializedSockets.add(socket.id);
-                console.log(`🖥️  [Terminal] Initialized terminal handlers for ${socket.id} (auto-auth)`);
+                log.info(`🖥️  [Terminal] Initialized terminal handlers for ${socket.id} (auto-auth)`);
               } catch (termError: any) {
-                console.error(`❌ [Terminal] Failed to initialize terminal handlers:`, termError);
+                log.error(`❌ [Terminal] Failed to initialize terminal handlers:`, termError);
               }
             }
             
@@ -352,7 +354,7 @@ export function setupWebSocket(
       const roomSockets = io.sockets.adapter.rooms.get(room);
       const connectedCount = roomSockets ? roomSockets.size : 0;
       
-      console.log(`✅ WebSocket client connected: ${socket.id} (wallet: ${wallet_address.slice(0, 6)}...${wallet_address.slice(-4)}, room: ${room}, total clients in room: ${connectedCount})`);
+      log.info(`✅ WebSocket client connected: ${socket.id} (wallet: ${wallet_address.slice(0, 6)}...${wallet_address.slice(-4)}, room: ${room}, total clients in room: ${connectedCount})`);
 
       // Deliver queued events for this wallet (matching mock server pattern)
       // normalizedWallet already declared above
@@ -361,13 +363,13 @@ export function setupWebSocket(
       });
       
       if (queuedEvents.length > 0) {
-        console.log(`📤 Delivering ${queuedEvents.length} queued events to ${socket.id} (wallet: ${normalizedWallet})`);
+        log.debug(`📤 Delivering ${queuedEvents.length} queued events to ${socket.id} (wallet: ${normalizedWallet})`);
         queuedEvents.forEach(evt => {
           socket.emit(evt.event, evt.data);
         });
         // Remove delivered events from queue
         pendingEvents.splice(0, pendingEvents.length, ...pendingEvents.filter(evt => !queuedEvents.includes(evt)));
-        console.log(`✅ Delivered ${queuedEvents.length} events, queue size now: ${pendingEvents.length}`);
+        log.debug(`✅ Delivered ${queuedEvents.length} events, queue size now: ${pendingEvents.length}`);
       }
 
       // Send connection confirmation
@@ -383,9 +385,9 @@ export function setupWebSocket(
         try {
           initializeTerminalHandlers(socket, wallet_address, userHomesBase, terminalConfig);
           terminalInitializedSockets.add(socket.id);
-          console.log(`🖥️  [Terminal] Initialized terminal handlers for ${socket.id} (handshake auth)`);
+          log.info(`🖥️  [Terminal] Initialized terminal handlers for ${socket.id} (handshake auth)`);
         } catch (termError: any) {
-          console.error(`❌ [Terminal] Failed to initialize terminal handlers:`, termError);
+          log.error(`❌ [Terminal] Failed to initialize terminal handlers:`, termError);
         }
       }
     }
@@ -447,7 +449,7 @@ export function setupWebSocket(
       const roomSockets = io.sockets.adapter.rooms.get(room);
       const connectedCount = roomSockets ? roomSockets.size : 0;
       
-      console.log(`✅ WebSocket client authenticated via 'authenticate' event: ${socket.id} (wallet: ${session.wallet_address.slice(0, 6)}...${session.wallet_address.slice(-4)}, room: ${room}, total clients: ${connectedCount})`);
+      log.info(`✅ WebSocket client authenticated via 'authenticate' event: ${socket.id} (wallet: ${session.wallet_address.slice(0, 6)}...${session.wallet_address.slice(-4)}, room: ${room}, total clients: ${connectedCount})`);
       
       // Deliver queued events for this wallet (matching mock server pattern)
       // normalizedWallet already declared above
@@ -456,16 +458,16 @@ export function setupWebSocket(
       });
       
       if (queuedEventsForAuth.length > 0) {
-        console.log(`📤 Delivering ${queuedEventsForAuth.length} queued events to ${socket.id} (wallet: ${normalizedWallet})`);
+        log.debug(`📤 Delivering ${queuedEventsForAuth.length} queued events to ${socket.id} (wallet: ${normalizedWallet})`);
         queuedEventsForAuth.forEach(evt => {
-          console.log(`📤 Emitting queued event: ${evt.event}`, evt.data);
+          log.debug(`📤 Emitting queued event: ${evt.event}`, evt.data);
           socket.emit(evt.event, evt.data);
         });
         // Remove delivered events from queue
         pendingEvents.splice(0, pendingEvents.length, ...pendingEvents.filter(evt => !queuedEventsForAuth.includes(evt)));
-        console.log(`✅ Delivered ${queuedEventsForAuth.length} events, queue size now: ${pendingEvents.length}`);
+        log.debug(`✅ Delivered ${queuedEventsForAuth.length} events, queue size now: ${pendingEvents.length}`);
       } else {
-        console.log(`📭 No queued events for ${socket.id} (wallet: ${normalizedWallet}), queue size: ${pendingEvents.length}`);
+        log.debug(`📭 No queued events for ${socket.id} (wallet: ${normalizedWallet}), queue size: ${pendingEvents.length}`);
       }
       
       socket.emit('authenticated', { wallet_address: session.wallet_address, room });
@@ -475,9 +477,9 @@ export function setupWebSocket(
         try {
           initializeTerminalHandlers(socket, session.wallet_address, userHomesBase, terminalConfig);
           terminalInitializedSockets.add(socket.id);
-          console.log(`🖥️  [Terminal] Initialized terminal handlers for ${socket.id}`);
+          log.info(`🖥️  [Terminal] Initialized terminal handlers for ${socket.id}`);
         } catch (termError: any) {
-          console.error(`❌ [Terminal] Failed to initialize terminal handlers:`, termError);
+          log.error(`❌ [Terminal] Failed to initialize terminal handlers:`, termError);
         }
       }
     });
@@ -500,9 +502,9 @@ export function setupWebSocket(
         socket.join(room);
         const roomSockets = io.sockets.adapter.rooms.get(room);
         const connectedCount = roomSockets ? roomSockets.size : 0;
-        console.log(`💚 [puter_is_actually_open] Socket ${socket.id} confirmed open, room: ${room}, clients: ${connectedCount}`);
+        log.debug(`💚 [puter_is_actually_open] Socket ${socket.id} confirmed open, room: ${room}, clients: ${connectedCount}`);
       } else {
-        console.log(`💚 [puter_is_actually_open] Socket ${socket.id} confirmed open (not authenticated yet)`);
+        log.debug(`💚 [puter_is_actually_open] Socket ${socket.id} confirmed open (not authenticated yet)`);
       }
     });
 
@@ -511,7 +513,7 @@ export function setupWebSocket(
       // Client can subscribe to specific file changes
       if (data.path && socket.user) {
         socket.join(`file:${socket.user.wallet_address}:${data.path}`);
-        console.log(`📁 Client subscribed to file: ${data.path}`);
+        log.debug(`📁 Client subscribed to file: ${data.path}`);
       }
     });
 
@@ -523,7 +525,7 @@ export function setupWebSocket(
 
     // Handle disconnection
     socket.on('disconnect', (reason) => {
-      console.log(`🔌 WebSocket client disconnected: ${socket.id} (reason: ${reason})`);
+      log.info(`🔌 WebSocket client disconnected: ${socket.id} (reason: ${reason})`);
       
       // Clean up heartbeat interval
       if (heartbeatInterval) {
@@ -533,7 +535,7 @@ export function setupWebSocket(
       // Clean up authenticated session
       const session = authenticatedSessions.get(socket.id);
       if (session) {
-        console.log(`🧹 Cleaning up session for ${socket.id} (wallet: ${session.wallet_address.slice(0, 6)}...${session.wallet_address.slice(-4)})`);
+        log.debug(`🧹 Cleaning up session for ${socket.id} (wallet: ${session.wallet_address.slice(0, 6)}...${session.wallet_address.slice(-4)})`);
       }
       authenticatedSessions.delete(socket.id);
       
@@ -546,32 +548,32 @@ export function setupWebSocket(
 
     // Handle errors
     socket.on('error', (error) => {
-      console.error(`❌ WebSocket error for ${socket.id}:`, error);
+      log.error(`❌ WebSocket error for ${socket.id}:`, error);
     });
     
     // Handle connection errors (transport errors)
     socket.on('connect_error', (error) => {
-      console.error(`❌ WebSocket connection error for ${socket.id}:`, error);
+      log.error(`❌ WebSocket connection error for ${socket.id}:`, error);
     });
     
     // Log when socket is ready
     socket.on('connect', () => {
-      console.log(`✅ WebSocket socket connected: ${socket.id}`);
+      log.debug(`✅ WebSocket socket connected: ${socket.id}`);
     });
     
     // Listen for item.removed events to verify delivery
     socket.on('item.removed', (data) => {
-      console.log(`✅ [VERIFY] Socket ${socket.id} received item.removed event:`, data);
+      log.debug(`✅ [VERIFY] Socket ${socket.id} received item.removed event:`, data);
     });
     
     // Listen for item.added events to verify delivery
     socket.on('item.added', (data) => {
-      console.log(`✅ [VERIFY] Socket ${socket.id} received item.added event:`, data);
+      log.debug(`✅ [VERIFY] Socket ${socket.id} received item.added event:`, data);
     });
     
     // Listen for item.moved events to verify delivery
     socket.on('item.moved', (data) => {
-      console.log(`✅ [VERIFY] Socket ${socket.id} received item.moved event:`, data);
+      log.debug(`✅ [VERIFY] Socket ${socket.id} received item.moved event:`, data);
     });
   });
 

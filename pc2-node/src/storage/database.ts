@@ -9,6 +9,9 @@ import { existsSync, mkdirSync } from 'fs';
 import { dirname } from 'path';
 import { runMigrations } from './migrations.js';
 import { encryptApiKeys, decryptApiKeys } from '../utils/encryption.js';
+import { createLogger } from '../utils/logger.js';
+
+const log = createLogger('database');
 
 export interface User {
   wallet_address: string;
@@ -84,6 +87,10 @@ export class DatabaseManager {
     this.dbPath = dbPath;
   }
 
+  getDatabase(): Database.Database | null {
+    return this.db;
+  }
+
   /**
    * Initialize database connection and run migrations
    */
@@ -107,7 +114,7 @@ export class DatabaseManager {
     // Run migrations
     runMigrations(this.db);
 
-    console.log(`✅ Database initialized: ${this.dbPath}`);
+    log.info(`Database initialized: ${this.dbPath}`);
   }
 
   /**
@@ -127,7 +134,7 @@ export class DatabaseManager {
     if (this.db) {
       this.db.close();
       this.db = null;
-      console.log('✅ Database connection closed');
+      log.info('Database connection closed');
     }
   }
 

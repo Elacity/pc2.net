@@ -204,6 +204,36 @@ function initKeyboardShortcuts() {
             return;
         }
 
+        // F3: Toggle Mission Control
+        if (e.key === 'F3') {
+            e.preventDefault();
+            e.stopPropagation();
+            if (window.toggleMissionControl) window.toggleMissionControl();
+            return;
+        }
+
+        // Ctrl+Arrow Left/Right: Switch workspaces
+        if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && e[modifierKey] && !e.shiftKey) {
+            if (window.workspace_manager) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.key === 'ArrowRight') window.workspace_manager.switchToNext();
+                else window.workspace_manager.switchToPrevious();
+            }
+            return;
+        }
+
+        // Ctrl+Shift+Arrow Left/Right: Move active window to next/previous workspace
+        if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && e[modifierKey] && e.shiftKey) {
+            if (window.workspace_manager) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.key === 'ArrowRight') window.workspace_manager.moveActiveWindowToNext();
+                else window.workspace_manager.moveActiveWindowToPrevious();
+            }
+            return;
+        }
+
         // Arrow keys: Navigate files (when no input is focused)
         if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key) && !isInputFocused()) {
             const activeWindow = $('.window-active');

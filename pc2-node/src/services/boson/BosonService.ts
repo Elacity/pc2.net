@@ -11,6 +11,9 @@
 import { IdentityService, IdentityConfig } from './IdentityService.js';
 import { UsernameService, UsernameConfig } from './UsernameService.js';
 import { ConnectivityService, ConnectivityConfig, ConnectionStatus } from './ConnectivityService.js';
+import { WireGuardService, type WireGuardStatus } from '../wireguard/WireGuardService.js';
+import { AmneziaWGService, type AmneziaWGStatus } from '../wireguard/AmneziaWGService.js';
+import { VLESSRealityService, type VLESSRealityStatus } from '../vless/VLESSRealityService.js';
 import { logger } from '../../utils/logger.js';
 
 export interface BosonConfig {
@@ -19,6 +22,7 @@ export interface BosonConfig {
   publicDomain?: string;
   localPort?: number;
   autoConnect?: boolean;
+  stealthMode?: boolean;
   superNodes?: ConnectivityConfig['superNodes'];
 }
 
@@ -35,6 +39,9 @@ export interface BosonStatus {
     publicUrl: string | null;
   };
   connectivity: ConnectionStatus;
+  wireguard: WireGuardStatus | null;
+  amneziaWG: AmneziaWGStatus | null;
+  vlessReality: VLESSRealityStatus | null;
 }
 
 export class BosonService {
@@ -42,6 +49,9 @@ export class BosonService {
   private identityService: IdentityService;
   private usernameService: UsernameService;
   private connectivityService: ConnectivityService;
+  private wireGuardService: WireGuardService | null;
+  private amneziaWGService: AmneziaWGService | null;
+  private vlessRealityService: VLESSRealityService | null;
   private initialized: boolean = false;
   private firstRunMnemonic: string | null = null;
 
@@ -70,6 +80,10 @@ export class BosonService {
       superNodes: this.config.superNodes,
       localPort: this.config.localPort,
     });
+
+    this.wireGuardService = null;
+    this.amneziaWGService = null;
+    this.vlessRealityService = null;
   }
 
   /**
@@ -106,7 +120,55 @@ export class BosonService {
       this.connectivityService.setNodeKeys(keypair.publicKey, keypair.privateKey);
     }
 
-    // 4. Auto-connect if enabled
+    // 4. Initialize WireGuard (preferred NAT traversal over Boson relay)
+    this.wireGuardService = new WireGuardService({
+      dataDir: this.config.dataDir,
+      gatewayUrl: this.config.gatewayUrl!,
+      nodeId,
+      localPort: this.config.localPort!,
+    });
+
+    if (this.wireGuardService.isAvailable()) {
+      logger.info('[Boson] WireGuard tools detected -- will prefer WireGuard tunnel for NAT traversal');
+      this.connectivityService.setWireGuardService(this.wireGuardService);
+    } else {
+      logger.info('[Boson] WireGuard not installed -- will use Boson ActiveProxy for NAT traversal');
+    }
+
+    // 4b. Initialize AmneziaWG (stealth fallback transport)
+    this.amneziaWGService = new AmneziaWGService({
+      dataDir: this.config.dataDir,
+      gatewayUrl: this.config.gatewayUrl!,
+      nodeId,
+      localPort: this.config.localPort!,
+    });
+
+    if (this.amneziaWGService.isAvailable()) {
+      logger.info('[Boson] AmneziaWG stealth transport detected -- available as DPI-resistant fallback');
+      this.connectivityService.setAmneziaWGService(this.amneziaWGService);
+    }
+
+    // 4c. Initialize VLESS Reality (TCP stealth transport via sing-box)
+    this.vlessRealityService = new VLESSRealityService({
+      dataDir: this.config.dataDir,
+      gatewayUrl: this.config.gatewayUrl!,
+      nodeId,
+      localPort: this.config.localPort!,
+    });
+
+    if (this.vlessRealityService.isAvailable()) {
+      logger.info('[Boson] VLESS Reality transport detected -- available as TCP stealth fallback');
+      this.connectivityService.setVLESSRealityService(this.vlessRealityService);
+    }
+
+    // Apply stealth mode config
+    const stealthMode = this.config.stealthMode ?? false;
+    if (stealthMode) {
+      logger.info('[Boson] 🔒 Stealth mode enabled -- will bypass standard WireGuard');
+      this.connectivityService.setStealthMode(true);
+    }
+
+    // 5. Auto-connect if enabled
     if (this.config.autoConnect) {
       await this.connectivityService.start();
     }
@@ -120,7 +182,13 @@ export class BosonService {
    */
   async stop(): Promise<void> {
     await this.connectivityService.stop();
-    logger.info('✅ Boson service stopped');
+    if (this.amneziaWGService?.isConnected()) {
+      await this.amneziaWGService.disconnect();
+    }
+    if (this.wireGuardService?.isConnected()) {
+      await this.wireGuardService.disconnect();
+    }
+    logger.info('Boson service stopped');
   }
 
   /**
@@ -162,6 +230,9 @@ export class BosonService {
         publicUrl: usernameInfo.publicUrl,
       },
       connectivity: connectivityStatus,
+      wireguard: this.wireGuardService ? this.wireGuardService.getStatus() : null,
+      amneziaWG: this.amneziaWGService ? this.amneziaWGService.getStatus() : null,
+      vlessReality: this.vlessRealityService ? this.vlessRealityService.getStatus() : null,
     };
   }
 

@@ -30,6 +30,9 @@ import UIWindowProgress from './UI/UIWindowProgress.js';
 import globToRegExp from "./helpers/globToRegExp.js";
 import get_html_element_from_options from "./helpers/get_html_element_from_options.js";
 import item_icon from "./helpers/item_icon.js";
+import refresh_item_container from "./helpers/refresh_item_container.js";
+
+window.refresh_item_container = refresh_item_container;
 
 window.is_auth = ()=>{
     if(localStorage.getItem("auth_token") === null || window.auth_token === null)
@@ -1997,7 +2000,7 @@ window.refresh_desktop_background = async function() {
         
         // If bg_url is null or the default wallpaper, use it directly (no signing needed)
         // Always use 'cover' fit for default wallpapers, regardless of saved fit
-        if (!bg_url || bg_url === '/images/wallpaper-elastos.jpg' || bg_url === '/images/flint-2.jpg') {
+        if (!bg_url || bg_url === '/images/wallpaper-elacity.png' || bg_url === '/images/wallpaper-elastos.jpg' || bg_url === '/images/wallpaper-elastos-branded.png' || bg_url === '/images/flint-2.jpg') {
             false && console.log('[refresh_desktop_background] Using default wallpaper:', bg_url);
             window.set_desktop_background({
                 url: bg_url,
@@ -3427,6 +3430,14 @@ window.change_clock_visible = (clock_visible) => {
     newValue === 'show' && $('#clock').show();
     newValue === 'hide' && $('#clock').hide();
 
+    // Also apply to full top bar clock: hide when user chose "hide", otherwise show when topbar is active
+    const topbarActive = $('.topbar').hasClass('active');
+    if (newValue === 'hide') {
+        $('#topbar-clock').hide();
+    } else if (topbarActive) {
+        $('#topbar-clock').show();
+    }
+
     if(clock_visible) {
         // save clock_visible to user preferences
         window.mutate_user_preferences({
@@ -3438,6 +3449,36 @@ window.change_clock_visible = (clock_visible) => {
 
     $('select.change-clock-visible').val(window.user_preferences.clock_visible);
 }
+
+window.change_desktop_layout = (layout) => {
+    let newValue = layout || window.user_preferences.desktop_layout || 'topbar';
+
+    // On mobile, always use toolbar mode (topbar is hidden via CSS on phones)
+    const isMobileDevice = document.body.classList.contains('device-phone');
+    const effectiveValue = isMobileDevice ? 'toolbar' : newValue;
+
+    if (effectiveValue === 'topbar') {
+        $('.toolbar').hide();
+        $('.topbar').addClass('active');
+    } else {
+        $('.topbar').removeClass('active');
+        $('.toolbar').show();
+        if (!window.toolbar_auto_hide_enabled && $('.toolbar').hasClass('toolbar-hidden')) {
+            window.show_toolbar();
+        }
+    }
+
+    if (layout) {
+        window.mutate_user_preferences({
+            desktop_layout: newValue
+        });
+        $('input#desktop-layout-topbar-toggle').prop('checked', newValue === 'topbar');
+        window.change_clock_visible();
+        return;
+    }
+
+    $('input#desktop-layout-topbar-toggle').prop('checked', (window.user_preferences.desktop_layout || 'topbar') === 'topbar');
+};
 
 // Finds the `.window` element for the given app instance ID
 window.window_for_app_instance = (instance_id) => {

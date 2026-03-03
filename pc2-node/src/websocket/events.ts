@@ -6,6 +6,8 @@
 
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { DatabaseManager } from '../storage/database.js';
+import { createLogger } from '../utils/logger.js';
+const log = createLogger('ws-events');
 
 export interface SocketUser {
   wallet_address: string;
@@ -39,7 +41,7 @@ export function broadcastFileChange(
 ): void {
   const room = `user:${event.wallet_address}`;
   io.to(room).emit('file:changed', event);
-  console.log(`📡 Broadcasted file change to ${room}: ${event.action} ${event.path}`);
+  log.debug(`📡 Broadcasted file change to ${room}: ${event.action} ${event.path}`);
 }
 
 /**
@@ -51,7 +53,7 @@ export function broadcastDirectoryChange(
 ): void {
   const room = `user:${event.wallet_address}`;
   io.to(room).emit('directory:changed', event);
-  console.log(`📡 Broadcasted directory change to ${room}: ${event.action} ${event.path}`);
+  log.debug(`📡 Broadcasted directory change to ${room}: ${event.action} ${event.path}`);
 }
 
 /**
@@ -73,7 +75,7 @@ export function broadcastItemRenamed(
 ): void {
   const room = `user:${walletAddress}`;
   io.to(room).emit('item.renamed', item);
-  console.log(`📡 Broadcasted item.renamed to ${room}: ${item.old_path} → ${item.path}`);
+  log.debug(`📡 Broadcasted item.renamed to ${room}: ${item.old_path} → ${item.path}`);
 }
 
 // Global event queue (matching mock server pattern)
@@ -131,33 +133,33 @@ export function broadcastItemAdded(
     if (globalPendingEvents.length > 100) {
       globalPendingEvents.shift();
     }
-    console.log(`🔔 Queued item.added event for wallet: ${normalizedWallet}, queue size: ${globalPendingEvents.length}`);
+    log.debug(`🔔 Queued item.added event for wallet: ${normalizedWallet}, queue size: ${globalPendingEvents.length}`);
   }
   
   // Always emit to room (Socket.io will queue for polling if no WebSocket connection)
   // This ensures events are delivered even if clients are using polling
-  console.log(`📡 Emitting item.added to room: ${room}, name: ${item.name}, dirpath: ${item.dirpath}, connectedCount: ${connectedCount}`);
+  log.debug(`📡 Emitting item.added to room: ${room}, name: ${item.name}, dirpath: ${item.dirpath}, connectedCount: ${connectedCount}`);
   io.to(room).emit('item.added', item);
-  console.log(`📡 Event emitted - Socket.io should deliver to ${connectedCount} WebSocket clients or via polling`);
+  log.debug(`📡 Event emitted - Socket.io should deliver to ${connectedCount} WebSocket clients or via polling`);
   
   if (connectedCount > 0) {
-    console.log(`📡 Broadcasted item.added to ${room} (${connectedCount} clients): ${item.name} in ${item.dirpath}`);
+    log.debug(`📡 Broadcasted item.added to ${room} (${connectedCount} clients): ${item.name} in ${item.dirpath}`);
     
     // Also emit directly to each socket to ensure delivery
     const roomSocketsArray = Array.from(roomSockets || []);
     roomSocketsArray.forEach(socketId => {
       const socket = io.sockets.sockets.get(socketId);
       if (socket && socket.connected) {
-        console.log(`📡 Directly emitting item.added to socket ${socketId.substring(0, 10)}...`);
+        log.debug(`📡 Directly emitting item.added to socket ${socketId.substring(0, 10)}...`);
         socket.emit('item.added', item);
       } else {
-        console.warn(`⚠️  Socket ${socketId.substring(0, 10)}... not connected, event queued for polling`);
+        log.warn(`⚠️  Socket ${socketId.substring(0, 10)}... not connected, event queued for polling`);
       }
     });
   } else {
-    console.log(`📡 Emitted item.added to ${room} (0 WebSocket clients, will be delivered via polling): ${item.name} in ${item.dirpath}`);
+    log.debug(`📡 Emitted item.added to ${room} (0 WebSocket clients, will be delivered via polling): ${item.name} in ${item.dirpath}`);
     const allRooms = Array.from(io.sockets.adapter.rooms.keys()).filter(r => r.startsWith('user:'));
-    console.log(`📡 Available rooms (${allRooms.length}):`, allRooms.slice(0, 10));
+    log.debug(`📡 Available rooms (${allRooms.length}):`, allRooms.slice(0, 10));
   }
 }
 
@@ -210,47 +212,47 @@ export function broadcastItemRemoved(
     if (globalPendingEvents.length > 100) {
       globalPendingEvents.shift();
     }
-    console.log(`🔔 Queued item.removed event for wallet: ${normalizedWallet}, queue size: ${globalPendingEvents.length}`);
+    log.debug(`🔔 Queued item.removed event for wallet: ${normalizedWallet}, queue size: ${globalPendingEvents.length}`);
   }
   
   // Always emit to room (Socket.io will queue for polling if no WebSocket connection)
   // This ensures events are delivered even if clients are using polling
-  console.log(`📡 Emitting item.removed to room: ${room}, path: ${item.path}, connectedCount: ${connectedCount}`);
+  log.debug(`📡 Emitting item.removed to room: ${room}, path: ${item.path}, connectedCount: ${connectedCount}`);
   
   // Double-check room membership right before emitting (sockets might have disconnected)
   const currentRoomSockets = io.sockets.adapter.rooms.get(room);
   const currentConnectedCount = currentRoomSockets ? currentRoomSockets.size : 0;
   if (currentConnectedCount !== connectedCount) {
-    console.log(`⚠️  Room membership changed! Was ${connectedCount}, now ${currentConnectedCount}`);
+    log.warn(`⚠️  Room membership changed! Was ${connectedCount}, now ${currentConnectedCount}`);
   }
   
     io.to(room).emit('item.removed', eventData);
-  console.log(`📡 Event emitted - Socket.io should deliver to ${currentConnectedCount} WebSocket clients or via polling`);
+  log.debug(`📡 Event emitted - Socket.io should deliver to ${currentConnectedCount} WebSocket clients or via polling`);
   
   if (currentConnectedCount > 0) {
-    console.log(`📡 Broadcasted item.removed to ${room} (${currentConnectedCount} clients): ${item.path}`);
-    console.log(`📡 Event data:`, JSON.stringify(eventData, null, 2));
+    log.debug(`📡 Broadcasted item.removed to ${room} (${currentConnectedCount} clients): ${item.path}`);
+    log.debug(`📡 Event data:`, JSON.stringify(eventData, null, 2));
     
     // Log all sockets in the room for debugging
     const roomSocketsArray = Array.from(currentRoomSockets || []);
-    console.log(`📡 Room ${room} has ${currentConnectedCount} client(s):`, roomSocketsArray.map(sid => sid.substring(0, 10) + '...'));
+    log.debug(`📡 Room ${room} has ${currentConnectedCount} client(s):`, roomSocketsArray.map(sid => sid.substring(0, 10) + '...'));
     
     // Also emit directly to each socket to ensure delivery
     roomSocketsArray.forEach(socketId => {
       const socket = io.sockets.sockets.get(socketId);
       if (socket && socket.connected) {
-        console.log(`📡 Directly emitting item.removed to socket ${socketId.substring(0, 10)}... (path: ${eventData.path})`);
+        log.debug(`📡 Directly emitting item.removed to socket ${socketId.substring(0, 10)}... (path: ${eventData.path})`);
         socket.emit('item.removed', eventData);
-        console.log(`✅ [SERVER] Emitted item.removed to socket ${socketId} - Socket.io should deliver to client`);
+        log.debug(`✅ [SERVER] Emitted item.removed to socket ${socketId} - Socket.io should deliver to client`);
       } else {
-        console.warn(`⚠️  Socket ${socketId.substring(0, 10)}... not connected (connected: ${socket?.connected}), event queued for polling`);
+        log.warn(`⚠️  Socket ${socketId.substring(0, 10)}... not connected (connected: ${socket?.connected}), event queued for polling`);
       }
     });
   } else {
-    console.log(`📡 Emitted item.removed to ${room} (0 WebSocket clients, will be delivered via polling): ${item.path}`);
+    log.debug(`📡 Emitted item.removed to ${room} (0 WebSocket clients, will be delivered via polling): ${item.path}`);
     const allRooms = Array.from(io.sockets.adapter.rooms.keys()).filter(r => r.startsWith('user:'));
-    console.log(`📡 Available rooms (${allRooms.length}):`, allRooms.slice(0, 10));
-    console.log(`📡 Looking for room: ${room}, normalized wallet: ${normalizedWallet}`);
+    log.debug(`📡 Available rooms (${allRooms.length}):`, allRooms.slice(0, 10));
+    log.debug(`📡 Looking for room: ${room}, normalized wallet: ${normalizedWallet}`);
   }
 }
 
@@ -322,38 +324,38 @@ export function broadcastItemMoved(
     if (globalPendingEvents.length > 100) {
       globalPendingEvents.shift();
     }
-    console.log(`🔔 Queued item.moved event for wallet: ${normalizedWallet}, queue size: ${globalPendingEvents.length}`);
+    log.debug(`🔔 Queued item.moved event for wallet: ${normalizedWallet}, queue size: ${globalPendingEvents.length}`);
   }
   
   // Always emit to room (Socket.io will queue for polling if no WebSocket connection)
   // This ensures events are delivered even if clients are using polling
-  console.log(`📡 Emitting item.moved to room: ${room}, from: ${eventData.old_path}, to: ${eventData.path}, connectedCount: ${connectedCount}`);
+  log.debug(`📡 Emitting item.moved to room: ${room}, from: ${eventData.old_path}, to: ${eventData.path}, connectedCount: ${connectedCount}`);
   io.to(room).emit('item.moved', eventData);
-  console.log(`📡 Event emitted - Socket.io should deliver to ${connectedCount} WebSocket clients or via polling`);
+  log.debug(`📡 Event emitted - Socket.io should deliver to ${connectedCount} WebSocket clients or via polling`);
   
   if (connectedCount > 0) {
-    console.log(`📡 Broadcasted item.moved to ${room} (${connectedCount} clients): ${eventData.old_path} → ${eventData.path}`);
-    console.log(`📡 Event data:`, JSON.stringify(eventData, null, 2));
+    log.debug(`📡 Broadcasted item.moved to ${room} (${connectedCount} clients): ${eventData.old_path} → ${eventData.path}`);
+    log.debug(`📡 Event data:`, JSON.stringify(eventData, null, 2));
     
     // Log all sockets in the room for debugging
     const roomSocketsArray = Array.from(roomSockets || []);
-    console.log(`📡 Room ${room} has ${connectedCount} client(s):`, roomSocketsArray.map(sid => sid.substring(0, 10) + '...'));
+    log.debug(`📡 Room ${room} has ${connectedCount} client(s):`, roomSocketsArray.map(sid => sid.substring(0, 10) + '...'));
     
     // Also emit directly to each socket to ensure delivery
     roomSocketsArray.forEach(socketId => {
       const socket = io.sockets.sockets.get(socketId);
       if (socket && socket.connected) {
-        console.log(`📡 Directly emitting item.moved to socket ${socketId.substring(0, 10)}...`);
+        log.debug(`📡 Directly emitting item.moved to socket ${socketId.substring(0, 10)}...`);
         socket.emit('item.moved', eventData);
       } else {
-        console.warn(`⚠️  Socket ${socketId.substring(0, 10)}... not connected, event queued for polling`);
+        log.warn(`⚠️  Socket ${socketId.substring(0, 10)}... not connected, event queued for polling`);
       }
     });
   } else {
-    console.log(`📡 Emitted item.moved to ${room} (0 WebSocket clients, will be delivered via polling): ${eventData.old_path} → ${eventData.path}`);
+    log.debug(`📡 Emitted item.moved to ${room} (0 WebSocket clients, will be delivered via polling): ${eventData.old_path} → ${eventData.path}`);
     const allRooms = Array.from(io.sockets.adapter.rooms.keys()).filter(r => r.startsWith('user:'));
-    console.log(`📡 Available rooms (${allRooms.length}):`, allRooms.slice(0, 10));
-    console.log(`📡 Looking for room: ${room}, normalized wallet: ${normalizedWallet}`);
+    log.debug(`📡 Available rooms (${allRooms.length}):`, allRooms.slice(0, 10));
+    log.debug(`📡 Looking for room: ${room}, normalized wallet: ${normalizedWallet}`);
   }
 }
 
@@ -393,12 +395,12 @@ export function broadcastItemUpdated(
     if (globalPendingEvents.length > 100) {
       globalPendingEvents.shift();
     }
-    console.log(`🔔 Queued item.updated event for wallet: ${normalizedWallet}, queue size: ${globalPendingEvents.length}`);
+    log.debug(`🔔 Queued item.updated event for wallet: ${normalizedWallet}, queue size: ${globalPendingEvents.length}`);
   }
   
   // Always emit to room (Socket.io will queue for polling if no WebSocket connection)
   io.to(room).emit('item.updated', item);
-  console.log(`📡 Broadcasted item.updated to ${room}: ${item.path}${item.thumbnail ? ' (with thumbnail)' : ''}`);
+  log.debug(`📡 Broadcasted item.updated to ${room}: ${item.path}${item.thumbnail ? ' (with thumbnail)' : ''}`);
 }
 
 /**

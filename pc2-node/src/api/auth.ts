@@ -287,7 +287,7 @@ function buildUserInfo(
     email_confirmed: true,
     is_temp: false,
     taskbar_items: [],
-    desktop_bg_url: '/images/flint-2.jpg',
+    desktop_bg_url: '/images/wallpaper-elacity.png',
     desktop_bg_color: null,
     desktop_bg_fit: 'cover',
     token: sessionToken,

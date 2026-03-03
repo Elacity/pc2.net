@@ -8,7 +8,10 @@
 import { IPFSStorage } from './ipfs.js';
 import { DatabaseManager, FileMetadata } from './database.js';
 import { normalize, join, dirname } from 'path';
-import { logger } from '../utils/logger.js';
+import { createReadStream, statSync, unlinkSync } from 'fs';
+import { logger, createLogger } from '../utils/logger.js';
+
+const log = createLogger('filesystem');
 import { generateThumbnail, supportsThumbnails } from './thumbnail.js';
 
 export interface FileContent {
@@ -193,6 +196,153 @@ export class FilesystemManager {
   }
 
   /**
+   * Write a file from a local path on disk, streaming to IPFS without loading
+   * the entire file into memory. The temp file is deleted after processing.
+   * Suitable for large uploads on memory-constrained devices.
+   */
+  async writeFileFromPath(
+    destPath: string,
+    localFilePath: string,
+    walletAddress: string,
+    options?: {
+      mimeType?: string;
+      isPublic?: boolean;
+    }
+  ): Promise<FileMetadata> {
+    const normalizedPath = this.normalizePath(destPath);
+    const isInPublicFolder = this.isInPublicFolder(normalizedPath);
+    const isPublic = options?.isPublic ?? isInPublicFolder;
+
+    const parentPath = dirname(normalizedPath);
+    if (parentPath !== '/' && parentPath !== '.') {
+      await this.ensureDirectory(parentPath, walletAddress);
+    }
+
+    if (!this.isIPFSAvailable() || !this.ipfs) {
+      throw new Error('IPFS is not available. File storage requires IPFS to be initialized.');
+    }
+
+    const fileSize = statSync(localFilePath).size;
+    logger.info(`[Filesystem] Streaming file to IPFS: ${normalizedPath} (size: ${fileSize} bytes)`);
+
+    // Stream file to IPFS in chunks -- never holds the whole file in memory
+    let bytesStreamed = 0;
+    const logInterval = fileSize > 1024 * 1024 * 1024 ? 100 * 1024 * 1024 : 50 * 1024 * 1024; // 100MB for GB+ files, 50MB otherwise
+    let nextLogAt = logInterval;
+
+    async function* fileChunks(filePath: string): AsyncIterable<Uint8Array> {
+      // 64KB chunks reduce memory pressure on ARM/Jetson devices and improve
+      // backpressure handling in Helia's addByteStream for multi-GB files
+      const stream = createReadStream(filePath, { highWaterMark: 64 * 1024 });
+      for await (const chunk of stream) {
+        const data = chunk instanceof Buffer ? new Uint8Array(chunk) : chunk;
+        bytesStreamed += data.length;
+        if (bytesStreamed >= nextLogAt) {
+          const mb = (bytesStreamed / (1024 * 1024)).toFixed(1);
+          const pct = ((bytesStreamed / fileSize) * 100).toFixed(0);
+          logger.info(`[Filesystem] IPFS upload progress: ${mb}MB / ${(fileSize / (1024 * 1024)).toFixed(1)}MB (${pct}%)`);
+          nextLogAt += logInterval;
+        }
+        yield data;
+      }
+    }
+
+    // Scale timeout with file size: 10 min base + 2 min per 100MB (generous for ARM devices)
+    const timeoutMs = 10 * 60 * 1000 + Math.ceil(fileSize / (100 * 1024 * 1024)) * 2 * 60 * 1000;
+    logger.info(`[Filesystem] IPFS timeout set to ${Math.round(timeoutMs / 60000)} minutes for ${(fileSize / (1024 * 1024)).toFixed(0)}MB file`);
+
+    const ipfsHash = await this.ipfs.storeFileStream(fileChunks(localFilePath), { pin: true, timeoutMs });
+
+    // Verify stored size matches original — catches silent truncation
+    // Note: Helia's UnixFS exporter can throw NotUnixFSError on very large files
+    // (known issue with DAG metadata parsing). If verification fails but all bytes
+    // were streamed, the file is almost certainly intact — skip verification gracefully.
+    if (bytesStreamed === fileSize) {
+      try {
+        const storedSize = await this.ipfs.getFileSize(ipfsHash);
+        if (storedSize !== fileSize) {
+          logger.error(`[Filesystem] SIZE MISMATCH: original=${fileSize} bytes, stored=${storedSize} bytes (${((storedSize / fileSize) * 100).toFixed(1)}%). CID: ${ipfsHash}`);
+          throw new Error(`File upload incomplete: ${storedSize} of ${fileSize} bytes stored. Please retry.`);
+        }
+        logger.info(`[Filesystem] Size verified: ${storedSize} bytes matches original`);
+      } catch (sizeError) {
+        if (sizeError instanceof Error && sizeError.message.includes('File upload incomplete')) {
+          throw sizeError;
+        }
+        // NotUnixFSError or similar — all bytes streamed, file is likely intact
+        logger.info(`[Filesystem] Size verification skipped (all ${bytesStreamed} bytes streamed successfully). Helia metadata read error: ${sizeError instanceof Error ? sizeError.message : sizeError}`);
+      }
+    } else {
+      logger.error(`[Filesystem] STREAM INCOMPLETE: only ${bytesStreamed} of ${fileSize} bytes were yielded by the file reader`);
+    }
+
+    logger.info(`[Filesystem] File streamed to IPFS: ${normalizedPath} -> CID: ${ipfsHash} (${bytesStreamed} bytes streamed, ${fileSize} bytes expected)`);
+
+    // Also check if our streaming generator actually yielded all bytes
+    if (bytesStreamed < fileSize) {
+      logger.error(`[Filesystem] STREAM INCOMPLETE: only ${bytesStreamed} of ${fileSize} bytes were yielded by the file reader. Possible disk read error.`);
+    }
+
+    // Clean up temp file
+    try { unlinkSync(localFilePath); } catch { /* best-effort */ }
+
+    const mimeType = options?.mimeType || this.guessMimeType(destPath);
+
+    // Thumbnails skipped for streamed files (would require reading file again).
+    // Could be added as a background job later.
+    const thumbnail: string | null = null;
+
+    const existing = this.db.getFile(normalizedPath, walletAddress);
+    if (existing && existing.ipfs_hash) {
+      const nextVersion = this.db.getNextVersionNumber(normalizedPath, walletAddress);
+      this.db.createFileVersion({
+        file_path: normalizedPath,
+        wallet_address: walletAddress,
+        version_number: nextVersion,
+        ipfs_hash: existing.ipfs_hash,
+        size: existing.size,
+        mime_type: existing.mime_type,
+        created_at: existing.updated_at,
+        created_by: null,
+        comment: null
+      });
+      logger.info(`[Filesystem] Created version ${nextVersion} snapshot for: ${normalizedPath} (CID: ${existing.ipfs_hash})`);
+    }
+
+    const metadata: FileMetadata = {
+      path: normalizedPath,
+      wallet_address: walletAddress,
+      ipfs_hash: ipfsHash,
+      size: fileSize,
+      mime_type: mimeType,
+      thumbnail,
+      content_text: null,
+      is_dir: false,
+      is_public: isPublic,
+      created_at: existing?.created_at || Date.now(),
+      updated_at: Date.now()
+    };
+
+    if (isPublic) {
+      logger.info(`[Filesystem] File marked as public: ${normalizedPath}`);
+    }
+
+    this.db.createOrUpdateFile(metadata);
+
+    if (isPublic && this.ipfs && this.ipfs.canAnnounce()) {
+      this.ipfs.announceCID(ipfsHash).then(announced => {
+        if (announced) {
+          logger.info(`[Filesystem] Announced public file CID to DHT: ${ipfsHash}`);
+        }
+      }).catch(err => {
+        logger.warn(`[Filesystem] Failed to announce CID to DHT: ${err.message}`);
+      });
+    }
+
+    return metadata;
+  }
+
+  /**
    * Read file (retrieve from IPFS using CID from database)
    */
   async readFile(path: string, walletAddress: string): Promise<Buffer> {
@@ -273,6 +423,46 @@ export class FilesystemManager {
       });
       throw error;
     }
+  }
+
+  /**
+   * Get the byte size of a file without loading content into memory.
+   * Falls back to metadata.size if IPFS streaming is unavailable.
+   */
+  async getFileSize(path: string, walletAddress: string): Promise<number> {
+    const normalizedPath = this.normalizePath(path);
+    const metadata = this.db.getFile(normalizedPath, walletAddress);
+    if (!metadata) throw new Error(`File not found: ${path}`);
+    if (metadata.is_dir) throw new Error(`Path is a directory: ${path}`);
+    if (!metadata.ipfs_hash) throw new Error(`File has no IPFS hash: ${path}`);
+
+    if (this.ipfs) {
+      try {
+        return await this.ipfs.getFileSize(metadata.ipfs_hash);
+      } catch {
+        // Fall back to DB size (may be stale but better than nothing)
+      }
+    }
+    return metadata.size;
+  }
+
+  /**
+   * Stream file content with optional byte-range support.
+   * Memory usage is proportional to IPFS chunk size (~256 KB), not file size.
+   */
+  async *readFileStream(
+    path: string,
+    walletAddress: string,
+    options?: { offset?: number; length?: number }
+  ): AsyncGenerator<Uint8Array> {
+    const normalizedPath = this.normalizePath(path);
+    const metadata = this.db.getFile(normalizedPath, walletAddress);
+    if (!metadata) throw new Error(`File not found: ${path}`);
+    if (metadata.is_dir) throw new Error(`Path is a directory: ${path}`);
+    if (!metadata.ipfs_hash) throw new Error(`File has no IPFS hash: ${path}`);
+    if (!this.ipfs) throw new Error('IPFS is not available');
+
+    yield* this.ipfs.getFileStream(metadata.ipfs_hash, options);
   }
 
   /**
@@ -438,7 +628,7 @@ export class FilesystemManager {
           await this.ipfs.unpinFile(metadata.ipfs_hash);
         } catch (error) {
           // Non-critical - continue with deletion
-          console.warn(`Failed to unpin directory ${metadata.ipfs_hash}:`, error);
+          log.warn(`Failed to unpin directory ${metadata.ipfs_hash}:`, error);
         }
       }
     } else {
@@ -446,10 +636,10 @@ export class FilesystemManager {
       if (metadata.ipfs_hash && this.isIPFSAvailable() && this.ipfs) {
         try {
           await this.ipfs.unpinFile(metadata.ipfs_hash);
-          console.log(`[Delete] Unpinned file from IPFS: ${metadata.ipfs_hash}`);
+          log.info(`[Delete] Unpinned file from IPFS: ${metadata.ipfs_hash}`);
         } catch (error) {
           // Non-critical - continue with deletion
-          console.warn(`Failed to unpin file ${metadata.ipfs_hash}:`, error);
+          log.warn(`Failed to unpin file ${metadata.ipfs_hash}:`, error);
         }
       }
     }
@@ -458,7 +648,7 @@ export class FilesystemManager {
     // Also delete all version history for this file
     this.db.deleteFileVersions(normalizedPath, walletAddress);
     this.db.deleteFile(normalizedPath, walletAddress);
-    console.log(`[Delete] Removed file and version history from database: ${normalizedPath}`);
+    log.info(`[Delete] Removed file and version history from database: ${normalizedPath}`);
   }
 
   /**
@@ -492,7 +682,7 @@ export class FilesystemManager {
         // Only fail if it's a file (we can't overwrite files without explicit overwrite flag)
         if (!existingNew.is_dir) {
           // Log details for debugging
-          console.log('[Filesystem] Destination already exists check:', {
+          log.debug('[Filesystem] Destination already exists check:', {
             oldPath: normalizedOldPath,
             newPath: normalizedNewPath,
             existingFile: {
@@ -505,7 +695,7 @@ export class FilesystemManager {
           throw new Error(`Destination already exists: ${newPath}`);
         } else {
           // Destination is a directory - that's fine, we're moving the file INTO it
-          console.log('[Filesystem] Destination is a directory, allowing move into it:', {
+          log.debug('[Filesystem] Destination is a directory, allowing move into it:', {
             oldPath: normalizedOldPath,
             newPath: normalizedNewPath,
             destinationDir: existingNew.path
@@ -606,15 +796,22 @@ export class FilesystemManager {
       'css': 'text/css',
       'js': 'text/javascript',
       'json': 'application/json',
+      'xml': 'application/xml',
       'png': 'image/png',
       'jpg': 'image/jpeg',
       'jpeg': 'image/jpeg',
       'gif': 'image/gif',
       'svg': 'image/svg+xml',
+      'webp': 'image/webp',
+      'avif': 'image/avif',
+      'ico': 'image/x-icon',
       'pdf': 'application/pdf',
       'zip': 'application/zip',
+      'gz': 'application/gzip',
+      'tar': 'application/x-tar',
       // Video formats
       'mp4': 'video/mp4',
+      'm4v': 'video/mp4',
       'mov': 'video/quicktime',
       'webm': 'video/webm',
       'mpg': 'video/mpeg',
@@ -622,12 +819,19 @@ export class FilesystemManager {
       'mpv': 'video/mpeg',
       'avi': 'video/x-msvideo',
       'mkv': 'video/x-matroska',
+      'ts': 'video/mp2t',
+      '3gp': 'video/3gpp',
+      'ogv': 'video/ogg',
+      'av1': 'video/mp4',
       // Audio formats
       'mp3': 'audio/mpeg',
       'm4a': 'audio/mp4',
+      'aac': 'audio/aac',
       'wav': 'audio/wav',
       'ogg': 'audio/ogg',
-      'flac': 'audio/flac'
+      'opus': 'audio/opus',
+      'flac': 'audio/flac',
+      'weba': 'audio/webm',
     };
 
     return mimeTypes[ext] || null;

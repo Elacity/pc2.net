@@ -102,8 +102,8 @@ function UIPopover (options) {
                 // Position at top for left/right taskbars
                 y_pos = window.toolbar_height + 10; // Just below the toolbar
             } else {
-                // Default bottom taskbar behavior - position above taskbar
-                y_pos = options.top ?? (window.innerHeight - (window.taskbar_height + popover_height + 10));
+                const gapAboveTaskbar = 8;
+                y_pos = options.top ?? (window.innerHeight - (window.taskbar_height + popover_height + gapAboveTaskbar));
             }
         } else {
             y_pos = options.top ?? ($(options.snapToElement).offset().top + $(options.snapToElement).height() + 5);
@@ -121,13 +121,14 @@ function UIPopover (options) {
         position_popover();
     });
 
-    // Show Popover
-    $(el_popover).delay(100).show(0)
-    // In the right position (the mouse)
-        .css({
-            left: `${x_pos }px`,
-            top: `${y_pos }px`,
-        });
+    // Show Popover with smooth animation
+    $(el_popover).show(0).css({
+        left: `${x_pos}px`,
+        top: `${y_pos}px`,
+    });
+    requestAnimationFrame(() => {
+        $(el_popover).addClass('popover-visible');
+    });
 
     return el_popover;
 }

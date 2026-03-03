@@ -5,6 +5,7 @@
  */
 
 import { logger } from '../../utils/logger.js';
+import { detectPlatform } from '../../utils/platform.js';
 import { OllamaProvider, ChatModel, ChatMessage, CompleteArguments, ChatCompletion } from './providers/OllamaProvider.js';
 import { ClaudeProvider } from './providers/ClaudeProvider.js';
 import { OpenAIProvider } from './providers/OpenAIProvider.js';
@@ -19,6 +20,7 @@ import { agentKitTools } from './tools/AgentKitTools.js';
 import { ToolExecutor } from './tools/ToolExecutor.js';
 import { FilesystemManager } from '../../storage/filesystem.js';
 import { DatabaseManager } from '../../storage/database.js';
+import { ContextStore } from '../../storage/context.js';
 import { MemoryConsolidator, ConsolidatedState } from './memory/MemoryConsolidator.js';
 import { TokenBudgetManager } from './budget/TokenBudgetManager.js';
 import { buildSystemPrompt, buildMinimalSystemPrompt } from './prompts/SystemPromptBuilder.js';
@@ -32,6 +34,13 @@ export interface AIConfig {
       enabled?: boolean;
       baseUrl?: string;
       defaultModel?: string;
+      hardware?: {
+        autoDetect?: boolean;
+        num_gpu?: number;
+        num_ctx?: number;
+        num_batch?: number;
+        num_thread?: number;
+      };
     };
     openai?: {
       enabled?: boolean;
@@ -255,6 +264,7 @@ export class AIChatService {
 
   /**
    * Register Ollama provider (auto-detect if available)
+   * Injects platform detection for hardware-aware GPU optimization.
    */
   private async registerOllamaProvider(): Promise<void> {
     const ollamaConfig = this.config.providers?.ollama || {};
@@ -265,6 +275,24 @@ export class AIChatService {
       baseUrl,
       defaultModel,
     });
+
+    // Inject platform info for hardware-aware GPU optimization
+    const platformInfo = detectPlatform();
+    provider.setPlatformInfo(platformInfo);
+
+    // Inject user hardware config overrides if present
+    const hardwareConfig = ollamaConfig.hardware;
+    if (hardwareConfig) {
+      provider.setConfigOverrides(hardwareConfig);
+    }
+
+    if (platformInfo.cudaAvailable) {
+      logger.info(`[AIChatService] 🚀 GPU acceleration enabled: ${platformInfo.gpuInfo || 'CUDA device'}`);
+      logger.info(`[AIChatService] Memory: ${platformInfo.totalMemoryMB}MB total, ~${platformInfo.estimatedAvailableVRAM}MB available for GPU`);
+    }
+    if (platformInfo.isJetson) {
+      logger.info(`[AIChatService] 🤖 Jetson device detected: ${platformInfo.jetsonModel || 'unknown model'}`);
+    }
 
     // Check if Ollama is available
     const isAvailable = await provider.isAvailable();
@@ -412,6 +440,12 @@ export class AIChatService {
     // Register user-specific providers if wallet address is provided
     if (args.walletAddress) {
       await this.registerUserProviders(args.walletAddress);
+    }
+
+    // Retry Ollama registration if no providers available (handles slow startup / memory pressure)
+    if (this.providers.size === 0 && !this.providers.has('ollama')) {
+      logger.info('[AIChatService] No providers available, retrying Ollama registration...');
+      await this.registerOllamaProvider();
     }
 
     if (this.providers.size === 0) {
@@ -706,6 +740,29 @@ export class AIChatService {
     if (cognitivePrompt && !useMinimalPrompt) {
       systemPromptContent = `${systemPromptContent}\n\n${cognitivePrompt}`;
       logger.info('[AIChatService] Cognitive tools injected for complex task');
+    }
+
+    // Inject real-world context if awareness is enabled
+    if (this.db && walletAddress) {
+      try {
+        const rawDb = this.db.getDatabase();
+        if (rawDb) {
+          const aiConfig = this.db.getAIConfig(walletAddress);
+          const contextEnabled = (aiConfig as any)?.context_awareness === 1;
+          if (contextEnabled) {
+            const contextStore = new ContextStore(rawDb);
+            const contextSummary = contextStore.summarizeRecentContext(walletAddress, 24);
+            if (contextSummary) {
+              systemPromptContent = `${systemPromptContent}\n\n${contextSummary}`;
+              logger.info('[AIChatService] Context awareness injected', {
+                length: contextSummary.length,
+              });
+            }
+          }
+        }
+      } catch (error: any) {
+        logger.warn(`[AIChatService] Context injection failed: ${error.message}`);
+      }
     }
     
     logger.info('[AIChatService] System prompt built:', {
@@ -1510,6 +1567,12 @@ Example: {"tool_calls": [{"name": "write_file", "arguments": {"path": "${filePat
     // Register user-specific providers if wallet address is provided
     if (args.walletAddress) {
       await this.registerUserProviders(args.walletAddress);
+    }
+
+    // Retry Ollama registration if no providers available (handles slow startup / memory pressure)
+    if (this.providers.size === 0 && !this.providers.has('ollama')) {
+      logger.info('[AIChatService] No providers available, retrying Ollama registration...');
+      await this.registerOllamaProvider();
     }
 
     if (this.providers.size === 0) {

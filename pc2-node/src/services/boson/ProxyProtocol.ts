@@ -6,51 +6,193 @@
  * 
  * Protocol compatibility:
  * - Server: Boson.Java boson-active-proxy-2.0.8-SNAPSHOT
- * - Uses NaCl CryptoBox for encrypted communication
- * - May require updates for Boson V2 (expected Feb 2026)
+ * - Uses NaCl CryptoBox (libsodium via Apache Tuweni) for encrypted communication
  * 
- * Encrypted Packet Format (after handshake):
- * - 2 bytes: Length (big-endian, includes length field itself)
- * - 24 bytes: Nonce
- * - N bytes: Encrypted payload (includes packet type + data)
+ * === PACKET FORMAT (post-AUTH) ===
  * 
- * Plaintext Packet Format (inside encrypted envelope):
- * - 1 byte: Packet type
- * - N bytes: Payload
+ * All packets: [2-byte length (BE, includes itself)][1-byte type (in clear)][body]
+ * 
+ * Body depends on packet type:
+ *   - Encrypted + padding: CONNECT (cipher of known-size payload + random padding)
+ *   - Encrypted only:      DATA, ERROR (cipher only, no padding)
+ *   - No cipher:           PING_ACK, DISCONNECT, DISCONNECT_ACK, ATTACH_ACK (padding only)
+ *   - Special:             AUTH_ACK (cipher with identity keys + padding)
+ * 
+ * Encryption: NaCl crypto_box_easy_afternm (XSalsa20-Poly1305)
+ *   - Key: DH(clientSessionPk, serverSessionSk) via nacl.box.before
+ *   - Nonce: connectionNonce from AUTH payload (fixed for entire session, never incremented)
+ *   - Cipher format: [16-byte Poly1305 MAC][encrypted body]
+ * 
+ * Padding: Random 0-255 bytes appended to all packets EXCEPT DATA and ERROR.
+ * 
+ * === PACKET TYPE ENCODING ===
+ * 
+ * Java enum uses variable-width ranges per type:
+ *   AUTH:       0x00-0x07  (8 values)     ACK: 0x80-0x87
+ *   ATTACH:     0x08-0x0F  (8 values)     ACK: 0x88-0x8F
+ *   PING:       0x10-0x1F  (16 values)    ACK: 0x90-0x9F
+ *   CONNECT:    0x20-0x2F  (16 values)    ACK: 0xA0-0xAF
+ *   DISCONNECT: 0x30-0x3F  (16 values)    ACK: 0xB0-0xBF
+ *   DATA:       0x40-0x6F  (48 values)    (no ACK)
+ *   ERROR:      0x70-0x7F  (16 values)    (no ACK)
+ * 
+ * Wire values are randomized within each range. ACK types have bit 7 set.
+ * 
+ * Decompiled from: boson-active-proxy-2.0.8-SNAPSHOT.jar
+ *   - io.bosonnetwork.service.activeproxy.PacketType
+ *   - io.bosonnetwork.service.activeproxy.ProxyConnection
+ *   - io.bosonnetwork.service.activeproxy.ProxySession
  */
 
 /**
  * Packet type codes for Active Proxy protocol
+ * 
+ * These are the BASE values (minimum of each range).
+ * Wire values are randomized within the range.
+ * ACK types have the high bit (0x80) set.
+ * 
+ * Source: Java PacketType.valueOf() decompilation
  */
 export enum PacketType {
-  // Authentication (0x00-0x07)
+  // Authentication: range 0x00-0x07
   AUTH = 0x00,
-  AUTH_ACK = 0x01,
-  AUTH_ERROR = 0x02,
+  // AUTH_ACK: range 0x80-0x87
+  AUTH_ACK = 0x80,
   
-  // Session attachment (0x08-0x0F)
+  // Session attachment: range 0x08-0x0F
   ATTACH = 0x08,
-  ATTACH_ACK = 0x09,
-  ATTACH_ERROR = 0x0A,
+  // ATTACH_ACK: range 0x88-0x8F
+  ATTACH_ACK = 0x88,
   
-  // Keep-alive (0x10-0x1F)
+  // Keep-alive: PING range 0x10-0x1F, PING_ACK range 0x90-0x9F
   PING = 0x10,
-  PONG = 0x11,
+  PING_ACK = 0x90,
   
-  // Connection management (0x20-0x2F)
+  // Connection management: CONNECT range 0x20-0x2F, CONNECT_ACK range 0xA0-0xAF
   CONNECT = 0x20,
-  CONNECT_ACK = 0x21,
+  CONNECT_ACK = 0xA0,
   
-  // Disconnection (0x30-0x3F)
+  // Disconnection: DISCONNECT range 0x30-0x3F, DISCONNECT_ACK range 0xB0-0xBF
   DISCONNECT = 0x30,
-  DISCONNECT_ACK = 0x31,
+  DISCONNECT_ACK = 0xB0,
   
-  // Data transfer (0x40-0x6F)
+  // Data transfer: range 0x40-0x6F (48 values, no ACK)
   DATA = 0x40,
   
-  // Errors (0x70-0x7F)
+  // Errors: range 0x70-0x7F (16 values, no ACK)
   ERROR = 0x70,
 }
+
+/**
+ * Parse a wire byte into a PacketType using the same logic as Java's PacketType.valueOf()
+ * 
+ * Decompiled from Java:
+ *   boolean ack = (flag & 0x80) != 0;
+ *   byte type = (byte)(flag & 0x7F);
+ *   switch (type >> 4) {
+ *     case 0: type <= 7 ? AUTH : ATTACH (with ack variant)
+ *     case 1: PING (with ack variant)
+ *     case 2: CONNECT (with ack variant)
+ *     case 3: DISCONNECT (with ack variant)
+ *     case 4,5,6: DATA (no ACK allowed)
+ *     case 7: ERROR (no ACK allowed)
+ *   }
+ */
+export function parsePacketType(flag: number): PacketType | null {
+  const ack = (flag & 0x80) !== 0;
+  const type = flag & 0x7F;
+  const category = type >> 4;
+  
+  switch (category) {
+    case 0: // 0x00-0x0F
+      if (type <= 7) {
+        return ack ? PacketType.AUTH_ACK : PacketType.AUTH;
+      }
+      return ack ? PacketType.ATTACH_ACK : PacketType.ATTACH;
+      
+    case 1: // 0x10-0x1F
+      return ack ? PacketType.PING_ACK : PacketType.PING;
+      
+    case 2: // 0x20-0x2F
+      return ack ? PacketType.CONNECT_ACK : PacketType.CONNECT;
+      
+    case 3: // 0x30-0x3F
+      return ack ? PacketType.DISCONNECT_ACK : PacketType.DISCONNECT;
+      
+    case 4: // 0x40-0x4F
+    case 5: // 0x50-0x5F
+    case 6: // 0x60-0x6F
+      if (ack) return null; // DATA cannot be ACK
+      return PacketType.DATA;
+      
+    case 7: // 0x70-0x7F
+      if (ack) return null; // ERROR cannot be ACK
+      return PacketType.ERROR;
+      
+    default:
+      return null;
+  }
+}
+
+/**
+ * Check if a packet type has an encrypted payload from the server
+ * 
+ * Server-to-client encrypted types:
+ *   CONNECT: 19-byte payload encrypted (35 bytes cipher)
+ *   DATA: variable-length payload encrypted
+ *   ERROR: variable-length payload encrypted
+ * 
+ * NOT encrypted (padding only or empty):
+ *   PING_ACK: no payload, random padding
+ *   DISCONNECT: no payload, random padding
+ *   DISCONNECT_ACK: no payload, random padding
+ *   ATTACH_ACK: no payload, random padding
+ */
+export function hasEncryptedPayload(type: PacketType): boolean {
+  switch (type) {
+    case PacketType.CONNECT:
+    case PacketType.DATA:
+    case PacketType.ERROR:
+      return true;
+    default:
+      return false;
+  }
+}
+
+/**
+ * Check if a packet type has random padding after the payload/cipher
+ * 
+ * From Java sendPacket():
+ *   if (type != PacketType.DATA && type != PacketType.ERROR) {
+ *       padding = this.randomPadding();  // 0-255 random bytes
+ *   }
+ */
+export function hasPadding(type: PacketType): boolean {
+  return type !== PacketType.DATA && type !== PacketType.ERROR;
+}
+
+/**
+ * Get the known plaintext size for a packet type's payload (if fixed-size)
+ * Returns null for variable-size payloads (DATA, ERROR)
+ * 
+ * CONNECT payload: [1-byte addrLen][16-byte addr][2-byte port] = 19 bytes
+ * CONNECT cipher = 19 + 16 (MAC) = 35 bytes
+ */
+export function getKnownCipherSize(type: PacketType): number | null {
+  switch (type) {
+    case PacketType.CONNECT:
+      return 35; // 19 payload + 16 MAC
+    default:
+      return null; // Variable size or no cipher
+  }
+}
+
+/**
+ * CONNECT payload size (always 19 bytes from Java)
+ * Format: [1-byte addrLen][16-byte addr (zero-padded)][2-byte port (BE)]
+ */
+export const CONNECT_PAYLOAD_SIZE = 19;
+export const CONNECT_CIPHER_SIZE = CONNECT_PAYLOAD_SIZE + 16; // 35 bytes
 
 /**
  * Decoded packet structure
@@ -81,193 +223,99 @@ export interface AuthAckPayload {
 
 /**
  * CONNECT packet payload structure
+ * 
+ * From Java sendConnect():
+ *   payload[0] = addr.length (4 for IPv4, 16 for IPv6)
+ *   payload[1..16] = addr bytes (zero-padded to 16)
+ *   payload[17..18] = port (big-endian)
  */
 export interface ConnectPayload {
-  connectionId: number;
-  sourceAddress: string;
-  sourcePort: number;
+  addressLength: number;
+  address: string;
+  port: number;
 }
 
 /**
- * DATA packet payload structure
- */
-export interface DataPayload {
-  connectionId: number;
-  data: Buffer;
-}
-
-/**
- * Length field size: 2 bytes (encrypted protocol)
+ * Length field size: 2 bytes
  */
 export const LENGTH_FIELD_SIZE = 2;
 
 /**
- * Nonce size for encrypted packets
+ * Nonce size for NaCl CryptoBox
  */
 export const NONCE_SIZE = 24;
 
 /**
- * Minimum encrypted packet header: 2 (length) + 24 (nonce)
+ * Packet header size: 2 (length) + 1 (type)
  */
-export const ENCRYPTED_HEADER_SIZE = LENGTH_FIELD_SIZE + NONCE_SIZE;
+export const PACKET_HEADER_SIZE = 3;
 
 /**
- * Header size for plaintext packet inside envelope: 1 byte type
+ * Maximum packet size (64KB - reasonable for TCP proxy)
  */
-const PLAINTEXT_HEADER_SIZE = 1;
+const MAX_PACKET_SIZE = 65535;
 
 /**
- * Maximum packet size (1MB)
+ * Get packet type name for logging
  */
-const MAX_PACKET_SIZE = 1024 * 1024;
-
-/**
- * Maximum encrypted packet size (1MB + crypto overhead)
- */
-const MAX_ENCRYPTED_PACKET_SIZE = MAX_PACKET_SIZE + NONCE_SIZE + 16; // 16 = auth tag
-
-/**
- * Encode a plaintext packet (to be encrypted before transmission)
- * 
- * This creates the inner packet format: [1-byte type][payload]
- * The result should be encrypted with CryptoBox before sending.
- * 
- * @param type - Packet type
- * @param payload - Packet payload
- * @returns Encoded plaintext packet (ready for encryption)
- */
-export function encodePlaintextPacket(type: PacketType, payload: Buffer = Buffer.alloc(0)): Buffer {
-  const packet = Buffer.alloc(1 + payload.length);
-  
-  // Write packet type
-  packet.writeUInt8(type, 0);
-  
-  // Write payload
-  if (payload.length > 0) {
-    payload.copy(packet, 1);
-  }
-  
-  return packet;
-}
-
-/**
- * Legacy encode function for backward compatibility
- * @deprecated Use encodePlaintextPacket with CryptoBox encryption
- */
-export function encodePacket(type: PacketType, payload: Buffer = Buffer.alloc(0)): Buffer {
-  return encodePlaintextPacket(type, payload);
-}
-
-/**
- * Decode a plaintext packet (after decryption)
- * 
- * This decodes the inner packet format: [1-byte type][payload]
- * Use this after decrypting received data with CryptoBox.
- * 
- * @param data - Decrypted plaintext data
- * @returns Decoded packet or null if invalid
- */
-export function decodePlaintextPacket(data: Buffer): Packet | null {
-  if (data.length < 1) {
-    return null;
-  }
-  
-  const type = data.readUInt8(0) as PacketType;
-  const payload = data.length > 1 ? data.slice(1) : Buffer.alloc(0);
-  
-  return { type, payload };
-}
-
-/**
- * Read an encrypted packet from a buffer
- * 
- * Encrypted packet format: [2-byte length][24-byte nonce][encrypted data]
- * 
- * @param data - Buffer containing encrypted packet data
- * @returns Encrypted packet components or null if incomplete
- */
-export function readEncryptedPacket(data: Buffer): { 
-  nonce: Buffer; 
-  ciphertext: Buffer; 
-  bytesConsumed: number;
-} | null {
-  // Need at least length field
-  if (data.length < LENGTH_FIELD_SIZE) {
-    return null;
-  }
-  
-  // Read 2-byte length (includes itself)
-  const messageLength = data.readUInt16BE(0);
-  
-  // Validate length
-  if (messageLength > MAX_ENCRYPTED_PACKET_SIZE) {
-    throw new Error(`Encrypted packet too large: ${messageLength} bytes`);
-  }
-  
-  // Check if we have the full packet
-  if (data.length < messageLength) {
-    return null;
-  }
-  
-  // Minimum valid: 2 (len) + 24 (nonce) + 16 (min ciphertext)
-  if (messageLength < ENCRYPTED_HEADER_SIZE + 16) {
-    throw new Error(`Encrypted packet too short: ${messageLength} bytes`);
-  }
-  
-  // Extract nonce and ciphertext (after length field)
-  const nonce = data.slice(LENGTH_FIELD_SIZE, ENCRYPTED_HEADER_SIZE);
-  const ciphertext = data.slice(ENCRYPTED_HEADER_SIZE, messageLength);
-  
-  return {
-    nonce,
-    ciphertext,
-    bytesConsumed: messageLength,
+export function getPacketTypeName(type: PacketType): string {
+  const names: Record<number, string> = {
+    [PacketType.AUTH]: 'AUTH',
+    [PacketType.AUTH_ACK]: 'AUTH_ACK',
+    [PacketType.ATTACH]: 'ATTACH',
+    [PacketType.ATTACH_ACK]: 'ATTACH_ACK',
+    [PacketType.PING]: 'PING',
+    [PacketType.PING_ACK]: 'PING_ACK',
+    [PacketType.CONNECT]: 'CONNECT',
+    [PacketType.CONNECT_ACK]: 'CONNECT_ACK',
+    [PacketType.DISCONNECT]: 'DISCONNECT',
+    [PacketType.DISCONNECT_ACK]: 'DISCONNECT_ACK',
+    [PacketType.DATA]: 'DATA',
+    [PacketType.ERROR]: 'ERROR',
   };
+  
+  return names[type] || `UNKNOWN(0x${type.toString(16)})`;
 }
 
 /**
- * Legacy decode function - for testing only
- * @deprecated Use readEncryptedPacket + CryptoBox decryption + decodePlaintextPacket
+ * Parse CONNECT payload from decrypted plaintext
+ * 
+ * Java format: [1-byte addrLen][16-byte addr (zero-padded)][2-byte port (BE)]
+ * addrLen = 4 for IPv4, 16 for IPv6
  */
-export function decodePacket(data: Buffer): { packet: Packet; bytesConsumed: number } | null {
-  // This legacy function expected 4-byte length + 1-byte type
-  // It's kept for backward compatibility but shouldn't be used with the real server
-  
-  if (data.length < 5) {
-    return null;
+export function parseConnectPayload(plaintext: Buffer): ConnectPayload {
+  if (plaintext.length < CONNECT_PAYLOAD_SIZE) {
+    throw new Error(`CONNECT payload too short: ${plaintext.length} bytes (need ${CONNECT_PAYLOAD_SIZE})`);
   }
   
-  const length = data.readUInt32BE(0);
+  const addressLength = plaintext.readUInt8(0);
   
-  if (length > MAX_PACKET_SIZE) {
-    throw new Error(`Packet too large: ${length} bytes`);
+  // Extract address bytes (only addrLen bytes are meaningful, rest is zero-padding)
+  const addrBytes = plaintext.slice(1, 1 + addressLength);
+  
+  // Convert to IP string
+  let address: string;
+  if (addressLength === 4) {
+    // IPv4: a.b.c.d
+    address = Array.from(addrBytes).join('.');
+  } else if (addressLength === 16) {
+    // IPv6: groups of 2 bytes as hex
+    const parts: string[] = [];
+    for (let i = 0; i < 16; i += 2) {
+      parts.push(((addrBytes[i] << 8) | addrBytes[i + 1]).toString(16));
+    }
+    address = parts.join(':');
+  } else {
+    address = addrBytes.toString('hex');
   }
   
-  const totalLength = 4 + length;
-  if (data.length < totalLength) {
-    return null;
-  }
+  const port = plaintext.readUInt16BE(17);
   
-  const type = data.readUInt8(4) as PacketType;
-  const payload = Buffer.alloc(length - 1);
-  if (length > 1) {
-    data.copy(payload, 0, 5, totalLength);
-  }
-  
-  return {
-    packet: { type, payload },
-    bytesConsumed: totalLength,
-  };
+  return { addressLength, address, port };
 }
 
 /**
  * Encode AUTH packet payload
- * 
- * @param nodeId - Node identifier
- * @param publicKey - Ed25519 public key (32 bytes)
- * @param signature - Signature of challenge (64 bytes)
- * @param port - Local port to expose
- * @returns Encoded payload buffer
  */
 export function encodeAuthPayload(
   nodeId: string,
@@ -281,21 +329,17 @@ export function encodeAuthPayload(
   const payload = Buffer.alloc(2 + nodeIdBytes.length + 32 + 64 + 2);
   let offset = 0;
   
-  // Node ID length and data
   payload.writeUInt16BE(nodeIdBytes.length, offset);
   offset += 2;
   nodeIdBytes.copy(payload, offset);
   offset += nodeIdBytes.length;
   
-  // Public key (32 bytes)
   publicKey.copy(payload, offset);
   offset += 32;
   
-  // Signature (64 bytes)
   signature.copy(payload, offset);
   offset += 64;
   
-  // Port
   payload.writeUInt16BE(port, offset);
   
   return payload;
@@ -303,24 +347,18 @@ export function encodeAuthPayload(
 
 /**
  * Decode AUTH_ACK packet payload
- * 
- * @param payload - Raw payload buffer
- * @returns Decoded AUTH_ACK payload
  */
 export function decodeAuthAckPayload(payload: Buffer): AuthAckPayload {
   let offset = 0;
   
-  // Session ID length and data
   const sessionIdLen = payload.readUInt16BE(offset);
   offset += 2;
   const sessionId = payload.slice(offset, offset + sessionIdLen).toString('utf8');
   offset += sessionIdLen;
   
-  // Allocated port
   const allocatedPort = payload.readUInt16BE(offset);
   offset += 2;
   
-  // Server public key (32 bytes)
   const serverPublicKey = Buffer.alloc(32);
   payload.copy(serverPublicKey, 0, offset, offset + 32);
   
@@ -328,205 +366,29 @@ export function decodeAuthAckPayload(payload: Buffer): AuthAckPayload {
 }
 
 /**
- * Decode CONNECT packet payload
+ * Packet buffer for handling partial TCP reads
  * 
- * @param payload - Raw payload buffer
- * @returns Decoded CONNECT payload
- */
-export function decodeConnectPayload(payload: Buffer): ConnectPayload {
-  let offset = 0;
-  
-  // Connection ID (4 bytes)
-  const connectionId = payload.readUInt32BE(offset);
-  offset += 4;
-  
-  // Source address length and data
-  const addrLen = payload.readUInt16BE(offset);
-  offset += 2;
-  const sourceAddress = payload.slice(offset, offset + addrLen).toString('utf8');
-  offset += addrLen;
-  
-  // Source port
-  const sourcePort = payload.readUInt16BE(offset);
-  
-  return { connectionId, sourceAddress, sourcePort };
-}
-
-/**
- * Encode DATA packet payload
- * 
- * @param connectionId - Connection identifier
- * @param data - Data to send
- * @returns Encoded payload buffer
- */
-export function encodeDataPayload(connectionId: number, data: Buffer): Buffer {
-  const payload = Buffer.alloc(4 + data.length);
-  
-  // Connection ID (4 bytes)
-  payload.writeUInt32BE(connectionId, 0);
-  
-  // Data
-  data.copy(payload, 4);
-  
-  return payload;
-}
-
-/**
- * Decode DATA packet payload
- * 
- * @param payload - Raw payload buffer
- * @returns Decoded DATA payload
- */
-export function decodeDataPayload(payload: Buffer): DataPayload {
-  const connectionId = payload.readUInt32BE(0);
-  const data = Buffer.alloc(payload.length - 4);
-  payload.copy(data, 0, 4);
-  
-  return { connectionId, data };
-}
-
-/**
- * Encode DISCONNECT packet payload
- * 
- * @param connectionId - Connection identifier to disconnect
- * @returns Encoded payload buffer
- */
-export function encodeDisconnectPayload(connectionId: number): Buffer {
-  const payload = Buffer.alloc(4);
-  payload.writeUInt32BE(connectionId, 0);
-  return payload;
-}
-
-/**
- * Get packet type name for logging
- * 
- * @param type - Packet type code
- * @returns Human-readable name
- */
-export function getPacketTypeName(type: PacketType): string {
-  const names: Record<number, string> = {
-    [PacketType.AUTH]: 'AUTH',
-    [PacketType.AUTH_ACK]: 'AUTH_ACK',
-    [PacketType.AUTH_ERROR]: 'AUTH_ERROR',
-    [PacketType.ATTACH]: 'ATTACH',
-    [PacketType.ATTACH_ACK]: 'ATTACH_ACK',
-    [PacketType.ATTACH_ERROR]: 'ATTACH_ERROR',
-    [PacketType.PING]: 'PING',
-    [PacketType.PONG]: 'PONG',
-    [PacketType.CONNECT]: 'CONNECT',
-    [PacketType.CONNECT_ACK]: 'CONNECT_ACK',
-    [PacketType.DISCONNECT]: 'DISCONNECT',
-    [PacketType.DISCONNECT_ACK]: 'DISCONNECT_ACK',
-    [PacketType.DATA]: 'DATA',
-    [PacketType.ERROR]: 'ERROR',
-  };
-  
-  return names[type] || `UNKNOWN(0x${type.toString(16)})`;
-}
-
-/**
- * Encrypted packet buffer for handling partial reads
- * 
- * Handles the encrypted protocol format: [2-byte length][24-byte nonce][ciphertext]
- */
-export class EncryptedPacketBuffer {
-  private buffer: Buffer = Buffer.alloc(0);
-  
-  /**
-   * Append data to the buffer
-   */
-  append(data: Buffer): void {
-    this.buffer = Buffer.concat([this.buffer, data]);
-  }
-  
-  /**
-   * Try to extract a complete encrypted packet from the buffer
-   * 
-   * @returns Encrypted packet components or null if incomplete
-   */
-  extractEncryptedPacket(): { nonce: Buffer; ciphertext: Buffer } | null {
-    const result = readEncryptedPacket(this.buffer);
-    
-    if (result) {
-      // Remove consumed bytes from buffer
-      this.buffer = this.buffer.slice(result.bytesConsumed);
-      return {
-        nonce: result.nonce,
-        ciphertext: result.ciphertext,
-      };
-    }
-    
-    return null;
-  }
-  
-  /**
-   * Get the raw buffer for handshake processing
-   */
-  getBuffer(): Buffer {
-    return this.buffer;
-  }
-  
-  /**
-   * Consume bytes from the buffer (for handshake)
-   */
-  consume(bytes: number): void {
-    this.buffer = this.buffer.slice(bytes);
-  }
-  
-  /**
-   * Get remaining buffer length
-   */
-  get length(): number {
-    return this.buffer.length;
-  }
-  
-  /**
-   * Clear the buffer
-   */
-  clear(): void {
-    this.buffer = Buffer.alloc(0);
-  }
-}
-
-/**
- * Legacy packet buffer - for backward compatibility
- * @deprecated Use EncryptedPacketBuffer with CryptoBox
+ * Format: [2-byte length (includes itself)][1-byte type][body]
  */
 export class PacketBuffer {
   private buffer: Buffer = Buffer.alloc(0);
   
-  /**
-   * Append data to the buffer
-   */
   append(data: Buffer): void {
     this.buffer = Buffer.concat([this.buffer, data]);
   }
   
-  /**
-   * Try to extract a complete packet from the buffer
-   * @deprecated This uses legacy 4-byte length format
-   */
-  extractPacket(): Packet | null {
-    const result = decodePacket(this.buffer);
-    
-    if (result) {
-      this.buffer = this.buffer.slice(result.bytesConsumed);
-      return result.packet;
-    }
-    
-    return null;
+  getBuffer(): Buffer {
+    return this.buffer;
   }
   
-  /**
-   * Get remaining buffer length
-   */
+  consume(bytes: number): void {
+    this.buffer = this.buffer.slice(bytes);
+  }
+  
   get length(): number {
     return this.buffer.length;
   }
   
-  /**
-   * Clear the buffer
-   */
   clear(): void {
     this.buffer = Buffer.alloc(0);
   }

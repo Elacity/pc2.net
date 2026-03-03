@@ -1,11 +1,15 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
 import cookieParser from 'cookie-parser';
 import multer from 'multer';
+import os from 'os';
+import path from 'path';
+import fs from 'fs';
 import { DatabaseManager, FilesystemManager } from '../storage/index.js';
 import { Config } from '../config/loader.js';
 import { Server as SocketIOServer } from 'socket.io';
 import { authenticate, corsMiddleware, errorHandler, AuthenticatedRequest } from './middleware.js';
-import { logger } from '../utils/logger.js';
+import { logger, createLogger } from '../utils/logger.js';
+const log = createLogger('api-index');
 import { handleWhoami } from './whoami.js';
 import { handleParticleAuth, handleGrantUserApp, handleGetUserAppToken } from './auth.js';
 import { handleStat, handleReaddir, handleRead, handleWrite, handleMkdir, handleDelete, handleMove, handleRename, handleCopy } from './filesystem.js';
@@ -38,6 +42,8 @@ import didRouter from './did.js';
 import walletRouter from './wallet.js';
 import gatewayRouter from './gateway.js';
 import systemRouter from './system.js';
+import contextRouter from './context.js';
+import voiceRouter from './voice.js';
 
 // Extend Express Request to include database, filesystem, config, and WebSocket
 declare global {
@@ -210,7 +216,7 @@ export function setupAPI(app: Express): void {
       
       res.json({ success: true });
     } catch (error) {
-      console.error('[User Profile] Error:', error);
+      log.error('[User Profile] Error:', error);
       res.status(500).json({ error: 'Failed to save profile' });
     }
   });
@@ -227,7 +233,7 @@ export function setupAPI(app: Express): void {
       
       res.json({ display_name: displayName });
     } catch (error) {
-      console.error('[User Profile] Error:', error);
+      log.error('[User Profile] Error:', error);
       res.status(500).json({ error: 'Failed to get profile' });
     }
   });
@@ -261,7 +267,7 @@ export function setupAPI(app: Express): void {
       
       res.json({ logins });
     } catch (error) {
-      console.error('[Login History] Error:', error);
+      log.error('[Login History] Error:', error);
       res.json({ logins: [] });
     }
   });
@@ -296,7 +302,7 @@ export function setupAPI(app: Express): void {
       
       res.json(result);
     } catch (error) {
-      console.error('[List Sessions] Error:', error);
+      log.error('[List Sessions] Error:', error);
       res.json([]);
     }
   });
@@ -320,7 +326,7 @@ export function setupAPI(app: Express): void {
       
       res.json({ success: true });
     } catch (error) {
-      console.error('[Revoke Session] Error:', error);
+      log.error('[Revoke Session] Error:', error);
       res.status(500).json({ error: 'Failed to revoke session' });
     }
   });
@@ -342,6 +348,8 @@ export function setupAPI(app: Express): void {
   app.use('/api/wallet', walletRouter);
   app.use('/api/gateway', gatewayRouter);
   app.use('/api/system', systemRouter);
+  app.use('/api/context', contextRouter);
+  app.use('/api/ai', voiceRouter);
   
   // Rate limit status endpoint
   app.get('/api/rate-limit/status', authenticate, (req: AuthenticatedRequest, res: Response) => {
@@ -395,11 +403,29 @@ export function setupAPI(app: Express): void {
   app.get('/df', authenticate, handleDF);
   app.post('/df', authenticate, handleDF);
   
-  // Batch endpoint with multer for multipart file uploads
+  // Batch endpoint with multer for multipart file uploads.
+  // Uses diskStorage to stream uploads to a temp dir instead of buffering
+  // entirely in RAM -- critical for large files on memory-constrained devices.
+  // Prefer data directory over os.tmpdir() because /tmp is often tmpfs (RAM-backed)
+  // and can't hold large files on memory-constrained devices like Jetson.
+  const config = app.locals.config as Config | undefined;
+  const dataDir = config?.storage?.database_path ? path.dirname(config.storage.database_path) : null;
+  const uploadTmpDir = dataDir
+    ? path.join(dataDir, 'tmp', 'pc2-uploads')
+    : path.join(os.tmpdir(), 'pc2-uploads');
+  if (!fs.existsSync(uploadTmpDir)) fs.mkdirSync(uploadTmpDir, { recursive: true });
+  logger.info(`[API] Upload temp directory: ${uploadTmpDir}`);
+
   const upload = multer({ 
-    storage: multer.memoryStorage(),
+    storage: multer.diskStorage({
+      destination: uploadTmpDir,
+      filename: (_req, file, cb) => {
+        const unique = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        cb(null, `${unique}-${file.originalname}`);
+      },
+    }),
     limits: {
-      fileSize: 100 * 1024 * 1024 // 100MB max file size
+      fileSize: Infinity // No artificial limit -- user's hardware, user's resources
     }
   });
   

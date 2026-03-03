@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "lastUpdated": "2025-01-31",
+  "lastUpdated": "2026-02-27",
   "categories": {
     "recommended": {
       "title": "Recommended for Your Hardware",
@@ -317,6 +317,38 @@
       "capabilities": ["chat", "vision"],
       "minVRAM": "16GB",
       "tags": ["vision", "multimodal", "high-quality", "no-tools"]
+    },
+    {
+      "id": "orieg/gemma3-tools:4b",
+      "name": "Gemma 3 Tools 4B",
+      "family": "gemma",
+      "provider": "Community",
+      "parameters": "4B",
+      "size": "3.3GB",
+      "sizeBytes": 3543348019,
+      "description": "Community pick - Gemma 3 4B with tools enabled for file creation",
+      "categories": ["recommended", "medium"],
+      "communityPick": true,
+      "supportsTools": true,
+      "capabilities": ["chat", "instruction-following", "tools"],
+      "minVRAM": "4GB",
+      "tags": ["community", "tools", "function-calling", "file-creation"]
+    },
+    {
+      "id": "qwen3.5:35b-a3b",
+      "name": "Qwen 3.5 35B-A3B (MoE)",
+      "family": "qwen",
+      "provider": "Alibaba",
+      "parameters": "35B",
+      "size": "24GB",
+      "sizeBytes": 25769803776,
+      "description": "Sonnet-grade MoE model - runs locally on modest hardware via sparse activation",
+      "categories": ["large"],
+      "communityPick": true,
+      "supportsTools": true,
+      "capabilities": ["chat", "reasoning", "code-generation", "multilingual", "vision", "tools"],
+      "minVRAM": "16GB",
+      "tags": ["moe", "high-quality", "reasoning", "vision", "function-calling"]
     },
     {
       "id": "llama3.2-claude3.7:latest",

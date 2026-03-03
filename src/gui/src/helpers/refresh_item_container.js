@@ -79,7 +79,8 @@ const refresh_item_container = function (el_item_container, options) {
             $(el_window).attr('data-uid', fsentry.id);
             $(el_window).attr('data-sort_by', fsentry.sort_by ?? 'name');
             $(el_window).attr('data-sort_order', fsentry.sort_order ?? 'asc');
-            $(el_window).attr('data-layout', fsentry.layout ?? 'icons');
+            const layout = window.get_explorer_layout_preference?.() ?? fsentry.layout ?? 'icons';
+            $(el_window).attr('data-layout', layout);
             // data-name
             $(el_window).attr('data-name', html_encode(fsentry.name));
             // data-path
@@ -113,12 +114,13 @@ const refresh_item_container = function (el_item_container, options) {
         $(el_item_container).attr('data-sort_by', fsentry.sort_by ?? 'name');
         $(el_item_container).attr('data-sort_order', fsentry.sort_order ?? 'asc');
         // update layout
+        const layoutToApply = window.get_explorer_layout_preference?.() ?? fsentry.layout ?? 'icons';
         if ( el_window && el_window.length > 0 )
         {
-            window.update_window_layout(el_window, fsentry.layout);
+            window.update_window_layout(el_window, layoutToApply);
         }
         //
-        if ( fsentry.layout === 'details' ) {
+        if ( layoutToApply === 'details' ) {
             window.update_details_layout_sort_visuals(el_window, fsentry.sort_by, fsentry.sort_order);
         }
     });

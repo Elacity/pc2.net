@@ -7,6 +7,8 @@
 import { Router, Request, Response } from 'express';
 import { BosonService } from '../services/boson/index.js';
 import os from 'os';
+import { createLogger } from '../utils/logger.js';
+const log = createLogger('api-boson');
 
 const router = Router();
 
@@ -169,6 +171,36 @@ router.get('/connectivity', (req: Request, res: Response) => {
   const status = connectivityService.getStatus();
   
   res.json(status);
+});
+
+/**
+ * POST /api/boson/stealth-mode
+ * Toggle stealth mode (forces AmneziaWG stealth tunnel)
+ */
+router.post('/stealth-mode', async (req: Request, res: Response) => {
+  const bosonService = getBosonService(req);
+
+  if (!bosonService) {
+    return res.status(503).json({
+      error: 'Boson service not available',
+    });
+  }
+
+  const { enabled, transport } = req.body;
+  if (typeof enabled !== 'boolean') {
+    return res.status(400).json({ error: 'enabled must be a boolean' });
+  }
+
+  const validTransports = ['amnezia-wireguard', 'vless-reality'];
+  if (transport && !validTransports.includes(transport)) {
+    return res.status(400).json({ error: `transport must be one of: ${validTransports.join(', ')}` });
+  }
+
+  const connectivityService = bosonService.getConnectivityService();
+  await connectivityService.setStealthMode(enabled, transport || undefined);
+
+  const status = connectivityService.getStatus();
+  res.json({ success: true, stealthMode: enabled, transport: status.natType, forcedTransport: status.forcedTransport });
 });
 
 /**
@@ -509,7 +541,7 @@ router.post('/secure-mnemonic', async (req: Request, res: Response) => {
       adminWallet: walletAddress,
     });
   } catch (error) {
-    console.error('[Boson API] Failed to secure mnemonic:', error);
+    log.error('[Boson API] Failed to secure mnemonic:', error);
     res.status(500).json({
       error: 'Failed to encrypt mnemonic',
     });
@@ -607,7 +639,7 @@ router.post('/encrypt-mnemonic', async (req: Request, res: Response) => {
       adminWallet: walletAddress,
     });
   } catch (error) {
-    console.error('[Boson API] Failed to encrypt mnemonic:', error);
+    log.error('[Boson API] Failed to encrypt mnemonic:', error);
     res.status(500).json({
       error: 'Failed to encrypt mnemonic',
     });

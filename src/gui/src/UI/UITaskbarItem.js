@@ -102,6 +102,12 @@ function UITaskbarItem (options) {
         }, 100);
     }
 
+    if (options.onHover) {
+        $(el_taskbar_item).on('mouseenter', function () {
+            options.onHover(el_taskbar_item);
+        });
+    }
+
     $(el_taskbar_item).on('click', function (e) {
         e.preventDefault();
         e.stopPropagation();
@@ -125,8 +131,26 @@ function UITaskbarItem (options) {
         }
 
         if ( options.onClick === undefined || options.onClick(el_taskbar_item) === false ) {
-            // re-show each window in this app group
-            $(`.window[data-app="${options.app}"]`).showWindow();
+            const wm = window.workspace_manager;
+            if (wm) {
+                // Prefer windows on the current workspace
+                const $currentWsWindows = $(`.window[data-app="${options.app}"][data-workspace="${wm.activeWorkspaceId}"]`);
+                if ($currentWsWindows.length > 0) {
+                    $currentWsWindows.showWindow();
+                } else {
+                    // No windows on current workspace — find which workspace has one and switch
+                    const $anyWindow = $(`.window[data-app="${options.app}"]`).first();
+                    if ($anyWindow.length > 0) {
+                        const wsId = parseInt($anyWindow.attr('data-workspace'));
+                        if (wsId && wsId !== wm.activeWorkspaceId) {
+                            wm.switchTo(wsId);
+                        }
+                        $(`.window[data-app="${options.app}"][data-workspace="${wsId}"]`).showWindow();
+                    }
+                }
+            } else {
+                $(`.window[data-app="${options.app}"]`).showWindow();
+            }
         }
     });
 
@@ -291,6 +315,28 @@ function UITaskbarItem (options) {
                 onClick: function () {
                     $(`.window[data-app="${options.app}"]`).close();
                 },
+            });
+        }
+
+        // -------------------------------------------
+        // Move to Workspace submenu
+        // -------------------------------------------
+        const wm = window.workspace_manager;
+        if (wm && wm.workspaces.length > 1 && open_windows > 0) {
+            menu_items.push('-');
+            const wsSubmenu = wm.workspaces
+                .filter(ws => ws.id !== wm.activeWorkspaceId)
+                .map(ws => ({
+                    html: ws.name,
+                    onClick: function () {
+                        $(`.window[data-app="${options.app}"][data-workspace="${wm.activeWorkspaceId}"]`).each(function () {
+                            wm.moveWindowToWorkspace($(this).attr('data-id'), ws.id);
+                        });
+                    }
+                }));
+            menu_items.push({
+                html: 'Move All to Workspace',
+                items: wsSubmenu,
             });
         }
         const pos = el_taskbar_item.getBoundingClientRect();

@@ -23,8 +23,17 @@ todos:
   - id: dht-participant
     content: Enable PC2 nodes to participate in DHT (Level 2 - store/forward DHT entries)
     status: pending
+  - id: wireguard-nat
+    content: WireGuard kernel-level NAT traversal for home hardware (Jetson, Pi)
+    status: completed
+  - id: wireguard-auto-provision
+    content: Auto-provision WireGuard tunnel after setup wizard completion
+    status: completed
+  - id: config-driven-supernodes
+    content: Make supernode list config-driven with dynamic discovery API
+    status: completed
   - id: relay-node
-    content: Enable PC2 nodes with public IP to act as relay nodes for NAT'd peers
+    content: Enable PC2 nodes with public IP to act as WireGuard relay nodes for NAT'd peers
     status: pending
   - id: p2p-messenger
     content: Implement P2P Messenger Service for PC2-to-PC2 encrypted communication
@@ -183,8 +192,9 @@ PC2 nodes can contribute to the Boson network at different levels, making the ne
 │  LEVEL 1: CLIENT ONLY (Current State)                                        │
 │  ┌─────────────────────────────────────────────────────────────────────┐    │
 │  │  PC2 Node ──connects to──► Supernode                                │    │
+│  │  • Uses WireGuard tunnel for NAT traversal (primary, ~1.5s loads)  │    │
+│  │  • Falls back to Active Proxy if WireGuard unavailable             │    │
 │  │  • Uses DHT for lookups only                                        │    │
-│  │  • Uses Active Proxy for NAT traversal                              │    │
 │  │  • Does NOT contribute to network                                   │    │
 │  └─────────────────────────────────────────────────────────────────────┘    │
 │                                                                              │
@@ -197,13 +207,15 @@ PC2 nodes can contribute to the Boson network at different levels, making the ne
 │  │  • Works even behind NAT (UDP hole punching)                        │    │
 │  └─────────────────────────────────────────────────────────────────────┘    │
 │                                                                              │
-│  LEVEL 3: RELAY NODE (Medium)                                                │
+│  LEVEL 3: RELAY NODE / "Lightweight Supernode" (Medium)                       │
 │  ┌─────────────────────────────────────────────────────────────────────┐    │
-│  │  PC2 Node acts as relay for other PC2 nodes                         │    │
-│  │  • Requires public IP or UPnP port forwarding                       │    │
-│  │  • Relays traffic for nodes behind strict NAT                       │    │
-│  │  • ~100-500MB RAM, moderate bandwidth                               │    │
-│  │  • VPS operators can enable this easily                             │    │
+│  │  PC2 Node acts as WireGuard entry point for other PC2 nodes         │    │
+│  │  • Requires public IP (VPS or properly forwarded)                   │    │
+│  │  • Runs WireGuard server + basic Web Gateway proxy                  │    │
+│  │  • Serves as geographic entry point (reduces latency)               │    │
+│  │  • ~256MB RAM, moderate bandwidth                                   │    │
+│  │  • Community members with spare VPS can contribute                  │    │
+│  │  • Does NOT need Boson DHT or full supernode stack                  │    │
 │  └─────────────────────────────────────────────────────────────────────┘    │
 │                                                                              │
 │  LEVEL 4: FULL SUPERNODE (Heavy)                                             │
@@ -225,11 +237,11 @@ PC2 nodes can contribute to the Boson network at different levels, making the ne
 
 |-------|--------|--------|---------------------|
 
-| Level 1 (Client) | Done | None | **Yes - Current state** |
+| Level 1 (Client + WireGuard) | Done | None | **Yes - Current state with WireGuard NAT traversal** |
 
 | Level 2 (DHT Participant) | Medium | High | Requires Boson Java SDK integration |
 
-| Level 3 (Relay Node) | Medium | Medium | Requires new relay service |
+| Level 3 (Relay/Lightweight) | Low-Medium | High | WireGuard server + proxy -- community contribution path |
 
 | Level 4 (Full Supernode) | Low | Very High | **Yes - Use existing guide** |
 
@@ -623,6 +635,89 @@ When every PC2 node participates in the DHT, the network becomes self-sustaining
 
 ---
 
+## WireGuard NAT Traversal (Implemented)
+
+### What's Deployed
+
+WireGuard replaces Boson Active Proxy as the primary NAT traversal mechanism for home hardware nodes. The results:
+
+| Metric | Before (Boson Relay) | After (WireGuard) |
+|--------|---------------------|-------------------|
+| Page load time | 2-5 minutes | ~1.5 seconds |
+| Connections | Serial (one at a time) | Unlimited parallel |
+| User experience | Unusable for web UI | Indistinguishable from VPS |
+
+### User Flow (Seamless - No Extra Steps)
+
+```
+1. Run: sudo bash scripts/setup-node.sh    (one-time: installs WireGuard tools)
+2. Run: pm2 start ecosystem.config.cjs     (start the node)
+3. Open: http://localhost:4200              (complete setup wizard)
+4. Done! https://username.ela.city is live via WireGuard
+```
+
+### Multi-Supernode Scaling Strategy
+
+```
+                   Dynamic Supernode Discovery API
+                   /api/supernodes → [{id, address, port, ...}]
+                                  │
+              ┌───────────────────┼───────────────────┐
+              ▼                   ▼                   ▼
+        SuperNode-US         SuperNode-EU        SuperNode-Asia
+        (69.164.241.210)     (future)            (future)
+        WG: 10.100.0.0/24   WG: 10.100.1.0/24   WG: 10.100.2.0/24
+              │                   │                   │
+              ▼                   ▼                   ▼
+        ~250 PC2 nodes       ~250 PC2 nodes      ~250 PC2 nodes
+```
+
+**How scaling works:**
+1. Each supernode gets its own /24 WireGuard subnet
+2. PC2 nodes discover supernodes via `fetchSuperNodes()` API or config
+3. Node provisions WireGuard tunnel to the nearest/best supernode
+4. GeoDNS routes browser requests to the supernode closest to the visitor
+
+**Config-driven supernodes** (in `config/config.json`):
+```json
+{
+  "boson": {
+    "supernodes": [
+      {
+        "id": "J1h7RHv5iHhT43zsXxMCg7zGmZq6g4Ec2VJeCkSGry2E",
+        "address": "69.164.241.210",
+        "port": 39001,
+        "proxyPort": 8090,
+        "gatewayUrl": "https://69.164.241.210"
+      }
+    ]
+  }
+}
+```
+
+### Community Relay Nodes ("Lightweight Supernodes")
+
+Community members with spare VPS capacity can contribute as **Tier 2 Relay Nodes**:
+
+**What a relay node runs:**
+- WireGuard server (accepts tunnel connections from home PC2 nodes)
+- Basic HTTP proxy (forwards traffic to the WireGuard peers)
+- No Boson DHT, no Active Proxy, no Java -- just Linux + WireGuard + Node.js proxy
+
+**Requirements:**
+- Public IP (any VPS)
+- ~256MB RAM
+- Ubuntu 22.04+
+
+**Benefits to the network:**
+- Geographic distribution (reduces latency for users worldwide)
+- Decentralization (no single supernode bottleneck)
+- Community ownership (relay operators are network participants)
+
+**Implementation status:** Spec defined, implementation pending second supernode deployment.
+
+---
+
 ## Immediate Next Steps
 
 ### To Support Multiple Domains (pc2.net, ela.net)
@@ -637,8 +732,10 @@ When every PC2 node participates in the DHT, the network becomes self-sustaining
 ### To Scale Supernodes
 
 1. Deploy additional supernodes in EU, Asia using existing guide
-2. Add new bootstrap nodes to config
-3. Configure GeoDNS for domain load balancing
+2. Configure WireGuard server on each new supernode (separate /24 subnet)
+3. Add new supernodes to dynamic discovery API or `boson.supernodes` config
+4. Configure GeoDNS for domain load balancing
+5. Define relay node spec for community contributions
 
 ### To Complete localhost:// WebSpace
 
@@ -706,12 +803,18 @@ When every PC2 node participates in the DHT, the network becomes self-sustaining
 
 | `pc2-node/src/services/boson/IdentityService.ts` | Node identity (DID, keys) |
 
-| `pc2-node/src/services/boson/ConnectivityService.ts` | Supernode connection, Active Proxy |
+| `pc2-node/src/services/boson/ConnectivityService.ts` | Supernode connection, transport priority (WG > Boson > Direct) |
 
-| `pc2-node/src/services/boson/ActiveProxyClient.ts` | NAT traversal client |
+| `pc2-node/src/services/wireguard/WireGuardService.ts` | WireGuard client (provision, connect, health check) |
+
+| `pc2-node/src/services/boson/ActiveProxyClient.ts` | NAT traversal client (fallback) |
+
+| `scripts/setup-node.sh` | One-time system prep for WireGuard |
+
+| `scripts/setup-wireguard-client.sh` | Manual WireGuard tunnel setup |
 
 | `docs/pc2-infrastructure/ARCHITECTURE.md` | Infrastructure documentation |
 
-| `docs/pc2-infrastructure/SUPERNODE_OPERATOR_GUIDE.md` | How to run a supernode |
+| `docs/pc2-infrastructure/SUPERNODE_OPERATOR_GUIDE.md` | How to run a supernode (includes WireGuard) |
 
-| `docs/PC2_NETWORK_SPECIFICATION.md` | Network design specification |
+| `docs/deployment/ARM_DEVICES.md` | Home hardware setup guide |

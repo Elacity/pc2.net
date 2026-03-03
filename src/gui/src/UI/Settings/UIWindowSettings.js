@@ -77,7 +77,7 @@ async function UIWindowSettings (options) {
             title: 'Settings',
             app: 'settings',
             single_instance: true,
-            icon: null,
+            icon: window.icons['cog.svg'],
             uid: null,
             is_dir: false,
             body_content: h,

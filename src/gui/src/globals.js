@@ -98,11 +98,12 @@ if (window.user_preferences === null) {
     window.user_preferences = {
         show_hidden_files: false,
         language: navigator.language.split("-")[0] || navigator.userLanguage || 'en',
-        clock_visible: 'auto',
+        clock_visible: 'hide',
     }
 }
 
 window.window_stack = []
+window.workspace_manager = null;
 window.toolbar_height = 45;
 window.default_taskbar_height = 50;
 window.taskbar_height = window.default_taskbar_height;
@@ -236,7 +237,7 @@ window.current_active_snap_zone = undefined;
 // 
 window.is_fullpage_mode = false;
 
-window.window_border_radius = 4;
+window.window_border_radius = 12;
 
 window.sites = [];
 

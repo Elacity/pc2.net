@@ -5,6 +5,7 @@
  */
 
 import { logger } from '../../../utils/logger.js';
+import { type PlatformInfo, type OllamaHardwareConfig, calculateOptimalNumCtx } from '../../../utils/platform.js';
 
 export interface ChatModel {
   id: string;
@@ -32,6 +33,13 @@ export interface CompleteArguments {
   temperature?: number;
 }
 
+export interface PerformanceMetrics {
+  tokensPerSecond: number;
+  evalCount: number;
+  evalDurationMs: number;
+  promptEvalDurationMs?: number;
+}
+
 export interface ChatCompletion {
   message: {
     role: string;
@@ -51,6 +59,7 @@ export interface ChatCompletion {
     completion_tokens: number;
     total_tokens: number;
   };
+  performance?: PerformanceMetrics;
 }
 
 export class OllamaProvider {
@@ -59,10 +68,87 @@ export class OllamaProvider {
   private modelsCache: ChatModel[] | null = null;
   private cacheTimestamp: number = 0;
   private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+  private platformInfo: PlatformInfo | null = null;
+  private configOverrides: OllamaHardwareConfig | null = null;
 
   constructor(config?: { baseUrl?: string; defaultModel?: string }) {
     this.apiBaseUrl = config?.baseUrl || 'http://localhost:11434';
     this.defaultModel = config?.defaultModel || 'deepseek-r1:1.5b';
+  }
+
+  /**
+   * Inject platform info for hardware-aware GPU optimization.
+   * Called once at startup by AIChatService.
+   */
+  setPlatformInfo(info: PlatformInfo): void {
+    this.platformInfo = info;
+  }
+
+  /**
+   * Inject user config overrides for Ollama hardware parameters.
+   * When set with autoDetect: false, these override auto-detected values.
+   */
+  setConfigOverrides(config: OllamaHardwareConfig): void {
+    this.configOverrides = config;
+  }
+
+  /**
+   * Build hardware-aware options for Ollama native API (/api/chat).
+   * Only applies to the native endpoint -- the OpenAI-compatible endpoint
+   * does not support Ollama's options parameter.
+   */
+  private buildHardwareOptions(temperature: number, maxTokens?: number): Record<string, unknown> {
+    const options: Record<string, unknown> = { temperature };
+
+    if (maxTokens) {
+      options.num_predict = maxTokens;
+    }
+
+    // If user explicitly disabled autoDetect, use their overrides directly
+    if (this.configOverrides && this.configOverrides.autoDetect === false) {
+      if (this.configOverrides.num_gpu !== undefined) options.num_gpu = this.configOverrides.num_gpu;
+      if (this.configOverrides.num_ctx !== undefined) options.num_ctx = this.configOverrides.num_ctx;
+      if (this.configOverrides.num_batch !== undefined) options.num_batch = this.configOverrides.num_batch;
+      if (this.configOverrides.num_thread !== undefined) options.num_thread = this.configOverrides.num_thread;
+      return options;
+    }
+
+    // Auto-detect: apply GPU acceleration when CUDA is available
+    // EXCLUDE macOS -- Ollama auto-manages Metal on Apple Silicon
+    if (this.platformInfo?.cudaAvailable && !this.platformInfo?.isMacOS) {
+      // Offload all model layers to GPU (critical performance fix for Jetson/NVIDIA)
+      options.num_gpu = this.configOverrides?.num_gpu ?? -1;
+      // Larger batch size for faster prompt processing with GPU
+      options.num_batch = this.configOverrides?.num_batch ?? 512;
+    }
+
+    // Dynamic context window sizing based on available memory
+    if (this.platformInfo && (this.platformInfo.isJetson || this.platformInfo.isConstrainedDevice)) {
+      options.num_ctx = this.configOverrides?.num_ctx ??
+        calculateOptimalNumCtx(this.platformInfo.totalMemoryMB, this.platformInfo.isJetson);
+    }
+
+    return options;
+  }
+
+  /**
+   * Parse performance metrics from Ollama native API response.
+   * Ollama returns eval_count (tokens generated) and eval_duration (nanoseconds).
+   */
+  private parsePerformanceMetrics(data: any): PerformanceMetrics | undefined {
+    if (!data.eval_count || !data.eval_duration) return undefined;
+
+    const evalDurationMs = Math.round(data.eval_duration / 1e6);
+    const tokensPerSecond = Math.round((data.eval_count / (data.eval_duration / 1e9)) * 10) / 10;
+
+    return {
+      tokensPerSecond,
+      evalCount: data.eval_count,
+      evalDurationMs,
+      promptEvalDurationMs: data.prompt_eval_duration
+        ? Math.round(data.prompt_eval_duration / 1e6)
+        : undefined,
+    };
   }
 
   /**
@@ -72,7 +158,7 @@ export class OllamaProvider {
     try {
       const response = await fetch(`${this.apiBaseUrl}/api/tags`, {
         method: 'GET',
-        signal: AbortSignal.timeout(2000),
+        signal: AbortSignal.timeout(10000),
       });
       return response.ok;
     } catch (error) {
@@ -252,19 +338,6 @@ export class OllamaProvider {
       return rest;
     });
 
-    const requestBody: any = {
-      model: model,
-      messages: sanitizedMessages,
-      stream: false,
-      options: {
-        temperature: temperature,
-      },
-    };
-
-    if (maxTokens) {
-      requestBody.options.num_predict = maxTokens;
-    }
-
     // Use Ollama's OpenAI-compatible API for native function calling support
     // This endpoint supports tools/function calling like OpenAI
     const useOpenAICompat = args.tools && args.tools.length > 0;
@@ -310,18 +383,14 @@ export class OllamaProvider {
         logger.info('[Ollama] Using OpenAI-compatible endpoint for function calling support');
       } else {
         // Use raw Ollama API for backward compatibility
+        // Hardware-aware options (num_gpu, num_ctx, num_batch) applied here
         endpoint = `${this.apiBaseUrl}/api/chat`;
         requestBody = {
           model: model,
           messages: messages,
           stream: false,
-          options: {
-            temperature: temperature,
-          },
+          options: this.buildHardwareOptions(temperature, maxTokens),
         };
-        if (maxTokens) {
-          requestBody.options.num_predict = maxTokens;
-        }
       }
       
       const requestBodyString = JSON.stringify(requestBody);
@@ -377,19 +446,14 @@ export class OllamaProvider {
              errorData?.error?.message?.includes('does not support tools'))) {
           logger.warn('[Ollama] Model does not support tools, falling back to regular endpoint without tools');
           
-          // Retry without tools using regular Ollama endpoint
+          // Retry without tools using regular Ollama endpoint (with hardware-aware options)
           const fallbackEndpoint = `${this.apiBaseUrl}/api/chat`;
           const fallbackRequestBody: any = {
             model: model,
             messages: messages,
             stream: false,
-            options: {
-              temperature: temperature,
-            },
+            options: this.buildHardwareOptions(temperature, maxTokens),
           };
-          if (maxTokens) {
-            fallbackRequestBody.options.num_predict = maxTokens;
-          }
           
           const fallbackResponse = await fetch(fallbackEndpoint, {
             method: 'POST',
@@ -421,6 +485,7 @@ export class OllamaProvider {
               completion_tokens: fallbackData.eval_count || 0,
               total_tokens: (fallbackData.prompt_eval_count || 0) + (fallbackData.eval_count || 0),
             },
+            performance: this.parsePerformanceMetrics(fallbackData),
           };
         }
         
@@ -453,6 +518,11 @@ export class OllamaProvider {
       }
 
       // Raw Ollama format: { message: { role, content }, done: true, ... }
+      const performance = this.parsePerformanceMetrics(data);
+      if (performance) {
+        logger.info(`[Ollama] Inference speed: ${performance.tokensPerSecond} tokens/sec (${performance.evalCount} tokens in ${performance.evalDurationMs}ms)`);
+      }
+
       return {
         message: {
           role: data.message?.role || 'assistant',
@@ -464,6 +534,7 @@ export class OllamaProvider {
           completion_tokens: data.eval_count || 0,
           total_tokens: (data.prompt_eval_count || 0) + (data.eval_count || 0),
         },
+        performance,
       };
     } catch (error) {
       logger.error('[Ollama] Chat completion error:', error);
@@ -523,15 +594,13 @@ export class OllamaProvider {
       
       logger.info('[Ollama] Using OpenAI-compatible endpoint for streaming with function calling support');
     } else {
-      // Use traditional Ollama endpoint
+      // Use traditional Ollama endpoint (with hardware-aware GPU options)
       endpoint = `${this.apiBaseUrl}/api/chat`;
       requestBody = {
         model: model,
         messages: messages,
         stream: true,
-        options: {
-          temperature: temperature,
-        },
+        options: this.buildHardwareOptions(temperature),
       };
     }
 
@@ -546,76 +615,107 @@ export class OllamaProvider {
 
       if (!response.ok) {
         const errorText = await response.text();
+
+        if (useOpenAICompat && response.status === 400 &&
+            errorText.includes('does not support tools')) {
+          logger.warn('[Ollama] Model does not support tools, retrying stream without tools');
+          const fallbackEndpoint = `${this.apiBaseUrl}/api/chat`;
+          const fallbackBody = {
+            model,
+            messages,
+            stream: true,
+            options: this.buildHardwareOptions(temperature),
+          };
+          const fallbackResponse = await fetch(fallbackEndpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(fallbackBody),
+          });
+          if (!fallbackResponse.ok) {
+            const fbErr = await fallbackResponse.text();
+            throw new Error(`Ollama API error: ${fallbackResponse.status} ${fbErr}`);
+          }
+          yield* this.streamOllamaLines(fallbackResponse);
+          return;
+        }
+
         throw new Error(`Ollama API error: ${response.status} ${errorText}`);
       }
 
-      const reader = response.body?.getReader();
-      if (!reader) {
-        throw new Error('No response body reader available');
-      }
-
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        
-        if (useOpenAICompat) {
-          // OpenAI-compatible streaming format: "data: {...}\n\n"
-          const chunks = buffer.split('\n\n');
-          buffer = chunks.pop() || '';
-          
-          for (const chunk of chunks) {
-            if (!chunk.trim() || chunk === 'data: [DONE]') continue;
-            try {
-              const jsonStr = chunk.replace(/^data: /, '');
-              const data = JSON.parse(jsonStr);
-              if (data.choices && data.choices[0]) {
-                const choice = data.choices[0];
-                const delta = choice.delta || {};
-                yield {
-                  message: {
-                    role: delta.role || 'assistant',
-                    content: delta.content || '',
-                    tool_calls: delta.tool_calls || undefined,
-                  },
-                  done: choice.finish_reason !== null,
-                };
-              }
-            } catch (e) {
-              // Skip invalid JSON
-            }
-          }
-        } else {
-          // Raw Ollama streaming format: one JSON object per line
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
-
-          for (const line of lines) {
-            if (line.trim() === '') continue;
-            try {
-              const data = JSON.parse(line);
-              if (data.message) {
-                yield {
-                  message: {
-                    role: data.message.role || 'assistant',
-                    content: data.message.content || '',
-                  },
-                  done: data.done ?? false,
-                };
-              }
-            } catch (e) {
-              // Skip invalid JSON lines
-            }
-          }
-        }
+      if (useOpenAICompat) {
+        yield* this.streamOpenAICompat(response);
+      } else {
+        yield* this.streamOllamaLines(response);
       }
     } catch (error) {
       logger.error('[Ollama] Stream completion error:', error);
       throw error;
+    }
+  }
+
+  private async *streamOpenAICompat(response: Response): AsyncGenerator<ChatCompletion, void, unknown> {
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('No response body reader available');
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const chunks = buffer.split('\n\n');
+      buffer = chunks.pop() || '';
+      for (const chunk of chunks) {
+        if (!chunk.trim() || chunk === 'data: [DONE]') continue;
+        try {
+          const jsonStr = chunk.replace(/^data: /, '');
+          const data = JSON.parse(jsonStr);
+          if (data.choices && data.choices[0]) {
+            const choice = data.choices[0];
+            const delta = choice.delta || {};
+            yield {
+              message: {
+                role: delta.role || 'assistant',
+                content: delta.content || '',
+                tool_calls: delta.tool_calls || undefined,
+              },
+              done: choice.finish_reason !== null,
+            };
+          }
+        } catch {
+          // Skip invalid JSON
+        }
+      }
+    }
+  }
+
+  private async *streamOllamaLines(response: Response): AsyncGenerator<ChatCompletion, void, unknown> {
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('No response body reader available');
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        if (line.trim() === '') continue;
+        try {
+          const data = JSON.parse(line);
+          if (data.message) {
+            yield {
+              message: {
+                role: data.message.role || 'assistant',
+                content: data.message.content || '',
+              },
+              done: data.done ?? false,
+            };
+          }
+        } catch {
+          // Skip invalid JSON lines
+        }
+      }
     }
   }
 }

@@ -8,6 +8,7 @@
 import { Router, Response } from 'express';
 import { authenticate, AuthenticatedRequest } from './middleware.js';
 import { logger } from '../utils/logger.js';
+import { detectPlatform, getOllamaServerEnv } from '../utils/platform.js';
 import { AIChatService } from '../services/ai/AIChatService.js';
 import { readFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
@@ -894,7 +895,32 @@ router.get('/ollama-status', authenticate, async (req: AuthenticatedRequest, res
         running = false;
       }
     }
+
+    // Detect platform GPU capabilities
+    const platformInfo = detectPlatform();
+
+    // Check if Ollama is actively using GPU (parse 'ollama ps' output)
+    let ollamaGpuActive = false;
+    let ollamaGpuDetail = '';
+    if (running) {
+      try {
+        const { stdout } = await execAsync('ollama ps 2>/dev/null');
+        ollamaGpuActive = stdout.includes('GPU');
+        // Extract processor detail (e.g., "100% GPU", "50% GPU / 50% CPU")
+        const psLines = stdout.trim().split('\n').slice(1);
+        if (psLines.length > 0) {
+          const parts = psLines[0].split(/\s{2,}/);
+          // PROCESSOR column is typically the 3rd column
+          ollamaGpuDetail = parts[2]?.trim() || '';
+        }
+      } catch {
+        // ollama ps not available or failed
+      }
+    }
     
+    // Report which Ollama server-level optimizations would be applied
+    const ollamaOptimizations = getOllamaServerEnv();
+
     res.json({
       success: true,
       result: {
@@ -902,7 +928,18 @@ router.get('/ollama-status', authenticate, async (req: AuthenticatedRequest, res
         running,
         version,
         models,
-        hasDeepseek: models.some(m => m.includes('deepseek'))
+        hasDeepseek: models.some(m => m.includes('deepseek')),
+        // GPU and hardware info
+        gpuAccelerated: platformInfo.cudaAvailable,
+        ollamaGpuActive,
+        ollamaGpuDetail,
+        isJetson: platformInfo.isJetson,
+        jetsonModel: platformInfo.jetsonModel,
+        gpuInfo: platformInfo.gpuInfo,
+        totalMemoryMB: platformInfo.totalMemoryMB,
+        estimatedAvailableVRAM: platformInfo.estimatedAvailableVRAM,
+        // Server-level optimizations (applied when PC2 starts Ollama)
+        ollamaOptimizations: Object.keys(ollamaOptimizations).length > 0 ? ollamaOptimizations : undefined,
       }
     });
   } catch (error: any) {
@@ -982,10 +1019,12 @@ router.post('/install-ollama', authenticate, async (req: AuthenticatedRequest, r
           });
         }
       } catch {
-        // Ollama might not be running, try to start it
+        // Ollama might not be running, try to start it with optimized env vars
+        const ollamaEnv = getOllamaServerEnv();
         const startProcess = spawn('ollama', ['serve'], {
           detached: true,
-          stdio: 'ignore'
+          stdio: 'ignore',
+          env: { ...process.env, ...ollamaEnv },
         });
         startProcess.unref();
         
@@ -1059,7 +1098,11 @@ router.get('/model-library', authenticate, async (req: AuthenticatedRequest, res
       // Ollama not available or not running
     }
     
-    // Merge installed status into catalog
+    // Detect platform for hardware-aware model recommendations
+    const platformInfo = detectPlatform();
+    const availableVRAM = platformInfo.estimatedAvailableVRAM;
+
+    // Merge installed status and device-recommended flag into catalog
     const modelsWithStatus = catalog.models.map(model => {
       // Check if this model is installed (match by base name or full name)
       const modelBase = model.id.split(':')[0];
@@ -1068,10 +1111,22 @@ router.get('/model-library', authenticate, async (req: AuthenticatedRequest, res
         installed.startsWith(modelBase + ':') ||
         installed === modelBase
       );
+
+      // Determine if model is recommended for this device's hardware
+      let deviceRecommended = true; // default: all models recommended on unconstrained devices
+      if (availableVRAM && model.minVRAM) {
+        // Parse minVRAM string (e.g., "4GB" -> 4096)
+        const minVRAMMatch = model.minVRAM.match(/^(\d+(?:\.\d+)?)\s*GB$/i);
+        if (minVRAMMatch) {
+          const minVRAMMB = parseFloat(minVRAMMatch[1]) * 1024;
+          deviceRecommended = availableVRAM >= minVRAMMB;
+        }
+      }
       
       return {
         ...model,
-        installed: isInstalled
+        installed: isInstalled,
+        deviceRecommended,
       };
     });
     
@@ -1082,7 +1137,15 @@ router.get('/model-library', authenticate, async (req: AuthenticatedRequest, res
         lastUpdated: catalog.lastUpdated,
         categories: catalog.categories,
         models: modelsWithStatus,
-        installedModels
+        installedModels,
+        // Hardware context for the UI
+        hardware: {
+          totalMemoryMB: platformInfo.totalMemoryMB,
+          estimatedAvailableVRAM: platformInfo.estimatedAvailableVRAM,
+          isJetson: platformInfo.isJetson,
+          isConstrainedDevice: platformInfo.isConstrainedDevice,
+          gpuInfo: platformInfo.gpuInfo,
+        },
       }
     });
   } catch (error: any) {
@@ -1172,7 +1235,8 @@ router.post('/models/pull', authenticate, async (req: AuthenticatedRequest, res:
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
-    res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
     
     // Make request to Ollama API
     try {

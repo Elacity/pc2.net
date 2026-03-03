@@ -561,7 +561,7 @@
     // Initialize
     document.addEventListener('DOMContentLoaded', async () => {
       try {
-        const response = await fetch('/api/setup/status');
+        const response = await fetch('/api/setup/status', { signal: AbortSignal.timeout(10000) });
         const status = await response.json();
         
         if (status.setupComplete) {
@@ -720,7 +720,8 @@
           const response = await fetch('/api/setup/check-username', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username })
+            body: JSON.stringify({ username }),
+            signal: AbortSignal.timeout(10000)
           });
           
           const result = await response.json();
@@ -736,7 +737,7 @@
           }
           updateContinueButton();
         } catch (error) {
-          status.textContent = 'Failed to check availability';
+          status.textContent = 'Could not reach server — check your internet connection and try again';
           status.className = 'input-status error';
           usernameValid = false;
           updateContinueButton();
@@ -755,7 +756,8 @@
         const response = await fetch('/api/setup/complete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, password })
+          body: JSON.stringify({ username, password }),
+          signal: AbortSignal.timeout(30000)
         });
         
         const result = await response.json();
@@ -772,7 +774,15 @@
         // Go directly to complete
         showComplete();
       } catch (error) {
-        alert('Error: ' + error.message);
+        const errorMsg = error.message || 'Something went wrong';
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'input-status error';
+        errorDiv.style.cssText = 'margin-top: 12px; padding: 10px; background: rgba(220,38,38,0.1); border-radius: 6px;';
+        errorDiv.textContent = errorMsg.includes('fetch') || errorMsg.includes('network') || errorMsg.includes('abort')
+          ? 'Network error — check your internet connection and try again'
+          : errorMsg;
+        btn.parentNode.insertBefore(errorDiv, btn.nextSibling);
+        setTimeout(() => errorDiv.remove(), 8000);
         btn.disabled = false;
         btn.textContent = 'Continue';
       }

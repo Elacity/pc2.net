@@ -1,8 +1,8 @@
 # PC2 Agent Handover Document
 
 > **Purpose:** Complete contextual awareness for AI agents working on PC2
-> **Last Updated:** 2026-01-23
-> **Current Status:** MVP v1.0.0 Complete, Production Deployed
+> **Last Updated:** 2026-02-26
+> **Current Status:** v1.1 branch tested on 2 Jetsons, awaiting Sash's validation + merge to main
 
 ---
 
@@ -62,20 +62,88 @@ Three WebSpaces being built:
 | Service | Port | Purpose |
 |---------|------|---------|
 | Boson DHT | 39001/UDP | Decentralized identity, peer discovery |
-| Active Proxy | 8090/TCP | NAT traversal for nodes behind firewalls |
-| Web Gateway | 80/443 | Subdomain routing with SSL |
+| Active Proxy | 8090/TCP | NAT traversal relay (fallback, slow) |
+| WireGuard | 51820/UDP | NAT traversal tunnel (primary, fast) |
+| Web Gateway | 80/443 | Subdomain routing with SSL, gzip compression, keep-alive pooling |
 
 ### How Routing Works
 
+**Home hardware (Jetson, Pi) - via WireGuard tunnel:**
 ```
-User Browser                    Supernode                     PC2 Node
+User Browser                    Supernode                     PC2 Node (home)
      │                              │                            │
-     │ https://test7.ela.city ──────►│                            │
-     │                              │ DNS points here            │
+     │ https://alice.ela.city ─────►│                            │
      │                              │                            │
-     │                              │ Active Proxy relay ────────►│
+     │                              │── HTTP via WG tunnel ─────►│
+     │                              │   10.100.0.x:4200          │ (kernel-level,
+     │                              │   (keep-alive pooled)      │  keep-alive reuse)
+     │◄──── gzip compressed ────────│◄─────── Response ──────────│
+```
+
+**Gateway performance layer** (transparent, no behavior change):
+- Gzip compression: text responses compressed 74-77% (3MB JS bundle → 816KB)
+- Keep-alive pooling: TCP connections to WireGuard peers reused (saves ~240ms/request)
+- Cache headers: static assets get `Cache-Control` when node doesn't set its own
+- 206 bypass: Range/partial responses are never compressed (preserves byte-range semantics)
+
+**Video streaming layer** (IPFS byte-range streaming):
+- All file-serving endpoints support `Range` requests (HTTP 206 Partial Content)
+- Streams directly from IPFS blockstore -- memory usage ~256 KB per request regardless of file size
+- Enables instant video playback and seeking for 2GB+ files on memory-constrained devices (Jetson)
+- Routes: `/ipfs/:cid`, `/public/:wallet/*`, `/file?uid=`, authenticated `/read`
+- Key files: `ipfs.ts` (getFileStream/getFileSize), `public.ts` (streamToResponse helper)
+
+**VPS (public IP) - direct HTTP:**
+```
+User Browser                    Supernode                     PC2 Node (VPS)
      │                              │                            │
+     │ https://bob.ela.city ───────►│                            │
+     │                              │─── HTTP direct ──────────►│
+     │                              │    public-ip:4200          │
      │◄──────────── Response ───────│◄─────── Response ──────────│
+```
+
+### Transport Priority (ConnectivityService)
+
+The node automatically selects the best transport:
+1. **WireGuard** (primary) - kernel-level UDP tunnel, near-localhost speed
+2. **Boson Active Proxy** (fallback) - serial TCP relay, slow but works everywhere
+3. **Direct** - public IP users (VPS), no tunnel needed
+
+### WireGuard Architecture
+
+**Key files:**
+- `pc2-node/src/services/wireguard/WireGuardService.ts` - Client tunnel management (kernel + wireguard-go userspace)
+- `pc2-node/src/services/boson/ConnectivityService.ts` - Transport priority logic + automatic fallback
+- `scripts/install-arm.sh` - **One-command installer** for ARM (Pi/Jetson). Installs Node.js, PM2, WireGuard, builds PC2, starts it. Includes Jetson wireguard-go fallback.
+- `scripts/setup-node.sh` - Standalone WireGuard system prep (can also be run separately)
+- `deploy/web-gateway/index.js` - `/api/wg/register` provisioning endpoint
+
+**User flow (one command, then wizard):**
+1. Run `curl -sSL .../install-arm.sh | bash` (installs EVERYTHING including WireGuard)
+2. Open browser, login with wallet, complete setup wizard (choose domain name)
+3. Node auto-provisions WireGuard tunnel to supernode
+4. Domain is live at `https://username.ela.city`
+5. If WireGuard fails (blocked network, etc.), auto-falls back to Boson relay
+
+**WireGuard modes (auto-detected by WireGuardService.ts):**
+- `kernel` -- Linux kernel module (regular Linux, Pi, or Jetson with manually compiled .ko). Best speed.
+- `userspace` -- wireguard-go (Jetson out-of-box, NVIDIA custom kernel lacks module). Good speed, zero kernel work needed. Install script builds from source automatically.
+- `none` -- Falls back to Boson Active Proxy. Slower but works everywhere.
+
+**Critical implementation details (bugs found and fixed in previous sessions):**
+- `sudo` strips env vars: `WG_QUICK_USERSPACE_IMPLEMENTATION` must be set BEFORE `sudo -E` (not via Node.js env option). `wgQuickCmd()` builds: `WG_QUICK_USERSPACE_IMPLEMENTATION=wireguard-go sudo -E wg-quick up /path`
+- Sudoers must include `SETENV:` for `sudo -E` to work: `ALL ALL=(root) NOPASSWD: SETENV: /usr/bin/wg-quick up *, /usr/bin/wg-quick down *`
+- `detectMode()` uses `modinfo` (not `modprobe`) to check for kernel module -- doesn't need root, no noisy sudo errors
+- Install script checks if existing sudoers has `SETENV` -- if old rule lacks it (returning user from before fix), it regenerates
+
+**Supernode config-driven (config/config.json):**
+```json
+{
+  "boson": {
+    "supernodes": [{ "id": "...", "address": "69.164.241.210", "port": 39001, "proxyPort": 8090, "gatewayUrl": "https://69.164.241.210" }]
+  }
+}
 ```
 
 ---
@@ -202,45 +270,71 @@ npm start
 ```bash
 # SSH access
 ssh root@38.242.211.112
-# Password: Bella2822!
+# Password: [ROTATED -- stored in password manager, not in git]
 
 # Update and restart
-cd /root/pc2-node/pc2.net
+cd ~/pc2.net
 git pull origin main
 cd pc2-node
 npm run build:backend
-systemctl restart pc2-node
+pm2 restart pc2    # or: systemctl restart pc2-node (on older setups)
 ```
 
 ---
 
-## Current State (2026-01-23)
+## Current State (2026-02-21)
 
 ### What's Working
 
 - ✅ Wallet-based authentication (Particle Network)
 - ✅ File management (IPFS storage)
-- ✅ Apps (Calculator, Editor, Viewer, Player, Terminal)
+- ✅ Apps (Calculator, Editor, Viewer, Player, Terminal, PDF Reader)
 - ✅ AI Chat (OpenAI, Anthropic, Groq, local Ollama)
 - ✅ Access control (owner/admin/member roles)
 - ✅ Backup & restore
-- ✅ NAT traversal via Active Proxy
-- ✅ Subdomain routing (`test7.ela.city`)
+- ✅ NAT traversal via WireGuard (primary) + Boson Active Proxy (fallback)
+- ✅ Subdomain routing (`*.ela.city`)
 - ✅ Auto-update notifications
+- ✅ WireGuard kernel + wireguard-go userspace (Jetson automatic fallback)
+- ✅ One-command ARM installer (`install-arm.sh`) with PM2 auto-start on boot
+- ✅ Video streaming with HTTP Range/206 support (IPFS byte-range, memory-efficient)
+- ✅ Large file uploads (multi-GB, disk-based streaming via multer)
+- ✅ Gateway gzip compression + keep-alive pooling
+- ✅ PDF and image rendering (fixed binary data corruption)
 
-### Recently Fixed (2026-01-23)
+### Recently Fixed (2026-02-21)
 
-1. **Apps not opening via domain** - Fixed URL resolution for Active Proxy
-2. **WebSocket Mixed Content** - Fixed wss:// protocol handling
-3. **API origin detection** - Created shared `urlUtils.ts`
+1. **WireGuard on Jetson** - wireguard-go userspace fallback (NVIDIA custom kernel lacks module)
+2. **sudo env stripping** - `WG_QUICK_USERSPACE_IMPLEMENTATION` now set before `sudo -E`, SETENV in sudoers
+3. **Video streaming regression** - `ipfs.getFileSize()` was called on every request; now uses DB metadata, IPFS only for Range requests
+4. **PDF blank pages** - Binary data was corrupted by `content.toString('utf8')`; now sends raw Buffer for binary files
+5. **Image loading errors** - Same binary corruption fix as PDFs
+6. **Accept-Ranges header** - Now only set for video/audio types; was causing PDF.js to attempt broken range-based loading
+7. **100MB+ upload crashes** - Switched multer to diskStorage, IPFS streaming upload
+8. **Gateway 206 compression** - Partial content responses are never gzipped (preserves byte-range semantics)
+9. **install-arm.sh rewrite** - Now includes WireGuard setup, PM2 (not systemd), wireguard-go for Jetson, boot persistence
+
+### Recently Fixed (2026-02-23/24)
+
+10. **AV1/Firefox playback** — Player now shows clear error for unsupported containers (MKV/AVI/MOV in Firefox), added `.av1` file support
+11. **IPFS DHT broadcasting** — Switched to client-mode DHT with 50-peer connection limit, private files no longer announced to IPFS network
+12. **Active Proxy overwriting WireGuard** — ConnectivityService now prefers WireGuard on reconnect, Active Proxy can't overwrite a working WireGuard endpoint
+13. **Gateway stale connections** — Health-check every 60s probes WireGuard peers, auto-flushes dead sockets, error-triggered flush on ECONNREFUSED
+14. **PM2 auto-start** — `pm2 startup systemd` integrated into install script for boot persistence
+15. **File creation error** — `window.refresh_item_container` exposed globally (was missing)
+16. **MKV double-click** — Added to file-to-player associations
+17. **Large upload timeout** — Added timeout wrappers to IPFS storeFile/storeFileStream with progress logging
 
 ### Pending Tasks
 
+- [ ] Merge `feature/jetson-gpu-acceleration` to main (after community Jetson testing passes clean)
+- [ ] Large file upload stalling at ~85% on 2.5GB+ (ulimit fix pending verification on Jetson)
+- [ ] Wallpaper not loading via gateway (URL origin mismatch)
 - [ ] Debian package (.deb) for Raspberry Pi
 - [ ] macOS package (.dmg)
 - [ ] Multi-domain support (pc2.net, ela.net)
 - [ ] P2P messaging between PC2 nodes
-- [ ] DHT participation for PC2 nodes
+- [ ] See [ROADMAP.md](./ROADMAP.md) for full strategic roadmap
 
 ---
 
@@ -292,7 +386,7 @@ Located in `.cursor/rules/`:
 ## Key Contacts & Resources
 
 - **Repository:** github.com/Elacity/pc2.net
-- **Supernode SSH:** root@38.242.211.112 (Bella2822!)
+- **Supernode SSH:** root@38.242.211.112 (password rotated -- see password manager)
 - **Flagship Supernode:** 69.164.241.210
 - **Test URL:** https://test7.ela.city
 

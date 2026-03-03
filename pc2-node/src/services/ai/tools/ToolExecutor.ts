@@ -1368,7 +1368,7 @@ export class ToolExecutor {
             // Personalization
             if (category === 'all' || category === 'personalization') {
               result.personalization = {
-                desktop_bg_url: this.db.getSetting(`${this.walletAddress}:user_preferences.desktop_bg_url`) || '/images/flint-2.jpg',
+                desktop_bg_url: this.db.getSetting(`${this.walletAddress}:user_preferences.desktop_bg_url`) || '/images/wallpaper-elacity.png',
                 desktop_bg_color: this.db.getSetting(`${this.walletAddress}:user_preferences.desktop_bg_color`) || null,
                 desktop_bg_fit: this.db.getSetting(`${this.walletAddress}:user_preferences.desktop_bg_fit`) || 'cover',
                 profile_picture_url: this.db.getSetting(`${this.walletAddress}:user_preferences.profile_picture_url`) || null

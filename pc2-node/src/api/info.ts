@@ -9,7 +9,8 @@ import { AuthenticatedRequest } from './middleware.js';
 import { FilesystemManager } from '../storage/filesystem.js';
 import { Server as SocketIOServer } from 'socket.io';
 import { broadcastFileChange, broadcastItemAdded } from '../websocket/events.js';
-import { logger } from '../utils/logger.js';
+import { logger, createLogger } from '../utils/logger.js';
+const log = createLogger('api-info');
 import path from 'path';
 import { existsSync, readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
@@ -73,8 +74,8 @@ export function handleGetLaunchApps(req: Request, res: Response): void {
         'calculator': 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImNhbGNncmFkIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iIzgxOGNmOCIvPjxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzY2N2VlYSIvPjwvbGluZWFyR3JhZGllbnQ+PGNsaXBQYXRoIGlkPSJyb3VuZGVkIj48cmVjdCB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHJ4PSIxMCIvPjwvY2xpcFBhdGg+PC9kZWZzPjxnIGNsaXAtcGF0aD0idXJsKCNyb3VuZGVkKSI+PHJlY3Qgd2lkdGg9IjQ4IiBoZWlnaHQ9IjQ4IiBmaWxsPSJ1cmwoI2NhbGNncmFkKSIvPjxyZWN0IHg9IjgiIHk9IjYiIHdpZHRoPSIzMiIgaGVpZ2h0PSIzNiIgcng9IjQiIGZpbGw9IiMxZTFlMmUiLz48cmVjdCB4PSIxMiIgeT0iMTAiIHdpZHRoPSIyNCIgaGVpZ2h0PSI4IiByeD0iMiIgZmlsbD0iIzg5YjBkMyIvPjxyZWN0IHg9IjEyIiB5PSIyMiIgd2lkdGg9IjYiIGhlaWdodD0iNiIgcng9IjEiIGZpbGw9IiM0YjU1NjMiLz48cmVjdCB4PSIyMSIgeT0iMjIiIHdpZHRoPSI2IiBoZWlnaHQ9IjYiIHJ4PSIxIiBmaWxsPSIjNGI1NTYzIi8+PHJlY3QgeD0iMzAiIHk9IjIyIiB3aWR0aD0iNiIgaGVpZ2h0PSI2IiByeD0iMSIgZmlsbD0iI2Y5NzMxNiIvPjxyZWN0IHg9IjEyIiB5PSIzMCIgd2lkdGg9IjYiIGhlaWdodD0iNiIgcng9IjEiIGZpbGw9IiM0YjU1NjMiLz48cmVjdCB4PSIyMSIgeT0iMzAiIHdpZHRoPSI2IiBoZWlnaHQ9IjYiIHJ4PSIxIiBmaWxsPSIjNGI1NTYzIi8+PHJlY3QgeD0iMzAiIHk9IjMwIiB3aWR0aD0iNiIgaGVpZ2h0PSI2IiByeD0iMSIgZmlsbD0iI2Y5NzMxNiIvPjwvZz48L3N2Zz4=',
         // File Analyzer - document with text lines (rounded)
         'file-processor': 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImZwZ3JhZCIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiM4YjVjZjYiLz48c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiM3NjRiYTIiLz48L2xpbmVhckdyYWRpZW50PjxjbGlwUGF0aCBpZD0icm91bmRlZCI+PHJlY3Qgd2lkdGg9IjQ4IiBoZWlnaHQ9IjQ4IiByeD0iMTAiLz48L2NsaXBQYXRoPjwvZGVmcz48ZyBjbGlwLXBhdGg9InVybCgjcm91bmRlZCkiPjxyZWN0IHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCIgZmlsbD0idXJsKCNmcGdyYWQpIi8+PHJlY3QgeD0iMTIiIHk9IjgiIHdpZHRoPSIyNCIgaGVpZ2h0PSIzMiIgcng9IjIiIGZpbGw9IiNmZmYiLz48cmVjdCB4PSIxNiIgeT0iMTQiIHdpZHRoPSIxNiIgaGVpZ2h0PSIyIiBmaWxsPSIjYzRiNWZkIi8+PHJlY3QgeD0iMTYiIHk9IjIwIiB3aWR0aD0iMTIiIGhlaWdodD0iMiIgZmlsbD0iI2M0YjVmZCIvPjxyZWN0IHg9IjE2IiB5PSIyNiIgd2lkdGg9IjE0IiBoZWlnaHQ9IjIiIGZpbGw9IiNjNGI1ZmQiLz48cmVjdCB4PSIxNiIgeT0iMzIiIHdpZHRoPSI4IiBoZWlnaHQ9IjIiIGZpbGw9IiNjNGI1ZmQiLz48L2c+PC9zdmc+',
-        // AI Chat - chat bubble with brain/sparkles design (purple/blue gradient)
-        'ai-chat': 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImFpZ3JhZCIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiM4YjVjZjYiLz48c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiM2MzY2ZjEiLz48L2xpbmVhckdyYWRpZW50PjxjbGlwUGF0aCBpZD0icm91bmRlZCI+PHJlY3Qgd2lkdGg9IjQ4IiBoZWlnaHQ9IjQ4IiByeD0iMTAiLz48L2NsaXBQYXRoPjwvZGVmcz48ZyBjbGlwLXBhdGg9InVybCgjcm91bmRlZCkiPjxyZWN0IHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCIgZmlsbD0idXJsKCNhaWdyYWQpIi8+PHBhdGggZD0iTTM2IDI0YzAgNi42MjctNS4zNzMgMTItMTIgMTItMS40MDcgMC0yLjc1Ni0uMjQzLTQtLjY5TDEyIDM4di01LjY5Yy0yLjQ3NC0yLjA0Ni00LTUuMTQ1LTQtOC42MzEgMC02LjYyNyA1LjM3My0xMiAxMi0xMnMxMiA1LjM3MyAxMiAxMnoiIGZpbGw9IiNmZmYiLz48Y2lyY2xlIGN4PSIxNyIgY3k9IjI0IiByPSIyIiBmaWxsPSIjOGI1Y2Y2Ii8+PGNpcmNsZSBjeD0iMjQiIGN5PSIyNCIgcj0iMiIgZmlsbD0iIzhiNWNmNiIvPjxjaXJjbGUgY3g9IjMxIiBjeT0iMjQiIHI9IjIiIGZpbGw9IiM4YjVjZjYiLz48cGF0aCBkPSJNMzYgOGw0IDQtNCA0IiBzdHJva2U9IiNmZmQ3NjQiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBmaWxsPSJub25lIi8+PHBhdGggZD0iTTQwIDEyaDQiIHN0cm9rZT0iI2ZmZDc2NCIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48L2c+PC9zdmc+',
+        // AI Chat - dark container with white chat bubble + dots (works in light and dark mode)
+        'ai-chat': 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZGVmcz48Y2xpcFBhdGggaWQ9InJvdW5kZWQiPjxyZWN0IHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCIgcng9IjEwIi8+PC9jbGlwUGF0aD48L2RlZnM+PGcgY2xpcC1wYXRoPSJ1cmwoI3JvdW5kZWQpIj48cmVjdCB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIGZpbGw9IiMzNzQxNTEiLz48cGF0aCBkPSJNMzYgMjRjMCA2LjYyNy01LjM3MyAxMi0xMiAxMi0xLjQwNyAwLTIuNzU2LS4yNDMtNC0uNjlMMTIgMzh2LTUuNjljLTIuNDc0LTIuMDQ2LTQtNS4xNDUtNC04LjYzMSAwLTYuNjI3IDUuMzczLTEyIDEyLTEyczEyIDUuMzczIDEyIDEyeiIgZmlsbD0iI2ZmZiIvPjxjaXJjbGUgY3g9IjE3IiBjeT0iMjQiIHI9IjIiIGZpbGw9IiNmZmYiLz48Y2lyY2xlIGN4PSIyNCIgY3k9IjI0IiByPSIyIiBmaWxsPSIjZmZmIi8+PGNpcmNsZSBjeD0iMzEiIGN5PSIyNCIgcj0iMiIgZmlsbD0iI2ZmZiIvPjxwYXRoIGQ9Ik0zNiA4bDQgNC00IDQiIHN0cm9rZT0iI2ZiYmYyNCIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIGZpbGw9Im5vbmUiLz48cGF0aCBkPSJNNDAgMTJoNCIgc3Ryb2tlPSIjZmJiZjI0IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjwvZz48L3N2Zz4=',
         // DAO Dashboard - governance icon with concentric circles (blue gradient)
         'dao-dashboard': 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImRhb2dyYWQiIHgxPSIwIiB5MT0iMCIgeDI9IjEiIHkyPSIxIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjM2I4MmY2Ii8+PHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjMWQ0ZWQ4Ii8+PC9saW5lYXJHcmFkaWVudD48Y2xpcFBhdGggaWQ9InJvdW5kZWQiPjxyZWN0IHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCIgcng9IjEwIi8+PC9jbGlwUGF0aD48L2RlZnM+PGcgY2xpcC1wYXRoPSJ1cmwoI3JvdW5kZWQpIj48cmVjdCB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIGZpbGw9InVybCgjZGFvZ3JhZCkiLz48cGF0aCBkPSJNMjQgOGMtOC44NCAwLTE2IDcuMTYtMTYgMTZzNy4xNiAxNiAxNiAxNiAxNi03LjE2IDE2LTE2LTcuMTYtMTYtMTYtMTZ6bTAgMjhjLTYuNjMgMC0xMi01LjM3LTEyLTEyczUuMzctMTIgMTItMTIgMTIgNS4zNyAxMiAxMi01LjM3IDEyLTEyIDEyeiIgZmlsbD0iI2ZmZiIgb3BhY2l0eT0iMC44Ii8+PHBhdGggZD0iTTI0IDE2Yy00LjQyIDAtOCAzLjU4LTggOHMzLjU4IDggOCA4IDgtMy41OCA4LTgtMy41OC04LTgtOHptMCAxMmMtMi4yMSAwLTQtMS43OS00LTRzMS43OS00IDQtNCA0IDEuNzkgNCA0LTEuNzkgNC00IDR6IiBmaWxsPSIjZmZmIi8+PGNpcmNsZSBjeD0iMjQiIGN5PSIyNCIgcj0iMiIgZmlsbD0iI2ZmZiIvPjwvZz48L3N2Zz4='
       };
@@ -446,10 +447,11 @@ export async function handleBatch(req: AuthenticatedRequest, res: Response): Pro
             // Normalize the path (remove double slashes, etc.)
             filePath = filePath.replace(/\/+/g, '/');
             
-            // Get file content - prioritize buffer, fallback to data
+            // Get file content - buffer (memoryStorage), data, or disk path (diskStorage)
             const fileContent = file.buffer || file.data;
+            const onDisk = !fileContent && file.path;
             const reportedSize = file.size || (fileContent ? fileContent.length : 0);
-            const actualSize = fileContent ? (Buffer.isBuffer(fileContent) ? fileContent.length : (fileContent instanceof Uint8Array ? fileContent.length : Buffer.byteLength(fileContent))) : 0;
+            const actualSize = fileContent ? (Buffer.isBuffer(fileContent) ? fileContent.length : (fileContent instanceof Uint8Array ? fileContent.length : Buffer.byteLength(fileContent))) : reportedSize;
             
             logger.info('[Batch] Uploading file', {
               originalDest: formData.path || formData.dest_path || formData.fileinfo || formData.operation || req.query.path,
@@ -460,22 +462,11 @@ export async function handleBatch(req: AuthenticatedRequest, res: Response): Pro
               actualSize,
               hasBuffer: !!file.buffer,
               hasData: !!file.data,
-              bufferType: fileContent ? (Buffer.isBuffer(fileContent) ? 'Buffer' : (fileContent instanceof Uint8Array ? 'Uint8Array' : typeof fileContent)) : 'none',
+              onDisk,
               mimeType: file.mimetype || file.type
             });
             
-            // Validate file size matches
-            if (reportedSize > 0 && actualSize > 0 && reportedSize !== actualSize) {
-              logger.error('[Batch] File size mismatch', {
-                fileName,
-                reportedSize,
-                actualSize,
-                difference: reportedSize - actualSize
-              });
-              // Continue anyway - might be a metadata issue
-            }
-            
-            if (!fileContent || actualSize === 0) {
+            if (!fileContent && !onDisk) {
               logger.error('[Batch] No file content received', {
                 fileName,
                 hasBuffer: !!file.buffer,
@@ -490,15 +481,20 @@ export async function handleBatch(req: AuthenticatedRequest, res: Response): Pro
               continue;
             }
             
-            // Write file to filesystem
-            const metadata = await filesystem.writeFile(
-              filePath,
-              fileContent,
-              req.user.wallet_address,
-              {
-                mimeType: file.mimetype || file.type
-              }
-            );
+            // Write file to filesystem -- stream from disk for large files
+            const metadata = onDisk
+              ? await filesystem.writeFileFromPath(
+                  filePath,
+                  file.path,
+                  req.user.wallet_address,
+                  { mimeType: file.mimetype || file.type }
+                )
+              : await filesystem.writeFile(
+                  filePath,
+                  fileContent,
+                  req.user.wallet_address,
+                  { mimeType: file.mimetype || file.type }
+                );
             
             // Extract parent directory path (dirpath) - CRITICAL for frontend
             const pathParts = metadata.path.split('/').filter(p => p);
@@ -578,14 +574,22 @@ export async function handleBatch(req: AuthenticatedRequest, res: Response): Pro
               filePath
             });
             
-            const metadata = await filesystem.writeFile(
-              filePath,
-              file.buffer || file.data,
-              req.user.wallet_address,
-              {
-                mimeType: file.mimetype || file.type
-              }
-            );
+            const singleFileContent = file.buffer || file.data;
+            const singleOnDisk = !singleFileContent && file.path;
+
+            const metadata = singleOnDisk
+              ? await filesystem.writeFileFromPath(
+                  filePath,
+                  file.path,
+                  req.user.wallet_address,
+                  { mimeType: file.mimetype || file.type }
+                )
+              : await filesystem.writeFile(
+                  filePath,
+                  singleFileContent,
+                  req.user.wallet_address,
+                  { mimeType: file.mimetype || file.type }
+                );
             
             // Extract parent directory path (dirpath) - CRITICAL for frontend
             const pathParts = metadata.path.split('/').filter(p => p);
@@ -847,7 +851,7 @@ export function handleStats(req: AuthenticatedRequest, res: Response): void {
       directories: directoryCount
     });
   } catch (error) {
-    console.error('[handleStats] Error:', error);
+    log.error('[handleStats] Error:', error);
     res.status(500).json({
       error: 'Failed to get storage stats',
       message: error instanceof Error ? error.message : 'Unknown error'

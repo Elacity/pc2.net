@@ -5,13 +5,15 @@
  */
 
 import { Request, Response } from 'express';
+import { Readable, pipeline } from 'stream';
 import { FilesystemManager } from '../storage/filesystem.js';
 import { AuthenticatedRequest } from './middleware.js';
 import { broadcastFileChange, broadcastDirectoryChange, broadcastItemRemoved, broadcastItemMoved, broadcastItemUpdated, broadcastItemAdded, broadcastItemRenamed } from '../websocket/events.js';
 import { FileStat, DirectoryEntry, ReadFileRequest, WriteFileRequest, CreateDirectoryRequest, DeleteRequest, MoveRequest } from '../types/api.js';
 import { FileMetadata } from '../storage/database.js';
 import { Server as SocketIOServer } from 'socket.io';
-import { logger } from '../utils/logger.js';
+import { logger, createLogger } from '../utils/logger.js';
+const log = createLogger('api-filesystem');
 
 /**
  * Get file/folder stat
@@ -283,8 +285,8 @@ export function handleReaddir(req: AuthenticatedRequest, res: Response): void {
         path: trashPath,
         type: 'dir',
         size: 0,
-        created: Date.now(),
-        modified: Date.now(),
+        created: Math.floor(Date.now() / 1000),
+        modified: Math.floor(Date.now() / 1000),
         mime_type: 'inode/directory',
         is_dir: true,
         uid: `uuid-${trashPath.replace(/\//g, '-').replace(/^-/, '')}`,
@@ -322,8 +324,8 @@ export function handleReaddir(req: AuthenticatedRequest, res: Response): void {
         is_dir: metadata.is_dir,
         is_empty: is_empty,
         size: metadata.size || 0,
-        created: new Date(metadata.created_at).toISOString(), // ISO timestamp like mock server
-        modified: new Date(metadata.updated_at).toISOString(), // ISO timestamp like mock server
+        created: Math.floor(metadata.created_at / 1000), // Unix seconds (frontend timeago expects this)
+        modified: Math.floor(metadata.updated_at / 1000), // Unix seconds (frontend timeago expects this)
         type: metadata.is_dir ? null : (metadata.mime_type || 'application/octet-stream'), // null for dirs, mime_type for files
         thumbnail: metadata.thumbnail || undefined, // Include thumbnail if available
         is_public: metadata.is_public || false // Only Public folder should be true
@@ -503,89 +505,105 @@ export async function handleRead(req: AuthenticatedRequest, res: Response): Prom
       isDir: fileMetadata.is_dir
     });
     
-    const content = await filesystem.readFile(resolvedPath, walletAddress);
+    const mimeType = fileMetadata?.mime_type || 'application/octet-stream';
 
-    // Get MIME type from metadata
-    const metadata = filesystem.getFileMetadata(resolvedPath, walletAddress);
-    const mimeType = metadata?.mime_type || 'application/octet-stream';
-    
-    // Determine if file is binary (video, image, audio, archives, etc.)
-    // Default to binary for safety - only treat explicitly text types as text
     const isTextFile = mimeType.startsWith('text/') || 
                        mimeType === 'application/json' ||
                        mimeType === 'application/xml' ||
                        mimeType === 'application/javascript' ||
                        mimeType === 'application/x-javascript';
     const isBinary = !isTextFile || encoding === 'base64';
+    const isStreamable = /^(video|audio)\//.test(mimeType);
 
-    // Set CORS headers for video/image/audio files (needed for player/viewer apps)
     if (isBinary) {
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
       res.setHeader('Access-Control-Allow-Headers', 'Range, Content-Type');
       res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges');
-      // Support range requests for video seeking
-      res.setHeader('Accept-Ranges', 'bytes');
+      if (isStreamable) {
+        res.setHeader('Accept-Ranges', 'bytes');
+      }
     }
 
-    // Support HTTP Range requests for video seeking (matching mock server behavior)
+    // Cache headers based on IPFS CID (immutable content addressing)
+    if (fileMetadata?.ipfs_hash) {
+      res.setHeader('ETag', `"${fileMetadata.ipfs_hash}"`);
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+      res.setHeader('Last-Modified', new Date(fileMetadata.updated_at).toUTCString());
+    } else {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    }
+
+    // Range request -- only for video/audio where seeking is needed
     const rangeHeader = req.headers.range;
-    const fileSize = content.length;
-    
-    if (rangeHeader && isBinary) {
-      // Parse range header (e.g., "bytes=0-1023" or "bytes=1024-")
-      const parts = rangeHeader.replace(/bytes=/, "").split("-");
-      const start = parseInt(parts[0], 10);
-      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-      const chunkSize = (end - start) + 1;
-      const chunk = content.slice(start, end + 1);
-      
-      logger.info('[Read] Range request', {
-        path: resolvedPath,
-        range: rangeHeader,
-        start,
-        end,
-        fileSize,
-        chunkSize
+    const STREAM_THRESHOLD = 10 * 1024 * 1024; // 10 MB
+
+    if (rangeHeader && isStreamable && isBinary && encoding !== 'base64') {
+      const fileSize = await filesystem.getFileSize(resolvedPath, walletAddress).catch(() => fileMetadata.size);
+      const match = rangeHeader.match(/^bytes=(\d+)-(\d*)$/);
+      if (!match) {
+        res.status(416).set({ 'Content-Range': `bytes */${fileSize}` }).end();
+        return;
+      }
+      const start = parseInt(match[1], 10);
+      const end = match[2] ? parseInt(match[2], 10) : fileSize - 1;
+      if (start > end || start >= fileSize) {
+        res.status(416).set({ 'Content-Range': `bytes */${fileSize}` }).end();
+        return;
+      }
+      const chunkSize = end - start + 1;
+
+      logger.info('[Read] Streaming range request', {
+        path: resolvedPath, range: rangeHeader, start, end, fileSize, chunkSize,
       });
-      
+
       res.status(206).set({
         'Content-Type': mimeType,
         'Content-Length': chunkSize.toString(),
         'Content-Range': `bytes ${start}-${end}/${fileSize}`,
         'Accept-Ranges': 'bytes',
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges'
+        'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges',
       });
-      res.send(chunk);
+
+      const ipfsStream = filesystem.readFileStream(resolvedPath, walletAddress, {
+        offset: start, length: chunkSize,
+      });
+      pipeline(Readable.from(ipfsStream), res, (err) => {
+        if (err && err.code !== 'ERR_STREAM_PREMATURE_CLOSE') {
+          logger.error('[Read] Stream pipeline error', { path: resolvedPath, error: err.message });
+        }
+      });
       return;
     }
 
-    // Set cache headers to prevent stale file content
-    // Use ETag based on IPFS hash (CID) - when file is updated, CID changes, so ETag changes
-    // This ensures browsers re-fetch when file is actually updated
-    if (metadata?.ipfs_hash) {
-      res.setHeader('ETag', `"${metadata.ipfs_hash}"`);
-      res.setHeader('Cache-Control', 'no-cache, must-revalidate'); // Force revalidation
-      res.setHeader('Last-Modified', new Date(metadata.updated_at).toUTCString());
-    } else {
-      // No IPFS hash - use no-cache to prevent any caching
-      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-      res.setHeader('Pragma', 'no-cache');
-      res.setHeader('Expires', '0');
+    // Large video/audio without Range -- stream to avoid buffering entire file
+    if (isStreamable && isBinary && encoding !== 'base64' && fileMetadata.size > STREAM_THRESHOLD) {
+      res.setHeader('Content-Type', mimeType);
+      res.setHeader('Content-Length', fileMetadata.size.toString());
+
+      const ipfsStream = filesystem.readFileStream(resolvedPath, walletAddress);
+      pipeline(Readable.from(ipfsStream), res, (err) => {
+        if (err && err.code !== 'ERR_STREAM_PREMATURE_CLOSE') {
+          logger.error('[Read] Stream pipeline error', { path: resolvedPath, error: err.message });
+        }
+      });
+      return;
     }
 
-    // No range request - send full file
+    // All other files (PDFs, images, documents, text) -- buffer is fine
+    const content = await filesystem.readFile(resolvedPath, walletAddress);
+
     if (encoding === 'base64') {
       res.setHeader('Content-Type', 'application/octet-stream');
       res.send(content.toString('base64'));
     } else if (isBinary) {
-      // Send binary files as Buffer (not UTF-8 string)
       res.setHeader('Content-Type', mimeType);
       res.setHeader('Content-Length', content.length.toString());
       res.send(content);
     } else {
-      // Text files can be sent as UTF-8 string
       res.setHeader('Content-Type', mimeType);
       res.send(content.toString('utf8'));
     }
@@ -1715,7 +1733,7 @@ export async function handleMove(req: AuthenticatedRequest, res: Response): Prom
     });
     
     // Also log to console for immediate visibility
-    console.error('[Move] Detailed error:', errorDetails);
+    log.error('[Move] Detailed error:', errorDetails);
     
     // Check if it's a "destination already exists" error - return 409 Conflict
     if (errorMessage.includes('Destination already exists')) {

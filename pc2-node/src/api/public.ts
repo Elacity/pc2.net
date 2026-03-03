@@ -11,21 +11,232 @@
  */
 
 import { Router, Request, Response } from 'express';
+import { Readable, pipeline } from 'stream';
 import { DatabaseManager, FileMetadata } from '../storage/database.js';
 import { FilesystemManager } from '../storage/filesystem.js';
 import { IPFSStorage } from '../storage/ipfs.js';
 import { logger } from '../utils/logger.js';
 import rateLimit from 'express-rate-limit';
 
-// Rate limiting for public endpoints (prevent abuse)
+// Rate limiting for API endpoints (metadata, listings, pinning)
 const publicRateLimit = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 100, // 100 requests per minute
+  windowMs: 60 * 1000,
+  max: 100,
   message: { error: 'Too many requests, please try again later' },
   standardHeaders: true,
   legacyHeaders: false,
-  validate: { trustProxy: false }, // Disable trust proxy validation for local dev
+  validate: { trustProxy: false },
 });
+
+// Higher limit for content-serving routes -- video players make many Range
+// requests per second and would instantly hit the 100/min API limit.
+const contentRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 600,
+  message: { error: 'Too many requests, please try again later' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { trustProxy: false },
+});
+
+/**
+ * Parse an HTTP Range header into start/end byte offsets.
+ * Returns null for invalid or multi-range requests.
+ */
+function parseRange(rangeHeader: string, fileSize: number): { start: number; end: number } | null {
+  const match = rangeHeader.match(/^bytes=(\d+)-(\d*)$/);
+  if (!match) return null;
+
+  const start = parseInt(match[1], 10);
+  const end = match[2] ? parseInt(match[2], 10) : fileSize - 1;
+
+  if (start > end || start >= fileSize || end >= fileSize) return null;
+  return { start, end };
+}
+
+/**
+ * Stream IPFS content to an HTTP response with proper backpressure.
+ * Supports full-file and Range (206) responses.
+ */
+function streamToResponse(
+  ipfs: IPFSStorage,
+  cid: string,
+  req: Request,
+  res: Response,
+  opts: {
+    fileSize: number;
+    mimeType: string;
+    filename: string;
+    extraHeaders?: Record<string, string>;
+  }
+): void {
+  const { fileSize, mimeType, filename, extraHeaders } = opts;
+  const isStreamable = /^(video|audio)\//.test(mimeType);
+
+  const commonHeaders: Record<string, string> = {
+    'Content-Type': mimeType,
+    'X-IPFS-CID': cid,
+    'X-IPFS-Path': `/ipfs/${cid}`,
+    'Cache-Control': 'public, max-age=31536000, immutable',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Expose-Headers': 'X-IPFS-CID, X-IPFS-Path, Content-Range, Accept-Ranges, Content-Length',
+    'Content-Disposition': `inline; filename="${encodeURIComponent(filename)}"`,
+    ...extraHeaders,
+  };
+
+  if (isStreamable) {
+    commonHeaders['Accept-Ranges'] = 'bytes';
+  }
+
+  // HEAD request -- return headers only, no content
+  if (req.method === 'HEAD') {
+    res.set({ ...commonHeaders, 'Content-Length': fileSize.toString() });
+    res.status(200).end();
+    return;
+  }
+
+  const rangeHeader = req.headers.range;
+  let offset: number | undefined;
+  let length: number | undefined;
+
+  if (rangeHeader && isStreamable) {
+    const range = parseRange(rangeHeader, fileSize);
+    if (!range) {
+      res.status(416).set({ 'Content-Range': `bytes */${fileSize}` }).end();
+      return;
+    }
+    offset = range.start;
+    length = range.end - range.start + 1;
+
+    res.status(206).set({
+      ...commonHeaders,
+      'Content-Length': length.toString(),
+      'Content-Range': `bytes ${range.start}-${range.end}/${fileSize}`,
+    });
+  } else {
+    res.status(200).set({
+      ...commonHeaders,
+      'Content-Length': fileSize.toString(),
+    });
+  }
+
+  const ipfsStream = ipfs.getFileStream(cid, { offset, length });
+  const readable = Readable.from(ipfsStream);
+
+  pipeline(readable, res, (err) => {
+    if (err && err.code !== 'ERR_STREAM_PREMATURE_CLOSE') {
+      logger.error(`[Public Gateway] Stream error for CID ${cid}:`, { error: err.message });
+    }
+  });
+}
+
+/**
+ * Handler for /ipfs/:cid routes (GET and HEAD).
+ */
+function ipfsCidHandler(ipfs: IPFSStorage | null, db: DatabaseManager) {
+  return async (req: Request, res: Response) => {
+    const { cid, filename } = req.params;
+
+    if (!ipfs || !ipfs.isReady()) {
+      return res.status(503).json({ error: 'IPFS not available' });
+    }
+
+    try {
+      const metadata = db.getFileByCID(cid);
+      const mimeType = metadata?.mime_type || 'application/octet-stream';
+      const contentFilename = filename || metadata?.path?.split('/').pop() || cid;
+
+      // Use DB size for non-Range requests (fast); only hit IPFS when needed
+      const needsIpfsSize = !!req.headers.range || !metadata?.size;
+      const fileSize = needsIpfsSize
+        ? await ipfs.getFileSize(cid)
+        : metadata!.size;
+
+      streamToResponse(ipfs, cid, req, res, {
+        fileSize,
+        mimeType,
+        filename: contentFilename,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      if (message.includes('not found') || message.includes('Entry not found')) {
+        return res.status(404).json({
+          error: 'Content not found',
+          cid,
+          hint: 'This CID is not pinned on this node',
+        });
+      }
+      logger.error(`[Public Gateway] Error serving CID ${cid}:`, { error: message });
+      res.status(500).json({ error: 'Failed to retrieve content' });
+    }
+  };
+}
+
+/**
+ * Handler for /public/:wallet/* routes (GET and HEAD).
+ */
+function publicWalletHandler(ipfs: IPFSStorage | null, db: DatabaseManager) {
+  return async (req: Request, res: Response) => {
+    const { wallet } = req.params;
+    const subPath = req.params[0] || '';
+    const fullPath = `/${wallet}/Public${subPath ? '/' + subPath : ''}`;
+
+    if (!ipfs || !ipfs.isReady()) {
+      return res.status(503).json({ error: 'IPFS not available' });
+    }
+
+    try {
+      const metadata = db.getFile(fullPath, wallet);
+      if (!metadata) {
+        return res.status(404).json({ error: 'File not found', path: fullPath });
+      }
+      if (!metadata.is_public) {
+        return res.status(403).json({ error: 'Access denied', message: 'This file is not publicly accessible' });
+      }
+
+      // Directory listings are small JSON -- no streaming needed
+      if (metadata.is_dir) {
+        const files = db.getPublicFiles(wallet, fullPath);
+        return res.json({
+          path: fullPath,
+          isDirectory: true,
+          files: files.map(f => ({
+            name: f.path.split('/').pop(),
+            path: f.path.replace(`/${wallet}/Public`, ''),
+            cid: f.ipfs_hash,
+            size: f.size,
+            mimeType: f.mime_type,
+            isDirectory: f.is_dir,
+            createdAt: f.created_at,
+          })),
+        });
+      }
+
+      if (!metadata.ipfs_hash) {
+        return res.status(404).json({ error: 'File has no content' });
+      }
+
+      const mimeType = metadata.mime_type || 'application/octet-stream';
+      const filename = metadata.path.split('/').pop() || 'file';
+
+      // Use DB size for non-Range requests (fast); only hit IPFS when needed
+      const needsIpfsSize = !!req.headers.range || !metadata.size;
+      const fileSize = needsIpfsSize
+        ? await ipfs.getFileSize(metadata.ipfs_hash)
+        : metadata.size;
+
+      streamToResponse(ipfs, metadata.ipfs_hash, req, res, {
+        fileSize,
+        mimeType,
+        filename,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      logger.error(`[Public Gateway] Error serving ${fullPath}:`, { error: message });
+      res.status(500).json({ error: 'Failed to retrieve file' });
+    }
+  };
+}
 
 /**
  * Create the public gateway router
@@ -42,143 +253,23 @@ export function createPublicRouter(
   // when this router is mounted at root level.
 
   /**
-   * GET /ipfs/:cid
-   * GET /ipfs/:cid/:filename
+   * GET|HEAD /ipfs/:cid
+   * GET|HEAD /ipfs/:cid/:filename
    * 
-   * Serve content directly by CID. Works for any pinned content.
-   * The optional filename parameter allows setting Content-Disposition for downloads.
+   * Serve content directly by CID with streaming and Range request support.
+   * HEAD returns headers (size, MIME, Accept-Ranges) without loading content.
    */
-  router.get('/ipfs/:cid/:filename?', publicRateLimit, async (req: Request, res: Response) => {
-    const { cid, filename } = req.params;
-
-    if (!ipfs || !ipfs.isReady()) {
-      return res.status(503).json({ error: 'IPFS not available' });
-    }
-
-    try {
-      // Try to get file metadata from database (for mime type)
-      const metadata = db.getFileByCID(cid);
-      
-      // Retrieve content from IPFS
-      const content = await ipfs.getFile(cid);
-
-      // Set response headers
-      const mimeType = metadata?.mime_type || 'application/octet-stream';
-      const contentFilename = filename || metadata?.path?.split('/').pop() || cid;
-
-      res.set({
-        'Content-Type': mimeType,
-        'Content-Length': content.length.toString(),
-        'X-IPFS-CID': cid,
-        'X-IPFS-Path': `/ipfs/${cid}`,
-        'Cache-Control': 'public, max-age=31536000, immutable',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Expose-Headers': 'X-IPFS-CID, X-IPFS-Path',
-      });
-
-      // Set Content-Disposition if filename provided
-      if (filename) {
-        res.set('Content-Disposition', `inline; filename="${encodeURIComponent(filename)}"`);
-      }
-
-      res.send(content);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      
-      // Check if it's a "not found" type error
-      if (message.includes('not found') || message.includes('Entry not found')) {
-        return res.status(404).json({ 
-          error: 'Content not found',
-          cid,
-          hint: 'This CID is not pinned on this node'
-        });
-      }
-
-      logger.error(`[Public Gateway] Error serving CID ${cid}:`, { error: message });
-      res.status(500).json({ error: 'Failed to retrieve content' });
-    }
-  });
+  router.head('/ipfs/:cid/:filename?', contentRateLimit, ipfsCidHandler(ipfs, db));
+  router.get('/ipfs/:cid/:filename?', contentRateLimit, ipfsCidHandler(ipfs, db));
 
   /**
-   * GET /public/:wallet/*
+   * GET|HEAD /public/:wallet/*
    * 
-   * Serve files from a user's /Public folder by path.
+   * Serve files from a user's /Public folder with streaming and Range support.
    * Only files marked as is_public=true are served.
    */
-  router.get('/public/:wallet/*', publicRateLimit, async (req: Request, res: Response) => {
-    const { wallet } = req.params;
-    const subPath = req.params[0] || '';
-    
-    // Construct the full path within the Public folder
-    const fullPath = `/${wallet}/Public${subPath ? '/' + subPath : ''}`;
-
-    if (!ipfs || !ipfs.isReady()) {
-      return res.status(503).json({ error: 'IPFS not available' });
-    }
-
-    try {
-      // Get file metadata
-      const metadata = db.getFile(fullPath, wallet);
-
-      if (!metadata) {
-        return res.status(404).json({ 
-          error: 'File not found',
-          path: fullPath
-        });
-      }
-
-      // Verify it's actually in the Public folder and marked public
-      if (!metadata.is_public) {
-        return res.status(403).json({ 
-          error: 'Access denied',
-          message: 'This file is not publicly accessible'
-        });
-      }
-
-      // If it's a directory, return listing
-      if (metadata.is_dir) {
-        const files = db.getPublicFiles(wallet, fullPath);
-        return res.json({
-          path: fullPath,
-          isDirectory: true,
-          files: files.map(f => ({
-            name: f.path.split('/').pop(),
-            path: f.path.replace(`/${wallet}/Public`, ''),
-            cid: f.ipfs_hash,
-            size: f.size,
-            mimeType: f.mime_type,
-            isDirectory: f.is_dir,
-            createdAt: f.created_at
-          }))
-        });
-      }
-
-      // Get file content from IPFS
-      if (!metadata.ipfs_hash) {
-        return res.status(404).json({ error: 'File has no content' });
-      }
-
-      const content = await ipfs.getFile(metadata.ipfs_hash);
-      const filename = metadata.path.split('/').pop() || 'file';
-
-      res.set({
-        'Content-Type': metadata.mime_type || 'application/octet-stream',
-        'Content-Length': content.length.toString(),
-        'X-IPFS-CID': metadata.ipfs_hash,
-        'X-IPFS-Path': `/ipfs/${metadata.ipfs_hash}/${filename}`,
-        'Cache-Control': 'public, max-age=31536000, immutable',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Expose-Headers': 'X-IPFS-CID, X-IPFS-Path',
-        'Content-Disposition': `inline; filename="${encodeURIComponent(filename)}"`,
-      });
-
-      res.send(content);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      logger.error(`[Public Gateway] Error serving ${fullPath}:`, { error: message });
-      res.status(500).json({ error: 'Failed to retrieve file' });
-    }
-  });
+  router.head('/public/:wallet/*', contentRateLimit, publicWalletHandler(ipfs, db));
+  router.get('/public/:wallet/*', contentRateLimit, publicWalletHandler(ipfs, db));
 
   /**
    * GET /api/public/list/:wallet

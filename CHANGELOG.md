@@ -6,7 +6,98 @@
 
 ---
 
-## [UNRELEASED] PC2 v1.0.0-alpha
+## [1.1.0] - 2026-03-03
+
+> 133 commits since v1.0.0 — squash merged from `feature/jetson-gpu-acceleration`
+
+### 🎉 New Features (v1.1.0)
+
+#### Ubuntu/macOS-Style Desktop UI (2026-02-27)
+- **Top Bar**: System bar with clock, status indicators, and profile menu
+- **Dock/Taskbar**: macOS-style dock with app icons, responsive on mobile
+- **Window Chrome**: Refined window title bars, rounded corners, proper shadows
+- **File Explorer**: Path bar, list view with Modified column, proper light/dark styling
+- **Search Modal**: Even padding, icon aligned with text
+
+#### Virtual Desktops / Spaces (2026-02-27)
+- **Multiple Workspaces**: Create, switch, and delete virtual desktops
+- **Mission Control**: Overview of all workspaces with live window previews
+- **Keyboard Shortcuts**: Navigate between workspaces with keyboard
+- **Taskbar Integration**: Workspace indicator dots in the taskbar
+
+#### Voice AI Pipeline (2026-02-26)
+- **Whisper STT**: Local speech-to-text via whisper.cpp server
+- **Piper TTS**: Local text-to-speech for voice responses
+- **Voice Button**: Mic button in AI chat with waveform visualizer
+- **Settings UI**: Single-row Voice AI control with Install button or Enable toggle
+- **Opt-in on ARM**: Voice AI tools not auto-installed on Jetson (saves ~500MB GPU memory)
+
+#### VLESS Reality TCP Stealth Transport (2026-03-02)
+- **TCP Stealth Layer**: VLESS Reality (via sing-box 1.13.0+) wraps AWG traffic in TLS 1.3 mimicry when all UDP is blocked
+- **Chaining Architecture**: AWG provides the tunnel, VLESS Reality provides the stealth TCP transport — double obfuscation
+- **TLS Mimicry**: Connections appear as HTTPS to www.microsoft.com with Chrome JA3/JA4 fingerprint
+- **XUDP Encapsulation**: AWG UDP packets carried transparently inside the VLESS tunnel with h2mux multiplexing
+- **Four-Tier Cascade**: WireGuard > AmneziaWG > VLESS Reality + AWG > ActiveProxy
+- **Supernode Setup**: sing-box server on port 8443, systemd service, watchdog cron, peer management
+- **Provisioning API**: `/api/vless/register` and `/api/vless/status` gateway endpoints
+- **Auto-install**: sing-box installed by `start-local.sh` (brew/binary) and `install-arm.sh` with auto-upgrade
+- **UI**: Transport label updates dynamically — "VLESS Reality" in blue when active, "Switching..." / "Reconnecting..." feedback during transport changes
+- **Stealth sub-toggle**: VLESS Reality appears as a sub-toggle under Stealth Mode, synced between dropdown and Settings
+
+#### AmneziaWG Stealth Transport (2026-03-02)
+- **DPI-Resistant Tunnel**: AmneziaWG (WireGuard fork) as a stealth fallback for censored networks
+- **DPI Detection**: Automatic detection of DPI blocks (WireGuard connects but traffic is dropped)
+- **Stealth Mode**: Toggle in Settings to force AmneziaWG, bypassing standard WireGuard
+- **Supernode Support**: Separate AWG interface (awg0) on port 51821 with 10.101.0.0/16 subnet
+- **Provisioning API**: `/api/awg/register` and `/api/awg/status` endpoints with obfuscation params
+- **Install Scripts**: Both `start-local.sh` and `install-arm.sh` build `amneziawg-go` from source
+- **Cloud Dropdown**: Transport indicator shows "AmneziaWG (Stealth)" in purple when active
+- **Documentation**: New `docs/deployment/STEALTH_MODE.md` guide for users behind DPI
+
+#### WireGuard macOS Support (2026-03-01)
+- **Cross-platform WireGuard**: Full support for macOS alongside Linux
+- **Auto-install**: `start-local.sh` automatically installs Homebrew + WireGuard tools on macOS
+- **Passwordless sudo**: Configures `/etc/sudoers.d/wireguard` for non-interactive `wg-quick`
+- **Network Change Detection**: Detects gateway changes (laptop mobility) and triggers reconnect
+- **Branch Support**: `PC2_BRANCH` env var lets users install a specific branch
+
+#### AI Improvements (2026-02-26)
+- **Ollama Tool Fallback**: Models that reject tool definitions automatically retry without tools
+- **Thinking Block Scroll**: AI reasoning/thinking section is scrollable with auto-scroll
+- **Community Models**: Added gemma3, qwen3, phi4-mini, llama3.2, and custom model pull input
+- **Model Download Progress**: Fixed SSE streaming for real-time download progress
+
+### 🔧 Bug Fixes (v1.1.0)
+
+- **VLESS Reality sing-box version**: Pinned to 1.13.0+ — older 1.11.x versions have critical XUDP/multiplex bugs that cause tunnel to connect but silently drop all packets
+- **VLESS Reality sniffing conflict**: Disabled sing-box protocol sniffing on direct inbound — AWG 2.0's I1 QUIC signature was triggering misdetection, overriding packet destinations
+- **VLESS Reality multiplex**: Added h2mux protocol with padding to XUDP multiplexing for reliable UDP-over-TCP encapsulation
+- **ARM install sudo fix**: `install-arm.sh` now detects `$SUDO_USER` and installs to the real user's home directory instead of `/root`, preventing duplicate PC2 installations and PM2 conflicts
+- **ARM install rogue cleanup**: Auto-detects and removes previous faulty `/root/pc2.net` installations from `sudo` runs
+- **sing-box auto-upgrade**: Install scripts detect older sing-box versions and upgrade to 1.13.0 automatically
+- **Mobile Taskbar Z-index**: Full-screen windows (Settings, Explorer, Apps) no longer hidden behind mobile taskbar
+- **Sidebar Icon Hover**: Light mode sidebar icons now tint dark on hover instead of white
+- **WireGuard Retry**: Reduced retry interval from 60s to 15s with exponential backoff
+- **WireGuard PATH**: Detection works under PM2/systemd restricted PATH environments
+- **Large File Upload**: Progress bar no longer doubles total size; IPFS size verification added
+- **AV1/Firefox**: Proper error handling and format support for video playback
+- **IPFS DHT**: Client mode with connection limits to prevent bandwidth saturation
+- **Gateway Keep-alive**: Hardened keep-alive for persistent ActiveProxy connections
+- **Particle Auth Build**: Removed compiled .js artifacts that broke Vite 6.x strict mode
+- **Canvas Build**: Resilient native dependency build for ARM devices
+- **Startup Performance**: Parallelized AI/Gateway/Boson initialization for faster cold start
+
+### 📝 Documentation (v1.1.0)
+
+- Strategic roadmap aligned with DAO proposal and Rong Chen's vision
+- Architecture convergence plan (PC2 v1 → ElastOS Runtime v2)
+- ARM devices deployment guide (Jetson + Raspberry Pi)
+- Network hardening roadmap for supernode decentralization
+- Weekly shipping report template and cadence established
+
+---
+
+## [RELEASED] PC2 v1.0.0
 
 ### 🎉 Major Features
 
@@ -95,14 +186,15 @@
 - Some filesystem provider errors under WASM branch (non-critical)
 - WASI file I/O still in progress
 
-### 🔜 Coming Next
-- Docker image for easy deployment
-- Raspberry Pi / Jetson Nano images
-- SSL/TLS auto-configuration
-- OpenAI, Gemini, xAI provider support
-- Agent-to-agent communication
-- WhatsApp/Telegram channel integration
-- dDRM (decentralized Digital Rights Management)
+### 🔜 Coming Next (v1.2+)
+- Apple code-signed macOS launcher (no `xattr` required)
+- Windows `.exe` installer via Electron
+- Pre-built Raspberry Pi / Jetson images (zero-terminal install)
+- Linux `.deb` package
+- ActiveProxy auto-connect in Desktop Launcher
+- P2P messaging between PC2 nodes
+- dDRM marketplace integration
+- Mobile companion app (iOS/Android)
 
 ---
 

@@ -8,6 +8,8 @@ import Database from 'better-sqlite3';
 import { readFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { createLogger } from '../utils/logger.js';
+const log = createLogger('migrations');
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -29,7 +31,7 @@ function findSchemaFile(): string {
   }
   throw new Error(`Schema file not found. Tried: ${SCHEMA_FILE} and ${sourceSchema}`);
 }
-const CURRENT_VERSION = 14;
+const CURRENT_VERSION = 15;
 
 interface Migration {
   version: number;
@@ -79,24 +81,24 @@ export function runMigrations(db: Database.Database): void {
 
   if (currentVersion === 0) {
     // First run: create initial schema
-    console.log('📦 Creating initial database schema...');
+    log.info('📦 Creating initial database schema...');
     runInitialSchema(db);
-    console.log('✅ Database schema created');
+    log.info('✅ Database schema created');
     return;
   }
 
   if (currentVersion < CURRENT_VERSION) {
-    console.log(`📦 Running migrations from version ${currentVersion} to ${CURRENT_VERSION}...`);
+    log.info(`📦 Running migrations from version ${currentVersion} to ${CURRENT_VERSION}...`);
     
     // Migration 2: Add thumbnail column to files table
     if (currentVersion < 2) {
       try {
         db.exec('ALTER TABLE files ADD COLUMN thumbnail TEXT');
-        console.log('✅ Added thumbnail column to files table');
+        log.debug('✅ Added thumbnail column to files table');
       } catch (error: any) {
         // Column might already exist (e.g., from fresh install with new schema)
         if (!error.message.includes('duplicate column')) {
-          console.warn(`⚠️  Migration 2 warning: ${error.message}`);
+          log.warn(`⚠️  Migration 2 warning: ${error.message}`);
         }
       }
     }
@@ -106,7 +108,7 @@ export function runMigrations(db: Database.Database): void {
       try {
         // Add content_text column for storing extracted file content
         db.exec('ALTER TABLE files ADD COLUMN content_text TEXT');
-        console.log('✅ Added content_text column to files table');
+        log.debug('✅ Added content_text column to files table');
         
         // Drop existing FTS5 table and triggers if they exist (for clean migration)
         db.exec('DROP TABLE IF EXISTS files_fts');
@@ -125,7 +127,7 @@ export function runMigrations(db: Database.Database): void {
             mime_type
           )
         `);
-        console.log('✅ Created FTS5 virtual table files_fts');
+        log.debug('✅ Created FTS5 virtual table files_fts');
         
         // Helper function to extract filename from path
         // SQLite doesn't have a built-in basename function, so we use a workaround
@@ -164,7 +166,7 @@ export function runMigrations(db: Database.Database): void {
             WHERE rowid = new.rowid;
           END
         `);
-        console.log('✅ Created FTS5 sync triggers');
+        log.debug('✅ Created FTS5 sync triggers');
         
         // Populate FTS5 with existing files (if any)
         db.exec(`
@@ -178,10 +180,10 @@ export function runMigrations(db: Database.Database): void {
           FROM files
           WHERE is_dir = 0
         `);
-        console.log('✅ Populated FTS5 with existing files');
+        log.debug('✅ Populated FTS5 with existing files');
         
       } catch (error: any) {
-        console.error(`❌ Migration 3 error: ${error.message}`);
+        log.error(`❌ Migration 3 error: ${error.message}`);
         // Don't fail migration if FTS5 already exists
         if (!error.message.includes('already exists') && !error.message.includes('duplicate column')) {
           throw error;
@@ -192,7 +194,7 @@ export function runMigrations(db: Database.Database): void {
     // Migration 4: Add file_versions table for version history
     if (currentVersion < 4) {
       try {
-        console.log('📦 Running Migration 4: File versioning...');
+        log.info('📦 Running Migration 4: File versioning...');
         
         // Create file_versions table
         db.exec(`
@@ -223,10 +225,10 @@ export function runMigrations(db: Database.Database): void {
           ON file_versions(created_at DESC)
         `);
         
-        console.log('✅ Migration 4 complete: File versioning table created');
+        log.info('✅ Migration 4 complete: File versioning table created');
         recordMigration(db, 4);
       } catch (error: any) {
-        console.error(`❌ Migration 4 error: ${error.message}`);
+        log.error(`❌ Migration 4 error: ${error.message}`);
         throw error;
       }
     }
@@ -234,7 +236,7 @@ export function runMigrations(db: Database.Database): void {
     // Migration 5: Add ai_config table for wallet-scoped AI configuration
     if (currentVersion < 5) {
       try {
-        console.log('📦 Running Migration 5: AI configuration...');
+        log.info('📦 Running Migration 5: AI configuration...');
         
         // Create ai_config table (wallet-scoped)
         db.exec(`
@@ -255,10 +257,10 @@ export function runMigrations(db: Database.Database): void {
           ON ai_config(wallet_address)
         `);
         
-        console.log('✅ Migration 5 complete: AI config table created');
+        log.info('✅ Migration 5 complete: AI config table created');
         recordMigration(db, 5);
       } catch (error: any) {
-        console.error(`❌ Migration 5 error: ${error.message}`);
+        log.error(`❌ Migration 5 error: ${error.message}`);
         throw error;
       }
     }
@@ -266,7 +268,7 @@ export function runMigrations(db: Database.Database): void {
     // Migration 6: Clean model names in ai_config (remove provider prefixes)
     if (currentVersion < 6) {
       try {
-        console.log('📦 Running Migration 6: Clean AI model names...');
+        log.info('📦 Running Migration 6: Clean AI model names...');
         const rows = db.prepare('SELECT wallet_address, default_model FROM ai_config WHERE default_model IS NOT NULL').all() as Array<{wallet_address: string, default_model: string}>;
         
         let cleaned = 0;
@@ -278,16 +280,16 @@ export function runMigrations(db: Database.Database): void {
             if (parts[0] === 'ollama' || parts[0] === 'claude' || parts[0] === 'openai' || parts[0] === 'gemini') {
               const cleanModel = parts.slice(1).join(':');
               db.prepare('UPDATE ai_config SET default_model = ? WHERE wallet_address = ?').run(cleanModel, row.wallet_address);
-              console.log(`  Cleaned model for ${row.wallet_address.substring(0, 10)}...: "${model}" -> "${cleanModel}"`);
+              log.debug(`  Cleaned model for ${row.wallet_address.substring(0, 10)}...: "${model}" -> "${cleanModel}"`);
               cleaned++;
             }
           }
         }
         
-        console.log(`✅ Migration 6 complete: Cleaned ${cleaned} model name(s)`);
+        log.info(`✅ Migration 6 complete: Cleaned ${cleaned} model name(s)`);
         recordMigration(db, 6);
       } catch (error: any) {
-        console.error(`❌ Migration 6 error: ${error.message}`);
+        log.error(`❌ Migration 6 error: ${error.message}`);
         throw error;
       }
     }
@@ -295,7 +297,7 @@ export function runMigrations(db: Database.Database): void {
     // Migration 7: Update deprecated Claude model names to current model
     if (currentVersion < 7) {
       try {
-        console.log('📦 Running Migration 7: Update deprecated Claude models...');
+        log.info('📦 Running Migration 7: Update deprecated Claude models...');
         const deprecatedModels = ['claude-3-5-sonnet-20241022', 'claude-3-5-sonnet-20240620'];
         const newModel = 'claude-sonnet-4-5-20250929';
         
@@ -304,15 +306,15 @@ export function runMigrations(db: Database.Database): void {
           const rows = db.prepare('SELECT wallet_address, default_model FROM ai_config WHERE default_model = ?').all(oldModel) as Array<{wallet_address: string, default_model: string}>;
           for (const row of rows) {
             db.prepare('UPDATE ai_config SET default_model = ? WHERE wallet_address = ?').run(newModel, row.wallet_address);
-            console.log(`  Updated Claude model for ${row.wallet_address.substring(0, 10)}...: "${row.default_model}" -> "${newModel}"`);
+            log.debug(`  Updated Claude model for ${row.wallet_address.substring(0, 10)}...: "${row.default_model}" -> "${newModel}"`);
             updated++;
           }
         }
         
-        console.log(`✅ Migration 7 complete: Updated ${updated} Claude model name(s)`);
+        log.info(`✅ Migration 7 complete: Updated ${updated} Claude model name(s)`);
         recordMigration(db, 7);
       } catch (error: any) {
-        console.error(`❌ Migration 7 error: ${error.message}`);
+        log.error(`❌ Migration 7 error: ${error.message}`);
         throw error;
       }
     }
@@ -320,7 +322,7 @@ export function runMigrations(db: Database.Database): void {
     // Migration 8: Add recent_apps table for tracking recently launched apps
     if (currentVersion < 8) {
       try {
-        console.log('📦 Running Migration 8: Recent apps table...');
+        log.info('📦 Running Migration 8: Recent apps table...');
         
         db.exec(`
           CREATE TABLE IF NOT EXISTS recent_apps (
@@ -337,10 +339,10 @@ export function runMigrations(db: Database.Database): void {
           ON recent_apps(wallet_address)
         `);
         
-        console.log('✅ Migration 8 complete: Recent apps table created');
+        log.info('✅ Migration 8 complete: Recent apps table created');
         recordMigration(db, 8);
       } catch (error: any) {
-        console.error(`❌ Migration 8 error: ${error.message}`);
+        log.error(`❌ Migration 8 error: ${error.message}`);
         throw error;
       }
     }
@@ -348,7 +350,7 @@ export function runMigrations(db: Database.Database): void {
     // Migration 9: Add api_keys table for agent/programmatic access
     if (currentVersion < 9) {
       try {
-        console.log('📦 Running Migration 9: API keys table...');
+        log.info('📦 Running Migration 9: API keys table...');
         
         db.exec(`
           CREATE TABLE IF NOT EXISTS api_keys (
@@ -375,10 +377,10 @@ export function runMigrations(db: Database.Database): void {
           ON api_keys(key_hash)
         `);
         
-        console.log('✅ Migration 9 complete: API keys table created');
+        log.info('✅ Migration 9 complete: API keys table created');
         recordMigration(db, 9);
       } catch (error: any) {
-        console.error(`❌ Migration 9 error: ${error.message}`);
+        log.error(`❌ Migration 9 error: ${error.message}`);
         throw error;
       }
     }
@@ -386,7 +388,7 @@ export function runMigrations(db: Database.Database): void {
     // Migration 10: Add audit_logs table for tracking agent actions
     if (currentVersion < 10) {
       try {
-        console.log('📦 Running Migration 10: Audit logs table...');
+        log.info('📦 Running Migration 10: Audit logs table...');
         
         db.exec(`
           CREATE TABLE IF NOT EXISTS audit_logs (
@@ -424,10 +426,10 @@ export function runMigrations(db: Database.Database): void {
           ON audit_logs(action)
         `);
         
-        console.log('✅ Migration 10 complete: Audit logs table created');
+        log.info('✅ Migration 10 complete: Audit logs table created');
         recordMigration(db, 10);
       } catch (error: any) {
-        console.error(`❌ Migration 10 error: ${error.message}`);
+        log.error(`❌ Migration 10 error: ${error.message}`);
         throw error;
       }
     }
@@ -435,7 +437,7 @@ export function runMigrations(db: Database.Database): void {
     // Migration 11: Add scheduled_tasks table for cron-like task scheduling
     if (currentVersion < 11) {
       try {
-        console.log('📦 Running Migration 11: Scheduled tasks table...');
+        log.info('📦 Running Migration 11: Scheduled tasks table...');
         
         db.exec(`
           CREATE TABLE IF NOT EXISTS scheduled_tasks (
@@ -469,10 +471,10 @@ export function runMigrations(db: Database.Database): void {
           ON scheduled_tasks(next_run_at)
         `);
         
-        console.log('✅ Migration 11 complete: Scheduled tasks table created');
+        log.info('✅ Migration 11 complete: Scheduled tasks table created');
         recordMigration(db, 11);
       } catch (error: any) {
-        console.error(`❌ Migration 11 error: ${error.message}`);
+        log.error(`❌ Migration 11 error: ${error.message}`);
         throw error;
       }
     }
@@ -480,7 +482,7 @@ export function runMigrations(db: Database.Database): void {
     // Migration 12: AI Memory State table (Context Engineering)
     if (currentVersion < 12) {
       try {
-        console.log('📦 Running Migration 12: AI Memory State table...');
+        log.info('📦 Running Migration 12: AI Memory State table...');
         
         db.exec(`
           CREATE TABLE IF NOT EXISTS ai_memory_state (
@@ -501,10 +503,10 @@ export function runMigrations(db: Database.Database): void {
           ON ai_memory_state(updated_at)
         `);
         
-        console.log('✅ Migration 12 complete: AI Memory State table created');
+        log.info('✅ Migration 12 complete: AI Memory State table created');
         recordMigration(db, 12);
       } catch (error: any) {
-        console.error(`❌ Migration 12 error: ${error.message}`);
+        log.error(`❌ Migration 12 error: ${error.message}`);
         throw error;
       }
     }
@@ -512,7 +514,7 @@ export function runMigrations(db: Database.Database): void {
     // Migration 13: AI Conversations table (persistent chat history)
     if (currentVersion < 13) {
       try {
-        console.log('📦 Running Migration 13: AI Conversations table...');
+        log.info('📦 Running Migration 13: AI Conversations table...');
         
         db.exec(`
           CREATE TABLE IF NOT EXISTS ai_conversations (
@@ -538,10 +540,10 @@ export function runMigrations(db: Database.Database): void {
           ON ai_conversations(wallet_address, updated_at DESC)
         `);
         
-        console.log('✅ Migration 13 complete: AI Conversations table created');
+        log.info('✅ Migration 13 complete: AI Conversations table created');
         recordMigration(db, 13);
       } catch (error: any) {
-        console.error(`❌ Migration 13 error: ${error.message}`);
+        log.error(`❌ Migration 13 error: ${error.message}`);
         throw error;
       }
     }
@@ -549,7 +551,7 @@ export function runMigrations(db: Database.Database): void {
     // Migration 14: Agent Proposals table (AI agent transaction proposals)
     if (currentVersion < 14) {
       try {
-        console.log('📦 Running Migration 14: Agent Proposals table...');
+        log.info('📦 Running Migration 14: Agent Proposals table...');
         
         db.exec(`
           CREATE TABLE IF NOT EXISTS agent_proposals (
@@ -598,15 +600,47 @@ export function runMigrations(db: Database.Database): void {
           ON agent_proposals(wallet_address, created_at DESC)
         `);
         
-        console.log('✅ Migration 14 complete: Agent Proposals table created');
+        log.info('✅ Migration 14 complete: Agent Proposals table created');
         recordMigration(db, 14);
       } catch (error: any) {
-        console.error(`❌ Migration 14 error: ${error.message}`);
+        log.error(`❌ Migration 14 error: ${error.message}`);
+        throw error;
+      }
+    }
+
+    // Migration 15: Context events table + context_awareness flag
+    if (currentVersion < 15) {
+      try {
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS context_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            wallet TEXT NOT NULL,
+            timestamp TEXT NOT NULL,
+            type TEXT NOT NULL,
+            data TEXT NOT NULL,
+            created_at INTEGER DEFAULT (strftime('%s', 'now'))
+          )
+        `);
+
+        db.exec(`CREATE INDEX IF NOT EXISTS idx_context_wallet_time ON context_events(wallet, timestamp DESC)`);
+        db.exec(`CREATE INDEX IF NOT EXISTS idx_context_type ON context_events(type)`);
+
+        // Add context_awareness flag to ai_config
+        try {
+          db.exec(`ALTER TABLE ai_config ADD COLUMN context_awareness INTEGER DEFAULT 0`);
+        } catch {
+          // Column already exists
+        }
+
+        log.info('✅ Migration 15 complete: Context events table + awareness flag');
+        recordMigration(db, 15);
+      } catch (error: any) {
+        log.error(`❌ Migration 15 error: ${error.message}`);
         throw error;
       }
     }
     
-    console.log('✅ Migrations completed');
+    log.info('✅ Migrations completed');
   } else if (currentVersion === CURRENT_VERSION) {
     // Even if migration version is current, check if FTS5 table exists
     // (it might have been dropped manually or due to an error)
@@ -617,7 +651,7 @@ export function runMigrations(db: Database.Database): void {
       `).get();
       
       if (!fts5Exists) {
-        console.log('⚠️  FTS5 table missing, recreating...');
+        log.warn('⚠️  FTS5 table missing, recreating...');
         // Recreate FTS5 table and triggers
         db.exec('DROP TRIGGER IF EXISTS files_fts_insert');
         db.exec('DROP TRIGGER IF EXISTS files_fts_update');
@@ -663,13 +697,13 @@ export function runMigrations(db: Database.Database): void {
           FROM files
           WHERE is_dir = 0
         `);
-        console.log('✅ FTS5 table and triggers recreated');
+        log.info('✅ FTS5 table and triggers recreated');
       }
     } catch (error: any) {
-      console.warn('⚠️  Could not check/recreate FTS5 table:', error.message);
+      log.warn('⚠️  Could not check/recreate FTS5 table:', error.message);
     }
-    console.log('✅ Database schema is up to date');
+    log.info('✅ Database schema is up to date');
   } else {
-    console.warn(`⚠️  Database version (${currentVersion}) is newer than expected (${CURRENT_VERSION})`);
+    log.warn(`⚠️  Database version (${currentVersion}) is newer than expected (${CURRENT_VERSION})`);
   }
 }

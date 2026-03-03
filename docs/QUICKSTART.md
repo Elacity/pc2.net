@@ -172,11 +172,11 @@ docker compose pull && docker compose up -d
 
 ## ARM Devices
 
-**Perfect for:** Raspberry Pi 4/5, Jetson Nano, home servers
+**Perfect for:** Raspberry Pi 4/5, Jetson Orin Nano, home servers
 
 ### Prerequisites
 
-- Raspberry Pi 4/5 (4GB+ RAM) or Jetson Nano
+- Raspberry Pi 4/5 (4GB+ RAM) or Jetson Orin Nano
 - Raspberry Pi OS or Ubuntu 22.04
 - Internet connection
 
@@ -188,46 +188,42 @@ curl -sSL https://raw.githubusercontent.com/Elacity/pc2.net/main/scripts/install
 
 ### What Gets Installed
 
-1. Node.js 20
+1. Node.js 20 + PM2 process manager
 2. Build tools
-3. PC2 from source
-4. **systemd service for auto-start** (keeps running when you close SSH)
+3. WireGuard (kernel module on Pi, wireguard-go on Jetson -- automatic)
+4. PC2 from source, built and running
 
-**Important:** Always use the install script above. It creates a systemd service that keeps PC2 running even when you close your terminal or disconnect SSH. If you run PC2 manually (`npm start`), it will stop when you disconnect.
+**That's it -- one command.** The script handles everything including WireGuard setup. PC2 runs via PM2 (survives SSH disconnect and reboots).
 
-### Access Your PC2
+### What Happens Next
 
-```
-Local:   http://localhost:4200
-Network: http://192.168.x.x:4200  (shown after install)
-```
+1. Open `http://<device-ip>:4200` in your browser (the IP is shown after install)
+2. Login with your wallet (MetaMask, WalletConnect, etc.)
+3. Choose your domain name in the setup wizard
+4. **PC2 automatically activates WireGuard and your domain goes live** at `https://yourname.ela.city`
 
-### Enable Remote Access
-
-For access outside your home network:
-
-1. Open Settings → PC2
-2. Enable "Active Proxy"
-3. Register a username
-4. Access via `https://username.ela.city`
+Page loads are ~1.5 seconds from anywhere. If WireGuard isn't available, PC2 falls back to Boson relay (slower but works everywhere).
 
 ### Useful Commands
 
 ```bash
 # View logs
-sudo journalctl -u pc2 -f
+pm2 logs pc2
 
 # Stop PC2
-sudo systemctl stop pc2
+pm2 stop pc2
 
 # Start PC2
-sudo systemctl start pc2
+pm2 start pc2
 
 # Restart PC2
-sudo systemctl restart pc2
+pm2 restart pc2
 
 # Check status
-sudo systemctl status pc2
+pm2 status
+
+# Check WireGuard tunnel
+sudo wg show wg0
 ```
 
 ---

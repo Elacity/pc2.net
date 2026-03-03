@@ -23,10 +23,14 @@ module.exports = {
     min_uptime: 30000,        // Must run 30s to count as successful start
     kill_timeout: 15000,      // Wait 15s for graceful shutdown
     
+    // Node.js options for large file handling and IPFS performance
+    node_args: "--max-old-space-size=2048",
+    
     // Environment
     env: {
       NODE_ENV: "production",
-      PORT: "4200"
+      PORT: "4200",
+      PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"
     },
     
     // Logging - PM2 defaults are fine, logs go to ~/.pm2/logs/

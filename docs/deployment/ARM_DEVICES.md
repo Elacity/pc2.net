@@ -109,11 +109,35 @@ NVIDIA Jetson ships a custom kernel that **does not include the WireGuard kernel
 For maximum performance, power users can optionally build the kernel module:
 https://docs.kinesis.network/blog/enable-wireguard-on-nvidia-jetson
 
+### Power Mode Optimization (Automatic)
+
+Jetson Orin Nano supports multiple power modes. The install script automatically detects and optimizes this:
+
+| Mode | CPU Max | GPU Max | Use Case |
+|------|---------|---------|----------|
+| 7W | 729 MHz | 306 MHz | Battery/thermal constrained |
+| **15W** | 1497 MHz | 612 MHz | Default on some JetPack versions |
+| **25W** | 1728 MHz | 918 MHz | **Recommended for PC2** (auto-set by install script) |
+| MAXN_SUPER | Max | Max | No power cap (runs hotter) |
+
+The install script will:
+1. Detect the current power mode via `nvpmodel`
+2. Switch to **25W** if running at a lower setting (15W or 7W)
+3. Run `jetson_clocks` to lock CPU/GPU at maximum frequencies
+4. Make the clock settings persistent across reboots
+
+To check or change manually:
+```bash
+sudo nvpmodel -q                    # Check current mode
+sudo nvpmodel -m 1 && sudo jetson_clocks   # Switch to 25W
+sudo nvpmodel -m 2 && sudo jetson_clocks   # Switch to MAXN_SUPER (max perf, more heat)
+```
+
 ### Notes for Jetson
 
 - GPU acceleration available for Ollama AI models (CUDA auto-detected)
 - Works great for AI agent workloads with local LLMs
-- Use barrel jack power for stability
+- Use barrel jack power for stability (especially at 25W mode)
 - PC2 runs via PM2 process manager -- survives SSH disconnect and reboots automatically
 - Voice AI tools (Whisper STT + Piper TTS) are **opt-in** on Jetson — install via Settings > AI > Voice AI
 - Voice AI uses ~500MB+ GPU memory; on 8GB Jetson this may prevent larger Ollama models from loading

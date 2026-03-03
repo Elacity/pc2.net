@@ -109,6 +109,86 @@ detect_platform() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Optimize Jetson power mode for best performance
+#
+# Jetson Orin Nano ships with multiple power modes. The install script
+# checks the current mode and upgrades to 25W if running at a lower
+# setting, then locks clocks with jetson_clocks for consistent throughput.
+# ─────────────────────────────────────────────────────────────────────────────
+
+optimize_jetson_power() {
+    if [ "$IS_JETSON" != true ]; then
+        return
+    fi
+
+    if ! command -v nvpmodel &>/dev/null; then
+        return
+    fi
+
+    CURRENT_MODE=$(nvpmodel -q 2>/dev/null | grep "NV Power Mode" | sed 's/.*: //')
+    CURRENT_MODE_ID=$(nvpmodel -q 2>/dev/null | tail -1 | tr -d '[:space:]')
+
+    if [ -z "$CURRENT_MODE" ]; then
+        return
+    fi
+
+    print_step "Jetson power mode: ${CURRENT_MODE} (ID=${CURRENT_MODE_ID})"
+
+    # Parse available modes to find the best one
+    # Priority: 25W (ID varies) > current if already >= 25W
+    BEST_MODE_ID=""
+    HAS_25W=$(nvpmodel -p --verbose -f /etc/nvpmodel.conf 2>&1 | grep "POWER_MODEL.*NAME=25W" | grep -oP 'ID=\K[0-9]+')
+    HAS_MAXN=$(nvpmodel -p --verbose -f /etc/nvpmodel.conf 2>&1 | grep -i "POWER_MODEL.*NAME=MAXN" | grep -oP 'ID=\K[0-9]+' | head -1)
+
+    case "$CURRENT_MODE" in
+        *25W*|*MAXN*)
+            print_ok "Jetson already running at optimal power mode ($CURRENT_MODE)"
+            ;;
+        *)
+            if [ -n "$HAS_25W" ]; then
+                BEST_MODE_ID="$HAS_25W"
+                print_step "Switching Jetson to 25W mode for best performance..."
+                if nvpmodel -m "$BEST_MODE_ID" 2>/dev/null; then
+                    print_ok "Jetson power mode set to 25W"
+                else
+                    print_warn "Failed to switch power mode (may need reboot)"
+                fi
+            elif [ -n "$HAS_MAXN" ]; then
+                BEST_MODE_ID="$HAS_MAXN"
+                print_step "Switching Jetson to MAXN mode for best performance..."
+                if nvpmodel -m "$BEST_MODE_ID" 2>/dev/null; then
+                    print_ok "Jetson power mode set to MAXN"
+                else
+                    print_warn "Failed to switch power mode (may need reboot)"
+                fi
+            else
+                print_warn "Could not detect higher power mode -- staying at $CURRENT_MODE"
+            fi
+            ;;
+    esac
+
+    # Lock clocks at maximum for consistent server performance
+    if command -v jetson_clocks &>/dev/null; then
+        jetson_clocks 2>/dev/null && print_ok "Jetson clocks locked at maximum frequency" || true
+
+        # Make jetson_clocks persistent across reboots via rc.local
+        if ! grep -q "jetson_clocks" /etc/rc.local 2>/dev/null; then
+            if [ ! -f /etc/rc.local ]; then
+                cat > /etc/rc.local << 'RCLOCAL_EOF'
+#!/bin/bash
+jetson_clocks 2>/dev/null || true
+exit 0
+RCLOCAL_EOF
+                chmod +x /etc/rc.local
+            else
+                sed -i '/^exit 0/i jetson_clocks 2>/dev/null || true' /etc/rc.local 2>/dev/null || true
+            fi
+            print_ok "Jetson clocks will persist across reboots"
+        fi
+    fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Install system prerequisites
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -840,6 +920,7 @@ main() {
     print_banner
     check_arch
     detect_platform
+    optimize_jetson_power
 
     # Safety: if running via sudo and there's a rogue /root/pc2.net from a
     # previous bad install, warn and clean it up to prevent port conflicts

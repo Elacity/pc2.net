@@ -213,6 +213,12 @@ async function main() {
       elacityBootstrap = ipfsConfig.elacity_bootstrap;
     }
 
+    const envCarReplicationEnabled = process.env.IPFS_CAR_REPLICATION_ENABLED;
+    const envCarReplicationUrl = process.env.IPFS_CAR_REPLICATION_URL;
+    const envCarReplicationToken = process.env.IPFS_CAR_REPLICATION_TOKEN;
+    const envCarReplicationTimeoutMs = process.env.IPFS_CAR_REPLICATION_TIMEOUT_MS;
+    const envCarReplicationMaxBytes = process.env.IPFS_CAR_REPLICATION_MAX_BYTES;
+
     ipfs = new IPFSStorage({
       repoPath: IPFS_REPO_PATH,
       mode: ipfsMode,
@@ -228,6 +234,17 @@ async function main() {
       relayBootstrap: ipfsConfig.relay_bootstrap,
       relayMode,
       relayMaxConnections,
+      carReplicationEnabled: envCarReplicationEnabled !== undefined
+        ? envCarReplicationEnabled === 'true'
+        : ipfsConfig.car_replication_enabled === true,
+      carReplicationUrl: envCarReplicationUrl || ipfsConfig.car_replication_url,
+      carReplicationToken: envCarReplicationToken || ipfsConfig.car_replication_token,
+      carReplicationTimeoutMs: envCarReplicationTimeoutMs
+        ? parseInt(envCarReplicationTimeoutMs, 10)
+        : ipfsConfig.car_replication_timeout_ms,
+      carReplicationMaxBytes: envCarReplicationMaxBytes
+        ? parseInt(envCarReplicationMaxBytes, 10)
+        : ipfsConfig.car_replication_max_bytes,
     });
     await ipfs.initialize();
 

@@ -136,6 +136,11 @@ export interface IPFSOptions {
   relayMode?: boolean;              // Enable relay server mode (for nodes with public IP)
   relayMaxConnections?: number;     // Max relay connections (default: 100)
   bootstrapHealthcheckIntervalMs?: number; // Periodic bootstrap re-dial when disconnected (default: 30s)
+  carReplicationUrl?: string;       // Optional private CAR ingest endpoint
+  carReplicationToken?: string;     // Optional auth token for CAR ingest endpoint
+  carReplicationEnabled?: boolean;  // Enable fire-and-forget CAR replication (default: false)
+  carReplicationTimeoutMs?: number; // CAR upload timeout (default: 120s)
+  carReplicationMaxBytes?: number;  // Max CAR bytes to buffer/upload (default: 512MB)
 }
 
 export class IPFSStorage {
@@ -159,6 +164,7 @@ export class IPFSStorage {
   private configuredBootstrapPeers: string[] = [];
   private configuredElacityPeers: string[] = [];
   private configuredElacityPeerIds: Set<string> = new Set();
+  private inFlightCarReplications: Set<string> = new Set();
 
   constructor(options: IPFSOptions) {
     this.repoPath = options.repoPath;
@@ -669,6 +675,7 @@ export class IPFSStorage {
 
       void this.maybeAnnounceStoredCID(cid.toString(), options?.announce);
       void this.maybeWarmPublicGateway(cid.toString());
+      void this.maybeReplicateStoredCIDAsCAR(cid.toString());
 
       return cid.toString();
     } catch (error) {
@@ -722,6 +729,7 @@ export class IPFSStorage {
       void this.maybeAnnounceStoredCIDs(Array.from(importedCids), options?.announce);
       void this.maybeWarmPublicGateway(dirCid);
       void this.maybeWarmPublicGatewayDirectoryPaths(dirCid, Object.keys(files));
+      void this.maybeReplicateStoredCIDAsCAR(dirCid);
 
       log.info(`[IPFS] Stored directory with ${Object.keys(files).length} files: ${dirCid}`);
       return dirCid;
@@ -758,6 +766,7 @@ export class IPFSStorage {
 
       void this.maybeAnnounceStoredCID(cid.toString(), options?.announce);
       void this.maybeWarmPublicGateway(cid.toString());
+      void this.maybeReplicateStoredCIDAsCAR(cid.toString());
 
       return cid.toString();
     } catch (error) {
@@ -844,6 +853,77 @@ export class IPFSStorage {
       } catch (error: any) {
         log.debug(`[IPFS] Public gateway prefetch path failed for ${rootCid}/${name}: ${error?.message || 'unknown error'}`);
       }
+    }
+  }
+
+  private async maybeReplicateStoredCIDAsCAR(cid: string): Promise<void> {
+    const enabled = this.options.carReplicationEnabled === true;
+    const endpoint = (this.options.carReplicationUrl || '').trim();
+    if (!enabled || endpoint === '') return;
+
+    if (this.inFlightCarReplications.has(cid)) {
+      log.debug(`[IPFS] CAR replication already in-flight for ${cid}, skipping duplicate trigger`);
+      return;
+    }
+    this.inFlightCarReplications.add(cid);
+
+    const timeoutMs = this.options.carReplicationTimeoutMs ?? 120_000;
+    const maxBytes = this.options.carReplicationMaxBytes ?? 512 * 1024 * 1024; // 512MB
+    const token = (this.options.carReplicationToken || '').trim();
+
+    try {
+      const helia = this.getHelia();
+      const { CID } = await import('multiformats/cid');
+      const { car } = await import('@helia/car');
+      const c = car(helia);
+      const rootCid = CID.parse(cid);
+
+      const chunks: Uint8Array[] = [];
+      let total = 0;
+      for await (const chunk of c.export(rootCid)) {
+        total += chunk.byteLength;
+        if (total > maxBytes) {
+          log.warn(`[IPFS] CAR replication skipped for ${cid}: export exceeded ${(maxBytes / (1024 * 1024)).toFixed(0)}MB cap`);
+          return;
+        }
+        chunks.push(chunk);
+      }
+
+      const carBytes = new Uint8Array(total);
+      let offset = 0;
+      for (const chunk of chunks) {
+        carBytes.set(chunk, offset);
+        offset += chunk.byteLength;
+      }
+
+      const headers: Record<string, string> = {
+        'X-CAR-Root-CID': cid,
+        'Content-Type': 'application/vnd.ipld.car',
+      };
+      if (token.length > 0) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const started = Date.now();
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body: carBytes,
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      const elapsed = Date.now() - started;
+
+      if (!response.ok) {
+        log.warn(`[IPFS] CAR replication non-2xx for ${cid}: status=${response.status} (${elapsed}ms)`);
+        return;
+      }
+
+      log.info(`[IPFS] CAR replicated: ${cid} (${(total / (1024 * 1024)).toFixed(1)}MB, ${elapsed}ms)`);
+    } catch (error: any) {
+      const isTimeout = error?.name === 'TimeoutError' || error?.name === 'AbortError';
+      log.warn(`[IPFS] CAR replication ${isTimeout ? 'timed out' : 'failed'} for ${cid}: ${error?.message || 'unknown error'}`);
+    } finally {
+      this.inFlightCarReplications.delete(cid);
     }
   }
 

@@ -14,8 +14,7 @@ export interface MPDSegment {
 export interface MPDTrack {
   info: TrackInfo;
   segments: MPDSegment[];
-  initFilename: string;
-  mediaPattern: string;
+  repId: string;
 }
 
 function formatDuration(seconds: number): string {
@@ -129,8 +128,12 @@ export function generateMPD(tracks: MPDTrack[], totalDuration: number): string {
 
     lines.push(`    <AdaptationSet ${asAttrs}>`);
 
-    const repId = `${info.type === 'video' ? 'v' : 'a'}${info.trackId}`;
-    let repAttrs = `id="${repId}" codecs="${escapeXml(info.codec)}" bandwidth="${info.bandwidth}"`;
+    const segTimeline = buildSegmentTimeline(track.segments);
+    lines.push(`      <SegmentTemplate timescale="${info.timescale}" initialization="$RepresentationID$/init.mp4" media="$RepresentationID$/seg-$Number$.m4s" startNumber="1">`);
+    lines.push(segTimeline);
+    lines.push('      </SegmentTemplate>');
+
+    let repAttrs = `id="${escapeXml(track.repId)}" codecs="${escapeXml(info.codec)}" bandwidth="${info.bandwidth}"`;
     if (info.type === 'video' && info.width && info.height) {
       repAttrs += ` width="${info.width}" height="${info.height}"`;
     }
@@ -138,14 +141,7 @@ export function generateMPD(tracks: MPDTrack[], totalDuration: number): string {
       repAttrs += ` audioSamplingRate="${info.audioSampleRate}"`;
     }
 
-    lines.push(`      <Representation ${repAttrs}>`);
-
-    const segTimeline = buildSegmentTimeline(track.segments);
-    lines.push(`        <SegmentTemplate timescale="${info.timescale}" initialization="${escapeXml(track.initFilename)}" media="${escapeXml(track.mediaPattern)}" startNumber="1">`);
-    lines.push(segTimeline);
-    lines.push('        </SegmentTemplate>');
-
-    lines.push('      </Representation>');
+    lines.push(`      <Representation ${repAttrs} />`);
     lines.push('    </AdaptationSet>');
   }
 
@@ -161,13 +157,12 @@ export function buildMPDTracks(
 ): MPDTrack[] {
   return trackInfos.map(info => {
     const trackSegs = segmentInfos.filter(s => s.trackId === info.trackId);
-    const dirName = `${info.type === 'video' ? 'video' : 'audio'}/${info.trackId}`;
+    const repId = info.type === 'video' ? `video/${info.codec.split('.')[0]}` : `audio/und/${info.codec}`;
 
     return {
       info,
       segments: trackSegs.map(s => ({ duration: s.duration })),
-      initFilename: `${dirName}/init.mp4`,
-      mediaPattern: `${dirName}/seg-$Number$.m4s`,
+      repId,
     };
   });
 }

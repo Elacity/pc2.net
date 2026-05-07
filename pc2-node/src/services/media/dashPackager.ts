@@ -343,8 +343,7 @@ export async function packageDASH(
   const mpdTracks = buildMPDTracks(tracks, segments);
 
   for (const track of mpdTracks) {
-    const dirType = track.info.type === 'video' ? 'video' : 'audio';
-    const trackDir = join(dashDir, dirType, String(track.info.trackId));
+    const trackDir = join(dashDir, track.repId);
     mkdirSync(trackDir, { recursive: true });
 
     await writeFile(join(trackDir, 'init.mp4'), transformedInit);

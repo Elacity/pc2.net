@@ -20,8 +20,29 @@ import https from 'https';
 import { createPublicKey, verify as cryptoVerify } from 'crypto';
 import { createLogger } from '../utils/logger.js';
 import { getBaseRpcUrl } from '../utils/rpc.js';
+import { recordMetricCounter, recordMetricHistogram } from '../utils/metrics.js';
 
 const logger = createLogger('chipotle');
+
+/**
+ * Map a thrown error from a Lit Action call to a low-cardinality reason
+ * tag suitable for metric labelling. Anything not on the allow-list
+ * collapses to "other" so the tag value space stays bounded — this is a
+ * privacy + cardinality concern (uncapped error strings would let raw
+ * KIDs / addresses leak into telemetry tags).
+ */
+function classifyChipotleError (err: unknown): string {
+    const msg = (err instanceof Error ? err.message : String(err || '')).toLowerCase();
+    if (msg.includes('lit action denied')) return 'action_denied';
+    if (msg.includes('invalid cek')) return 'bad_cek';
+    if (msg.includes('rate') && msg.includes('limit')) return 'rate_limited';
+    if (msg.includes('timeout') || msg.includes('etimedout')) return 'timeout';
+    if (msg.includes('fetch') || msg.includes('network') || msg.includes('econnrefused')) return 'network';
+    if (msg.includes('unauthorized') || msg.includes('401')) return 'unauthorized';
+    if (msg.includes('forbidden') || msg.includes('403')) return 'forbidden';
+    if (msg.includes('500') || msg.includes('502') || msg.includes('503')) return 'server_error';
+    return 'other';
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -658,55 +679,69 @@ export async function recoverNonMediaCEK(
     );
   }
 
-  const code = getChipotleNonMediaActionCode();
-  const pkpId = resolvePkpId(config);
-  logger.info(`[Chipotle] Non-media action kid=${params.kid}`);
+  // T-1C Phase 2: metric recording. Singleton DB handle is wired at boot;
+  // recorders no-op when the kill switch is set. Reason tag uses the
+  // classifyChipotleError() allow-list, never raw error text.
+  const __metricStart = Date.now();
 
-  // Session-key delegation fields (Option C). The sigauth Lit Action
-  // derives the effective user from delegation.coveredAddresses, so
-  // no `userAddress` is sent here — a caller cannot pretend to be
-  // someone else by naming their address.
-  const jsParams: Record<string, unknown> = {
-    ciphertext: params.litCiphertext,
-    dataToEncryptHash: params.dataToEncryptHash,
-    kid: params.kid.startsWith('0x') ? params.kid : `0x${params.kid}`,
-    pkpId,
-    authority: params.authority || DEFAULT_AUTHORITY,
-    chain: params.chain || DEFAULT_CHAIN,
-    chainId: params.chainId || DEFAULT_CHAIN_ID,
-    rpc: params.rpc || getBaseRpcUrl(),
-    // The sigauth Lit Action verifies del.actionIpfsId matches its
-    // own CID; the server must forward the CID explicitly since
-    // Chipotle v3 doesn't expose getIpfsId() to action code.
-    actionIpfsId: params.actionCid,
-    delegation: params.secureViewSession.delegationCanonical,
-    delegationSig: params.secureViewSession.delegationSig,
-    request: params.secureViewSession.requestCanonical,
-    requestSig: params.secureViewSession.requestSig,
-  };
-
-  const result = await executeLitAction({ code, jsParams }, config);
-
-  // Sigauth action returns `{ data: base64, authorizedAddress, delegationNonce, requestNonce }`.
-  let cekBase64: string;
   try {
-    const parsed = JSON.parse(result.response);
-    if (parsed.error) {
-      const detail = parsed.code ? ` (code=${parsed.code})` : '';
-      throw new Error(`Lit Action denied: ${parsed.error}${detail}`);
+    const code = getChipotleNonMediaActionCode();
+    const pkpId = resolvePkpId(config);
+    logger.info(`[Chipotle] Non-media action kid=${params.kid}`);
+
+    // Session-key delegation fields (Option C). The sigauth Lit Action
+    // derives the effective user from delegation.coveredAddresses, so
+    // no `userAddress` is sent here — a caller cannot pretend to be
+    // someone else by naming their address.
+    const jsParams: Record<string, unknown> = {
+      ciphertext: params.litCiphertext,
+      dataToEncryptHash: params.dataToEncryptHash,
+      kid: params.kid.startsWith('0x') ? params.kid : `0x${params.kid}`,
+      pkpId,
+      authority: params.authority || DEFAULT_AUTHORITY,
+      chain: params.chain || DEFAULT_CHAIN,
+      chainId: params.chainId || DEFAULT_CHAIN_ID,
+      rpc: params.rpc || getBaseRpcUrl(),
+      // The sigauth Lit Action verifies del.actionIpfsId matches its
+      // own CID; the server must forward the CID explicitly since
+      // Chipotle v3 doesn't expose getIpfsId() to action code.
+      actionIpfsId: params.actionCid,
+      delegation: params.secureViewSession.delegationCanonical,
+      delegationSig: params.secureViewSession.delegationSig,
+      request: params.secureViewSession.requestCanonical,
+      requestSig: params.secureViewSession.requestSig,
+    };
+
+    const result = await executeLitAction({ code, jsParams }, config);
+
+    // Sigauth action returns `{ data: base64, authorizedAddress, delegationNonce, requestNonce }`.
+    let cekBase64: string;
+    try {
+      const parsed = JSON.parse(result.response);
+      if (parsed.error) {
+        const detail = parsed.code ? ` (code=${parsed.code})` : '';
+        throw new Error(`Lit Action denied: ${parsed.error}${detail}`);
+      }
+      cekBase64 = parsed.data || parsed;
+    } catch (e) {
+      if (e instanceof Error && e.message.startsWith('Lit Action denied')) throw e;
+      cekBase64 = result.response;
     }
-    cekBase64 = parsed.data || parsed;
-  } catch (e) {
-    if (e instanceof Error && e.message.startsWith('Lit Action denied')) throw e;
-    cekBase64 = result.response;
-  }
 
-  if (!cekBase64 || cekBase64.length < 10) {
-    throw new Error(`Invalid CEK response: ${result.response?.substring(0, 100)}`);
-  }
+    if (!cekBase64 || cekBase64.length < 10) {
+      throw new Error(`Invalid CEK response: ${result.response?.substring(0, 100)}`);
+    }
 
-  logger.info(`[Chipotle] Non-media CEK recovered (${cekBase64.length} chars)`);
-  return cekBase64;
+    logger.info(`[Chipotle] Non-media CEK recovered (${cekBase64.length} chars)`);
+    recordMetricCounter(undefined, 'chipotle.cek_recovery', 1, { kind: 'non_media', outcome: 'success' });
+    recordMetricHistogram(undefined, 'chipotle.cek_recovery_ms', Date.now() - __metricStart, { kind: 'non_media', outcome: 'success' });
+    return cekBase64;
+  } catch (err) {
+    const reason = classifyChipotleError(err);
+    recordMetricCounter(undefined, 'chipotle.cek_recovery', 1, { kind: 'non_media', outcome: 'failure', reason });
+    recordMetricHistogram(undefined, 'chipotle.cek_recovery_ms', Date.now() - __metricStart, { kind: 'non_media', outcome: 'failure' });
+    throw err;
+  }
 }
 
 /**
@@ -728,29 +763,40 @@ export async function recoverMediaCEKEnvelope(
     );
   }
 
-  const jsParams: Record<string, unknown> = {
-    keyAlg: { name: 'ECDH', namedCurve: 'P-256' },
-    publicKey: params.publicKeyHex,
-    ciphertext: params.litCiphertext,
-    dataToEncryptHash: params.dataToEncryptHash,
-    kid: params.kid.startsWith('0x') ? params.kid : `0x${params.kid}`,
-    actionIpfsId: params.actionCid,
-    authority: params.authority || DEFAULT_AUTHORITY,
-    chain: params.chain || DEFAULT_CHAIN,
-    chainId: params.chainId || DEFAULT_CHAIN_ID,
-    rpc: params.rpc || getBaseRpcUrl(),
-    delegation: params.secureViewSession.delegationCanonical,
-    delegationSig: params.secureViewSession.delegationSig,
-    request: params.secureViewSession.requestCanonical,
-    requestSig: params.secureViewSession.requestSig,
-  };
+  const __metricStart = Date.now();
 
-  const result = await executeLitAction({ code: mediaActionCode, jsParams }, config);
+  try {
+    const jsParams: Record<string, unknown> = {
+      keyAlg: { name: 'ECDH', namedCurve: 'P-256' },
+      publicKey: params.publicKeyHex,
+      ciphertext: params.litCiphertext,
+      dataToEncryptHash: params.dataToEncryptHash,
+      kid: params.kid.startsWith('0x') ? params.kid : `0x${params.kid}`,
+      actionIpfsId: params.actionCid,
+      authority: params.authority || DEFAULT_AUTHORITY,
+      chain: params.chain || DEFAULT_CHAIN,
+      chainId: params.chainId || DEFAULT_CHAIN_ID,
+      rpc: params.rpc || getBaseRpcUrl(),
+      delegation: params.secureViewSession.delegationCanonical,
+      delegationSig: params.secureViewSession.delegationSig,
+      request: params.secureViewSession.requestCanonical,
+      requestSig: params.secureViewSession.requestSig,
+    };
 
-  // Media Lit Action returns a base64-encoded binary ECDH envelope
-  const envelope = Buffer.from(result.response, 'base64');
-  logger.info(`[Chipotle] Media CEK envelope received (${envelope.length} bytes)`);
-  return envelope;
+    const result = await executeLitAction({ code: mediaActionCode, jsParams }, config);
+
+    // Media Lit Action returns a base64-encoded binary ECDH envelope
+    const envelope = Buffer.from(result.response, 'base64');
+    logger.info(`[Chipotle] Media CEK envelope received (${envelope.length} bytes)`);
+    recordMetricCounter(undefined, 'chipotle.cek_recovery', 1, { kind: 'media', outcome: 'success' });
+    recordMetricHistogram(undefined, 'chipotle.cek_recovery_ms', Date.now() - __metricStart, { kind: 'media', outcome: 'success' });
+    return envelope;
+  } catch (err) {
+    const reason = classifyChipotleError(err);
+    recordMetricCounter(undefined, 'chipotle.cek_recovery', 1, { kind: 'media', outcome: 'failure', reason });
+    recordMetricHistogram(undefined, 'chipotle.cek_recovery_ms', Date.now() - __metricStart, { kind: 'media', outcome: 'failure' });
+    throw err;
+  }
 }
 
 /**
@@ -767,44 +813,55 @@ export async function encryptWithLitAction(
   params: EncryptParams,
   config?: ChipotleConfig,
 ): Promise<EncryptResult> {
-  const pkpId = resolvePkpId(config);
+  const __metricStart = Date.now();
 
-  // params.dataToEncrypt is the UTF-8 bytes of the base64 CEK string.
-  // Pass it directly as a string to the Lit Action so Decrypt returns
-  // the same string — no double-base64 encoding.
-  const plaintext = new TextDecoder().decode(params.dataToEncrypt);
-
-  const code = getChipotleEncryptCode();
-
-  const result = await executeLitAction(
-    { code, jsParams: { pkpId, plaintext } },
-    config,
-  );
-
-  let parsed: { ciphertext?: string; error?: string };
   try {
-    parsed = JSON.parse(result.response);
-  } catch {
-    throw new Error(`Chipotle encrypt returned unparseable response: ${result.response.substring(0, 200)}`);
+    const pkpId = resolvePkpId(config);
+
+    // params.dataToEncrypt is the UTF-8 bytes of the base64 CEK string.
+    // Pass it directly as a string to the Lit Action so Decrypt returns
+    // the same string — no double-base64 encoding.
+    const plaintext = new TextDecoder().decode(params.dataToEncrypt);
+
+    const code = getChipotleEncryptCode();
+
+    const result = await executeLitAction(
+      { code, jsParams: { pkpId, plaintext } },
+      config,
+    );
+
+    let parsed: { ciphertext?: string; error?: string };
+    try {
+      parsed = JSON.parse(result.response);
+    } catch {
+      throw new Error(`Chipotle encrypt returned unparseable response: ${result.response.substring(0, 200)}`);
+    }
+
+    if (parsed.error) {
+      throw new ChipotleError(`Chipotle encrypt failed: ${parsed.error}`, 500);
+    }
+
+    if (!parsed.ciphertext) {
+      throw new Error('Chipotle encrypt returned no ciphertext');
+    }
+
+    const crypto = await import('crypto');
+    const hash = crypto.createHash('sha256').update(plaintext).digest('hex');
+
+    logger.info(`[Chipotle] Encrypted ${params.dataToEncrypt.length} bytes via PKP-AES (pkpId: ${pkpId.substring(0, 10)}...)`);
+
+    recordMetricCounter(undefined, 'chipotle.encrypt', 1, { outcome: 'success' });
+    recordMetricHistogram(undefined, 'chipotle.encrypt_ms', Date.now() - __metricStart, { outcome: 'success' });
+    return {
+      ciphertext: parsed.ciphertext,
+      dataToEncryptHash: hash,
+    };
+  } catch (err) {
+    const reason = classifyChipotleError(err);
+    recordMetricCounter(undefined, 'chipotle.encrypt', 1, { outcome: 'failure', reason });
+    recordMetricHistogram(undefined, 'chipotle.encrypt_ms', Date.now() - __metricStart, { outcome: 'failure' });
+    throw err;
   }
-
-  if (parsed.error) {
-    throw new ChipotleError(`Chipotle encrypt failed: ${parsed.error}`, 500);
-  }
-
-  if (!parsed.ciphertext) {
-    throw new Error('Chipotle encrypt returned no ciphertext');
-  }
-
-  const crypto = await import('crypto');
-  const hash = crypto.createHash('sha256').update(plaintext).digest('hex');
-
-  logger.info(`[Chipotle] Encrypted ${params.dataToEncrypt.length} bytes via PKP-AES (pkpId: ${pkpId.substring(0, 10)}...)`);
-
-  return {
-    ciphertext: parsed.ciphertext,
-    dataToEncryptHash: hash,
-  };
 }
 
 // ── Utility: Build Self-Referential Conditions ───────────────────────────────

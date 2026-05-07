@@ -31,7 +31,7 @@ function findSchemaFile(): string {
   }
   throw new Error(`Schema file not found. Tried: ${SCHEMA_FILE} and ${sourceSchema}`);
 }
-const CURRENT_VERSION = 32;
+const CURRENT_VERSION = 33;
 
 interface Migration {
   version: number;
@@ -1326,6 +1326,45 @@ export function runMigrations(db: Database): void {
         recordMigration(db, 32);
       } catch (error: any) {
         log.error(`❌ Migration 32 error: ${error.message}`);
+        throw error;
+      }
+    }
+
+    // Migration 33 (T-1C Phase 1, 2026-05-07): create the metric registry
+    // tables that back `pc2-node/src/utils/metrics.ts`. Counters are
+    // monotonic per (name, tags) and UPSERTed in place. Histograms append a
+    // raw sample per observation and get rolled up + pruned by the future
+    // daily flusher (T-1C Phase 4-6). The `tags` column is a canonicalised
+    // JSON string with sorted keys so identical tag sets always collide on
+    // the primary key. Honoured by every recorder; entirely no-op when
+    // `PC2_TELEMETRY_DISABLED=true` is set.
+    if (currentVersion < 33) {
+      try {
+        log.info('📦 Running Migration 33: Create metrics_counters + metrics_histogram_samples tables (T-1C Phase 1)...');
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS metrics_counters (
+            name TEXT NOT NULL,
+            tags TEXT NOT NULL DEFAULT '{}',
+            value INTEGER NOT NULL DEFAULT 0,
+            updated_at INTEGER NOT NULL,
+            PRIMARY KEY (name, tags)
+          )
+        `);
+        db.exec(`CREATE INDEX IF NOT EXISTS idx_metrics_counters_name ON metrics_counters(name)`);
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS metrics_histogram_samples (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            tags TEXT NOT NULL DEFAULT '{}',
+            value REAL NOT NULL,
+            ts INTEGER NOT NULL
+          )
+        `);
+        db.exec(`CREATE INDEX IF NOT EXISTS idx_metrics_histogram_name_ts ON metrics_histogram_samples(name, ts)`);
+        log.info('✅ Migration 33 complete: metrics_counters + metrics_histogram_samples tables + indexes created');
+        recordMigration(db, 33);
+      } catch (error: any) {
+        log.error(`❌ Migration 33 error: ${error.message}`);
         throw error;
       }
     }

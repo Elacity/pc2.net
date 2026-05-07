@@ -1,0 +1,52 @@
+{
+  "name": "elacity-health",
+  "title": "Health & Support",
+  "version": "1.0.0",
+  "role": "system",
+  "description": "Run a local self-test on your PC2 node. Checks the database, transports, IPFS cluster, Lit/Chipotle config, supernode reachability, WASM runtimes, and update channel. Nothing leaves your machine.",
+  "author": {
+    "name": "Elacity Labs",
+    "url": "https://ela.city"
+  },
+  "license": "proprietary",
+  "icon": "icon.svg",
+  "iconDataUrl": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0OCA0OCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJiZyIgeDE9IjAiIHkxPSIwIiB4Mj0iNDgiIHkyPSI0OCIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPjxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iIzEwYjk4MSIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzBmNzY2ZSIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxyZWN0IHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCIgcng9IjEwIiBmaWxsPSJ1cmwoI2JnKSIvPjxwYXRoIGQ9Ik0yNCAzNiBMMTMgMjUgYTYgNiAwIDAgMSA4LjUgLTguNSBMMjQgMTkgTDI2LjUgMTYuNSBhNiA2IDAgMCAxIDguNSA4LjUgWiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjEuOCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjxwb2x5bGluZSBwb2ludHM9IjExLDI4IDE4LDI4IDIxLDIyIDI3LDM0IDMwLDI4IDM3LDI4IiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iMS44IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48L3N2Zz4=",
+  "entry": "index.html",
+  "type": "web",
+
+  "capabilities": {
+    "network": true,
+    "ipc": [],
+    "api_endpoints": [
+      "GET /api/diagnose",
+      "GET /whoami",
+      "GET /api/support/report/policy",
+      "POST /api/support/report/preview",
+      "GET /api/metrics/snapshot"
+    ],
+    "postMessage_events": {
+      "sends": [],
+      "receives": []
+    }
+  },
+
+  "requirements": {
+    "minVersion": "1.2.7"
+  },
+
+  "display": {
+    "maximize": false,
+    "resizable": true,
+    "titlebar": true,
+    "taskbar": true,
+    "width": 880,
+    "height": 720
+  },
+
+  "distribution": {
+    "channel": "stable"
+  },
+
+  "category": "system",
+  "system": true
+}

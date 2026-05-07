@@ -180,6 +180,14 @@ async function main() {
     
     // Set global database singleton for access from services
     setGlobalDatabase(db);
+
+    // T-1C Phase 1: register the metric registry's process-wide DB handle
+    // now that the schema is open (migration 33 has run). Domain helpers
+    // that don't have an Express request context (e.g. chipotle-client,
+    // dashPackager) call `recordMetricCounter()` without threading a
+    // DatabaseManager and pick this handle up automatically.
+    const { setMetricsDb } = await import('./utils/metrics.js');
+    setMetricsDb(db);
     
     // Cleanup expired sessions on startup
     const cleaned = db.cleanupExpiredSessions();

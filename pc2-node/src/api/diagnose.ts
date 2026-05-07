@@ -23,14 +23,80 @@ import { Router, Response } from 'express';
 import { execSync } from 'child_process';
 import os from 'os';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { existsSync, readFileSync, statSync } from 'fs';
 import { authenticate, AuthenticatedRequest } from './middleware.js';
 import { logger } from '../utils/logger.js';
 import { getClusterPinConfig, getClusterPinProbeState } from '../services/clusterPin.js';
+import { sanitise } from '../utils/redact.js';
 
 const router = Router();
 
+// ESM-compatible __dirname. The package is `"type": "module"` so the
+// CommonJS magic globals don't exist — mirroring the polyfill in
+// `src/index.ts:94`. Required for `resolvePc2Version()` below to walk to
+// the right `package.json`. T-1A v1: previous build shipped without this
+// and crashed every diagnose call with `ReferenceError: __dirname is not
+// defined`. Surfaces as HTTP 500 in the Health & Support test-app.
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const SHELL_TIMEOUT_MS = 5_000;
+
+// Cache the resolved pc2-node version so we don't re-walk the filesystem on
+// every diagnose call. Resolved lazily on first use; immutable for the
+// process lifetime.
+let cachedVersion: string | null = null;
+
+/**
+ * Resolve the running pc2-node version. Mirrors the resolver in
+ * `src/index.ts` and `UpdateService.ts` — duplicated intentionally to keep
+ * the diagnose router self-contained and avoid pulling in either the boot
+ * sequence or the update service for what is meant to be a read-only probe.
+ *
+ * Strategy:
+ *   1. PC2_VERSION env var (set by Electron launcher in production builds)
+ *   2. Walk a few candidate paths looking for package.json
+ *   3. Fall back to "unknown" so the UI renders a clean badge instead of a
+ *      misleading version string.
+ *
+ * Why this matters: when pc2-node is launched via `node dist/index.js`
+ * (every desktop install does this), `process.env.npm_package_version` is
+ * NOT populated — that var is only set by `npm` when it spawns the process.
+ * The previous code read that env var directly and silently fell back to
+ * "unknown" on every desktop install. T-1A surfaced this as
+ * `Current version: unknown` in the Health & Support panel.
+ */
+function resolvePc2Version (): string {
+    if (cachedVersion) return cachedVersion;
+    const fromEnv = process.env.PC2_VERSION;
+    if (fromEnv && fromEnv.length > 0) {
+        cachedVersion = fromEnv;
+        return fromEnv;
+    }
+    const candidates = [
+        path.join(__dirname, '..', '..', 'package.json'),
+        path.join(__dirname, '..', '..', '..', 'package.json'),
+        path.join(process.cwd(), 'package.json'),
+        path.join(process.cwd(), '..', 'package.json'),
+    ];
+    for (const p of candidates) {
+        if (existsSync(p)) {
+            try {
+                const pkg = JSON.parse(readFileSync(p, 'utf-8'));
+                if (pkg && typeof pkg.version === 'string' && pkg.version.length > 0) {
+                    cachedVersion = pkg.version;
+                    return pkg.version;
+                }
+            } catch {
+                // Try next candidate
+            }
+        }
+    }
+    const fallback = process.env.npm_package_version || 'unknown';
+    cachedVersion = fallback;
+    return fallback;
+}
 
 /**
  * Run a shell command with a hard timeout and return stdout/stderr as
@@ -53,29 +119,9 @@ function safeRun (cmd: string): string {
     }
 }
 
-/**
- * Best-effort secret redaction. Mirrors the sed pipeline in
- * `scripts/pc2-diagnose.sh`. Keep these patterns in sync.
- *
- * NOT a security boundary — the operator must still eyeball the
- * output before pasting it publicly. This catches the common cases
- * (wallets, DIDs, bearer tokens, mnemonics, PEM blocks) so accidental
- * leaks are unlikely.
- */
-function sanitise (text: string): string {
-    if (!text) return text;
-    return text
-        .replace(/0x[a-fA-F0-9]{40}/g, '0xREDACTED_WALLET')
-        .replace(/did:[a-z]+:[A-Za-z0-9_.-]{8,}/g, 'did:REDACTED')
-        .replace(/(Bearer|bearer)\s+[A-Za-z0-9._~+/=-]+/g, 'Bearer REDACTED')
-        // ?token=… &api_key=… secret="…" — case-insensitive key match.
-        .replace(/\b(token|api_key|apikey|secret|password|signature)=[A-Za-z0-9._~+/=-]+/gi, '$1=REDACTED')
-        .replace(/-----BEGIN [A-Z ]+-----[\s\S]*?-----END [A-Z ]+-----/g, 'REDACTED-PEM-BLOCK')
-        // 24-word lowercase mnemonic on a single line. Loose match (3-8 letter
-        // words) is intentional — better to over-redact than miss a leaked
-        // recovery phrase.
-        .replace(/(?:\b[a-z]{3,8}\b ){23}\b[a-z]{3,8}\b/g, 'REDACTED-MNEMONIC');
-}
+// `sanitise()` was previously inline here. Extracted to
+// `pc2-node/src/utils/redact.ts` (T-1B) so both diagnose.ts and the new
+// support-report builder reuse the same patterns without drift.
 
 /**
  * Read pc2-node/.env and return only the KEY names (values stripped).
@@ -220,6 +266,296 @@ async function probeClusterEndpoint (): Promise<{ url: string | null; reachable:
     }
 }
 
+// ── liveProbes (T-1A) ────────────────────────────────────────────────────────
+// User-initiated diagnostic probes. Each is independent, fail-soft, and
+// hard-capped on latency. Results land under snapshot.liveProbes — existing
+// snapshot keys are unchanged so any consumer of GET /api/diagnose stays
+// compatible. SECURITY: every probe runs through `sanitise()` on errors and
+// avoids reading any secret values (existence + size only).
+
+const PROBE_TIMEOUT_MS = SHELL_TIMEOUT_MS;
+
+// Hardcoded supernode list mirrors chipotle-client.ts SUPERNODE_PROVISION_URLS
+// and ConnectivityService.ts SUPERNODE_HEALTH_URLS. Kept in sync deliberately
+// (no shared module yet — duplication tax until we extract a
+// `pc2-node/src/config/supernodes.ts` in T-1B Phase B).
+const KNOWN_SUPERNODES: ReadonlyArray<{ name: string; baseUrl: string }> = [
+    { name: 'interserver', baseUrl: 'https://69.164.241.210' },
+    { name: 'contabo',     baseUrl: 'https://38.242.211.112' },
+];
+
+const SUPERNODE_PROBE_PATHS = ['/api/health', '/api/ddrm/provision'] as const;
+
+// Lit Action API host (matches DEFAULT_API_URL in chipotle-client.ts).
+const LIT_API_HOST = 'https://api.chipotle.litprotocol.com';
+
+// WASM crates produced by Elacity's Rust workspace + ports. Paths are relative
+// to the workspace root (parent of `pc2-node/`). Resolved at probe time.
+const KNOWN_WASM_CRATES: ReadonlyArray<{ name: string; relPath: string }> = [
+    { name: 'cenc-encrypt',   relPath: 'pc2-node/wasm-apps/cenc-encrypt/cenc-encrypt.wasm' },
+    { name: 'cenc-decrypt',   relPath: 'pc2-node/wasm-apps/cenc-decrypt/cenc-decrypt.wasm' },
+    { name: 'mp4-split',      relPath: 'pc2-node/wasm-apps/mp4-split/mp4-split.wasm' },
+    { name: 'ipfs-assemble',  relPath: 'pc2-node/wasm-apps/ipfs-assemble/ipfs-assemble.wasm' },
+    { name: 'ddrm-renderer',  relPath: 'pc2-node/wasm-apps/ddrm-renderer/ddrm-renderer.wasm' },
+    { name: 'evm-multicall',  relPath: 'pc2-node/wasm-apps/evm-multicall/evm-multicall.wasm' },
+    { name: 'amm-engine',     relPath: 'pc2-node/wasm-apps/amm-engine/amm-engine.wasm' },
+];
+
+// GitHub repo for release checks (matches UpdateService.ts default).
+const UPDATE_CHANNEL_URL = 'https://api.github.com/repos/Elacity/pc2.net/releases/latest';
+
+interface LitConfigProbe {
+    apiKeyConfigured: boolean;
+    userKeyConfigured: boolean;
+    litActionCidConfigured: boolean;
+    provisionCached: boolean;
+    apiHostReachable: boolean;
+    apiLatencyMs: number | null;
+    error: string | null;
+}
+
+/**
+ * Lit Protocol / Chipotle health probe. Config-only — does NOT call any
+ * Lit Action and therefore burns ZERO Lit Protocol quota. Verifies that:
+ *   - the four chipotle-client.ts state files exist on disk and are non-empty
+ *   - the Lit API host is reachable (HEAD request, no auth, no JSON body)
+ *
+ * Why HEAD-only: a real round-trip would require a SIWE-signed delegation +
+ * burn one Lit Action call against the leaked usageKey. Both are hostile to a
+ * "click me to check things" diagnostic surface. Real round-trip moves to T-1B
+ * once SIWE-gated relayer endpoints exist (the relayer, not the user, owns
+ * the quota cost).
+ */
+async function probeLitConfig (dataDir: string): Promise<LitConfigProbe> {
+    const result: LitConfigProbe = {
+        apiKeyConfigured: false,
+        userKeyConfigured: false,
+        litActionCidConfigured: false,
+        provisionCached: false,
+        apiHostReachable: false,
+        apiLatencyMs: null,
+        error: null,
+    };
+
+    // File-existence checks. We never read the values — only check size > 0.
+    // Path layout mirrors chipotle-client.ts DATA_DIR resolution.
+    try {
+        const apiKeyPath     = path.join(dataDir, '.chipotle-api-key');
+        const userKeyPath    = path.join(dataDir, '.chipotle-user-key');
+        const cidPath        = path.join(dataDir, '.lit-action-cid');
+        const provisionPath  = path.join(dataDir, '.chipotle-provision.json');
+        result.apiKeyConfigured       = existsSync(apiKeyPath)    && statSync(apiKeyPath).size    > 0;
+        result.userKeyConfigured      = existsSync(userKeyPath)   && statSync(userKeyPath).size   > 0;
+        result.litActionCidConfigured = existsSync(cidPath)       && statSync(cidPath).size       > 0;
+        result.provisionCached        = existsSync(provisionPath) && statSync(provisionPath).size > 0;
+    } catch (err: any) {
+        result.error = sanitise(err?.message || 'config_check_failed');
+    }
+
+    const start = Date.now();
+    try {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), PROBE_TIMEOUT_MS);
+        const res = await fetch(LIT_API_HOST, {
+            method: 'HEAD',
+            signal: ctrl.signal,
+            keepalive: false,
+        });
+        clearTimeout(timer);
+        // We don't care about res.status — even a 404/405 means TLS handshake
+        // succeeded and the host is alive. A network-level fail would have
+        // thrown before reaching here.
+        result.apiHostReachable = true;
+        result.apiLatencyMs = Date.now() - start;
+        // Reference res so a future linter doesn't flag it unused without
+        // changing the no-burn semantics of this probe.
+        void res;
+    } catch (err: any) {
+        result.apiHostReachable = false;
+        result.apiLatencyMs = Date.now() - start;
+        if (!result.error) {
+            result.error = sanitise(err?.message || 'lit_host_unreachable');
+        }
+    }
+
+    return result;
+}
+
+interface SupernodeProbe {
+    name: string;
+    url: string;
+    endpoint: string;
+    reachable: boolean;
+    httpStatus: number | null;
+    latencyMs: number | null;
+    error: string | null;
+}
+
+/**
+ * Multi-supernode reachability matrix. Probes (supernode × endpoint) in
+ * parallel; each probe is bounded by PROBE_TIMEOUT_MS, so total wall time
+ * stays < PROBE_TIMEOUT_MS regardless of how many supernodes are listed.
+ *
+ * NO Authorization header — we want raw connect+TLS+HTTP-status. A 401 from
+ * `/api/ddrm/provision` against an un-authed probe means "alive + gating
+ * correctly" (same shape as `probeClusterEndpoint()`).
+ */
+async function probeAllSupernodes (): Promise<SupernodeProbe[]> {
+    const probes = KNOWN_SUPERNODES.flatMap((sn) =>
+        SUPERNODE_PROBE_PATHS.map(async (epPath): Promise<SupernodeProbe> => {
+            const url = `${sn.baseUrl}${epPath}`;
+            const start = Date.now();
+            try {
+                const ctrl = new AbortController();
+                const timer = setTimeout(() => ctrl.abort(), PROBE_TIMEOUT_MS);
+                const res = await fetch(url, {
+                    method: 'GET',
+                    signal: ctrl.signal,
+                    keepalive: false,
+                });
+                clearTimeout(timer);
+                return {
+                    name: sn.name,
+                    url,
+                    endpoint: epPath,
+                    reachable: true,
+                    httpStatus: res.status,
+                    latencyMs: Date.now() - start,
+                    error: null,
+                };
+            } catch (err: any) {
+                return {
+                    name: sn.name,
+                    url,
+                    endpoint: epPath,
+                    reachable: false,
+                    httpStatus: null,
+                    latencyMs: Date.now() - start,
+                    error: sanitise(err?.message || 'unknown'),
+                };
+            }
+        }),
+    );
+    return Promise.all(probes);
+}
+
+interface WasmProbe {
+    name: string;
+    path: string;
+    exists: boolean;
+    sizeBytes: number | null;
+    magicValid: boolean;
+    compileOk: boolean;
+    error: string | null;
+}
+
+/**
+ * Walks the known WASM crate list and validates each binary. Three checks:
+ *   1. file exists on disk
+ *   2. WASM magic bytes (`\0asm`) are present
+ *   3. `WebAssembly.compile()` parses without error
+ *
+ * SECURITY: `WebAssembly.compile()` is a STATIC validation — it parses the
+ * module structure and verifies it's well-formed but does NOT instantiate it,
+ * does NOT call any function, does NOT allocate per-instance memory, and
+ * does NOT run start sections. Memory cost is bounded by module size (each
+ * crate is ~hundreds of KB → tens of MB worst case for all 7 in parallel).
+ */
+async function probeWasmCrates (workspaceRoot: string): Promise<WasmProbe[]> {
+    const probes = KNOWN_WASM_CRATES.map(async (crate): Promise<WasmProbe> => {
+        const fullPath = path.resolve(workspaceRoot, crate.relPath);
+        const probe: WasmProbe = {
+            name: crate.name,
+            path: crate.relPath,
+            exists: false,
+            sizeBytes: null,
+            magicValid: false,
+            compileOk: false,
+            error: null,
+        };
+        try {
+            if (!existsSync(fullPath)) {
+                return probe;
+            }
+            probe.exists = true;
+            const buf = readFileSync(fullPath);
+            probe.sizeBytes = buf.length;
+            probe.magicValid = buf.length >= 4
+                && buf[0] === 0x00 && buf[1] === 0x61
+                && buf[2] === 0x73 && buf[3] === 0x6D;
+            if (probe.magicValid) {
+                // Static parse only — no instantiate, no run.
+                await WebAssembly.compile(buf);
+                probe.compileOk = true;
+            }
+        } catch (err: any) {
+            probe.error = sanitise(err?.message || 'wasm_probe_failed');
+        }
+        return probe;
+    });
+    return Promise.all(probes);
+}
+
+interface UpdateChannelProbe {
+    reachable: boolean;
+    httpStatus: number | null;
+    latestVersion: string | null;
+    currentVersion: string;
+    latencyMs: number | null;
+    error: string | null;
+}
+
+/**
+ * GitHub Releases reachability probe. Mirrors UpdateService.ts's call to
+ * confirm the auto-updater can reach its source of truth. Unauthenticated —
+ * GitHub allows 60 r/h per IP for unauth'd /repos/.../releases/latest, which
+ * is fine for a manually-triggered diagnostic.
+ */
+async function probeUpdateChannel (): Promise<UpdateChannelProbe> {
+    const currentVersion = resolvePc2Version();
+    const start = Date.now();
+    try {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), PROBE_TIMEOUT_MS);
+        const res = await fetch(UPDATE_CHANNEL_URL, {
+            method: 'GET',
+            headers: {
+                'User-Agent': `PC2-Node/${currentVersion}`,
+                'Accept': 'application/vnd.github.v3+json',
+            },
+            signal: ctrl.signal,
+            keepalive: false,
+        });
+        clearTimeout(timer);
+        let latestVersion: string | null = null;
+        if (res.ok) {
+            try {
+                const json = await res.json() as { tag_name?: string };
+                latestVersion = json.tag_name?.replace(/^v/, '') || null;
+            } catch {
+                // Body parse failure is non-fatal — reachability is what we asked.
+            }
+        }
+        return {
+            reachable: true,
+            httpStatus: res.status,
+            latestVersion,
+            currentVersion,
+            latencyMs: Date.now() - start,
+            error: null,
+        };
+    } catch (err: any) {
+        return {
+            reachable: false,
+            httpStatus: null,
+            latestVersion: null,
+            currentVersion,
+            latencyMs: Date.now() - start,
+            error: sanitise(err?.message || 'update_channel_unreachable'),
+        };
+    }
+}
+
 router.get('/', authenticate, async (req: AuthenticatedRequest, res: Response) => {
     try {
         const bosonService = req.app.locals.bosonService;
@@ -235,7 +571,26 @@ router.get('/', authenticate, async (req: AuthenticatedRequest, res: Response) =
 
         const clusterCfg = getClusterPinConfig();
         const clusterProbe = getClusterPinProbeState();
-        const clusterReachability = await probeClusterEndpoint();
+
+        // Run all five reachability/health probes in parallel — total wall
+        // time stays bounded by PROBE_TIMEOUT_MS (~5s) regardless of how many
+        // probes we add. The workspace root is two levels above dataDir
+        // (`pc2-node/data/..` → `pc2-node/..` → repo root) which is where
+        // `pc2-node/wasm-apps/...` resolves from.
+        const workspaceRoot = path.resolve(dataDir, '..', '..');
+        const [
+            clusterReachability,
+            litConfigProbe,
+            supernodeProbes,
+            wasmProbes,
+            updateChannelProbe,
+        ] = await Promise.all([
+            probeClusterEndpoint(),
+            probeLitConfig(dataDir),
+            probeAllSupernodes(),
+            probeWasmCrates(workspaceRoot),
+            probeUpdateChannel(),
+        ]);
 
         // Memory + load
         const totalMem = os.totalmem();
@@ -244,7 +599,7 @@ router.get('/', authenticate, async (req: AuthenticatedRequest, res: Response) =
         const snapshot = {
             generatedAt: new Date().toISOString(),
             pc2: {
-                version: process.env.npm_package_version || 'unknown',
+                version: resolvePc2Version(),
                 uptimeSec: Math.round(process.uptime()),
                 pid: process.pid,
                 nodeVersion: process.version,
@@ -293,6 +648,16 @@ router.get('/', authenticate, async (req: AuthenticatedRequest, res: Response) =
                 return Number.isFinite(n) ? n : null;
             })(),
             recentLogs: tailRelevantLogs(),
+            // T-1A liveProbes: user-initiated health checks. Run in parallel,
+            // bounded by PROBE_TIMEOUT_MS each. None mutate state, none burn
+            // Lit Action quota, none require auth headers (every endpoint
+            // probed is either public or expected to 401 cleanly).
+            liveProbes: {
+                litConfig: litConfigProbe,
+                supernodes: supernodeProbes,
+                wasm: wasmProbes,
+                updateChannel: updateChannelProbe,
+            },
             warnings: [
                 'Sanitisation is best-effort. Eyeball before pasting publicly.',
                 'No data is uploaded by this endpoint. The response is yours alone.',

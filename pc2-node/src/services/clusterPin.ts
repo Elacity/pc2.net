@@ -23,6 +23,7 @@
  */
 
 import { createLogger } from '../utils/logger.js';
+import { recordMetricCounter, recordMetricHistogram } from '../utils/metrics.js';
 
 const log = createLogger('clusterPin');
 
@@ -185,9 +186,17 @@ export function forwardPinToCluster(rawCid: string, name?: string): void {
         lastAt: Date.now(),
       };
 
+      // T-1C Phase 2: classify outcome into a low-cardinality tag set.
+      // status_class buckets the HTTP status ('2xx', '4xx', '5xx') instead
+      // of leaking the exact status — keeps tag cardinality bounded.
+      recordMetricHistogram(undefined, 'cluster_pin.forward_ms', durationMs, {
+        status_class: classifyHttpStatus(response.status),
+      });
+
       if (response.ok) {
         retryQueue.delete(cid);
         log.info(`[ClusterPin] ok cid=${cid} requestId=${requestId ?? 'n/a'} (${durationMs}ms)`);
+        recordMetricCounter(undefined, 'cluster_pin.forward', 1, { outcome: 'ok' });
         return;
       }
 
@@ -196,8 +205,10 @@ export function forwardPinToCluster(rawCid: string, name?: string): void {
       if (response.status >= 500) {
         log.warn(`[ClusterPin] 5xx cid=${cid} status=${response.status} (${durationMs}ms) — scheduling retry`);
         queueRetry(cid, `status=${response.status}`);
+        recordMetricCounter(undefined, 'cluster_pin.forward', 1, { outcome: 'retryable', status_class: '5xx' });
       } else {
         log.warn(`[ClusterPin] non-retryable cid=${cid} status=${response.status} (${durationMs}ms)`);
+        recordMetricCounter(undefined, 'cluster_pin.forward', 1, { outcome: 'non_retryable', status_class: classifyHttpStatus(response.status) });
       }
     },
     (err: unknown) => {
@@ -213,8 +224,37 @@ export function forwardPinToCluster(rawCid: string, name?: string): void {
       };
       log.debug(`[ClusterPin] failed cid=${cid} (${durationMs}ms): ${message} — scheduling retry`);
       queueRetry(cid, message);
+      recordMetricHistogram(undefined, 'cluster_pin.forward_ms', durationMs, { status_class: 'error' });
+      recordMetricCounter(undefined, 'cluster_pin.forward', 1, { outcome: 'error', reason: classifyNetworkError(message) });
     },
   );
+}
+
+/**
+ * Bucket a numeric HTTP status into a low-cardinality tag value.
+ * Lets the cluster_pin metric's `status_class` tag stay bounded
+ * (5 possible values) instead of one tag value per distinct status.
+ */
+function classifyHttpStatus (status: number): string {
+  if (status >= 200 && status < 300) return '2xx';
+  if (status >= 300 && status < 400) return '3xx';
+  if (status >= 400 && status < 500) return '4xx';
+  if (status >= 500 && status < 600) return '5xx';
+  return 'unknown';
+}
+
+/**
+ * Bucket a network error message into a low-cardinality reason tag.
+ * Same privacy rationale as `classifyChipotleError` in chipotle-client.ts.
+ */
+function classifyNetworkError (msg: string): string {
+  const m = msg.toLowerCase();
+  if (m.includes('timeout') || m.includes('timed out')) return 'timeout';
+  if (m.includes('aborted') || m.includes('abort')) return 'aborted';
+  if (m.includes('econnrefused') || m.includes('refused')) return 'conn_refused';
+  if (m.includes('enotfound') || m.includes('dns')) return 'dns';
+  if (m.includes('certificate') || m.includes('tls') || m.includes('ssl')) return 'tls';
+  return 'other';
 }
 
 /**
@@ -234,6 +274,7 @@ export async function queryClusterPinStatus(rawCid: string): Promise<{
   const cid = normalizeCid(rawCid);
   if (!cid) return null;
 
+  const __metricStart = Date.now();
   const target = `${config.url}/pins?cid=${encodeURIComponent(cid)}`;
   try {
     const response = await fetch(target, {
@@ -241,14 +282,21 @@ export async function queryClusterPinStatus(rawCid: string): Promise<{
       headers: { 'Authorization': `Bearer ${config.token}` },
       signal: AbortSignal.timeout(10_000),
     });
+    const durationMs = Date.now() - __metricStart;
+    recordMetricHistogram(undefined, 'cluster_pin.query_ms', durationMs, { status_class: classifyHttpStatus(response.status) });
     if (!response.ok) {
       log.debug(`[ClusterPin] queryStatus non-ok cid=${cid} status=${response.status}`);
+      recordMetricCounter(undefined, 'cluster_pin.query', 1, { outcome: 'non_ok', status_class: classifyHttpStatus(response.status) });
       return null;
     }
     const data: unknown = await response.json();
     const result = parseStatusResponse(cid, data);
+    recordMetricCounter(undefined, 'cluster_pin.query', 1, { outcome: 'ok', pin_status: result.status });
     return result;
   } catch (err) {
+    const durationMs = Date.now() - __metricStart;
+    recordMetricHistogram(undefined, 'cluster_pin.query_ms', durationMs, { status_class: 'error' });
+    recordMetricCounter(undefined, 'cluster_pin.query', 1, { outcome: 'error', reason: classifyNetworkError(errMessage(err)) });
     log.debug(`[ClusterPin] queryStatus failed cid=${cid}: ${errMessage(err)}`);
     return null;
   }

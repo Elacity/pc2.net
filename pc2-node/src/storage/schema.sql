@@ -270,6 +270,32 @@ CREATE TABLE IF NOT EXISTS telemetry_onramp (
 CREATE INDEX IF NOT EXISTS idx_telemetry_onramp_event ON telemetry_onramp(event);
 CREATE INDEX IF NOT EXISTS idx_telemetry_onramp_install ON telemetry_onramp(install_id);
 
+-- T-1C Phase 1: metric registry. `metrics_counters` is monotonic per (name,
+-- tags) and UPSERTed in place. `metrics_histogram_samples` appends a raw
+-- sample per observation; the future daily flusher rolls them up + prunes.
+-- `tags` is a canonicalised JSON string with sorted keys so identical tag
+-- sets always collide on the primary key. Honoured by every recorder in
+-- `pc2-node/src/utils/metrics.ts`; no-op when PC2_TELEMETRY_DISABLED=true.
+CREATE TABLE IF NOT EXISTS metrics_counters (
+  name TEXT NOT NULL,
+  tags TEXT NOT NULL DEFAULT '{}',
+  value INTEGER NOT NULL DEFAULT 0,
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY (name, tags)
+);
+
+CREATE INDEX IF NOT EXISTS idx_metrics_counters_name ON metrics_counters(name);
+
+CREATE TABLE IF NOT EXISTS metrics_histogram_samples (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  tags TEXT NOT NULL DEFAULT '{}',
+  value REAL NOT NULL,
+  ts INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_metrics_histogram_name_ts ON metrics_histogram_samples(name, ts);
+
 -- Context events table: Awareness layer data (location, photos, voice, activity)
 CREATE TABLE IF NOT EXISTS context_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

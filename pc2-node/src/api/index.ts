@@ -45,6 +45,8 @@ import bosonRouter from './boson.js';
 import setupRouter from './setup.js';
 import updateRouter from './update.js';
 import diagnoseRouter from './diagnose.js';
+import supportRouter from './support.js';
+import metricsRouter from './metrics.js';
 import { getUpdateService } from '../services/UpdateService.js';
 import { getClusterPinConfig, getClusterPinProbeState, getClusterPinRetryQueueSnapshot } from '../services/clusterPin.js';
 import accessControlRouter from './access-control.js';
@@ -626,6 +628,8 @@ export function setupAPI (app: Express): void {
     app.use('/api/update', updateRouter);
     // v1.2.7.1: structured diagnostic snapshot (auth-gated, opt-in pull)
     app.use('/api/diagnose', diagnoseRouter);
+    app.use('/api/support', supportRouter);
+    app.use('/api/metrics', metricsRouter);
     app.use('/api/access', accessControlRouter);
     app.use('/api/did', didRouter);
     app.use('/api/wallet', walletRouter);

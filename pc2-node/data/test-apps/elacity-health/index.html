@@ -1,0 +1,1096 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Health & Support</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            color: #1a1a2e;
+            padding: 20px;
+            line-height: 1.5;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .header-icon {
+            width: 36px; height: 36px;
+            background: linear-gradient(135deg, #10b981, #0f766e);
+            border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+        }
+        .header-icon svg { width: 22px; height: 22px; color: white; }
+        .header h1 { font-size: 18px; font-weight: 700; }
+        .header p { font-size: 12px; color: #666; margin-top: 1px; }
+
+        /* Consent banner */
+        .consent {
+            background: #ecfdf5;
+            border: 1px solid #a7f3d0;
+            color: #065f46;
+            border-radius: 10px;
+            padding: 12px 16px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            font-size: 13px;
+        }
+        .consent svg { flex-shrink: 0; margin-top: 2px; }
+        .consent-text { flex: 1; }
+        .consent-text strong { display: block; margin-bottom: 4px; }
+        .consent button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 6px 12px;
+            font-size: 12px;
+            line-height: 1;
+            font-family: inherit;
+            background: #10b981;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .consent button:hover { background: #059669; }
+
+        /* Run bar */
+        .run-bar {
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            padding: 14px 16px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .run-bar .summary { flex: 1; font-size: 13px; color: #6b7280; }
+        .run-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 10px 18px;
+            font-size: 13px;
+            font-weight: 600;
+            line-height: 1;
+            font-family: inherit;
+            background: linear-gradient(135deg, #10b981, #0f766e);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            box-shadow: 0 1px 2px rgba(16,185,129,0.2);
+        }
+        .run-btn:hover { transform: translateY(-1px); box-shadow: 0 2px 6px rgba(16,185,129,0.3); }
+        .run-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+        /* Overall summary tile */
+        .overall {
+            background: white;
+            border-radius: 10px;
+            padding: 16px;
+            margin-bottom: 12px;
+            border: 1px solid #e5e7eb;
+            display: none;
+        }
+        .overall.shown { display: block; }
+        .overall-title { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #6b7280; margin-bottom: 10px; }
+        .overall-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+        .overall-cell { padding: 10px; border-radius: 8px; text-align: center; }
+        .overall-cell.pass { background: #dcfce7; color: #16a34a; }
+        .overall-cell.warn { background: #fef3c7; color: #b45309; }
+        .overall-cell.fail { background: #fee2e2; color: #dc2626; }
+        .overall-cell .count { font-size: 22px; font-weight: 700; line-height: 1; }
+        .overall-cell .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; }
+
+        /* Cards */
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 16px;
+            margin-bottom: 12px;
+            border: 1px solid #e5e7eb;
+            display: none;
+        }
+        .card.shown { display: block; }
+        .card-title { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #6b7280; margin-bottom: 10px; }
+
+        /* Generic row + badge */
+        .row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid #f3f4f6;
+            gap: 12px;
+            font-size: 13px;
+        }
+        .row:last-child { border-bottom: none; }
+        .row .name { font-weight: 500; flex-shrink: 0; }
+        .row .value { font-size: 12px; font-weight: 600; color: #374151; text-align: right; word-break: break-word; }
+        .row .value.muted { color: #9ca3af; font-weight: 400; }
+        .row .value.url { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 22px;
+            height: 22px;
+            padding: 0 8px;
+            border-radius: 11px;
+            font-size: 11px;
+            font-weight: 600;
+            line-height: 1;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+        .badge.pass { background: #dcfce7; color: #16a34a; }
+        .badge.fail { background: #fee2e2; color: #dc2626; }
+        .badge.warn { background: #fef3c7; color: #b45309; }
+        .badge.info { background: #dbeafe; color: #1d4ed8; }
+        .badge.muted { background: #f3f4f6; color: #6b7280; }
+
+        /* Tables (used for supernodes + wasm) */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+        th, td {
+            padding: 6px 8px;
+            text-align: left;
+            border-bottom: 1px solid #f3f4f6;
+        }
+        th { font-weight: 600; color: #6b7280; text-transform: uppercase; font-size: 11px; letter-spacing: 0.3px; }
+        tr:last-child td { border-bottom: none; }
+        td.url { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
+        td.right { text-align: right; }
+        td.muted { color: #9ca3af; }
+
+        /* Logs */
+        .logs-wrap details > summary {
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            color: #374151;
+            padding: 6px 0;
+        }
+        .logs {
+            background: #1a1a2e;
+            color: #d1d5db;
+            border-radius: 6px;
+            padding: 12px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 11px;
+            max-height: 320px;
+            overflow-y: auto;
+            margin-top: 8px;
+            white-space: pre;
+        }
+
+        /* Spinner */
+        .spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid #ffffff66;
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            vertical-align: middle;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Footer / placeholders */
+        .placeholders {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 16px;
+        }
+        .placeholder-card {
+            background: white;
+            border: 1px dashed #d1d5db;
+            border-radius: 10px;
+            padding: 14px;
+            opacity: 0.65;
+        }
+        .placeholder-card .card-title { color: #9ca3af; }
+        .placeholder-card p { font-size: 12px; color: #6b7280; }
+        .placeholder-card .coming-soon {
+            display: inline-block;
+            margin-top: 8px;
+            font-size: 11px;
+            font-weight: 600;
+            color: #6b7280;
+            background: #f3f4f6;
+            padding: 3px 8px;
+            border-radius: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        /* T-1C metrics card. Stands alone (not .card) because the .card
+           class is `display:none` until JS adds `.shown` — that's how the
+           7 diagnostic result cards stay hidden until the operator runs
+           the health check. The metrics card is always visible. */
+        .metrics-card {
+            background: white;
+            border-radius: 10px;
+            padding: 16px;
+            margin-top: 16px;
+            margin-bottom: 12px;
+            border: 1px solid #e5e7eb;
+        }
+        .metrics-card .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 4px;
+        }
+        .metrics-card .card-subtitle {
+            font-size: 12px;
+            color: #6b7280;
+            margin: 0 0 12px 0;
+        }
+        .metrics-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .metrics-status {
+            font-size: 11px;
+            color: #6b7280;
+        }
+        .metrics-empty {
+            font-size: 13px;
+            color: #6b7280;
+            background: #f9fafb;
+            border: 1px dashed #e5e7eb;
+            border-radius: 8px;
+            padding: 12px;
+        }
+        .metrics-block { margin-top: 14px; }
+        .metrics-block h4 {
+            margin: 0 0 6px 0;
+            font-size: 12px;
+            font-weight: 600;
+            color: #374151;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .metrics-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+        .metrics-table th, .metrics-table td {
+            padding: 6px 8px;
+            border-bottom: 1px solid #f3f4f6;
+            text-align: left;
+            vertical-align: top;
+        }
+        .metrics-table th { color: #6b7280; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.3px; }
+        .metrics-table td.num, .metrics-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+        .metrics-table .name-cell { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; color: #111827; }
+        .metrics-table .tag-pill {
+            display: inline-block;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 10.5px;
+            padding: 1px 6px;
+            margin: 0 4px 2px 0;
+            background: #eef2ff;
+            color: #3730a3;
+            border-radius: 8px;
+        }
+        .metrics-table .tag-pill.empty { background: #f3f4f6; color: #9ca3af; font-style: italic; }
+        .metrics-status.kill { color: #b91c1c; font-weight: 600; }
+
+        .error-bar {
+            background: #fee2e2;
+            color: #991b1b;
+            border-radius: 8px;
+            padding: 10px 12px;
+            font-size: 12px;
+            margin-bottom: 12px;
+            display: none;
+        }
+        .error-bar.shown { display: block; }
+
+        /* Support Report panel */
+        .report-card {
+            background: white;
+            border-radius: 10px;
+            padding: 16px;
+            border: 1px solid #e5e7eb;
+            margin-top: 16px;
+        }
+        .report-card .card-title { color: #6b7280; }
+        .report-card p.lead { font-size: 12px; color: #6b7280; margin-bottom: 12px; }
+        .report-form { display: none; }
+        .report-form.shown { display: block; }
+        .report-form label { display: block; font-size: 12px; font-weight: 600; color: #374151; margin-bottom: 6px; }
+        .report-form textarea {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 13px;
+            font-family: inherit;
+            resize: vertical;
+            min-height: 100px;
+            margin-bottom: 4px;
+        }
+        .report-form .charcount { font-size: 11px; color: #9ca3af; text-align: right; margin-bottom: 12px; }
+        .report-form .charcount.warn { color: #b45309; }
+        .report-form .charcount.fail { color: #dc2626; }
+        .report-form .toggle-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 14px; }
+        .report-form .toggle {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 8px;
+            border-radius: 6px;
+            font-size: 12px;
+            background: #f9fafb;
+            cursor: pointer;
+            border: 1px solid #f3f4f6;
+        }
+        .report-form .toggle input { margin: 0; cursor: pointer; }
+        .report-form .toggle:hover { background: #f3f4f6; }
+        .report-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        .btn-primary, .btn-secondary, .btn-disabled {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 8px 14px;
+            font-size: 12px;
+            font-weight: 600;
+            line-height: 1;
+            font-family: inherit;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        .btn-primary { background: linear-gradient(135deg, #10b981, #0f766e); color: white; }
+        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 2px 6px rgba(16,185,129,0.3); }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        .btn-secondary { background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; }
+        .btn-secondary:hover { background: #e5e7eb; }
+        .btn-disabled { background: #f9fafb; color: #9ca3af; cursor: not-allowed; border: 1px dashed #d1d5db; position: relative; }
+        .btn-disabled:hover::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%) translateY(-6px);
+            background: #1a1a2e;
+            color: white;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 500;
+            white-space: nowrap;
+            pointer-events: none;
+        }
+
+        .preview-block { display: none; }
+        .preview-block.shown { display: block; }
+        .preview-json {
+            background: #1a1a2e;
+            color: #d1d5db;
+            border-radius: 6px;
+            padding: 12px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 11px;
+            max-height: 320px;
+            overflow: auto;
+            white-space: pre;
+            margin-bottom: 12px;
+        }
+        .omit-list {
+            background: #fef3c7;
+            border: 1px solid #fde68a;
+            color: #78350f;
+            border-radius: 6px;
+            padding: 10px 12px;
+            font-size: 11px;
+            margin-bottom: 12px;
+        }
+        .omit-list strong { display: block; margin-bottom: 4px; font-size: 12px; }
+        .omit-list ul { margin: 0; padding-left: 18px; }
+        .omit-list li { margin: 2px 0; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <div class="header-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 21 L4 13 a4.5 4.5 0 0 1 6.3 -6.3 L12 8.4 L13.7 6.7 a4.5 4.5 0 0 1 6.3 6.3 Z"/>
+            <polyline points="3,15 8,15 10,11 14,19 16,15 21,15"/>
+        </svg>
+    </div>
+    <div>
+        <h1>Health &amp; Support</h1>
+        <p>Local self-diagnostic for your PC2 node.</p>
+    </div>
+</div>
+
+<div class="consent" id="consent">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+        <path d="M7 11 V7 a5 5 0 0 1 10 0 V11"/>
+    </svg>
+    <div class="consent-text">
+        <strong>This is a local-only diagnostic.</strong>
+        Pressing "Run Health Check" gathers a snapshot of your node state and renders it on this page. Nothing leaves your machine. Logs and configuration values shown here are sanitised before display, but you should still review them before sharing publicly.
+    </div>
+    <button type="button" id="consent-dismiss">Got it</button>
+</div>
+
+<div class="run-bar">
+    <div class="summary" id="run-summary">Press "Run Health Check" to test connectivity, services, and runtime modules. Typical run: under 5 seconds.</div>
+    <button type="button" class="run-btn" id="run-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polygon points="5 3 19 12 5 21 5 3"/>
+        </svg>
+        <span id="run-btn-label">Run Health Check</span>
+    </button>
+</div>
+
+<div class="error-bar" id="error-bar"></div>
+
+<div class="overall" id="overall">
+    <div class="overall-title">Summary</div>
+    <div class="overall-grid">
+        <div class="overall-cell pass"><div class="count" id="pass-count">0</div><div class="label">Pass</div></div>
+        <div class="overall-cell warn"><div class="count" id="warn-count">0</div><div class="label">Warn</div></div>
+        <div class="overall-cell fail"><div class="count" id="fail-count">0</div><div class="label">Fail</div></div>
+    </div>
+</div>
+
+<div class="card" id="card-node"><div class="card-title">Node</div><div id="rows-node"></div></div>
+<div class="card" id="card-services"><div class="card-title">Services</div><div id="rows-services"></div></div>
+<div class="card" id="card-cluster"><div class="card-title">IPFS Cluster</div><div id="rows-cluster"></div></div>
+<div class="card" id="card-lit"><div class="card-title">Lit / Chipotle</div><div id="rows-lit"></div></div>
+<div class="card" id="card-supernodes"><div class="card-title">Supernodes</div><div id="rows-supernodes"></div></div>
+<div class="card" id="card-wasm"><div class="card-title">WASM Runtimes</div><div id="rows-wasm"></div></div>
+<div class="card" id="card-update"><div class="card-title">Update Channel</div><div id="rows-update"></div></div>
+
+<div class="card logs-wrap" id="card-logs">
+    <details>
+        <summary>Recent logs (sanitised)</summary>
+        <div class="logs" id="logs-content"></div>
+    </details>
+</div>
+
+<div class="report-card">
+    <div class="card-title">Send Support Report</div>
+    <p class="lead">Build a curated, redacted bundle from your last health-check snapshot plus a free-text description. Preview exactly what will be sent before anything leaves your machine. (Phase 1: copy / download manually; supernode submission lands next release.)</p>
+
+    <div class="report-actions" id="report-toggle-actions">
+        <button type="button" class="btn-primary" id="open-report-btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+            Compose report
+        </button>
+    </div>
+
+    <div class="report-form" id="report-form">
+        <label for="report-text">Describe the issue (max 2000 chars)</label>
+        <textarea id="report-text" placeholder="What were you doing? What did you expect to happen? What actually happened? Any error messages or symptoms?"></textarea>
+        <div class="charcount" id="report-charcount">0 / 2000</div>
+
+        <label>Include in report</label>
+        <div class="toggle-grid">
+            <label class="toggle"><input type="checkbox" id="opt-host"        checked> Host (hostname tail + masked IP)</label>
+            <label class="toggle"><input type="checkbox" id="opt-services"    checked> Services (db / fs / transports)</label>
+            <label class="toggle"><input type="checkbox" id="opt-cluster"     checked> IPFS cluster reachability</label>
+            <label class="toggle"><input type="checkbox" id="opt-livProbes"   checked> Live diagnostic probes</label>
+            <label class="toggle"><input type="checkbox" id="opt-logs"        checked> Recent logs (sanitised)</label>
+        </div>
+
+        <div class="report-actions">
+            <button type="button" class="btn-primary" id="preview-btn">Preview bundle</button>
+            <button type="button" class="btn-secondary" id="cancel-report-btn">Cancel</button>
+        </div>
+
+        <div class="error-bar" id="report-error"></div>
+
+        <div class="preview-block" id="preview-block">
+            <div class="omit-list" id="omit-list"></div>
+            <pre class="preview-json" id="preview-json"></pre>
+            <div class="report-actions">
+                <button type="button" class="btn-secondary" id="copy-btn">Copy JSON</button>
+                <button type="button" class="btn-secondary" id="download-btn">Download as file</button>
+                <button type="button" class="btn-disabled" id="send-btn" data-tooltip="Coming next release: SIWE-signed submission to supernode triage" disabled>Send report (next release)</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="metrics-card">
+    <div class="card-header">
+        <div class="card-title">Aggregate Telemetry</div>
+        <div class="metrics-actions">
+            <span id="metrics-status" class="metrics-status"></span>
+            <button type="button" class="btn-secondary" id="metrics-refresh-btn" title="Refresh counter + histogram values">Refresh</button>
+        </div>
+    </div>
+    <p class="card-subtitle">Local counters and timings. Built locally; no outbound traffic. Daily flusher to supernode lands in v1.2.9.0.</p>
+    <div id="metrics-empty" class="metrics-empty">Press <strong>Refresh</strong> after running a decryption or pin to see live values.</div>
+    <div id="metrics-counters-block" class="metrics-block" hidden>
+        <h4>Counters</h4>
+        <table class="metrics-table" id="metrics-counters-table"><thead><tr><th>Name</th><th>Tags</th><th class="num">Value</th></tr></thead><tbody></tbody></table>
+    </div>
+    <div id="metrics-histograms-block" class="metrics-block" hidden>
+        <h4>Histograms (ms)</h4>
+        <table class="metrics-table" id="metrics-histograms-table"><thead><tr><th>Name</th><th>Tags</th><th class="num">N</th><th class="num">p50</th><th class="num">p95</th><th class="num">p99</th></tr></thead><tbody></tbody></table>
+    </div>
+</div>
+
+<script>
+(function() {
+    const API_BASE = window.location.origin;
+    const CONSENT_KEY = 'pc2_health_consent_seen_v1';
+
+    let authToken = null;
+    try {
+        const params = new URLSearchParams(window.location.search);
+        authToken = params.get('puter.auth.token') || null;
+    } catch (_) {}
+
+    const $ = (id) => document.getElementById(id);
+
+    function pc2Fetch(path, opts) {
+        opts = opts || {};
+        const headers = opts.headers || {};
+        if (authToken) headers['Authorization'] = 'Bearer ' + authToken;
+        return fetch(API_BASE + path, Object.assign({}, opts, { headers: headers }));
+    }
+
+    // ── First-run consent banner ────────────────────────────────────────────
+    function maybeHideConsent() {
+        try {
+            if (localStorage.getItem(CONSENT_KEY) === '1') {
+                $('consent').style.display = 'none';
+            }
+        } catch (_) {}
+    }
+    maybeHideConsent();
+    $('consent-dismiss').addEventListener('click', function () {
+        try { localStorage.setItem(CONSENT_KEY, '1'); } catch (_) {}
+        $('consent').style.display = 'none';
+    });
+
+    // ── Counters ────────────────────────────────────────────────────────────
+    let counts = { pass: 0, warn: 0, fail: 0 };
+    function tick(verdict) { counts[verdict] = (counts[verdict] || 0) + 1; }
+
+    // Snapshot is stashed after each successful health check so the
+    // T-1B "Compose report" flow can reuse it without a redundant fetch.
+    let lastSnapshot = null;
+
+    // ── Render helpers ──────────────────────────────────────────────────────
+    function row(name, valueHtml, badge) {
+        const badgeHtml = badge ? '<span class="badge ' + badge.cls + '">' + badge.label + '</span>' : '';
+        const valueClass = (valueHtml && valueHtml.startsWith && valueHtml.startsWith('http')) ? 'value url' : 'value';
+        return '<div class="row"><span class="name">' + name + '</span>'
+            + '<span class="' + valueClass + '">' + (valueHtml || '<span class="muted">—</span>') + '</span>'
+            + badgeHtml + '</div>';
+    }
+
+    function fmtBool(v) { return v === true ? 'yes' : (v === false ? 'no' : '—'); }
+    function fmtMs(v) { return (typeof v === 'number') ? v + ' ms' : '—'; }
+    function fmtBytes(b) {
+        if (typeof b !== 'number') return '—';
+        if (b < 1024) return b + ' B';
+        if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
+        if (b < 1024 * 1024 * 1024) return (b / (1024 * 1024)).toFixed(1) + ' MB';
+        return (b / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+    }
+    function escapeHtml(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function showCard(id) { $(id).classList.add('shown'); }
+
+    function renderNode(s) {
+        const rows = [];
+        rows.push(row('Version', escapeHtml(s.pc2 && s.pc2.version) || '—'));
+        rows.push(row('Uptime', s.pc2 && s.pc2.uptimeSec != null ? Math.floor(s.pc2.uptimeSec / 60) + ' min' : '—'));
+        rows.push(row('Node', escapeHtml(s.pc2 && s.pc2.nodeVersion) || '—'));
+        rows.push(row('PID', s.pc2 && s.pc2.pid != null ? String(s.pc2.pid) : '—'));
+        rows.push(row('Platform', s.host ? escapeHtml((s.host.platform || '?') + ' ' + (s.host.arch || '?')) : '—'));
+        const memPct = s.host && typeof s.host.memUsagePercent === 'number' ? s.host.memUsagePercent : null;
+        const memBadge = memPct == null ? null : (memPct >= 90 ? { cls: 'fail', label: 'high' } : (memPct >= 75 ? { cls: 'warn', label: 'elev.' } : { cls: 'pass', label: 'ok' }));
+        if (memPct != null) tick(memBadge.cls === 'pass' ? 'pass' : (memBadge.cls === 'warn' ? 'warn' : 'fail'));
+        rows.push(row('Memory used', memPct != null ? memPct + '%' : '—', memBadge));
+        if (s.disk && typeof s.disk.free === 'number' && typeof s.disk.total === 'number') {
+            const pct = Math.round(((s.disk.total - s.disk.free) / s.disk.total) * 100);
+            const diskBadge = pct >= 90 ? { cls: 'fail', label: 'low' } : (pct >= 75 ? { cls: 'warn', label: 'elev.' } : { cls: 'pass', label: 'ok' });
+            tick(diskBadge.cls === 'pass' ? 'pass' : (diskBadge.cls === 'warn' ? 'warn' : 'fail'));
+            rows.push(row('Disk used', pct + '% (' + fmtBytes(s.disk.free) + ' free)', diskBadge));
+        }
+        $('rows-node').innerHTML = rows.join('');
+        showCard('card-node');
+    }
+
+    function renderServices(s) {
+        const rows = [];
+        const svc = s.services || {};
+        const verdict = (v) => v === 'ok' || v === true ? { cls: 'pass', label: 'ok' } : (v === 'missing' || v === false ? { cls: 'fail', label: 'fail' } : { cls: 'muted', label: '—' });
+        const wireguardOk = svc.wireguard && (svc.wireguard.installed || svc.wireguard.binary);
+        const checks = [
+            { name: 'Database',   value: escapeHtml(svc.database || '—'),   badge: verdict(svc.database) },
+            { name: 'Filesystem', value: escapeHtml(svc.filesystem || '—'), badge: verdict(svc.filesystem) },
+            { name: 'Boson init', value: fmtBool(svc.bosonInitialised),     badge: verdict(svc.bosonInitialised) },
+            { name: 'WireGuard',  value: wireguardOk ? 'present' : 'absent', badge: verdict(wireguardOk) },
+        ];
+        for (const c of checks) {
+            tick(c.badge.cls === 'pass' ? 'pass' : (c.badge.cls === 'fail' ? 'fail' : 'warn'));
+            rows.push(row(c.name, c.value, c.badge));
+        }
+        $('rows-services').innerHTML = rows.join('');
+        showCard('card-services');
+    }
+
+    function renderCluster(s) {
+        const rows = [];
+        const c = s.cluster || {};
+        const r = c.reachability || {};
+        const httpBadge = r.reachable ? { cls: 'pass', label: r.httpStatus || 'ok' } : { cls: 'fail', label: 'down' };
+        tick(r.reachable ? 'pass' : 'fail');
+        rows.push(row('Configured', fmtBool(c.configured), c.configured ? { cls: 'pass', label: 'yes' } : { cls: 'warn', label: 'default' }));
+        rows.push(row('Endpoint', escapeHtml(c.url || '—')));
+        rows.push(row('Reachable', fmtMs(r.latencyMs), httpBadge));
+        rows.push(row('Replication', (c.replicationMin || '?') + '–' + (c.replicationMax || '?')));
+        if (typeof s.ipfsSwarmCount === 'number') {
+            const peerBadge = s.ipfsSwarmCount > 5 ? { cls: 'pass', label: 'ok' } : (s.ipfsSwarmCount > 0 ? { cls: 'warn', label: 'low' } : { cls: 'fail', label: 'isolated' });
+            tick(peerBadge.cls === 'pass' ? 'pass' : (peerBadge.cls === 'fail' ? 'fail' : 'warn'));
+            rows.push(row('Swarm peers', String(s.ipfsSwarmCount), peerBadge));
+        }
+        $('rows-cluster').innerHTML = rows.join('');
+        showCard('card-cluster');
+    }
+
+    function renderLit(s) {
+        const probes = (s.liveProbes && s.liveProbes.litConfig) || null;
+        if (!probes) return;
+        const rows = [];
+        const required = [
+            { key: 'apiKeyConfigured',       name: 'Tier 1 key on disk' },
+            { key: 'litActionCidConfigured', name: 'Lit Action CID set' },
+            { key: 'provisionCached',        name: 'Provision blob cached' },
+        ];
+        for (const r of required) {
+            const ok = probes[r.key] === true;
+            tick(ok ? 'pass' : 'warn');
+            rows.push(row(r.name, fmtBool(probes[r.key]), { cls: ok ? 'pass' : 'warn', label: ok ? 'yes' : 'no' }));
+        }
+        const userOk = probes.userKeyConfigured === true;
+        rows.push(row('Tier 2 user key', fmtBool(probes.userKeyConfigured), { cls: userOk ? 'info' : 'muted', label: userOk ? 'set' : 'unset' }));
+        const apiBadge = probes.apiHostReachable ? { cls: 'pass', label: 'ok' } : { cls: 'fail', label: 'unreach' };
+        tick(probes.apiHostReachable ? 'pass' : 'fail');
+        rows.push(row('Lit API host', fmtMs(probes.apiLatencyMs), apiBadge));
+        if (probes.error) {
+            rows.push(row('Error', '<span class="muted">' + escapeHtml(probes.error) + '</span>'));
+        }
+        $('rows-lit').innerHTML = rows.join('');
+        showCard('card-lit');
+    }
+
+    function renderSupernodes(s) {
+        const probes = (s.liveProbes && s.liveProbes.supernodes) || [];
+        if (!probes.length) return;
+        let html = '<table><thead><tr><th>Supernode</th><th>Endpoint</th><th class="right">Status</th><th class="right">Latency</th><th>Result</th></tr></thead><tbody>';
+        for (const p of probes) {
+            const ok = p.reachable && p.httpStatus != null && p.httpStatus < 500;
+            const badge = ok ? { cls: 'pass', label: String(p.httpStatus || 'ok') } : (p.reachable ? { cls: 'warn', label: String(p.httpStatus) } : { cls: 'fail', label: 'down' });
+            tick(ok ? 'pass' : (p.reachable ? 'warn' : 'fail'));
+            html += '<tr>'
+                + '<td>' + escapeHtml(p.name) + '</td>'
+                + '<td class="url">' + escapeHtml(p.endpoint) + '</td>'
+                + '<td class="right">' + (p.httpStatus != null ? p.httpStatus : '—') + '</td>'
+                + '<td class="right">' + fmtMs(p.latencyMs) + '</td>'
+                + '<td><span class="badge ' + badge.cls + '">' + badge.label + '</span></td>'
+                + '</tr>';
+        }
+        html += '</tbody></table>';
+        $('rows-supernodes').innerHTML = html;
+        showCard('card-supernodes');
+    }
+
+    function renderWasm(s) {
+        const probes = (s.liveProbes && s.liveProbes.wasm) || [];
+        if (!probes.length) return;
+        let html = '<table><thead><tr><th>Crate</th><th class="right">Size</th><th>Magic</th><th>Compile</th><th>Result</th></tr></thead><tbody>';
+        for (const p of probes) {
+            const ok = p.exists && p.magicValid && p.compileOk;
+            const cls = ok ? 'pass' : (p.exists ? 'fail' : 'muted');
+            const label = ok ? 'ok' : (p.exists ? 'invalid' : 'missing');
+            tick(ok ? 'pass' : (p.exists ? 'fail' : 'warn'));
+            html += '<tr>'
+                + '<td>' + escapeHtml(p.name) + '</td>'
+                + '<td class="right">' + fmtBytes(p.sizeBytes) + '</td>'
+                + '<td>' + (p.magicValid ? '✓' : (p.exists ? '✗' : '<span class="muted">—</span>')) + '</td>'
+                + '<td>' + (p.compileOk ? '✓' : (p.exists ? '✗' : '<span class="muted">—</span>')) + '</td>'
+                + '<td><span class="badge ' + cls + '">' + label + '</span></td>'
+                + '</tr>';
+        }
+        html += '</tbody></table>';
+        $('rows-wasm').innerHTML = html;
+        showCard('card-wasm');
+    }
+
+    function renderUpdate(s) {
+        const u = (s.liveProbes && s.liveProbes.updateChannel) || null;
+        if (!u) return;
+        const rows = [];
+        rows.push(row('Current version', escapeHtml(u.currentVersion || '—')));
+        rows.push(row('Latest version', escapeHtml(u.latestVersion || '—')));
+        const reachBadge = u.reachable ? { cls: 'pass', label: 'ok' } : { cls: 'fail', label: 'down' };
+        tick(u.reachable ? 'pass' : 'fail');
+        rows.push(row('GitHub releases', fmtMs(u.latencyMs), reachBadge));
+        if (u.latestVersion && u.currentVersion && u.currentVersion !== u.latestVersion && u.currentVersion !== 'unknown') {
+            rows.push(row('Update available', escapeHtml(u.currentVersion + ' → ' + u.latestVersion), { cls: 'info', label: 'new' }));
+        }
+        if (u.error) {
+            rows.push(row('Error', '<span class="muted">' + escapeHtml(u.error) + '</span>'));
+        }
+        $('rows-update').innerHTML = rows.join('');
+        showCard('card-update');
+    }
+
+    function renderLogs(s) {
+        const lines = (s.recentLogs || []).join('\n');
+        $('logs-content').textContent = lines || '(no recent log lines matched the diagnostic filter)';
+        showCard('card-logs');
+    }
+
+    function resetView() {
+        counts = { pass: 0, warn: 0, fail: 0 };
+        $('overall').classList.remove('shown');
+        $('error-bar').classList.remove('shown');
+        $('error-bar').textContent = '';
+        document.querySelectorAll('.card').forEach(function (c) { c.classList.remove('shown'); });
+    }
+
+    function renderSummary() {
+        $('pass-count').textContent = String(counts.pass);
+        $('warn-count').textContent = String(counts.warn);
+        $('fail-count').textContent = String(counts.fail);
+        $('overall').classList.add('shown');
+        const total = counts.pass + counts.warn + counts.fail;
+        $('run-summary').textContent = 'Last run: ' + total + ' checks ('
+            + counts.pass + ' pass, ' + counts.warn + ' warn, ' + counts.fail + ' fail).';
+    }
+
+    function showError(msg) {
+        $('error-bar').textContent = msg;
+        $('error-bar').classList.add('shown');
+    }
+
+    async function runHealthCheck() {
+        const btn = $('run-btn');
+        const label = $('run-btn-label');
+        btn.disabled = true;
+        label.innerHTML = '<span class="spinner"></span> Running…';
+        resetView();
+        const t0 = Date.now();
+        try {
+            const resp = await pc2Fetch('/api/diagnose');
+            if (!resp.ok) throw new Error('API returned HTTP ' + resp.status);
+            const snapshot = await resp.json();
+            lastSnapshot = snapshot;
+            renderNode(snapshot);
+            renderServices(snapshot);
+            renderCluster(snapshot);
+            renderLit(snapshot);
+            renderSupernodes(snapshot);
+            renderWasm(snapshot);
+            renderUpdate(snapshot);
+            renderLogs(snapshot);
+            renderSummary();
+            const dt = Date.now() - t0;
+            label.textContent = 'Re-run (' + (dt / 1000).toFixed(1) + 's last)';
+        } catch (err) {
+            showError('Health check failed: ' + (err && err.message ? err.message : 'unknown error'));
+            label.textContent = 'Try again';
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    $('run-btn').addEventListener('click', runHealthCheck);
+
+    // ── Support Report (T-1B Phase 1) ───────────────────────────────────────
+    let walletAddress = null;
+    let lastBundle = null;
+
+    async function fetchWallet() {
+        try {
+            const r = await pc2Fetch('/whoami');
+            if (!r.ok) return;
+            const j = await r.json();
+            walletAddress = j.wallet_address || j.walletAddress || j.address || (j.user && j.user.wallet_address) || null;
+        } catch (_) {}
+    }
+    fetchWallet();
+
+    function setReportError(msg) {
+        const el = $('report-error');
+        if (!msg) { el.classList.remove('shown'); el.textContent = ''; return; }
+        el.textContent = msg;
+        el.classList.add('shown');
+    }
+
+    function updateCharCount() {
+        const ta = $('report-text');
+        const cc = $('report-charcount');
+        const len = ta.value.length;
+        cc.textContent = len + ' / 2000';
+        cc.classList.remove('warn', 'fail');
+        if (len > 2000) cc.classList.add('fail');
+        else if (len > 1800) cc.classList.add('warn');
+    }
+    $('report-text').addEventListener('input', updateCharCount);
+
+    $('open-report-btn').addEventListener('click', function () {
+        $('report-form').classList.add('shown');
+        $('open-report-btn').style.display = 'none';
+        $('report-text').focus();
+    });
+
+    $('cancel-report-btn').addEventListener('click', function () {
+        $('report-form').classList.remove('shown');
+        $('preview-block').classList.remove('shown');
+        $('open-report-btn').style.display = 'inline-flex';
+        setReportError('');
+    });
+
+    $('preview-btn').addEventListener('click', async function () {
+        setReportError('');
+        const text = $('report-text').value.trim();
+        if (!text) {
+            setReportError('Please describe the issue before previewing.');
+            return;
+        }
+        if (!walletAddress) {
+            // Try once more — whoami may have failed initially.
+            await fetchWallet();
+            if (!walletAddress) {
+                setReportError('Cannot resolve wallet address. Sign in to PC2 and retry.');
+                return;
+            }
+        }
+        const options = {
+            includeHost:       $('opt-host').checked,
+            includeServices:   $('opt-services').checked,
+            includeCluster:    $('opt-cluster').checked,
+            includeLiveProbes: $('opt-livProbes').checked,
+            includeLogs:       $('opt-logs').checked,
+        };
+        const btn = $('preview-btn');
+        btn.disabled = true;
+        const originalLabel = btn.textContent;
+        btn.innerHTML = '<span class="spinner"></span> Building…';
+        try {
+            const resp = await pc2Fetch('/api/support/report/preview', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    snapshot: lastSnapshot,
+                    freeText: text,
+                    walletAddress: walletAddress,
+                    options: options,
+                }),
+            });
+            if (!resp.ok) {
+                let detail = 'HTTP ' + resp.status;
+                try { const j = await resp.json(); detail = j.detail || j.error || detail; } catch (_) {}
+                throw new Error(detail);
+            }
+            const data = await resp.json();
+            lastBundle = data.bundle;
+            $('preview-json').textContent = JSON.stringify(data.bundle, null, 2);
+            $('omit-list').innerHTML = '<strong>What will NOT be in this report:</strong><ul>'
+                + (data.willOmit || []).map(function (o) { return '<li>' + escapeHtml(o) + '</li>'; }).join('')
+                + '</ul>';
+            $('preview-block').classList.add('shown');
+        } catch (err) {
+            setReportError('Preview failed: ' + (err && err.message ? err.message : 'unknown'));
+        } finally {
+            btn.disabled = false;
+            btn.textContent = originalLabel;
+        }
+    });
+
+    $('copy-btn').addEventListener('click', async function () {
+        if (!lastBundle) return;
+        const text = JSON.stringify(lastBundle, null, 2);
+        try {
+            await navigator.clipboard.writeText(text);
+            const btn = $('copy-btn');
+            const orig = btn.textContent;
+            btn.textContent = 'Copied!';
+            setTimeout(function () { btn.textContent = orig; }, 1500);
+        } catch (_) {
+            setReportError('Clipboard not available — use Download as file instead.');
+        }
+    });
+
+    $('download-btn').addEventListener('click', function () {
+        if (!lastBundle) return;
+        const blob = new Blob([JSON.stringify(lastBundle, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'pc2-support-report-' + (lastBundle.ticketId || 'bundle') + '.json';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(url); }, 0);
+    });
+
+    // ── Aggregate Telemetry (T-1C Phase 1) ──────────────────────────────────
+    // Pulls live counter + histogram values from /api/metrics/snapshot.
+    // Phase 1 is local-only — no opt-in question, no daily flusher; just a
+    // window for the operator into what the instrumented code paths are
+    // recording. Phase 4-6 will wire the daily POST to a supernode + opt-in
+    // toggle. Phase R adds Rust/WASM crate instrumentation.
+
+    function renderTagPills(tags) {
+        if (!tags || Object.keys(tags).length === 0) {
+            return '<span class="tag-pill empty">no tags</span>';
+        }
+        return Object.keys(tags).sort().map(function (k) {
+            return '<span class="tag-pill">' + escapeHtml(k) + '=' + escapeHtml(String(tags[k])) + '</span>';
+        }).join('');
+    }
+
+    function setMetricsStatus(text, isKill) {
+        const el = $('metrics-status');
+        if (!el) return;
+        el.textContent = text || '';
+        if (isKill) {
+            el.classList.add('kill');
+        } else {
+            el.classList.remove('kill');
+        }
+    }
+
+    async function refreshMetrics() {
+        const refreshBtn = $('metrics-refresh-btn');
+        const empty = $('metrics-empty');
+        const countersBlock = $('metrics-counters-block');
+        const histogramsBlock = $('metrics-histograms-block');
+        if (!refreshBtn || !empty || !countersBlock || !histogramsBlock) return;
+
+        refreshBtn.disabled = true;
+        const startedAt = Date.now();
+        setMetricsStatus('Loading…', false);
+
+        try {
+            const r = await pc2Fetch('/api/metrics/snapshot');
+            if (!r.ok) {
+                setMetricsStatus('HTTP ' + r.status, false);
+                return;
+            }
+            const j = await r.json();
+            const counters = Array.isArray(j.counters) ? j.counters : [];
+            const histograms = Array.isArray(j.histograms) ? j.histograms : [];
+            const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
+            const totalCounters = counters.length;
+            const totalHistograms = histograms.length;
+            const totalCounterValue = counters.reduce(function (acc, c) { return acc + (c.value || 0); }, 0);
+            const summary = totalCounters + ' counter' + (totalCounters === 1 ? '' : 's') +
+                ' (' + totalCounterValue + ' events) · ' +
+                totalHistograms + ' histogram' + (totalHistograms === 1 ? '' : 's') +
+                ' · ' + elapsed + 's';
+
+            if (j.killSwitch) {
+                setMetricsStatus('PC2_TELEMETRY_DISABLED — recording is OFF', true);
+            } else {
+                setMetricsStatus(summary, false);
+            }
+
+            if (totalCounters === 0 && totalHistograms === 0) {
+                empty.hidden = false;
+                countersBlock.hidden = true;
+                histogramsBlock.hidden = true;
+                return;
+            }
+            empty.hidden = true;
+
+            // Counters table
+            if (totalCounters > 0) {
+                const tbody = $('metrics-counters-table').querySelector('tbody');
+                tbody.innerHTML = counters.map(function (c) {
+                    return '<tr>' +
+                        '<td class="name-cell">' + escapeHtml(c.name) + '</td>' +
+                        '<td>' + renderTagPills(c.tags) + '</td>' +
+                        '<td class="num">' + (c.value || 0) + '</td>' +
+                        '</tr>';
+                }).join('');
+                countersBlock.hidden = false;
+            } else {
+                countersBlock.hidden = true;
+            }
+
+            // Histograms table
+            if (totalHistograms > 0) {
+                const tbody = $('metrics-histograms-table').querySelector('tbody');
+                tbody.innerHTML = histograms.map(function (h) {
+                    return '<tr>' +
+                        '<td class="name-cell">' + escapeHtml(h.name) + '</td>' +
+                        '<td>' + renderTagPills(h.tags) + '</td>' +
+                        '<td class="num">' + (h.count || 0) + '</td>' +
+                        '<td class="num">' + Math.round(h.p50 || 0) + '</td>' +
+                        '<td class="num">' + Math.round(h.p95 || 0) + '</td>' +
+                        '<td class="num">' + Math.round(h.p99 || 0) + '</td>' +
+                        '</tr>';
+                }).join('');
+                histogramsBlock.hidden = false;
+            } else {
+                histogramsBlock.hidden = true;
+            }
+        } catch (e) {
+            setMetricsStatus('Error: ' + (e && e.message ? e.message : 'unknown'), false);
+        } finally {
+            refreshBtn.disabled = false;
+        }
+    }
+
+    const metricsBtn = $('metrics-refresh-btn');
+    if (metricsBtn) metricsBtn.addEventListener('click', refreshMetrics);
+})();
+</script>
+
+</body>
+</html>

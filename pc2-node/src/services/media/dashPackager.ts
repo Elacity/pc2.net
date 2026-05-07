@@ -62,7 +62,7 @@ interface PSSHProtectionData {
   protocolVersion: string;
   protectionType: string;
   variant: string;
-  ciphersuite: string;
+  ciphersuite?: string;
   data: {
     authority: string;
     chainId: number;
@@ -148,10 +148,9 @@ export function buildPSSHJson(outputDir: string, encryptResult: { ciphertext: st
   const contractKid = '0x' + cleanHash.slice(0, 32).padEnd(32, '0');
 
   const protectionData: PSSHProtectionData = {
-    protocolVersion: '2.0',
+    protocolVersion: '3.0',
     protectionType: 'cenc:lit-aes-gcm-v3',
     variant: 'eth.web3.clearkey',
-    ciphersuite: 'e8582013',
     data: {
       authority: DEFAULT_AUTHORITY,
       chainId: DEFAULT_CHAIN_ID,
@@ -208,10 +207,9 @@ function injectPSSHBox(
   encryptResult: { ciphertext: string; dataToEncryptHash: string },
 ): Buffer {
   const psshJson = JSON.stringify({
-    protocolVersion: '2.0',
+    protocolVersion: '3.0',
     protectionType: 'cenc:lit-aes-gcm-v3',
     variant: 'eth.web3.clearkey',
-    ciphersuite: 'e8582013',
     data: {
       authority: DEFAULT_AUTHORITY,
       chainId: DEFAULT_CHAIN_ID,
@@ -359,10 +357,9 @@ export async function packageDASH(
   await writeFile(join(dashDir, 'stream.mpd'), mpdXml, 'utf-8');
 
   const psshJson = JSON.stringify({
-    protocolVersion: '2.0',
+    protocolVersion: '3.0',
     protectionType: 'cenc:lit-aes-gcm-v3',
     variant: 'eth.web3.clearkey',
-    ciphersuite: 'e8582013',
     data: {
       authority: DEFAULT_AUTHORITY,
       chainId: DEFAULT_CHAIN_ID,

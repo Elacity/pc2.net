@@ -213,11 +213,16 @@ async function main() {
       elacityBootstrap = ipfsConfig.elacity_bootstrap;
     }
 
-    const envCarReplicationEnabled = process.env.IPFS_CAR_REPLICATION_ENABLED;
-    const envCarReplicationUrl = process.env.IPFS_CAR_REPLICATION_URL;
-    const envCarReplicationToken = process.env.IPFS_CAR_REPLICATION_TOKEN;
-    const envCarReplicationTimeoutMs = process.env.IPFS_CAR_REPLICATION_TIMEOUT_MS;
-    const envCarReplicationMaxBytes = process.env.IPFS_CAR_REPLICATION_MAX_BYTES;
+    const configuredCarReplication = ipfsConfig.car_replication || {};
+    const carReplicationUrl = configuredCarReplication.url || ipfsConfig.car_replication_url;
+    const carReplicationToken = configuredCarReplication.token || ipfsConfig.car_replication_token;
+    const carReplicationTimeoutMs = Number(
+      configuredCarReplication.timeout_ms ?? ipfsConfig.car_replication_timeout_ms ?? 120000
+    );
+    const carReplicationMaxBytes = Number(
+      configuredCarReplication.max_bytes ?? ipfsConfig.car_replication_max_bytes ?? (512 * 1024 * 1024)
+    );
+    const carReplicationEnabledFromConfig = configuredCarReplication.enabled ?? ipfsConfig.car_replication_enabled;
 
     ipfs = new IPFSStorage({
       repoPath: IPFS_REPO_PATH,
@@ -234,17 +239,20 @@ async function main() {
       relayBootstrap: ipfsConfig.relay_bootstrap,
       relayMode,
       relayMaxConnections,
-      carReplicationEnabled: envCarReplicationEnabled !== undefined
-        ? envCarReplicationEnabled === 'true'
-        : ipfsConfig.car_replication_enabled === true,
-      carReplicationUrl: envCarReplicationUrl || ipfsConfig.car_replication_url,
-      carReplicationToken: envCarReplicationToken || ipfsConfig.car_replication_token,
-      carReplicationTimeoutMs: envCarReplicationTimeoutMs
-        ? parseInt(envCarReplicationTimeoutMs, 10)
-        : ipfsConfig.car_replication_timeout_ms,
-      carReplicationMaxBytes: envCarReplicationMaxBytes
-        ? parseInt(envCarReplicationMaxBytes, 10)
-        : ipfsConfig.car_replication_max_bytes,
+      carReplication:
+        ipfsMode !== 'private'
+        && carReplicationEnabledFromConfig === true
+        && typeof carReplicationUrl === 'string'
+        && typeof carReplicationToken === 'string'
+        && carReplicationUrl.trim().length > 0
+        && carReplicationToken.trim().length > 0
+          ? {
+              url: carReplicationUrl,
+              token: carReplicationToken,
+              timeoutMs: Number.isFinite(carReplicationTimeoutMs) ? carReplicationTimeoutMs : 120000,
+              maxBytes: Number.isFinite(carReplicationMaxBytes) ? carReplicationMaxBytes : (512 * 1024 * 1024),
+            }
+          : undefined,
     });
     await ipfs.initialize();
 

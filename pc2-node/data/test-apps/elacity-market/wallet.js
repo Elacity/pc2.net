@@ -1581,12 +1581,7 @@ var Wallet = (function () {
     return ethers.zeroPadValue(ethers.toBeHex(result), 32);
   }
 
-  // Pin a JSON metadata blob to PC2's local IPFS first (always reachable
-  // through the user's gateway), then mirror to Elacity for global
-  // discovery. Returns "ipfs://<CID>". The Elacity gateway upload is
-  // best-effort — local pin alone is enough for the on-chain write to
-  // succeed; viewers without PC2 will pick it up from Elacity once that
-  // mirror lands. Same belt-and-braces pattern as channel images.
+  // Pin a JSON metadata blob via one canonical endpoint.
   function uploadJsonToIpfs(metadataObj, pc2FetchFn, filename) {
     var fetchFn = pc2FetchFn || fetch;
     var json = JSON.stringify(metadataObj);
@@ -1596,25 +1591,13 @@ var Wallet = (function () {
     var dataUrl = 'data:application/json;base64,' + base64;
     var fname = filename || 'plan-metadata.json';
 
-    var localCid = null;
     return fetchFn('/api/storage/ipfs/add', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: dataUrl, filename: fname, announce: true })
+      body: JSON.stringify({ content: dataUrl, filename: fname, announce: true, replicationScope: 'asset_metadata' })
     })
-      .then(function (r) { return r.ok ? r.json() : null; })
-      .catch(function () { return null; })
       .then(function (j) {
-        if (j && j.cid) localCid = j.cid;
-        return fetchFn('/api/storage/ipfs/upload-elacity', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content: dataUrl, filename: fname })
-        }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
-      })
-      .then(function (j) {
-        var elacityCid = j && (j.cid || (j.success && j.cid)) ? j.cid : null;
-        var finalCid = elacityCid || localCid;
+        var finalCid = j && j.cid ? j.cid : null;
         if (!finalCid) throw new Error('IPFS upload failed (both local and Elacity gateway)');
         return 'ipfs://' + finalCid;
       });

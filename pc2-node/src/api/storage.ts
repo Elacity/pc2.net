@@ -593,7 +593,7 @@ router.post('/ipfs/add', authenticate, async (req: AuthenticatedRequest, res: Re
       return res.status(503).json({ error: 'IPFS not available' });
     }
 
-    const { content, announce } = req.body;
+    const { content, announce, replicationScope } = req.body;
     if (!content || typeof content !== 'string') {
       return res.status(400).json({ error: 'Missing or invalid content (expected base64 string)' });
     }
@@ -632,6 +632,14 @@ router.post('/ipfs/add', authenticate, async (req: AuthenticatedRequest, res: Re
       });
     }
 
+    // Scoped CAR replication is opt-in per upload class.
+    const scope = (
+      replicationScope === 'asset_data'
+      || replicationScope === 'asset_metadata'
+      || replicationScope === 'channel_metadata'
+    ) ? replicationScope : 'none';
+    forwardCIDToElacityCARImport(cid, scope);
+
     res.json({ success: true, cid, size: data.length });
   } catch (error: any) {
     logger.error('[Storage API]: Error adding content to IPFS:', error);
@@ -655,7 +663,7 @@ router.post('/ipfs/add-directory', authenticate, async (req: AuthenticatedReques
       return res.status(503).json({ error: 'IPFS not available' });
     }
 
-    const { files, announce } = req.body;
+    const { files, announce, replicationScope } = req.body;
     if (!files || typeof files !== 'object' || Array.isArray(files)) {
       return res.status(400).json({ error: 'Missing or invalid files (expected { "filename": "base64content", ... })' });
     }
@@ -708,6 +716,14 @@ router.post('/ipfs/add-directory', authenticate, async (req: AuthenticatedReques
       });
     }
 
+    // Scoped CAR replication is opt-in per upload class.
+    const scope = (
+      replicationScope === 'asset_data'
+      || replicationScope === 'asset_metadata'
+      || replicationScope === 'channel_metadata'
+    ) ? replicationScope : 'none';
+    forwardCIDToElacityCARImport(cid, scope);
+
     res.json({ success: true, cid, fileCount: filenames.length });
   } catch (error: any) {
     logger.error('[Storage API]: Error creating IPFS directory:', error);
@@ -755,7 +771,7 @@ interface MirrorProbeResult {
 const mirrorProbeState: Map<string, MirrorProbeResult> = new Map();
 
 /**
- * Elacity Kubo pin forward (ELACITY-KUBO-PIN-FORWARD task).
+ * Elacity CAR replication forward.
  *
  * After every successful local pin, fire one authenticated request to
  * `ipfs.ela.city`'s Kubo API asking it to pin the same CID. Kubo then pulls
@@ -764,12 +780,16 @@ const mirrorProbeState: Map<string, MirrorProbeResult> = new Map();
  *
  * Requires the Elacity ops team to have deployed the nginx patch in
  * `docs/handover/ELACITY_IPFS_PIN_ENDPOINT_NGINX_PATCH.md`. Until both
- * `ELACITY_PIN_FORWARD_URL` and `ELACITY_PIN_FORWARD_TOKEN` are set, this is
- * a no-op and no network traffic is generated.
+ * `ipfs.car_replication` is configured and network mode is non-private, this
+ * is a no-op and no network traffic is generated.
  */
+type CarReplicationScope = 'none' | 'channel_metadata' | 'asset_metadata' | 'asset_data';
+
 interface ElacityPinForwardConfig {
   url: string;
   token: string;
+  timeoutMs: number;
+  maxBytes: number;
 }
 
 interface ElacityForwardProbeResult {
@@ -783,15 +803,19 @@ interface ElacityForwardProbeResult {
 let elacityForwardProbeState: ElacityForwardProbeResult | null = null;
 
 function getElacityPinForwardConfig(): ElacityPinForwardConfig | null {
-  const rawUrl = process.env.ELACITY_PIN_FORWARD_URL;
-  const token = process.env.ELACITY_PIN_FORWARD_TOKEN;
-  if (!rawUrl || !token) return null;
-  const url = rawUrl.trim().replace(/\/+$/, '');
-  if (!/^https?:\/\//.test(url)) return null;
-  return { url, token: token.trim() };
+  const ipfs = (global as any).ipfsStorage as import('../storage/ipfs.js').IPFSStorage | undefined;
+  const cfg = ipfs?.getCarReplicationConfig() || null;
+  if (!cfg) return null;
+  if (!/^https?:\/\//.test(cfg.url)) return null;
+  return {
+    url: cfg.url,
+    token: cfg.token,
+    timeoutMs: cfg.timeoutMs,
+    maxBytes: cfg.maxBytes,
+  };
 }
 
-// Retry queue for Elacity Kubo pin forwards. In-memory only (pc2-node restarts
+// Retry queue for Elacity CAR replication forwards. In-memory only (pc2-node restarts
 // are rare; a hypothetical restart during pending retries is acceptable because
 // the next /ipfs/pin request from the client will re-trigger a forward). Back
 // off exponentially so a blip on ipfs.ela.city doesn't DOS it on recovery.
@@ -803,6 +827,7 @@ const PIN_RETRY_TICK_MS = 30_000;
 
 interface ElacityPinRetryState {
   cid: string;
+  scope: CarReplicationScope;
   attempts: number;
   firstQueuedAt: number;
   nextAttemptAt: number;
@@ -817,15 +842,20 @@ let elacityRetrySchedulerStarted = false;
  * exponential backoff and a hard cap on both attempts and total age so
  * a bad cid cannot sit in the queue forever.
  */
-function queueElacityPinRetry(cid: string, error: string): void {
-  const existing = elacityPinRetryQueue.get(cid);
+function retryKeyFor(cid: string, scope: CarReplicationScope): string {
+  return `${scope}:${cid}`;
+}
+
+function queueElacityPinRetry(cid: string, scope: CarReplicationScope, error: string): void {
+  const key = retryKeyFor(cid, scope);
+  const existing = elacityPinRetryQueue.get(key);
   const attempts = (existing?.attempts ?? 0) + 1;
 
   if (attempts > PIN_RETRY_MAX_ATTEMPTS) {
     logger.error(
       `[Storage API] Elacity pin forward giving up after ${PIN_RETRY_MAX_ATTEMPTS} attempts: cid=${cid} lastError=${error}`,
     );
-    elacityPinRetryQueue.delete(cid);
+    elacityPinRetryQueue.delete(key);
     return;
   }
 
@@ -836,7 +866,7 @@ function queueElacityPinRetry(cid: string, error: string): void {
     logger.error(
       `[Storage API] Elacity pin forward aged out (>${Math.round(PIN_RETRY_MAX_AGE_MS / 60000)}min): cid=${cid} lastError=${error}`,
     );
-    elacityPinRetryQueue.delete(cid);
+    elacityPinRetryQueue.delete(key);
     return;
   }
 
@@ -848,8 +878,9 @@ function queueElacityPinRetry(cid: string, error: string): void {
   }
 
   const backoff = PIN_RETRY_BACKOFF_MS[Math.min(attempts - 1, PIN_RETRY_BACKOFF_MS.length - 1)];
-  elacityPinRetryQueue.set(cid, {
+  elacityPinRetryQueue.set(key, {
     cid,
+    scope,
     attempts,
     firstQueuedAt,
     nextAttemptAt: now + backoff,
@@ -869,9 +900,9 @@ function ensureElacityPinRetrySchedulerStarted(): void {
     const now = Date.now();
     for (const [, state] of elacityPinRetryQueue) {
       if (state.nextAttemptAt <= now) {
-        // forwardPinToElacityKubo re-enters queueElacityPinRetry on failure
+        // forwardCIDToElacityCARImport re-enters queueElacityPinRetry on failure
         // or deletes the entry on success.
-        forwardPinToElacityKubo(state.cid);
+        forwardCIDToElacityCARImport(state.cid, state.scope);
       }
     }
   };
@@ -879,22 +910,40 @@ function ensureElacityPinRetrySchedulerStarted(): void {
   const timer = setInterval(tick, PIN_RETRY_TICK_MS);
   timer.unref?.();
   logger.info(
-    `[Storage API] Elacity pin forward retry scheduler started (interval=${PIN_RETRY_TICK_MS}ms, maxAttempts=${PIN_RETRY_MAX_ATTEMPTS})`,
+    `[Storage API] Elacity CAR replication retry scheduler started (interval=${PIN_RETRY_TICK_MS}ms, maxAttempts=${PIN_RETRY_MAX_ATTEMPTS})`,
   );
 }
 
-function forwardPinToElacityKubo(cid: string): void {
-  const config = getElacityPinForwardConfig();
-  if (!config) return;
-
-  const target = `${config.url}/api/v0/pin/add?arg=${encodeURIComponent(cid)}&recursive=true`;
-  const start = Date.now();
-
-  void fetch(target, {
+async function uploadCARToDagImport(
+  cid: string,
+  config: ElacityPinForwardConfig,
+): Promise<globalThis.Response> {
+  const ipfs = (global as any).ipfsStorage as import('../storage/ipfs.js').IPFSStorage | undefined;
+  if (!ipfs) {
+    throw new Error('IPFS storage not available for CAR export');
+  }
+  const carBytes = await ipfs.exportCIDAsCAR(cid, config.maxBytes);
+  const form = new FormData();
+  const carBuffer = carBytes.buffer.slice(
+    carBytes.byteOffset,
+    carBytes.byteOffset + carBytes.byteLength,
+  ) as ArrayBuffer;
+  form.append('file', new Blob([carBuffer], { type: 'application/vnd.ipld.car' }), `${cid}.car`);
+  const target = `${config.url}/api/v0/dag/import`;
+  return fetch(target, {
     method: 'POST',
     headers: { Authorization: `Bearer ${config.token}` },
-    signal: AbortSignal.timeout(30000),
-  }).then(
+    body: form,
+    signal: AbortSignal.timeout(config.timeoutMs),
+  });
+}
+
+function forwardCIDToElacityCARImport(cid: string, scope: CarReplicationScope): void {
+  if (scope === 'none') return;
+  const config = getElacityPinForwardConfig();
+  if (!config) return;
+  const start = Date.now();
+  void uploadCARToDagImport(cid, config).then(
     (response) => {
       const durationMs = Date.now() - start;
       elacityForwardProbeState = {
@@ -905,20 +954,20 @@ function forwardPinToElacityKubo(cid: string): void {
         lastAt: Date.now(),
       };
       if (response.ok) {
-        elacityPinRetryQueue.delete(cid);
-        logger.info(`[Storage API] Elacity Kubo pin forward ok: cid=${cid} (${durationMs}ms)`);
+        elacityPinRetryQueue.delete(retryKeyFor(cid, scope));
+        logger.info(`[Storage API] Elacity CAR replication ok: cid=${cid} scope=${scope} (${durationMs}ms)`);
         return;
       }
       // 4xx responses are the caller's fault (auth, bad CID) — no point retrying.
       // 5xx and gateway timeouts are transient — queue for retry.
       if (response.status >= 500) {
         logger.warn(
-          `[Storage API] Elacity Kubo pin forward 5xx: cid=${cid} status=${response.status} (${durationMs}ms) — scheduling retry`,
+          `[Storage API] Elacity CAR replication 5xx: cid=${cid} scope=${scope} status=${response.status} (${durationMs}ms) — scheduling retry`,
         );
-        queueElacityPinRetry(cid, `status=${response.status}`);
+        queueElacityPinRetry(cid, scope, `status=${response.status}`);
       } else {
         logger.warn(
-          `[Storage API] Elacity Kubo pin forward non-retryable: cid=${cid} status=${response.status} (${durationMs}ms)`,
+          `[Storage API] Elacity CAR replication non-retryable: cid=${cid} scope=${scope} status=${response.status} (${durationMs}ms)`,
         );
       }
     },
@@ -935,8 +984,8 @@ function forwardPinToElacityKubo(cid: string): void {
       };
       // Network-level errors (timeout, DNS, refused connection) are always
       // transient; always retry.
-      logger.debug(`[Storage API] Elacity Kubo pin forward failed: cid=${cid} (${durationMs}ms): ${message} — scheduling retry`);
-      queueElacityPinRetry(cid, message);
+      logger.debug(`[Storage API] Elacity CAR replication failed: cid=${cid} scope=${scope} (${durationMs}ms): ${message} — scheduling retry`);
+      queueElacityPinRetry(cid, scope, message);
     },
   );
 }
@@ -947,21 +996,11 @@ function forwardPinToElacityKubo(cid: string): void {
 (() => {
   const config = getElacityPinForwardConfig();
   if (config) {
-    logger.info(`[Storage API] Elacity Kubo pin forward: enabled -> ${config.url}`);
+    logger.info(`[Storage API] Elacity CAR replication: enabled -> ${config.url}/api/v0/dag/import`);
     ensureElacityPinRetrySchedulerStarted();
     return;
   }
-  const hasUrl = !!process.env.ELACITY_PIN_FORWARD_URL;
-  const hasToken = !!process.env.ELACITY_PIN_FORWARD_TOKEN;
-  if (hasUrl && hasToken) {
-    logger.warn(
-      '[Storage API] Elacity Kubo pin forward: both env vars set but ELACITY_PIN_FORWARD_URL is not http(s):// — disabled',
-    );
-  } else if (hasUrl || hasToken) {
-    logger.warn(
-      '[Storage API] Elacity Kubo pin forward: partially configured (both ELACITY_PIN_FORWARD_URL and ELACITY_PIN_FORWARD_TOKEN required) — disabled',
-    );
-  }
+  logger.info('[Storage API] Elacity CAR replication: disabled (missing ipfs.car_replication config)');
 })();
 
 function getConfiguredPinMirrors(): string[] {
@@ -1034,7 +1073,7 @@ router.get('/ipfs/pin-mirrors', authenticate, requireOwner, (_req: Authenticated
 
 /**
  * GET /api/storage/ipfs/elacity-pin-forward
- * Diagnostic: report whether the Elacity Kubo pin forward is configured and
+ * Diagnostic: report whether Elacity CAR replication is configured and
  * the last probe result. Owner-guarded — the token is never returned, only
  * a boolean flag confirming it is present.
  */
@@ -1155,7 +1194,6 @@ router.post('/ipfs/pin', authenticate, async (req: AuthenticatedRequest, res: Re
       }
 
       fanOutSupernodePinMirrors(cidClean);
-      forwardPinToElacityKubo(cidClean);
       forwardPinToCluster(cidClean);
 
       return res.json({
@@ -1198,7 +1236,6 @@ router.post('/ipfs/pin', authenticate, async (req: AuthenticatedRequest, res: Re
       }
 
       fanOutSupernodePinMirrors(cidClean);
-      forwardPinToElacityKubo(cidClean);
       forwardPinToCluster(cidClean);
 
       res.json({
@@ -3751,8 +3788,8 @@ router.post('/thumbnail', authenticate, async (req: AuthenticatedRequest, res: R
 // 60 s with no upstream response, regardless of payload size (a 100-byte
 // probe and a 500 KB file both block for the full minute). We keep the
 // fire-and-forget call as a best-effort byte path, but we never block
-// the user response on it — the local Helia store + DHT announce +
-// forwardPinToElacityKubo are the authoritative durability path.
+// the user response on it — local Helia store + DHT announce +
+// scoped CAR DAG import replication are the authoritative durability path.
 const ELACITY_UPLOAD_URL = 'https://base.ela.city/api/2.0/files/upload';
 const ELACITY_REPLICATION_TIMEOUT_MS = 8_000;
 
@@ -3790,6 +3827,7 @@ async function replicateBytesToElacityFireAndForget(
 
 router.post('/ipfs/upload-elacity', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   try {
+    logger.warn('[Storage API] Legacy endpoint /api/storage/ipfs/upload-elacity invoked; prefer /api/storage/ipfs/add with replicationScope');
     const { content, cid, filename } = req.body;
 
     let bytes: Buffer;
@@ -3851,7 +3889,7 @@ router.post('/ipfs/upload-elacity', authenticate, async (req: AuthenticatedReque
 
     // 3. Respond IMMEDIATELY with the local CID. Elacity-side reachability
     //    happens via DHT discovery (auto-fired by storeFile above) and the
-    //    fire-and-forget pin-forward + byte-replication kicked off below.
+    //    fire-and-forget CAR replication + byte-replication kicked off below.
     res.json({
       success: true,
       cid: finalCid,
@@ -3859,9 +3897,8 @@ router.post('/ipfs/upload-elacity', authenticate, async (req: AuthenticatedReque
       replication: 'pending',
     });
 
-    // 4. Ask Elacity's Kubo to durably pin (no-op when env vars unset;
-    //    default off until ops gives green light).
-    forwardPinToElacityKubo(finalCid);
+    // 4. Scoped CAR replication for asset payloads only.
+    forwardCIDToElacityCARImport(finalCid, 'asset_data');
 
     // 4b. Mirror to the IPFS Cluster pinning tier when configured (no-op
     //     when SUPERNODE_CLUSTER_PIN_URL/TOKEN unset). One call → CRDT
@@ -3892,7 +3929,8 @@ router.post('/ipfs/upload-elacity', authenticate, async (req: AuthenticatedReque
  */
 router.post('/ipfs/upload-elacity-directory', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { files } = req.body;
+    logger.warn('[Storage API] Legacy endpoint /api/storage/ipfs/upload-elacity-directory invoked; prefer /api/storage/ipfs/add-directory with replicationScope');
+    const { files, replicationScope } = req.body;
 
     if (!files || typeof files !== 'object') {
       res.status(400).json({ error: 'Missing files object' });
@@ -3941,8 +3979,11 @@ router.post('/ipfs/upload-elacity-directory', authenticate, async (req: Authenti
     //    Elacity-side replication paths fire-and-forget.
     res.json({ success: true, cid: cidV0String, replication: 'pending' });
 
-    // 4. Ask Elacity's Kubo to durably pin (no-op when env vars unset).
-    forwardPinToElacityKubo(cidV0String);
+    // 4. Scoped CAR replication for metadata only. Caller can specify
+    //    `channel_metadata`; defaults to `asset_metadata`.
+    const scope: CarReplicationScope =
+      replicationScope === 'channel_metadata' ? 'channel_metadata' : 'asset_metadata';
+    forwardCIDToElacityCARImport(cidV0String, scope);
 
     // 4b. Mirror to the IPFS Cluster pinning tier when configured (no-op
     //     when SUPERNODE_CLUSTER_PIN_URL/TOKEN unset).

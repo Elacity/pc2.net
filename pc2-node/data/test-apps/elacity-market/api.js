@@ -1719,12 +1719,7 @@ var ElacityAPI = (function () {
 
   // ── Channel Management ─────────────────────────────
 
-  // v1.2.7.7: Belt-and-braces upload — pin locally first (always reachable
-  // through the user's own gateway), then mirror to the Elacity public
-  // gateway for global discovery. Without the Elacity mirror, channel art
-  // uploaded here is only reachable while the publisher's PC2 is online and
-  // their CID has propagated through DHT — every other viewer sees broken
-  // images. Matches the asset-thumbnail flow in elacity-creator.
+  // Canonical path: one upload call + server-side scoped CAR replication.
   function uploadToIpfs(file, pc2FetchFn) {
     return new Promise(function (resolve, reject) {
       var reader = new FileReader();
@@ -1732,42 +1727,19 @@ var ElacityAPI = (function () {
         var base64 = reader.result.split(',')[1];
         var fetchFn = pc2FetchFn || fetch;
 
-        var localCid = null;
-        try {
-          var localRes = await fetchFn('/api/storage/ipfs/add', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ content: base64, announce: true })
-          });
-          if (localRes.ok) {
-            var localJson = await localRes.json();
-            if (localJson.success) localCid = localJson.cid;
-          }
-        } catch (e) {
-          console.warn('[Elacity] Local IPFS pin failed:', e && e.message);
+        var uploadRes = await fetchFn('/api/storage/ipfs/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: base64, announce: true, replicationScope: 'asset_data' })
+        });
+        if (!uploadRes.ok) {
+          reject(new Error('IPFS upload failed: HTTP ' + uploadRes.status));
+          return;
         }
-
-        var elacityCid = null;
-        try {
-          var elRes = await fetchFn('/api/storage/ipfs/upload-elacity', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ content: base64, filename: file.name || 'channel-image' })
-          });
-          if (elRes.ok) {
-            var elJson = await elRes.json();
-            if (elJson.success || elJson.cid) elacityCid = elJson.cid;
-          }
-        } catch (e) {
-          console.warn('[Elacity] Elacity gateway upload failed:', e && e.message);
-        }
-
-        // Prefer Elacity (faster global discovery for other viewers); fall
-        // back to local when the gateway is unreachable. If both failed,
-        // surface that to the UI.
-        var finalCid = elacityCid || localCid;
+        var uploadJson = await uploadRes.json();
+        var finalCid = uploadJson && uploadJson.cid ? uploadJson.cid : null;
         if (!finalCid) {
-          reject(new Error('IPFS upload failed (both local and Elacity gateway)'));
+          reject(new Error('IPFS upload failed: missing cid'));
           return;
         }
         resolve('ipfs://' + finalCid);

@@ -1841,16 +1841,10 @@
       };
     });
 
-    var files = {};
-    for (var fname in channelMeta) {
-      var jsonStr = JSON.stringify(channelMeta[fname], null, 2);
-      files[fname] = btoa(unescape(encodeURIComponent(jsonStr)));
-    }
-
     var metaResp = await pc2Fetch('/api/storage/ipfs/add-directory', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ files: files, announce: true }),
+      body: JSON.stringify({ files: channelMeta, announce: true, replicationScope: 'channel_metadata' }),
     });
     if (!metaResp.ok) {
       var errBody = await metaResp.json().catch(function () { return {}; });
@@ -2690,41 +2684,24 @@
   }
 
   async function uploadDataUrlToIpfs(dataUrl, filename) {
-    // Belt-and-braces: pin locally first (always reachable through the user's
-    // own gateway), then mirror to Elacity for global discovery. Same pattern
-    // as the asset thumbnail pin path. Returns ipfs://<cid> on success.
-    var localCid = null;
-    try {
-      var localResp = await pc2Fetch('/api/storage/ipfs/add', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: dataUrl, filename: filename }),
-      });
-      if (localResp.ok) {
-        var localData = await localResp.json();
-        localCid = localData.cid;
-      }
-    } catch (e) {
-      console.warn('[Creator] Local channel-image pin failed:', e.message);
+    // Canonical path: one upload call + server-side scoped CAR replication.
+    var resp = await pc2Fetch('/api/storage/ipfs/add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content: dataUrl,
+        filename: filename,
+        announce: true,
+        replicationScope: 'asset_data',
+      }),
+    });
+    if (!resp.ok) {
+      var err = await resp.json().catch(function () { return {}; });
+      throw new Error('IPFS upload failed: ' + (err.error || resp.status));
     }
-
-    var elacityCid = null;
-    try {
-      var elResp = await pc2Fetch('/api/storage/ipfs/upload-elacity', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: dataUrl, filename: filename }),
-      });
-      if (elResp.ok) {
-        var elData = await elResp.json();
-        elacityCid = elData.cid;
-      }
-    } catch (e) {
-      console.warn('[Creator] Elacity channel-image upload failed:', e.message);
-    }
-
-    var cid = elacityCid || localCid;
-    if (!cid) throw new Error('IPFS upload failed (both local and Elacity)');
+    var j = await resp.json();
+    var cid = j && j.cid ? j.cid : null;
+    if (!cid) throw new Error('IPFS upload failed: missing cid');
     return 'ipfs://' + cid;
   }
 
@@ -3084,8 +3061,7 @@
     return ethers.zeroPadValue(ethers.toBeHex(result), 32);
   }
 
-  // Pin a JSON metadata blob (PC2 local + Elacity gateway). Returns
-  // "ipfs://<CID>". Belt-and-braces same as channel image upload.
+  // Pin a JSON metadata blob via one canonical endpoint.
   async function uploadJsonToIpfs(metadataObj, filename) {
     var json = JSON.stringify(metadataObj);
     var base64 = (typeof btoa === 'function')
@@ -3094,38 +3070,23 @@
     var dataUrl = 'data:application/json;base64,' + base64;
     var fname = filename || 'plan-metadata.json';
 
-    var localCid = null;
-    try {
-      var localResp = await pc2Fetch('/api/storage/ipfs/add', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: dataUrl, filename: fname, announce: true })
-      });
-      if (localResp.ok) {
-        var lj = await localResp.json();
-        if (lj && lj.cid) localCid = lj.cid;
-      }
-    } catch (e) {
-      console.warn('[Creator] Local plan-metadata pin failed:', e && e.message);
+    var resp = await pc2Fetch('/api/storage/ipfs/add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content: dataUrl,
+        filename: fname,
+        announce: true,
+        replicationScope: 'asset_metadata',
+      })
+    });
+    if (!resp.ok) {
+      var err = await resp.json().catch(function () { return {}; });
+      throw new Error('IPFS upload failed: ' + (err.error || resp.status));
     }
-
-    var elacityCid = null;
-    try {
-      var elResp = await pc2Fetch('/api/storage/ipfs/upload-elacity', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: dataUrl, filename: fname })
-      });
-      if (elResp.ok) {
-        var ej = await elResp.json();
-        if (ej && ej.cid) elacityCid = ej.cid;
-      }
-    } catch (e) {
-      console.warn('[Creator] Elacity plan-metadata mirror failed:', e && e.message);
-    }
-
-    var cid = elacityCid || localCid;
-    if (!cid) throw new Error('IPFS upload failed (both local and Elacity gateway)');
+    var rj = await resp.json();
+    var cid = rj && rj.cid ? rj.cid : null;
+    if (!cid) throw new Error('IPFS upload failed: missing cid');
     return 'ipfs://' + cid;
   }
 
@@ -3273,12 +3234,12 @@
     switch ((duration.unit || '').toLowerCase()) {
       case 'seconds': return Math.floor(v);
       case 'minutes': return Math.floor(v * 60);
-      case 'hours':   return Math.floor(v * 3600);
-      case 'days':    return Math.floor(v * 86400);
-      case 'weeks':   return Math.floor(v * 604800);
-      case 'months':  return Math.floor(v * 2592000);
-      case 'years':   return Math.floor(v * 31104000);
-      default:        return Math.floor(v * 86400);
+      case 'hours': return Math.floor(v * 3600);
+      case 'days': return Math.floor(v * 86400);
+      case 'weeks': return Math.floor(v * 604800);
+      case 'months': return Math.floor(v * 2592000);
+      case 'years': return Math.floor(v * 31104000);
+      default: return Math.floor(v * 86400);
     }
   }
 
@@ -4189,7 +4150,7 @@
         var localAssetResp = await pc2Fetch('/api/storage/ipfs/add', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content: assetBase64, announce: true }),
+          body: JSON.stringify({ content: assetBase64, announce: true, replicationScope: 'asset_data' }),
         });
         if (!localAssetResp.ok) {
           var errBody = await localAssetResp.json().catch(function () { return {}; });
@@ -4199,24 +4160,8 @@
         var localAssetCid = localAssetData.cid;
         console.log('[Creator] Local asset CID:', localAssetCid, isFreeContent ? '(cleartext)' : '(encrypted)');
 
-        setProgStep('prog-upload-asset', 'Pinning to Elacity IPFS...', 'active');
+        setProgStep('prog-upload-asset', 'Pinning to IPFS...', 'active');
         var assetCid = localAssetCid;
-        try {
-          var elacityAssetResp = await pc2Fetch('/api/storage/ipfs/upload-elacity', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ content: assetBase64, filename: isFreeContent ? 'free-asset' : 'encrypted-asset' }),
-          });
-          if (elacityAssetResp.ok) {
-            var elacityAssetData = await elacityAssetResp.json();
-            assetCid = elacityAssetData.cid;
-            console.log('[Creator] Elacity asset CID:', assetCid);
-          } else {
-            console.warn('[Creator] Elacity IPFS upload failed, using local CID');
-          }
-        } catch (e) {
-          console.warn('[Creator] Elacity IPFS upload error:', e.message);
-        }
         setProgStep('prog-upload-asset', 'CID: ' + assetCid.substring(0, 12) + '...', 'done');
       } // end else (non-media IPFS upload)
 
@@ -4445,54 +4390,24 @@
         }
 
         if (thumbBase64) {
-          // Always pin the thumbnail locally first via Helia. This guarantees
-          // the bytes are reachable through *some* IPFS gateway even when
-          // Elacity's pinning service is degraded (502 / extreme slowness).
-          // Mirrors the belt-and-braces pattern used by the asset upload
-          // and metadata directory upload paths above.
-          var localThumbCid = null;
-          try {
-            var localThumbResp = await pc2Fetch('/api/storage/ipfs/add', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ content: thumbBase64, filename: 'thumbnail.jpg' }),
-            });
-            if (localThumbResp.ok) {
-              var localThumbData = await localThumbResp.json();
-              localThumbCid = localThumbData.cid;
-            } else {
-              console.warn('[Creator] Local thumbnail pin returned', localThumbResp.status);
+          // Canonical path: one upload call + server-side scoped CAR replication.
+          var thumbResp = await pc2Fetch('/api/storage/ipfs/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              content: thumbBase64,
+              filename: 'thumbnail.jpg',
+              replicationScope: 'asset_data',
+            }),
+          });
+          if (thumbResp.ok) {
+            var thumbData = await thumbResp.json();
+            if (thumbData && thumbData.cid) {
+              imageUri = 'ipfs://' + thumbData.cid;
+              console.log('[Creator] Thumbnail pinned:', imageUri);
             }
-          } catch (localThumbErr) {
-            console.warn('[Creator] Local thumbnail pin failed:', localThumbErr.message);
-          }
-
-          var elacityThumbCid = null;
-          try {
-            var thumbResp = await pc2Fetch('/api/storage/ipfs/upload-elacity', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ content: thumbBase64, filename: 'thumbnail.jpg' }),
-            });
-            if (thumbResp.ok) {
-              var thumbData = await thumbResp.json();
-              elacityThumbCid = thumbData.cid;
-            } else {
-              console.warn('[Creator] Elacity thumbnail upload returned', thumbResp.status);
-            }
-          } catch (elacityThumbErr) {
-            console.warn('[Creator] Elacity thumbnail upload failed:', elacityThumbErr.message);
-          }
-
-          // Prefer Elacity (faster global discovery), fall back to local.
-          // Either way the metadata.json gets a non-empty `imageUri`, so the
-          // marketplace + player + file manager all show the cover art.
-          if (elacityThumbCid) {
-            imageUri = 'ipfs://' + elacityThumbCid;
-            console.log('[Creator] Thumbnail pinned to Elacity:', imageUri);
-          } else if (localThumbCid) {
-            imageUri = 'ipfs://' + localThumbCid;
-            console.log('[Creator] Thumbnail pinned locally only (Elacity unreachable):', imageUri);
+          } else {
+            console.warn('[Creator] Thumbnail pin returned', thumbResp.status);
           }
         }
       } catch (thumbErr) {
@@ -4670,10 +4585,10 @@
 
       var metaCid = null;
       try {
-        var elacityMetaResp = await pc2Fetch('/api/storage/ipfs/upload-elacity-directory', {
+        var elacityMetaResp = await pc2Fetch('/api/storage/ipfs/add-directory', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ files: metaDirFiles, filename: 'metadataFolder' }),
+          body: JSON.stringify({ files: metaDirFiles, filename: 'metadataFolder', replicationScope: 'asset_metadata' }),
         });
         if (elacityMetaResp.ok) {
           var elacityMetaData = await elacityMetaResp.json();

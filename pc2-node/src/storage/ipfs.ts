@@ -136,11 +136,12 @@ export interface IPFSOptions {
   relayMode?: boolean;              // Enable relay server mode (for nodes with public IP)
   relayMaxConnections?: number;     // Max relay connections (default: 100)
   bootstrapHealthcheckIntervalMs?: number; // Periodic bootstrap re-dial when disconnected (default: 30s)
-  carReplicationUrl?: string;       // Optional private CAR ingest endpoint
-  carReplicationToken?: string;     // Optional auth token for CAR ingest endpoint
-  carReplicationEnabled?: boolean;  // Enable fire-and-forget CAR replication (default: false)
-  carReplicationTimeoutMs?: number; // CAR upload timeout (default: 120s)
-  carReplicationMaxBytes?: number;  // Max CAR bytes to buffer/upload (default: 512MB)
+  carReplication?: {
+    url: string;                    // CAR ingest endpoint (e.g. <gateway>/api/v0/dag/import)
+    token: string;                  // Auth token for CAR ingest endpoint
+    timeoutMs: number;              // CAR upload timeout
+    maxBytes: number;               // Max CAR bytes to buffer/export
+  };
 }
 
 export class IPFSStorage {
@@ -164,12 +165,14 @@ export class IPFSStorage {
   private configuredBootstrapPeers: string[] = [];
   private configuredElacityPeers: string[] = [];
   private configuredElacityPeerIds: Set<string> = new Set();
-  private inFlightCarReplications: Set<string> = new Set();
-
   constructor(options: IPFSOptions) {
     this.repoPath = options.repoPath;
     this.networkMode = options.mode || 'private';
-    this.options = options;
+    this.options = {
+      ...options,
+      // Explicitly disable CAR replication in private mode.
+      carReplication: (options.mode || 'private') === 'private' ? undefined : options.carReplication,
+    };
     this.relayEnabled = options.relayMode ?? false;
   }
 
@@ -651,6 +654,7 @@ export class IPFSStorage {
     pin?: boolean;
     timeoutMs?: number;
     announce?: boolean; // Announce CID to DHT after storing
+    replicationScope?: 'none' | 'channel_metadata' | 'asset_metadata' | 'asset_data';
   }): Promise<string> {
     const fs = this.getUnixFS();
     const timeout = options?.timeoutMs ?? 15 * 60 * 1000; // 15 min default
@@ -675,7 +679,6 @@ export class IPFSStorage {
 
       void this.maybeAnnounceStoredCID(cid.toString(), options?.announce);
       void this.maybeWarmPublicGateway(cid.toString());
-      void this.maybeReplicateStoredCIDAsCAR(cid.toString());
 
       return cid.toString();
     } catch (error) {
@@ -694,7 +697,12 @@ export class IPFSStorage {
    */
   async storeDirectory(
     files: Record<string, Buffer | Uint8Array | string>,
-    options?: { pin?: boolean; timeoutMs?: number; announce?: boolean }
+    options?: {
+      pin?: boolean;
+      timeoutMs?: number;
+      announce?: boolean;
+      replicationScope?: 'none' | 'channel_metadata' | 'asset_metadata' | 'asset_data';
+    }
   ): Promise<string> {
     const fs = this.getUnixFS();
 
@@ -729,7 +737,6 @@ export class IPFSStorage {
       void this.maybeAnnounceStoredCIDs(Array.from(importedCids), options?.announce);
       void this.maybeWarmPublicGateway(dirCid);
       void this.maybeWarmPublicGatewayDirectoryPaths(dirCid, Object.keys(files));
-      void this.maybeReplicateStoredCIDAsCAR(dirCid);
 
       log.info(`[IPFS] Stored directory with ${Object.keys(files).length} files: ${dirCid}`);
       return dirCid;
@@ -747,6 +754,7 @@ export class IPFSStorage {
     pin?: boolean;
     timeoutMs?: number;
     announce?: boolean; // Announce CID to DHT after storing
+    replicationScope?: 'none' | 'channel_metadata' | 'asset_metadata' | 'asset_data';
   }): Promise<string> {
     const fs = this.getUnixFS();
     const timeout = options?.timeoutMs ?? 30 * 60 * 1000; // 30 min default for large files
@@ -766,7 +774,6 @@ export class IPFSStorage {
 
       void this.maybeAnnounceStoredCID(cid.toString(), options?.announce);
       void this.maybeWarmPublicGateway(cid.toString());
-      void this.maybeReplicateStoredCIDAsCAR(cid.toString());
 
       return cid.toString();
     } catch (error) {
@@ -856,21 +863,7 @@ export class IPFSStorage {
     }
   }
 
-  private async maybeReplicateStoredCIDAsCAR(cid: string): Promise<void> {
-    const enabled = this.options.carReplicationEnabled === true;
-    const endpoint = (this.options.carReplicationUrl || '').trim();
-    if (!enabled || endpoint === '') return;
-
-    if (this.inFlightCarReplications.has(cid)) {
-      log.debug(`[IPFS] CAR replication already in-flight for ${cid}, skipping duplicate trigger`);
-      return;
-    }
-    this.inFlightCarReplications.add(cid);
-
-    const timeoutMs = this.options.carReplicationTimeoutMs ?? 120_000;
-    const maxBytes = this.options.carReplicationMaxBytes ?? 512 * 1024 * 1024; // 512MB
-    const token = (this.options.carReplicationToken || '').trim();
-
+  async exportCIDAsCAR(cid: string, maxBytes: number): Promise<Uint8Array> {
     try {
       const helia = this.getHelia();
       const { CID } = await import('multiformats/cid');
@@ -883,8 +876,7 @@ export class IPFSStorage {
       for await (const chunk of c.export(rootCid)) {
         total += chunk.byteLength;
         if (total > maxBytes) {
-          log.warn(`[IPFS] CAR replication skipped for ${cid}: export exceeded ${(maxBytes / (1024 * 1024)).toFixed(0)}MB cap`);
-          return;
+          throw new Error(`CAR export exceeded ${(maxBytes / (1024 * 1024)).toFixed(0)}MB cap`);
         }
         chunks.push(chunk);
       }
@@ -896,35 +888,26 @@ export class IPFSStorage {
         offset += chunk.byteLength;
       }
 
-      const headers: Record<string, string> = {
-        'X-CAR-Root-CID': cid,
-        'Content-Type': 'application/vnd.ipld.car',
-      };
-      if (token.length > 0) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-
-      const started = Date.now();
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers,
-        body: carBytes,
-        signal: AbortSignal.timeout(timeoutMs),
-      });
-      const elapsed = Date.now() - started;
-
-      if (!response.ok) {
-        log.warn(`[IPFS] CAR replication non-2xx for ${cid}: status=${response.status} (${elapsed}ms)`);
-        return;
-      }
-
-      log.info(`[IPFS] CAR replicated: ${cid} (${(total / (1024 * 1024)).toFixed(1)}MB, ${elapsed}ms)`);
+      return carBytes;
     } catch (error: any) {
-      const isTimeout = error?.name === 'TimeoutError' || error?.name === 'AbortError';
-      log.warn(`[IPFS] CAR replication ${isTimeout ? 'timed out' : 'failed'} for ${cid}: ${error?.message || 'unknown error'}`);
-    } finally {
-      this.inFlightCarReplications.delete(cid);
+      throw new Error(`Failed to export CAR for ${cid}: ${error?.message || 'unknown error'}`);
     }
+  }
+
+  getCarReplicationConfig():
+    | { url: string; token: string; timeoutMs: number; maxBytes: number }
+    | null {
+    const cfg = this.options.carReplication;
+    if (!cfg) return null;
+    const url = (cfg.url || '').trim();
+    const token = (cfg.token || '').trim();
+    if (!url || !token) return null;
+    return {
+      url: url.replace(/\/+$/, ''),
+      token,
+      timeoutMs: Number.isFinite(cfg.timeoutMs) ? cfg.timeoutMs : 120_000,
+      maxBytes: Number.isFinite(cfg.maxBytes) ? cfg.maxBytes : 512 * 1024 * 1024,
+    };
   }
 
   /**

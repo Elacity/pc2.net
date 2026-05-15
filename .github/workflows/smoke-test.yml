@@ -140,36 +140,92 @@ jobs:
           echo "Memory: $(node -e 'console.log(JSON.stringify(process.memoryUsage()))')"
           echo "::endgroup::"
 
-      # The actual build OOM was specifically inside webpack at the
-      # `npm run build:gui` step. Reproduce the v1.2.7.8 fix: feed
-      # `--max-old-space-size=4096` via NODE_OPTIONS so we behave like
-      # update.sh does in production. If the OOM comes back, this step
-      # fails and we know it's not a CI flake.
+      # A-8: pc2-node has `canvas@2.11.2` in optionalDependencies. The three
+      # `await import('canvas')` sites in pc2-node/src/{api/storage,storage/
+      # thumbnail}.ts are runtime-graceful (try/catch) but tsc --noEmit still
+      # needs the module on disk to resolve types. canvas@2.x has no usable
+      # prebuilts for the runner's Node 20.x ABI, so npm ci skips it silently
+      # → tsc TS2307 → red gate. We install Cairo/Pango family system libs so
+      # canvas builds from source successfully during npm ci, populating its
+      # bundled types/ dir. End users are unaffected — canvas remains optional
+      # in pc2-node's package.json; these system libs are CI-only.
       #
-      # Install strategy (matters more than it looks):
-      #   - Root uses `npm install --legacy-peer-deps` because the root
-      #     lockfile may be out of sync after a small devDep change (e.g.
-      #     adding depcheck/jscpd) and we want it to resolve, not bail.
-      #     particle-auth in packages/ also needs --legacy-peer-deps.
-      #   - pc2-node uses `npm ci`: strict, reproducible, fast (~30 s
-      #     warm cache). pc2-node has its own lockfile in sync with its
-      #     package.json; `npm install` here would re-resolve and risk
-      #     esbuild's bundled-binary version check failing because of
-      #     npm's hoisting across the two trees (the actual symptom of
-      #     the first smoke-test run on this branch — fresh-install bug
-      #     class, same family as the v1.2.7.x patches).
-      - name: Install root + pc2-node dependencies
+      # Follow-up tracked in OPTIMISATION-AND-REFACTORING-2026-05 Phase 2:
+      # migrate the three import sites to @napi-rs/canvas (already a transitive
+      # dep, prebuilt-only, no system libs), then we can delete the steps
+      # below.
+      - name: Install canvas system libs (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          echo "::group::apt-get canvas deps"
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            libcairo2-dev \
+            libpango1.0-dev \
+            libjpeg-dev \
+            libgif-dev \
+            librsvg2-dev \
+            libpixman-1-dev \
+            pkg-config
+          echo "::endgroup::"
+
+      - name: Install canvas system libs (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          echo "::group::brew canvas deps"
+          # macos-latest typically ships these via brew already, but we
+          # install explicitly so a runner-image change doesn't silently
+          # break the build. brew install is idempotent — re-running on
+          # an already-installed formula is a fast no-op (~1 s each).
+          brew install pkg-config cairo pango libpng jpeg giflib librsvg
+          echo "::endgroup::"
+
+      # A-7 + build-OOM defence in a single step.
+      #
+      # OOM context: the v1.2.7.8 build failure was inside webpack at
+      # `npm run build:gui`. Reproduce its fix by feeding
+      # `--max-old-space-size=4096` via NODE_OPTIONS so we behave like
+      # update.sh does in production. If the OOM comes back, this fails
+      # and we know it's not a CI flake.
+      #
+      # Install order matters (A-7 fix — fresh-install race documented in
+      # .cursor/tasks/RELEASE-ENGINEERING-V1280/FIX-PLAN-A7-A8.md):
+      #
+      #   1. pc2-node FIRST. pc2-node's tsx@4.21 wants esbuild@0.27.2 with
+      #      its sibling @esbuild/<platform>@0.27.2. Installing pc2-node
+      #      first lets npm fully nest both before the root install can
+      #      plant a different esbuild higher in the tree.
+      #
+      #   2. `npm rebuild esbuild` insurance. Re-runs esbuild's install.js
+      #      once all platform deps are guaranteed to be on disk, killing
+      #      the npm parallel-postinstall race that the first smoke run
+      #      tripped on Linux.
+      #
+      #   3. Root LAST with `npm install --legacy-peer-deps` because the
+      #      root lockfile may be out of sync after small devDep additions
+      #      (e.g. depcheck/jscpd) and we want it to resolve, not bail.
+      #      particle-auth in packages/ also requires --legacy-peer-deps
+      #      for its own peer-resolution.
+      - name: Install pc2-node + root dependencies
         env:
           NODE_OPTIONS: '--max-old-space-size=4096'
           NPM_CONFIG_LEGACY_PEER_DEPS: 'true'
         run: |
           set -euo pipefail
-          echo "::group::Root npm install"
-          npm install --no-audit --no-fund --legacy-peer-deps
+
+          echo "::group::pc2-node npm ci (installed FIRST — see A-7 plan)"
+          (cd pc2-node && npm ci --no-audit --no-fund)
           echo "::endgroup::"
 
-          echo "::group::pc2-node npm ci"
-          (cd pc2-node && npm ci --no-audit --no-fund)
+          echo "::group::pc2-node npm rebuild esbuild (race-guard)"
+          (cd pc2-node && npm rebuild esbuild --no-audit --no-fund)
+          echo "::endgroup::"
+
+          echo "::group::Root npm install (installed LAST)"
+          npm install --no-audit --no-fund --legacy-peer-deps
           echo "::endgroup::"
 
       # The build pipeline at root: particle-auth → GUI bundles → pc2-node

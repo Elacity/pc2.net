@@ -145,12 +145,22 @@ jobs:
       # `--max-old-space-size=4096` via NODE_OPTIONS so we behave like
       # update.sh does in production. If the OOM comes back, this step
       # fails and we know it's not a CI flake.
+      #
+      # Install strategy (matters more than it looks):
+      #   - Root uses `npm install --legacy-peer-deps` because the root
+      #     lockfile may be out of sync after a small devDep change (e.g.
+      #     adding depcheck/jscpd) and we want it to resolve, not bail.
+      #     particle-auth in packages/ also needs --legacy-peer-deps.
+      #   - pc2-node uses `npm ci`: strict, reproducible, fast (~30 s
+      #     warm cache). pc2-node has its own lockfile in sync with its
+      #     package.json; `npm install` here would re-resolve and risk
+      #     esbuild's bundled-binary version check failing because of
+      #     npm's hoisting across the two trees (the actual symptom of
+      #     the first smoke-test run on this branch — fresh-install bug
+      #     class, same family as the v1.2.7.x patches).
       - name: Install root + pc2-node dependencies
         env:
           NODE_OPTIONS: '--max-old-space-size=4096'
-          # particle-auth uses --legacy-peer-deps inside its own install;
-          # we mirror it at the top level to keep behaviour predictable
-          # when npm's peer-resolver tightens between minor versions.
           NPM_CONFIG_LEGACY_PEER_DEPS: 'true'
         run: |
           set -euo pipefail
@@ -158,8 +168,8 @@ jobs:
           npm install --no-audit --no-fund --legacy-peer-deps
           echo "::endgroup::"
 
-          echo "::group::pc2-node npm install"
-          (cd pc2-node && npm install --no-audit --no-fund)
+          echo "::group::pc2-node npm ci"
+          (cd pc2-node && npm ci --no-audit --no-fund)
           echo "::endgroup::"
 
       # The build pipeline at root: particle-auth → GUI bundles → pc2-node

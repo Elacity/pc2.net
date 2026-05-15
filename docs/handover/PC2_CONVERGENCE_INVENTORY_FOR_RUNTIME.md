@@ -1,16 +1,51 @@
 # PC2 Convergence Inventory for ElastOS Runtime
 
-> **Date:** April 16, 2026
+> **Original date:** April 16, 2026 (pre-v0.1.2 / pre-v1.2 baseline).
+> **Current-state refresh:** **2026-05-06** — see "Refresh notes" block below.
 > **From:** Sasha Mitchell / PC2 Engineering
-> **To:** Anders / Runtime Engineering
-> **Purpose:** Everything PC2 has built that maps to Runtime capsules, providers, and infrastructure -- ready for the bottoms-up convergence starting with v0.1.2
+> **To:** Runtime Engineering
+> **Purpose:** Everything PC2 has built that maps to Runtime capsules, providers, and infrastructure — convergence inputs for the next runtime sprint. The body of this document captures the original April-16 mapping (still ~85% accurate); the **Refresh notes** below capture what has shipped on both sides since.
+
+---
+
+## Refresh notes — 2026-05-06
+
+What has shipped or moved on either side since the original Apr-16 authoring:
+
+**PC2 side** — `feature/lit-chipotle-migration` is no longer a branch. The work merged into `main` and shipped as **v1.2.0** (Apr 30) plus 13 follow-up patch releases (v1.2.1 → v1.2.7.13 over Apr 30 – May 6). Current `main` HEAD: `41ac37866`. Anything in this doc that links to `tree/feature/lit-chipotle-migration` should now be read as `tree/main`. Newly stable since Apr 16:
+- 9-chain wallet bridge with capability classification (`WALLET_READ`, `WALLET_SIGN`, `NETWORK_RPC`) — production-shipped.
+- SIWE / device-pairing flow + on-chain plans + on-chain token-gates — production-shipped (v1.2.7.7).
+- Runtime-heartbeat protocol (v1.2.7.13) — pc2-node ↔ launcher contract documented at `docs/wiki/Technical/RUNTIME_HEARTBEAT_PROTOCOL.md`. Schema-versioned (`pc2.heartbeat.v1`) and could be a useful pattern for runtime↔shell health.
+- IPFS cluster (Kubo 0.41.0 + ipfs-cluster 1.1.4 CRDT, 2-peer mesh, symmetric 60-pin replication) and `pc2-ipfs-relay` libp2p hardening (May 6).
+- Chipotle key custody under active hardening (Wave-8 envelope signing landed; v1.2.8.0 server-side relayer designed and approved).
+
+**Runtime side** — Anders shipped **v0.2.0** on Apr 29 (commit `5b90ea8f`, marked Latest release). Major architectural milestones since the Apr-16 baseline:
+- Visible product front door **renamed from "PC2" to "Home"** — runtime's shell is now Home; PC2 (ours) is now unambiguously the user-facing personal-cloud stack. Naming collision resolved.
+- Home browser shell capsule landed; first-party Home + System + Inbox + Library + Documents + Chat-Room + GBA + uCity capsules.
+- Capsule role metadata formalised (`shell` / `app` / `viewer` / `provider` / `content`).
+- Documents provider with publish/unpublish through IPFS provider (capsule plane, not gateway plane).
+- DID-backed identity unified: main DID is now derived from device key.
+- `ipfs-provider` and `did-provider` capsule slots **defined** (capsule.json + Cargo skeleton) — not yet wired to PC2's stack but the contract exists.
+- Four-quadrant model now explicit in `docs/ARCHITECTURE.md`: PC2/Home (UX), Runtime (capabilities), Carrier (transport), Blockchain (identity). PC2 is named as one of the four quadrants — not a competing project.
+- "Trusted content and access rights" section added to `TASKS.md` Next — explicitly anticipates an "ElastOS-native access/decryption provider analogous to a Lit-style policy gate" (i.e. our dDRM stack). Deferred until phases 1-3 land.
+- Anders' explicit balancing sequence (per his ROADMAP.md "Near-Term Direction"): **(1) Wallet-backed identity + WebConnect → (2) Spaces / network drives → (3) Capsule publish/install registry**. dDRM and DeFi explicitly defer until those three are real.
+- 21 capsules total in `capsules/`. Linux x86_64 + aarch64 verified; macOS / mobile / kiosk are mapped as host adapters in roadmap, not yet first-class.
+- No commits on `main` since Apr 29 = ~7-day quiet stretch consistent with Anders' between-sprint cadence (planning v0.3, not stuck).
+
+**What's stale below this line:** the "Phase 1 / Phase 2 / Phase 3 / Phase 4" timeline in §7 was authored against `Runtime v0.1.2`, which is now 2 versions back. The current convergence sequencing should follow Anders' published "Wallet-id → Spaces → Capsule registry" order from his ROADMAP, not the original phases below. The "Anders already has Puter in a VM" line in §3 is also outdated — Anders is now actively *deleting* Puter assumptions per his current roadmap, in favour of the runtime-owned Home browser shell.
+
+**What still holds:** the 8 WASM crates targeting `wasm32-wasip1`, the four Base contracts, the wallet-bridge architecture, the dDRM pipeline diagram, the namespace mapping, and the capsule manifest shapes — all still accurate and still the right inputs for the convergence sprint when Anders opens the v0.3 wallet-identity track.
+
+**Recommended next move (when Anders signals v0.3 planning is opening):** hand-package the wallet-bridge as a `did-provider` PR-shape — `pc2-wallet-bridge.js` + EIP-1193 shim + `CAPABILITY_SCOPES` constants mapped onto the Runtime capability-token format. That lands Anders' #1 balancing move with our reference rather than him re-implementing from scratch. Followed shortly by `ipfs-provider` capsule wired to the PC2 cluster as backend (his #2). dDRM-as-provider-capsule comes later, after his phases 1-3.
+
+---
 
 ### Repositories
 
 | Repo | Branch | URL |
 |------|--------|-----|
-| **PC2 (main codebase)** | `feature/lit-chipotle-migration` | [github.com/Elacity/pc2.net](https://github.com/Elacity/pc2.net/tree/feature/lit-chipotle-migration) |
-| **ElastOS Runtime** | `review/0.1.2` | [github.com/Elacity/elastos-runtime](https://github.com/Elacity/elastos-runtime/tree/review/0.1.2) |
+| **PC2 (main codebase)** | `main` *(was `feature/lit-chipotle-migration` at original authoring; merged into v1.2.0)* | [github.com/Elacity/pc2.net](https://github.com/Elacity/pc2.net) |
+| **ElastOS Runtime** | `main` at v0.2.0 *(was `review/0.1.2` at original authoring)* | [github.com/Elacity/elastos-runtime](https://github.com/Elacity/elastos-runtime) |
 | **ElastOS Launcher** (Electron) | `main` | [github.com/Elacity/elastos-launcher](https://github.com/Elacity/elastos-launcher) |
 | **Elacity Market** (React dApp) | `main` | [github.com/aspect-build/elacity-app](https://github.com/aspect-build/elacity-app) |
 | **Elacity JS SDK** | `main` | [github.com/aspect-build/elacity-js](https://github.com/aspect-build/elacity-js) |

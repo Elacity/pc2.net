@@ -1,0 +1,312 @@
+name: Smoke test (build + boot)
+
+# Pre-release smoke test for pc2-node + the ElastOS GUI build.
+#
+# Why this exists (RELEASE-ENGINEERING-V1280):
+#
+# v1.2.7.7 → v1.2.7.13 shipped 6 hot-patch releases in 2 days, each fixing
+# macOS / build / startup edge cases the previous one exposed. Every one of
+# those bugs would have been catchable by running the actual build + boot
+# path on a real Apple Silicon Mac in CI BEFORE tagging the release.
+#
+# GitHub Actions provides free standard runners for public repos. We're
+# already paying $0 to ship the same bugs to users — let's pay $0 to catch
+# them first instead.
+#
+# Phase 1 scope (this file): build gate + type-check gate + release-asset
+# integrity check. Catches:
+#   - v1.2.7.8 build OOM during npm run build:pc2
+#   - v1.2.7.8 missing pc2-binaries-v1 release
+#   - Any TypeScript regression on the pc2-node side
+#   - Any dependency / workspace install break (the v1.2.7.x lockfile drift class)
+#
+# Phase 2-6 scopes (separate PRs against this workflow): heartbeat probe,
+# macOS permissions probe, osascript unit-test, Windows + Linux-ARM
+# expansion, pre-tag checklist, rollback runbook.
+#
+# Failure means: do NOT tag. Investigate the failing matrix entry, reproduce
+# locally, fix, push again. The whole point of this workflow is that we
+# refuse to ship until it's green.
+#
+# Trigger model:
+#   - push to main: gate on the merged code being shippable.
+#   - pull_request: gate on the PR not regressing build/typecheck.
+#   - workflow_dispatch: manual trigger for pre-release rehearsal +
+#     opt-in expensive matrix entries (e.g. paid Intel Mac).
+#
+# Cost: $0. Public repo, standard runners (macos-latest = Apple Silicon
+# M-series 3-core, ubuntu-latest 2-core). Mac is the long pole (~10–12 min
+# end-to-end); Linux finishes in ~6–8 min.
+
+on:
+  push:
+    branches:
+      - main
+      - 'feat/**'
+      - 'release/**'
+  pull_request:
+    branches:
+      - main
+      - 'feat/**'
+      - 'release/**'
+  workflow_dispatch:
+    inputs:
+      include_intel_mac:
+        description: 'Also run on macos-13-large (paid Intel Mac, ~$0.16/min) — use pre-release'
+        type: boolean
+        default: false
+
+# Cancel in-flight runs of this workflow for the same ref. A new push
+# supersedes the previous one — don't burn runner minutes on stale code.
+concurrency:
+  group: smoke-test-${{ github.ref }}
+  cancel-in-progress: true
+
+# Read-only: this workflow does not need to write to the repo, push images,
+# or create releases. Keeps blast radius minimal.
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # build-and-typecheck: the core gate. Runs on every supported matrix entry.
+  # If any of these fail, the release should not ship until they're green.
+  # ---------------------------------------------------------------------------
+  build-and-typecheck:
+    name: Build + typecheck (${{ matrix.label }})
+    strategy:
+      # Don't bail on first failure: we want to know if a bug is platform-
+      # specific or general. Fast-fail hides information.
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: linux-x64
+          - os: macos-latest
+            label: darwin-arm64
+
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+
+    steps:
+      # Submodules are required for the GUI build (v86, twisp, epoxy-tls,
+      # wiki). We skip recursing into the wiki — it's a docs submodule that
+      # adds ~30 s of clone time and isn't read by the build.
+      - name: Checkout (with required submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+          fetch-depth: 1
+
+      # Pin Node to a version we actually support. pc2-node/package.json
+      # declares engines.node >=20.18.0; we pick the latest 20.x to match
+      # what a fresh user install of nvm or Node-via-Homebrew would land on.
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+
+      # Cache npm + yarn at home dir level. Speeds up successive runs from
+      # ~6 min install down to ~90 s once the cache is warm. The cache key
+      # mixes OS + all known lockfiles so a dep change always invalidates.
+      - name: Cache npm + yarn caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+            ~/.yarn/cache
+            ~/.cache/yarn
+          key: smoke-${{ matrix.os }}-deps-${{ hashFiles('package-lock.json', 'pc2-node/package-lock.json') }}
+          restore-keys: |
+            smoke-${{ matrix.os }}-deps-
+
+      # Surface a few baseline numbers so failure analysis can compare runs.
+      - name: Environment baseline
+        run: |
+          echo "::group::Environment"
+          node --version
+          npm --version
+          echo "OS: $(uname -s) $(uname -r) $(uname -m)"
+          echo "Disk free: $(df -h . | tail -1)"
+          echo "Memory: $(node -e 'console.log(JSON.stringify(process.memoryUsage()))')"
+          echo "::endgroup::"
+
+      # The actual build OOM was specifically inside webpack at the
+      # `npm run build:gui` step. Reproduce the v1.2.7.8 fix: feed
+      # `--max-old-space-size=4096` via NODE_OPTIONS so we behave like
+      # update.sh does in production. If the OOM comes back, this step
+      # fails and we know it's not a CI flake.
+      - name: Install root + pc2-node dependencies
+        env:
+          NODE_OPTIONS: '--max-old-space-size=4096'
+          # particle-auth uses --legacy-peer-deps inside its own install;
+          # we mirror it at the top level to keep behaviour predictable
+          # when npm's peer-resolver tightens between minor versions.
+          NPM_CONFIG_LEGACY_PEER_DEPS: 'true'
+        run: |
+          set -euo pipefail
+          echo "::group::Root npm install"
+          npm install --no-audit --no-fund --legacy-peer-deps
+          echo "::endgroup::"
+
+          echo "::group::pc2-node npm install"
+          (cd pc2-node && npm install --no-audit --no-fund)
+          echo "::endgroup::"
+
+      # The build pipeline at root: particle-auth → GUI bundles → pc2-node
+      # backend (TypeScript). Same order users hit during update.sh. Webpack
+      # runs inside build:gui; pc2-node's tsc runs inside build:server.
+      - name: Build PC2 (particle-auth + GUI + server)
+        env:
+          NODE_OPTIONS: '--max-old-space-size=4096'
+        run: |
+          set -euo pipefail
+          echo "::group::npm run build:pc2"
+          npm run build:pc2
+          echo "::endgroup::"
+
+      # The launcher loads pc2-node from `pc2-node/dist/index.js`. If the
+      # TS build produced no main module, we already shipped a broken bundle.
+      # Cheap structural assertion that the next-stage tests can rely on.
+      - name: Verify build outputs exist
+        run: |
+          set -euo pipefail
+          missing=()
+          [ -f "pc2-node/dist/index.js" ] || missing+=("pc2-node/dist/index.js")
+          [ -d "pc2-node/frontend" ] || missing+=("pc2-node/frontend/")
+          # GUI bundle outputs end up in pc2-node/frontend/ after build:gui's
+          # cp step. We don't pin to specific bundle.min.js names because
+          # build.js emits content-hashed filenames; we only check the dir
+          # exists and is non-empty.
+          if [ -d "pc2-node/frontend" ] && [ -z "$(ls -A pc2-node/frontend 2>/dev/null)" ]; then
+            missing+=("pc2-node/frontend/ is empty")
+          fi
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing build outputs:"
+            printf '  %s\n' "${missing[@]}"
+            exit 1
+          fi
+          echo "All required build outputs present."
+
+      # Build artefact size signal: lets us track regression (or improvement)
+      # over time without needing the full OPTIMISATION-AND-REFACTORING
+      # baseline workflow to be in place yet.
+      - name: Report build artefact sizes
+        run: |
+          echo "::group::pc2-node/dist"
+          du -sh pc2-node/dist 2>/dev/null || true
+          du -sh pc2-node/dist/* 2>/dev/null | sort -h | tail -10 || true
+          echo "::endgroup::"
+          echo "::group::pc2-node/frontend"
+          du -sh pc2-node/frontend 2>/dev/null || true
+          ls -la pc2-node/frontend 2>/dev/null | head -20 || true
+          echo "::endgroup::"
+
+      # Standalone typecheck pass on pc2-node. The build above runs tsc
+      # internally via build:server, but that emits files; this `--noEmit`
+      # pass is the canonical "would tsc be happy without compilation
+      # side effects" gate. Fails fast on any latent type regression that
+      # would survive a partial rebuild.
+      - name: Typecheck pc2-node (tsc --noEmit)
+        run: |
+          set -euo pipefail
+          echo "::group::tsc --noEmit"
+          (cd pc2-node && npx --no-install tsc --noEmit)
+          echo "::endgroup::"
+
+      # Unit tests under pc2-node/tests/unit. Currently scopes to:
+      #   - setup-permissions-osascript.test.js — v1.2.7.11 apostrophe
+      #     regression class (RELEASE-ENGINEERING-V1280 Phase 4)
+      # Future Phases add more files. The npm script `test:unit` is the
+      # canonical entry point — keep this step's command in lockstep with
+      # pc2-node/package.json scripts.test:unit.
+      - name: Run pc2-node unit tests
+        run: |
+          set -euo pipefail
+          echo "::group::npm run test:unit"
+          (cd pc2-node && npm run test:unit)
+          echo "::endgroup::"
+
+  # ---------------------------------------------------------------------------
+  # release-assets-integrity: confirm the pc2-binaries-v1 GitHub release has
+  # the expected asset count. This is the v1.2.7.8 bug class: BinaryManager
+  # referenced a release that didn't actually exist, so every fresh-install
+  # Mac silently fell back to ActiveProxy.
+  #
+  # Runs once (Linux only, ~10 s) since it's just a `gh release view` query.
+  # ---------------------------------------------------------------------------
+  release-assets-integrity:
+    name: pc2-binaries-v1 asset integrity
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Verify pc2-binaries-v1 release has expected asset count
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Expected count from publish-pc2-binaries.yml as of v1.2.7.11:
+          #   darwin: 12 = 5 native × 2 archs + 2 scripts
+          #   linux-x64: 6 = 4 native + 2 scripts
+          #   linux-arm64: 4 native
+          #   Total: 22
+          # If publish-pc2-binaries.yml's matrix changes, update this number
+          # in lockstep — pc2-node/src/utils/binary-manager.ts is the source
+          # of truth for what BinaryManager attempts to download.
+          EXPECTED=22
+
+          if ! gh release view pc2-binaries-v1 -R Elacity/pc2.net >/dev/null 2>&1; then
+            echo "::error::pc2-binaries-v1 release does not exist. Run publish-pc2-binaries.yml first."
+            exit 1
+          fi
+
+          actual=$(gh release view pc2-binaries-v1 -R Elacity/pc2.net --json assets --jq '.assets | length')
+          echo "pc2-binaries-v1 has ${actual} assets (expected ${EXPECTED})."
+
+          if [ "$actual" != "$EXPECTED" ]; then
+            echo "::error::pc2-binaries-v1 asset count is ${actual}, expected ${EXPECTED}."
+            echo "Either re-run publish-pc2-binaries.yml with replace_existing=true to refresh,"
+            echo "or update EXPECTED in this workflow if the matrix legitimately changed."
+            exit 1
+          fi
+
+      # Surface the asset list in the run log for human review on every run.
+      # Cheap and useful if a future release silently drops an asset.
+      - name: List pc2-binaries-v1 asset names + sizes (for log review)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view pc2-binaries-v1 -R Elacity/pc2.net \
+            --json assets \
+            --jq '.assets[] | "\(.name)\t\(.size) bytes"' \
+            | column -t -s $'\t'
+
+  # ---------------------------------------------------------------------------
+  # summary: roll up matrix results into a single "ok / not ok" output so the
+  # status badge + branch protection rule have one thing to point at.
+  # ---------------------------------------------------------------------------
+  summary:
+    name: Smoke test summary
+    needs: [build-and-typecheck, release-assets-integrity]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Report aggregate status
+        run: |
+          echo "build-and-typecheck: ${{ needs.build-and-typecheck.result }}"
+          echo "release-assets-integrity: ${{ needs.release-assets-integrity.result }}"
+
+          if [ "${{ needs.build-and-typecheck.result }}" != "success" ] \
+             || [ "${{ needs.release-assets-integrity.result }}" != "success" ]; then
+            echo "::error::Smoke test failed. Do NOT tag a release until these are green."
+            exit 1
+          fi
+
+          echo "All smoke gates green. Safe to proceed to pre-tag checklist."

@@ -89,13 +89,22 @@ jobs:
     timeout-minutes: 25
 
     steps:
-      # Submodules are required for the GUI build (v86, twisp, epoxy-tls,
-      # wiki). We skip recursing into the wiki — it's a docs submodule that
-      # adds ~30 s of clone time and isn't read by the build.
-      - name: Checkout (with required submodules)
+      # Submodules in this repo (v86 emulator, twisp, epoxy-tls, wiki) are
+      # NOT touched by the build:pc2 chain (particle-auth → src/gui →
+      # pc2-node). Three of the four submodule URLs are `git@github.com:`
+      # SSH refs which a stateless CI checkout can't clone without an SSH
+      # key, and we have no reason to clone them: skipping the recursive
+      # submodule fetch keeps the checkout ~10s and avoids tying CI to
+      # SSH key management.
+      #
+      # If a future build chain starts importing from /submodules/*, this
+      # gate will surface the failure clearly (the actual missing-path
+      # error rather than an opaque clone failure), and we re-evaluate
+      # then with a `git config insteadOf` rewrite step.
+      - name: Checkout (without submodules — not needed by build:pc2)
         uses: actions/checkout@v4
         with:
-          submodules: 'recursive'
+          submodules: false
           fetch-depth: 1
 
       # Pin Node to a version we actually support. pc2-node/package.json
@@ -255,11 +264,15 @@ jobs:
           #   darwin: 12 = 5 native × 2 archs + 2 scripts
           #   linux-x64: 6 = 4 native + 2 scripts
           #   linux-arm64: 4 native
-          #   Total: 22
+          #   SHASUMS256.txt: 1 (checksum manifest emitted by publish step)
+          #   Total: 23
           # If publish-pc2-binaries.yml's matrix changes, update this number
           # in lockstep — pc2-node/src/utils/binary-manager.ts is the source
-          # of truth for what BinaryManager attempts to download.
-          EXPECTED=22
+          # of truth for what BinaryManager attempts to download (note that
+          # BinaryManager itself does not download SHASUMS256.txt; it
+          # verifies SHAs from a checked-in map. The file is shipped purely
+          # for human auditability.)
+          EXPECTED=23
 
           if ! gh release view pc2-binaries-v1 -R Elacity/pc2.net >/dev/null 2>&1; then
             echo "::error::pc2-binaries-v1 release does not exist. Run publish-pc2-binaries.yml first."

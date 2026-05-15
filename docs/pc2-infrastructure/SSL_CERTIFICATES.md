@@ -5,18 +5,31 @@
 ## Current Setup (Wildcard Certificate) ✅
 
 ### Certificate Details
-- **Provider**: Let's Encrypt
+- **Provider**: Let's Encrypt (ECDSA P-256)
 - **Challenge**: DNS-01 (via GoDaddy API)
-- **Tool**: acme.sh
+- **Tool**: acme.sh (cron-scheduled, daily at 23:40 UTC)
 - **Scope**: `*.ela.city` + `ela.city` (wildcard)
-- **Location**: `/etc/nginx/ssl/wildcard/`
+- **Current cert**: issued **2026-05-15**, expires **2026-08-13** (90-day Let's Encrypt cycle, acme.sh auto-renews ~60 days in)
+- **Next renewal cycle**: tracked by acme.sh at `/root/.acme.sh/*.ela.city_ecc/*.ela.city.conf` (`Le_NextRenewTimeStr`)
 
-### Certificate Files
+### Certificate Files (post-acme.sh path reconciliation, 2026-05-15)
+
+After the deploy-path reconciliation on 2026-05-15 ([§ Operational History](#operational-history-2026-05-15)), acme.sh deploys directly to the path nginx reads from. **No more cabinet mismatch.**
+
 ```
-/etc/nginx/ssl/wildcard/
-├── ela.city.crt    # Full chain certificate
-└── ela.city.key    # Private key
+/etc/letsencrypt/live/ela.city/   ← acme.sh installs here  ← nginx reads from here
+├── cert.pem         # End-entity certificate
+├── fullchain.pem    # End-entity + intermediate(s)
+└── privkey.pem      # Private key (mode 0600)
+
+/root/.acme.sh/*.ela.city_ecc/    ← acme.sh's internal source of truth (cert generation)
+├── *.ela.city.cer
+├── *.ela.city.key
+├── fullchain.cer
+└── *.ela.city.conf  # has Le_RealKeyPath + Le_RealFullChainPath pointing at /etc/letsencrypt/live/ela.city/
 ```
+
+The pipeline is now fully autonomous: acme.sh's daily cron checks if renewal is due → if yes, issues a fresh cert from Let's Encrypt via the GoDaddy DNS-01 challenge → installs the new cert directly at `/etc/letsencrypt/live/ela.city/` → runs `systemctl reload nginx` to make it live. **No human in the loop.**
 
 ### Coverage
 **ALL** `*.ela.city` subdomains are automatically covered:
@@ -196,17 +209,33 @@ export GD_Secret='<secret>'
 
 ---
 
-## Current Status
+## Current Status (2026-05-15)
 
 | Item | Status |
 |------|--------|
-| Wildcard Certificate | ✅ Active (`*.ela.city`) |
-| Issuer | Let's Encrypt E7 |
-| Valid From | Jan 22, 2026 |
-| Valid Until | Apr 22, 2026 |
-| Auto-Renewal | ✅ Configured (acme.sh cron) |
-| HTTP→HTTPS Redirect | ✅ Enabled |
+| Wildcard Certificate (`*.ela.city`) | ✅ Active and served by nginx |
+| Issuer | Let's Encrypt E8 (ECDSA) |
+| Valid From | 2026-05-15 |
+| Valid Until | 2026-08-13 (90-day cycle) |
+| Auto-Renewal Tool | ✅ acme.sh cron (`40 23 * * *`) |
+| Renewal Method | DNS-01 via GoDaddy API (creds in `acme.sh` config) |
+| Front-end | nginx (since C-1, 2026-05-15) |
+| Read path | `/etc/letsencrypt/live/ela.city/fullchain.pem` |
+| Deploy path (acme.sh) | `/etc/letsencrypt/live/ela.city/` ✅ matches read path |
+| HTTP→HTTPS Redirect | ✅ nginx-managed (301 from `:80`) |
+| ACME challenge location block | ✅ `/.well-known/acme-challenge/` → `/var/www/html` (in `pc2-gateway` site) |
+| End-to-end renewal verified | ✅ Forced renewal 2026-05-15 succeeded; nginx serves the fresh cert serial |
+
+## Operational History (2026-05-15)
+
+The cert stack went through three coordinated changes on 2026-05-15, all reversible with on-server scripts:
+
+1. **C-1 nginx fronting** (14:54–14:57 UTC) — InterServer's gateway migrated to live behind nginx. Brought TLS termination under nginx so the cert path could be standardised.
+2. **Zombie cleanup** (20:39 UTC) — Two pre-existing certbot renewal configs for unused single-domain certs (`cloud.ela.city`, `demo.ela.city`) were moved aside with `.disabled-<timestamp>` suffix. Both had been failing daily for weeks (port 80 collision); neither cert was actually used. Revert: `/root/revert-cert-zombies-20260515T203915Z.sh`. Snapshot: `/root/cert-zombies-cleanup-20260515T203915Z/`.
+3. **acme.sh deploy-path reconciliation** (21:09 UTC) — acme.sh's `Le_RealFullChainPath` and `Le_RealKeyPath` updated to point at `/etc/letsencrypt/live/ela.city/` instead of `/etc/nginx/ssl/wildcard/`. Followed by a forced renewal to validate end-to-end: a fresh cert was issued by Let's Encrypt, installed at the new path, and nginx auto-reloaded to serve it. The serial currently visible on the wire (`05EB0E...`, valid May 15 → Aug 13) confirms the pipeline works. Revert: `/root/revert-acme-paths-20260515T210925Z.sh`. Snapshot: `/root/acme-path-reconcile-20260515T210925Z/`.
+
+Going forward, the wildcard cert auto-renews itself with no human in the loop. Expected cadence: acme.sh checks every day at 23:40 UTC, renews when the cert is ≤30 days from expiry (roughly day 60 of 90), deploys directly to nginx's read path, and reloads nginx — all autonomously.
 
 ---
 
-*Last Updated: January 22, 2026*
+*Last Updated: 2026-05-15 21:15 UTC (post-reconciliation, end-to-end verified)*

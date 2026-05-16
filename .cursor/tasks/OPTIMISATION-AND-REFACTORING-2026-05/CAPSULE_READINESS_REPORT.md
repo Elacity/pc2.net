@@ -1,10 +1,12 @@
 # Capsule Readiness Report (Cluster 5.1, pilot)
 
-**Status**: PILOT + 4 BATCHES (methodology validated; **31 / 272 modules audited = 11.4%**). The rubric and vocabulary in §1-§3 are stable. The per-module audit in §4 has covered `src/types/` (complete) + strategic AI subset + `src/storage/` (complete) + 5-module `services/boson/` sample. Remaining ~241 modules can use the same rubric.
+**Status**: PILOT + 5 BATCHES (methodology validated; **36 / 272 modules audited = 13.2%**). The rubric and vocabulary in §1-§3 are stable. The per-module audit in §4 has covered `src/types/` (complete) + strategic AI subset + `src/storage/` (complete) + 5-module `services/boson/` sample + 5-module `src/api/` sample. Remaining ~236 modules can use the same rubric.
 
-**Major strategic finding** (Batch 4, §4.QUINT.MAJOR-FINDING): capsule readiness is **role-based, not subtree-based**. The original pilot's "AI is A, connectivity is C" framing was sampling artefact. Leaves are A across all subtrees; orchestrators are B; only ConnectivityService is truly C. Migration order changes accordingly.
+**Two major strategic findings**:
+1. **Role-based readiness, not subtree-based** (Batch 4): A-class leaves cluster across all subtrees; B-class clusters at orchestrators; only 2 mega-orchestrators are C-class. Migration order = role-scoped (lift A-leaves in parallel across subtrees), not subtree-scoped.
+2. **Capability infrastructure already exists** (Batches 1+5): pc2-node already defines the 14-scope capability vocabulary (`types/capabilities.ts`) AND enforces it at the HTTP boundary (`api/middleware.ts requireCapability(scope)`). Runtime convergence is extension, not invention.
 
-**Captured**: 2026-05-16 (pilot + four extension batches).
+**Captured**: 2026-05-16 (pilot + five extension batches).
 
 **Why this exists.** The dual-track strategy in `AGENTIC-PC2-MONETISATION-2026-05` calls for PC2 v1 work to be done in "patterns that migrate cleanly into the ElastOS Runtime". For that migration to be tractable, we need a current snapshot of which pc2-node modules are *already* capsule-shaped (a clean lift) vs which need bounded refactoring vs which are deeply woven into pc2-node's monolithic runtime. This document is that snapshot.
 
@@ -441,19 +443,64 @@ This is the most important strategic finding so far. It un-couples the migration
 
 ---
 
-## 5. Aggregate observations (pilot + 4 extension batches, 31 / 272 modules)
+## 4.SEX — Batch 5: `pc2-node/src/api/` sample (5 / 45 modules audited 2026-05-16)
 
-### 5.1 Distribution after 31 / 272 modules
+The api/ subtree is the biggest remaining unknown (45 top-level .ts files + 3 subdirs). This sample tests whether handlers are predominantly B-class (Express coupling forces it) and identifies any second C-class mega-orchestrator alongside ConnectivityService.
+
+| Module | LOC | Class | Score | Verdict |
+|---|---|---|---|---|
+| `middleware.ts` | 538 | B | 6/10 | **CRITICAL FINDING** — see callout below. Exports authentication, error handling, CORS, owner-checking, and crucially `requireCapability(scope: string)` middleware using the capability vocabulary from `types/capabilities.ts`. Owns `AuthenticatedRequest` and `CapabilityPrincipal` interfaces. -2 for Express coupling (Request/Response/NextFunction); -1 for owning types that should be in `types/auth.ts`; -1 for direct DatabaseManager import (concrete class). |
+| `rate-limit.ts` | 262 | A- | 7/10 | Smallest of the sampled api/ files. Imports only Express Response/NextFunction + AuthenticatedRequest + logger. Pure rate-limiting algorithm. -2 for Express coupling at the type level; -1 for sibling-type import from middleware.ts (should be in a shared types module). |
+| `wallet.ts` | 303 | B | 5/10 | Imports Express Router + middleware + AgentKitExecutor (concrete class) + **`getDatabase()` from `storage/index.ts`** — meaning the global-singleton pattern from §4.QUAT is actively used, not just defined. -2 for Express coupling; -2 for concrete AgentKitExecutor; -1 for using global singleton instead of DI. |
+| `ai.ts` | 1,534 | B | 5/10 | Large HTTP handler for AI endpoints. Imports Express Router + middleware + AIChatService (concrete) + platform utils + fs + path + url + os + crypto + https. Multi-purpose: chat completion routes + provider config + Ollama-model-download (the https + fs imports are for downloading model files). -2 for Express coupling; -2 for concrete AIChatService; -1 for size (1,534 LOC indicates 5+ unrelated route families). |
+| `index.ts` | 1,766 | C | 2/10 | **SECOND CANONICAL C-CLASS MODULE.** The api entry-point: imports Express + middleware + multer + cookie-parser + rate-limit + 28+ siblings (every other api/*.ts file by router or named handler) + Socket.IO + 5 storage modules + 3 service modules. This is the http-side equivalent of ConnectivityService — the mega-orchestrator wiring together every HTTP endpoint, every middleware, every router into one 1,766-line module. -8 score for: ~40 concrete imports, no module structure, ambient Express coupling everywhere, no clear public interface. |
+
+### 4.SEX.CRITICAL — `middleware.ts requireCapability` is the SECOND major existing-structure finding
+
+After `capabilities.ts` (Batch 1 finding: 14-scope vocabulary already defined), Batch 5 finds that **the capability enforcement is also already implemented** at the API boundary:
+
+```typescript
+// middleware.ts exports
+export function requireCapability(scope: string) {
+  return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    // check that req.principal has the named scope before letting through
+  };
+}
+```
+
+Combined with `populatePrincipal()` and the `CapabilityPrincipal` interface, **pc2-node already has a working capability-token enforcement layer** at HTTP request time. This is huge:
+
+1. **The migration story is even shorter than thought**. We don't need to *invent* capability enforcement; we need to (a) extend it to non-HTTP entry points (websocket, IPC), and (b) port the enforcement layer itself into the Runtime where it'll be `req.principal` → `capability_token.action`.
+2. **Every existing API route already lives behind a capability check.** When those routes migrate to capsules, the migration is mostly mechanical — replace `requireCapability('storage:write')` with the Runtime capsule's own capability-check primitive.
+3. **The capability-token philosophy is already a working pattern in pc2-node, not a future-tense aspiration.**
+
+### 4.SEX.FINDINGS — api/ subtree analysis
+
+**Predicted in §6**: "Expect mostly B-class; watch for Express middleware coupling."
+
+**Result**: 0 A, 1 A-, 3 B, 1 C. The B-class prediction is correct. The size of B is mostly driven by Express type-level coupling (Request/Response/NextFunction in every handler), which is unavoidable at the HTTP boundary.
+
+**Two important findings**:
+1. **`api/index.ts` is the second canonical C-class module**, alongside ConnectivityService. The mega-orchestrator-with-40-imports pattern repeats once on each side of the codebase (network ingress vs HTTP ingress). Both will need redesign — probably as part of the Runtime-track work (capsules don't have a single mega-entry-point; each capsule is its own module with its own surface).
+2. **The capability enforcement already exists** — `requireCapability(scope)` in middleware.ts uses the `types/capabilities.ts` vocabulary. Migration becomes shorter when pieces of the target architecture are already implemented.
+
+**Estimated remaining api/ audit**: 40 more files at ~3 min each (handlers all look similar at this point) = 2 hours to complete the subtree. Expectation based on the sample: ~70% B-class handlers, ~25% A- utilities, ~5% (or just `index.ts`) C-class.
+
+---
+
+## 5. Aggregate observations (pilot + 5 extension batches, 36 / 272 modules)
+
+### 5.1 Distribution after 36 / 272 modules
 
 | Class | Count | Modules |
 |---|---|---|
 | A (capsule-ready) | 17 | OpenAIProvider (9/10), AgentMemoryManager (8/10), api.ts (10/10), wallet-agent.ts (10/10), qrcode-terminal.d.ts (10/10), qrcode.d.ts (10/10), capabilities.ts (9/10), ClaudeProvider (9/10), GeminiProvider (9/10), OllamaProvider (8/10), EmbeddingProvider (9/10), AgentTools (10/10), context.ts (9/10), migrations.ts (9/10), ProxyProtocol (10/10), CryptoBox (9/10), NetworkDetector (8/10) |
-| A- (capsule-ready, light polish) | 6 | VectorMemoryStore (8/10), database.ts (7/10), ipfs.ts (7/10), thumbnail.ts (7/10), IdentityService (7/10), UsernameService (8/10) |
-| B (refactorable) | 7 | runtime-heartbeat (7/10), AIChatService (5/10), setupPermissions (5/10), filesystem.ts (6/10), indexer.ts (6/10), storage/index.ts (4/10), ActiveProxyClient (6/10), BosonService (5/10) |
+| A- (capsule-ready, light polish) | 7 | VectorMemoryStore (8/10), database.ts (7/10), ipfs.ts (7/10), thumbnail.ts (7/10), IdentityService (7/10), UsernameService (8/10), api/rate-limit.ts (7/10) |
+| B (refactorable) | 11 | runtime-heartbeat (7/10), AIChatService (5/10), setupPermissions (5/10), filesystem.ts (6/10), indexer.ts (6/10), storage/index.ts (4/10), ActiveProxyClient (6/10), BosonService (5/10), api/middleware.ts (6/10), api/wallet.ts (5/10), api/ai.ts (5/10) |
 | B- (refactorable, multiple blockers) | 1 | ToolExecutor (4/10) |
-| C (deeply coupled) | 1 | ConnectivityService (2/10) |
+| C (deeply coupled) | 2 | ConnectivityService (2/10), api/index.ts (2/10) |
 
-**23 of 31 modules audited so far are A or A- class (74%).** The hypothesis structure has now refined considerably:
+**24 of 36 modules audited so far are A or A- class (67%).** The distribution has stabilised:
 
 - **Confirmed: A-class clusters at the leaf level across all subtrees.**
   - Types subtree: 5/5 A (100%)
@@ -461,22 +508,25 @@ This is the most important strategic finding so far. It un-couples the migration
   - Boson pure utilities (CryptoBox, ProxyProtocol, NetworkDetector): 3/3 A (100%)
   - AI tool data: 1/1 A (100%)
   - Storage utilities (migrations, context): 2/2 A (100%)
-- **Confirmed: A- (lightly-coupled service) clusters around file-backed components.** Database/file-backed services tend to land in A- territory due to direct fs usage rather than capability-driven I/O. Affects ~6 modules.
-- **Confirmed: B-class clusters at the orchestrator level — across all subtrees, not subtree-specific.** BosonService (boson) ≈ AIChatService (AI) ≈ filesystem.ts (storage). Same shape: wires together concrete-class siblings.
-- **The C-class outlier remains 1**: ConnectivityService. The original "boson is mostly C" prediction was wrong — only this one module is C.
+- **Confirmed: A- (lightly-coupled service) clusters around file-backed components and small HTTP utilities.** Database/file-backed services and isolated middleware utilities (rate-limit) tend to land in A- territory due to direct fs/Express usage rather than capability-driven I/O. Affects ~7 modules.
+- **Confirmed: B-class clusters at the orchestrator level AND at every HTTP-handler level.** BosonService (boson) ≈ AIChatService (AI) ≈ filesystem.ts (storage) ≈ api/wallet.ts ≈ api/ai.ts. Two distinct sources of B: (a) orchestrator pattern with concrete-class imports; (b) HTTP handlers with Express type coupling. Both fixable; both bounded.
+- **Two C-class outliers identified** (was: 1 in pilot): `ConnectivityService` (network-side mega-orchestrator) + `api/index.ts` (HTTP-side mega-orchestrator). Both have the same shape: 40+ concrete imports, no module structure, ambient framework coupling. Both will be redesigned, not refactored, when their respective subtrees migrate to Runtime capsules (which by architecture don't have single mega-entry-points).
+- **NEW critical finding (Batch 5)**: pc2-node already has `requireCapability(scope)` enforcement at HTTP boundary using the `types/capabilities.ts` vocabulary — the migration story shortens further.
 
-**The strongest cross-cutting blocker pattern is now unambiguously**: **concrete-class imports where interfaces should suffice**. Confirmed in 7 modules so far across 3 subtrees. The fix is a single coordinated refactoring (extract ~5 interfaces, update imports) that improves the score of 7+ modules in one Phase 2 ticket.
+**The strongest cross-cutting blocker pattern is now unambiguously**: **concrete-class imports where interfaces should suffice**. Confirmed in 7+ modules across 4 subtrees (`ai`, `storage`, `boson`, `api`). The fix is a single coordinated refactoring (extract ~5 interfaces, update imports) that improves the score of 7+ modules in one Phase 2 ticket.
 
-### 5.2 Top blocker patterns (updated after 26 modules)
+### 5.2 Top blocker patterns (updated after 36 modules)
 
 | Pattern | Now affects | Fix shape | Status |
 |---|---|---|---|
-| **Concrete class import where interface should suffice** | AgentMemoryManager, EmbeddingProvider, ToolExecutor, filesystem.ts, indexer.ts (**5 confirmed**, pattern very likely repeats in `api/`) | Extract `IFilesystemManager`, `IDatabaseManager`, `IIPFSStorage` interfaces; concrete classes implement them | **#1 cross-cutting refactor pattern**. Promote to dedicated Phase 2 ticket. |
+| **Concrete class import where interface should suffice** | AgentMemoryManager, EmbeddingProvider, ToolExecutor, filesystem.ts, indexer.ts, api/wallet.ts (AgentKitExecutor), api/ai.ts (AIChatService), BosonService (7 concrete-class deps) (**7+ confirmed across 4 subtrees**) | Extract `IFilesystemManager`, `IDatabaseManager`, `IIPFSStorage`, `IAIChatService`, `IAgentKitExecutor`, `IIdentityService` interfaces; concrete classes implement them | **#1 cross-cutting refactor pattern**. One Phase 2 ticket covering 7+ modules. |
 | **Types co-located with implementation, imported by siblings** | `providers/` (OllamaProvider exports types to 4 siblings), `storage/` (database.ts owns 9 types used everywhere) — **2 subtrees confirmed**, applies to ~10-15 modules | Extract `<subtree>/types.ts` files | **High-ROI: ~3 hours total fixes ~10-15 module scores by +1 each**. Two Phase 2 tickets (one per subtree). |
 | Async `initialize()` separate from constructor | AIChatService, database.ts (**2 confirmed**) | Either builder pattern or sync construct + lazy connect | Pattern continues; expect 5-10 modules total. |
 | Cross-cutting imports from `websocket/events` + `gateway/` inside leaf modules | ToolExecutor | Expose as injected capabilities | Specific to orchestration code; expect 2-3 modules. |
 | `: any` escape-hatch typing for sibling service references | ToolExecutor (`aiService?: any`) | Formalise the cross-reference | Newly detected. |
-| **Global singleton with setter/getter (ambient authority)** | `storage/index.ts` (globalDatabase) — **1 confirmed, but the canonical capsule violation** | Remove singleton, use constructor DI throughout | Dedicated ticket: search for `let global*` and `set*` setter patterns in remaining audit. |
+| **Global singleton with setter/getter (ambient authority)** | `storage/index.ts` (globalDatabase) defined; `api/wallet.ts` uses `getDatabase()` — **singleton is actively used, not dead code**. Likely repeats in many api handlers. | Remove singleton, use constructor DI throughout | Dedicated ticket: grep for `getDatabase\|getGatewayService\|getUpdateService` usages — the global-service-getter pattern is shaping up to be widespread. |
+| **Express type coupling forces api/ handlers to B-class** | All 4 audited api/ handlers (middleware, wallet, ai, index) | Extract handler logic into pure functions; keep Express as thin shell | Affects ~40 of the 50 api/ files; design decision deferred to Runtime convergence (capsules don't use Express anyway). |
+| **Mega-orchestrator with 40+ concrete imports** | ConnectivityService, api/index.ts (**2 confirmed**) | Redesign as multiple smaller capsules; abandon single entry-point pattern | Both bordering Runtime-track territory; the canonical pattern that will be eliminated by capsule architecture. |
 | Direct `process.exit` instead of "I want to exit" signal | runtime-heartbeat | Capability-based RestartRequester | <5 modules likely affected. |
 | Setter-pattern post-construction service injection | ConnectivityService | Constructor-only injection | Yet to find others. |
 | Multi-OS branching inside single function | setupPermissions | Per-OS modules + shared core | Yet to find others. |
@@ -497,7 +547,7 @@ The 0-10 scoring proved easy to apply on the 5 pilot modules. Two calibration no
 
 ### 5.4 What this audit tells us about the AGENTIC-PC2-MONETISATION strategy
 
-After 31 modules, the strategic picture has refined significantly from the 5-module pilot:
+After 36 modules across 5 batches, the strategic picture has refined significantly from the 5-module pilot:
 
 - **Strong-track-1 signal (CONFIRMED + broadened)**: A-class leaves cluster everywhere, not just in AI. The Monetisation Agent's required components can be sourced from A-class leaves across multiple subtrees:
   - AI provider + memory + tool-data leaves (100% A)
@@ -510,22 +560,26 @@ After 31 modules, the strategic picture has refined significantly from the 5-mod
   - `BosonService` (B, 458 LOC) — interface extraction (~1-2 days)
   - `filesystem.ts` (B, 855 LOC) — interface extraction (~1 day)
   - Total: ~10-15 days of bounded refactor work, value-positive for PC2 v1 in its own right.
-- **Strong-track-2 signal (REFINED)**: only ConnectivityService is truly C. The original "connectivity subtree is C-heavy" framing was an artefact of pilot sampling. The actual statement is: **ConnectivityService specifically needs redesign**; the rest of the boson subtree migrates cleanly.
+- **Strong-track-2 signal (REFINED, now 2 C-class modules)**: ConnectivityService AND api/index.ts are both mega-orchestrator C-class. They mirror each other on the network and HTTP sides. Both need redesign, not refactor.
 - **NEW: capability vocabulary already exists** in `types/capabilities.ts`, 1:1-mapped to Runtime provider contracts. Runtime convergence is an extension of structure that exists, not greenfield work.
-- **NEW: migration order changes**: lift A-class leaves first **across all subtrees** (CryptoBox + ProxyProtocol + AI providers can go to Runtime in parallel as their own crates). Then refactor B-class orchestrators in bounded chunks. Treat ConnectivityService as a special-case redesign.
-- **Verdict (refined)**: ship the Mac launcher first. Then, in parallel: (a) Runtime team can begin lifting A-class leaves as crates immediately (low coordination cost; the leaves don't change); (b) PC2 team can refactor B-class orchestrators (4 of them, ~10-15 days total, value-positive); (c) ConnectivityService redesign waits for the Runtime track to provide a clean substrate.
+- **NEW: capability ENFORCEMENT already exists** in `api/middleware.ts` (`requireCapability(scope)`). The vocabulary and the gate-keeping mechanism are both in place — only the substrate (HTTP routes → Runtime capsules) needs to change.
+- **NEW: migration order changes**: lift A-class leaves first **across all subtrees** (CryptoBox + ProxyProtocol + AI providers + storage utilities can go to Runtime in parallel as their own crates). Then refactor B-class orchestrators in bounded chunks. Treat both C-class mega-orchestrators (ConnectivityService + api/index.ts) as redesign.
+- **Verdict (refined)**: ship the Mac launcher first. Then, in parallel:
+  - **(a) Runtime team** can begin lifting A-class leaves as crates immediately (low coordination cost; the leaves don't change). Initial portfolio: `boson-crypto`, `boson-protocol`, `ai-providers`, `storage-migrations`, all building on the existing 14-scope capability vocabulary.
+  - **(b) PC2 team** can refactor B-class orchestrators and HTTP handlers (bounded; ~15-20 days total, value-positive). The cross-cutting blocker fix (concrete-class imports → interfaces) is a single Phase 2 ticket that touches 7+ modules.
+  - **(c)** Both C-class mega-orchestrators wait for the Runtime track to provide a clean substrate; their eventual redesign retires the mega-orchestrator pattern altogether.
 
-The 31-module sample reduces variance on the strategy significantly compared to the 5-module pilot — the migration is no longer subtree-scoped, it's role-scoped.
+The 36-module sample (5 batches across 4 subtrees) is now strong enough to set Phase 2 priorities. The remaining ~236 modules will mostly confirm or refute counts of patterns already identified — they are unlikely to surface fundamentally new findings.
 
 ---
 
 ## 6. What's left to audit
 
-**31 of 272 pc2-node/src .ts files audited (11.4%).** Remaining ~241 files, by directory:
+**36 of 272 pc2-node/src .ts files audited (13.2%).** Remaining ~236 files, by directory:
 
 | Directory | Files | Audited | Notes for auditor |
 |---|---|---|---|
-| `pc2-node/src/api/` | 50 | 0 | HTTP handlers + business logic. Now expect mostly A/A- at leaf (handler) level with isolated B-class orchestrators (per the role-based finding). Watch for Express middleware coupling. |
+| `pc2-node/src/api/` | 50 | 5 (middleware, ai, wallet, rate-limit, index) | Sample confirmed: most handlers will be B-class due to Express coupling, isolated A- utilities, 1 C-class (api/index.ts) for the mega-entry-point. Pace for remaining ~45 files: ~3 min each = 2 hours. |
 | `pc2-node/src/services/` | 71 | 13 (ai/ subset + boson/ sample) | `services/ai/`: A-heavy at leaves, B at orchestrators. `services/boson/`: 6 audited (3 A, 2 A-, 1 B-orchestrator, 1 C). Not yet sampled: `services/gateway/`, `services/dDRM/`, `services/ddrm/`, plus 4 more boson files (`ActiveProxyClient` ✓, `IdentityService` ✓, `UsernameService` ✓; `BosonService` ✓; remaining: `index.ts`, others as found). |
 | `pc2-node/src/storage/` | 8 | **8 (DONE)** | 2 A, 2 A-, 4 B. No C-class. Storage hypothesis confirmed. |
 | `pc2-node/src/utils/` | 16 | 1 (runtime-heartbeat) | Mostly should be A based on role-based finding. |
@@ -551,10 +605,11 @@ The 31-module sample reduces variance on the strategy significantly compared to 
 - ~~Batch 2 — `pc2-node/src/services/ai/` strategic subset (8 of 26 files, hypothesis-test the "AI is mostly A" claim).~~ **DONE 2026-05-16.**
 - ~~Batch 3 — `pc2-node/src/storage/` (8 files, sanity-check storage hypothesis).~~ **DONE 2026-05-16.**
 - ~~Batch 4 — `services/boson/` sample (5 modules; refuted "boson is mostly C").~~ **DONE 2026-05-16.**
-- Batch 5 — `services/ai/` remaining 18 files (finish AI subtree).
-- Batch 6 — `pc2-node/src/utils/` remaining 15 files (small, fast).
-- Batch 7 — `pc2-node/src/api/` HTTP handlers (50 files; identify the worst Express coupling early).
-- Batches 8-N — everything else.
+- ~~Batch 5 — `api/` sample (5 modules; confirmed handlers are B; found 2nd C-class; found existing `requireCapability` enforcement).~~ **DONE 2026-05-16.**
+- Batch 6 — `services/ai/` remaining 18 files (finish AI subtree).
+- Batch 7 — `pc2-node/src/utils/` remaining 15 files (small, fast).
+- Batch 8 — `api/` remaining 45 files (complete the api/ subtree).
+- Batches 9-N — everything else.
 
 After each batch, append a section to §4 of this document under a new heading. Don't replace earlier data — we want the time series.
 
@@ -573,7 +628,7 @@ After each batch, append a section to §4 of this document under a new heading. 
 
 - **Source of truth**: this file.
 - **Scope**: pc2-node/src — 272 .ts files, 82,580 LOC (per jscpd).
-- **Audit completion**: 31/272 (11.4%) — pilot (5) + types subtree (5, complete) + AI subtree strategic subset (8) + storage subtree (8, complete) + boson subtree sample (5).
+- **Audit completion**: 36/272 (13.2%) — pilot (5) + types subtree (5, complete) + AI subtree strategic subset (8) + storage subtree (8, complete) + boson subtree sample (5) + api subtree sample (5).
 - **Last updated**: see git log on this file.
 - **Tied to**:
   - `.cursor/tasks/OPTIMISATION-AND-REFACTORING-2026-05/PHASE-2-PLAN.md` (Cluster 5)

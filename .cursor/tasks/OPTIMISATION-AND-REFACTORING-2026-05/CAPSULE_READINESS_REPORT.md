@@ -1,6 +1,8 @@
 # Capsule Readiness Report (Cluster 5.1, pilot)
 
-**Status**: PILOT + 5 BATCHES (methodology validated; **36 / 272 modules audited = 13.2%**). The rubric and vocabulary in §1-§3 are stable. The per-module audit in §4 has covered `src/types/` (complete) + strategic AI subset + `src/storage/` (complete) + 5-module `services/boson/` sample + 5-module `src/api/` sample. Remaining ~236 modules can use the same rubric.
+**Status**: PILOT + 6 BATCHES (methodology validated; **51 / 272 modules audited = 18.8%**). The rubric and vocabulary in §1-§3 are stable. The per-module audit in §4 has covered: `src/types/` (complete) + strategic AI subset + `src/storage/` (complete) + 5-module `services/boson/` sample + 5-module `src/api/` sample + `src/utils/` (complete). Remaining ~221 modules can use the same rubric.
+
+**Companion document**: a 1-page executive summary lives at [`AUDIT_EXECUTIVE_SUMMARY.md`](./AUDIT_EXECUTIVE_SUMMARY.md) for non-technical stakeholders (Sasha, Anders, board narrative). The full audit data lives here.
 
 **Two major strategic findings**:
 1. **Role-based readiness, not subtree-based** (Batch 4): A-class leaves cluster across all subtrees; B-class clusters at orchestrators; only 2 mega-orchestrators are C-class. Migration order = role-scoped (lift A-leaves in parallel across subtrees), not subtree-scoped.
@@ -488,19 +490,55 @@ Combined with `populatePrincipal()` and the `CapabilityPrincipal` interface, **p
 
 ---
 
-## 5. Aggregate observations (pilot + 5 extension batches, 36 / 272 modules)
+## 4.SEPT — Batch 6: `pc2-node/src/utils/` (15 / 16 modules audited 2026-05-16)
 
-### 5.1 Distribution after 36 / 272 modules
+Utils subtree complete (15 new + 1 already-audited runtime-heartbeat = 16/16). Tests the role-based hypothesis at the utility-leaf level. **Prediction**: should be overwhelmingly A based on the role-based finding.
+
+| Module | LOC | Class | Score | Notes |
+|---|---|---|---|---|
+| `logger.ts` | 56 | A | 10/10 | Zero imports, tiny module — the logger that every other module depends on. Sits at the very bottom of the dep graph. |
+| `polyfill.ts` | 51 | A | 10/10 | Imports only logger. Tiny. |
+| `routes.ts` | 89 | A | 10/10 | Pure functions (isAPIRoute, etc.). Zero non-logger imports. |
+| `wallet.ts` | 119 | A | 10/10 | Pure functions (detectAddressType, normalizeAddress, compareAddresses). Zero imports. |
+| `skill-parser.ts` | 31 | A | 10/10 | Pure YAML frontmatter parser. Zero imports. |
+| `redact.ts` | 112 | A | 10/10 | Pure utility (crypto + os.hostname for sensitive-data redaction). |
+| `rpc.ts` | 111 | A | 9/10 | Generic JSON-RPC utility. Only logger import. -1 for being part of network calling layer with no capability label. |
+| `secureViewSession.ts` | 562 | A | 9/10 | Wallet-signature session management. Imports `viem` for signature verification, logger. Self-contained. -1 for owning sessions in memory without explicit GC capability. |
+| `platform.ts` | 368 | A | 8/10 | OS/hardware detection. Imports os, child_process (execSync for nvidia-smi etc.), fs, logger. -2 for direct execSync + read-fs calls; otherwise pure detection. |
+| `encryption.ts` | 334 | A- | 8/10 | Crypto + light file persistence for keys. -2 for direct fs read/write. |
+| `urlUtils.ts` | 89 | A- | 8/10 | Imports Express `Request` for URL parsing helpers. -2 for Express type coupling (same pattern as api/rate-limit.ts). |
+| `fileUrlSigner.ts` | 209 | A- | 8/10 | HMAC-signed URLs with key persistence. -2 for direct fs read/write. |
+| `respawner.ts` | 70 | A- | 7/10 | Process self-restart utility. Imports child_process + logger. -3 for PROCESS-SPAWN capability not abstracted; otherwise small and focused. |
+| `metrics.ts` | 361 | A- | 7/10 | Imports `DatabaseManager` (concrete class — **8th instance** of the #1 cross-cutting blocker) + logger. -3 for concrete-class import. |
+| `binary-manager.ts` | 969 | B | 5/10 | Downloads + verifies + chmods + installs external transport binaries (WireGuard, Amnezia, etc.). 11 fs functions + execSync + http + https. Multi-capability utility: NETWORK-FETCH + WRITE-DATA-DIR + PROCESS-SPAWN + executable permission management. -5 for the cluster of capabilities without explicit grant labels. |
+
+(`runtime-heartbeat.ts` already audited in pilot — B, 7/10.)
+
+### 4.SEPT.FINDINGS
+
+**Distribution**: 9 A (60%), 5 A- (33%), 1 B (7%) + 1 already-audited B from pilot.
+
+**14 of 16 utils/ modules are A or A- class (87.5%).** The role-based hypothesis is strongly confirmed at the utility level: utilities are predominantly pure-function leaves by design. The one B-class entry (`binary-manager.ts`) is a multi-capability orchestrator masquerading as a utility — it's a downloader + verifier + installer + chmod-er, which is several concerns in one 969-LOC module.
+
+**Notable**: this batch surfaced the **8th concrete-class-import instance** (`metrics.ts` → `DatabaseManager`). The cross-cutting blocker pattern is now confirmed across 5 subtrees (`ai`, `storage`, `boson`, `api`, `utils`).
+
+**No new patterns surfaced.** This batch confirms existing finding counts rather than discovering new shapes — consistent with the prediction that diminishing returns has begun.
+
+---
+
+## 5. Aggregate observations (pilot + 6 extension batches, 51 / 272 modules)
+
+### 5.1 Distribution after 51 / 272 modules
 
 | Class | Count | Modules |
 |---|---|---|
-| A (capsule-ready) | 17 | OpenAIProvider (9/10), AgentMemoryManager (8/10), api.ts (10/10), wallet-agent.ts (10/10), qrcode-terminal.d.ts (10/10), qrcode.d.ts (10/10), capabilities.ts (9/10), ClaudeProvider (9/10), GeminiProvider (9/10), OllamaProvider (8/10), EmbeddingProvider (9/10), AgentTools (10/10), context.ts (9/10), migrations.ts (9/10), ProxyProtocol (10/10), CryptoBox (9/10), NetworkDetector (8/10) |
-| A- (capsule-ready, light polish) | 7 | VectorMemoryStore (8/10), database.ts (7/10), ipfs.ts (7/10), thumbnail.ts (7/10), IdentityService (7/10), UsernameService (8/10), api/rate-limit.ts (7/10) |
-| B (refactorable) | 11 | runtime-heartbeat (7/10), AIChatService (5/10), setupPermissions (5/10), filesystem.ts (6/10), indexer.ts (6/10), storage/index.ts (4/10), ActiveProxyClient (6/10), BosonService (5/10), api/middleware.ts (6/10), api/wallet.ts (5/10), api/ai.ts (5/10) |
-| B- (refactorable, multiple blockers) | 1 | ToolExecutor (4/10) |
-| C (deeply coupled) | 2 | ConnectivityService (2/10), api/index.ts (2/10) |
+| A (capsule-ready) | 26 | OpenAIProvider, AgentMemoryManager, api.ts, wallet-agent.ts, qrcode-terminal.d.ts, qrcode.d.ts, capabilities.ts, ClaudeProvider, GeminiProvider, OllamaProvider, EmbeddingProvider, AgentTools, context.ts, migrations.ts, ProxyProtocol, CryptoBox, NetworkDetector, logger, polyfill, routes, wallet, skill-parser, redact, rpc, secureViewSession, platform |
+| A- (capsule-ready, light polish) | 12 | VectorMemoryStore, database.ts, ipfs.ts, thumbnail.ts, IdentityService, UsernameService, api/rate-limit.ts, encryption, urlUtils, fileUrlSigner, respawner, metrics |
+| B (refactorable) | 12 | runtime-heartbeat, AIChatService, setupPermissions, filesystem.ts, indexer.ts, storage/index.ts, ActiveProxyClient, BosonService, api/middleware.ts, api/wallet.ts, api/ai.ts, binary-manager |
+| B- (refactorable, multiple blockers) | 1 | ToolExecutor |
+| C (deeply coupled) | 2 | ConnectivityService, api/index.ts |
 
-**24 of 36 modules audited so far are A or A- class (67%).** The distribution has stabilised:
+**38 of 51 modules audited so far are A or A- class (75%).** The distribution has stabilised — utils/ batch shifted the A-class share up significantly because utility leaves are A by design:
 
 - **Confirmed: A-class clusters at the leaf level across all subtrees.**
   - Types subtree: 5/5 A (100%)
@@ -515,11 +553,11 @@ Combined with `populatePrincipal()` and the `CapabilityPrincipal` interface, **p
 
 **The strongest cross-cutting blocker pattern is now unambiguously**: **concrete-class imports where interfaces should suffice**. Confirmed in 7+ modules across 4 subtrees (`ai`, `storage`, `boson`, `api`). The fix is a single coordinated refactoring (extract ~5 interfaces, update imports) that improves the score of 7+ modules in one Phase 2 ticket.
 
-### 5.2 Top blocker patterns (updated after 36 modules)
+### 5.2 Top blocker patterns (updated after 51 modules)
 
 | Pattern | Now affects | Fix shape | Status |
 |---|---|---|---|
-| **Concrete class import where interface should suffice** | AgentMemoryManager, EmbeddingProvider, ToolExecutor, filesystem.ts, indexer.ts, api/wallet.ts (AgentKitExecutor), api/ai.ts (AIChatService), BosonService (7 concrete-class deps) (**7+ confirmed across 4 subtrees**) | Extract `IFilesystemManager`, `IDatabaseManager`, `IIPFSStorage`, `IAIChatService`, `IAgentKitExecutor`, `IIdentityService` interfaces; concrete classes implement them | **#1 cross-cutting refactor pattern**. One Phase 2 ticket covering 7+ modules. |
+| **Concrete class import where interface should suffice** | AgentMemoryManager, EmbeddingProvider, ToolExecutor, filesystem.ts, indexer.ts, api/wallet.ts (AgentKitExecutor), api/ai.ts (AIChatService), BosonService (7 concrete deps), metrics.ts (DatabaseManager) (**9+ confirmed across 5 subtrees**) | Extract `IFilesystemManager`, `IDatabaseManager`, `IIPFSStorage`, `IAIChatService`, `IAgentKitExecutor`, `IIdentityService` interfaces; concrete classes implement them | **#1 cross-cutting refactor pattern**. One Phase 2 ticket covering 9+ modules. |
 | **Types co-located with implementation, imported by siblings** | `providers/` (OllamaProvider exports types to 4 siblings), `storage/` (database.ts owns 9 types used everywhere) — **2 subtrees confirmed**, applies to ~10-15 modules | Extract `<subtree>/types.ts` files | **High-ROI: ~3 hours total fixes ~10-15 module scores by +1 each**. Two Phase 2 tickets (one per subtree). |
 | Async `initialize()` separate from constructor | AIChatService, database.ts (**2 confirmed**) | Either builder pattern or sync construct + lazy connect | Pattern continues; expect 5-10 modules total. |
 | Cross-cutting imports from `websocket/events` + `gateway/` inside leaf modules | ToolExecutor | Expose as injected capabilities | Specific to orchestration code; expect 2-3 modules. |
@@ -575,14 +613,14 @@ The 36-module sample (5 batches across 4 subtrees) is now strong enough to set P
 
 ## 6. What's left to audit
 
-**36 of 272 pc2-node/src .ts files audited (13.2%).** Remaining ~236 files, by directory:
+**51 of 272 pc2-node/src .ts files audited (18.8%).** Remaining ~221 files, by directory:
 
 | Directory | Files | Audited | Notes for auditor |
 |---|---|---|---|
 | `pc2-node/src/api/` | 50 | 5 (middleware, ai, wallet, rate-limit, index) | Sample confirmed: most handlers will be B-class due to Express coupling, isolated A- utilities, 1 C-class (api/index.ts) for the mega-entry-point. Pace for remaining ~45 files: ~3 min each = 2 hours. |
 | `pc2-node/src/services/` | 71 | 13 (ai/ subset + boson/ sample) | `services/ai/`: A-heavy at leaves, B at orchestrators. `services/boson/`: 6 audited (3 A, 2 A-, 1 B-orchestrator, 1 C). Not yet sampled: `services/gateway/`, `services/dDRM/`, `services/ddrm/`, plus 4 more boson files (`ActiveProxyClient` ✓, `IdentityService` ✓, `UsernameService` ✓; `BosonService` ✓; remaining: `index.ts`, others as found). |
 | `pc2-node/src/storage/` | 8 | **8 (DONE)** | 2 A, 2 A-, 4 B. No C-class. Storage hypothesis confirmed. |
-| `pc2-node/src/utils/` | 16 | 1 (runtime-heartbeat) | Mostly should be A based on role-based finding. |
+| `pc2-node/src/utils/` | 16 | **16 (DONE)** | 9 A, 5 A-, 2 B (runtime-heartbeat, binary-manager). Role-based hypothesis confirmed: utility leaves are A by design. |
 | `pc2-node/src/websocket/` | 4 | 0 | WebSocket layer. Expect B for the dispatcher, A for helpers/event types. |
 | `pc2-node/src/types/` | 5 | **5 (DONE)** | All confirmed A. Subtree complete. |
 | `pc2-node/src/sdk/` | 3 | 0 | Likely A. |
@@ -606,8 +644,8 @@ The 36-module sample (5 batches across 4 subtrees) is now strong enough to set P
 - ~~Batch 3 — `pc2-node/src/storage/` (8 files, sanity-check storage hypothesis).~~ **DONE 2026-05-16.**
 - ~~Batch 4 — `services/boson/` sample (5 modules; refuted "boson is mostly C").~~ **DONE 2026-05-16.**
 - ~~Batch 5 — `api/` sample (5 modules; confirmed handlers are B; found 2nd C-class; found existing `requireCapability` enforcement).~~ **DONE 2026-05-16.**
-- Batch 6 — `services/ai/` remaining 18 files (finish AI subtree).
-- Batch 7 — `pc2-node/src/utils/` remaining 15 files (small, fast).
+- ~~Batch 6 — `pc2-node/src/utils/` (16/16 complete; 9 A, 5 A-, 2 B).~~ **DONE 2026-05-16.**
+- Batch 7 — `services/ai/` remaining 18 files (finish AI subtree).
 - Batch 8 — `api/` remaining 45 files (complete the api/ subtree).
 - Batches 9-N — everything else.
 
@@ -628,7 +666,7 @@ After each batch, append a section to §4 of this document under a new heading. 
 
 - **Source of truth**: this file.
 - **Scope**: pc2-node/src — 272 .ts files, 82,580 LOC (per jscpd).
-- **Audit completion**: 36/272 (13.2%) — pilot (5) + types subtree (5, complete) + AI subtree strategic subset (8) + storage subtree (8, complete) + boson subtree sample (5) + api subtree sample (5).
+- **Audit completion**: 51/272 (18.8%) — pilot (5) + types subtree (5, complete) + AI subtree strategic subset (8) + storage subtree (8, complete) + boson subtree sample (5) + api subtree sample (5) + utils subtree (15 new, complete).
 - **Last updated**: see git log on this file.
 - **Tied to**:
   - `.cursor/tasks/OPTIMISATION-AND-REFACTORING-2026-05/PHASE-2-PLAN.md` (Cluster 5)

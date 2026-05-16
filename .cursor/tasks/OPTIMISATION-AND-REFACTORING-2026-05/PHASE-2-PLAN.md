@@ -176,19 +176,42 @@ Medium risk. Touches product code. Each item is its own PR with explicit before/
 
 These items don't touch code in Phase 2. They produce documents that feed into the AGENTIC-PC2-MONETISATION-2026-05 strategy AND the eventual ElastOS Runtime work.
 
-### 5.1 Capsule-shape audit
-- **What**: walk pc2-node/src module-by-module; produce a `CAPSULE_READINESS_REPORT.md` classifying each module as: (a) already capsule-shaped (small, pure, capability-driven), (b) refactorable to capsule shape with bounded effort, (c) deeply coupled to pc2-node's monolith and needs significant restructuring before capsule extraction.
-- **ROI**: feeds the dual-track strategy directly — tells us which patterns we've built that translate cleanly to the Runtime and which need rework.
-- **Effort**: 1 full day of analysis.
-- **Risk**: none (audit only, no code).
-- **Dependencies**: none. Could even be done before Phase 2 formally starts if there's spare cycles, but flagged here for completeness.
+### 5.1 Capsule-shape audit — **IN PROGRESS (51/272 = 18.8% as of 2026-05-16)**
 
-### 5.2 Capability-token affordance audit
-- **What**: walk pc2-node/src looking for places where one module passes "trust" to another via implicit ambient authority (e.g. "this caller is internal so it can do X") rather than explicit capability tokens. Each one is a candidate refactor for when Runtime semantics arrive.
-- **ROI**: same as 5.1 — informs the Runtime migration plan.
-- **Effort**: half-day.
-- **Risk**: none (audit only).
+- **What**: walk pc2-node/src module-by-module; classify each module as: (a) capsule-ready (A), (b) refactorable with bounded effort (B), (c) deeply coupled (C).
+- **Status**: 51 of 272 modules audited across 6 batches (types/ ✓, AI subset, storage ✓, boson sample, api sample, utils ✓). See [`CAPSULE_READINESS_REPORT.md`](./CAPSULE_READINESS_REPORT.md) for full data; [`AUDIT_EXECUTIVE_SUMMARY.md`](./AUDIT_EXECUTIVE_SUMMARY.md) for the 1-page summary.
+- **Distribution so far**: 26 A (51%), 12 A- (24%), 12 B (24%), 1 B- (2%), 2 C (4%).
+- **Concrete findings already actionable for Phase 2**:
+  1. **#1 cross-cutting blocker**: concrete-class import instead of interface — confirmed in 9+ modules across 5 subtrees. **One Phase 2 ticket** ("extract IFilesystemManager, IDatabaseManager, IIPFSStorage, IAIChatService, IAgentKitExecutor, IIdentityService") fixes 9+ module scores.
+  2. **Types co-located with implementation**: `providers/types.ts` extraction is a **1-hour Phase 2 ticket** that improves 5 module scores to 10/10. Similar `storage/types.ts` extraction is ~2 hours.
+  3. **Global singleton actively used**: `storage/index.ts` exports `getDatabase()` singleton, used in `api/wallet.ts`. Removal is Phase 2 work; grep audit needed to find all consumers first.
+  4. **Two C-class mega-orchestrators identified**: `ConnectivityService` (1,597 LOC) and `api/index.ts` (1,766 LOC) — both retired by Runtime substrate, not refactored.
+- **Effort to complete**: ~12-15 hours of analyst-time at current pace (down from initial ~30hr estimate; pace improves as rubric is internalised).
+- **Risk**: none (audit only, no code).
 - **Dependencies**: none.
+
+### 5.2 Capability-token affordance audit — **PARTIALLY DONE (subsumed by 5.1)**
+
+- **What**: walk pc2-node/src looking for ambient-authority patterns.
+- **Status**: §3 of `CAPSULE_READINESS_REPORT.md` defines the 14-term capability vocabulary; every audited module declares its capabilities. The audit doubles as the capability-token affordance audit.
+- **Major finding**: pc2-node **already defines and enforces** a 14-scope capability vocabulary (`types/capabilities.ts` + `api/middleware.ts requireCapability(scope)`). Runtime convergence is extension, not invention.
+- **Effort**: subsumed; no separate work needed.
+
+### 5.3 Concrete-class → interface extraction — **READY TO START POST-MAC**
+
+- **What**: based on 5.1 findings, extract ~5-6 interfaces (`IFilesystemManager`, `IDatabaseManager`, `IIPFSStorage`, `IAIChatService`, `IAgentKitExecutor`, `IIdentityService`); update concrete classes to implement them; switch sibling imports to interface imports.
+- **ROI**: improves 9+ module scores in one PR; reduces test surface (mocking becomes trivial); unblocks Runtime crate extraction for the affected modules.
+- **Effort**: ~1 week (the affected modules span 5 subtrees and need coordinated PRs to avoid breaking the build mid-refactor).
+- **Risk**: medium — must not change runtime semantics; need full smoke test green after each PR.
+- **Dependencies**: hard-blocked until Mac launcher 48-72h soak is complete.
+
+### 5.4 Types extraction (providers/types.ts + storage/types.ts) — **READY TO START POST-MAC**
+
+- **What**: extract type definitions from the implementation modules that currently own them.
+- **ROI**: 5 AI provider modules + 4-6 storage modules improve scores by +1 each.
+- **Effort**: ~3 hours total (one PR per subtree).
+- **Risk**: very low (types-only refactor, no runtime change).
+- **Dependencies**: same as 5.3.
 
 ---
 

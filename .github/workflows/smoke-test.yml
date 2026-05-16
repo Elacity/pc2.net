@@ -19,10 +19,16 @@ name: Smoke test (build + boot)
 #   - v1.2.7.8 missing pc2-binaries-v1 release
 #   - Any TypeScript regression on the pc2-node side
 #   - Any dependency / workspace install break (the v1.2.7.x lockfile drift class)
+#   - v1.2.7.11 osascript apostrophe regression (via test:unit step)
 #
-# Phase 2-6 scopes (separate PRs against this workflow): heartbeat probe,
-# macOS permissions probe, osascript unit-test, Windows + Linux-ARM
-# expansion, pre-tag checklist, rollback runbook.
+# Phase 5 (A-3, this revision): matrix expansion to ubuntu-24.04-arm +
+# windows-latest as experimental gates that surface platform-specific
+# regressions ahead of the Linux-ARM / Windows launcher rollout that
+# follows the Mac launcher. These DO NOT block release tagging until
+# proven stable; see continue-on-error on the matrix.
+#
+# Future phases (separate PRs against this workflow): heartbeat probe,
+# macOS permissions probe, pre-tag checklist, rollback runbook.
 #
 # Failure means: do NOT tag. Investigate the failing matrix entry, reproduce
 # locally, fix, push again. The whole point of this workflow is that we
@@ -34,9 +40,15 @@ name: Smoke test (build + boot)
 #   - workflow_dispatch: manual trigger for pre-release rehearsal +
 #     opt-in expensive matrix entries (e.g. paid Intel Mac).
 #
-# Cost: $0. Public repo, standard runners (macos-latest = Apple Silicon
-# M-series 3-core, ubuntu-latest 2-core). Mac is the long pole (~10–12 min
-# end-to-end); Linux finishes in ~6–8 min.
+# Cost: $0. Public repo, standard runners. All four matrix entries
+# (ubuntu-latest, macos-latest, ubuntu-24.04-arm, windows-latest) are
+# free for public repos. Observed timings on this branch:
+#   - linux-x64       ~4 min cold cache
+#   - darwin-arm64    ~7 min cold cache
+#   - linux-arm64     not yet measured (first run with this matrix)
+#   - windows-x64     not yet measured (first run with this matrix)
+# Total wall-clock is bounded by the slowest entry because matrix
+# entries run in parallel.
 
 on:
   push:
@@ -80,13 +92,61 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # ── Required gates ────────────────────────────────────────────
+          # These two MUST be green before the launcher is tagged. They
+          # cover the platforms we ship to users next Wed/Thu. A red
+          # entry here fails the Smoke test summary job and prevents
+          # release tagging once branch protection is enabled on main.
           - os: ubuntu-latest
             label: linux-x64
+            experimental: false
           - os: macos-latest
             label: darwin-arm64
+            experimental: false
+
+          # ── Experimental gates (A-3 matrix expansion) ────────────────
+          # These two run on every push but are NOT release blockers.
+          # They surface platform-specific regressions ahead of the
+          # Linux-ARM / Windows launcher rollout after the Mac release
+          # ships. continue-on-error: true (set below) means a red entry
+          # here lands as a yellow advisory on the dashboard rather than
+          # a red workflow failure.
+          #
+          # Expected initial state:
+          #   - ubuntu-24.04-arm: likely green. Build chain is Unix and
+          #     apt-get canvas libs work the same on arm64. If red,
+          #     diagnose and fix incrementally.
+          #   - windows-latest: likely red on typecheck because canvas@2
+          #     building from source on Windows needs MSVC + GYP +
+          #     non-trivial setup; we explicitly do NOT install canvas
+          #     system libs on Windows in this phase. The Phase 2 canvas
+          #     migration to @napi-rs/canvas removes this entire concern.
+          #
+          # Promotion path: once an experimental entry has been green for
+          # 5 consecutive pushes, flip its `experimental: true` to false
+          # to make it a required gate.
+          - os: ubuntu-24.04-arm
+            label: linux-arm64
+            experimental: true
+          - os: windows-latest
+            label: windows-x64
+            experimental: true
 
     runs-on: ${{ matrix.os }}
+    # Experimental matrix entries do NOT block the workflow; they report
+    # data without failing branch protection. Switch to false (or remove
+    # the line) once the entry is stable enough to gate releases.
+    continue-on-error: ${{ matrix.experimental }}
     timeout-minutes: 25
+
+    # Force bash on every platform so the run: blocks below behave
+    # identically on Linux, macOS, AND Windows (Git Bash is preinstalled
+    # on windows-latest runners). Without this, Windows defaults to
+    # PowerShell, which would silently break our pipe / set -euo pipefail
+    # / conditional patterns.
+    defaults:
+      run:
+        shell: bash
 
     steps:
       # Submodules in this repo (v86 emulator, twisp, epoxy-tls, wiki) are

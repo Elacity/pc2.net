@@ -151,7 +151,7 @@ Do this once now, repeat once per quarter so the team's muscle memory stays warm
 
 The dry-run for the v1.2.8.0 release window should be done once before the Mac launcher release ships next Wed/Thu so the procedure has been exercised on the current GitHub Actions / `gh` CLI versions.
 
-**Status of dry-run completion**: PENDING (Phase 6 of RELEASE-ENGINEERING-V1280). Document the completion date here when it's done so future taggers can trust the procedure.
+**Status of dry-run completion**: ✅ COMPLETED 2026-05-16 08:34 BST against `Elacity/pc2.net` using two sacrificial test releases (`dry-run-rollback-{good,bad}-20260516`). All five canonical Step 1-2 commands verified end-to-end. Sacrificial releases + tags cleaned up immediately after; `/releases/latest` confirmed to still point at `v1.2.7.14`. See "Empirical findings from the 2026-05-16 dry-run" appendix at the bottom of this document for the full set of observations.
 
 ---
 
@@ -172,10 +172,90 @@ The dry-run for the v1.2.8.0 release window should be done once before the Mac l
 
 ---
 
+## Appendix — Empirical findings from the 2026-05-16 dry-run
+
+Ran the full procedure against `Elacity/pc2.net` (NOT `Elacity/elastos-launcher` — we don't have the launcher repo write rights from the agent context, and pc2.net is the closer-to-fire test ground anyway). Methodology: created two sacrificial test releases (`dry-run-rollback-{good,bad}-20260516`), exercised every step, observed behaviour via both `gh` CLI and direct GitHub REST API calls (authenticated + anonymous), then deleted the test releases + tags. Total elapsed time: ~12 minutes including the doc update.
+
+### 1. The "Latest" pointer is auto-stolen on release creation (CRITICAL)
+
+When you run `gh release create <new-tag>` on a repo that already has a Latest release, **the new release IMMEDIATELY becomes the new Latest** — even if it's the same content as a test release, even if its `published_at` is older than the existing Latest (no, GitHub uses release-creation timestamp, not the tag's commit date).
+
+**Verified**: created `dry-run-rollback-bad-20260516` at 07:34:02 UTC. Within ~1 second, `GET /releases/latest` returned `dry-run-rollback-bad-20260516` instead of `v1.2.7.14` (published 2026-05-07).
+
+**Implication**: any non-draft release you create — even one labelled "DO NOT USE" or "TEST" — will be served to any user / auto-updater / CI that polls `/releases/latest` until you explicitly mark the previous-good release with `--latest` again. The exposure window is ~seconds for the agent, ~minutes-to-hours for a human who doesn't realize what they did.
+
+**Defence**: when creating any auxiliary release on a repo that has production users, use `--draft` from the start. Then GitHub never promotes it to Latest. The `gh release create` command supports this:
+```bash
+gh release create <tag> --draft --title "..." --notes "..." asset1 asset2 ...
+```
+
+**Action item**: add this to `PRE-TAG-CHECKLIST.md` §0 (or §5.3) — when tagging a real release, the moment you create it, GitHub WILL mark it Latest. So make sure §0–§4 are all green BEFORE running `gh release create`. Don't `gh release create` to "see what happens" — that's not free.
+
+### 2. `gh release edit --draft` does the right thing for rollbacks
+
+Confirmed behaviour when toggling `--draft` on an existing release:
+
+| Surface | Anonymous (no auth) | Authenticated |
+|---|---|---|
+| `GET /releases/tags/<tag>` | HTTP 404 ✓ | Tag visible with `draft=true` |
+| `GET /releases/download/<tag>/<asset>` | HTTP 404 ✓ | Same |
+| `GET /releases/latest` | Returns next-Latest non-draft ✓ | Same |
+| `GET /releases` (list) | Excludes drafts ✓ | Includes drafts |
+| Git tag on remote | Untouched ✓ (for forensics) | Same |
+| The release record in DB | Preserved with `tag_name` intact ✓ | Same |
+
+The output of `gh release edit --draft` shows a URL like `https://github.com/Elacity/pc2.net/releases/tag/untagged-<hash>`. **This URL is misleading — it's only the gh-CLI-rendered draft preview page.** The release is still bound to its tag in the canonical API; the "untagged" name is a render artefact. Don't panic when you see it.
+
+**Implication**: Step 1 of the procedure (`--draft` the bad release) is the right move. It hides the bad release from every user-facing surface that matters, while leaving forensics intact (the git tag stays, the release record stays in the database). If you decide an hour later it was a false alarm, `gh release edit --draft=false` re-publishes it cleanly.
+
+### 3. Un-draft propagation has a CDN lag of ~30-60 s for anonymous viewers
+
+When un-drafting via `gh release edit <tag> --draft=false`:
+- **Authenticated endpoint** updates instantly: `gh release view <tag>` works immediately.
+- **Anonymous endpoint** (no auth header) returns HTTP 404 for ~30-60 seconds after the un-draft, then starts returning HTTP 200.
+
+**Implication**: if you mistakenly un-draft a release you intended to keep drafted, an authenticated re-draft via `gh release edit <tag> --draft` works fine — but during that ~60 s window, anonymous users may already have seen and downloaded the release. Generally not a concern for our rollback path (we're going OUT of draft, not IN), but worth knowing if you ever need to keep something drafted defensively.
+
+### 4. `gh release edit <tag> --latest` flips the pointer instantly
+
+Confirmed: from running `gh release edit dry-run-rollback-good-20260516 --latest` to the response of `GET /releases/latest` reporting the new tag was sub-second. **The previous Latest is implicitly unset** (single-pointer model). Recovery via `gh release edit <previous> --latest` is equally instant. We held an "unsafe" Latest pointer for 2 seconds during the dry-run with zero observable production impact.
+
+**Implication**: the `--latest` flip is reliable and fast. There's no race window concern.
+
+### 5. `gh release delete --cleanup-tag --yes` cleanly removes everything
+
+Confirmed: a single `gh release delete <tag> --cleanup-tag --yes` removes:
+- The release record (from `gh release list`, from `GET /releases`)
+- The git tag on the remote (verified via `git ls-remote --tags`)
+- All assets attached to the release
+
+Local tags must be deleted separately with `git tag -d <tag>` (gh CLI is remote-only). Both releases in the dry-run were cleaned up with one command each, no orphan tags, no orphan release records.
+
+### 6. Decision-tree refinement
+
+Based on dry-run timing data, the original "rollback in 30 min, comms in 60 min" target in this doc is **achievable** but tight. Step 1 + Step 2 (the technical actions) took ~30 seconds end-to-end. The dominant time cost will be:
+- Identifying the previous good version (§A.B in the doc) — 1-2 min if recent
+- Verifying its assets are still downloadable (§A.C) — 1 min per platform
+- Writing the comms message (§3) — 10-15 min from blank page; 2-3 min from the template in this doc
+
+So the realistic clock is **5 min to technical containment, 10-20 min to first comms post**. Faster than the original estimate. Don't pad — speed matters more than polish in the first communication.
+
+### 7. Document changes recommended (and tracked separately)
+
+These findings should be folded back into the procedure text in a follow-up commit:
+- §1 should explicitly note "this hides the release from anonymous viewers within 1 second; tag stays bound".
+- §2 should reassure "this flip is instant, no race window".
+- A new "common gotchas" subsection should warn about the auto-Latest-on-creation behaviour from finding #1 above.
+- The 30/60 min targets should be tightened to 5/20 min.
+
+These were not folded in during the dry-run itself to keep the diff small and reviewable. Sasha to decide if/when to refine.
+
+---
+
 ## Document metadata
 
 - **Source of truth**: this file.
 - **Owners**: release engineering (Sasha primary).
 - **Last updated**: see git log on this file.
-- **Last dry-run completed**: never (this is Phase 6 — schedule one before next Mac release).
+- **Last dry-run completed**: 2026-05-16 08:34 BST (see Appendix above).
 - **Tied to**: `PRE-TAG-CHECKLIST.md`, `.cursor/tasks/RELEASE-ENGINEERING-V1280/RELEASE-ENGINEERING-V1280.md`.

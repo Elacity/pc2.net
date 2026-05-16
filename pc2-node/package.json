@@ -18,7 +18,7 @@
     "clean": "node scripts/clean.js",
     "test": "npm run build:backend && node scripts/test-system.js",
     "test:security": "tsx --test tests/security/*.test.js",
-    "test:unit": "node --test tests/unit/*.test.js",
+    "test:unit": "node --test tests/unit",
     "backup": "node scripts/backup.js",
     "restore": "node scripts/restore.js",
     "recover-mnemonic": "node scripts/recover-mnemonic.js"

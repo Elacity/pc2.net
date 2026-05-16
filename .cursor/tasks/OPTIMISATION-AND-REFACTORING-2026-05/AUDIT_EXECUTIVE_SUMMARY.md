@@ -3,20 +3,22 @@
 > **Companion to**: [`CAPSULE_READINESS_REPORT.md`](./CAPSULE_READINESS_REPORT.md) (full audit data, methodology, 638-line per-module classification).
 > **For**: Sasha, Anders (Runtime team), Ahmed (ENM), board narrative.
 > **Reading time**: 3 minutes.
-> **Status**: Audit-in-progress; **79 of 272 pc2-node modules classified (29.0%)**; **8 subtrees fully audited** (types, services/ai, storage, utils, services/media [dDRM], services/sandbox, services/wasm, services/providers); strategy stable.
+> **Status**: Audit-in-progress; **102 of 272 pc2-node modules classified (37.5%)**; **the ENTIRE `pc2-node/src/services/` subtree is now audited (71/71 modules across 13 nested subtrees)**, plus types/ (5/5), storage/ (8/8), utils/ (16/16), api/ sample (5/45). Strategy stable.
 > **Updated**: 2026-05-16.
 
 ---
 
 ## TL;DR
 
-pc2-node is **dramatically more capsule-ready than expected**. After auditing 79 modules across 8 fully-complete subtrees including AI and dDRM:
+pc2-node is **dramatically more capsule-ready than expected**. After auditing 102 modules across the entire `services/` subtree plus types/storage/utils/api-sample:
 
-- **78% of audited modules are A or A- class** (capsule-ready or close to it)
-- **The entire AI subtree is C-free**: 26/26 modules — 18 A, 3 A-, 2 B, 1 B-, 0 C
-- **The entire dDRM/media subsystem is C-free**: 8/8 modules — 3 A, 2 A-, 3 B, 0 C. **The Monetisation Agent's most critical dependency is structurally clean.**
+- **79% of audited modules are A or A- class** (capsule-ready or close to it)
+- **The entire `services/` subtree is now audited (71/71)**: 38 A (54%), 13 A- (18%), 14 B (20%), 2 B- (3%), 1 C (1%)
+- **The entire AI subtree is C-free** (26/26): 0 C
+- **The entire dDRM/media subsystem is C-free** (8/8): 0 C. The Monetisation Agent's most critical dependency is structurally clean.
 - **Only 2 modules in the whole codebase are deeply coupled** (C-class): `ConnectivityService` and `api/index.ts` — both mega-orchestrators that the Runtime architecture eliminates by design
 - **THREE pieces of Runtime convergence infrastructure already exist in pc2-node**: (1) the 14-scope capability vocabulary, (2) HTTP-side capability enforcement, (3) **formal Runtime provider operation contracts with explicit pointers to the current pc2-node implementation of each operation**
+- **`ContentSeedingService.ts` + `ContentIndexerService.ts` show the fix template** for the #1 cross-cutting blocker: type-only imports + dependency injection. Mechanical refactor; can be applied to 15+ other modules.
 - **Migration is role-scoped, not subtree-scoped** — lift A-class leaves in parallel across all subtrees
 
 Runtime convergence is **rename + repackage, not re-architect**. pc2-node was designed for capsule extraction from the start. The dual-track strategy from `AGENTIC-PC2-MONETISATION-2026-05` is supported by overwhelming empirical evidence.
@@ -70,28 +72,32 @@ The pilot audit's framing ("AI is mostly A, connectivity is mostly C") turned ou
 
 **Implication**: Runtime migration order is decoupled from subtree boundaries. The Runtime team can lift `boson-crypto` + `ai-providers` + `storage-migrations` **in parallel as their own crates**, not sequentially per-subtree. This unblocks parallel work.
 
-### Finding 5: One refactor pattern dominates
+### Finding 5: One refactor pattern dominates — and the fix template already exists in the codebase
 
-The single biggest cross-cutting blocker is **"concrete class import where an interface should suffice"** — confirmed in **11+ modules** across 5 subtrees. Examples:
+The single biggest cross-cutting blocker is **"concrete class import where an interface should suffice"** — confirmed in **15+ modules** across the entire services/ subtree. Examples:
 - `filesystem.ts` imports concrete `IPFSStorage` + `DatabaseManager`
 - `api/wallet.ts` imports concrete `AgentKitExecutor`
 - `BosonService` imports 7 concrete sibling services
 - `metrics.ts` imports concrete `DatabaseManager`
-- `MemoryConsolidator` + `ContextRetriever` + `AgentKitExecutor` all import concrete service classes
+- `MemoryConsolidator` + `ContextRetriever` + `AgentKitExecutor` import concrete service classes
+- `ChannelBridge` imports 5 concrete classes (worst offender)
+- `AppInstallService` + `ContentIntelligenceService` + `GatewayService` all import concrete `DatabaseManager`
 
-**The fix**: extract ~6-7 interfaces (`IFilesystemManager`, `IDatabaseManager`, `IIPFSStorage`, `IAIChatService`, `IAgentKitExecutor`, `IIdentityService`, `IParticleWalletProvider`). One Phase 2 ticket. Improves the score of 11+ modules.
+**The fix template already exists**: `ContentSeedingService.ts` and `ContentIndexerService.ts` show how it should be done — `import type { IPFSStorage }`, `import type { DatabaseManager }`, `import type { Config }`, and use the actual instances via dependency injection. The refactor is mechanical: convert offending modules' import statements from concrete to type-only, then pass instances through constructors.
+
+**The fix**: extract ~7-8 interfaces (`IFilesystemManager`, `IDatabaseManager`, `IIPFSStorage`, `IAIChatService`, `IAgentKitExecutor`, `IIdentityService`, `IParticleWalletProvider`, `IGatewayService`). One Phase 2 ticket. Improves the score of 15+ modules.
 
 **Estimated effort**: 1 week of focused work, value-positive for PC2 v1 testability and Runtime migration alike.
 
 ### Finding 6: Only 2 modules are deeply coupled
 
-After 79 audits across 8 fully-complete subtrees, only **two** modules earn C-class:
+After 102 audits across the entire services/ subtree plus types/storage/utils/api-sample, only **two** modules earn C-class:
 - `pc2-node/src/services/boson/ConnectivityService.ts` (1,597 LOC, network-side mega-orchestrator with state machine and setter-injected services)
 - `pc2-node/src/api/index.ts` (1,766 LOC, HTTP-side mega-orchestrator wiring 40+ siblings, ambient Express coupling)
 
 Both are the same architectural pattern on opposite sides of the codebase. Both will be **retired**, not refactored, by capsule architecture (capsules don't have single mega-entry-points by design).
 
-**Implication**: the "PC2-as-monolith" problem is concentrated in 2 files. The other 77 audited modules are either capsule-shape already (62) or one bounded refactor away (15).
+**Implication**: the "PC2-as-monolith" problem is concentrated in 2 files. The other 100 audited modules are either capsule-shape already (81) or one bounded refactor away (19).
 
 ---
 
@@ -121,26 +127,32 @@ The mandate's dual-track strategy is **supported with stronger empirical backing
 
 1. **Track 1 (PC2 v1 evolution)**: Work in the AI leaf modules is NOT throw-away. Those modules already match the capsule shape; they migrate cleanly.
 2. **Track 2 (Runtime convergence)**: Runtime is **not future-tense**. The vocabulary, enforcement layer, and module shape are already partly in place. Convergence is incremental extension, not greenfield rewrite.
-3. **The 8 new Rust crates identified in mandate v1.1 §7.5** can now be cross-referenced to specific pc2-node modules:
+3. **The 8 new Rust crates identified in mandate v1.1 §7.5** are now cross-referenced to specific pc2-node modules (all confirmed):
    - `dDRM-renderer` capsule — sources directly from `services/wasm/WASMRuntime.ts` (A-, 7/10) which already implements drm:render, drm:decrypt, drm:decrypt-media
    - `dDRM-packager` capsule — sources from `services/media/{mpdGenerator, mpdParser, sessionManager, mp4split, fingerprint, dashPackager, encoder, bento4}` (3 A, 2 A-, 3 B; no C)
    - `boson-crypto` capsule — sources directly from `services/boson/CryptoBox.ts` (A, 9/10)
    - `boson-protocol` capsule — sources directly from `services/boson/ProxyProtocol.ts` (A, 10/10)
    - `ai-providers` capsule — sources from `services/ai/providers/*.ts` (all A-class)
+   - `ai-tools` capsule — sources from `services/ai/tools/{AgentKitTools, CanvasTools, FilesystemTools, SettingsTools, SkillsTools, WalletTools}` (all 10/10 A) + ToolExecutor (B-, needs split)
    - `storage-migrations` capsule — sources from `storage/migrations.ts` (A, 9/10)
    - `sandbox` capsule — sources from `services/sandbox/SandboxManager.ts` (A-, 7/10) — Firecracker integration already POC'd
+   - `wallet` capsule — sources from `services/wallet/ParticleWalletProvider.ts` (A, 9/10)
+   - `gateway-channels` capsule — sources from `services/gateway/channels/{WhatsAppChannel, TelegramChannel}` (both A, 10/10)
+   - `terminal` capsule — sources from `services/terminal/TerminalService.ts` (A-, 7/10)
+   - `update` capsule — sources from `services/UpdateService.ts` (B, 6/10) — needs split
+   - `vpn` capsule — sources from `services/{vless, wireguard}` (all A-, 7/10)
 
 ---
 
 ## What we DON'T yet know
 
-- 71% of pc2-node/src is still unaudited. Distribution may shift as more modules come in (though pattern is now well-established and recent batches show diminishing-return convergence on existing pattern counts).
-- `services/gateway/`, `services/UpdateService.ts`, `services/clusterPin.ts`, `services/wallet/`, `services/terminal/`, `services/vless/`, `services/wireguard/`, `services/support/` — not yet sampled. Could surface additional C-class entries or new patterns (gateway in particular is suspect).
+- 62% of pc2-node/src is still unaudited (170 modules remaining). Distribution may shift as more modules come in (though pattern is now well-established — recent batches consistently confirm existing pattern counts rather than discovering new shapes).
 - The 40 remaining `api/` HTTP handlers are predicted to be ~70% B / 25% A- / 5% C but unverified.
 - WebSocket subtree (`websocket/*`) has 4 modules; not yet sampled.
 - `sdk/`, `auth/`, `config/` subtrees not yet sampled.
+- Top-level `pc2-node/src/*.ts` files (~10 files: index.ts, setup, etc.) not yet audited.
 
-**Audit completion plan**: extend in subtree batches per `CAPSULE_READINESS_REPORT §6`. Target ≥50% coverage by May 22; ≥80% by end of May. The remaining ~193 modules are ~8-10 hours of analyst-time at current pace (which is improving as the rubric is internalised).
+**Audit completion plan**: 37.5% coverage achieved tonight. ≥50% achievable in another ~2 hours of audit time (one more batch). ≥80% by end of week if focused. The remaining ~170 modules are ~6-8 hours of analyst-time at current pace.
 
 ---
 

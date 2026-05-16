@@ -35,6 +35,22 @@ A rollback does **not** mean reverting commits on `main`. The bad code stays in 
 
 ---
 
+## Common gotchas (read before you touch `gh release`)
+
+These are empirically verified from the 2026-05-16 dry-run. They will bite if you forget them at 11 PM on a Friday during a real fire. The Appendix at the bottom of this doc has the raw verification commands and outputs.
+
+1. **`gh release create` auto-steals the "Latest" pointer in <1 second.** On any repo with existing users, the moment you create a new non-draft release, `/releases/latest` flips to point at it — regardless of `published_at` ordering, regardless of how you labelled the release ("DO NOT USE", "TEST", whatever). Auto-updaters and `BinaryManager` calls hit it immediately. **Defence**: use `--draft` from the start for any auxiliary / test / "let me see what happens" release. Promote to non-draft only when you're certain you want it to be Latest. The release we're rolling back was likely created without `--draft` (that's normal for a real release), so this gotcha doesn't apply to Step 1 — but it does apply to any test release you create during the rollback investigation.
+
+2. **The `untagged-<hash>` URL that `gh release edit --draft` prints is a render artefact, not a state change.** When you draft an existing release, the gh CLI outputs a URL like `https://github.com/Elacity/pc2.net/releases/tag/untagged-3a28ed07ee...`. Don't panic — the release record in GitHub's database still carries the original `tag_name`, the git tag is still on the remote, and querying via the authenticated API confirms everything is intact. The "untagged" URL is just how gh CLI renders the draft preview page.
+
+3. **Un-draft has a ~30-60 s CDN lag on anonymous endpoints.** `gh release edit --draft=false` is instant for authenticated viewers and `gh release view <tag>`, but anonymous users hitting `/releases/tags/<tag>` may still get HTTP 404 for up to a minute as GitHub's CDN propagates. Important if you're un-drafting something you intend users to download immediately — wait a minute before announcing the URL. Normal rollback direction (we're drafting, not un-drafting) is unaffected.
+
+4. **`gh release delete --cleanup-tag` is remote-only.** It removes the release record AND the remote git tag, but leaves your local tag. Run `git tag -d <tag>` separately to clean up locally.
+
+5. **The `--latest` flip is instant and reversible.** Going from `<good> --latest` to `<bad> --latest` is sub-second, and going back is also sub-second. There is NO race window where users see neither. Recovery from an accidental flip is a single command. (See finding #4 in the Appendix.)
+
+---
+
 ## Pre-flight: assemble what you need
 
 Before doing anything else, gather:
@@ -64,24 +80,36 @@ The fastest, most reversible action. Sets the bad release to "draft" on GitHub, 
 gh release edit v<bad-version> -R Elacity/elastos-launcher --draft
 ```
 
-Result: existing users on the bad version stay on the bad version (auto-updater no longer offers them anything newer — until §2 happens). New users downloading from the GitHub release page stop seeing the bad version at the top.
+Result: **within 1 second** the bad release becomes invisible to:
+- Anonymous viewers hitting `GET /releases/tags/v<bad-version>` (HTTP 404)
+- Anonymous viewers attempting to download any asset on the bad release (HTTP 404)
+- Anyone polling `GET /releases/latest` (returns the next non-draft Latest release)
+- The public release list (`gh release list` for unauthenticated users)
 
-**This is the bell that can be un-rung.** If you decide 30 minutes later this was unnecessary, run `--draft=false` and the bad release is back in the channel. Do this BEFORE anything else in this procedure.
+The git tag on the remote is untouched, the release record in GitHub's DB is preserved with its `tag_name` intact, and forensics remain accessible to anyone authenticated. Existing users on the bad version stay on the bad version (auto-updater no longer offers them anything newer — until §2 happens).
+
+The gh CLI may print a URL like `https://github.com/<repo>/releases/tag/untagged-<hash>` — see gotcha #2 above. **Don't panic** if you see this; the release is still bound to its tag.
+
+**This is the bell that can be un-rung.** If you decide 30 minutes later this was unnecessary, run `--draft=false` and the bad release is back in the channel (with a 30-60 s anonymous-viewer CDN lag — see gotcha #3 above). Do this BEFORE anything else in this procedure.
 
 ### Step 2 — Re-publish the previous launcher release to the top of the list
 
-GitHub's release list is sorted by `published_at` timestamp. The auto-updater polls the topmost non-draft release. Re-publishing the previous release bumps its `published_at` to "now", which makes the auto-updater offer it to users on the bad version as an "update" — even though the version number is lower.
+GitHub's release list is sorted by `published_at` timestamp. The auto-updater polls the topmost non-draft release (or follows `/releases/latest`). Marking the previous good release as `--latest` makes the auto-updater offer it to users on the bad version as an "update" — even though the version number is lower.
 
 ```bash
-# Bump the previous release's published_at to NOW, keeping content unchanged
+# Flip the canonical Latest pointer to the previous good release
 gh release edit v<previous-good-version> -R Elacity/elastos-launcher --latest
 ```
 
-The `--latest` flag explicitly sets this release as the "Latest release" on the GitHub repo page and updates the auto-updater feed. Most Electron-style auto-updaters respect this signal.
+The `--latest` flag explicitly sets this release as the "Latest release" on the GitHub repo page and updates `/releases/latest`. Most Electron-style auto-updaters respect this signal.
 
-**If your auto-updater doesn't respect `--latest`**: you may need to delete-and-re-create the previous release (more invasive). Test this beforehand — see §6 dry-run.
+**Verified**: the flip is **sub-second** on the authenticated `/releases/latest` endpoint. There is no race window where users see "neither" or "both" — the previous Latest is implicitly unset the moment the new one is set. If you make a mistake and flip to the wrong release, immediately re-running `gh release edit <correct-release> --latest` restores the right state, also sub-second.
 
-### Step 3 — Communicate the rollback (within 30 minutes of §1)
+**If your auto-updater doesn't respect `--latest`**: you may need to delete-and-re-create the previous release (more invasive). Test this beforehand — see §6 dry-run. (Note: the dry-run for `Elacity/pc2.net` confirmed `--latest` works on GitHub's hosted endpoint; whether `Elacity/elastos-launcher`'s Electron auto-updater respects it specifically is the remaining open question, addressed by the launcher-side dry-run scheduled for the next quarterly review.)
+
+### Step 3 — Communicate the rollback (within 20 minutes of §1)
+
+Steps 1 + 2 together take about 30 seconds of wall-clock time (verified during the dry-run). With identification + binary verification (the pre-flight checklist), realistic target is **5 minutes to technical containment, 10-20 minutes to first comms post**. Don't pad — speed of communication matters more than polish in the first message.
 
 The actual user-facing harm of a bad release is greatly reduced by transparency. Users who know "v1.2.7.10 has a bug, we're reverting to v1.2.7.9, fix coming in v1.2.7.11 within 24h" feel respected. Users who silently get downgraded without an announcement get suspicious. Trust burns three orders of magnitude faster than it builds.
 
@@ -240,15 +268,16 @@ Based on dry-run timing data, the original "rollback in 30 min, comms in 60 min"
 
 So the realistic clock is **5 min to technical containment, 10-20 min to first comms post**. Faster than the original estimate. Don't pad — speed matters more than polish in the first communication.
 
-### 7. Document changes recommended (and tracked separately)
+### 7. Document changes folded back into the procedure (now ✅ done)
 
-These findings should be folded back into the procedure text in a follow-up commit:
-- §1 should explicitly note "this hides the release from anonymous viewers within 1 second; tag stays bound".
-- §2 should reassure "this flip is instant, no race window".
-- A new "common gotchas" subsection should warn about the auto-Latest-on-creation behaviour from finding #1 above.
-- The 30/60 min targets should be tightened to 5/20 min.
+The findings above have been folded into the main procedure body:
 
-These were not folded in during the dry-run itself to keep the diff small and reviewable. Sasha to decide if/when to refine.
+- ✅ §1 now explicitly states "within 1 second the bad release becomes invisible to..." with the exhaustive list of surfaces affected.
+- ✅ §2 now reassures "sub-second flip, no race window, recovery is also sub-second".
+- ✅ New "Common gotchas" subsection (between "What rollback means in our context" and "Pre-flight") covers all five gotchas — including the auto-Latest-on-creation behaviour from finding #1.
+- ✅ §3 timing tightened from "within 30 minutes" to "within 20 minutes" with the 5/20 min breakdown explicitly noted.
+
+Any further refinements based on a real production rollback should be folded back here with a dated note.
 
 ---
 

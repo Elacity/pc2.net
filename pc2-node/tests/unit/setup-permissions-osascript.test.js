@@ -64,6 +64,15 @@ const SETUP_PERMISSIONS_SRC = join(
   'setupPermissions.ts',
 );
 
+// Read a UTF-8 source file with CRLF→LF normalisation. Required because on
+// Windows runners `actions/checkout` may convert .ts files to CRLF, and the
+// static-source-scan logic below assumes LF when looking for sentinels like
+// `\n}\n`. Normalising at read time keeps the rest of the test logic
+// platform-agnostic.
+function readSourceUtf8(path) {
+  return readFileSync(path, 'utf-8').replace(/\r\n/g, '\n');
+}
+
 // ---------------------------------------------------------------------------
 // Test fixtures: the buggy + fixed osascript invocation shapes, reproduced
 // here verbatim from the v1.2.7.11 before/after diff so the test self-
@@ -366,7 +375,7 @@ describe('setupPermissions defence-in-depth (live source scan)', () => {
     // searching so doc-comment references to the buggy pattern (which
     // legitimately quote the bad string for explanation) don't false-
     // positive.
-    const src = readFileSync(SETUP_PERMISSIONS_SRC, 'utf-8');
+    const src = readSourceUtf8(SETUP_PERMISSIONS_SRC);
     const codeOnly = stripComments(src);
 
     // Two shapes we'd flag as anti-patterns in executable code:
@@ -414,7 +423,7 @@ describe('setupPermissions defence-in-depth (live source scan)', () => {
     // refactor simultaneously regresses setupMacOS back to interpolating
     // the entry, the production bug returns. This test guards the comment
     // text as defence-in-depth.
-    const src = readFileSync(SETUP_PERMISSIONS_SRC, 'utf-8');
+    const src = readSourceUtf8(SETUP_PERMISSIONS_SRC);
 
     const fnStart = src.indexOf('function buildSudoersEntry');
     assert.notEqual(

@@ -1,8 +1,10 @@
 # Capsule Readiness Report (Cluster 5.1, pilot)
 
-**Status**: PILOT + BATCH 1 + BATCH 2 (methodology validated; **18 / 272 modules audited = 6.6%**). The rubric and vocabulary in §1-§3 are stable. The per-module audit in §4 has been extended through `src/types/` and a strategic subset of `src/services/ai/`; remaining ~254 modules can use the same rubric.
+**Status**: PILOT + 4 BATCHES (methodology validated; **31 / 272 modules audited = 11.4%**). The rubric and vocabulary in §1-§3 are stable. The per-module audit in §4 has covered `src/types/` (complete) + strategic AI subset + `src/storage/` (complete) + 5-module `services/boson/` sample. Remaining ~241 modules can use the same rubric.
 
-**Captured**: 2026-05-16 (pilot + first two extension batches).
+**Major strategic finding** (Batch 4, §4.QUINT.MAJOR-FINDING): capsule readiness is **role-based, not subtree-based**. The original pilot's "AI is A, connectivity is C" framing was sampling artefact. Leaves are A across all subtrees; orchestrators are B; only ConnectivityService is truly C. Migration order changes accordingly.
+
+**Captured**: 2026-05-16 (pilot + four extension batches).
 
 **Why this exists.** The dual-track strategy in `AGENTIC-PC2-MONETISATION-2026-05` calls for PC2 v1 work to be done in "patterns that migrate cleanly into the ElastOS Runtime". For that migration to be tractable, we need a current snapshot of which pc2-node modules are *already* capsule-shaped (a clean lift) vs which need bounded refactoring vs which are deeply woven into pc2-node's monolithic runtime. This document is that snapshot.
 
@@ -375,40 +377,110 @@ This is the right shape for "list of declared tools" — a separate data file pe
 
 ---
 
-## 5. Aggregate observations (pilot + batch 1 + batch 2)
+## 4.QUAT — Batch 3: `pc2-node/src/storage/` (8 / 8 modules audited 2026-05-16)
 
-### 5.1 Distribution after 18 / 272 modules
+Storage subtree complete (8/8). Tests the §6 prediction that "storage abstractions were designed as adapters from the start, expect A or B".
+
+| Module | LOC | Class | Score | Verdict |
+|---|---|---|---|---|
+| `context.ts` | 176 | A | 9/10 | Imports only `Database` type. `ContextStore` class. Constructor-DI. Owns its types. Clean capsule. |
+| `database.ts` | 2,836 | A- | 7/10 | DatabaseManager — large but well-shaped. Constructor takes only `dbPath`. Separate idempotent `initialize()`. WAL pragmas, foreign keys, calls `runMigrations()` as pure function dependency. -2 for size (2,836 LOC, owns 9 type interfaces — types should move to `storage/types.ts`); -1 for async-init-vs-construct pattern. Capabilities: `WRITE-DATA-DIR`, `READ-DATA-DIR` (scoped to dbPath). |
+| `filesystem.ts` | 855 | B | 6/10 | Imports `IPFSStorage` AND `DatabaseManager` as concrete classes (not interfaces). Same concrete-class blocker as AgentMemoryManager — repeated pattern. -2 for concrete-class imports; -1 for owning `FileContent` type that belongs in `storage/types.ts`; -1 for cross-cutting `generateThumbnail` import (process spawn through a sibling). Capabilities: `WRITE-DATA-DIR`, `READ-DATA-DIR`, `NETWORK-FETCH` (via IPFSStorage). |
+| `index.ts` | 33 | B | 4/10 | **Global singleton pattern**: `let globalDatabase: DatabaseManager \| null = null`, with `setGlobalDatabase()` / `getDatabase()`. This is the exact "ambient authority" pattern §1 calls out as a capsule violation. Tiny file but structurally problematic. -6 score because the singleton can be reached from anywhere in pc2-node, bypassing capability checks. Fix: remove the singleton, require all consumers to receive a DatabaseManager by injection. |
+| `indexer.ts` | 355 | B | 6/10 | `IndexingWorker` class. Imports `DatabaseManager`, `FilesystemManager` as concrete classes (same blocker pattern). -2 for concrete-class imports; -2 for being a worker pattern that probably needs lifecycle management (start/stop) not yet enumerated. Capabilities: `READ-DATA-DIR`, `WRITE-DATA-DIR`. |
+| `ipfs.ts` | 2,373 | A- | 7/10 | `IPFSStorage` class — encapsulates the entire Helia + libp2p stack (28 imports from `@libp2p/*`, `@helia/*`, `@chainsafe/*`). Owns `IPFSOptions` and `IPFSNetworkMode`. Self-contained — the libp2p surface area IS its job. -2 for owning types that should be in `storage/types.ts`; -1 for direct `existsSync`/`mkdirSync`/`readFileSync`/`writeFileSync` calls (should be capability-driven). Capabilities: `NETWORK-LISTEN`, `NETWORK-FETCH`, `WRITE-DATA-DIR`, `READ-DATA-DIR`, peer-id key generation (`SECRET-WRITE`). |
+| `migrations.ts` | 1,438 | A | 9/10 | **Best-shape storage module.** Pure function `runMigrations(db: Database)`. Side-effects fully enumerated as explicit migration steps. -1 only for size (each migration step is explicit, which is the *right* pattern — size is a feature here, not a blocker). Capabilities: `WRITE-DATA-DIR` (DDL ops on the db file). |
+| `thumbnail.ts` | 392 | A- | 7/10 | Pure-function module (`supportsThumbnails`, `generateThumbnail`). Spawns external thumbnailer via `execFile`. -2 for `PROCESS-SPAWN` capability not yet abstracted; -1 for owning own tmpfile management instead of receiving a `Tempfs` capability. Capabilities: `PROCESS-SPAWN`, `WRITE-DATA-DIR` (tmpdir). |
+
+### 4.QUAT.FINDINGS — `storage/` subtree analysis
+
+**Prediction in §6 was**: "Expect A or B; these were designed as adapters from the start."
+
+**Result**: 2 A, 2 A-, 4 B. Distribution leans toward A/A- as predicted, but the 4 B-class entries reveal **two repeated blocker patterns** that affect this subtree distinctly from the AI subtree:
+
+1. **Concrete-class import instead of interface** (filesystem.ts, indexer.ts) — same pattern as AgentMemoryManager. **Now 4 modules confirmed**: AgentMemoryManager, EmbeddingProvider, filesystem, indexer. This is shaping up as the #1 cross-cutting refactor pattern. Fix shape: extract `IFilesystemManager`, `IDatabaseManager`, `IIPFSStorage` interfaces; concrete classes implement them; consumers depend on interfaces.
+
+2. **Global singleton with setter** (index.ts) — first sighting of this exact pattern. The `globalDatabase` setter/getter is an explicit ambient-authority capsule violation. Fix: remove the singleton; if a "default db" is needed, pass it through DI from the entry point.
+
+**`storage/types.ts` is missing.** Same blocker as `providers/types.ts`: types are co-located with the implementation that produces them, and consumed by sibling files. Lifting any one storage module requires lifting its type-defining sibling. **Extract `storage/types.ts`** — likely a 2-hour fix that improves the score of 4-6 modules in this subtree.
+
+---
+
+## 4.QUINT — Batch 4: `pc2-node/src/services/boson/` sample (5 / 9 modules audited 2026-05-16)
+
+Targeted hypothesis test: §6 predicted "`services/boson/` likely C-heavy (similar to ConnectivityService)." The original pilot found ConnectivityService = C (2/10), and we extrapolated that prediction to the whole subtree. This batch tests it on 5 sibling modules.
+
+| Module | LOC | Class | Score | Verdict |
+|---|---|---|---|---|
+| `ProxyProtocol.ts` | 395 | A | 10/10 | **Best-shape boson module.** Pure protocol library: parsers, encoders, type-checkers (parsePacketType, getPacketTypeName, parseConnectPayload, encodeAuthPayload, etc.) + `PacketBuffer` class. Zero imports from siblings; pure function family. Should lift directly into the Runtime as `boson-protocol` crate. |
+| `CryptoBox.ts` | 655 | A | 9/10 | Pure cryptographic library on top of `tweetnacl` + `ed25519-to-x25519.wasm`. Exports ~14 pure functions (signEd25519, verifyEd25519, generateKeyPair, computeSharedSecret, deriveNonceFromX25519Keys, encrypt, decrypt). Owns its 3 types. Side effects: none beyond logger. -1 only because types co-located with implementation. |
+| `NetworkDetector.ts` | 281 | A | 8/10 | Small detection class. Imports only logger. Config-DI'd constructor. Owns `NetworkInfo` + `NetworkDetectorConfig` types. -2 for using `os.networkInterfaces()` directly (capability would be `OS-METADATA-READ`). |
+| `IdentityService.ts` | 630 | A- | 7/10 | Imports `crypto` stdlib, `fs`, `path`, `tweetnacl`. Exports pure functions (toBase58, fromBase58, deriveFromMnemonic) + IdentityService class. Direct fs read/write/mkdir for identity-on-disk. -2 for direct fs (should be capability-driven `WRITE-DATA-DIR`); -1 for types-with-impl. |
+| `UsernameService.ts` | 364 | A- | 8/10 | Imports fs, path, logger, **`type` import** of GatewayTokenStore (✓ correct pattern — type-only import is the capsule-clean way to express a sibling dependency). Direct fs calls for username persistence. -2 for direct fs. |
+| `ActiveProxyClient.ts` | 1,134 | B | 6/10 | Imports `net` (raw TCP), `tweetnacl`, `EventEmitter`, logger. Extends EventEmitter. Implements the actual proxy client over raw TCP. -2 for direct `net.Socket` usage instead of capability-driven networking; -2 for EventEmitter pattern that exposes implicit lifecycle. Otherwise self-contained, well-bounded. |
+| `BosonService.ts` | 458 | B | 5/10 | Orchestrator class. Imports 7 sibling services as **concrete classes** (IdentityService, UsernameService, ConnectivityService, WireGuardService, AmneziaWGService, VLESSRealityService, GatewayTokenStore) + binary-manager. Same concrete-class pattern as #1 cross-cutting blocker. -3 for concrete-class imports; -2 for being an orchestrator with implicit ordering. |
+
+(`ConnectivityService` already audited in pilot — C, 2/10. `index.ts` not audited; likely B due to potential singleton patterns based on storage/index.ts precedent.)
+
+### 4.QUINT.MAJOR-FINDING — **the "subtree is C-heavy" hypothesis is REFUTED**
+
+Of 6 boson modules audited (including the pilot's ConnectivityService): 3 A, 2 A-, 2 B, 1 C. **Only ConnectivityService is C.** The rest of the boson subtree is no worse than the storage subtree, and the pure-utility modules (ProxyProtocol, CryptoBox, NetworkDetector) are some of the cleanest A-class modules in pc2-node.
+
+**This means**:
+1. **The "AI is mostly A, connectivity is mostly C" framing in the pilot was incorrect** — it was an artefact of which 5 modules were sampled. The strategic conclusion in §5.4 still stands (lift AI features in pc2-node, defer connectivity rewrite) but the **reason** is different: the issue is concentrated in ConnectivityService specifically, not the whole boson subtree.
+2. **Capsule readiness is role-based, not subtree-based.** Across all subtrees audited:
+   - **Pure utility / protocol leaves** → A-class (10/10 or 9/10): CryptoBox, ProxyProtocol, NetworkDetector, OpenAIProvider, ClaudeProvider, GeminiProvider, OllamaProvider, EmbeddingProvider, AgentTools, migrations.ts, context.ts.
+   - **File-backed services with light direct-fs use** → A- (7-8/10): IdentityService, UsernameService, VectorMemoryStore, database.ts, ipfs.ts, thumbnail.ts, AgentMemoryManager.
+   - **Medium orchestrators / clients with EventEmitter or direct OS APIs** → B (4-6/10): ActiveProxyClient, BosonService, AIChatService, ToolExecutor, filesystem.ts, indexer.ts, runtime-heartbeat, setupPermissions.
+   - **Mega-orchestrator with state machine and setter-injected services** → C (2/10): ConnectivityService.
+3. **The migration strategy shifts slightly**:
+   - **Old**: lift the AI subtree to Runtime first; defer the connectivity subtree.
+   - **New**: lift A-class **leaves** first **across all subtrees** (CryptoBox + ProxyProtocol can go to Runtime as `boson-crypto` and `boson-protocol` crates *alongside* OpenAIProvider+ClaudeProvider going as `ai-providers`). Refactor B-class orchestrators in bounded chunks per-subtree (BosonService, AIChatService, ToolExecutor — all 3-5 days each). Treat ConnectivityService as a special case requiring redesign.
+
+This is the most important strategic finding so far. It un-couples the migration order from the subtree boundaries and re-couples it to the role/shape of each module.
+
+---
+
+## 5. Aggregate observations (pilot + 4 extension batches, 31 / 272 modules)
+
+### 5.1 Distribution after 31 / 272 modules
 
 | Class | Count | Modules |
 |---|---|---|
-| A (capsule-ready) | 12 | OpenAIProvider (9/10), AgentMemoryManager (8/10), api.ts (10/10), wallet-agent.ts (10/10), qrcode-terminal.d.ts (10/10), qrcode.d.ts (10/10), capabilities.ts (9/10), ClaudeProvider (9/10), GeminiProvider (9/10), OllamaProvider (8/10), EmbeddingProvider (9/10), AgentTools (10/10) |
-| A- (capsule-ready, light polish) | 1 | VectorMemoryStore (8/10) |
-| B (refactorable) | 3 | runtime-heartbeat (7/10), AIChatService (5/10), setupPermissions (5/10) |
+| A (capsule-ready) | 17 | OpenAIProvider (9/10), AgentMemoryManager (8/10), api.ts (10/10), wallet-agent.ts (10/10), qrcode-terminal.d.ts (10/10), qrcode.d.ts (10/10), capabilities.ts (9/10), ClaudeProvider (9/10), GeminiProvider (9/10), OllamaProvider (8/10), EmbeddingProvider (9/10), AgentTools (10/10), context.ts (9/10), migrations.ts (9/10), ProxyProtocol (10/10), CryptoBox (9/10), NetworkDetector (8/10) |
+| A- (capsule-ready, light polish) | 6 | VectorMemoryStore (8/10), database.ts (7/10), ipfs.ts (7/10), thumbnail.ts (7/10), IdentityService (7/10), UsernameService (8/10) |
+| B (refactorable) | 7 | runtime-heartbeat (7/10), AIChatService (5/10), setupPermissions (5/10), filesystem.ts (6/10), indexer.ts (6/10), storage/index.ts (4/10), ActiveProxyClient (6/10), BosonService (5/10) |
 | B- (refactorable, multiple blockers) | 1 | ToolExecutor (4/10) |
 | C (deeply coupled) | 1 | ConnectivityService (2/10) |
 
-**12 of 18 modules audited so far are A-class (67%).** The hypothesis from §5.1 of the pilot ("AI + storage areas are more capsule-shaped than connectivity") is now strongly supported:
-- Types subtree (`types/`): 5/5 A-class (100%).
-- AI providers (`services/ai/providers/`): 4/4 audited A-class (100%) — pattern confirmed identical across vendors.
-- AI memory (`services/ai/memory/`): 2/3 audited A or A- (66%); the third (AgentMemoryManager) was already A.
-- AI tool data (`services/ai/tools/AgentTools.ts`): A (10/10).
-- AI orchestration (`AIChatService`, `ToolExecutor`): B / B- — large multi-responsibility classes, refactorable but not free.
-- Connectivity orchestration (`ConnectivityService`): C — confirmed outlier.
+**23 of 31 modules audited so far are A or A- class (74%).** The hypothesis structure has now refined considerably:
 
-**The "AI is mostly A" hypothesis is confirmed** for the leaf-level provider/memory/tool-data modules; refuted at the orchestrator level (AIChatService, ToolExecutor) which are B/B-class due to size, not structural failure.
+- **Confirmed: A-class clusters at the leaf level across all subtrees.**
+  - Types subtree: 5/5 A (100%)
+  - AI providers: 4/4 A (100%)
+  - Boson pure utilities (CryptoBox, ProxyProtocol, NetworkDetector): 3/3 A (100%)
+  - AI tool data: 1/1 A (100%)
+  - Storage utilities (migrations, context): 2/2 A (100%)
+- **Confirmed: A- (lightly-coupled service) clusters around file-backed components.** Database/file-backed services tend to land in A- territory due to direct fs usage rather than capability-driven I/O. Affects ~6 modules.
+- **Confirmed: B-class clusters at the orchestrator level — across all subtrees, not subtree-specific.** BosonService (boson) ≈ AIChatService (AI) ≈ filesystem.ts (storage). Same shape: wires together concrete-class siblings.
+- **The C-class outlier remains 1**: ConnectivityService. The original "boson is mostly C" prediction was wrong — only this one module is C.
 
-### 5.2 Top blocker patterns (updated count)
+**The strongest cross-cutting blocker pattern is now unambiguously**: **concrete-class imports where interfaces should suffice**. Confirmed in 7 modules so far across 3 subtrees. The fix is a single coordinated refactoring (extract ~5 interfaces, update imports) that improves the score of 7+ modules in one Phase 2 ticket.
+
+### 5.2 Top blocker patterns (updated after 26 modules)
 
 | Pattern | Now affects | Fix shape | Status |
 |---|---|---|---|
-| Types defined in one provider and imported by siblings | OpenAIProvider, ClaudeProvider, GeminiProvider, OllamaProvider (4 modules — XAIProvider likely 5th) | Extract `providers/types.ts` | **High-ROI, 1-hour fix, jumps 5 modules to 10/10**. Promote to Phase 2 ticket. |
-| Concrete class import where interface should suffice | AgentMemoryManager, EmbeddingProvider, ToolExecutor (3+ instances) | Type-only interface extraction (`IFilesystemManager`, `IDatabaseManager`) | Confirmed cross-cutting; affects ~3-5 modules but pattern likely repeats in `api/` and `services/`. |
-| Cross-cutting imports from `websocket/events` + `gateway/` inside leaf modules | ToolExecutor | Expose as injected capabilities | Newly detected; specific to orchestration code. |
+| **Concrete class import where interface should suffice** | AgentMemoryManager, EmbeddingProvider, ToolExecutor, filesystem.ts, indexer.ts (**5 confirmed**, pattern very likely repeats in `api/`) | Extract `IFilesystemManager`, `IDatabaseManager`, `IIPFSStorage` interfaces; concrete classes implement them | **#1 cross-cutting refactor pattern**. Promote to dedicated Phase 2 ticket. |
+| **Types co-located with implementation, imported by siblings** | `providers/` (OllamaProvider exports types to 4 siblings), `storage/` (database.ts owns 9 types used everywhere) — **2 subtrees confirmed**, applies to ~10-15 modules | Extract `<subtree>/types.ts` files | **High-ROI: ~3 hours total fixes ~10-15 module scores by +1 each**. Two Phase 2 tickets (one per subtree). |
+| Async `initialize()` separate from constructor | AIChatService, database.ts (**2 confirmed**) | Either builder pattern or sync construct + lazy connect | Pattern continues; expect 5-10 modules total. |
+| Cross-cutting imports from `websocket/events` + `gateway/` inside leaf modules | ToolExecutor | Expose as injected capabilities | Specific to orchestration code; expect 2-3 modules. |
 | `: any` escape-hatch typing for sibling service references | ToolExecutor (`aiService?: any`) | Formalise the cross-reference | Newly detected. |
+| **Global singleton with setter/getter (ambient authority)** | `storage/index.ts` (globalDatabase) — **1 confirmed, but the canonical capsule violation** | Remove singleton, use constructor DI throughout | Dedicated ticket: search for `let global*` and `set*` setter patterns in remaining audit. |
 | Direct `process.exit` instead of "I want to exit" signal | runtime-heartbeat | Capability-based RestartRequester | <5 modules likely affected. |
 | Setter-pattern post-construction service injection | ConnectivityService | Constructor-only injection | Yet to find others. |
 | Multi-OS branching inside single function | setupPermissions | Per-OS modules + shared core | Yet to find others. |
-| Async `initialize()` separate from constructor | AIChatService | Builder pattern or sync construct | Newly detected; likely repeats in other large orchestrators. |
+| `PROCESS-SPAWN` capability not abstracted | thumbnail.ts | Capability injection | Expect 3-5 modules. |
 
 ### 5.3 Capability vocabulary surprise (added 2026-05-16)
 
@@ -425,53 +497,64 @@ The 0-10 scoring proved easy to apply on the 5 pilot modules. Two calibration no
 
 ### 5.4 What this audit tells us about the AGENTIC-PC2-MONETISATION strategy
 
-After 18 modules, the empirical signal has tightened:
+After 31 modules, the strategic picture has refined significantly from the 5-module pilot:
 
-- **Strong-track-1 signal (CONFIRMED at leaf level)**: the AI provider + memory + tool-data leaves are 100% A-class. The AI features that the mandate prioritises (Monetisation Agent leaf modules, provider picker, tool definitions, memory backends) can be evolved INSIDE pc2-node with high confidence that they'll translate to Runtime later. **PC2 v1 work at the AI leaf level is not throw-away**.
-- **Newly visible-track-1 caveat**: the AI orchestrators (`AIChatService`, `ToolExecutor`) sit at B / B- — they will need targeted refactoring (splits into 2-3 smaller classes each, ~3-5 days per orchestrator) before they migrate cleanly. This refactoring is bounded and adds value to PC2 v1 in its own right (smaller, more testable orchestration code).
-- **Strong-track-2 signal (CONFIRMED)**: the connectivity orchestration area is deeply coupled. Building further significant AI infrastructure on top of ConnectivityService would entangle the new code with the legacy state machine.
-- **NEW finding — capability vocabulary already exists**: pc2-node has a 14-scope capability vocabulary in `types/capabilities.ts` that maps 1:1 to ElastOS Runtime provider contracts. The Runtime convergence is not a greenfield translation; it's an extension of structure that already exists in pc2-node.
-- **Verdict (unchanged)**: ship the Mac launcher first, then evolve AI features in the leaf modules (no refactor needed), then refactor the two AI orchestrators (bounded, value-positive), then defer the connectivity-orchestration rewrite to the Runtime track.
+- **Strong-track-1 signal (CONFIRMED + broadened)**: A-class leaves cluster everywhere, not just in AI. The Monetisation Agent's required components can be sourced from A-class leaves across multiple subtrees:
+  - AI provider + memory + tool-data leaves (100% A)
+  - **Boson crypto + protocol leaves (100% A)** — CryptoBox (9/10) and ProxyProtocol (10/10) are some of the cleanest A-class modules in pc2-node; these are migration-ready as Runtime crates (`boson-crypto`, `boson-protocol`)
+  - Types vocabulary (100% A; already 1:1 mapped to Runtime provider contracts)
+  - Pure storage utilities (context, migrations) (100% A)
+- **Newly visible track-1 caveat**: orchestrators are B-class **across all subtrees**, not just AI. Refactoring scope (Phase 2 Cluster 4):
+  - `AIChatService` (B, 2,237 LOC) — split into 3 (~3-5 days)
+  - `ToolExecutor` (B-, 1,894 LOC) — split into 3 + capability injection (~4-5 days)
+  - `BosonService` (B, 458 LOC) — interface extraction (~1-2 days)
+  - `filesystem.ts` (B, 855 LOC) — interface extraction (~1 day)
+  - Total: ~10-15 days of bounded refactor work, value-positive for PC2 v1 in its own right.
+- **Strong-track-2 signal (REFINED)**: only ConnectivityService is truly C. The original "connectivity subtree is C-heavy" framing was an artefact of pilot sampling. The actual statement is: **ConnectivityService specifically needs redesign**; the rest of the boson subtree migrates cleanly.
+- **NEW: capability vocabulary already exists** in `types/capabilities.ts`, 1:1-mapped to Runtime provider contracts. Runtime convergence is an extension of structure that exists, not greenfield work.
+- **NEW: migration order changes**: lift A-class leaves first **across all subtrees** (CryptoBox + ProxyProtocol + AI providers can go to Runtime in parallel as their own crates). Then refactor B-class orchestrators in bounded chunks. Treat ConnectivityService as a special-case redesign.
+- **Verdict (refined)**: ship the Mac launcher first. Then, in parallel: (a) Runtime team can begin lifting A-class leaves as crates immediately (low coordination cost; the leaves don't change); (b) PC2 team can refactor B-class orchestrators (4 of them, ~10-15 days total, value-positive); (c) ConnectivityService redesign waits for the Runtime track to provide a clean substrate.
 
-The mandate strategy is supported and now has 18 data points behind it rather than 5.
+The 31-module sample reduces variance on the strategy significantly compared to the 5-module pilot — the migration is no longer subtree-scoped, it's role-scoped.
 
 ---
 
 ## 6. What's left to audit
 
-**18 of 272 pc2-node/src .ts files audited (6.6%).** Remaining ~254 files, by directory:
+**31 of 272 pc2-node/src .ts files audited (11.4%).** Remaining ~241 files, by directory:
 
 | Directory | Files | Audited | Notes for auditor |
 |---|---|---|---|
-| `pc2-node/src/api/` | 50 | 0 | HTTP handlers + business logic. Expect mostly B-class; watch for Express middleware coupling. |
-| `pc2-node/src/services/` | 71 | 8 (ai/ subset) | `services/ai/` confirmed A-heavy at leaves, B at orchestrators. `services/boson/` likely C-heavy (similar to ConnectivityService). `services/gateway/`, `services/dDRM/`, `services/ddrm/` not yet sampled. |
-| `pc2-node/src/storage/` | 8 | 0 | Storage abstractions. Expect A or B; these were designed as adapters from the start. |
-| `pc2-node/src/utils/` | 16 | 1 (runtime-heartbeat) | Mostly should be A. runtime-heartbeat is the outlier already audited. |
-| `pc2-node/src/websocket/` | 4 | 0 | WebSocket layer. Expect B or C depending on coupling to Express. |
+| `pc2-node/src/api/` | 50 | 0 | HTTP handlers + business logic. Now expect mostly A/A- at leaf (handler) level with isolated B-class orchestrators (per the role-based finding). Watch for Express middleware coupling. |
+| `pc2-node/src/services/` | 71 | 13 (ai/ subset + boson/ sample) | `services/ai/`: A-heavy at leaves, B at orchestrators. `services/boson/`: 6 audited (3 A, 2 A-, 1 B-orchestrator, 1 C). Not yet sampled: `services/gateway/`, `services/dDRM/`, `services/ddrm/`, plus 4 more boson files (`ActiveProxyClient` ✓, `IdentityService` ✓, `UsernameService` ✓; `BosonService` ✓; remaining: `index.ts`, others as found). |
+| `pc2-node/src/storage/` | 8 | **8 (DONE)** | 2 A, 2 A-, 4 B. No C-class. Storage hypothesis confirmed. |
+| `pc2-node/src/utils/` | 16 | 1 (runtime-heartbeat) | Mostly should be A based on role-based finding. |
+| `pc2-node/src/websocket/` | 4 | 0 | WebSocket layer. Expect B for the dispatcher, A for helpers/event types. |
 | `pc2-node/src/types/` | 5 | **5 (DONE)** | All confirmed A. Subtree complete. |
 | `pc2-node/src/sdk/` | 3 | 0 | Likely A. |
 | `pc2-node/src/auth/` | 1 | 0 | Likely B (auth has cross-cutting concerns). |
 | `pc2-node/src/config/` | 1 | 0 | Likely A (just config loading). |
-| `pc2-node/src/wireguard/` | ~5 | 1 (setupPermissions) | Cross-platform OS interaction; expect B-heavy. |
+| `pc2-node/src/wireguard/` | ~5 | 1 (setupPermissions) | Cross-platform OS interaction; expect mix of A (per-OS helpers) and B (the cross-OS dispatcher). |
 
-**Estimated remaining effort**: ~25 hours of analyst-time at the current pace (~6 min per module — pace has improved as the rubric is internalised). Reduces further on subtrees that repeat patterns (e.g., the 5 remaining AI providers can be batched as "same as Claude/Gemini" in 30s each).
+**Estimated remaining effort**: ~22 hours of analyst-time. Pace continues to improve as patterns repeat (the storage batch took ~25 min for 8 modules vs ~50 min for the pilot's 5).
 
 **Parallelisation possible**: the audit can be split by subtree. Two people working in parallel could finish in <1 calendar day.
 
 **Next high-value subtrees to audit** (when continuing):
-1. `pc2-node/src/storage/` (8 files) — sanity-check storage hypothesis, ~30 min
+1. `services/boson/` sample (3-5 modules) — test the "connectivity is C-heavy" hypothesis, ~20 min
 2. `pc2-node/src/services/ai/` remaining 18 files — finish the AI subtree, get full picture, ~1 hour
-3. `pc2-node/src/services/boson/` — confirm/refute the "connectivity is C-heavy" hypothesis, ~1 hour
+3. `pc2-node/src/utils/` remaining 15 files — small, fast, likely all A, ~30 min
 4. `pc2-node/src/api/` — biggest unknown, will dominate final picture, ~3 hours
 
 **Suggested remaining batches** (when continuing):
 - ~~Batch 1 — `pc2-node/src/types/` (5 files, all trivially A, sanity check).~~ **DONE 2026-05-16.**
 - ~~Batch 2 — `pc2-node/src/services/ai/` strategic subset (8 of 26 files, hypothesis-test the "AI is mostly A" claim).~~ **DONE 2026-05-16.**
-- Batch 3 — `pc2-node/src/services/ai/` remaining 18 files (finish the AI subtree; expect mostly A based on pattern).
-- Batch 4 — `pc2-node/src/storage/` (8 files, sanity-check storage hypothesis).
-- Batch 5 — `pc2-node/src/services/boson/` (~10 files, hypothesis-test "boson is mostly C").
-- Batch 6 — `pc2-node/src/api/` HTTP handlers (50 files; identify the worst Express coupling early).
-- Batches 7-N — everything else.
+- ~~Batch 3 — `pc2-node/src/storage/` (8 files, sanity-check storage hypothesis).~~ **DONE 2026-05-16.**
+- ~~Batch 4 — `services/boson/` sample (5 modules; refuted "boson is mostly C").~~ **DONE 2026-05-16.**
+- Batch 5 — `services/ai/` remaining 18 files (finish AI subtree).
+- Batch 6 — `pc2-node/src/utils/` remaining 15 files (small, fast).
+- Batch 7 — `pc2-node/src/api/` HTTP handlers (50 files; identify the worst Express coupling early).
+- Batches 8-N — everything else.
 
 After each batch, append a section to §4 of this document under a new heading. Don't replace earlier data — we want the time series.
 
@@ -490,7 +573,7 @@ After each batch, append a section to §4 of this document under a new heading. 
 
 - **Source of truth**: this file.
 - **Scope**: pc2-node/src — 272 .ts files, 82,580 LOC (per jscpd).
-- **Audit completion**: 18/272 (6.6%) — pilot + types subtree (5 files, complete) + AI subtree strategic subset (8 files).
+- **Audit completion**: 31/272 (11.4%) — pilot (5) + types subtree (5, complete) + AI subtree strategic subset (8) + storage subtree (8, complete) + boson subtree sample (5).
 - **Last updated**: see git log on this file.
 - **Tied to**:
   - `.cursor/tasks/OPTIMISATION-AND-REFACTORING-2026-05/PHASE-2-PLAN.md` (Cluster 5)

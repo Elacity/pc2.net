@@ -21,11 +21,11 @@ name: Smoke test (build + boot)
 #   - Any dependency / workspace install break (the v1.2.7.x lockfile drift class)
 #   - v1.2.7.11 osascript apostrophe regression (via test:unit step)
 #
-# Phase 5 (A-3, this revision): matrix expansion to ubuntu-24.04-arm +
-# windows-latest as experimental gates that surface platform-specific
-# regressions ahead of the Linux-ARM / Windows launcher rollout that
-# follows the Mac launcher. These DO NOT block release tagging until
-# proven stable; see continue-on-error on the matrix.
+# Phase 5 (A-3, A-3.1): matrix expansion to ubuntu-24.04-arm +
+# windows-latest. linux-arm64 promoted to required gate 2026-05-16
+# after 5 consecutive green runs since matrix introduction. windows-x64
+# remains experimental until it has the same green streak; see
+# continue-on-error on the matrix.
 #
 # Future phases (separate PRs against this workflow): heartbeat probe,
 # macOS permissions probe, pre-tag checklist, rollback runbook.
@@ -42,11 +42,11 @@ name: Smoke test (build + boot)
 #
 # Cost: $0. Public repo, standard runners. All four matrix entries
 # (ubuntu-latest, macos-latest, ubuntu-24.04-arm, windows-latest) are
-# free for public repos. Observed timings on this branch:
+# free for public repos. Observed timings:
 #   - linux-x64       ~4 min cold cache
+#   - linux-arm64     ~5 min cold cache (required gate as of 2026-05-16)
 #   - darwin-arm64    ~7 min cold cache
-#   - linux-arm64     not yet measured (first run with this matrix)
-#   - windows-x64     not yet measured (first run with this matrix)
+#   - windows-x64     ~8 min cold cache (still experimental — see matrix)
 # Total wall-clock is bounded by the slowest entry because matrix
 # entries run in parallel.
 
@@ -93,8 +93,7 @@ jobs:
       matrix:
         include:
           # ── Required gates ────────────────────────────────────────────
-          # These two MUST be green before the launcher is tagged. They
-          # cover the platforms we ship to users next Wed/Thu. A red
+          # These MUST be green before the launcher is tagged. A red
           # entry here fails the Smoke test summary job and prevents
           # release tagging once branch protection is enabled on main.
           - os: ubuntu-latest
@@ -103,31 +102,29 @@ jobs:
           - os: macos-latest
             label: darwin-arm64
             experimental: false
-
-          # ── Experimental gates (A-3 matrix expansion) ────────────────
-          # These two run on every push but are NOT release blockers.
-          # They surface platform-specific regressions ahead of the
-          # Linux-ARM / Windows launcher rollout after the Mac release
-          # ships. continue-on-error: true (set below) means a red entry
-          # here lands as a yellow advisory on the dashboard rather than
-          # a red workflow failure.
-          #
-          # Expected initial state:
-          #   - ubuntu-24.04-arm: likely green. Build chain is Unix and
-          #     apt-get canvas libs work the same on arm64. If red,
-          #     diagnose and fix incrementally.
-          #   - windows-latest: likely red on typecheck because canvas@2
-          #     building from source on Windows needs MSVC + GYP +
-          #     non-trivial setup; we explicitly do NOT install canvas
-          #     system libs on Windows in this phase. The Phase 2 canvas
-          #     migration to @napi-rs/canvas removes this entire concern.
-          #
-          # Promotion path: once an experimental entry has been green for
-          # 5 consecutive pushes, flip its `experimental: true` to false
-          # to make it a required gate.
+          # linux-arm64 promoted 2026-05-16 after 5 consecutive green
+          # runs since A-3 matrix expansion (runs 25947219129,
+          # 25947614795, 25955832357, 25956072211, 25956409080).
+          # The Linux ARM build chain has proven identical to x86_64
+          # under our apt-get + canvas system-libs setup; promoting it
+          # tightens the safety net for the post-Mac ARM rollout.
           - os: ubuntu-24.04-arm
             label: linux-arm64
-            experimental: true
+            experimental: false
+
+          # ── Experimental gates ───────────────────────────────────────
+          # Run on every push but NOT release blockers. continue-on-error
+          # is wired below so a red entry here is a yellow advisory.
+          #
+          # Promotion criterion: 5 consecutive green runs without revert.
+          #
+          # windows-x64 status (2026-05-16): green for the first time on
+          # run 25956072211 after fixing (a) env-var-prefix syntax via
+          # cross-env, (b) node --test glob expansion, (c) CRLF in test
+          # source scanner. Only 1-2 consecutive greens so far; needs
+          # ~3 more clean runs before promotion. Next potential blocker
+          # (when investigated): the build:gui cp -r command may need
+          # cross-platform replacement in Phase 2.
           - os: windows-latest
             label: windows-x64
             experimental: true

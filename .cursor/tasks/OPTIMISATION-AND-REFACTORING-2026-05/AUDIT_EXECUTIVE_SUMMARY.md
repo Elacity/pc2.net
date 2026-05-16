@@ -3,17 +3,18 @@
 > **Companion to**: [`CAPSULE_READINESS_REPORT.md`](./CAPSULE_READINESS_REPORT.md) (full audit data, methodology, 638-line per-module classification).
 > **For**: Sasha, Anders (Runtime team), Ahmed (ENM), board narrative.
 > **Reading time**: 3 minutes.
-> **Status**: Audit-in-progress; 51 of 272 pc2-node modules classified (18.8%); strategy stable.
+> **Status**: Audit-in-progress; **67 of 272 pc2-node modules classified (24.6%)**; **3 subtrees fully audited** (`types/`, `services/ai/`, `storage/`, `utils/`); strategy stable.
 > **Updated**: 2026-05-16.
 
 ---
 
 ## TL;DR
 
-pc2-node is **more capsule-ready than expected**. After auditing 51 modules across 6 subtrees:
+pc2-node is **more capsule-ready than expected**. After auditing 67 modules across 6 subtrees (3 complete: `types/`, `services/ai/`, `storage/`, `utils/`):
 
-- **75% of audited modules are A or A- class** (capsule-ready or close to it)
-- **Only 2 modules are deeply coupled** (C-class): `ConnectivityService` and `api/index.ts` — both mega-orchestrators that the Runtime architecture eliminates by design
+- **79% of audited modules are A or A- class** (capsule-ready or close to it)
+- **The entire AI subtree is C-free** — 26/26 modules: 18 A, 3 A-, 2 B, 1 B-, 0 C. **This is the Monetisation Agent's structural foundation, and it's clean.**
+- **Only 2 modules in the whole codebase are deeply coupled** (C-class): `ConnectivityService` and `api/index.ts` — both mega-orchestrators that the Runtime architecture eliminates by design
 - **The ElastOS Runtime capability vocabulary already exists** inside pc2-node and is **already being enforced** at the HTTP boundary
 - **Migration is role-scoped, not subtree-scoped** — lift A-class leaves in parallel across all subtrees; refactor B-class orchestrators in bounded chunks; redesign the 2 C-class mega-orchestrators last
 
@@ -50,25 +51,26 @@ The pilot audit's framing ("AI is mostly A, connectivity is mostly C") turned ou
 
 ### Finding 4: One refactor pattern dominates
 
-The single biggest cross-cutting blocker is **"concrete class import where an interface should suffice"** — confirmed in 9+ modules across 5 subtrees. Examples:
+The single biggest cross-cutting blocker is **"concrete class import where an interface should suffice"** — confirmed in **11+ modules** across 5 subtrees. Examples:
 - `filesystem.ts` imports concrete `IPFSStorage` + `DatabaseManager`
 - `api/wallet.ts` imports concrete `AgentKitExecutor`
 - `BosonService` imports 7 concrete sibling services
 - `metrics.ts` imports concrete `DatabaseManager`
+- `MemoryConsolidator` + `ContextRetriever` + `AgentKitExecutor` all import concrete service classes
 
-**The fix**: extract ~5-6 interfaces (`IFilesystemManager`, `IDatabaseManager`, `IIPFSStorage`, `IAIChatService`, `IAgentKitExecutor`, `IIdentityService`). One Phase 2 ticket. Improves the score of 9+ modules.
+**The fix**: extract ~6-7 interfaces (`IFilesystemManager`, `IDatabaseManager`, `IIPFSStorage`, `IAIChatService`, `IAgentKitExecutor`, `IIdentityService`, `IParticleWalletProvider`). One Phase 2 ticket. Improves the score of 11+ modules.
 
 **Estimated effort**: 1 week of focused work, value-positive for PC2 v1 testability and Runtime migration alike.
 
 ### Finding 5: Only 2 modules are deeply coupled
 
-After 51 audits, only **two** modules earn C-class:
+After 67 audits across 3 fully-complete subtrees, only **two** modules earn C-class:
 - `pc2-node/src/services/boson/ConnectivityService.ts` (1,597 LOC, network-side mega-orchestrator with state machine and setter-injected services)
 - `pc2-node/src/api/index.ts` (1,766 LOC, HTTP-side mega-orchestrator wiring 40+ siblings, ambient Express coupling)
 
 Both are the same architectural pattern on opposite sides of the codebase. Both will be **retired**, not refactored, by capsule architecture (capsules don't have single mega-entry-points by design).
 
-**Implication**: the "PC2-as-monolith" problem is concentrated in 2 files. The other 49 audited modules are either capsule-shape already (38) or one bounded refactor away (11).
+**Implication**: the "PC2-as-monolith" problem is concentrated in 2 files. The other 65 audited modules are either capsule-shape already (53) or one bounded refactor away (12).
 
 ---
 
@@ -109,12 +111,13 @@ The mandate's dual-track strategy is **supported with stronger empirical backing
 
 ## What we DON'T yet know
 
-- 80% of pc2-node/src is still unaudited. Distribution may shift as more modules come in.
-- `services/dDRM/`, `services/ddrm/`, `services/gateway/`, `services/UpdateService.ts` — the DRM and update subsystems are not yet sampled. These could surface additional C-class entries or new patterns.
+- 75% of pc2-node/src is still unaudited. Distribution may shift as more modules come in (though pattern is now well-established).
+- **`services/dDRM/`, `services/ddrm/`** — the **dDRM** subsystem is the AGENTIC-PC2-MONETISATION mandate's most critical subtree and is **not yet audited**. Should be next priority.
+- `services/gateway/`, `services/UpdateService.ts`, `services/clusterPin.ts`, `services/wallet/`, `services/terminal/` — not yet sampled. Could surface additional C-class entries or new patterns.
 - The 40 remaining `api/` HTTP handlers are predicted to be ~70% B / 25% A- / 5% C but unverified.
 - WebSocket subtree (`websocket/*`) has 4 modules; not yet sampled.
 
-**Audit completion plan**: extend in subtree batches per `CAPSULE_READINESS_REPORT §6`. Target 50% coverage in the May 25-29 window (post-Mac launcher). The remaining ~221 modules are ~12-15 hours of analyst-time at current pace.
+**Audit completion plan**: extend in subtree batches per `CAPSULE_READINESS_REPORT §6`. Target 50% coverage by May 22; ≥80% by end of May. The remaining ~205 modules are ~10-12 hours of analyst-time at current pace.
 
 ---
 

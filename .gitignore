@@ -12,6 +12,9 @@ license-header.txt
 # Build Outputs
 dist/
 
+# Auto-generated analysis reports (depcheck / jscpd / size-limit etc.)
+reports/
+
 # VS Code IDE
 .vscode/**/*
 !.vscode/extensions.json

@@ -8,7 +8,10 @@
 - `FOOTPRINT_AND_REFACTOR_BASELINE.md` §7 (specific candidates with measurements)
 - `ROLLBACK-PROCEDURE.md` §7 of dry-run appendix (doc refinements)
 
-**Hard constraint** (set by Sasha 2026-05-15): no item in this plan starts until v1.2.8.0 (Mac launcher) ships and is observed stable for ≥48 h on real user installs. Confirmation gates: 0 hot-patch reports in the first 48 h, supernode dDRM surface unchanged, IPFS cluster healthy.
+**Hard constraint** (set by Sasha 2026-05-15, clarified 2026-05-17):
+- **Shipping gate**: no item in this plan **ships to users** — i.e. gets merged into the release branch, included in a release tag, or otherwise reaches an end-user installer — until v1.2.8.0 (Mac launcher) ships and is observed stable for ≥48 h on real user installs. Confirmation gates: 0 hot-patch reports in the first 48 h, supernode dDRM surface unchanged, IPFS cluster healthy.
+- **Coding gate**: work on the current feature branch (`feat/t-1-telemetry-and-support` or successor) can proceed at any time, *provided* the change cannot interfere with v1.2.8.0's release surface. Type-only refactors, internal-module reorganisation, and any change that does not appear in a v1.2.8.0 build are explicitly allowed. The feature branch is **not** the release branch; pushing to it does not affect what ships.
+- **Why the distinction matters**: doing low-risk Phase 2 work *now* (on the feature branch, behind the shipping gate) means PRs are smoke-tested, reviewed, and ready-to-merge the instant Mac soak passes — instead of starting fresh that day. This is productive use of release-window time without risking the release.
 
 **Soft constraints** (also set by Sasha):
 - Each Phase 2 item is its own PR with its own smoke-test green run. No "while we're at it" bundling.
@@ -205,13 +208,14 @@ These items don't touch code in Phase 2. They produce documents that feed into t
 - **Risk**: medium — must not change runtime semantics; need full smoke test green after each PR.
 - **Dependencies**: hard-blocked until Mac launcher 48-72h soak is complete.
 
-### 5.4 Types extraction (providers/types.ts + storage/types.ts) — **READY TO START POST-MAC**
+### 5.4 Types extraction (providers/types.ts + storage/types.ts) — **TICKET WRITTEN, READY TO EXECUTE POST-MAC**
 
 - **What**: extract type definitions from the implementation modules that currently own them.
 - **ROI**: 5 AI provider modules + 4-6 storage modules improve scores by +1 each.
-- **Effort**: ~3 hours total (one PR per subtree).
+- **Effort**: ~3 hours total (one PR per subtree, or single PR — see ticket).
 - **Risk**: very low (types-only refactor, no runtime change).
 - **Dependencies**: same as 5.3.
+- **Ticket**: see [`PHASE-2-A-TYPES-EXTRACTION.md`](./PHASE-2-A-TYPES-EXTRACTION.md) — full ticket with acceptance criteria, risk analysis, score impact table, and confirmed grep results for all 18 affected import sites. Awaiting Sasha sign-off on 4 open questions (one-PR-vs-two, optional follow-on scope, Mac soak confirmation, reviewer).
 
 ---
 

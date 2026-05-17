@@ -6,7 +6,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { logger } from '../../../utils/logger.js';
-import { ChatModel, ChatMessage, CompleteArguments, ChatCompletion } from './OllamaProvider.js';
+import type { ChatModel, ChatMessage, CompleteArguments, ChatCompletion } from './types.js';
 
 export class ClaudeProvider {
   private anthropic: Anthropic;

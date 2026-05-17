@@ -6,7 +6,7 @@
 
 import OpenAI from 'openai';
 import { logger } from '../../../utils/logger.js';
-import { ChatModel, ChatMessage, CompleteArguments, ChatCompletion } from './OllamaProvider.js';
+import type { ChatModel, ChatMessage, CompleteArguments, ChatCompletion } from './types.js';
 
 export class XAIProvider {
   private client: OpenAI;

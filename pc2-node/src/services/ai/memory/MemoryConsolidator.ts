@@ -16,7 +16,7 @@
 
 import { logger } from '../../../utils/logger.js';
 import { DatabaseManager } from '../../../storage/database.js';
-import { ChatMessage } from '../providers/OllamaProvider.js';
+import type { ChatMessage } from '../providers/types.js';
 
 /**
  * Entity extracted from conversation context

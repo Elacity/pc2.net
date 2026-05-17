@@ -867,7 +867,7 @@ The 3 C-class modules account for **9,374 LOC out of pc2-node's ~70k LOC = 13% o
 | Pattern | Now affects | Fix shape | Status |
 |---|---|---|---|
 | **Concrete class import where interface should suffice** | **16+ confirmed across 6 subtrees** (full list in §4 batches; high-count examples: AgentMemoryManager, EmbeddingProvider, ToolExecutor, filesystem.ts, indexer.ts, api/wallet, api/ai, BosonService, metrics, MemoryConsolidator, ContextRetriever, AgentKitExecutor, ChannelBridge, AppInstallService, ContentIntelligenceService, websocket/events). | Extract `IFilesystemManager`, `IDatabaseManager`, `IIPFSStorage`, `IAIChatService`, `IAgentKitExecutor`, `IIdentityService`, `IParticleWalletProvider`, `IGatewayService` interfaces; **the fix template is in-codebase** (see ContentSeedingService.ts, ContentIndexerService.ts). | **#1 cross-cutting refactor pattern.** One Phase 2 ticket covering 16+ modules; mechanical. |
-| **Types co-located with implementation, imported by siblings** | `providers/` (OllamaProvider exports types to 4 siblings), `storage/` (database.ts owns 9 types used everywhere) — **2 subtrees confirmed**, applies to ~10-15 modules | Extract `<subtree>/types.ts` files | **High-ROI: ~3 hours total fixes ~10-15 module scores by +1 each**. Two Phase 2 tickets (one per subtree). |
+| **Types co-located with implementation, imported by siblings** | `providers/` (OllamaProvider exports types to 4 siblings — **RESOLVED 2026-05-17 via Phase 2-A**), `storage/` (database.ts owns 9 types used everywhere — **RESOLVED 2026-05-17 via Phase 2-A**). | Extract `<subtree>/types.ts` files | ✅ **RESOLVED** — see §5.4 below. |
 | Async `initialize()` separate from constructor | AIChatService, database.ts (**2 confirmed**) | Either builder pattern or sync construct + lazy connect | Pattern continues; expect 5-10 modules total. |
 | Cross-cutting imports from `websocket/events` + `gateway/` inside leaf modules | ToolExecutor | Expose as injected capabilities | Specific to orchestration code; expect 2-3 modules. |
 | `: any` escape-hatch typing for sibling service references | ToolExecutor (`aiService?: any`) | Formalise the cross-reference | Newly detected. |
@@ -892,7 +892,64 @@ The 0-10 scoring proved easy to apply on the 5 pilot modules. Two calibration no
 - **Don't let LOC dominate the score.** The 1,600-line ConnectivityService scored 2/10; the 300-line OpenAIProvider scored 9/10. Size is a downstream signal of doing too many things; the score should track *capsule criteria violations*, not file size.
 - **Score the module against its own boundary, not against pc2-node.** If a module is internally clean but depends on a pc2-node-specific dep that's itself capsule-ready, that's not a violation. If it depends on a globally-mutable singleton, that is.
 
-### 5.4 What this audit tells us about the AGENTIC-PC2-MONETISATION strategy
+### 5.4 Phase 2-A executed (2026-05-17) — types extraction complete
+
+**Status**: Phase 2-A landed on `feat/t-1-telemetry-and-support` (feature branch — not shipped to users; held behind Mac-launcher soak per `PHASE-2-PLAN.md` shipping gate).
+
+**Files created** (2):
+- `pc2-node/src/services/ai/providers/types.ts` (5 interfaces, 67 LOC including header comment)
+- `pc2-node/src/storage/types.ts` (9 type exports + Database alias, 147 LOC including header comment)
+
+**Files modified** (8):
+- `pc2-node/src/services/ai/providers/OllamaProvider.ts` (-52 LOC: type defs removed, replaced with import + re-export)
+- `pc2-node/src/storage/database.ts` (-126 LOC: type defs removed, replaced with import + re-export)
+- `pc2-node/src/services/ai/providers/ClaudeProvider.ts` (1 line: import path changed to `./types.js`, converted to `import type`)
+- `pc2-node/src/services/ai/providers/GeminiProvider.ts` (1 line: same)
+- `pc2-node/src/services/ai/providers/XAIProvider.ts` (1 line: same)
+- `pc2-node/src/services/ai/providers/OpenAIProvider.ts` (1 line: same)
+- `pc2-node/src/services/ai/memory/MemoryConsolidator.ts` (1 line: import path changed)
+- `pc2-node/src/services/ai/AIChatService.ts` (split single combined import into one runtime + one type-only import — this was added during execution; the original ticket had missed `AIChatService` as a 6th consumer)
+
+**Validation passed**:
+- ✅ `tsc --noEmit` clean (zero TypeScript errors)
+- ✅ `npm run build:backend` succeeds
+- ✅ `npm run test:unit` all 7 tests pass
+- ✅ ReadLints clean on all 10 touched files
+- ✅ Compiled `dist/services/ai/providers/types.js` and `dist/storage/types.js` are header-comment-only files (`export {};`) — empirical proof of zero runtime change
+- ✅ Backward compatibility: 22 consumers of `storage/database.js` continue to compile via re-export; 6 consumers of `OllamaProvider.js` updated; re-export from `OllamaProvider.ts` retained for any not-yet-discovered consumer
+
+**Score impact** (post-Phase-2-A):
+
+| Module | Pre-2-A | Post-2-A | Delta |
+|---|---|---|---|
+| `OllamaProvider.ts` | A 9/10 (-1 for owning sibling types) | A 10/10 | +1 |
+| `ClaudeProvider.ts` | A 9/10 (-1 for types-from-sibling) | A 10/10 | +1 |
+| `GeminiProvider.ts` | A 9/10 (-1 for types-from-sibling) | A 10/10 | +1 |
+| `XAIProvider.ts` | A 9/10 (-1 for types-from-sibling) | A 10/10 | +1 |
+| `OpenAIProvider.ts` | A 9/10 (-1 for types-from-sibling) | A 10/10 | +1 |
+| `MemoryConsolidator.ts` | A- 7/10 (-1 for cross-module type dep, -2 for concrete `DatabaseManager`) | A- 8/10 | +1 |
+| `database.ts` | A- 7/10 | A 8/10 (still owns `DatabaseManager` class — that's Phase 2-C) | +1 |
+| **NEW**: `providers/types.ts` | n/a | A 10/10 | new module |
+| **NEW**: `storage/types.ts` | n/a | A 10/10 | new module |
+
+**Net distribution change** (across full 163-module pc2-node):
+- A class: 72 → 77 (+5)
+- A- class: 41 → 40 (-1; MemoryConsolidator stays A- because of the remaining concrete-`DatabaseManager` import, but its score improved within the band)
+- B class: 40 → 39 (-1; database.ts promoted out of B-band into A 8/10)
+- Total modules: 163 → 165 (2 new types files)
+
+**What remains as Phase 2-B / 2-C work** (not addressed by 2-A):
+- The 11 modules with concrete `DatabaseManager` imports still need interface extraction (Phase 2-B)
+- The 4 type-only consumers of `storage/database.js` (`api/public.ts`, `api/filesystem.ts`, `AppInstallService.ts`, `ContentIndexerService.ts`) could optionally switch to import from `storage/types.js` directly for +1 each — deferred to Phase 2-B per the ticket's open question #2 (one-PR-tightness preferred over additional scope)
+
+**Validates Phase 2 pipeline**:
+- Per-PR template (cluster ID, before/after, risk mitigation, smoke test, install verification, re-baseline) successfully applied to a real refactor
+- "Shipping gate vs coding gate" distinction proven correct: code work on feature branch did not affect Mac launcher release surface
+- TypeScript compiler caught no issues — refactor was as low-risk as predicted
+
+**Shipping**: held behind Mac-launcher 48-72h soak per `PHASE-2-PLAN.md` shipping gate. Merge to release branch only after soak confirms v1.2.8.0 stability.
+
+### 5.5 What this audit tells us about the AGENTIC-PC2-MONETISATION strategy
 
 After 160 modules across 11 batches (audit functionally complete at 98.2% coverage), the strategic picture is now stable and final:
 

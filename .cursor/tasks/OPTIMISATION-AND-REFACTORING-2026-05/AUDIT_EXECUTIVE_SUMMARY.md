@@ -4,7 +4,8 @@
 > **For**: Sasha, Anders (Runtime team), Ahmed (ENM), board narrative.
 > **Reading time**: 3 minutes.
 > **Status**: **AUDIT FUNCTIONALLY COMPLETE** — **160 of 163 pc2-node modules classified (98.2%)**. All subtrees audited. Only 3 type-only re-export files remain unclassified (already covered as part of parent batches). The original audit doc cited 272 as the total — this was a miscount; actual pc2-node/src .ts file count is 163. Strategy stable and final.
-> **Updated**: 2026-05-16.
+> **Phase 2-A executed (2026-05-17)**: types extraction landed on feature branch. 7 module scores improved (5 providers + MemoryConsolidator + database.ts). Validated on `tsc --noEmit` + `build:backend` + unit tests. Shipping held behind Mac launcher soak gate. See `PHASE-2-A-TYPES-EXTRACTION.md` + audit report §5.4.
+> **Updated**: 2026-05-17.
 
 ---
 

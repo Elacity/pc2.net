@@ -6,7 +6,8 @@
 
 import { logger } from '../../utils/logger.js';
 import { detectPlatform } from '../../utils/platform.js';
-import { OllamaProvider, ChatModel, ChatMessage, CompleteArguments, ChatCompletion } from './providers/OllamaProvider.js';
+import { OllamaProvider } from './providers/OllamaProvider.js';
+import type { ChatModel, ChatMessage, CompleteArguments, ChatCompletion } from './providers/types.js';
 import { ClaudeProvider } from './providers/ClaudeProvider.js';
 import { OpenAIProvider } from './providers/OpenAIProvider.js';
 import { GeminiProvider } from './providers/GeminiProvider.js';

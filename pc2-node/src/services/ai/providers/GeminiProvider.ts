@@ -6,7 +6,7 @@
 
 import { GoogleGenAI, type Content, type Part, type Tool } from '@google/genai';
 import { logger } from '../../../utils/logger.js';
-import { ChatModel, ChatMessage, CompleteArguments, ChatCompletion } from './OllamaProvider.js';
+import type { ChatModel, ChatMessage, CompleteArguments, ChatCompletion } from './types.js';
 
 export class GeminiProvider {
   private client: GoogleGenAI;

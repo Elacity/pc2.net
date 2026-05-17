@@ -6,61 +6,19 @@
 
 import { logger } from '../../../utils/logger.js';
 import { type PlatformInfo, type OllamaHardwareConfig, calculateOptimalNumCtx } from '../../../utils/platform.js';
+import type {
+  ChatModel,
+  ChatMessage,
+  CompleteArguments,
+  PerformanceMetrics,
+  ChatCompletion,
+} from './types.js';
 
-export interface ChatModel {
-  id: string;
-  name: string;
-  max_tokens: number;
-  costs_currency: string;
-  costs: {
-    tokens: number;
-    input_token: number;
-    output_token: number;
-  };
-}
-
-export interface ChatMessage {
-  role: 'user' | 'assistant' | 'system';
-  content: string | Array<{ type: string; text?: string; [key: string]: any }>;
-}
-
-export interface CompleteArguments {
-  messages: ChatMessage[];
-  model?: string;
-  stream?: boolean;
-  tools?: any[];
-  max_tokens?: number;
-  temperature?: number;
-}
-
-export interface PerformanceMetrics {
-  tokensPerSecond: number;
-  evalCount: number;
-  evalDurationMs: number;
-  promptEvalDurationMs?: number;
-}
-
-export interface ChatCompletion {
-  message: {
-    role: string;
-    content: string;
-    tool_calls?: Array<{
-      id: string;
-      type: 'function';
-      function: {
-        name: string;
-        arguments: string;
-      };
-    }>;
-  };
-  done: boolean;
-  usage?: {
-    prompt_tokens: number;
-    completion_tokens: number;
-    total_tokens: number;
-  };
-  performance?: PerformanceMetrics;
-}
+// Re-export the shared provider types so that any consumer that historically
+// imported them from this module via `import { ChatModel } from './OllamaProvider.js'`
+// continues to compile. New code should import from `./types.js` directly.
+// (Phase 2-A — see ticket PHASE-2-A-TYPES-EXTRACTION.md.)
+export type { ChatModel, ChatMessage, CompleteArguments, PerformanceMetrics, ChatCompletion };
 
 export class OllamaProvider {
   private apiBaseUrl: string;

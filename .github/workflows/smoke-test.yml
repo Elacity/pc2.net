@@ -359,6 +359,138 @@ jobs:
           (cd pc2-node && npm run test:unit)
           echo "::endgroup::"
 
+      # A-4: Boot smoke — actually start the pc2-node binary in the background
+      # and assert /api/health responds with status:ok before tearing it down.
+      #
+      # Why this exists (CI-HARDENING-A4-D1):
+      #
+      # Through Phase 1 (build + typecheck + unit tests), the smoke matrix
+      # proves the code compiles, types check, and unit tests pass. But none
+      # of those steps prove the binary actually STARTS. Real bug classes
+      # that escape: init-time crashes (missing env, bad config parsing),
+      # port collisions, slow startup (>30s), missing required directories
+      # the launcher would create. v1.2.7.x had several "build passed but
+      # users see PC2 stopped" scenarios; this step is the cheapest possible
+      # belt-and-suspenders.
+      #
+      # Why we skip Windows: pc2-node's startup path uses POSIX SIGTERM for
+      # graceful shutdown; on Windows that's not equivalent. windows-x64 is
+      # still experimental in the build matrix anyway. Promote to boot-smoke
+      # once windows-x64 reaches 5 consecutive green builds.
+      - name: Boot-smoke pc2-node + assert /api/health (A-4)
+        if: matrix.label != 'windows-x64'
+        env:
+          # Use a non-standard port to dodge any runner-side port 4200 conflict
+          # (the GitHub-hosted runners don't have anything on 4200, but being
+          # explicit costs nothing and lets us run this locally with `act` later).
+          PC2_PORT: 14200
+          # Disable any feature that requires network egress at boot —
+          # the runner has internet but the goal here is the smallest
+          # possible smoke, not a fully-functional node.
+          NODE_ENV: production
+        run: |
+          set -euo pipefail
+          echo "::group::A-4 boot-smoke"
+
+          cd pc2-node
+
+          # Start the server in the background. Capture stdout+stderr so we
+          # can dump them on failure for diagnosis.
+          PORT="${PC2_PORT}" node dist/index.js > /tmp/pc2-boot.log 2>&1 &
+          SERVER_PID=$!
+          echo "Started pc2-node with PID ${SERVER_PID}, polling /api/health on port ${PC2_PORT}"
+
+          # Function to gracefully tear down on any exit path.
+          cleanup() {
+            local exitcode=$?
+            echo ""
+            echo "::group::Tearing down pc2-node (PID ${SERVER_PID})"
+            if kill -0 ${SERVER_PID} 2>/dev/null; then
+              kill -TERM ${SERVER_PID} 2>/dev/null || true
+              # Give it 5 s to exit cleanly.
+              for i in 1 2 3 4 5; do
+                if ! kill -0 ${SERVER_PID} 2>/dev/null; then break; fi
+                sleep 1
+              done
+              # Force-kill if still alive.
+              if kill -0 ${SERVER_PID} 2>/dev/null; then
+                echo "Server did not exit gracefully within 5 s, sending SIGKILL"
+                kill -KILL ${SERVER_PID} 2>/dev/null || true
+              fi
+            else
+              echo "Server already exited."
+            fi
+            wait ${SERVER_PID} 2>/dev/null || true
+            echo "::endgroup::"
+
+            if [ $exitcode -ne 0 ]; then
+              echo "::group::pc2-node boot log (last 200 lines)"
+              tail -n 200 /tmp/pc2-boot.log || true
+              echo "::endgroup::"
+            fi
+            return $exitcode
+          }
+          trap cleanup EXIT
+
+          # Poll /api/health with 1 s intervals up to 30 s.
+          HEALTH_URL="http://localhost:${PC2_PORT}/api/health"
+          for attempt in $(seq 1 30); do
+            if curl -fsS -m 2 "${HEALTH_URL}" -o /tmp/pc2-health.json 2>/dev/null; then
+              echo "✅ /api/health responded after ${attempt}s"
+              break
+            fi
+            # If the server died mid-poll, bail early rather than waiting.
+            if ! kill -0 ${SERVER_PID} 2>/dev/null; then
+              echo "::error::pc2-node process died during health-check polling (PID ${SERVER_PID} no longer alive)"
+              exit 1
+            fi
+            sleep 1
+          done
+
+          if [ ! -s /tmp/pc2-health.json ]; then
+            echo "::error::/api/health never responded within 30 s on ${HEALTH_URL}"
+            exit 1
+          fi
+
+          echo "Health response body:"
+          cat /tmp/pc2-health.json
+          echo ""
+
+          # Assert specific fields, not just HTTP 200. We want to know the
+          # server is in a known-good state, not just that it can answer.
+          # node parses JSON natively; avoids requiring jq or python3 on
+          # arbitrary runner images.
+          node -e "
+            const r = JSON.parse(require('fs').readFileSync('/tmp/pc2-health.json', 'utf8'));
+            const fails = [];
+            if (r.status !== 'ok') fails.push('status was ' + JSON.stringify(r.status) + ', expected \"ok\"');
+            if (!r.version || typeof r.version !== 'string') fails.push('version missing or not a string');
+            if (!r.timestamp || typeof r.timestamp !== 'string') fails.push('timestamp missing or not a string');
+            if (fails.length) {
+              console.error('::error::Health assertion failures:');
+              fails.forEach(f => console.error('  - ' + f));
+              process.exit(1);
+            }
+            console.log('✅ Health assertions passed (status=' + r.status + ', version=' + r.version + ')');
+          "
+
+          # Secondary smoke: /api/info should respond 200 (unauthenticated
+          # allowed for general node-info), /api/resources should respond
+          # 401 (auth required — proves auth middleware is wired correctly).
+          INFO_CODE=$(curl -s -m 2 -o /dev/null -w '%{http_code}' "http://localhost:${PC2_PORT}/api/info" || echo "000")
+          RESOURCES_CODE=$(curl -s -m 2 -o /dev/null -w '%{http_code}' "http://localhost:${PC2_PORT}/api/resources" || echo "000")
+          echo "Secondary route smoke: /api/info → HTTP ${INFO_CODE} (expected 200), /api/resources → HTTP ${RESOURCES_CODE} (expected 401)"
+
+          if [ "${INFO_CODE}" != "200" ]; then
+            echo "::warning::/api/info returned HTTP ${INFO_CODE} (expected 200) — non-fatal but worth investigating"
+          fi
+          if [ "${RESOURCES_CODE}" != "401" ]; then
+            echo "::warning::/api/resources returned HTTP ${RESOURCES_CODE} (expected 401 — auth middleware should reject unauthenticated)"
+          fi
+
+          echo "::endgroup::"
+          echo "✅ A-4 boot-smoke complete on ${{ matrix.label }}"
+
   # ---------------------------------------------------------------------------
   # release-assets-integrity: confirm the pc2-binaries-v1 GitHub release has
   # the expected asset count. This is the v1.2.7.8 bug class: BinaryManager
@@ -424,12 +556,148 @@ jobs:
             | column -t -s $'\t'
 
   # ---------------------------------------------------------------------------
+  # D-1: docker-smoke — build pc2-node/Dockerfile in CI (no push) and assert
+  # the container actually serves /api/health.
+  #
+  # Why this exists (CI-HARDENING-A4-D1):
+  #
+  # pc2-node/Dockerfile (5.7KB, multi-stage build with wireguard-go +
+  # amneziawg-go + sing-box compilation) is the canonical Docker image for
+  # supernode operators and any deployment that wants containerised pc2-node.
+  # It hasn't been CI-tested since Feb 2026 — the existing pc2-node-docker.yml
+  # workflow was disabled (workflow_dispatch only) after 3 consecutive failed
+  # runs on 2026-02-03 because no one had time to fix the Dockerfile and
+  # broken CI was noisier than no CI. The Dockerfile has since been updated
+  # (2026-05-01) but nobody has verified the rebuild works.
+  #
+  # This job builds the Dockerfile from scratch on every commit. NO push to
+  # GHCR — pure build validation. If the image build succeeds AND the
+  # container's HEALTHCHECK reports healthy AND /api/health responds via
+  # mapped port, we've proven the Docker deployment path stays viable
+  # alongside the native launcher path.
+  #
+  # Promotion criterion: 3 consecutive green runs without a Dockerfile
+  # change → flip continue-on-error: false (required gate). Same playbook
+  # as windows-x64 in the build matrix.
+  #
+  # Cost: GitHub-hosted ubuntu-latest runner, free for public repos.
+  # Observed first-run time (target): ~5-7 min cold (multi-stage with
+  # transport-binary cross-compilation; subsequent runs ~3-4 min with
+  # cache-from: type=gha).
+  # ---------------------------------------------------------------------------
+  docker-smoke:
+    name: Docker-smoke (pc2-node/Dockerfile)
+    runs-on: ubuntu-latest
+    # Experimental on first run — same pattern as windows-x64 in the matrix.
+    # Promote to required gate after 3 consecutive green runs.
+    continue-on-error: true
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # We don't push, but the gha cache lets a successful build on commit N
+      # reuse layers from commit N-1 to speed up the inner-loop iteration
+      # while we're stabilising this job.
+      - name: Build pc2-node Docker image (no push)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./pc2-node/Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: pc2-node:smoke-test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Start pc2-node container + wait for HEALTHCHECK
+        run: |
+          set -euo pipefail
+          echo "::group::Starting container"
+          # -d detached, -p host:container port mapping, --name so we can
+          # reference it later for inspect/logs/stop without hunting PIDs.
+          docker run -d \
+            --name pc2-smoke \
+            -p 14200:4200 \
+            pc2-node:smoke-test
+          echo "::endgroup::"
+
+          echo "::group::Polling Docker HEALTHCHECK status"
+          # Dockerfile declares HEALTHCHECK --interval=30s --start-period=60s,
+          # so the first check fires at t=0 (start-period grace) but the
+          # status only flips to "healthy" after a successful probe. We poll
+          # every 5 s for up to 120 s. healthy → pass; unhealthy or starting
+          # past 120 s → fail.
+          status="starting"
+          for attempt in $(seq 1 24); do
+            status=$(docker inspect --format='{{.State.Health.Status}}' pc2-smoke 2>/dev/null || echo "missing")
+            echo "  attempt ${attempt}/24: status=${status}"
+            if [ "${status}" = "healthy" ]; then
+              echo "✅ Container healthy after $((attempt * 5))s"
+              break
+            fi
+            if [ "${status}" = "unhealthy" ]; then
+              echo "::error::Container reported unhealthy on attempt ${attempt}"
+              break
+            fi
+            if [ "${status}" = "missing" ]; then
+              echo "::error::Container disappeared mid-poll"
+              break
+            fi
+            sleep 5
+          done
+          echo "::endgroup::"
+
+          if [ "${status}" != "healthy" ]; then
+            echo "::group::Container state on failure"
+            docker ps -a --filter name=pc2-smoke
+            echo ""
+            echo "Inspect (health log):"
+            docker inspect --format='{{json .State.Health}}' pc2-smoke 2>&1 | head -100 || true
+            echo "::endgroup::"
+            echo "::group::Container logs (last 200 lines)"
+            docker logs --tail 200 pc2-smoke 2>&1 || true
+            echo "::endgroup::"
+            exit 1
+          fi
+
+          echo "::group::Verify /api/health is reachable through port mapping"
+          # Belt-and-suspenders: the HEALTHCHECK already curls /api/health from
+          # *inside* the container. This additional curl from *outside* proves
+          # the port mapping works — a different failure class.
+          curl -fsS -m 5 http://localhost:14200/api/health -o /tmp/docker-health.json
+          cat /tmp/docker-health.json
+          echo ""
+          node -e "
+            const r = JSON.parse(require('fs').readFileSync('/tmp/docker-health.json', 'utf8'));
+            if (r.status !== 'ok') { console.error('status:', r.status); process.exit(1); }
+            console.log('✅ /api/health from outside container: status=ok, version=' + r.version);
+          "
+          echo "::endgroup::"
+
+      - name: Tear down container
+        if: always()
+        run: |
+          docker stop pc2-smoke 2>/dev/null || true
+          docker rm pc2-smoke 2>/dev/null || true
+          echo "Cleanup complete."
+
+  # ---------------------------------------------------------------------------
   # summary: roll up matrix results into a single "ok / not ok" output so the
   # status badge + branch protection rule have one thing to point at.
   # ---------------------------------------------------------------------------
   summary:
     name: Smoke test summary
-    needs: [build-and-typecheck, release-assets-integrity]
+    needs: [build-and-typecheck, release-assets-integrity, docker-smoke]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 2
@@ -438,11 +706,19 @@ jobs:
         run: |
           echo "build-and-typecheck: ${{ needs.build-and-typecheck.result }}"
           echo "release-assets-integrity: ${{ needs.release-assets-integrity.result }}"
+          echo "docker-smoke: ${{ needs.docker-smoke.result }} (experimental — does not block)"
 
+          # Required gates only. docker-smoke is experimental until it hits
+          # the 3-consecutive-green promotion criterion; report its status
+          # but do not fail the summary on its red.
           if [ "${{ needs.build-and-typecheck.result }}" != "success" ] \
              || [ "${{ needs.release-assets-integrity.result }}" != "success" ]; then
             echo "::error::Smoke test failed. Do NOT tag a release until these are green."
             exit 1
           fi
 
-          echo "All smoke gates green. Safe to proceed to pre-tag checklist."
+          if [ "${{ needs.docker-smoke.result }}" != "success" ]; then
+            echo "::warning::docker-smoke (experimental) was ${{ needs.docker-smoke.result }} — does not block release. Investigate before promoting to required gate."
+          fi
+
+          echo "All required smoke gates green. Safe to proceed to pre-tag checklist."

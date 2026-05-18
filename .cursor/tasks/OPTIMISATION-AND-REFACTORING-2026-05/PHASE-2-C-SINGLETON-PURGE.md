@@ -375,7 +375,18 @@ Three boundaries we held instead of expanding:
 
 ### Commit reference
 
-(Will be filled in after commit + push.)
+- **Commit**: `06ff6b3ca` on `feat/t-1-telemetry-and-support` (pushed 2026-05-18 ~01:38 UTC+1)
+- **Diff size**: 18 files changed, 229 insertions, 42 deletions
+- **Pre-commit gates**: ✅ gitleaks clean (0 leaks in 22 KB scan), ✅ ESLint config valid
+- **CI run**: [`26008988768`](https://github.com/Elacity/pc2.net/actions/runs/26008988768) — **all 6 jobs GREEN**
+  - ✅ Build + typecheck (darwin-arm64) — macOS Apple Silicon
+  - ✅ Build + typecheck (linux-x64)
+  - ✅ Build + typecheck (linux-arm64)
+  - ✅ Build + typecheck (windows-x64)
+  - ✅ pc2-binaries-v1 asset integrity
+  - ✅ Smoke test summary
+
+**Code change is now production-shape on the feature branch**, awaiting Mac launcher 48-72h soak before release-branch merge per `PHASE-2-PLAN.md` shipping gate.
 
 ---
 

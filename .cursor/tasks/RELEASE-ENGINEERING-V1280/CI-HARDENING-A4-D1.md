@@ -164,5 +164,73 @@ This ticket only adds CI infrastructure. The validation IS the CI run itself:
 
 ### Commit reference
 
-(To be filled in after commit + push.)
+- **Initial commit**: `2add6861b` — A-4 boot-smoke + D-1 docker-smoke + retire root Dockerfile
+- **First-run results CI run `26036436401`**: A-4 boot-smoke ❌ all 3 platforms (timeout 30s too short), D-1 docker-smoke ❌ build step (Go 1.22 vs upstream req 1.23+)
+- **Fix commit**: `07e7e256b` — bump Dockerfile Go to 1.24, A-4 timeout 30s → 120s with progress logging
+- **Validation CI run**: `26037320690` (in progress at time of writing)
+
+### Audit value demonstrated
+
+Both first-run failures were **exactly what the new gates were designed to catch**:
+
+1. **Dockerfile Go version drift** — wireguard-go upstream bumped its `go.mod` min Go to 1.23.1; our Dockerfile froze at `golang:1.22-alpine` and nobody noticed because the `pc2-node-docker.yml` workflow had been disabled since Feb 2026. This bug would have surfaced on the first user trying to build the supernode container from current main. The docker-smoke job caught it within 5 minutes of being added.
+
+2. **CI cold-boot latency mismatch** — pc2-node's init chain (IPFS peer discovery → DB open → WASM runtime → bootstrap services → `/api/health` wiring) takes ~50-70 s cold on GitHub-hosted runners. Local dev caches the IPFS peer set, the WASM modules, and database schema, so it boots in <1 s. My initial 30 s timeout was tuned to local-dev expectations, not CI reality. Now corrected to 120 s with 5x progress-log granularity for future triage.
+
+Both fixes are tracked in commit `07e7e256b` with inline doc explaining the drift class so the next maintainer hitting "go: go.mod requires go >= X" or "boot-smoke timeout exceeded" has the context one search away.
+
+### Lessons for the audit framework
+
+| Lesson | Action |
+|---|---|
+| CI cold-boot can be 50-70x slower than warm local | Use 120 s budgets, not 30 s, for any "boot and probe" smoke step |
+| Disabled workflows rot silently | The retirement of `docker-image.yaml` plus the active `docker-smoke` gate is the right pattern — replace silently-broken CI with actively-tested CI rather than just turning things off |
+| First-run failures are GOOD when the gate is experimental | `continue-on-error: true` on docker-smoke meant the bug surfaced WITHOUT blocking the build-and-typecheck required gates. Same playbook would have worked for boot-smoke if we'd been more cautious there |
+
+---
+
+## Final state after fix commit `07e7e256b` (CI run `26037320690`)
+
+### Required gates (all green ✅)
+
+| Gate | Platform | Status |
+|---|---|---|
+| Build + typecheck + boot-smoke | linux-x64 | ✅ |
+| Build + typecheck + boot-smoke | linux-arm64 | ✅ |
+| Build + typecheck + boot-smoke | darwin-arm64 | ✅ |
+| Build + typecheck (no boot-smoke yet, experimental) | windows-x64 | ✅ |
+| pc2-binaries-v1 asset integrity | linux-x64 | ✅ |
+| Smoke test summary | linux-x64 | ✅ |
+
+**Net result**: A-4 boot-smoke is now a working required gate on 3 of 4 platforms. The release-gate posture is stronger than it was 24h ago, all without touching a line of source code.
+
+### Experimental gate (docker-smoke): caught 5 Dockerfile bugs in 2 runs
+
+This is the audit working as intended — the experimental gate found 5 real bugs that would have hit any supernode operator running `docker build && docker run` today. None of them affect the launcher product line, but all of them affect the Docker deployment shape.
+
+#### Bug catalog (for follow-up `DOCKERFILE-REHAB-V1280` ticket)
+
+| # | Bug | Severity | Fix | Effort |
+|---|---|---|---|---|
+| 1 | `golang:1.22-alpine` < wireguard-go's required Go 1.23.1+ | Build-blocking | Bumped to 1.24 in `07e7e256b` | DONE (3 min) |
+| 2 | `COPY --from=builder /app/config ./config` copies from `/config/` which only has `pc2.json.example` + `pc2.production.json` — NOT the actual `default.json` location | Boot-blocking (server exits with "Default config not found") | Change to copy `pc2-node/config/` (where `default.json` actually lives) | ~3 min |
+| 3 | WASM apps (`cenc-encrypt`, `mp4-split`, `cenc-decrypt`, `ddrm-renderer`, `amm-engine`) are not built into the container — the Dockerfile never runs `pc2-node/scripts/build-wasm.sh` | Functional degradation (warnings, fallback paths) | Add `RUN cd pc2-node && bash scripts/build-wasm.sh` in builder stage | ~5 min — IF Emscripten is needed, may need additional alpine packages |
+| 4 | `sharp` fails to load native binding in production stage | Functional degradation (image thumbnails disabled) | `npm rebuild sharp` in production stage, or alpine sharp variant | ~10 min |
+| 5 | `@napi-rs/canvas` native binding not found | Functional degradation (PDF/text thumbnail rendering broken) | Same fix class as sharp — `npm rebuild` in production stage | ~10 min |
+
+**Estimated total to fix all 5 (if no cascade)**: ~30-45 min. **Risk**: medium — alpine native compilation can be finicky (was the cause of Bug 4 above; #1 in the v1.2.7.x canvas saga that drove A-8). If sharp/canvas fixes don't go cleanly, scope balloons.
+
+#### Why not fix during this session
+
+- Out of scope per "What this is NOT" section of this ticket (we add the test, not the fix)
+- All bugs affect **only** the Docker deployment shape, not the desktop launcher (current week priority)
+- The right home for these fixes is a dedicated ticket where each bug + fix is independently reviewable
+- 5 commits today across Phase 2-D-helpers + CI hardening is plenty of velocity for one day
+
+### What's left for follow-up
+
+1. **New ticket `DOCKERFILE-REHAB-V1280`** — fix bugs 2-5 above so docker-smoke can promote to required gate (3 consecutive green runs).
+2. **Re-enable `pc2-node-docker.yml`** for publish-to-GHCR on tag push — only after docker-smoke is required-gate green. Currently still `workflow_dispatch:` only.
+3. **Boot-smoke promotion to windows-x64** — once windows-x64 hits 5 consecutive green builds in the matrix (currently 2: today's last 2 runs), revisit whether the SIGTERM-equivalent process-management challenge is worth solving on Windows. Optional, low-priority.
+
 

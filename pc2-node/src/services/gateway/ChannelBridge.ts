@@ -14,7 +14,7 @@
 
 import { logger } from '../../utils/logger.js';
 import { parseSkillFrontmatter } from '../../utils/skill-parser.js';
-import { AIChatService, CompleteRequest } from '../ai/AIChatService.js';
+import type { AIChatService, CompleteRequest } from '../ai/AIChatService.js';
 import type { FilesystemManager } from '../../storage/filesystem.js';
 import type { DatabaseManager } from '../../storage/database.js';
 import { GatewayService, getGatewayService } from './GatewayService.js';

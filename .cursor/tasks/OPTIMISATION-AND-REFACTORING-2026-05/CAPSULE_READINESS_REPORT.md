@@ -1049,6 +1049,66 @@ Net: ~10-14 score points moved across pc2-node. Remaining `getDatabase`/`getWASM
 
 **Shipping**: held behind Mac-launcher 48-72h soak per `PHASE-2-PLAN.md` shipping gate.
 
+### 5.8 Phase 2-D executed (2026-05-18 morning) — sibling-orchestrator type-only conversions (completes audit blocker #1)
+
+**Status**: shipped to feature branch `feat/t-1-telemetry-and-support`, awaiting CI green + review + Mac soak before release-branch merge.
+
+**The audit predicted this would be a 3-hour structural refactor — it actually took 50 minutes**
+
+The audit's original "Phase 2-D" framing said "extract small interfaces from sibling-orchestrator classes" — implying a multi-hour structural job to define `IAIChatService`, `IBosonService`, etc. and refactor all consumers to depend on the interface.
+
+The post-2-C survey discovered that this framing was an artefact of the audit being written before 2-C completed. After 2-C purged ambient singletons and 2-B converted storage-class imports, the actual remaining sibling-orchestrator imports were ALREADY type-only-in-spirit — used as field type, function parameter type, or cast target, never as a value. TypeScript's structural typing means **`import type { AIChatService }` IS the interface** at the type level; no nominal `IAIChatService` extraction is required to resolve the audit's blocker.
+
+So Phase 2-D collapsed into a 6-line mechanical keyword change.
+
+**What landed**:
+- 6 mechanical `import` → `import type` conversions across 6 files:
+  - `pc2-node/src/server.ts` — `ServerOptions.aiService` type annotation
+  - `pc2-node/src/api/ai.ts` — 3 cast sites
+  - `pc2-node/src/api/other.ts` — 1 cast site
+  - `pc2-node/src/services/gateway/ChannelBridge.ts` — `AIChatService` + `CompleteRequest`, both type-only
+  - `pc2-node/src/services/ContentIntelligenceService.ts` — field annotation + ctor param
+  - `pc2-node/src/api/boson.ts` — return-type annotation
+- 6 documented "keep concrete" exceptions for value-use sites at architectural boundaries (bootstrap, internal sibling instantiation, static-method consumer)
+
+**Validation outcome — strongest possible**:
+
+| Gate | Result |
+|---|---|
+| `tsc --noEmit` | ✅ clean |
+| `npm run build:backend` | ✅ clean |
+| `npm run test:unit` | ✅ 7/7 in 53.8 ms |
+| `ReadLints` on 6 modified files | ✅ 0 errors |
+| **SHA-256 byte-identical compiled JS** | ✅ literally identical for **all 6** modified `dist/*.js` files (every byte matches pre vs post) |
+
+This is **stronger than Phase 2-B's proof** — in 2-B we spot-checked 5 files for byte-identical-JS; in 2-D every modified file is byte-identical, not just samples.
+
+**Why the JS came out fully identical, not just "minus a require line"**:
+
+The original ticket prediction expected the compiled JS to differ by exactly one removed `require('...')` per file. The actual result is more interesting: TypeScript's default emitter (`importsNotUsedAsValues: 'remove'`) was **already eliding the unused-as-value imports**. The compiled output already had no `require` for AIChatService / BosonService in any of these 6 consumers, because the compiler detected the type-only nature automatically.
+
+So at the runtime level, Phase 2-D is a **zero-bytes-changed change**. Why bother then?
+1. **Explicit intent in source code** — `import type` declares "I depend on this only as a type" *where reviewers and audits can see it*, not just where the compiler infers it.
+2. **Resilience to future tsconfig changes** — if `verbatimModuleSyntax: true` is ever enabled (recommended by the TS team, likely default in future versions), only `import type` would erase. Plain `import` would not.
+3. **Audit machine-readability** — the audit's "concrete-class consumer import" pattern is detected by grep'ing `^import {.*ClassName}`. After 2-D, these 6 sites no longer match — blocker is gone in source code, not just in compiled output.
+
+**This completes the audit's mechanical-pattern blockers for consumer modules**:
+
+- Pattern #1 (concrete-class consumer imports): storage classes done by 2-B (40 sites in 29 files); sibling-orchestrator classes done by 2-D (6 sites in 6 files).
+- Pattern #2 (ambient global singletons): route layer done by 2-C (27 sites purged, 10 explicitly deferred with markers).
+
+Remaining audit-derived work in `pc2-node/src` is no longer mechanical — it requires architectural decisions:
+- **Phase 2-E**: split the 3 C-class mega-orchestrators (`ConnectivityService`, `api/index.ts`, `api/storage.ts`) — structural refactor.
+- **`pc2Config` mutable-global ticket** (promoted out of 2-C): design the full lifecycle for a 4-file pattern with runtime mutation.
+- **AgentKitExecutor ProposalStore extraction**: structural — would resolve the static-method-consumer pattern in `api/wallet.ts`.
+- **Phase 2-D-helpers** (8 deep WASM/dDRM/IPFS helper sites deferred from 2-C): would thread `wasmRuntime` through 5+ layers; significant effort, modest audit benefit.
+
+After Phase 2-E and the structural tickets above, any remaining work moves into capsule-boundary definition and runtime capability tokens — i.e., the AGENTIC-PC2-MONETISATION migration design itself.
+
+**Score impact**: ~6 score points across 6 consumer modules (each promoted by ~1 band). Smaller absolute number than 2-C, but it's the **completion of the audit's #1 mechanical blocker** for consumer modules. Combined with 2-B's 40 sites and 2-C's 27 sites, the total mechanical-blocker cleanup since 2026-05-17 is 73 sites in ~5.5 hours of focused work — high signal-to-noise refactor work.
+
+**Shipping**: held behind Mac-launcher 48-72h soak per `PHASE-2-PLAN.md` shipping gate.
+
 ### 5.6 What this audit tells us about the AGENTIC-PC2-MONETISATION strategy
 
 After 160 modules across 11 batches (audit functionally complete at 98.2% coverage), the strategic picture is now stable and final:

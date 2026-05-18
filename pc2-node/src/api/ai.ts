@@ -9,7 +9,7 @@ import { Router, Response } from 'express';
 import { authenticate, requireOwner, AuthenticatedRequest } from './middleware.js';
 import { logger } from '../utils/logger.js';
 import { detectPlatform, getOllamaServerEnv } from '../utils/platform.js';
-import { AIChatService } from '../services/ai/AIChatService.js';
+import type { AIChatService } from '../services/ai/AIChatService.js';
 import { readFileSync, existsSync, createWriteStream, unlinkSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';

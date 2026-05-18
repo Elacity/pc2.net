@@ -5,7 +5,7 @@
  */
 
 import { Router, Request, Response } from 'express';
-import { BosonService } from '../services/boson/index.js';
+import type { BosonService } from '../services/boson/index.js';
 import os from 'os';
 import { createLogger } from '../utils/logger.js';
 const log = createLogger('api-boson');

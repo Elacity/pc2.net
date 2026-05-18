@@ -18,7 +18,7 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { readFile, stat } from 'fs/promises';
 import { createHash } from 'crypto';
-import { AIChatService } from './ai/AIChatService.js';
+import type { AIChatService } from './ai/AIChatService.js';
 import { computePerceptualHash, hammingDistance } from './media/fingerprint.js';
 import type { DatabaseManager } from '../storage/database.js';
 import { logger } from '../utils/logger.js';

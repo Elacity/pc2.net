@@ -14,7 +14,7 @@ const log = createLogger('api-other');
 import { broadcastItemUpdated } from '../websocket/events.js';
 import { Server as SocketIOServer } from 'socket.io';
 import crypto from 'crypto';
-import { AIChatService } from '../services/ai/AIChatService.js';
+import type { AIChatService } from '../services/ai/AIChatService.js';
 import { getBaseUrl } from '../utils/urlUtils.js';
 import { getGatewayService } from '../services/gateway/GatewayService.js';
 import type { AgentConfig } from '../services/gateway/types.js';

@@ -8,7 +8,7 @@ import { setupWebSocket, setGlobalIO } from './websocket/server.js';
 import { DatabaseManager, FilesystemManager, IPFSStorage } from './storage/index.js';
 import { Config } from './config/loader.js';
 import { IndexingWorker } from './storage/indexer.js';
-import { AIChatService } from './services/ai/AIChatService.js';
+import type { AIChatService } from './services/ai/AIChatService.js';
 import { logger, createLogger } from './utils/logger.js';
 import { getOrMintBootToken } from './api/setup/first-run-token.js';
 

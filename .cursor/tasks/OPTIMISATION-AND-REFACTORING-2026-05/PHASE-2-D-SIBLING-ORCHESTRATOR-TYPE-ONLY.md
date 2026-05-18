@@ -247,7 +247,18 @@ The remaining audit-derived work is no longer mechanical — it's architectural 
 
 ### Commit reference
 
-(Will be filled in after commit + push.)
+- **Commit**: `ebe3a2de4` on `feat/t-1-telemetry-and-support` (pushed 2026-05-18 ~10:28 UTC+1)
+- **Diff size**: 11 files changed, 423 insertions, 7 deletions (most of the inserts are ticket + cheat sheet + audit-doc updates; source code change is exactly 6 lines)
+- **Pre-commit gates**: ✅ gitleaks clean (0 leaks in 38.84 KB scan), ✅ ESLint config valid
+- **CI run**: [`26025091106`](https://github.com/Elacity/pc2.net/actions/runs/26025091106) — **all 6 jobs GREEN**
+  - ✅ Build + typecheck (darwin-arm64) — macOS Apple Silicon
+  - ✅ Build + typecheck (linux-x64)
+  - ✅ Build + typecheck (linux-arm64)
+  - ✅ Build + typecheck (windows-x64)
+  - ✅ pc2-binaries-v1 asset integrity
+  - ✅ Smoke test summary
+
+**Code change is now production-shape on the feature branch**, awaiting Mac launcher 48-72h soak before release-branch merge per `PHASE-2-PLAN.md` shipping gate.
 
 ---
 

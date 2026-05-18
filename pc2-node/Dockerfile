@@ -21,8 +21,15 @@
 # ---------------------------------------------------------------------------
 # Stage 1: Compile transport binaries (wireguard-go, amneziawg-go, sing-box)
 # Runs in parallel with the Node.js builder stage for faster builds.
+#
+# Go version note (caught 2026-05-18 by docker-smoke CI):
+# wireguard-go upstream go.mod now requires Go >= 1.23.1. We pin to 1.24
+# to give a small buffer for the next upstream bump without breaking
+# rebuilds. If this Dockerfile fails again with "go: go.mod requires go
+# >= X" check the wireguard-go and amneziawg-go upstream go.mod files
+# and bump accordingly. See CI-HARDENING-A4-D1.md "Bug 1 fix" for context.
 # ---------------------------------------------------------------------------
-FROM golang:1.22-alpine AS transport-builder
+FROM golang:1.24-alpine AS transport-builder
 
 RUN apk add --no-cache git
 

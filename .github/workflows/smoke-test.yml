@@ -432,11 +432,20 @@ jobs:
           }
           trap cleanup EXIT
 
-          # Poll /api/health with 1 s intervals up to 30 s.
+          # Poll /api/health with 2 s intervals up to 120 s.
+          # 120 s budget: pc2-node's boot sequence kicks off IPFS peer
+          # discovery (40+ peers), database open, WASM runtime init, and
+          # service-bootstrap chain before /api/health is wired. On a cold
+          # CI runner with no warm caches, the observed cold-boot time on
+          # 2026-05-18 was ~50-70 s. 120 s gives 2x safety margin without
+          # being so generous that a truly-broken init goes undetected.
+          #
+          # 2 s intervals: balances responsiveness vs not hammering the
+          # bind-during-startup race window. Total max iterations = 60.
           HEALTH_URL="http://localhost:${PC2_PORT}/api/health"
-          for attempt in $(seq 1 30); do
-            if curl -fsS -m 2 "${HEALTH_URL}" -o /tmp/pc2-health.json 2>/dev/null; then
-              echo "✅ /api/health responded after ${attempt}s"
+          for attempt in $(seq 1 60); do
+            if curl -fsS -m 3 "${HEALTH_URL}" -o /tmp/pc2-health.json 2>/dev/null; then
+              echo "✅ /api/health responded after $((attempt * 2))s"
               break
             fi
             # If the server died mid-poll, bail early rather than waiting.
@@ -444,11 +453,19 @@ jobs:
               echo "::error::pc2-node process died during health-check polling (PID ${SERVER_PID} no longer alive)"
               exit 1
             fi
-            sleep 1
+            # Surface progress every 10 s so a stuck poll is debuggable
+            # in real time rather than only post-mortem.
+            if [ $((attempt % 5)) -eq 0 ]; then
+              echo "  ... still polling /api/health (elapsed: $((attempt * 2))s / 120 s)"
+              # Snapshot the last few boot-log lines so we can see what
+              # pc2-node is doing inside the polling window.
+              echo "  last boot log line: $(tail -n 1 /tmp/pc2-boot.log 2>/dev/null || echo '(no log yet)')"
+            fi
+            sleep 2
           done
 
           if [ ! -s /tmp/pc2-health.json ]; then
-            echo "::error::/api/health never responded within 30 s on ${HEALTH_URL}"
+            echo "::error::/api/health never responded within 120 s on ${HEALTH_URL}"
             exit 1
           fi
 

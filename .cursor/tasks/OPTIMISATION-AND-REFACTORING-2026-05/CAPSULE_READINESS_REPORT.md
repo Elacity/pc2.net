@@ -1109,6 +1109,107 @@ After Phase 2-E and the structural tickets above, any remaining work moves into 
 
 **Shipping**: held behind Mac-launcher 48-72h soak per `PHASE-2-PLAN.md` shipping gate.
 
+### 5.10 Phase 2-D-helpers executed (2026-05-18 afternoon) — deep WASMRuntime consumer-site thread (completes route-chain consumer cleanup)
+
+**Status**: shipped to feature branch `feat/t-1-telemetry-and-support`, awaiting CI green + review + Mac soak before release-branch merge.
+
+**Resolves the 7-of-10 "Phase 2-D (deferred)" markers Phase 2-C left behind**
+
+Phase 2-C deferred 8 (actually 10 — Phase 2-C's count was approximate) `getWASMRuntime()` call sites with `Phase 2-D (deferred): deep helper, ambient pull preserved` comments. Without further analysis these all looked equivalent. Call-graph mapping during this ticket showed they actually split into three distinct categories:
+
+| Category | Sites | Action | Rationale |
+|---|---|---|---|
+| Route-chain helpers (1-2 layers from a route handler) | 7 | **Thread `wasmRuntime: WASMRuntime` parameter** | Clean Express context available; same pattern as Phase 2-C did at the route boundary. |
+| Service-layer helpers (3+ layers deep in services/media/) | 2 | **Document as intentional service-internal ambient** | Threading would require modifying 3+ service module signatures with negligible audit benefit; future ProposalStore-style extraction is the right fix. |
+| Class-method on bootstrap-constructed service | 1 | **Document as bootstrap-time class-method ambient** | `IPFSStorage` is built once at bootstrap; cleanest future fix is constructor injection. |
+| Module-level eager preloads | 2 | **No fix needed** — they don't actually use the WASM runtime (pure `readFileSync`); the `getWASMRuntime` import was unused at module-level once route-chain helpers were threaded. |
+
+### 7 conversions across 3 files
+
+**`api/storage.ts`**:
+- `loadRendererBinary(wasmRuntime: WASMRuntime)` — new param
+- `decryptAssetTwoLayer(params, ipfsService, wasmRuntime: WASMRuntime)` — new param (also made `ipfsService` required since both callers always pass it)
+- `renderViaWASM(params, mime, maxWidth, wasmRuntime: WASMRuntime, ...)` — new param
+- 2 route handlers (`/lit/encrypt`, `/lit/secure-view`) updated to read `wasmRuntime` from `req.app.locals` and pass down
+- Import converted: `import { getWASMRuntime, type RendererCommand }` → `import type { WASMRuntime, RendererCommand }`
+
+**`api/media.ts`**:
+- `splitInitForTrackWithFallback(initSegment, trackType, wasmRuntime: WASMRuntime)` — new param
+- `stripInitViaWASM(initSegment, wasmRuntime: WASMRuntime)` — new param
+- `decryptSegmentViaWASM(encryptedSegment, cekBase64, wasmRuntime: WASMRuntime, initSegment?)` — new param (positioned before optional)
+- `/segment` route handler updated to read `wasmRuntime` from `req.app.locals` and thread it through all 3 helper calls (2 declarations in 2 different lexical scopes within the same handler)
+- Import dropped entirely: `import { getWASMRuntime } from ...` → `import type { WASMRuntime } from ...` (no more value-import in this file)
+
+**`api/gateway.ts`**:
+- 1 caller of `decryptAssetTwoLayer` (in the skills-install handler) updated to pass `wasmRuntime`
+- New `import type { WASMRuntime }` added
+
+### 3 sites + 2 preloads documented as intentional architectural-boundary ambient
+
+These sites keep `getWASMRuntime()` ambient access with explicit classification comments pointing at this ticket for the audit rationale:
+
+- `services/media/dashPackager.ts:273` — `packageDASH()` exported service function
+- `services/media/mp4split.ts:458` — `splitFragmentedMP4WASM()` exported service function
+- `storage/ipfs.ts:918` — `IPFSStorage.getFile()` class method
+- `api/media.ts:1098, 1117` — module-level eager preloads (don't actually use runtime; just file reads)
+
+The pattern is the same as `__filesystem` was treated in Phase 2-Globals: **explicit, audit-permitted, with a documented future-fix path**.
+
+### Validation outcome (every gate green first try)
+
+| Gate | Result |
+|---|---|
+| `tsc --noEmit` | ✅ clean on FIRST attempt (no compiler bugs surfaced this round — expected, since route-chain sites were already properly typed) |
+| `npm run build:backend` | ✅ clean |
+| `npm run test:unit` | ✅ 7/7 in 52.2 ms |
+| `ReadLints` on 6 modified files | ✅ 0 errors |
+| Live `/api/health` smoke (dev server hot-reloaded all edits via `tsx watch`) | ✅ HTTP 200, db=connected, ipfs=available, user session continues normally |
+
+Notable difference from Phase 2-D: **compiled JS is NOT byte-identical** (function signatures changed). Behavior equivalence is preserved by passing the exact same singleton that ambient access would have returned (verified at bootstrap: `app.locals.wasmRuntime = wasmRuntime` writes the same instance `getWASMRuntime()` lazily constructs).
+
+### Strategic note on what this completes
+
+After Phase 2-D-helpers:
+
+- **Every route-chain consumer site for WASMRuntime in `pc2-node/src` now uses explicit dependency injection.**
+- The only remaining `getWASMRuntime()` calls are at the service-construction layer (class methods, module-level preloads, deep service-internal helpers), which are architectural concerns — not mechanical.
+- Combined with Phases 2-A/2-B/2-C/2-D/2-Globals, **all mechanical-pattern blockers (#1 + #2) are now functionally exhausted at the Express request boundary**.
+
+**Combined progress since 2026-05-17**:
+- Phase 2-A (types extraction): 10 files
+- Phase 2-B (concrete-class → type-only imports for storage classes): 29 files, 40 sites
+- Phase 2-C (ambient module-singleton purge): 14 files, 27 sites
+- Phase 2-D (sibling-orchestrator type-only conversions): 6 files
+- Phase 2-Globals (4-pattern ambient global cleanup + latent bug fix): 7 files
+- **Phase 2-D-helpers (deep WASMRuntime route-chain thread): 6 files, 7 sites converted + 3 sites + 2 preloads classified**
+- **Total: 72 file-touches, 80+ specific call-site changes, in ~7.5 hours of focused mechanical refactoring**
+
+The remaining audit-derived work is now exclusively architectural:
+
+| Future ticket | Type | Estimated effort |
+|---|---|---|
+| Phase 2-E — split 3 C-class mega-orchestrators (`ConnectivityService`, `api/index.ts`, `api/storage.ts`) | Structural refactor with real design decisions | ~1-2 days |
+| AgentKitExecutor ProposalStore extraction (static-method consumers in `api/wallet.ts`) | Structural | ~2-3 hours |
+| Optional WASMRuntime config-injection refactor | Lifecycle (make compute settings injectable at startup; opens path to runtime-mutable limits) | ~1 hour |
+| Optional IPFSStorage constructor injection for wasmRuntime | Class-construction refactor | ~1-2 hours |
+| Optional service-pipeline runtime-context object for `services/media/` | Architectural | Part of Phase 2-E or later |
+
+After these structural items land, any remaining work moves into capsule-boundary definition and runtime capability tokens — i.e., the AGENTIC-PC2-MONETISATION migration design itself.
+
+### Score impact
+
+Estimated band shifts:
+- `api/storage.ts`: B+ → A- (4 audit blockers resolved + clean import pattern)
+- `api/media.ts`: B → A- (3 audit blockers resolved + dropped value-import entirely)
+- `api/gateway.ts`: A- → A (added explicit type-only import; cleaner contract)
+- `services/media/dashPackager.ts`, `services/media/mp4split.ts`, `storage/ipfs.ts`: bands unchanged but intent now documented for future audits
+
+Net: ~5-7 score points across 6 modules + the audit's mechanical-pattern blocker for route-chain WASMRuntime consumers is now functionally closed.
+
+### Shipping
+
+Held behind Mac launcher 48-72h soak gate per `PHASE-2-PLAN.md`. After the Mac release stabilizes, this can be merged to release alongside Phase 2-A/2-B/2-C/2-D/2-Globals.
+
 ### 5.9 Phase 2-Globals executed (2026-05-18 midday) — ambient `(global as any).X` cleanup (completes audit blocker #2 for consumer modules)
 
 **Status**: shipped to feature branch `feat/t-1-telemetry-and-support`, awaiting CI green + review + Mac soak before release-branch merge.

@@ -269,7 +269,15 @@ export async function packageDASH(
   encryptResult: { ciphertext: string; dataToEncryptHash: string },
 ): Promise<string> {
   const wasmBinary = await loadCENCEncryptWasm();
-  // Phase 2-D (deferred): deep CENC packager helper, ambient pull preserved.
+  // Phase 2-D-helpers: INTENTIONAL service-internal ambient.
+  // This packager is a service-module helper called from the deep media
+  // encoding pipeline (services/media/ → pipeline/ → encoder steps).
+  // Threading wasmRuntime through every pipeline stage would require
+  // modifying 3+ services and is out of scope for Phase 2-D-helpers'
+  // route-chain mandate. Audit-permitted as architectural-boundary
+  // ambient; future ProposalStore-style extraction would inject the
+  // runtime at service construction. See PHASE-2-D-HELPERS-CLEANUP.md
+  // §"Intentional service-internal ambient sites".
   const wasmRuntime = getWASMRuntime();
   const dashDir = join(outputDir, 'dash');
 

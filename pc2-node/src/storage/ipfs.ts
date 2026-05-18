@@ -914,7 +914,16 @@ export class IPFSStorage {
       if (totalLength >= WASM_ASSEMBLE_THRESHOLD) {
         try {
           const { getWASMRuntime } = await import('../services/wasm/WASMRuntime.js');
-          // Phase 2-D (deferred): deep IPFS assembly helper, ambient pull preserved.
+          // Phase 2-D-helpers: INTENTIONAL service-internal ambient.
+          // This is inside IPFSStorage.getFile() — a CLASS METHOD on a
+          // service constructed once at bootstrap (before any request).
+          // Cleanest future fix is constructor injection of WASMRuntime
+          // into IPFSStorage; that's structurally invasive and out of
+          // scope for Phase 2-D-helpers' route-chain mandate.
+          // Audit-permitted as architectural-boundary ambient (similar
+          // pattern to the bootstrap-time setGlobalDatabase() in Phase 2-C).
+          // See PHASE-2-D-HELPERS-CLEANUP.md §"Intentional service-internal
+          // ambient sites".
           const runtime = getWASMRuntime();
 
           if (!cachedAssembleWasm) {

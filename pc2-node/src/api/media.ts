@@ -17,7 +17,7 @@ import * as crypto from 'crypto';
 import { webcrypto } from 'crypto';
 import { parseMPD } from '../services/media/mpdParser.js';
 import { mediaSessionManager } from '../services/media/sessionManager.js';
-import { getWASMRuntime } from '../services/wasm/WASMRuntime.js';
+import type { WASMRuntime } from '../services/wasm/WASMRuntime.js';
 import { createLogger } from '../utils/logger.js';
 import { getInternalIPFSGateway } from '../utils/urlUtils.js';
 
@@ -625,14 +625,18 @@ router.post('/segment', async (req: AuthenticatedRequest, res: Response) => {
       // Cache raw init segment for WASM decryption (tenc extraction)
       session.initSegments.set(trackIdx, segmentBytes);
 
+      // Phase 2-D-helpers: route handler reads wasmRuntime from app.locals
+      // and threads it through to all media WASM helpers below.
+      const wasmRuntime = req.app.locals.wasmRuntime as WASMRuntime;
+
       // Strip CENC encryption signaling via WASM (encv → av01, enca → mp4a/Opus,
       // remove sinf box, strip pssh boxes). Uses strip_init mode in cenc-decrypt.
-      let cleanInit = await stripInitViaWASM(segmentBytes);
+      let cleanInit = await stripInitViaWASM(segmentBytes, wasmRuntime);
       logger.info(`[media/segment] Init segment: raw=${segmentBytes.length}B → clean=${cleanInit.length}B (stripped ${segmentBytes.length - cleanInit.length}B of DRM signaling)`);
 
       // Split multi-track init to single-track for MSE compatibility.
       // MSE requires each SourceBuffer to receive only its own track.
-      cleanInit = await splitInitForTrackWithFallback(cleanInit, track.type);
+      cleanInit = await splitInitForTrackWithFallback(cleanInit, track.type, wasmRuntime);
 
       res.setHeader('Content-Type', 'video/mp4');
       res.setHeader('Content-Length', String(cleanInit.length));
@@ -643,10 +647,14 @@ router.post('/segment', async (req: AuthenticatedRequest, res: Response) => {
     // Get cached init segment for this track (provides tenc for IV size)
     const initSegForTrack = session.initSegments.get(trackIdx) || null;
 
+    // Phase 2-D-helpers: route handler reads wasmRuntime from app.locals.
+    const wasmRuntime = req.app.locals.wasmRuntime as WASMRuntime;
+
     // Decrypt + strip via WASM (combined: decrypt samples then remove senc/saiz/saio boxes)
     const cleanSegment = await decryptSegmentViaWASM(
       segmentBytes,
       session.cekBase64,
+      wasmRuntime,
       initSegForTrack,
     );
 
@@ -883,13 +891,13 @@ const FALLBACK_IPFS_GATEWAY = 'https://ipfs.ela.city/ipfs/';
  * to keep binary data out of V8's GC heap. Falls back to the JS
  * implementation if WASM is unavailable or fails.
  */
-async function splitInitForTrackWithFallback(initSegment: Buffer, trackType: 'video' | 'audio'): Promise<Buffer> {
+async function splitInitForTrackWithFallback(
+  initSegment: Buffer,
+  trackType: 'video' | 'audio',
+  wasmRuntime: WASMRuntime,
+): Promise<Buffer> {
   try {
     const wasmBinary = await loadMp4SplitWasmBinary();
-    // Phase 2-D (deferred): deep helper, ambient pull preserved. Threading
-    // wasmRuntime as a parameter through the media split pipeline is a
-    // multi-layer refactor; tracked separately.
-    const wasmRuntime = getWASMRuntime();
     const result = await wasmRuntime.executeMp4InitSplit(
       wasmBinary,
       initSegment,
@@ -1122,9 +1130,7 @@ loadCENCWasmBinary().catch((err) =>
  * Uses the cenc-decrypt module's strip_init mode (encv→av01/enca→mp4a,
  * remove sinf, remove pssh). 64-bit extended box sizes handled.
  */
-async function stripInitViaWASM(initSegment: Buffer): Promise<Buffer> {
-  // Phase 2-D (deferred): deep helper, ambient pull preserved.
-  const wasmRuntime = getWASMRuntime();
+async function stripInitViaWASM(initSegment: Buffer, wasmRuntime: WASMRuntime): Promise<Buffer> {
   const wasmBinary = await loadCENCWasmBinary();
 
   const commandJson = JSON.stringify({
@@ -1150,11 +1156,9 @@ async function stripInitViaWASM(initSegment: Buffer): Promise<Buffer> {
 async function decryptSegmentViaWASM(
   encryptedSegment: Buffer,
   cekBase64: string,
+  wasmRuntime: WASMRuntime,
   initSegment?: Buffer | null,
 ): Promise<Buffer> {
-  // Phase 2-D (deferred): deep helper, ambient pull preserved.
-  const wasmRuntime = getWASMRuntime();
-
   const commandJson = JSON.stringify({
     cek_b64: cekBase64,
     iv_size: 8,

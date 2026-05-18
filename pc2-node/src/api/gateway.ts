@@ -13,6 +13,7 @@ import { parseSkillFrontmatter } from '../utils/skill-parser.js';
 import { getGatewayService } from '../services/gateway/index.js';
 import { decryptAssetTwoLayer } from './storage.js';
 import type { DecryptParams } from './storage.js';
+import type { WASMRuntime } from '../services/wasm/WASMRuntime.js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import fs from 'fs';
@@ -1037,7 +1038,8 @@ router.post('/skills/install', authenticate, async (req: AuthenticatedRequest, r
       chainId,
     };
 
-    const decryptedBytes = await decryptAssetTwoLayer(decryptParams, ipfs);
+    const wasmRuntime = req.app.locals.wasmRuntime as WASMRuntime;
+    const decryptedBytes = await decryptAssetTwoLayer(decryptParams, ipfs, wasmRuntime);
     const skillContent = decryptedBytes.toString('utf-8');
 
     // Verify it's a valid SKILL.md (has frontmatter)

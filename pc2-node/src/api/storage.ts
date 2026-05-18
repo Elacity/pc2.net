@@ -12,7 +12,7 @@ import { getEffectiveStorageLimit } from './info.js';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { getWASMRuntime, type RendererCommand } from '../services/wasm/WASMRuntime.js';
+import type { WASMRuntime, RendererCommand } from '../services/wasm/WASMRuntime.js';
 import {
   forwardPinToCluster,
   getClusterPinConfig,
@@ -2208,9 +2208,10 @@ router.post('/lit/encrypt', authenticate, async (req: AuthenticatedRequest, res:
 
     // Layer 1: AES-256-GCM encrypt inside WASM — plaintext stays in WASM linear memory,
     // but the generated CEK is returned to Node.js for Lit-wrapping (see CEK Exposure Assessment).
-    const wasmBinary = await loadRendererBinary();
-    // Phase 2-D (deferred): deep dDRM helper, ambient pull preserved.
-    const wasmRuntime = getWASMRuntime();
+    // Phase 2-D-helpers: route handler reads wasmRuntime from app.locals;
+    // threaded through to deep dDRM helpers below.
+    const wasmRuntime = req.app.locals.wasmRuntime as WASMRuntime;
+    const wasmBinary = await loadRendererBinary(wasmRuntime);
     const wasmEncryptResult = await wasmRuntime.executeEncrypt(wasmBinary, dataBytes, { timeoutMs: 60000 });
 
     if (!wasmEncryptResult.success || !wasmEncryptResult.encryptedBytes || !wasmEncryptResult.cekBase64 || !wasmEncryptResult.ivBase64) {
@@ -2493,7 +2494,11 @@ async function recoverCEKAndFetchData(params: DecryptParams, ipfsService?: any):
  */
 const WASM_DECRYPT_MAX_BYTES = 200 * 1024 * 1024; // 200MB — above this, Node.js crypto is used (CEK briefly in V8)
 
-export async function decryptAssetTwoLayer(params: DecryptParams, ipfsService?: any): Promise<Buffer> {
+export async function decryptAssetTwoLayer(
+  params: DecryptParams,
+  ipfsService: any,
+  wasmRuntime: WASMRuntime,
+): Promise<Buffer> {
   const { cekBase64, encryptedBytes } = await recoverCEKAndFetchData(params, ipfsService);
 
   // Chipotle REST API may return base64 without padding — the Rust WASM
@@ -2503,10 +2508,10 @@ export async function decryptAssetTwoLayer(params: DecryptParams, ipfsService?: 
   // WASM path: decryption happens in WASM, but CEK is passed in via command.json
   if (encryptedBytes.length <= WASM_DECRYPT_MAX_BYTES) {
     try {
-      const wasmBinary = await loadRendererBinary();
-      // Phase 2-D (deferred): deep dDRM helper, ambient pull preserved.
-      const runtime = getWASMRuntime();
-      const result = await runtime.executeDecryptOnly(
+      // Phase 2-D-helpers: wasmRuntime now threaded in via the
+      // decryptAssetTwoLayer parameter (replaces ambient getWASMRuntime).
+      const wasmBinary = await loadRendererBinary(wasmRuntime);
+      const result = await wasmRuntime.executeDecryptOnly(
         wasmBinary,
         paddedCek,
         params.iv,
@@ -2644,11 +2649,9 @@ router.post('/admin/cek-cache/flush', authenticate, requireOwner, (req: Authenti
 const DDRM_RENDERER_PATH = 'wasm-apps/ddrm-renderer/ddrm-renderer.wasm';
 let cachedRendererBinary: ArrayBuffer | null = null;
 
-async function loadRendererBinary(): Promise<ArrayBuffer> {
+async function loadRendererBinary(wasmRuntime: WASMRuntime): Promise<ArrayBuffer> {
   if (cachedRendererBinary) return cachedRendererBinary;
-  // Phase 2-D (deferred): deep dDRM helper, ambient pull preserved.
-  const runtime = getWASMRuntime();
-  cachedRendererBinary = await runtime.loadFromFile(DDRM_RENDERER_PATH);
+  cachedRendererBinary = await wasmRuntime.loadFromFile(DDRM_RENDERER_PATH);
   logger.info(`[SecureView] dDRM renderer WASM loaded (${cachedRendererBinary.byteLength} bytes)`);
   return cachedRendererBinary;
 }
@@ -2680,6 +2683,7 @@ async function renderViaWASM(
   params: DecryptParams,
   mime: string,
   maxWidth: number,
+  wasmRuntime: WASMRuntime,
   page?: number,
   ipfsService?: any,
   chapter?: number,
@@ -2706,10 +2710,8 @@ async function renderViaWASM(
     viewport_width: isEpub ? (viewportWidth || 680) : undefined,
   };
 
-  const wasmBinary = await loadRendererBinary();
-  // Phase 2-D (deferred): deep dDRM helper, ambient pull preserved.
-  const runtime = getWASMRuntime();
-  const output = await runtime.executeRenderer(wasmBinary, command, encryptedBytes, {
+  const wasmBinary = await loadRendererBinary(wasmRuntime);
+  const output = await wasmRuntime.executeRenderer(wasmBinary, command, encryptedBytes, {
     timeoutMs: 60000,
   });
 
@@ -3257,10 +3259,12 @@ router.post('/lit/secure-view', authenticate, async (req: AuthenticatedRequest, 
       || isCbz;
     if (wasmSupportedTypes) {
       try {
+        const wasmRuntime = req.app.locals.wasmRuntime as WASMRuntime;
         const wasmResult = await renderViaWASM(
           effectiveBody,
           mime,
           maxWidth,
+          wasmRuntime,
           pageNum,
           ipfsService,
           typeof reqChapter === 'number' ? reqChapter : undefined,
@@ -3321,7 +3325,8 @@ router.post('/lit/secure-view', authenticate, async (req: AuthenticatedRequest, 
 
     // ── Node.js Fallback Path ───────────────────────────
     // Used for PDFs (WASM PDF not yet implemented) and when WASM fails.
-    const decryptedBytes = await decryptAssetTwoLayer(effectiveBody, ipfsService);
+    const fallbackWasmRuntime = req.app.locals.wasmRuntime as WASMRuntime;
+    const decryptedBytes = await decryptAssetTwoLayer(effectiveBody, ipfsService, fallbackWasmRuntime);
 
     // ── Image pipeline (fallback) ────────────────────────
     if (mime.startsWith('image/')) {

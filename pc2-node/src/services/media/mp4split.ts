@@ -454,7 +454,12 @@ export async function splitFragmentedMP4WASM(filePath: string): Promise<SplitRes
 
   try {
     const { getWASMRuntime } = await import('../wasm/WASMRuntime.js');
-    // Phase 2-D (deferred): deep mp4split helper, ambient pull preserved.
+    // Phase 2-D-helpers: INTENTIONAL service-internal ambient.
+    // This is a deep mp4-split helper called from services/media/ pipeline.
+    // Same rationale as dashPackager.ts — threading wasmRuntime through
+    // the whole pipeline is out of scope for the route-chain mandate.
+    // Audit-permitted as architectural-boundary ambient. See
+    // PHASE-2-D-HELPERS-CLEANUP.md §"Intentional service-internal ambient sites".
     const runtime = getWASMRuntime();
 
     if (!cachedMp4SplitWasm) {

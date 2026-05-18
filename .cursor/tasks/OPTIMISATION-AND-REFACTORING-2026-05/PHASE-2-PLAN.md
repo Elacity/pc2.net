@@ -211,6 +211,17 @@ These items don't touch code in Phase 2. They produce documents that feed into t
 - **Status (2026-05-18 ~01:30 UTC+1)**: source code converted; `tsc --noEmit` / `build:backend` / `test:unit` all green; ReadLints clean; SHA-256 byte-identical proof captured. About to commit on `feat/t-1-telemetry-and-support`. Held behind Mac launcher soak gate — awaits soak confirmation before merging to release branch.
 - **Methodology lesson captured**: future "import → import type" tickets must grep for `<ClassName>.` (static-member access) in addition to `new` / `instanceof`. The `IPFSStorage.PinErrorType` enum-as-static-class-member usage in `api/public.ts` was the one site that couldn't be converted; reverted in 30 seconds after `tsc` flagged it. Lesson folded into Phase 2-C playbook.
 
+### 5.3.1 Global-singleton purge → Phase 2-C: ambient-authority removal — **TICKET WRITTEN 2026-05-18, AWAITING SIGN-OFF**
+
+- **What**: replace ~36 ambient-global accessor calls (`getDatabase()`, `getWASMRuntime()`, `getUpdateService()`) with explicit dependency passing via the *already widely-used* `req.app.locals.X` pattern (200+ siblings) or constructor injection for service classes. Also removes the one `(global as any).pc2Config` read.
+- **ROI**: resolves audit Pattern #2 (ambient singletons) for the route layer; promotes ~14-18 module score points; the audit's "global-singleton blocker" is substantially eliminated for app code (declarations stay for bootstrap; consumer call sites all migrated).
+- **Effort**: ~6-7 hours focused work; recommend single PR.
+- **Risk**: low-to-moderate — first Phase 2 ticket where compiled JS *does* change (the byte-identical proof from 2-B no longer applies). Mitigated by TypeScript signature checks, unit suite, and full 4-platform CI matrix.
+- **Dependencies**: shipping gate is Mac launcher 48-72h soak; coding gate is none (feature branch OK). Built on top of Phase 2-B's type-only DatabaseManager / FilesystemManager / IPFSStorage imports.
+- **Ticket**: see [`PHASE-2-C-SINGLETON-PURGE.md`](./PHASE-2-C-SINGLETON-PURGE.md) — full ticket with file-by-file conversion table, bootstrap update plan, risk analysis, and the explicit out-of-scope list (sibling-orchestrator refactor → 2-D; mega-orchestrator splits → 2-E; `getGlobalIO()` / `getEventQueue()` kept as acceptable globals).
+- **Cheat sheet for sign-off**: [`PHASE-2-C-CHEAT-SHEET.md`](./PHASE-2-C-CHEAT-SHEET.md).
+- **Awaiting Sasha sign-off on 4 open questions** (PR strategy, Mac soak confirmation, reviewer, whether to also purge getGlobalIO/getEventQueue).
+
 ### 5.4 Types extraction (providers/types.ts + storage/types.ts) — **PHASE 2-A: SHIPPED TO FEATURE BRANCH 2026-05-17**
 
 - **What**: extract type definitions from the implementation modules that currently own them.

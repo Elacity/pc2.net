@@ -200,22 +200,26 @@ These items don't touch code in Phase 2. They produce documents that feed into t
 - **Major finding**: pc2-node **already defines and enforces** a 14-scope capability vocabulary (`types/capabilities.ts` + `api/middleware.ts requireCapability(scope)`). Runtime convergence is extension, not invention.
 - **Effort**: subsumed; no separate work needed.
 
-### 5.3 Concrete-class → interface extraction — **READY TO START POST-MAC**
+### 5.3 ~~Concrete-class → interface extraction~~ → Phase 2-B: type-only import refactor (mechanical) — **TICKET WRITTEN, AWAITING SIGN-OFF**
 
-- **What**: based on 5.1 findings, extract ~5-6 interfaces (`IFilesystemManager`, `IDatabaseManager`, `IIPFSStorage`, `IAIChatService`, `IAgentKitExecutor`, `IIdentityService`); update concrete classes to implement them; switch sibling imports to interface imports.
-- **ROI**: improves 9+ module scores in one PR; reduces test surface (mocking becomes trivial); unblocks Runtime crate extraction for the affected modules.
-- **Effort**: ~1 week (the affected modules span 5 subtrees and need coordinated PRs to avoid breaking the build mid-refactor).
-- **Risk**: medium — must not change runtime semantics; need full smoke test green after each PR.
-- **Dependencies**: hard-blocked until Mac launcher 48-72h soak is complete.
+- **What**: convert ~38-40 imports of `DatabaseManager`, `FilesystemManager`, `IPFSStorage` from value-imports (`import { X }`) to type-only imports (`import type { X }`) wherever the consumer uses the class only as a type. The audit's original recommendation was to extract interfaces (`IFilesystemManager` etc.), but the in-codebase fix template (`ContentSeedingService.ts`) shows that `import type { X }` captures 90% of the audit-score value at 20% of the cost. Interface extraction can come later (Phase 2-D or beyond, on demand for Runtime crate translation).
+- **ROI**: improves 16-18 module scores by +22 to +28 total points; promotes 6 modules out of B-class.
+- **Effort**: ~4 hours focused work; recommend single PR.
+- **Risk**: very low — TypeScript catches all misuse statically; compiled JS output is byte-identical.
+- **Dependencies**: shipping gate is Mac launcher 48-72h soak; coding gate is none (feature branch OK).
+- **Ticket**: see [`PHASE-2-B-CONCRETE-CLASS-TYPE-ONLY.md`](./PHASE-2-B-CONCRETE-CLASS-TYPE-ONLY.md) — full ticket with file-by-file conversion table, in-codebase fix template reference, risk analysis, and the explicit out-of-scope list (singleton purge → 2-C; sibling-orchestrator refactor → 2-D; Express coupling → Runtime work).
+- **Cheat sheet for sign-off**: [`PHASE-2-B-CHEAT-SHEET.md`](./PHASE-2-B-CHEAT-SHEET.md).
+- **Awaiting Sasha sign-off on 4 open questions** (PR strategy, Mac soak confirmation, reviewer, feature-branch coding timing).
 
-### 5.4 Types extraction (providers/types.ts + storage/types.ts) — **TICKET WRITTEN, READY TO EXECUTE POST-MAC**
+### 5.4 Types extraction (providers/types.ts + storage/types.ts) — **PHASE 2-A: SHIPPED TO FEATURE BRANCH 2026-05-17**
 
 - **What**: extract type definitions from the implementation modules that currently own them.
 - **ROI**: 5 AI provider modules + 4-6 storage modules improve scores by +1 each.
 - **Effort**: ~3 hours total (one PR per subtree, or single PR — see ticket).
 - **Risk**: very low (types-only refactor, no runtime change).
-- **Dependencies**: same as 5.3.
-- **Ticket**: see [`PHASE-2-A-TYPES-EXTRACTION.md`](./PHASE-2-A-TYPES-EXTRACTION.md) — full ticket with acceptance criteria, risk analysis, score impact table, and confirmed grep results for all 18 affected import sites. Awaiting Sasha sign-off on 4 open questions (one-PR-vs-two, optional follow-on scope, Mac soak confirmation, reviewer).
+- **Dependencies**: shipping gate is Mac launcher 48-72h soak.
+- **Ticket**: [`PHASE-2-A-TYPES-EXTRACTION.md`](./PHASE-2-A-TYPES-EXTRACTION.md) — flipped Proposed → **Agreed** → executed.
+- **Status (2026-05-17 ~01:00 UTC+1)**: Committed `7cc3e6ff3` on `feat/t-1-telemetry-and-support`. CI green: Mac + Linux x64 + Linux ARM64 + Windows x64 + asset integrity + summary, 9m02s (run `26006041952`). Compiled `dist/services/ai/providers/types.js` and `dist/storage/types.js` are header-comment-only files (empirical proof of zero runtime change). Held behind Mac launcher soak gate — awaits soak confirmation before merging to release branch.
 
 ---
 

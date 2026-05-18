@@ -80,6 +80,29 @@ COPY pc2-node/package*.json ./pc2-node/
 # Install dependencies
 RUN cd pc2-node && npm ci --include=dev
 
+# npm/cli#4828 workaround: the pc2-node/package-lock.json is typically
+# generated on macOS-arm64 (the lead dev environment), so it ONLY records
+# the macOS platform variants of native deps:
+#   - @img/sharp-darwin-arm64 (sharp's native binding)
+#   - @napi-rs/canvas-darwin-arm64
+# When `npm ci` runs in this alpine/linux/musl/x64 builder, it strictly
+# follows the lockfile and silently skips the linux/musl variants that
+# aren't recorded there. Runtime then logs "Cannot find native binding"
+# for both sharp and @napi-rs/canvas.
+#
+# Fix: after `npm ci`, force-install the platform-specific variants with
+# `--include=optional --no-save`. This triggers each package's own
+# install/check.js post-install hook which detects alpine/linux/musl/x64
+# and downloads the correct prebuilts (@img/sharp-linuxmusl-x64,
+# @napi-rs/canvas-linux-x64-musl, plus their libvips siblings). --no-save
+# means we DON'T modify package.json or the lockfile — purely a runtime
+# fix-up for this Docker build's environment.
+#
+# Caught 2026-05-18 by docker-smoke CI on first run. See:
+#   - https://github.com/npm/cli/issues/4828 (the upstream npm bug)
+#   - .cursor/tasks/RELEASE-ENGINEERING-V1280/DOCKERFILE-REHAB-V1280.md
+RUN cd pc2-node && npm install --no-save --include=optional sharp @napi-rs/canvas
+
 # Copy source code
 COPY . .
 
@@ -122,8 +145,29 @@ COPY --from=builder /app/pc2-node/frontend ./frontend
 COPY --from=builder /app/pc2-node/package.json ./
 COPY --from=builder /app/pc2-node/tsconfig.json ./
 
-# Copy configuration templates
-COPY --from=builder /app/config ./config
+# Copy configuration templates.
+# Bug 2 fix (2026-05-18 docker-smoke): The previous path `/app/config` was
+# the host's repo-root /config/ directory which only contains
+# pc2.json.example + pc2.production.json — NO default.json. The actual
+# default config lives at pc2-node/config/default.json. The runtime
+# loader (pc2-node/src/config/loader.ts:139) computes
+# DEFAULT_CONFIG_PATH = join(__dirname, '../../config/default.json')
+# which resolves to /app/config/default.json at runtime (since
+# __dirname = /app/src/config). Copying pc2-node/config to /app/config
+# satisfies that path.
+COPY --from=builder /app/pc2-node/config ./config
+
+# Copy pre-built WASM apps.
+# Bug 3 fix (2026-05-18 docker-smoke): The 7 .wasm binaries (cenc-decrypt,
+# cenc-encrypt, ddrm-renderer, mp4-split, ipfs-assemble, evm-multicall,
+# amm-engine) are committed to the repo at pc2-node/wasm-apps/ as
+# pre-built artifacts. Without this copy, dDRM features, media
+# segmentation, and AMM operations all fall back to inferior paths or
+# fail outright with "WASM not found — run scripts/build-wasm.sh".
+# We do NOT build WASM in the Dockerfile because that requires the Rust
+# toolchain + cargo + wasm-opt (binaryen), ~200MB of build-stage bloat
+# for artifacts that are already committed.
+COPY --from=builder /app/pc2-node/wasm-apps ./wasm-apps
 
 # Copy entrypoint script
 COPY --from=builder /app/pc2-node/scripts/docker-entrypoint.sh /app/docker-entrypoint.sh

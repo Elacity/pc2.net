@@ -19,7 +19,7 @@
 import type { Request, Response } from 'express';
 import { randomUUID } from 'crypto';
 import { AuthenticatedRequest } from './middleware.js';
-import { DatabaseManager } from '../storage/index.js';
+import type { DatabaseManager } from '../storage/index.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('telemetry');

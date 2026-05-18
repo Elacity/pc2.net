@@ -39,7 +39,7 @@
  *     instrumentation bug shoving a CID or path in by mistake).
  */
 
-import { DatabaseManager } from '../storage/index.js';
+import type { DatabaseManager } from '../storage/index.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('metrics');

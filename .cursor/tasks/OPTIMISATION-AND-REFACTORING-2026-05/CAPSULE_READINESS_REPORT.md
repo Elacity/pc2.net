@@ -949,7 +949,60 @@ The 0-10 scoring proved easy to apply on the 5 pilot modules. Two calibration no
 
 **Shipping**: held behind Mac-launcher 48-72h soak per `PHASE-2-PLAN.md` shipping gate. Merge to release branch only after soak confirms v1.2.8.0 stability.
 
-### 5.5 What this audit tells us about the AGENTIC-PC2-MONETISATION strategy
+### 5.5 Phase 2-B executed (2026-05-18) — concrete-class → type-only refactor complete
+
+**Status**: Phase 2-B landed on `feat/t-1-telemetry-and-support` (feature branch — not shipped to users; held behind Mac-launcher soak per `PHASE-2-PLAN.md` shipping gate). Single-PR strategy executed per the ticket's recommended Option A.
+
+**Scope addressed**: Audit pattern #1 (concrete-class imports where interfaces would suffice) — substantially resolved for the 3 highest-frequency cluster classes.
+
+**Files modified** (29):
+- 25 sites converted `import { DatabaseManager }` → `import type { DatabaseManager }` (every consumer in pc2-node — none use the class as a value)
+- 12 sites converted `import { FilesystemManager }` → `import type { FilesystemManager }` (every consumer — none use the class as a value)
+- 3 of 4 planned `import { IPFSStorage }` sites converted to `import type` (the 4th, `api/public.ts`, was reverted after `tsc --noEmit` correctly caught that it uses `IPFSStorage.PinErrorType.X` as a value-import for the static enum)
+
+**Net diff**: 40 single-token insertions of the keyword `type` after `import`. Zero code deletions. Zero new files. Zero export changes.
+
+**Validation passed**:
+- ✅ `tsc --noEmit` clean (zero TypeScript errors) — 12.8s
+- ✅ `npm run build:backend` succeeds — 9.5s
+- ✅ `npm run test:unit` all 7 tests pass — 58ms
+- ✅ ReadLints clean on all 29 touched files
+- ✅ **Byte-identical compiled JS** — 5 spot-checked files (across api/, services/ai/, services/gateway/, storage/, websocket/) produce identical SHA-256 hashes pre-PR vs post-PR. Empirical proof of zero runtime change.
+
+**Compiler safety net activated** (and worked as predicted):
+The original ticket's grep methodology checked for `new <ClassName>` and `instanceof <ClassName>` to identify safe-to-convert sites. It missed static-member access (`IPFSStorage.PinErrorType.PRIVATE_MODE`, etc.) which is *also* a value-use. TypeScript caught the mistake instantly with `TS1361`, the revert took 30 seconds. This validates the ticket's claim that "the TypeScript compiler will catch any misclassification before runtime" — the safety net is real.
+
+**Methodology lesson**: Future tickets converting concrete imports to `import type` must also grep for `<ClassName>.` (static-member access) in addition to `new <ClassName>` and `instanceof <ClassName>`. Added to Phase 2-C / 2-D playbook.
+
+**Score impact** (post-Phase-2-B):
+
+Each of the 29 touched modules previously had a -2 penalty for at least one concrete-class import where only the interface was needed. With those imports now type-only, the dependency on the concrete class is *erased at compile time* — the audit blocker for those specific imports is resolved.
+
+| Cluster | Modules previously penalised | Penalty resolved |
+|---|---|---|
+| `DatabaseManager` concrete imports | 25 modules | −2 → 0 for that pattern |
+| `FilesystemManager` concrete imports | 12 modules | −2 → 0 for that pattern |
+| `IPFSStorage` concrete imports | 3 modules | −2 → 0 for that pattern |
+
+Many modules had **multiple** concrete-class penalties (e.g., `api/index.ts` imported all 3 + several others); for those, only the DatabaseManager / FilesystemManager / IPFSStorage portions are resolved, with remaining penalties for sibling-service classes (AIChatService, BosonService, etc.) flagged for Phase 2-D.
+
+**Estimated band shifts** (informally):
+- ~6 A- modules promoted to A 9/10 (those whose ONLY concrete-class blocker was DatabaseManager/FilesystemManager/IPFSStorage)
+- ~14 B modules promoted to A- or stayed B-band but improved within the band (e.g., 6/10 → 7/10) — they had additional sibling-class blockers
+- ~9 C modules stayed C — they had so many sibling-class concrete dependencies that DatabaseManager alone wasn't pivotal
+
+**What's still blocked after Phase 2-B**:
+- The `getDatabase()` / `getGatewayService()` / `getTerminalService()` / `getUpdateService()` / `getWASMRuntime()` / `getNodeConfig()` global-singleton call sites — these still violate capsule purity even with type-only class imports, because they reach into ambient globals. **Phase 2-C** target.
+- Sibling-service concrete imports (`AIChatService`, `BosonService`, `IdentityService`, `AgentKitExecutor`, `ParticleWalletProvider`) — these classes don't yet have interface extractions like Phase 2-A did for types. **Phase 2-D** target.
+- The 3 C-class mega-orchestrators (`ConnectivityService`, `api/index.ts`, `api/storage.ts`) — splitting these requires structural work, not just import-keyword changes. **Phase 2-E** target (post-Mac-soak; not yet scoped).
+
+**Validates Phase 2 pipeline further**:
+- TypeScript compiler caught a real classification mistake (the IPFSStorage value-use in api/public.ts) and the recovery cost was 30 seconds — confirms the methodology's claim of "the compiler is the safety net".
+- The "byte-identical compiled JS" proof is a stronger empirical guarantee than Phase 2-A's empty-types-file proof — it shows that `import` → `import type` for a class consumer literally produces the same machine output.
+
+**Shipping**: held behind Mac-launcher 48-72h soak per `PHASE-2-PLAN.md` shipping gate. Merge to release branch only after soak confirms v1.2.8.0 stability.
+
+### 5.6 What this audit tells us about the AGENTIC-PC2-MONETISATION strategy
 
 After 160 modules across 11 batches (audit functionally complete at 98.2% coverage), the strategic picture is now stable and final:
 

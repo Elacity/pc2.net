@@ -10,7 +10,7 @@
  * SECURITY: All paths are scoped to wallet and agent for isolation.
  */
 
-import { FilesystemManager } from '../../../storage/filesystem.js';
+import type { FilesystemManager } from '../../../storage/filesystem.js';
 import { logger } from '../../../utils/logger.js';
 
 /**

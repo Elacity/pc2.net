@@ -5,8 +5,8 @@
  * Links file paths (user-friendly) with IPFS CIDs (content-addressed)
  */
 
-import { IPFSStorage } from './ipfs.js';
-import { DatabaseManager, FileMetadata } from './database.js';
+import type { IPFSStorage } from './ipfs.js';
+import type { DatabaseManager, FileMetadata } from './database.js';
 import { normalize, join, dirname } from 'path';
 import { createReadStream, statSync, unlinkSync } from 'fs';
 import { logger, createLogger } from '../utils/logger.js';

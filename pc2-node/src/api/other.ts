@@ -7,8 +7,8 @@
 import { Request, Response } from 'express';
 import { AuthenticatedRequest } from './middleware.js';
 import { SignRequest, SignResponse } from '../types/api.js';
-import { FilesystemManager } from '../storage/filesystem.js';
-import { DatabaseManager } from '../storage/database.js';
+import type { FilesystemManager } from '../storage/filesystem.js';
+import type { DatabaseManager } from '../storage/database.js';
 import { logger, createLogger } from '../utils/logger.js';
 const log = createLogger('api-other');
 import { broadcastItemUpdated } from '../websocket/events.js';

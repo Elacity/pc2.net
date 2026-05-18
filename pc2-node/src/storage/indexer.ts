@@ -4,8 +4,8 @@
  * Extracts and indexes text content from files for full-text search
  */
 
-import { DatabaseManager } from './database.js';
-import { FilesystemManager } from './filesystem.js';
+import type { DatabaseManager } from './database.js';
+import type { FilesystemManager } from './filesystem.js';
 import { logger } from '../utils/logger.js';
 import { readFile } from 'fs/promises';
 

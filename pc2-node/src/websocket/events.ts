@@ -5,7 +5,7 @@
  */
 
 import { Server as SocketIOServer, Socket } from 'socket.io';
-import { DatabaseManager } from '../storage/database.js';
+import type { DatabaseManager } from '../storage/database.js';
 import { createLogger } from '../utils/logger.js';
 const log = createLogger('ws-events');
 

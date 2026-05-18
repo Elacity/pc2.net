@@ -6,7 +6,7 @@
 
 import { Request, Response } from 'express';
 import { Readable, pipeline } from 'stream';
-import { FilesystemManager } from '../storage/filesystem.js';
+import type { FilesystemManager } from '../storage/filesystem.js';
 import { AuthenticatedRequest } from './middleware.js';
 import { createLogger } from '../utils/logger.js';
 import { verifyFileUrl, isFileUrlSigningRequired } from '../utils/fileUrlSigner.js';

@@ -5,7 +5,7 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import { DatabaseManager } from '../storage/database.js';
+import type { DatabaseManager } from '../storage/database.js';
 import { Config } from '../config/loader.js';
 import { verifyOwner } from '../auth/owner.js';
 import { logger } from '../utils/logger.js';

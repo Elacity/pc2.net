@@ -200,16 +200,16 @@ These items don't touch code in Phase 2. They produce documents that feed into t
 - **Major finding**: pc2-node **already defines and enforces** a 14-scope capability vocabulary (`types/capabilities.ts` + `api/middleware.ts requireCapability(scope)`). Runtime convergence is extension, not invention.
 - **Effort**: subsumed; no separate work needed.
 
-### 5.3 ~~Concrete-class → interface extraction~~ → Phase 2-B: type-only import refactor (mechanical) — **TICKET WRITTEN, AWAITING SIGN-OFF**
+### 5.3 ~~Concrete-class → interface extraction~~ → Phase 2-B: type-only import refactor (mechanical) — **SHIPPED TO FEATURE BRANCH 2026-05-18**
 
-- **What**: convert ~38-40 imports of `DatabaseManager`, `FilesystemManager`, `IPFSStorage` from value-imports (`import { X }`) to type-only imports (`import type { X }`) wherever the consumer uses the class only as a type. The audit's original recommendation was to extract interfaces (`IFilesystemManager` etc.), but the in-codebase fix template (`ContentSeedingService.ts`) shows that `import type { X }` captures 90% of the audit-score value at 20% of the cost. Interface extraction can come later (Phase 2-D or beyond, on demand for Runtime crate translation).
-- **ROI**: improves 16-18 module scores by +22 to +28 total points; promotes 6 modules out of B-class.
-- **Effort**: ~4 hours focused work; recommend single PR.
-- **Risk**: very low — TypeScript catches all misuse statically; compiled JS output is byte-identical.
-- **Dependencies**: shipping gate is Mac launcher 48-72h soak; coding gate is none (feature branch OK).
-- **Ticket**: see [`PHASE-2-B-CONCRETE-CLASS-TYPE-ONLY.md`](./PHASE-2-B-CONCRETE-CLASS-TYPE-ONLY.md) — full ticket with file-by-file conversion table, in-codebase fix template reference, risk analysis, and the explicit out-of-scope list (singleton purge → 2-C; sibling-orchestrator refactor → 2-D; Express coupling → Runtime work).
+- **What**: converted ~40 imports of `DatabaseManager`, `FilesystemManager`, `IPFSStorage` from value-imports (`import { X }`) to type-only imports (`import type { X }`) wherever the consumer uses the class only as a type.
+- **ROI**: erased the audit's "concrete-class import" blocker for the 3 highest-frequency cluster classes across 29 modules. Each previously had a −2 penalty for that pattern; the penalty is resolved for those imports.
+- **Effort**: ~1.5 hours actual (faster than estimated). Single PR per Option A.
+- **Risk**: very low (proven) — TypeScript caught the one classification mistake instantly; compiled JS output is **byte-identical** (SHA-256 verified on 5 spot-checked files).
+- **Ticket**: see [`PHASE-2-B-CONCRETE-CLASS-TYPE-ONLY.md`](./PHASE-2-B-CONCRETE-CLASS-TYPE-ONLY.md) — flipped Proposed → **Agreed** → **EXECUTED**. Includes full execution log at the bottom.
 - **Cheat sheet for sign-off**: [`PHASE-2-B-CHEAT-SHEET.md`](./PHASE-2-B-CHEAT-SHEET.md).
-- **Awaiting Sasha sign-off on 4 open questions** (PR strategy, Mac soak confirmation, reviewer, feature-branch coding timing).
+- **Status (2026-05-18 ~01:30 UTC+1)**: source code converted; `tsc --noEmit` / `build:backend` / `test:unit` all green; ReadLints clean; SHA-256 byte-identical proof captured. About to commit on `feat/t-1-telemetry-and-support`. Held behind Mac launcher soak gate — awaits soak confirmation before merging to release branch.
+- **Methodology lesson captured**: future "import → import type" tickets must grep for `<ClassName>.` (static-member access) in addition to `new` / `instanceof`. The `IPFSStorage.PinErrorType` enum-as-static-class-member usage in `api/public.ts` was the one site that couldn't be converted; reverted in 30 seconds after `tsc` flagged it. Lesson folded into Phase 2-C playbook.
 
 ### 5.4 Types extraction (providers/types.ts + storage/types.ts) — **PHASE 2-A: SHIPPED TO FEATURE BRANCH 2026-05-17**
 

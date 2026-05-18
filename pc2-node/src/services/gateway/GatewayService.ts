@@ -16,7 +16,7 @@ import { EventEmitter } from 'events';
 import path from 'path';
 import fs from 'fs';
 import { logger } from '../../utils/logger.js';
-import { DatabaseManager } from '../../storage/database.js';
+import type { DatabaseManager } from '../../storage/database.js';
 import { WhatsAppChannel, createWhatsAppChannel } from './channels/WhatsAppChannel.js';
 import { TelegramChannel, createTelegramChannel } from './channels/TelegramChannel.js';
 import type {

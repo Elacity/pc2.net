@@ -15,8 +15,8 @@
 import { logger } from '../../utils/logger.js';
 import { parseSkillFrontmatter } from '../../utils/skill-parser.js';
 import { AIChatService, CompleteRequest } from '../ai/AIChatService.js';
-import { FilesystemManager } from '../../storage/filesystem.js';
-import { DatabaseManager } from '../../storage/database.js';
+import type { FilesystemManager } from '../../storage/filesystem.js';
+import type { DatabaseManager } from '../../storage/database.js';
 import { GatewayService, getGatewayService } from './GatewayService.js';
 import { AgentMemoryManager } from '../ai/memory/AgentMemoryManager.js';
 import { fileURLToPath } from 'url';

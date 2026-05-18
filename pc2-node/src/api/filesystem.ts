@@ -6,7 +6,7 @@
 
 import { Request, Response } from 'express';
 import { Readable, pipeline } from 'stream';
-import { FilesystemManager } from '../storage/filesystem.js';
+import type { FilesystemManager } from '../storage/filesystem.js';
 import { AuthenticatedRequest } from './middleware.js';
 import { broadcastFileChange, broadcastDirectoryChange, broadcastItemRemoved, broadcastItemMoved, broadcastItemUpdated, broadcastItemAdded, broadcastItemRenamed } from '../websocket/events.js';
 import { FileStat, DirectoryEntry, ReadFileRequest, WriteFileRequest, CreateDirectoryRequest, DeleteRequest, MoveRequest } from '../types/api.js';

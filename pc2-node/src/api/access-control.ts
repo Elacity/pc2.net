@@ -12,7 +12,7 @@ import { logger } from '../utils/logger.js';
 import { normalizeAddress, compareAddresses, isValidAddress, detectAddressType } from '../utils/wallet.js';
 import { getNodeConfig, saveNodeConfig } from './setup.js';
 import { authenticate, AuthenticatedRequest } from './middleware.js';
-import { DatabaseManager } from '../storage/database.js';
+import type { DatabaseManager } from '../storage/database.js';
 import { Config } from '../config/loader.js';
 import { verifySiweSignature } from './auth/siwe-verify.js';
 import { challengeStore } from './auth/challenge-store.js';

@@ -15,7 +15,7 @@
  */
 
 import { logger } from '../../../utils/logger.js';
-import { DatabaseManager } from '../../../storage/database.js';
+import type { DatabaseManager } from '../../../storage/database.js';
 import type { ChatMessage } from '../providers/types.js';
 
 /**

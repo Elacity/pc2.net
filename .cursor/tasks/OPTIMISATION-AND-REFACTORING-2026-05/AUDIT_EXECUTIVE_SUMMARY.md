@@ -5,6 +5,8 @@
 > **Reading time**: 3 minutes.
 > **Status**: **AUDIT FUNCTIONALLY COMPLETE** — **160 of 163 pc2-node modules classified (98.2%)**. All subtrees audited. Only 3 type-only re-export files remain unclassified (already covered as part of parent batches). The original audit doc cited 272 as the total — this was a miscount; actual pc2-node/src .ts file count is 163. Strategy stable and final.
 > **Phase 2-A executed (2026-05-17)**: types extraction landed on feature branch. 7 module scores improved (5 providers + MemoryConsolidator + database.ts). Validated on `tsc --noEmit` + `build:backend` + unit tests. Shipping held behind Mac launcher soak gate. See `PHASE-2-A-TYPES-EXTRACTION.md` + audit report §5.4.
+>
+> **Phase 2-B executed (2026-05-18)**: concrete-class → type-only refactor landed on feature branch. 40 `import` → `import type` conversions across 29 files for DatabaseManager / FilesystemManager / IPFSStorage. Validated with `tsc --noEmit`, `build:backend`, `test:unit`, ReadLints — and proven **byte-identical compiled JS** via SHA-256 on 5 spot-checked files. TypeScript compiler caught the one classification edge-case (`IPFSStorage.PinErrorType` static-member access in `api/public.ts`) instantly; reverted that one file. Methodology lesson captured for Phase 2-C. Shipping held behind Mac launcher soak gate. See `PHASE-2-B-CONCRETE-CLASS-TYPE-ONLY.md` + audit report §5.5.
 > **Updated**: 2026-05-17.
 
 ---

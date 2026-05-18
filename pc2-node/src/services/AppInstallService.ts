@@ -13,8 +13,8 @@ import { pipeline } from 'node:stream/promises';
 import nacl from 'tweetnacl';
 import * as tar from 'tar';
 import { createLogger } from '../utils/logger.js';
-import { DatabaseManager, InstalledApp } from '../storage/database.js';
-import { IPFSStorage } from '../storage/ipfs.js';
+import type { DatabaseManager, InstalledApp } from '../storage/database.js';
+import type { IPFSStorage } from '../storage/ipfs.js';
 
 const log = createLogger('app-install');
 

@@ -5,7 +5,7 @@
  */
 
 import { Request, Response } from 'express';
-import { DatabaseManager } from '../storage/database.js';
+import type { DatabaseManager } from '../storage/database.js';
 import { AuthenticatedRequest } from './middleware.js';
 import { UserInfo } from '../types/api.js';
 import { logger } from '../utils/logger.js';

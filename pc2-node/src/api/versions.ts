@@ -6,7 +6,7 @@
 
 import { Response } from 'express';
 import { AuthenticatedRequest } from './middleware.js';
-import { DatabaseManager, FilesystemManager } from '../storage/index.js';
+import type { DatabaseManager, FilesystemManager } from '../storage/index.js';
 import { logger } from '../utils/logger.js';
 
 /**

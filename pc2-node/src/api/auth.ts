@@ -5,12 +5,12 @@
  */
 
 import { Request, Response } from 'express';
-import { DatabaseManager } from '../storage/database.js';
+import type { DatabaseManager } from '../storage/database.js';
 import { Config, saveConfig } from '../config/loader.js';
 import { verifyOwner, setOwner } from '../auth/owner.js';
 import { AuthRequest, AuthResponse, UserInfo } from '../types/api.js';
 import { AuthenticatedRequest } from './middleware.js';
-import { FilesystemManager } from '../storage/filesystem.js';
+import type { FilesystemManager } from '../storage/filesystem.js';
 import { logger } from '../utils/logger.js';
 import { normalizeAddress, compareAddresses, detectAddressType } from '../utils/wallet.js';
 import crypto from 'crypto';

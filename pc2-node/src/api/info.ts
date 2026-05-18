@@ -6,7 +6,7 @@
 
 import { Request, Response } from 'express';
 import { AuthenticatedRequest } from './middleware.js';
-import { FilesystemManager } from '../storage/filesystem.js';
+import type { FilesystemManager } from '../storage/filesystem.js';
 import { Server as SocketIOServer } from 'socket.io';
 import { broadcastFileChange, broadcastItemAdded } from '../websocket/events.js';
 import { logger, createLogger } from '../utils/logger.js';

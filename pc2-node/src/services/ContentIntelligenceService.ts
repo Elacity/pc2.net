@@ -20,7 +20,7 @@ import { readFile, stat } from 'fs/promises';
 import { createHash } from 'crypto';
 import { AIChatService } from './ai/AIChatService.js';
 import { computePerceptualHash, hammingDistance } from './media/fingerprint.js';
-import { DatabaseManager } from '../storage/database.js';
+import type { DatabaseManager } from '../storage/database.js';
 import { logger } from '../utils/logger.js';
 import type {
   ContentIntelligenceReport,

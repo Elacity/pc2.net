@@ -6,7 +6,7 @@
 import { Response, Router, NextFunction } from 'express';
 import { AuthenticatedRequest, authenticate } from './middleware.js';
 import { logger } from '../utils/logger.js';
-import { DatabaseManager } from '../storage/index.js';
+import type { DatabaseManager } from '../storage/index.js';
 
 const router = Router();
 

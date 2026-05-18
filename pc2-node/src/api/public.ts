@@ -12,8 +12,8 @@
 
 import { Router, Request, Response } from 'express';
 import { Readable, pipeline } from 'stream';
-import { DatabaseManager, FileMetadata } from '../storage/database.js';
-import { FilesystemManager } from '../storage/filesystem.js';
+import type { DatabaseManager, FileMetadata } from '../storage/database.js';
+import type { FilesystemManager } from '../storage/filesystem.js';
 import { IPFSStorage } from '../storage/ipfs.js';
 import { logger } from '../utils/logger.js';
 import rateLimit from 'express-rate-limit';

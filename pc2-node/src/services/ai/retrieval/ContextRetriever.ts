@@ -14,8 +14,8 @@
  */
 
 import { logger } from '../../../utils/logger.js';
-import { DatabaseManager } from '../../../storage/database.js';
-import { FilesystemManager } from '../../../storage/filesystem.js';
+import type { DatabaseManager } from '../../../storage/database.js';
+import type { FilesystemManager } from '../../../storage/filesystem.js';
 
 /**
  * Retrieved context chunk

@@ -7,7 +7,7 @@
 
 import { Server as HTTPServer } from 'http';
 import { Server as SocketIOServer, Socket } from 'socket.io';
-import { DatabaseManager } from '../storage/database.js';
+import type { DatabaseManager } from '../storage/database.js';
 import { SocketUser, setEventQueue } from './events.js';
 import { initializeTerminalHandlers, getTerminalService } from './terminal.js';
 import { createLogger } from '../utils/logger.js';

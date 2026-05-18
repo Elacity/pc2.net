@@ -287,7 +287,20 @@ After these are addressed, all remaining audit-derived work is architectural rat
 
 ### Commit reference
 
-(Will be filled in after commit + push.)
+- **Commit**: `e5280e5f2` on `feat/t-1-telemetry-and-support` (pushed 2026-05-18 ~12:32 UTC+1)
+- **Diff size**: 12 files changed, 304 insertions, 62 deletions (7 source files + 5 docs)
+- **Pre-commit gates**: ✅ gitleaks clean (0 leaks in 27.26 KB scan), ✅ ESLint config valid
+- **CI run**: [`26030865387`](https://github.com/Elacity/pc2.net/actions/runs/26030865387) — **all 6 jobs GREEN**
+  - ✅ Build + typecheck (darwin-arm64) — macOS Apple Silicon
+  - ✅ Build + typecheck (linux-x64)
+  - ✅ Build + typecheck (linux-arm64)
+  - ✅ Build + typecheck (windows-x64)
+  - ✅ pc2-binaries-v1 asset integrity
+  - ✅ Smoke test summary
+
+**Code change is now production-shape on the feature branch**, awaiting Mac launcher 48-72h soak before release-branch merge per `PHASE-2-PLAN.md` shipping gate.
+
+**Release-notes copy** for v1.2.8.0 is prepared in [`PHASE-2-GLOBALS-RELEASE-NOTES.md`](./PHASE-2-GLOBALS-RELEASE-NOTES.md) — do not paste prematurely; release manager owns assembly.
 
 ---
 

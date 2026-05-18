@@ -47,7 +47,7 @@ import updateRouter from './update.js';
 import diagnoseRouter from './diagnose.js';
 import supportRouter from './support.js';
 import metricsRouter from './metrics.js';
-import { getUpdateService } from '../services/UpdateService.js';
+import type { UpdateService } from '../services/UpdateService.js';
 import { getClusterPinConfig, getClusterPinProbeState, getClusterPinRetryQueueSnapshot } from '../services/clusterPin.js';
 import accessControlRouter from './access-control.js';
 import didRouter from './did.js';
@@ -150,7 +150,10 @@ export function setupAPI (app: Express): void {
         // thinking their node was massively out-of-date.
         let pc2Version = '0.0.0-dev';
         try {
-            pc2Version = getUpdateService().getCurrentVersion();
+            const updateService = req.app.locals.updateService as UpdateService | undefined;
+            if (updateService) {
+                pc2Version = updateService.getCurrentVersion();
+            }
         } catch {
             // UpdateService not yet constructed — keep the dev fallback.
         }

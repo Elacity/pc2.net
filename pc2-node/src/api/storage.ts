@@ -2215,6 +2215,7 @@ router.post('/lit/encrypt', authenticate, async (req: AuthenticatedRequest, res:
     // Layer 1: AES-256-GCM encrypt inside WASM — plaintext stays in WASM linear memory,
     // but the generated CEK is returned to Node.js for Lit-wrapping (see CEK Exposure Assessment).
     const wasmBinary = await loadRendererBinary();
+    // Phase 2-D (deferred): deep dDRM helper, ambient pull preserved.
     const wasmRuntime = getWASMRuntime();
     const wasmEncryptResult = await wasmRuntime.executeEncrypt(wasmBinary, dataBytes, { timeoutMs: 60000 });
 
@@ -2509,6 +2510,7 @@ export async function decryptAssetTwoLayer(params: DecryptParams, ipfsService?: 
   if (encryptedBytes.length <= WASM_DECRYPT_MAX_BYTES) {
     try {
       const wasmBinary = await loadRendererBinary();
+      // Phase 2-D (deferred): deep dDRM helper, ambient pull preserved.
       const runtime = getWASMRuntime();
       const result = await runtime.executeDecryptOnly(
         wasmBinary,
@@ -2650,6 +2652,7 @@ let cachedRendererBinary: ArrayBuffer | null = null;
 
 async function loadRendererBinary(): Promise<ArrayBuffer> {
   if (cachedRendererBinary) return cachedRendererBinary;
+  // Phase 2-D (deferred): deep dDRM helper, ambient pull preserved.
   const runtime = getWASMRuntime();
   cachedRendererBinary = await runtime.loadFromFile(DDRM_RENDERER_PATH);
   logger.info(`[SecureView] dDRM renderer WASM loaded (${cachedRendererBinary.byteLength} bytes)`);
@@ -2710,6 +2713,7 @@ async function renderViaWASM(
   };
 
   const wasmBinary = await loadRendererBinary();
+  // Phase 2-D (deferred): deep dDRM helper, ambient pull preserved.
   const runtime = getWASMRuntime();
   const output = await runtime.executeRenderer(wasmBinary, command, encryptedBytes, {
     timeoutMs: 60000,

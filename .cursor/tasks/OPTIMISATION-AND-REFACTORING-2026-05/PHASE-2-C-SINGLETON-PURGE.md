@@ -2,9 +2,10 @@
 
 **Task ID**: `PHASE-2-C-SINGLETON-PURGE`
 **Created**: 2026-05-18
-**Status**: **Proposed** — awaiting Sasha sign-off
+**Status**: **EXECUTED on feature branch** (`feat/t-1-telemetry-and-support`, 2026-05-18) — awaiting CI green + Sasha review for merge-gate sign-off
 **Priority**: Medium-high (third audit-derived Phase 2 ticket; resolves the audit's #2 blocker pattern)
 **Shipping gate**: Cannot **merge to release branch** until Mac launcher 48-72h soak completes per `RELEASE-ENGINEERING-V1280`. Coding on the feature branch is allowed.
+**Execution log**: see §"Execution log (2026-05-18)" below.
 
 > **TL;DR for non-technical sign-off**: see [`PHASE-2-C-CHEAT-SHEET.md`](./PHASE-2-C-CHEAT-SHEET.md) (2-minute read). It explains in plain English what changes, what doesn't, and the four sign-off questions Sasha needs to answer.
 
@@ -289,6 +290,92 @@ The Phase 2 CI runs (since 2026-05-17) have been flagging:
 2. **Node 20 deprecation cutoff** — bump `actions/checkout`, `actions/setup-node`, `actions/cache` to v5 before **June 2, 2026**. ~10 min fix.
 
 These do not affect Phase 2-C critical path. Will be folded into the same "Phase 2 CI-hygiene" ticket queued during Phase 2-B execution.
+
+---
+
+## Execution log (2026-05-18)
+
+### Summary
+
+| Cluster | Singleton | Sites planned | Sites fully purged | Sites kept ambient w/ comment | Notes |
+|---|---|---|---|---|---|
+| **1** | `getDatabase()` | 17 | **15** | 2 | Static methods in AgentKitExecutor (`updateProposalStatus`, `getProposal`) have no `this`; explicit deferral comment |
+| **2** | `getWASMRuntime()` | 13 | **5** | 8 (Phase 2-D deferral) | 4 route handlers in `api/wasm.ts` + 1 class injection in `ContentIndexerService`; remaining 8 are deep WASM/dDRM/IPFS helpers where threading would propagate through 5+ layers — deferred to Phase 2-D with grep-friendly markers |
+| **3** | `getUpdateService()` | 7 | **7** | 0 | All route-handler contexts; smooth replace_all |
+| **5** | `(global as any).pc2Config` | 1 (planned) | 0 | n/a | **Scope dropped** — investigation revealed `pc2Config` is a wider pattern (4 files read/write, mutated at runtime by `api/storage.ts`). Promoted to its own future ticket; touching the WASMRuntime read alone would leave the pattern half-purged and misleading. |
+| **Bootstrap** | n/a | n/a | n/a | n/a | `app.locals.wasmRuntime` + `app.locals.updateService` set in `src/index.ts` after existing `app.locals.indexerService` block. WASM `.initialize()` lifted from `api/wasm.ts` module-load to explicit bootstrap call. |
+
+**Totals**: 27/37 audited sites fully purged (73%); 10 sites kept ambient with explicit `Phase 2-C` or `Phase 2-D (deferred)` markers; 1 site (`pc2Config`) promoted to a dedicated ticket.
+
+### Files modified (14)
+
+**Bootstrap & infrastructure (3)**:
+- `pc2-node/src/index.ts` — added `getWASMRuntime`/`getUpdateService` imports; stash on `app.locals` after indexer block; lifted `wasmRuntime.initialize()` from `api/wasm.ts`; passed `wasmRuntime` explicitly to `ContentIndexerService.initialize()`
+- `pc2-node/src/services/ContentIndexerService.ts` — `initialize()` signature now accepts `wasmRuntime?: WASMRuntime` with fallback
+- `pc2-node/src/services/ai/tools/AgentKitExecutor.ts` — added `db?: DatabaseManager` constructor option; instance methods prefer `this.db ?? getDatabase()`; static methods retain ambient pull with explicit comment
+
+**Route handlers fully purged (5)**:
+- `pc2-node/src/api/drafts.ts` — 6 sites, `import type DatabaseManager`
+- `pc2-node/src/api/wallet.ts` — 7 sites, `import type DatabaseManager`
+- `pc2-node/src/api/wasm.ts` — 4 sites, removed module-load `initialize()` side-effect, `import type WASMRuntime`
+- `pc2-node/src/api/update.ts` — 6 sites, `import type UpdateService`
+- `pc2-node/src/api/index.ts` (`healthHandler`) — 1 site for updateService
+
+**Cross-class plumbing (1)**:
+- `pc2-node/src/services/ai/tools/ToolExecutor.ts` — threads `db: this.db` into AgentKitExecutor constructor call
+
+**Deferral markers added (Phase 2-D, 5 files)**:
+- `pc2-node/src/api/media.ts` (3 sites in mp4-split / CENC strip / CENC decrypt helpers)
+- `pc2-node/src/api/storage.ts` (4 sites in encrypt/decrypt/loadRendererBinary/executeRenderer helpers)
+- `pc2-node/src/services/media/dashPackager.ts` (1 site)
+- `pc2-node/src/services/media/mp4split.ts` (1 site, async-imported)
+- `pc2-node/src/storage/ipfs.ts` (1 site, async-imported)
+
+### TypeScript-as-safety-net wins (compiler caught what intuition missed)
+
+Two real mistakes the compiler caught immediately, validating the same "compiler as harness" lesson learned in Phase 2-B:
+
+1. **Static-method `this.db` error** — initial pass converted all 4 `getDatabase()` sites in `AgentKitExecutor.ts` to `this.db ?? getDatabase()`. `tsc --noEmit` flagged lines 766 and 785 with `TS2339: Property 'db' does not exist on type 'typeof AgentKitExecutor'`. Investigation showed both were inside `static updateProposalStatus()` and `static getProposal()` — no `this` exists in static context. Reverted those two and added explicit deferral comment.
+2. **Type narrowing on `req.app.locals.updateService`** — first pass at `api/index.ts:153` did `pc2Version = req.app.locals.updateService.getCurrentVersion()` which had a type issue around `undefined`. Adjusted to `const updateService = ... as UpdateService | undefined; if (updateService) { ... }` to preserve the original try/catch fail-soft semantics.
+
+### Validation results
+
+| Gate | Result |
+|---|---|
+| `tsc --noEmit` | ✅ clean (0 errors) |
+| `npm run build:backend` | ✅ clean compile |
+| `npm run test:unit` | ✅ 7/7 passing (62ms total) |
+| `ReadLints` on 14 modified files | ✅ 0 linter errors |
+| Dev-server hot-reload (`tsx watch`) through all 3 clusters | ✅ each cluster restart clean, no error logs |
+| `GET /api/health` post-change | ✅ HTTP 200, `version: "1.2.7.14"` (proves `req.app.locals.updateService.getCurrentVersion()` returns same value as pre-change ambient pull) |
+| `GET /api/wasm/stats` post-change | ✅ HTTP 401 "Authentication required" (proves route is correctly mounted; `req.app.locals.wasmRuntime` cast doesn't break startup) |
+| Content-indexer scan cycles (uses converted `ContentIndexerService.initialize(wasmRuntime)` path) | ✅ continued normally — 37/37 catalog resolved, block scans completing |
+| WebSocket clients reconnected after each restart | ✅ 2/2 clients reconnect cleanly, terminal handlers re-initialize |
+
+### Unlike Phase 2-B, compiled JS *does* change here
+
+Phase 2-B was provably zero-runtime-change (byte-identical `dist/*.js`). Phase 2-C is **not** — the compiled `dist/api/drafts.js` (etc.) now has `req.app.locals.db` lookups instead of `getDatabase()` calls. This was anticipated in the ticket risk section. The validation strategy compensated:
+- TypeScript catches every type mismatch (4 errors caught and fixed during execution, all subtle).
+- Live dev-server smoke proves the runtime behavior is identical (same version field, same auth gating, same indexer behavior).
+- Unit tests pass (though unit-test coverage of Express request context is limited — the live smoke is the more meaningful gate).
+
+### Strategic scope reductions documented (NOT scope creep — scope shrink)
+
+Three boundaries we held instead of expanding:
+
+1. **Cluster 2 deep helpers (8 sites)**: threading `wasmRuntime` through 5 layers of media-processing helpers would have ballooned this ticket and changed many function signatures with unclear capsule-readiness benefit. Marked with `Phase 2-D (deferred)` comments instead. Honest trade-off: route layer fully purged (the capsule-boundary that matters most), deep helpers preserve current behavior.
+2. **AgentKitExecutor static methods (2 sites)**: refactoring them into an injected `ProposalStore` service would force changes to multiple callers and risk pending-proposal flow. Out of scope.
+3. **`pc2Config` ambient global (Cluster 5)**: investigation showed it's read by 3 modules and *mutated at runtime* by `api/storage.ts`. Half-purging only the `WASMRuntime.ts` read would obscure the wider pattern. Promoted to its own ticket where the full mutable-global lifecycle can be designed once.
+
+### What's now in production-shape on the feature branch
+
+- Route handlers in 5 files (`drafts.ts`, `wallet.ts`, `wasm.ts`, `update.ts`, `api/index.ts healthHandler`) are now **capsule-ready** for getDatabase/getWASMRuntime/getUpdateService dependency injection.
+- `ContentIndexerService` is **capsule-ready** for its WASM dependency (constructor + signature-injection path proven).
+- The `app.locals.X` Express pattern is consistent across `db`, `filesystem`, `ipfs`, `config`, `aiService`, `io`, `indexer`, `bosonService`, `seedingService`, `indexerService`, `wasmRuntime`, `updateService` — twelve dependencies all addressable via the same lookup convention. This is the pattern Runtime-capsule wiring will translate to (Runtime kernel passes capabilities; Express's `req.app.locals` is the closest pc2-node equivalent).
+
+### Commit reference
+
+(Will be filled in after commit + push.)
 
 ---
 

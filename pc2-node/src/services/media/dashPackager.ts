@@ -269,6 +269,7 @@ export async function packageDASH(
   encryptResult: { ciphertext: string; dataToEncryptHash: string },
 ): Promise<string> {
   const wasmBinary = await loadCENCEncryptWasm();
+  // Phase 2-D (deferred): deep CENC packager helper, ambient pull preserved.
   const wasmRuntime = getWASMRuntime();
   const dashDir = join(outputDir, 'dash');
 

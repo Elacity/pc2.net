@@ -7,7 +7,7 @@
 
 import { Router, Response } from 'express';
 import { authenticate, AuthenticatedRequest } from './middleware.js';
-import { getDatabase } from '../storage/index.js';
+import type { DatabaseManager } from '../storage/database.js';
 import { logger } from '../utils/logger.js';
 
 const router = Router();
@@ -32,7 +32,7 @@ router.post('/', authenticate, async (req: AuthenticatedRequest, res: Response) 
       return res.status(400).json({ error: 'Missing required fields: title, asset_cid, metadata_cid, encrypt_hash, channel' });
     }
 
-    const db = getDatabase();
+    const db = req.app.locals.db as DatabaseManager;
     const id = db.insertDraft({
       wallet_address: walletAddress,
       title,
@@ -74,7 +74,7 @@ router.get('/', authenticate, async (req: AuthenticatedRequest, res: Response) =
     const walletAddress = req.user?.wallet_address;
     if (!walletAddress) return res.status(401).json({ error: 'Not authenticated' });
 
-    const db = getDatabase();
+    const db = req.app.locals.db as DatabaseManager;
     const drafts = db.getDraftsByWallet(walletAddress);
 
     // Parse JSON fields for the response
@@ -101,7 +101,7 @@ router.get('/count', authenticate, async (req: AuthenticatedRequest, res: Respon
     const walletAddress = req.user?.wallet_address;
     if (!walletAddress) return res.status(401).json({ count: 0 });
 
-    const db = getDatabase();
+    const db = req.app.locals.db as DatabaseManager;
     const count = db.getDraftCount(walletAddress);
     res.json({ count });
   } catch (error: any) {
@@ -121,7 +121,7 @@ router.get('/:id', authenticate, async (req: AuthenticatedRequest, res: Response
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) return res.status(400).json({ error: 'Invalid draft ID' });
 
-    const db = getDatabase();
+    const db = req.app.locals.db as DatabaseManager;
     const draft = db.getDraftById(id, walletAddress);
     if (!draft) return res.status(404).json({ error: 'Draft not found' });
 
@@ -152,7 +152,7 @@ router.patch('/:id', authenticate, async (req: AuthenticatedRequest, res: Respon
     const { status } = req.body;
     if (!status) return res.status(400).json({ error: 'Missing status' });
 
-    const db = getDatabase();
+    const db = req.app.locals.db as DatabaseManager;
     const updated = db.updateDraftStatus(id, walletAddress, status);
     if (!updated) return res.status(404).json({ error: 'Draft not found' });
 
@@ -175,7 +175,7 @@ router.delete('/:id', authenticate, async (req: AuthenticatedRequest, res: Respo
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) return res.status(400).json({ error: 'Invalid draft ID' });
 
-    const db = getDatabase();
+    const db = req.app.locals.db as DatabaseManager;
     const deleted = db.deleteDraft(id, walletAddress);
     if (!deleted) return res.status(404).json({ error: 'Draft not found' });
 

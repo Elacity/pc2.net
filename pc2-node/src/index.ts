@@ -87,6 +87,8 @@ import { initBaseRpcPool } from './utils/rpc.js';
 import { getGatewayService, createChannelBridge } from './services/gateway/index.js';
 import { getNodeConfig } from './api/setup.js';
 import { RuntimeHeartbeat } from './utils/runtime-heartbeat.js';
+import { getWASMRuntime } from './services/wasm/WASMRuntime.js';
+import { getUpdateService } from './services/UpdateService.js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { readFileSync as fsReadFileSync, existsSync as fsExistsSync } from 'fs';
@@ -259,7 +261,7 @@ async function main() {
   // Initialize content indexer (on-chain content catalog)
   try {
     indexerService = new ContentIndexerService(config);
-    indexerService.initialize(db!, ipfs);
+    indexerService.initialize(db!, ipfs, getWASMRuntime());
   } catch (error) {
     logger.error('❌ Failed to initialize content indexer:', error);
     logger.warn('   Content discovery will fall back to Elacity GraphQL');
@@ -423,6 +425,23 @@ async function main() {
   if (indexerService) {
     app.locals.indexerService = indexerService;
   }
+
+  // Phase 2-C: stash lazy singletons on app.locals so route handlers can read
+  // them via req.app.locals.X (matches the pattern used by db/ipfs/aiService
+  // in server.ts) instead of pulling ambient globals via getWASMRuntime() /
+  // getUpdateService(). The singleton accessors still exist for legacy callers
+  // and the recordMetricCounter() helper that has no Express context.
+  const wasmRuntime = getWASMRuntime();
+  app.locals.wasmRuntime = wasmRuntime;
+  app.locals.updateService = getUpdateService();
+
+  // Trigger async WASM runtime initialization. This was previously done as a
+  // module-load side-effect inside api/wasm.ts; lifting it here keeps the
+  // bootstrap path explicit and matches how db/ipfs/filesystem are
+  // initialized once at startup rather than on first import.
+  wasmRuntime.initialize().catch((error) => {
+    logger.error('[Bootstrap] Failed to initialize WASM runtime:', error);
+  });
 
   // Handle server listen with retry for EADDRINUSE
   // Increased retries and delay to handle slow port release after crashes

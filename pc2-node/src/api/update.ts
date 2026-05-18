@@ -15,7 +15,7 @@
  */
 
 import { Router, Request, Response, NextFunction } from 'express';
-import { getUpdateService } from '../services/UpdateService.js';
+import type { UpdateService } from '../services/UpdateService.js';
 import { logger } from '../utils/logger.js';
 import { authenticate, requireOwner, AuthenticatedRequest } from './middleware.js';
 
@@ -59,7 +59,7 @@ const githubThrottle = makeThrottle(throttleState.github);
  */
 router.get('/status', authenticate, requireOwner, (req: Request, res: Response) => {
   try {
-    const updateService = getUpdateService();
+    const updateService = req.app.locals.updateService as UpdateService;
     const status = updateService.getStatus();
 
     res.json({
@@ -78,7 +78,7 @@ router.get('/status', authenticate, requireOwner, (req: Request, res: Response) 
  */
 router.post('/check', authenticate, requireOwner, async (req: Request, res: Response) => {
   try {
-    const updateService = getUpdateService();
+    const updateService = req.app.locals.updateService as UpdateService;
     const result = await updateService.checkForUpdates();
 
     res.json({
@@ -101,7 +101,7 @@ router.post('/check', authenticate, requireOwner, async (req: Request, res: Resp
  */
 router.get('/version', authenticate, requireOwner, (req: Request, res: Response) => {
   try {
-    const updateService = getUpdateService();
+    const updateService = req.app.locals.updateService as UpdateService;
 
     res.json({
       version: updateService.getCurrentVersion(),
@@ -119,7 +119,7 @@ router.get('/version', authenticate, requireOwner, (req: Request, res: Response)
  */
 router.post('/check-github', authenticate, requireOwner, githubThrottle, async (req: Request, res: Response) => {
   try {
-    const updateService = getUpdateService();
+    const updateService = req.app.locals.updateService as UpdateService;
     const result = await updateService.checkGitHubReleases();
 
     res.json({
@@ -149,7 +149,7 @@ router.post('/check-github', authenticate, requireOwner, githubThrottle, async (
  */
 router.post('/install', authenticate, requireOwner, installThrottle, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const updateService = getUpdateService();
+    const updateService = req.app.locals.updateService as UpdateService;
 
     if (updateService.getIsUpdating()) {
       return res.status(409).json({
@@ -197,7 +197,7 @@ router.post('/install', authenticate, requireOwner, installThrottle, async (req:
  */
 router.get('/progress', authenticate, requireOwner, (req: Request, res: Response) => {
   try {
-    const updateService = getUpdateService();
+    const updateService = req.app.locals.updateService as UpdateService;
     const allLog = updateService.getUpdateLog();
     const currentSeq = updateService.getLogSeq();
 

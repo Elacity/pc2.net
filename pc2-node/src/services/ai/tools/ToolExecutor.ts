@@ -74,6 +74,7 @@ export class ToolExecutor {
       this.agentKitExecutor = new AgentKitExecutor(this.walletAddress, {
         smartAccountAddress: this.smartAccountAddress,
         io: this.io,
+        db: this.db,
       });
       logger.info('[ToolExecutor] AgentKitExecutor initialized for Agent Account features');
     }

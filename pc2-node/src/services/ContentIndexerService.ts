@@ -194,12 +194,16 @@ export class ContentIndexerService {
     }
   }
 
-  initialize(db: DatabaseManager, ipfs?: IPFSStorage | null): void {
+  initialize(db: DatabaseManager, ipfs?: IPFSStorage | null, wasmRuntime?: WASMRuntime): void {
     this.db = db;
     this.ipfs = ipfs ?? null;
 
     try {
-      this.wasmRuntime = getWASMRuntime();
+      // Phase 2-C: prefer constructor-injected wasmRuntime (explicit
+      // dependency); fall back to getWASMRuntime() ambient singleton only
+      // if not provided, preserving legacy behavior for callers that
+      // haven't migrated yet.
+      this.wasmRuntime = wasmRuntime ?? getWASMRuntime();
       loadMulticallWasm();
       log.info('WASM ABI decoder loaded (evm-multicall)');
     } catch (error: any) {

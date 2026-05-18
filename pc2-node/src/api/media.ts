@@ -886,6 +886,9 @@ const FALLBACK_IPFS_GATEWAY = 'https://ipfs.ela.city/ipfs/';
 async function splitInitForTrackWithFallback(initSegment: Buffer, trackType: 'video' | 'audio'): Promise<Buffer> {
   try {
     const wasmBinary = await loadMp4SplitWasmBinary();
+    // Phase 2-D (deferred): deep helper, ambient pull preserved. Threading
+    // wasmRuntime as a parameter through the media split pipeline is a
+    // multi-layer refactor; tracked separately.
     const wasmRuntime = getWASMRuntime();
     const result = await wasmRuntime.executeMp4InitSplit(
       wasmBinary,
@@ -1120,6 +1123,7 @@ loadCENCWasmBinary().catch((err) =>
  * remove sinf, remove pssh). 64-bit extended box sizes handled.
  */
 async function stripInitViaWASM(initSegment: Buffer): Promise<Buffer> {
+  // Phase 2-D (deferred): deep helper, ambient pull preserved.
   const wasmRuntime = getWASMRuntime();
   const wasmBinary = await loadCENCWasmBinary();
 
@@ -1148,6 +1152,7 @@ async function decryptSegmentViaWASM(
   cekBase64: string,
   initSegment?: Buffer | null,
 ): Promise<Buffer> {
+  // Phase 2-D (deferred): deep helper, ambient pull preserved.
   const wasmRuntime = getWASMRuntime();
 
   const commandJson = JSON.stringify({

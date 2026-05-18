@@ -30,6 +30,7 @@ import {
 } from './AgentKitTools.js';
 import { Server as SocketIOServer } from 'socket.io';
 import { getDatabase } from '../../../storage/index.js';
+import type { DatabaseManager } from '../../../storage/database.js';
 
 /**
  * In-memory store for pending proposals
@@ -45,17 +46,23 @@ export class AgentKitExecutor {
   private walletAddress: string;
   private smartAccountAddress: string | null;
   private io?: SocketIOServer;
+  // Phase 2-C: prefer constructor-injected db (explicit dependency); fall back
+  // to getDatabase() ambient singleton only if not provided, preserving
+  // legacy behavior for any caller that hasn't migrated yet.
+  private db?: DatabaseManager;
   
   constructor(
     walletAddress: string,
     options?: {
       smartAccountAddress?: string;
       io?: SocketIOServer;
+      db?: DatabaseManager;
     }
   ) {
     this.walletAddress = walletAddress.toLowerCase();
     this.smartAccountAddress = options?.smartAccountAddress?.toLowerCase() || null;
     this.io = options?.io;
+    this.db = options?.db;
     
     // Initialize wallet provider if we have a smart account
     if (this.smartAccountAddress) {
@@ -390,7 +397,7 @@ export class AgentKitExecutor {
     
     // Persist to database
     try {
-      const db = getDatabase();
+      const db = this.db ?? getDatabase();
       db.saveProposal({
         id: proposal.id,
         walletAddress: this.walletAddress,
@@ -518,7 +525,7 @@ export class AgentKitExecutor {
       
       // Persist to database (same pattern as transfer)
       try {
-        const db = getDatabase();
+        const db = this.db ?? getDatabase();
         db.saveProposal({
           id: proposal.id,
           walletAddress: this.walletAddress,
@@ -756,6 +763,9 @@ export class AgentKitExecutor {
     
     // Update in database
     try {
+      // Phase 2-C: this is a static method so `this.db` is not available;
+      // keep ambient getDatabase() here. Future ticket may refactor static
+      // proposal helpers into an injected ProposalStore service.
       const db = getDatabase();
       db.updateProposalStatus(proposalId, status, extra);
     } catch (dbError) {
@@ -775,6 +785,9 @@ export class AgentKitExecutor {
     
     // Fall back to database
     try {
+      // Phase 2-C: this is a static method so `this.db` is not available;
+      // keep ambient getDatabase() here. Future ticket may refactor static
+      // proposal helpers into an injected ProposalStore service.
       const db = getDatabase();
       return db.getProposal(proposalId);
     } catch (dbError) {

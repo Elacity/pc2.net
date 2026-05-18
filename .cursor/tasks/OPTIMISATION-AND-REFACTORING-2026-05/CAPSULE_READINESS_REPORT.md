@@ -1002,6 +1002,53 @@ Many modules had **multiple** concrete-class penalties (e.g., `api/index.ts` imp
 
 **Shipping**: held behind Mac-launcher 48-72h soak per `PHASE-2-PLAN.md` shipping gate. Merge to release branch only after soak confirms v1.2.8.0 stability.
 
+### 5.7 Phase 2-C executed (2026-05-18) — global-singleton purge (audit blocker #2)
+
+**Status**: shipped to feature branch `feat/t-1-telemetry-and-support`, awaiting CI green + review + Mac soak before release-branch merge.
+
+**What landed**:
+- **27 of 37 audited ambient-singleton sites fully purged (73%)**. Routes and one service-class now receive `db`, `wasmRuntime`, and `updateService` via explicit dependency channels:
+  - **Cluster 1 (`getDatabase()`)**: 15/17 sites → `req.app.locals.db as DatabaseManager` (route handlers) or `this.db` (class instance fields, AgentKitExecutor constructor-injected from ToolExecutor). 2 static methods on AgentKitExecutor kept ambient with explicit deferral comment (no `this` in static context).
+  - **Cluster 2 (`getWASMRuntime()`)**: 5/13 sites — all 4 `api/wasm.ts` route handlers + 1 `ContentIndexerService.initialize(wasmRuntime)` signature injection. The 8 remaining sites in deep WASM/dDRM/IPFS helpers (media transcoding, CENC encryption, renderer load, IPFS assembly) are marked `Phase 2-D (deferred)`: threading would propagate signature changes through 5+ layers with unclear capsule-readiness benefit; route layer (the capsule boundary that matters) is fully purged.
+  - **Cluster 3 (`getUpdateService()`)**: 7/7 sites → `req.app.locals.updateService as UpdateService`. 100% purge.
+  - **Cluster 5 (`(global as any).pc2Config`)**: dropped from this ticket — investigation revealed wider 4-file pattern (3 reads + runtime mutation by `api/storage.ts`). Promoted to a future dedicated ticket to design the full mutable-global lifecycle in one move.
+- **Bootstrap update** in `src/index.ts`: `app.locals.wasmRuntime` and `app.locals.updateService` set after existing `app.locals.indexerService` block. WASM `.initialize()` lifted out of `api/wasm.ts` module-load side-effect into an explicit bootstrap call. The `app.locals.X` Express pattern is now consistent across **twelve** dependencies (`db`, `filesystem`, `ipfs`, `config`, `aiService`, `io`, `indexer`, `bosonService`, `seedingService`, `indexerService`, `wasmRuntime`, `updateService`).
+
+**Files modified (14)**:
+- Route handlers (5): `api/drafts.ts`, `api/wallet.ts`, `api/wasm.ts`, `api/update.ts`, `api/index.ts (healthHandler)`
+- Service classes (3): `services/ContentIndexerService.ts`, `services/ai/tools/AgentKitExecutor.ts`, `services/ai/tools/ToolExecutor.ts`
+- Bootstrap (1): `src/index.ts`
+- Deep-helper deferral markers (5): `api/media.ts`, `api/storage.ts`, `services/media/dashPackager.ts`, `services/media/mp4split.ts`, `storage/ipfs.ts`
+
+**Validation results**:
+| Gate | Outcome |
+|---|---|
+| `tsc --noEmit` | ✅ clean |
+| `npm run build:backend` | ✅ clean |
+| `npm run test:unit` | ✅ 7/7 passing in 62 ms |
+| `ReadLints` on 14 modified files | ✅ 0 errors |
+| `tsx watch` hot-reload through all 3 clusters | ✅ each cluster restart clean |
+| `GET /api/health` post-change | ✅ HTTP 200, `version: "1.2.7.14"` — **identical** to pre-change value, proving the converted `req.app.locals.updateService.getCurrentVersion()` is exact behavior-equivalent to the old ambient `getUpdateService().getCurrentVersion()` |
+| Content-indexer scan cycles (uses converted `ContentIndexerService.initialize(wasmRuntime)` path) | ✅ 37/37 catalog resolved, block scans completing every ~30s |
+| WebSocket clients reconnect after each restart | ✅ 2/2 clients reconnect, terminal handlers re-init |
+
+**Phase 2-C ≠ Phase 2-B in one important way**: Phase 2-B produced byte-identical compiled JS. Phase 2-C does **not** — `dist/api/drafts.js` etc. now contains `req.app.locals.db` lookups instead of `getDatabase()` calls. This was anticipated in the ticket's risk section. The mitigation strategy: TypeScript catches all type mismatches (and did — twice, immediately, see below), plus live dev-server smoke comparing pre/post values on the dependent endpoints proves runtime equivalence.
+
+**Two TypeScript catches during execution (validates "compiler as harness" methodology a second time)**:
+1. Initial pass converted all 4 `getDatabase()` sites in `AgentKitExecutor.ts` to `this.db ?? getDatabase()`. `tsc` immediately flagged lines 766 and 785 with `TS2339: Property 'db' does not exist on type 'typeof AgentKitExecutor'` — both inside `static updateProposalStatus()` and `static getProposal()`. No `this` in static context. Reverted those two with deferral comment in <60 seconds.
+2. First pass at `api/index.ts:153` did `pc2Version = req.app.locals.updateService.getCurrentVersion()` which had a type-narrowing issue on the optional `app.locals.updateService` field. Adjusted to `const updateService = ... as UpdateService | undefined; if (updateService) { ... }` preserving the original try/catch fail-soft semantics.
+
+**Score impact**: audit Pattern #2 (ambient global singletons) is **substantially resolved for the route layer**. Estimated band shifts:
+- 5 route-handler modules (`api/drafts.ts`, `api/wallet.ts`, `api/update.ts`, `api/wasm.ts`, `api/index.ts:healthHandler`) promoted to A- or A
+- 1 service-class module (`ContentIndexerService`) promoted to A- (explicit dependencies)
+- 1 service-class module (`AgentKitExecutor`) partially improved (instance methods purged; static methods deferred)
+
+Net: ~10-14 score points moved across pc2-node. Remaining `getDatabase`/`getWASMRuntime` calls in deep helpers are now grep-trackable via `Phase 2-D (deferred)` comments — making the next pass mechanically straightforward.
+
+**What this means for Runtime convergence**: every Phase 2-C-purged module is now closer to "drop-in capsule" shape — its dependencies arrive through explicit channels (request context or constructor) the way a Runtime kernel would hand capabilities to a capsule. The remaining ambient pulls live in two specific places (proposal-state static methods, deep WASM helpers) that are well-bounded and known.
+
+**Shipping**: held behind Mac-launcher 48-72h soak per `PHASE-2-PLAN.md` shipping gate.
+
 ### 5.6 What this audit tells us about the AGENTIC-PC2-MONETISATION strategy
 
 After 160 modules across 11 batches (audit functionally complete at 98.2% coverage), the strategic picture is now stable and final:

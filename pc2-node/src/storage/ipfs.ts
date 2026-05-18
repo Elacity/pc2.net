@@ -914,6 +914,7 @@ export class IPFSStorage {
       if (totalLength >= WASM_ASSEMBLE_THRESHOLD) {
         try {
           const { getWASMRuntime } = await import('../services/wasm/WASMRuntime.js');
+          // Phase 2-D (deferred): deep IPFS assembly helper, ambient pull preserved.
           const runtime = getWASMRuntime();
 
           if (!cachedAssembleWasm) {

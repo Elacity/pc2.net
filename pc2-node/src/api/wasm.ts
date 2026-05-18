@@ -13,23 +13,19 @@
 import { Router, Response } from 'express';
 import { authenticate, AuthenticatedRequest } from './middleware.js';
 import { logger } from '../utils/logger.js';
-import { getWASMRuntime } from '../services/wasm/WASMRuntime.js';
+import type { WASMRuntime } from '../services/wasm/WASMRuntime.js';
 
 const router = Router();
-
-// Get the singleton runtime instance (uses global config)
-const wasmRuntime = getWASMRuntime();
-
-// Initialize runtime on startup
-wasmRuntime.initialize().catch((error) => {
-    logger.error('[WASM API] Failed to initialize WASMER runtime:', error);
-});
+// Phase 2-C: WASM runtime instance is now stashed on app.locals at bootstrap
+// (src/index.ts) and initialized there. Route handlers below read it via
+// req.app.locals.wasmRuntime (matches db/ipfs/aiService pattern in server.ts).
 
 /**
  * GET /api/wasm/stats
  * Get current WASM runtime statistics
  */
 router.get('/stats', authenticate, (req: AuthenticatedRequest, res: Response) => {
+    const wasmRuntime = req.app.locals.wasmRuntime as WASMRuntime;
     const stats = wasmRuntime.getStats();
     res.json({
         success: true,
@@ -50,6 +46,7 @@ router.get('/stats', authenticate, (req: AuthenticatedRequest, res: Response) =>
  */
 router.post('/execute-file', authenticate, async (req: AuthenticatedRequest, res: Response) => {
     try {
+        const wasmRuntime = req.app.locals.wasmRuntime as WASMRuntime;
         const { filePath, functionName, args } = req.body;
 
         if (!filePath || !functionName) {
@@ -100,6 +97,7 @@ router.post('/execute-file', authenticate, async (req: AuthenticatedRequest, res
  */
 router.post('/execute', authenticate, async (req: AuthenticatedRequest, res: Response) => {
     try {
+        const wasmRuntime = req.app.locals.wasmRuntime as WASMRuntime;
         const { wasmBinary, functionName, args } = req.body;
 
         if (!wasmBinary || !functionName) {
@@ -159,6 +157,7 @@ router.post('/execute', authenticate, async (req: AuthenticatedRequest, res: Res
  */
 router.get('/list-functions', authenticate, async (req: AuthenticatedRequest, res: Response) => {
     try {
+        const wasmRuntime = req.app.locals.wasmRuntime as WASMRuntime;
         const { filePath } = req.query;
 
         if (!filePath || typeof filePath !== 'string') {

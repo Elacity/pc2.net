@@ -454,6 +454,7 @@ export async function splitFragmentedMP4WASM(filePath: string): Promise<SplitRes
 
   try {
     const { getWASMRuntime } = await import('../wasm/WASMRuntime.js');
+    // Phase 2-D (deferred): deep mp4split helper, ambient pull preserved.
     const runtime = getWASMRuntime();
 
     if (!cachedMp4SplitWasm) {

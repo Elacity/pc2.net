@@ -9,7 +9,7 @@ import express, { Router, Response } from 'express';
 import { authenticate, AuthenticatedRequest } from './middleware.js';
 import { logger } from '../utils/logger.js';
 import { pendingProposals, AgentKitExecutor } from '../services/ai/tools/AgentKitExecutor.js';
-import { getDatabase } from '../storage/index.js';
+import type { DatabaseManager } from '../storage/database.js';
 
 const router: Router = express.Router();
 
@@ -27,7 +27,7 @@ router.get('/proposals/pending', authenticate, async (req: AuthenticatedRequest,
     }
     
     // Get proposals from database (includes all historical proposals)
-    const db = getDatabase();
+    const db = req.app.locals.db as DatabaseManager;
     const dbProposals = db.getProposals(walletAddress, 50);
     
     // Merge with in-memory pending proposals (in case DB is behind)
@@ -73,7 +73,7 @@ router.get('/proposals/:id', authenticate, async (req: AuthenticatedRequest, res
     let proposal = pendingProposals.get(id);
     
     if (!proposal) {
-      const db = getDatabase();
+      const db = req.app.locals.db as DatabaseManager;
       proposal = db.getProposal(id);
     }
     
@@ -106,7 +106,7 @@ router.post('/proposals/:id/approve', authenticate, async (req: AuthenticatedReq
     let proposal = pendingProposals.get(id);
     
     if (!proposal) {
-      const db = getDatabase();
+      const db = req.app.locals.db as DatabaseManager;
       proposal = db.getProposal(id);
     }
     
@@ -186,7 +186,7 @@ router.post('/proposals/:id/reject', authenticate, async (req: AuthenticatedRequ
     // first so we can verify the caller owns the proposal before mutating.
     let proposal = pendingProposals.get(id);
     if (!proposal) {
-      const db = getDatabase();
+      const db = req.app.locals.db as DatabaseManager;
       proposal = db.getProposal(id);
     }
     if (!proposal) {
@@ -209,7 +209,7 @@ router.post('/proposals/:id/reject', authenticate, async (req: AuthenticatedRequ
     
     if (!updatedProposal) {
       // Also try to update in database directly
-      const db = getDatabase();
+      const db = req.app.locals.db as DatabaseManager;
       db.updateProposalStatus(id, 'rejected', { rejectionReason: reason });
     }
     
@@ -249,7 +249,7 @@ router.post('/proposals/:id/execute', authenticate, async (req: AuthenticatedReq
     // the record to 'executed'.
     let proposal = pendingProposals.get(id);
     if (!proposal) {
-      const db = getDatabase();
+      const db = req.app.locals.db as DatabaseManager;
       proposal = db.getProposal(id);
     }
     if (!proposal) {
@@ -272,7 +272,7 @@ router.post('/proposals/:id/execute', authenticate, async (req: AuthenticatedReq
     
     if (!updatedProposal) {
       // Also try to update in database directly
-      const db = getDatabase();
+      const db = req.app.locals.db as DatabaseManager;
       db.updateProposalStatus(id, 'executed', { txHash });
     }
     

@@ -233,6 +233,18 @@ These items don't touch code in Phase 2. They produce documents that feed into t
 - **Cheat sheet for sign-off**: [`PHASE-2-D-CHEAT-SHEET.md`](./PHASE-2-D-CHEAT-SHEET.md) — 2-min read with the 3 open questions.
 - **Execution outcome (2026-05-18 morning)**: **all 6 sites converted; BYTE-IDENTICAL compiled JS for every modified file** (literally the same SHA-256 pre vs post — stronger than 2-B's spot-check proof). TypeScript was already eliding the unused-as-value imports; adding `import type` makes the intent explicit in source and future-proofs against `verbatimModuleSyntax: true`. All gates green: `tsc` clean, `build:backend` clean, `test:unit` 7/7, ReadLints 0 errors. Audit's mechanical-pattern blockers are now functionally exhausted for consumer modules in `pc2-node/src` (modulo the documented bootstrap and tightly-coupled internal-sibling exceptions). Held behind Mac launcher soak gate before release-branch merge. **Open question 2** (bundle 2-C-deferred WASM helpers) deferred to a separate `Phase 2-D-helpers` ticket as recommended — different pattern (singleton purge vs. import-keyword change).
 
+### 5.3.3 Ambient `global.*` cleanup → Phase 2-Globals — **TICKET WRITTEN 2026-05-18, AWAITING SIGN-OFF**
+
+- **What**: clean up the 4 ambient `(global as any).X` patterns in pc2-node — replace with `req.app.locals.X` pattern where audit-correct, document the one exception that should stay (defensive fallback in Drivers tool-execution path). Bundles `pc2Config` (promoted out of 2-C), the `(global as any).db` latent bug, the `__filesystem` defensive-fallback documentation, and `(global as any).ipfsStorage` purge.
+- **Surprise finding during ticket drafting**: `(global as any).db` is **never set anywhere in the codebase** — `db?.getSetting(...)` calls in `api/resources.ts` and `api/supernode.ts` silently fall back. Users who set their `storage_limit`/`max_concurrent_wasm`/`max_memory_mb`/`wasm_timeout_ms` via the API have been having those settings ignored since the API was added. **This ticket fixes that bug** as a side effect of the cleanup.
+- **ROI**: completes audit Pattern #2 (ambient global singletons) for `pc2-node/src` consumer code; ~8-10 score points across 5 modules; **plus a real user-visible correctness fix** for db-persisted resource limits.
+- **Effort**: ~3 hours single-session (larger than 2-D, comparable to 2-C).
+- **Risk**: low-medium. First Phase 2 ticket where the source change has **deliberate user-visible behavioral implications** — the `global.db` bug fix means previously-ignored db settings start being honored. Warrants release-notes communication.
+- **Dependencies**: shipping gate is Mac launcher 48-72h soak. Pre-merge step recommended: query a sample of real user dbs for non-default `storage_limit` etc. values to know what users will see change.
+- **Ticket**: see [`PHASE-2-GLOBALS-CLEANUP.md`](./PHASE-2-GLOBALS-CLEANUP.md) — full ticket with site-by-site conversion plan, behavioral-change documentation, and 4 open questions.
+- **Cheat sheet for sign-off**: [`PHASE-2-GLOBALS-CHEAT-SHEET.md`](./PHASE-2-GLOBALS-CHEAT-SHEET.md) — 2-min read.
+- **Awaiting Sasha sign-off on 4 open questions** (approve deliberate `global.db` bug fix, defer WASMRuntime config injection, bundle vs split PR, execute-now-merge-after-soak).
+
 ### 5.4 Types extraction (providers/types.ts + storage/types.ts) — **PHASE 2-A: SHIPPED TO FEATURE BRANCH 2026-05-17**
 
 - **What**: extract type definitions from the implementation modules that currently own them.

@@ -259,17 +259,11 @@ router.post('/limit', authenticate, async (req: AuthenticatedRequest, res: Respo
 
     db?.setSetting('storage_limit', limit);
 
-    // Update global config so it takes effect immediately
-    if (!(global as any).pc2Config) {
-      (global as any).pc2Config = {};
-    }
-    if (!(global as any).pc2Config.resources) {
-      (global as any).pc2Config.resources = {};
-    }
-    if (!(global as any).pc2Config.resources.storage) {
-      (global as any).pc2Config.resources.storage = {};
-    }
-    (global as any).pc2Config.resources.storage.limit = limit;
+    // Phase 2-Globals: the (global as any).pc2Config write previously
+    // here is removed. The db.setSetting() above is the actual source
+    // of truth; downstream readers (api/info.ts, api/resources.ts) now
+    // read from req.app.locals.db.getSetting() directly. See
+    // PHASE-2-GLOBALS-CLEANUP ticket §"Global 1" for details.
 
     logger.info(`[Storage API]: Storage limit set to ${limit}`);
     res.json({ success: true, limit });

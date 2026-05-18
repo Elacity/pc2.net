@@ -10,16 +10,19 @@ import { authenticate, type AuthenticatedRequest } from './middleware.js';
 import { logger } from '../utils/logger.js';
 import os from 'os';
 import { statfsSync } from 'fs';
+import type { DatabaseManager } from '../storage/database.js';
+import type { IPFSStorage } from '../storage/ipfs.js';
 
 const router = Router();
 
-function getDb(): any {
-  return (global as any).db;
-}
-
-function getIpfsStorage(): any {
-  return (global as any).ipfsStorage;
-}
+// Phase 2-Globals: db and ipfs are now read from req.app.locals.X
+// instead of ambient globals. (global as any).db was never set
+// anywhere — the old getDb() helper always returned undefined and
+// db?.getSetting() reads silently failed, see
+// PHASE-2-GLOBALS-CLEANUP ticket §"Global 2". (global as any).ipfsStorage
+// is set once at bootstrap (index.ts) and is still available there
+// for non-Express callers, but consumer routes should use the
+// explicit req.app.locals.ipfs channel.
 
 // Minimum supernode requirements
 const SUPERNODE_REQUIREMENTS = {
@@ -110,9 +113,9 @@ router.get('/specs', authenticate, (_req: AuthenticatedRequest, res: Response) =
  * GET /api/supernode/relay/status
  * Get current relay mode status
  */
-router.get('/relay/status', authenticate, (_req: AuthenticatedRequest, res: Response) => {
-  const db = getDb();
-  const ipfs = getIpfsStorage();
+router.get('/relay/status', authenticate, (req: AuthenticatedRequest, res: Response) => {
+  const db = req.app.locals.db as DatabaseManager | undefined;
+  const ipfs = req.app.locals.ipfs as IPFSStorage | undefined;
 
   const relayEnabled = db?.getSetting('relay_mode') === 'true';
   const maxConnections = parseInt(db?.getSetting('relay_max_connections') || '100', 10);
@@ -142,7 +145,7 @@ router.get('/relay/status', authenticate, (_req: AuthenticatedRequest, res: Resp
  * Enable or disable relay mode
  */
 router.post('/relay/settings', authenticate, (req: AuthenticatedRequest, res: Response) => {
-  const db = getDb();
+  const db = req.app.locals.db as DatabaseManager | undefined;
   if (!db) {
     res.status(500).json({ error: 'Database not available' });
     return;

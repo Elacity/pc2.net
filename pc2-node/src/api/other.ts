@@ -878,7 +878,14 @@ export function handleDriversCall(req: AuthenticatedRequest, res: Response): voi
                   logger.error('[Drivers] app.locals.filesystem type:', typeof req.app.locals.filesystem);
                   logger.error('[Drivers] app.locals.filesystem value:', req.app.locals.filesystem);
                   
-                  // Try to get filesystem from global if available
+                  // Phase 2-Globals: deliberate defensive fallback. This
+                  // (global as any).__filesystem read is the consumer side
+                  // of the global written at server.ts:141. It exists
+                  // because tool execution is a critical path and we'd
+                  // rather degrade gracefully than fail entirely if
+                  // app.locals.filesystem is somehow missing (which
+                  // would itself be a bug worth logging loudly above).
+                  // See PHASE-2-GLOBALS-CLEANUP ticket §"Global 3".
                   const globalFilesystem = (global as any).__filesystem;
                   if (globalFilesystem) {
                     logger.warn('[Drivers] Found filesystem in global, using it as fallback');

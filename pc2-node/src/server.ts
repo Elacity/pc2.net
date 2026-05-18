@@ -137,9 +137,17 @@ export function createServer (options: ServerOptions): { app: Express; server: S
     }
     if ( options.filesystem ) {
         app.locals.filesystem = options.filesystem;
-        // Also store in global as fallback
+        // Phase 2-Globals: this (global as any).__filesystem write is
+        // INTENTIONAL — it's the defensive fallback for the Drivers
+        // tool-execution critical path in api/other.ts. If app.locals.filesystem
+        // is somehow undefined at request time (which would be a serious bug),
+        // the consumer there falls back to this global to keep tool execution
+        // functional. This is a deliberate belt-and-suspenders pattern around a
+        // critical path, not ambient authority — do NOT remove it without
+        // also removing the consumer fallback. See PHASE-2-GLOBALS-CLEANUP
+        // ticket §"Global 3" for the audit-permitted classification.
         (global as any).__filesystem = options.filesystem;
-        logger.info('[Server] ✅ Filesystem stored in app.locals and global');
+        logger.info('[Server] ✅ Filesystem stored in app.locals (with global fallback for Drivers critical path)');
     } else {
         logger.warn('[Server] ⚠️ No filesystem provided - tool execution will be disabled');
     }

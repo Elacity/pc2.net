@@ -1664,12 +1664,17 @@ let wasmRuntimeInstance: WASMRuntime | null = null;
 
 export function getWASMRuntime(): WASMRuntime {
     if (!wasmRuntimeInstance) {
-        // Read config from global if available
-        const config = (global as any).pc2Config?.resources?.compute;
+        // Phase 2-Globals: previously read (global as any).pc2Config?.resources?.compute,
+        // but pc2Config was a vestigial cache only populated by the storage-limit
+        // POST handler — compute settings were never written to it, so this read
+        // always returned undefined and the fallbacks below were always used.
+        // Removing the dead read preserves identical behavior. A future ticket
+        // will refactor this to accept config + db settings explicitly from
+        // bootstrap so user-set compute limits take effect on restart.
         wasmRuntimeInstance = new WASMRuntime({
-            maxConcurrent: config?.max_concurrent_wasm ?? 4,
-            defaultTimeoutMs: config?.wasm_timeout_ms ?? 30000,
-            defaultMaxMemoryMb: config?.max_memory_mb ?? 512,
+            maxConcurrent: 4,
+            defaultTimeoutMs: 30000,
+            defaultMaxMemoryMb: 512,
         });
     }
     return wasmRuntimeInstance;

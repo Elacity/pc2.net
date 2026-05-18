@@ -1109,6 +1109,85 @@ After Phase 2-E and the structural tickets above, any remaining work moves into 
 
 **Shipping**: held behind Mac-launcher 48-72h soak per `PHASE-2-PLAN.md` shipping gate.
 
+### 5.9 Phase 2-Globals executed (2026-05-18 midday) — ambient `(global as any).X` cleanup (completes audit blocker #2 for consumer modules)
+
+**Status**: shipped to feature branch `feat/t-1-telemetry-and-support`, awaiting CI green + review + Mac soak before release-branch merge.
+
+**Promoted out of Phase 2-C and grew into a 4-pattern catalog with a real bug fix**
+
+When `pc2Config` was scoped out of Phase 2-C in favor of a dedicated ticket, the survey for that ticket discovered three additional `(global as any).X` patterns in pc2-node and one of them was a real latent bug:
+
+| # | Pattern | Action | Outcome |
+|---|---|---|---|
+| 1 | `pc2Config` mutable cache | **Delete entirely** | Was a vestigial cache only ever populated by storage_limit POST. The actual `Config` loaded from `config/loader.js` is on `app.locals.config`; the db-persisted user values are on `req.app.locals.db`. Removed `(global as any).pc2Config = {...}` write in `api/storage.ts`; removed all 3 reads in `api/resources.ts`, `api/info.ts`, `services/wasm/WASMRuntime.ts`. Cleaner architecture. |
+| 2 | `(global as any).db` | **Fix latent bug** | This global was **never set anywhere in the codebase** — confirmed by exhaustive grep. The `getDb()` helpers in `api/resources.ts` and `api/supernode.ts` always returned `undefined`, so `db?.getSetting(...)` reads silently failed. Users who used the API to set `storage_limit` / `max_concurrent_wasm` / `max_memory_mb` / `wasm_timeout_ms` saw their writes accepted (via `db.setSetting()`) but the values were never honored on subsequent reads. The "Database settings override config file" comment in the code was false. **Fixed** by replacing both `getDb()` helpers with explicit `req.app.locals.db as DatabaseManager` lookups at 6 call sites. |
+| 3 | `(global as any).__filesystem` | **Keep + document intent** | Set at `server.ts:141` and read at `api/other.ts:882` as a deliberate defensive fallback for the Drivers tool-execution critical path. Added explanatory comments at both sites identifying this as an audit-permitted "intentional belt-and-suspenders" pattern, not ambient authority. Future audits should not flag this. |
+| 4 | `(global as any).ipfsStorage` | **Purge consumer; preserve bootstrap write** | Same pattern as 2-C — single-write at bootstrap (`index.ts:245`) is audit-permitted (equivalent to `setGlobalDatabase()`); the consumer helper in `api/supernode.ts` was deleted in favor of `req.app.locals.ipfs as IPFSStorage` at the call site. |
+
+**Pre-flight db survey result** (mandatory per ticket because of behavioral change): the local install's `settings` table has 46 rows, zero of which match the resource-setting keys. Nobody has ever successfully set a resource limit on this install — consistent with the bug analysis (broken read path → users had no incentive to keep settings). The bug-fix's user-visible blast radius is **forward-looking only**.
+
+### TypeScript caught 4 more pre-existing bugs during execution
+
+When the `getDb()` / `getConfig()` helpers were replaced with explicit `DatabaseManager | undefined` / `Config | undefined` types, the compiler immediately surfaced 4 type errors that had been silent under the old `any`-typed helpers:
+
+| Error site | Real issue |
+|---|---|
+| `resources.ts:89` (`maxConcurrentWasm`) | `db.getSetting()` returns `string \| undefined` (SQLite TEXT), not `number`. Old code treated it as the original numeric value; once the read path started working it would have caused NaN propagation. |
+| `resources.ts:90` (`wasmTimeoutMs`) | Same. |
+| `resources.ts:247` (`db.setSetting('max_concurrent_wasm', value)`) | `value` was `number` from `parseInt()`; `db.setSetting()` requires `string`. SQLite was implicitly coercing on bind, but the round-trip read would have returned a string the old code expected to be a number. |
+| `resources.ts:274` (`db.setSetting('wasm_timeout_ms', value)`) | Same. |
+
+Fixed by explicit `parseInt()` on read and `String()` on write. This is the **third Phase 2 phase where TypeScript caught real bugs during execution** (after 2-C's `this.db` static-method catch and the `updateService` type-narrowing catch). The pattern is consistent: **converting `any` to specific types surfaces latent bugs that would have manifested as runtime data corruption.** This is the methodology paying for itself, every time.
+
+### Validation outcome (every gate green)
+
+| Gate | Result |
+|---|---|
+| `tsc --noEmit` | ✅ clean (after fixing the 4 compiler-caught type errors) |
+| `npm run build:backend` | ✅ clean |
+| `npm run test:unit` | ✅ 7/7 in 52.6 ms |
+| `ReadLints` on 7 modified files | ✅ 0 errors |
+| Pre-flight db survey | ✅ zero existing user settings to be affected |
+
+### Strategic note on what this completes
+
+After Phase 2-Globals, the audit's **mechanical-pattern blocker #2 (ambient global singletons) is functionally complete for consumer modules in pc2-node/src**.
+
+Combined progress since 2026-05-17:
+- **Phase 2-A** (types extraction): 10 files
+- **Phase 2-B** (concrete-class → type-only imports for storage classes): 29 files, 40 sites
+- **Phase 2-C** (ambient module-singleton purge): 14 files, 27 sites
+- **Phase 2-D** (sibling-orchestrator type-only conversions): 6 files
+- **Phase 2-Globals** (4-pattern ambient global cleanup + latent bug fix): 7 files
+- **Total**: 66 file-touches across 73+ specific call-site changes in **~6.5 hours of focused mechanical refactoring**
+
+The remaining audit-derived work in `pc2-node/src` is no longer mechanical — it requires architectural decisions:
+
+| Future ticket | Type | Estimated effort |
+|---|---|---|
+| **Phase 2-E** — split 3 C-class mega-orchestrators (`ConnectivityService`, `api/index.ts`, `api/storage.ts`) | Structural refactor with real design decisions | ~1-2 days |
+| **Phase 2-D-helpers** (8 deep WASM/dDRM/IPFS helper sites deferred from 2-C) | Threading `wasmRuntime` through 5+ helper layers | ~2-3 hours, modest audit benefit |
+| **AgentKitExecutor ProposalStore extraction** (deferred from 2-D) | Resolves static-method consumer pattern in `api/wallet.ts` | ~2-3 hours |
+| **Optional WASMRuntime config-injection refactor** | Makes compute settings injectable from db at startup; opens path to runtime-mutable limits | ~1 hour |
+
+After these structural items land, any remaining work moves into capsule-boundary definition and runtime capability tokens — i.e., the AGENTIC-PC2-MONETISATION migration design itself.
+
+### Score impact
+
+Estimated band shifts:
+- `api/storage.ts`: B → B+ (one less audit blocker)
+- `api/resources.ts`: B- → B+ (two blockers removed: pc2Config + global.db; plus the latent bug is fixed, plus 4 type bugs surfaced and fixed)
+- `api/info.ts`: A- → A
+- `services/wasm/WASMRuntime.ts`: B → B+ (one less ambient pull)
+- `api/supernode.ts`: B- → B (two blockers removed: global.db + ipfsStorage)
+- `server.ts` + `api/other.ts`: unchanged but explicit intent documented
+
+Net: ~8-10 score points across 5 modules + 1 real user-visible correctness fix + 4 latent bugs surfaced by the compiler and fixed.
+
+### Shipping
+
+Held behind Mac launcher 48-72h soak gate per `PHASE-2-PLAN.md`. After the Mac release stabilizes, this can be merged to release alongside Phase 2-A/2-B/2-C/2-D.
+
 ### 5.6 What this audit tells us about the AGENTIC-PC2-MONETISATION strategy
 
 After 160 modules across 11 batches (audit functionally complete at 98.2% coverage), the strategic picture is now stable and final:

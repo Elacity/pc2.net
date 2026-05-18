@@ -919,7 +919,12 @@ export function handleCacheTimestamp(req: Request, res: Response): void {
  */
 export function getEffectiveStorageLimit(db: { getSetting(name: string): string | undefined } | null | undefined): number {
   const dbLimit = db?.getSetting('storage_limit');
-  const configLimit = dbLimit || (global as any).pc2Config?.resources?.storage?.limit;
+  // Phase 2-Globals: the (global as any).pc2Config fallback was a
+  // vestigial cache only ever populated by the storage-limit POST
+  // handler. The db.getSetting() above is now the only authoritative
+  // user-set value; if absent we fall through to config-file or
+  // auto-detect below. See PHASE-2-GLOBALS-CLEANUP ticket.
+  const configLimit = dbLimit;
 
   if (configLimit === 'auto' || !configLimit) {
     try {

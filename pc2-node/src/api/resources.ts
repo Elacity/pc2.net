@@ -16,33 +16,39 @@ import {
     ResourceLimits,
     EffectiveLimits
 } from '../services/resources/ResourceMonitor.js';
+import type { DatabaseManager } from '../storage/database.js';
+import type { Config } from '../config/loader.js';
 
 const router = Router();
 
-// Get database instance for settings persistence
-function getDb(): any {
-    return (global as any).db;
-}
-
-// Get config for reading configured limits
-function getConfig(): any {
-    return (global as any).pc2Config || {};
-}
+// Phase 2-Globals: db and config are now passed explicitly via
+// req.app.locals.X instead of being pulled from ambient globals.
+// (global as any).db was never set anywhere in the codebase, so the
+// old getDb() helper always returned undefined and db-persisted
+// resource settings were silently ignored — see PHASE-2-GLOBALS-CLEANUP
+// ticket §"Global 2" for details.
 
 /**
- * Parse config limits into ResourceLimits format
+ * Parse config limits into ResourceLimits format.
+ * Phase 2-Globals: db and config are passed in explicitly. The Config
+ * object is the canonical source loaded by config/loader.js; the
+ * previous (global as any).pc2Config global was a vestigial cache.
  */
-function getConfiguredLimits(): Partial<ResourceLimits> {
-    const config = getConfig();
-    const db = getDb();
-    
-    // Database settings override config file
+function getConfiguredLimits(db: DatabaseManager | undefined, config: Config | undefined): Partial<ResourceLimits> {
+    // Database settings override config file.
+    // Phase 2-Globals: db.getSetting() returns string|undefined (SQLite stores
+    // settings as TEXT). Numeric settings are parsed below — previously this
+    // code treated them as `any` and relied on implicit JS coercion, which
+    // silently broke when the value was actually present. The compiler now
+    // enforces the parsing.
     const dbStorageLimit = db?.getSetting('storage_limit');
-    const dbMaxConcurrentWasm = db?.getSetting('max_concurrent_wasm');
+    const dbMaxConcurrentWasmRaw = db?.getSetting('max_concurrent_wasm');
     const dbMaxMemoryMb = db?.getSetting('max_memory_mb');
-    const dbWasmTimeoutMs = db?.getSetting('wasm_timeout_ms');
+    const dbWasmTimeoutMsRaw = db?.getSetting('wasm_timeout_ms');
+    const dbMaxConcurrentWasm = dbMaxConcurrentWasmRaw ? parseInt(dbMaxConcurrentWasmRaw, 10) : undefined;
+    const dbWasmTimeoutMs = dbWasmTimeoutMsRaw ? parseInt(dbWasmTimeoutMsRaw, 10) : undefined;
     
-    const resourcesConfig = config.resources || {};
+    const resourcesConfig = config?.resources || {};
     const storageConfig = resourcesConfig.storage || {};
     const computeConfig = resourcesConfig.compute || {};
     
@@ -101,7 +107,9 @@ router.get('/', authenticate, async (req: AuthenticatedRequest, res: Response) =
     try {
         const monitor = getResourceMonitor();
         const systemResources = monitor.getSystemResources();
-        const configuredLimits = getConfiguredLimits();
+        const db = req.app.locals.db as DatabaseManager | undefined;
+        const config = req.app.locals.config as Config | undefined;
+        const configuredLimits = getConfiguredLimits(db, config);
         const effectiveLimits = monitor.getEffectiveLimits(configuredLimits);
         
         res.json({
@@ -162,9 +170,9 @@ router.get('/', authenticate, async (req: AuthenticatedRequest, res: Response) =
  */
 router.get('/limits', authenticate, async (req: AuthenticatedRequest, res: Response) => {
     try {
-        const db = getDb();
-        const config = getConfig();
-        const resourcesConfig = config.resources || {};
+        const db = req.app.locals.db as DatabaseManager | undefined;
+        const config = req.app.locals.config as Config | undefined;
+        const resourcesConfig = config?.resources || {};
         
         // Get values from database (takes precedence) or config
         const storageLimit = db?.getSetting('storage_limit') || resourcesConfig.storage?.limit || 'auto';
@@ -202,7 +210,7 @@ router.get('/limits', authenticate, async (req: AuthenticatedRequest, res: Respo
  */
 router.post('/limits', authenticate, async (req: AuthenticatedRequest, res: Response) => {
     try {
-        const db = getDb();
+        const db = req.app.locals.db as DatabaseManager | undefined;
         if (!db) {
             return res.status(500).json({
                 success: false,
@@ -243,7 +251,7 @@ router.post('/limits', authenticate, async (req: AuthenticatedRequest, res: Resp
                         error: 'max_concurrent_wasm must be between 1 and 32',
                     });
                 }
-                db.setSetting('max_concurrent_wasm', value);
+                db.setSetting('max_concurrent_wasm', String(value));
                 updated.push('max_concurrent_wasm');
                 logger.info(`[Resources API] Max concurrent WASM set to: ${value}`);
             }
@@ -257,7 +265,7 @@ router.post('/limits', authenticate, async (req: AuthenticatedRequest, res: Resp
                         error: `Invalid max_memory_mb. Valid options: ${validMemory.join(', ')} or custom value >= 128`,
                     });
                 }
-                db.setSetting('max_memory_mb', compute.max_memory_mb);
+                db.setSetting('max_memory_mb', String(compute.max_memory_mb));
                 updated.push('max_memory_mb');
                 logger.info(`[Resources API] Max memory MB set to: ${compute.max_memory_mb}`);
             }
@@ -270,7 +278,7 @@ router.post('/limits', authenticate, async (req: AuthenticatedRequest, res: Resp
                         error: 'wasm_timeout_ms must be between 1000 (1s) and 300000 (5min)',
                     });
                 }
-                db.setSetting('wasm_timeout_ms', value);
+                db.setSetting('wasm_timeout_ms', String(value));
                 updated.push('wasm_timeout_ms');
                 logger.info(`[Resources API] WASM timeout set to: ${value}ms`);
             }

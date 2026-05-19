@@ -212,25 +212,20 @@ This is the audit working as intended — the experimental gate found 5 real bug
 
 | # | Bug | Severity | Fix | Effort |
 |---|---|---|---|---|
-| 1 | `golang:1.22-alpine` < wireguard-go's required Go 1.23.1+ | Build-blocking | Bumped to 1.24 in `07e7e256b` | DONE (3 min) |
-| 2 | `COPY --from=builder /app/config ./config` copies from `/config/` which only has `pc2.json.example` + `pc2.production.json` — NOT the actual `default.json` location | Boot-blocking (server exits with "Default config not found") | Change to copy `pc2-node/config/` (where `default.json` actually lives) | ~3 min |
-| 3 | WASM apps (`cenc-encrypt`, `mp4-split`, `cenc-decrypt`, `ddrm-renderer`, `amm-engine`) are not built into the container — the Dockerfile never runs `pc2-node/scripts/build-wasm.sh` | Functional degradation (warnings, fallback paths) | Add `RUN cd pc2-node && bash scripts/build-wasm.sh` in builder stage | ~5 min — IF Emscripten is needed, may need additional alpine packages |
-| 4 | `sharp` fails to load native binding in production stage | Functional degradation (image thumbnails disabled) | `npm rebuild sharp` in production stage, or alpine sharp variant | ~10 min |
-| 5 | `@napi-rs/canvas` native binding not found | Functional degradation (PDF/text thumbnail rendering broken) | Same fix class as sharp — `npm rebuild` in production stage | ~10 min |
+| 1 | `golang:1.22-alpine` < wireguard-go's required Go 1.23.1+ | Build-blocking | ✅ **FIXED `07e7e256b`** — bumped to 1.24 |
+| 2 | `COPY --from=builder /app/config ./config` copies from `/config/` which only has `pc2.json.example` + `pc2.production.json` — NOT the actual `default.json` location | Boot-blocking (server exits with "Default config not found") | ✅ **FIXED `c3d158fe1`** (DOCKERFILE-REHAB-V1280) — switched to copy `pc2-node/config/` |
+| 3 | WASM apps (`cenc-encrypt`, `mp4-split`, `cenc-decrypt`, `ddrm-renderer`, `amm-engine`) are not built into the container — the Dockerfile never runs `pc2-node/scripts/build-wasm.sh` | Functional degradation (warnings, fallback paths) | ✅ **FIXED `c3d158fe1`** (DOCKERFILE-REHAB-V1280) — added `COPY ... wasm-apps ./wasm-apps` (pre-built artifacts already in repo) |
+| 4 | `sharp` fails to load native binding in production stage | Functional degradation (image thumbnails disabled) | ✅ **FIXED `c3d158fe1`** (DOCKERFILE-REHAB-V1280) — npm/cli#4828 workaround `npm install --no-save --include=optional sharp` |
+| 5 | `@napi-rs/canvas` native binding not found | Functional degradation (PDF/text thumbnail rendering broken) | ✅ **FIXED `c3d158fe1`** (DOCKERFILE-REHAB-V1280) — same npm/cli#4828 workaround |
+| 6 | `docker-entrypoint.sh:24` expects `/app/config/pc2.production.json` (deployment template from repo-root /config/), but Bug 2 fix removed that path. Container exits with `cp: can't stat ...` | Boot-blocking (after Bug 2 fix) | ✅ **FIXED `ef2b9e9d7`** (DOCKERFILE-REHAB-V1280) — added explicit COPYs for both deployment templates from repo-root /config/ alongside pc2-node/config |
 
-**Estimated total to fix all 5 (if no cascade)**: ~30-45 min. **Risk**: medium — alpine native compilation can be finicky (was the cause of Bug 4 above; #1 in the v1.2.7.x canvas saga that drove A-8). If sharp/canvas fixes don't go cleanly, scope balloons.
-
-#### Why not fix during this session
-
-- Out of scope per "What this is NOT" section of this ticket (we add the test, not the fix)
-- All bugs affect **only** the Docker deployment shape, not the desktop launcher (current week priority)
-- The right home for these fixes is a dedicated ticket where each bug + fix is independently reviewable
-- 5 commits today across Phase 2-D-helpers + CI hardening is plenty of velocity for one day
+**Final state**: All 6 bugs RESOLVED. First green docker-smoke run achieved 2026-05-19 12:13 UTC (CI run `26096161068`). Container reaches `healthy` in 20s; `/api/health` responds with `status:"ok", version:"1.0.0"` via port mapping. Total time for DOCKERFILE-REHAB-V1280 execution: ~50 min spread across 2 sessions.
 
 ### What's left for follow-up
 
-1. **New ticket `DOCKERFILE-REHAB-V1280`** — fix bugs 2-5 above so docker-smoke can promote to required gate (3 consecutive green runs).
-2. **Re-enable `pc2-node-docker.yml`** for publish-to-GHCR on tag push — only after docker-smoke is required-gate green. Currently still `workflow_dispatch:` only.
-3. **Boot-smoke promotion to windows-x64** — once windows-x64 hits 5 consecutive green builds in the matrix (currently 2: today's last 2 runs), revisit whether the SIGTERM-equivalent process-management challenge is worth solving on Windows. Optional, low-priority.
+1. ✅ ~~**New ticket `DOCKERFILE-REHAB-V1280`** — fix bugs 2-5 above~~ — DONE (and surfaced + fixed Bug 6 along the way).
+2. **Promote docker-smoke to required gate** — need 2 more consecutive green runs (1 of 3 done at run `26096161068`). Tracked in `DOCKERFILE-REHAB-V1280.md`.
+3. **Re-enable `pc2-node-docker.yml`** for publish-to-GHCR on tag push — only after docker-smoke is required-gate green. Currently still `workflow_dispatch:` only.
+4. **Boot-smoke promotion to windows-x64** — once windows-x64 hits 5 consecutive green builds in the matrix, revisit whether the SIGTERM-equivalent process-management challenge is worth solving on Windows. Optional, low-priority.
 
 

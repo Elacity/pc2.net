@@ -2,7 +2,7 @@
 
 **Task ID**: `DOCKERFILE-REHAB-V1280`
 **Created**: 2026-05-18
-**Status**: **InProgress** — executing in same session as CI-HARDENING-A4-D1
+**Status**: **Review** — first green docker-smoke CI run achieved 2026-05-19 12:13 UTC. 2 more consecutive green runs needed before promoting docker-smoke to required gate.
 **Priority**: Medium (Docker deployment shape only; does not block Mac launcher)
 **Predecessor**: `CI-HARDENING-A4-D1` (added the docker-smoke job that surfaced these bugs)
 
@@ -132,4 +132,72 @@ All changes are inline-documented with the specific bug class and CI evidence.
 
 ## Execution log
 
-(To be filled in during execution.)
+### Phase 1: Initial fix attempt (commit `c3d158fe1`, 2026-05-18 ~15:15 UTC+1)
+
+Executed all 4 fixes for bugs 2-5 in a single commit:
+1. Bug 2: `COPY --from=builder /app/config ./config` → `COPY --from=builder /app/pc2-node/config ./config`
+2. Bug 3: Added `COPY --from=builder /app/pc2-node/wasm-apps ./wasm-apps`
+3. Bugs 4+5: Added `RUN cd pc2-node && npm install --no-save --include=optional sharp @napi-rs/canvas`
+
+**CI run `26039175562` outcome**: Docker build SUCCEEDED (Bug 1 Go fix + Bugs 4-5 npm-cli-4828 workaround both worked). But container failed to reach healthy. New bug surfaced.
+
+### Phase 2: Bug 6 surfaced — entrypoint expects deployment template (commit `ef2b9e9d7`, 2026-05-18 ~19:08 UTC+1)
+
+**Symptom**:
+```
+[PC2] Creating default production configuration...
+cp: can't stat '/app/config/pc2.production.json': No such file or directory
+[PC2] exit code=1
+```
+
+**Root cause**: My Bug 2 fix in `c3d158fe1` replaced the old config copy with one pointing at `pc2-node/config/`, which has `default.json` + `config.json` + `models-catalog.json`. But `pc2-node/scripts/docker-entrypoint.sh:24` expects `/app/config/pc2.production.json` on first run to seed the data volume's `pc2.json`. That file lives in the host's repo-root `/config/` (alongside `pc2.json.example`), not in `pc2-node/config/`. My fix removed access to the deployment templates while solving the loader.ts issue.
+
+**Fix**: Add explicit COPYs for both deployment templates from repo-root `/config/` ON TOP OF the `pc2-node/config/` copy. The two source directories don't overlap:
+
+```
+pc2-node/config/        repo-root /config/
+├── default.json        ├── pc2.production.json
+├── config.json         └── pc2.json.example
+└── models-catalog.json
+```
+
+After fix, `/app/config/` contains all 5 files. Both `loader.ts` (reads `default.json`) and `docker-entrypoint.sh` (reads `pc2.production.json`) succeed.
+
+### Phase 3: First green run achieved (CI run `26096161068`, 2026-05-19 12:13 UTC)
+
+**Docker-smoke job log (key lines)**:
+```
+attempt 4/24: status=healthy
+✅ Container healthy after 20s
+✅ /api/health from outside container: status=ok, version=1.0.0
+```
+
+**Container boot time**: **20 seconds** from `docker run` to `HEALTHCHECK=healthy`. Faster than the native `node dist/index.js` boot (which takes ~50-70s on the same runners) — reasonable since the Docker image's smaller base + pre-built node_modules avoid the cold-start penalties.
+
+**Total CI run state**: ALL 7 jobs green (4 build+typecheck matrix entries + release-assets-integrity + docker-smoke + summary). Includes A-4 boot-smoke green on linux-x64, linux-arm64, darwin-arm64.
+
+### Promotion criterion
+
+Docker-smoke is currently `continue-on-error: true` (experimental gate). To promote to required gate, need **3 consecutive green runs** without intervening Dockerfile changes.
+
+Tracker:
+| Run # | CI run ID | Result | Notes |
+|---|---|---|---|
+| 1 | `26096161068` | ✅ green | First ever green; Bug 6 fix landed |
+| 2 | (pending next push to feature branch or manual re-run) | — | — |
+| 3 | (pending) | — | — |
+
+After 3 green: flip `continue-on-error: true` → remove that line in `.github/workflows/smoke-test.yml`. Update summary job to fail on docker-smoke red instead of warning.
+
+### Bugs RESOLVED (acceptance criteria met)
+
+- [x] Bug 2 (boot-blocking config path) — RESOLVED in `c3d158fe1`
+- [x] Bug 3 (WASM apps not in image) — RESOLVED in `c3d158fe1`
+- [x] Bug 4 (sharp native binding) — RESOLVED in `c3d158fe1`
+- [x] Bug 5 (@napi-rs/canvas native binding) — RESOLVED in `c3d158fe1`
+- [x] Bug 6 (deployment template missing) — RESOLVED in `ef2b9e9d7` (newly surfaced after Bug 2 fix)
+- [x] Container reaches healthy state — proven (~20s)
+- [x] `/api/health` responds with status:"ok" via port mapping — proven (version=1.0.0)
+- [x] Required CI gates remain green — proven (full matrix passing)
+- [ ] Mark CI-HARDENING-A4-D1 ticket bugs 2-5 as resolved — pending (this commit)
+- [ ] 3 consecutive green runs to promote to required gate — 1 of 3 done

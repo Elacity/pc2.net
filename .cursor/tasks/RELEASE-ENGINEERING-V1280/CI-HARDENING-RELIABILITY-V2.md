@@ -2,7 +2,7 @@
 
 **Task ID**: `CI-HARDENING-RELIABILITY-V2`
 **Created**: 2026-05-19
-**Status**: **InProgress** — executing now
+**Status**: **Done** — 2 of 3 gates shipped + green; #2 dropped with honest documentation
 **Priority**: Medium (release-engineering reliability layer 2; pure CI work, zero source-code touch)
 **Predecessors**: `CI-HARDENING-A4-D1`, `DOCKERFILE-REHAB-V1280`
 **Shipping gate**: None — `.github/workflows/` only
@@ -139,5 +139,18 @@ After 2 calibration attempts producing flaky signal, decision: **drop the memory
 - [x] CI runtime increase < 3 min total
 - [x] Inline doc on each new gate explaining bug class + thresholds
 - [x] Inline doc on dropped gate explains why and points to follow-up ticket
+
+## Final green run
+
+CI run `26100870256` (commit `a3c599f0c`):
+- ✅ Docker-smoke (pc2-node/Dockerfile)
+- ✅ pc2-binaries-v1 asset integrity (with V2 #1 binary execution smoke inside)
+- ✅ Build + typecheck (linux-arm64) (with V2 #3 boot SLA gate inside)
+- ✅ Build + typecheck (windows-x64) (boot-smoke skipped per A-4 design)
+- ✅ Build + typecheck (darwin-arm64) (with V2 #3 boot SLA gate inside)
+- ✅ Build + typecheck (linux-x64) (with V2 #3 boot SLA gate inside)
+- ✅ Smoke test summary
+
+Total runtime impact: < 3 min added across the workflow.
 
 

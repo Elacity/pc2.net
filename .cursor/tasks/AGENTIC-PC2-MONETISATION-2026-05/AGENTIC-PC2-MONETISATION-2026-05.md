@@ -1,9 +1,10 @@
 # AGENTIC PC2 MONETISATION — Strategic Mandate & Execution Blueprint
 
-> **Status**: DRAFT v1.0 — pending Sasha sign-off on §12 open questions
-> **Created**: 2026-05-15
+> **Status**: DRAFT v1.1 — pending Sasha sign-off on §12 open questions
+> **Created**: 2026-05-15 (v1.0); **Revised**: 2026-05-15 (v1.1)
+> **v1.1 changes**: Deep study of [`Elacity/elastos-runtime`](https://github.com/Elacity/elastos-runtime) v0.2.0 + [`Light-Heart-Labs/DreamServer`](https://github.com/Light-Heart-Labs/DreamServer) v2.0.0. Added: §4.5 Runtime Convergence mapping (11 capabilities → existing/new Runtime capsules); §7.5 WASM/Rust opportunities (8 new Rust crates Elacity should write, dual-target build pipeline, the dDRM provider as the highest-leverage upstream contribution); §9.7-9.8 MIT-Runtime license posture; dual-track strategy across §10/§11; Appendix F with canonical capsule manifests for 6 new components. Total length grew from 1,252 lines (v1.0) to ~1,900 lines (v1.1).
 > **Audience**: Sasha (decisions), PC2 maintainers (execution), Anders & Runtime team (convergence), Ahmed (ENM integration), CEO (board narrative)
-> **Author intent**: Define how PC2 becomes the user's Monetisation Agent — a conversational AI that turns files, data, media, software, documents, 3D assets, skills, and IP into priced, packaged, dDRM-protected, tokenised, agent-tradable Wealth Capsules. Audit [`Light-Heart-Labs/DreamServer`](https://github.com/Light-Heart-Labs/DreamServer) as a candidate component source. Plot the path to make Elacity's entire system end-to-end agentic, in line with the published manifesto and existing strategic trajectory.
+> **Author intent**: Define how PC2 becomes the user's Monetisation Agent — a conversational AI that turns files, data, media, software, documents, 3D assets, skills, and IP into priced, packaged, dDRM-protected, tokenised, agent-tradable Wealth Capsules. Audit [`Light-Heart-Labs/DreamServer`](https://github.com/Light-Heart-Labs/DreamServer) as a candidate component source. Plot the path to make Elacity's entire system end-to-end agentic, in line with the published manifesto and existing strategic trajectory. **v1.1 deepens the Runtime-convergence story: rather than treat ElastOS Runtime as a future-tense target, this revision maps every capability onto Anders' existing capsule plane and identifies the 4 new Runtime capsules + 8 new Rust crates Elacity should ship in parallel with PC2 v1.**
 > **Companion docs**:
 > - [`docs/core/THE_BIG_PICTURE.md`](../../../docs/core/THE_BIG_PICTURE.md) — published Elacity thesis
 > - [`docs/core/DECENTRALIZATION_TRAJECTORY.md`](../../../docs/core/DECENTRALIZATION_TRAJECTORY.md) — 18-month walkaway-passable plan
@@ -20,13 +21,15 @@
 2. [Context — what we have, what's missing](#2-context)
 3. [Strategic Alignment Matrix — manifesto → existing → gap → capability](#3-strategic-alignment-matrix)
 4. [The Monetisation Agent — eleven capabilities](#4-the-monetisation-agent--eleven-capabilities)
+   - 4.5 [Runtime Convergence — Mapping Capabilities to ElastOS Runtime Capsules](#45-runtime-convergence--mapping-capabilities-to-elastos-runtime-capsules) **(v1.1 new)**
 5. [DreamServer Disposition — per-component build/integrate/fork/reject](#5-dreamserver-disposition)
 6. [Agentic Protocol Plan — MCP, A2A, L402, ERC-8004, DID, dDRM](#6-agentic-protocol-plan)
 7. [Architecture Decision Records — eight ADRs](#7-architecture-decision-records)
+   - 7.5 [WASM/Rust Opportunities — The Track B Build Plan](#75-wasmrust-opportunities--the-track-b-build-plan) **(v1.1 new)**
 8. [Threat Model — STRIDE + OWASP LLM Top 10 + LINDDUN](#8-threat-model)
 9. [License Compatibility Audit — SPDX dependency tree](#9-license-compatibility-audit)
 10. [First Shippable Milestone — v1.3.0 "Monetisation Agent Alpha"](#10-first-shippable-milestone)
-11. [Three-Horizons Roadmap — H1 / H2 / H3](#11-three-horizons-roadmap)
+11. [Three-Horizons Roadmap — H1 / H2 / H3 (dual-track v1.1)](#11-three-horizons-roadmap)
 12. [Open Questions for Sasha](#12-open-questions-for-sasha)
 13. [Appendices](#13-appendices)
 
@@ -55,6 +58,17 @@ Mitigations are detailed in §8 (Threat Model) and §7 (ADRs).
 **The first shippable milestone.** v1.3.0 — "Monetisation Agent Alpha". One JTBD: *"As a creator with files on my PC2 node, I want to say 'package my portfolio for sale' and have my agent walk me through the dDRM packaging flow, suggest pricing from comparable assets, draft license terms I can confirm in plain English, and publish to the Exchange."* Single feature flag (`agent.monetisation.alpha`). Single user metric (10 packagings completed via voice/chat within 30 days of release). Single dependency (`AIChatService` provider extended with a `monetisation-orchestrator` skill). **No DreamServer integration in v1.3.0** — DreamServer evaluation runs in parallel and lands selectively in v1.4.x onward.
 
 **The end state.** By 2027 Q4, the Elacity stack — PC2 + Runtime + Carrier + dDRM + Exchange — operates as a coherent agentic system. A user's Monetisation Agent on their PC2 node negotiates with other users' agents over Carrier, settles payments on Base via Universal Accounts V2, mints and trades Royalty Tokens through the Exchange, runs sandboxed in Runtime capsules under capability-token authority, signs everything with ERC-8004 on-chain identities, and never depends on Elacity Labs being alive to keep working. **The Monetisation Agent is not a feature added to PC2 — it is what PC2 *is*, when the full vision is realised.**
+
+### 1.1 v1.1 addendum — the Runtime is not future-tense, it's already there
+
+A deeper read of [`Elacity/elastos-runtime`](https://github.com/Elacity/elastos-runtime) v0.2.0 (released Apr 29, 2026, MIT-licensed) reveals four things that change implementation strategy materially:
+
+1. **The substrate is shipped.** `elastos setup --profile agent-local-ai` is a one-line install of `home`, `home-cli`, `system`, `inbox`, `documents`, `library`, `did-provider`, `ipfs-provider`, `webspace-provider`, `llama-server`, and Qwen3.5 model — i.e., the entire local-AI substrate for the Monetisation Agent already exists.
+2. **The dDRM provider slot is open and named in Anders' TASKS.md.** Anders' own roadmap, quoted: *"Introduce an ElastOS-native access/decryption provider analogous to a Lit-style policy gate: authorize by DID, entitlement, and capability, then issue short-lived decryption access."* **This is Elacity's single highest-leverage upstream contribution** — we are the only team with both the dDRM IP and the protocol depth to ship this provider capsule.
+3. **Wealth Capsules are OBJECTS, not capsules.** Anders' Principle 13 inverts the common reading: objects are the user's things; capsules are software roles that operate on objects. A Wealth Capsule is a content-typed object; its viewer is a viewer capsule; its rights gate is a provider capsule; its packager is an agent capsule. This alignment makes Elacity's product story fit cleanly into Anders' architecture without compromise.
+4. **License compatibility is now confirmed clean.** Runtime is MIT (verified at [`elastos-runtime/LICENSE`](https://github.com/Elacity/elastos-runtime/blob/main/LICENSE)). Inbound to PC2 (AGPL-3.0) is clean; our Rust crates contributed upstream can carry MIT to match Runtime conventions; our agent capsules can carry AGPL-3.0 to retain product moat.
+
+**Strategic consequence**: v1.1 introduces a **dual-track strategy** (§4.5.5, §11). Track A continues to ship PC2 v1 (AGPL Node.js, Mac/Linux/Server) on the timeline §10/§11 set. Track B is a **parallel Rust/WASM build** of the cryptographic + chain + envelope core, starting now, landing as Runtime capsules from Q4 2026 onward. Tracks converge at v2.0 (~2027 Q4). The **same Rust crates power both tracks** via dual-target builds (wasm-bindgen for Node.js + native for Runtime), eliminating dual-implementation risk. **Total marginal cost of Track B: ~0.5 FTE for 4 months in 2026 H2** — material insurance against being trapped in Node.js when the Runtime end state arrives. See §7.5 for the eight new Rust crates and §4.5.3 for the four new Runtime capsules Elacity owns.
 
 ---
 
@@ -401,6 +415,171 @@ This capability borrows directly from Ahmed's [Elastos Node Manager (ENM)](#) de
 
 ---
 
+## 4.5 Runtime Convergence — Mapping Capabilities to ElastOS Runtime Capsules
+
+> **Why this section exists** (added in v1.1, 2026-05-15): A first-pass read of Anders' [`elastos-runtime`](https://github.com/Elacity/elastos-runtime) repo treated the convergence as a future-tense story. A deep read of the repo's [`components.json`](https://github.com/Elacity/elastos-runtime/blob/main/components.json), [`ARCHITECTURE.md`](https://github.com/Elacity/elastos-runtime/blob/main/docs/ARCHITECTURE.md), [`PRINCIPLES.md`](https://github.com/Elacity/elastos-runtime/blob/main/PRINCIPLES.md), [`TASKS.md`](https://github.com/Elacity/elastos-runtime/blob/main/TASKS.md), and `state.md` reveals four things that change the implementation strategy materially:
+>
+> 1. **The Runtime is MIT-licensed.** Inbound to PC2's AGPL-3.0-only is clean; outbound from Runtime stays MIT. We can write Rust crates that ship as both Runtime capsules AND embedded modules of PC2 with no license complication.
+> 2. **`agent-local-ai` is already a one-line install profile** — `elastos setup --profile agent-local-ai` already installs `shell`, `localhost-provider`, `did-provider`, `webspace-provider`, `home-cli`, `home`, `system`, `kubo`, `ipfs-provider`, `documents`, `library`, `inbox`, `llama-server`, and `model-qwen3.5-0.8b`. **The substrate for the Monetisation Agent already exists in the Runtime as a shipped install profile**. We extend it; we don't reinvent it.
+> 3. **Six provider capsules Anders has already built** become direct dependencies of our work: `localhost-provider`, `did-provider`, `ipfs-provider`, `ai-provider`, `llama-provider`, `webspace-provider`. Each is a process-isolated capsule with a stable `Provider` trait surface (fetch/store/list/delete). Our Monetisation Agent capsule calls them via capability-token-scoped invocations, never directly.
+> 4. **TASKS.md "Trusted content and access rights" explicitly leaves the slot open for Elacity to ship a dDRM provider capsule.** Anders' own language: *"Introduce an ElastOS-native access/decryption provider analogous to a Lit-style policy gate: authorize by DID, entitlement, and capability, then issue short-lived decryption access."* This is the **single highest-leverage contribution Elacity can make to the Runtime** — we are the only team in the world with both the dDRM IP and the protocol knowledge to ship this provider.
+
+### 4.5.1 The Runtime's existing surface (what already exists)
+
+The Runtime ships **21 capsules** today (per [`elastos-runtime/components.json`](https://github.com/Elacity/elastos-runtime/blob/main/components.json) and [`elastos-runtime/capsules/`](https://github.com/Elacity/elastos-runtime/tree/main/capsules)):
+
+| Capsule | Role | What it does | Our use |
+|---|---|---|---|
+| `shell` | shell | Host shell binary; managed runtime startup | Substrate |
+| `home` | shell | Browser-hosted Home capsule (the user front door) | **Where our agent surface appears** |
+| `home-cli` | shell | CLI Home for terminal users | Optional surface |
+| `system` | app | System settings + identity + storage + runtime activity | We register our agent settings here (C12) |
+| `library` | app | Object browser for `localhost://` documents | We extend with a Capsules tab |
+| `documents` | app | Local markdown editing + publish/unpublish | Reference for our packaging UX |
+| `inbox` | app | Approve/deny capability requests (human-in-the-loop gate) | **Where C8 B2A negotiation approvals appear** |
+| `chat` | app | Native P2P chat over Carrier | Reference for Carrier integration |
+| `chat-wasm` | app | WASM chat capsule variant | Reference for WASM packaging |
+| `chat-room` | app | Browser Chat Room app | Reference for hosted-vs-Home authority split |
+| `notepad` | app | Capability-aware CLI notepad | Reference for capability declarations |
+| `localhost-provider` | provider | Rooted localhost filesystem access | We call this for catalogue indexing (C1) |
+| `did-provider` | provider | did:key / Ed25519 identity | We call this for agent identity (ADR-005) |
+| `ipfs-provider` | provider | IPFS operations via managed Kubo daemon | We call this for capsule pinning (C2) |
+| `ai-provider` | provider | `elastos://ai/` LLM routing | **We call this for all agent reasoning (C0)** |
+| `llama-provider` | provider | Local llama.cpp inference (the actual model runner) | Backs `ai-provider` (transitive) |
+| `tunnel-provider` | provider | `elastos://tunnel/` public tunnel via cloudflared | We call this for B2A discovery endpoint (C8) |
+| `webspace-provider` | provider | `localhost://WebSpaces/...` resolver | We call this for catalogue paths |
+| `site-provider` | provider | Local site serving | Reference for our packaging-output viewer |
+| `agent` | agent | First-party AI agent capsule with signed gossip + verified-only AI responses | **THIS IS THE CAPSULE WE EXTEND/FORK** |
+| `gba-emulator` + `gba-ucity` | viewer + content | GBA emulator + ROM data capsule | **Reference: the canonical viewer+content split for Wealth Capsules** |
+
+### 4.5.2 The mapping — each of 11 capabilities to its Runtime delivery
+
+| Capability | Runtime delivery (post-convergence) | PC2 v1 delivery (pre-convergence, H1) |
+|---|---|---|
+| **C0 Local LLM Default** | Call `elastos://ai/{model}` via the `ai-provider` capsule. Use `llama-provider` transitively. Model: `model-qwen3.5-4b` (per Runtime's pinned default) | Direct `OllamaService.js` → `llama-server`. Replace with `LlamaServerService.js` per ADR-001. Future v1.4+: shim `LlamaServerService.js` to call `elastos://ai/` when Runtime is present |
+| **C1 Asset Discovery & Cataloguing** | Call `localhost-provider` via capability-scoped `localhost://Users/self/{allowlisted-path}/*`. Output stored as `localhost://Users/self/.monetisation/catalogue.sqlite`. Indexed via `webspace-provider` for fast lookup | Direct `puter.fs.readdir` + SQLite at `~/pc2/monetisation/catalogue.sqlite` |
+| **C2 Conversational Packaging** | New **`monetisation-orchestrator` agent capsule** (we ship this). Drives a new **`drm-provider`** capsule (we also ship this) which encrypts via Rust WASM crates `aes-gcm-encrypt` + `cenc-encrypt`. Pins via `ipfs-provider`. Signs via `did-provider` | `MonetisationPackagingOrchestrator.js` driving existing dDRM JS flow. Same logical sequence, Node.js implementation |
+| **C3 Protection Profile Selection** | Inside `monetisation-orchestrator`, deterministic logic + agent tie-breaker. Profile decision routed to `drm-provider` | Same logic in `MonetisationPackagingOrchestrator.js` |
+| **C4 Pricing Intelligence** | `monetisation-orchestrator` queries on-chain Channel events via a new **`chain-provider`** capsule (we also need this — Anders has `wallet-provider` planned, not built). Falls back to Elacity GraphQL via `webspace-provider` URL resolution | `MonetisationPricingAdvisor.js` direct query to Elacity GraphQL |
+| **C5 License Drafting** | Templates in a new **`license-templates` content capsule** (immutable, signed). `monetisation-orchestrator` selects template, LLM customises via `ai-provider`, user reviews, output written into the `.ddrm.json` envelope by `drm-provider` | `MonetisationLicenseDrafter.js` with bundled template library |
+| **C6 Tokenisation & Royalty Splits** | `monetisation-orchestrator` calls `chain-provider` for on-chain Channel mint + shareholder set. Royalty distribution events flow back through `chain-provider` event subscriptions | `MonetisationTokeniser.js` driving Particle UA v1 → Channel contract directly |
+| **C7 Skill Capsule Authoring** | The output of this capability IS a Runtime capsule manifest + signed WASM binary. Built by a new **`skill-capsule-author` agent capsule extension** that produces a `capsule.json` with `role: "skill"` (new role we propose) or `role: "content"` per Runtime's existing roles | Output is `.skill.json` manifest + `.ddrm.json` envelope; manifests are forward-compatible with Runtime capsule schema |
+| **C8 B2A Negotiation** | New **`b2a-negotiation` provider capsule** exposing MCP/A2A tool surface. Discovery via `tunnel-provider` or `webspace-provider`. Payment via `chain-provider`. Carrier-channel rail uses Runtime's native Carrier (FREE, already built) | Pre-Runtime: HTTP-only MCP endpoint on PC2 supernode; weaker identity verification (SIWE-only) |
+| **C9 Audit & Provenance** | `localhost://Users/self/.monetisation/audit.sqlite` + on-chain Merkle root anchored via `chain-provider`. Subscriptions via `ipfs-provider` IPNS pubsub | Local SQLite + Elacity GraphQL event subscription |
+| **C10 Renew/Repackage** | `monetisation-orchestrator` produces v2 capsule; updates `Channel.versions[]` via `chain-provider`. Existing AccessToken holders pass `hasAccess(cid)` check for either version | Same logic, Node.js implementation |
+| **C11 Portfolio CFO View** | A new **`portfolio-view` app capsule** (browser surface in Home). Reads via `monetisation-orchestrator`'s catalogue + audit | New Puter app: `src/gui/src/apps/PortfolioView/` |
+| **C12 Agent Operational Console** | Integrate into `system` capsule's existing settings/health UI. Health rules + Settings + Logs + Anti-snipe live alongside existing System content | New Settings tab in PC2 GUI: `src/gui/src/UI/Settings/UITabMonetisationAgent.js` |
+
+### 4.5.3 The new capsules we (Elacity) own, sequenced
+
+**Tier 1 — must-ship for Runtime-native Monetisation Agent (~12-16 eng-weeks):**
+
+| Capsule | Role | Type | License | Net-new Rust code |
+|---|---|---|---|---|
+| `drm-provider` | provider | wasm + native | MIT (Runtime-style) or AGPL-3.0 (PC2-style; OUR PICK) | ~3,000 LoC: wraps existing `aes-gcm-decrypt` + `cenc-decrypt` crates with the `Provider` trait, adds `chipotle-client.rs` (Rust port of `chipotle-client.ts`), exposes `elastos://drm/decrypt(cid)`, `elastos://drm/encrypt(bytes)`, `elastos://drm/license/check(token)` |
+| `chain-provider` | provider | wasm | MIT | ~2,000 LoC: EVM JSON-RPC over `elastos://chain/{network}/...`, `AccessToken` ABI bindings, Particle UA v2 integration, ENS resolution |
+| `monetisation-orchestrator` | agent | wasm | AGPL-3.0 (Elacity copyright) | ~4,000 LoC: tool-calling loop, conversation state, capability requests, drives dDRM packaging end-to-end |
+| `b2a-negotiation` | provider | wasm | MIT | ~2,500 LoC: MCP + A2A tool surface, signed proposal state machine, idempotency, rate limiting |
+
+**Tier 2 — nice-to-have for the full agent experience (~6-8 eng-weeks):**
+
+| Capsule | Role | Type | License | Notes |
+|---|---|---|---|---|
+| `portfolio-view` | app | wasm (browser-hosted) | AGPL-3.0 | C11 surface; Home-launched; iframe in Home browser shell |
+| `license-templates` | content | data | CC-BY-4.0 (Elacity Labs published) | Immutable signed templates; pinned by CID; updateable via new releases |
+| `skill-capsule-author` | agent | wasm | AGPL-3.0 | C7 specialisation; could fold into `monetisation-orchestrator` if scope is tight |
+
+**Tier 3 — long-horizon Runtime-only convergence work (H3, 18-36 months):**
+
+| Capsule | Role | Type | Notes |
+|---|---|---|---|
+| `frost-custody-shard` | provider | native (Rust) | One per supernode operator. Holds 1/N FROST share; participates in k-of-N signing rounds. Coordinated with [`DECENTRALIZATION_TRAJECTORY.md` §4.2 threshold custody](../../../docs/core/DECENTRALIZATION_TRAJECTORY.md) |
+| `wallet-provider` | provider | native | Currently in Anders' "Later" list per TASKS.md. Could land via Elacity contribution. Bridges EVM/UA signing through `elastos://wallet/...` |
+| `community-indexer` | provider | wasm or native | Replaces Elacity GraphQL dependency. Reads `Channel.Minted` events from Base; surfaces as `elastos://chain/elacity/channels/...` |
+
+### 4.5.4 The Object/Capsule/Space alignment for Wealth Capsules
+
+Anders' Principle 13 (`PRINCIPLES.md`) is critical: *"objects are the user's things; capsules are software roles that operate on objects; spaces are where objects and services resolve."*
+
+**This inverts a common misunderstanding of "Wealth Capsule":**
+
+> A Wealth Capsule is **not** a capsule (software role). It is an **object** (the user's thing).
+
+A user's photography portfolio is an object: a typed, content-addressed bundle with metadata, provenance, license, and pricing. The viewer/renderer that opens it is a capsule. The decryption/policy plane that authorises access is a provider capsule. The packaging tool that creates it is an agent capsule.
+
+The Runtime's `gba-emulator` + `gba-ucity` pair is the canonical reference architecture:
+
+```
+gba-ucity        →  content capsule (data type)  →  CID-addressed game ROM + metadata
+gba-emulator     →  viewer capsule (wasm type)   →  the renderer
+runtime          →  routes opening gba-ucity to gba-emulator via type resolution
+```
+
+Translated to Wealth Capsules:
+
+```
+my-portfolio.ddrm        →  content capsule (data type)  →  CID-addressed encrypted content + .ddrm.json envelope
+ddrm-viewer              →  viewer capsule (wasm type)   →  decrypts (via drm-provider) + renders content
+drm-provider             →  provider capsule              →  enforces access policy via on-chain + Lit/FROST
+monetisation-orchestrator →  agent capsule                →  creates content capsules (C2 packaging)
+```
+
+This alignment with Anders' object-first design has two practical consequences:
+
+1. **Wealth Capsules can be "opened" by any compatible viewer.** The `ddrm-viewer` capsule we ship is the canonical one, but a third party could ship a competing viewer that knows the `.ddrm.json` envelope shape. Trust comes from the `drm-provider` enforcement, not from the viewer identity.
+2. **Skill Capsules are different from Wealth Capsules.** Skill Capsules ARE capsules (software roles) — they execute. Wealth Capsules ARE objects (data). The Monetisation Agent packages both; the runtime treats them differently.
+
+### 4.5.5 The dual-track implementation strategy
+
+Given that PC2 v1 (AGPL-3.0, Node.js, Mac/Linux/Server) ships **now** and Runtime v1.0 (MIT, Rust, Linux-only) ships **later**, the strategy is **two parallel tracks** rather than serial:
+
+```
+                   ┌────────────────────────────────────────────────┐
+                   │  Track A — PC2 v1 (AGPL-3.0, Node.js)          │
+                   │  Mac + Linux + Server, broadest user base       │
+                   │                                                 │
+                   │  v1.3.0 Alpha (Q3 2026)                        │
+                   │  v1.4.x Hardening (Q4 2026)                    │
+                   │  v1.5.x Full B2A (2027 Q2)                     │
+                   │  → Code lives in pc2.net repo                  │
+                   └────────────────────────────────────────────────┘
+                                        │
+                                        │ Convergence handshake at v2.0
+                                        │ (capsule manifests forward-compat,
+                                        │  data files interoperable)
+                                        ▼
+                   ┌────────────────────────────────────────────────┐
+                   │  Track B — Runtime-native (MIT, Rust/WASM)     │
+                   │  Linux x86_64/aarch64 → macOS/Windows later     │
+                   │                                                 │
+                   │  drm-provider crate dev (Q3 2026, parallel)    │
+                   │  chain-provider crate dev (Q4 2026)            │
+                   │  monetisation-orchestrator capsule (Q1 2027)   │
+                   │  Runtime-native v2.0 (Q4 2027)                 │
+                   │  → Code lives in elacity/elastos-runtime-... or│
+                   │    contributed back to elastos-runtime repo    │
+                   └────────────────────────────────────────────────┘
+```
+
+**Both tracks start now.** Track A is the FSM (§10). Track B is the parallel Rust/WASM development that takes 6-9 months to first usable provider capsule. Track A's data outputs (`.ddrm.json` envelope, capsule manifests, audit log format) are **deliberately designed forward-compatible** with Track B's parsing.
+
+This is what "convergence" means concretely: when Runtime v2.0 lands, a user can run both PC2 v1 AND the Runtime-native agent on the same machine, accessing the same content capsules, with no migration step.
+
+### 4.5.6 What this means for the FSM (§10)
+
+The v1.3.0 Alpha FSM scope **does not change** from §10. We still ship the conversational packaging flow on PC2 v1. But we ADD a parallel work stream:
+
+- A new repo `elacity/elastos-runtime-elacity-capsules` (or contributed PR to `elastos-runtime`)
+- First crate: `drm-provider` (the highest-leverage Elacity contribution, per Anders' TASKS.md)
+- Coordinated through Anders — first ADR-style PR sets the dDRM provider interface
+- Target: first usable `drm-provider` capsule in Q4 2026, available via `elastos setup --with drm-provider` ahead of v1.4
+
+**Net additional engineer-weeks for the parallel track**: ~8 eng-weeks over Q3-Q4 2026, equivalent to one engineer at 40% allocation, OR two engineers each one day per week.
+
+This is **not a tradeoff** — it accelerates the manifesto's deepest claims. Once the `drm-provider` capsule exists in the Runtime, every other Runtime capsule that ever ships (including Anders' work, third-party capsules, future cross-team integrations) inherits the ability to read Elacity-protected content. **The dDRM provider becomes the unbypassable rights-respect layer for the entire ElastOS World Computer**, not just for Elacity-shipped UIs.
+
+---
+
 ## 5. DreamServer Disposition
 
 A per-component **build-vs-integrate-vs-fork-vs-inspire-vs-reject** decision, applying [Cynefin](https://thecynefin.co/about-us/about-cynefin-framework/) classification (Clear / Complicated / Complex / Chaotic) and the license-disposition flag from §9. Disposition definitions:
@@ -411,7 +590,15 @@ A per-component **build-vs-integrate-vs-fork-vs-inspire-vs-reject** decision, ap
 - **`inspire-architecture-only`** = Read their code for ideas, write our own. No license obligation.
 - **`reject`** = Do not use, do not look at code (license / security / architectural disqualifier).
 
-### 5.1 Per-component dispositions
+> **v1.1 update — overlap with ElastOS Runtime**: A material chunk of DreamServer's "embed-directly" components are **also** already in Anders' Runtime via [`components.json`](https://github.com/Elacity/elastos-runtime/blob/main/components.json). Specifically: `llama-server` is bundled directly by the Runtime; the Runtime ships a `llama-provider` + `ai-provider` capsule pair that mediates inference; the Runtime pins three Qwen3.5 models (0.8B / 4B / 9B) ready to install via `elastos setup --profile agent-local-ai`. **This does NOT change the v1.3.0 PC2 v1 dispositions below** — PC2 v1 ships on its own AGPL Node.js stack with its own `llama-server` install — but it does mean:
+>
+> 1. We avoid duplicate model curation: future PC2 versions can adopt the Runtime's pinned model set rather than maintaining a separate one.
+> 2. We avoid duplicate inference plumbing in Track B (§4.5.5): the Runtime-native `monetisation-orchestrator` capsule calls `elastos://ai/{model}` through `ai-provider`, never embeds llama.cpp itself.
+> 3. The DreamServer dispositions below are **strictly Track A (PC2 v1, AGPL Node.js)**. Track B uses Anders' provider capsules directly — see §4.5.2 mapping table.
+>
+> **Net effect**: total inference-related eng-weeks across both tracks goes DOWN, not up, because Track B inherits Anders' work.
+
+### 5.1 Per-component dispositions (Track A — PC2 v1 only)
 
 | # | DreamServer service | Function | Disposition | Rationale | License | Eng-weeks |
 |---|---|---|---|---|---|---|
@@ -785,6 +972,128 @@ These ADRs are **first-draft proposals**. Sasha sign-off in §12 finalises them.
 
 ---
 
+## 7.5 WASM/Rust Opportunities — The Track B Build Plan
+
+> Added in v1.1 (2026-05-15). The user asked: *"any WASM/Rust opportunities too?"* This section answers concretely: which Elacity crates exist already as Rust+WASM, which need to be written, which third-party crates we adopt, and what the dependency graph looks like.
+
+The Runtime's mandate is to keep the trusted base **small enough to reason about** (Anders' PRINCIPLES.md §5). Every Elacity contribution to the Runtime must respect this: provider capsules, not runtime extensions. The WASM/Rust opportunities below all map to that contract.
+
+### 7.5.1 Strategic posture: Rust as the common language across both tracks
+
+PC2 v1 is Node.js (TypeScript/JavaScript). But the **cryptographic core** of dDRM — the parts that must NEVER change semantics between PC2 v1 and Runtime-native — should already be Rust crates compiled to WASM for the Node.js runtime AND to native for the Runtime-native runtime. This is the **single-source-of-truth principle** applied to security-critical code.
+
+This is **partially done already** in the PC2 v1 codebase:
+
+| Existing crate (in `pc2.net` and/or `elastos-libs`) | Purpose | License | Status |
+|---|---|---|---|
+| `aes-gcm-decrypt` (Rust + wasm-bindgen) | AES-256-GCM decryption used by `chipotle-client.ts` | MIT (Elacity) | Shipped in PC2 v1.2 |
+| `cenc-decrypt` (Rust + wasm-bindgen) | CENC (Common Encryption) decryption for media streams | MIT (Elacity) | Shipped in PC2 v1.2 |
+| `merkle-helpers` (planned, per `DECENTRALIZATION_TRAJECTORY.md` §3) | Merkle root computation for audit log anchoring | MIT (Elacity) | Planned for v1.4 |
+
+This is the existing seed. The opportunity is **massive expansion of this Rust+WASM core** so the same compiled bytes power both PC2 v1 packaging operations AND Runtime-native capsules.
+
+### 7.5.2 New Rust crates Elacity should write (8 total, sequenced)
+
+#### Tier 1 — must-ship for v1.3.0 + Track B foundation (4 crates, ~6,000 LoC, ~6 eng-weeks)
+
+| Crate | Purpose | Used by (PC2 v1) | Used by (Runtime Track B) | License |
+|---|---|---|---|---|
+| **`aes-gcm-encrypt`** | The encryption counterpart to existing `aes-gcm-decrypt`. Currently the encryption side is in TypeScript; consolidating into Rust+WASM makes the security review surface symmetric. ~500 LoC. | `MonetisationPackagingOrchestrator.js` calls via wasm-bindgen during C2 | `drm-provider` capsule calls native | MIT |
+| **`cenc-encrypt`** | CENC encryption side, symmetric to `cenc-decrypt`. ~800 LoC. | Same — packaging side | Same | MIT |
+| **`chipotle-client`** (Rust) | Port of `chipotle-client.ts` (~600 LoC TS → ~900 LoC Rust). Particle UA v2 EVM RPC for AccessToken / Channel operations. | Bridge from `MonetisationPackagingOrchestrator.js` via wasm-bindgen (replaces TS version) | `drm-provider` calls native | MIT |
+| **`ddrm-envelope`** | Canonical `.ddrm.json` envelope parser + writer + signer. The schema is the **interoperability contract** between Track A and Track B. ~600 LoC. Includes the 100% test-vector suite. | All packaging & decryption flows | Same | MIT |
+
+**Bridging strategy**: Each of these crates exposes a **two-target API**: `#[cfg(target_arch = "wasm32")] wasm_bindgen::*` for the Node.js side, and a clean Rust API for native callers. The wasm-bindgen exports get compiled with `wasm-pack build --target nodejs` and dropped into `pc2-node/src/wasm/` so PC2 v1 Node.js can `require('./wasm/ddrm-envelope')` and call the same functions a Runtime-native capsule would call.
+
+This gives us the **single source of truth** for every byte of cryptographic logic. Bug fixes get applied once and propagate to both tracks.
+
+#### Tier 2 — required for the four new Runtime capsules in §4.5.3 (~10,000 LoC, ~12 eng-weeks)
+
+| Crate | Purpose | Lines | Notes |
+|---|---|---|---|
+| **`drm-provider-crate`** | The `Provider`-trait implementation. Aggregates `aes-gcm-encrypt`, `cenc-encrypt`, `chipotle-client`, `ddrm-envelope` + Lit Protocol client. Exposes `elastos://drm/...` operations. | ~3,000 | Bundled WITH Tier 1 crates as a Runtime capsule binary |
+| **`chain-provider-crate`** | EVM RPC abstraction. Wraps `ethers-rs` (which is Apache-2.0 + MIT dual-licensed). Provides `elastos://chain/{network}/...` namespace. | ~2,000 | Network-aware: routes Base, ESC, Ethereum, Optimism by namespace |
+| **`monetisation-orchestrator-crate`** | The agent capsule itself. Tool-calling loop, conversation state, capability requests. Uses `rmcp` (Rust MCP SDK, MIT licensed, [github.com/modelcontextprotocol/rust-sdk](https://github.com/modelcontextprotocol/rust-sdk)) for MCP integration. | ~4,000 | Calls every other provider via capability tokens; orchestrates C1-C12 |
+| **`b2a-negotiation-crate`** | MCP/A2A tool surface for B2A. State machine + idempotency + rate limit. | ~2,500 | Will need to track A2A spec evolution; pin to v1.x and document non-conformance points |
+
+#### Tier 3 — H3 long-horizon (~6,000 LoC, ~9 eng-weeks across 2027)
+
+| Crate | Purpose | Notes |
+|---|---|---|
+| **`frost-custody-shard-crate`** | k-of-N FROST signing for threshold key custody. Each PC2 supernode runs one shard. | Built on top of [`frost-secp256k1`](https://github.com/ZcashFoundation/frost) — MIT, audited by Zcash Foundation. The supernode integration is novel. |
+| **`wallet-provider-crate`** | EVM/EIP-7702 wallet signing through capability-token-gated calls. Currently in Anders' "Later" list. | Could be Elacity contribution upstream. Bridges Particle UA v2 / SiwA / WebAuthn signing. |
+| **`community-indexer-crate`** | Reads `Channel.Minted` events from on-chain, surfaces as Runtime namespace. Removes the Elacity-GraphQL dependency for capsule discovery (P8 sovereign claim). | Pull-mode subscription + local cache + persistence; runs as long-lived background capsule. |
+| **`merkle-anchor-crate`** | Anchors local SQLite audit log Merkle root on-chain via `chain-provider`. Coordinated with [`DECENTRALIZATION_TRAJECTORY.md`](../../../docs/core/DECENTRALIZATION_TRAJECTORY.md). | ~300 LoC; the on-chain anchoring contract is the harder bit. |
+
+### 7.5.3 Third-party Rust crates we adopt (the unbouht supply chain)
+
+| Crate | Version | License | Usage | Vetting status |
+|---|---|---|---|---|
+| `wasm-bindgen` | 0.2.x | MIT/Apache-2.0 | Node.js ↔ WASM bridge | Industry standard, ✅ |
+| `wasmtime` | already in Runtime | Apache-2.0 | WASM execution substrate | Anders has vetted ✅ |
+| `ethers-rs` (preferred) OR `alloy` | latest | MIT/Apache-2.0 | EVM RPC + ABI | ethers is mature; alloy is the new Paradigm-led replacement. Recommend `alloy` for new crates given trajectory. |
+| `rmcp` (Rust MCP SDK) | latest | MIT | MCP server/client | Official Anthropic SDK |
+| `frost-secp256k1` | 1.x | MIT | k-of-N threshold signing | Audited by Zcash Foundation ✅ |
+| `yrs` (Y.js Rust port) | 0.18.x | MIT | CRDT for collaborative document state (multi-author capsules) | Already on Anders' radar per TASKS.md |
+| `tokio` | 1.x | MIT | Async runtime | Industry standard ✅ |
+| `serde` + `serde_json` | 1.x | MIT/Apache-2.0 | Serialisation | Universal ✅ |
+| `aes-gcm` (RustCrypto) | 0.10.x | MIT/Apache-2.0 | Underlying AES-GCM impl | Audited by Trail of Bits ✅ |
+| `did-key` | latest | Apache-2.0 | did:key parsing (already in Runtime's `did-provider`) | ✅ |
+
+**No crate above is GPL or AGPL.** This keeps the **outbound license posture flexible**: Track B capsules can ship under MIT (matching Runtime) or AGPL (matching PC2) without recompiling against incompatible dependencies.
+
+### 7.5.4 The WASM compilation pipeline
+
+For each Tier 1 crate, the build produces THREE artifacts:
+
+```text
+crate-name/
+├── Cargo.toml
+├── src/lib.rs
+└── target/
+    ├── debug/libcrate_name.a             # Native static lib (for Runtime native callers)
+    ├── debug/libcrate_name.so            # Native dynamic lib (for Runtime dynamic callers)
+    └── pkg/                              # wasm-pack output (for Node.js callers)
+        ├── crate_name.js                 # JS glue
+        ├── crate_name.wasm               # WASM binary
+        ├── crate_name.d.ts               # TypeScript bindings
+        └── package.json                  # npm-installable
+
+# Build command:
+just build-all     # Calls cargo build + wasm-pack build --target nodejs
+```
+
+PC2 v1 consumes from `pkg/`. Runtime capsules consume from `target/release/*.so`. Same crate, same `Cargo.lock`, same audit surface. Diverging behavior across tracks becomes a build-time impossibility.
+
+### 7.5.5 The "Yrs CRDT for multi-author capsules" opportunity
+
+Anders' TASKS.md explicitly mentions Yrs (the Rust port of Y.js) under "Documents and Library": *"Decide the first collaborative document core intentionally; prefer a Rust/WASM CRDT evaluation (`Yrs` first, `Automerge` second)."*
+
+This opens a Tier 2.5 opportunity for the Monetisation Agent — **multi-author Wealth Capsules**. A Wealth Capsule with multiple co-authors (a band's album, a collaborative film, an open-source software bundle) needs conflict-free editing of:
+
+- Author list (royalty splits)
+- Asset inventory
+- License text
+- Pricing history
+
+A `multi-author-capsule-crate` built on Yrs would let three creators each on their own PC2 nodes contribute to a single Wealth Capsule and converge on a unified envelope via Carrier replication. **This is uniquely enabled by ElastOS Runtime** — no other system has both the local sovereignty AND the conflict-free replication primitive.
+
+Estimated effort: ~1,500 LoC, ~2 eng-weeks. Defer to H2/H3 — not required for FSM, but the option exists.
+
+### 7.5.6 Summary: the Rust/WASM contribution to the Elacity ecosystem
+
+If Tier 1 + Tier 2 ship by end of 2027:
+
+- **~16,000 LoC of net-new Rust** authored by Elacity, all dual-target (WASM + native), all MIT or AGPL-licensed.
+- **Replaces an unknown amount of Node.js TypeScript** in PC2 v1 (the cryptographic primitives, the EVM client, the dDRM envelope handling) with a single canonical Rust implementation.
+- **Foundation for 4 new Runtime capsules** that land in the elastos-runtime repo or in an `elacity-runtime-capsules` companion repo.
+- **Inherits Anders' inference plumbing** (llama-provider, ai-provider) instead of duplicating it.
+- **Surfaces the dDRM provider as a public Runtime contract** that other capsule developers (not just Elacity) can target, making the manifesto's "property rights for files" claim infrastructure-true rather than UI-true.
+
+**This is the practical answer to "how does the Monetisation Agent live on Anders' Runtime?"** — not by porting the agent, but by porting the cryptographic + chain + envelope core to Rust, then writing the agent capsule in Rust on top of those crates plus Anders' existing inference plumbing.
+
+---
+
 ## 8. Threat Model
 
 Applies [Microsoft STRIDE](https://learn.microsoft.com/en-us/azure/security/develop/threat-modeling-tool-threats) (Spoofing, Tampering, Repudiation, Information disclosure, Denial of service, Elevation of privilege) + [OWASP LLM Top 10 (2025)](https://owasp.org/www-project-top-10-for-large-language-model-applications/) + [LINDDUN](https://linddun.org) (Linkability, Identifiability, Non-repudiation, Detectability, Disclosure of information, Unawareness, Non-compliance). Each threat scored on the [FAIR](https://www.fairinstitute.org) loss-expectancy model (qualitative, since we have no operational baseline for the agent yet).
@@ -947,6 +1256,33 @@ Apache-2.0 includes a **defensive patent grant**: contributors grant a patent li
 
 **No identified patent conflicts** between the components we plan to ingest and Elacity's posture. Elacity Labs has filed no patents; Elacity's competitive moat is shipped code + network effects, not IP.
 
+### 9.7 ElastOS Runtime — license posture (Track B addition, v1.1)
+
+**Anders' `elastos-runtime` repo is MIT-licensed** (verified at [LICENSE](https://github.com/Elacity/elastos-runtime/blob/main/LICENSE) — Apr 2026 release v0.2.0 timestamp). This has three direct consequences for Track B (§4.5.5):
+
+1. **Inbound MIT to PC2 AGPL-3.0**: Clean. Any Runtime crate / capsule we link against from PC2 v1 carries its MIT terms (preserve notice); the combined PC2 work remains AGPL-3.0.
+2. **Outbound from Elacity contributions**: When we contribute Rust crates (Tier 1-3 in §7.5) UPSTREAM to `elastos-runtime`, we license them MIT to match. When the SAME crates compile to WASM and get loaded by PC2 v1 (the dual-target story in §7.5.4), they appear as MIT modules inside an AGPL host — that's the same pattern as any MIT library inside an AGPL Node.js app, well-trodden.
+3. **The dDRM provider capsule** (`drm-provider`, §4.5.3 Tier 1): We have a **strategic license choice**. Options:
+   - **Option A — MIT** (matches Runtime; widest adoption; anyone could fork). Recommend for the underlying crates (`aes-gcm-encrypt`, `cenc-encrypt`, `chipotle-client`, `ddrm-envelope`) — these are crypto primitives we WANT to be auditable by the broadest possible audience.
+   - **Option B — AGPL-3.0** (matches PC2; viral copyleft prevents proprietary SaaS forks). Recommend for the **agent capsule** itself (`monetisation-orchestrator-crate`) and the `portfolio-view` app capsule — these embody Elacity's product IP and we want to retain the network-distribution AGPL protections.
+
+**Default proposal**: Crypto crates MIT (widest trust). Agent + app capsules AGPL-3.0 (retain product moat). Open for Sasha override in §12.
+
+**Compatibility with Runtime**: The Runtime's design (MIT) imposes no copyleft on capsule authors. AGPL-3.0 capsules can absolutely run on an MIT-licensed Runtime; an AGPL capsule's network-distribution requirements apply to ITS source, not to the Runtime that hosts it. Anders confirmed-by-design via PRINCIPLES.md §15: "decryption and license policy should be mediated by an explicit provider, not reimplemented inside every app" — providers are independent licensing units.
+
+### 9.8 Summary license disposition (v1.1)
+
+| Layer | License | Rationale |
+|---|---|---|
+| PC2 v1 (existing Node.js) | AGPL-3.0-only | Unchanged; Sasha's pre-existing call |
+| Elastos Runtime (upstream) | MIT | Anders' call; we contribute under matching terms |
+| Tier 1 Rust crypto crates (Elacity-authored) | MIT | Widest auditability; recommend |
+| Tier 2 Runtime provider capsules (`drm-provider`, `chain-provider`, `b2a-negotiation`) | MIT | Match Runtime conventions; recommend |
+| Tier 2 Agent capsule (`monetisation-orchestrator`) | AGPL-3.0 | Product moat; recommend |
+| Tier 2 App capsule (`portfolio-view`) | AGPL-3.0 | Product moat; recommend |
+| Tier 2 Content capsule (`license-templates`) | CC-BY-4.0 | Documents/text content, not code |
+| DreamServer Track A components (per §5/§9.3) | per-component | Unchanged from v1.0 |
+
 ---
 
 ## 10. First Shippable Milestone
@@ -1008,6 +1344,23 @@ Apache-2.0 includes a **defensive patent grant**: contributors grant a patent li
 
 Discounting for re-use of existing `AIChatService.js` infrastructure and existing dDRM flow primitives: **~16-20 effective engineer-weeks**. Achievable by one mid-senior engineer in 4 months or two engineers in 2.5 months.
 
+#### 10.2b Parallel Track B work (v1.1 addition)
+
+In parallel with v1.3.0 shipping, the **Track B Rust foundation** (§7.5, §11 Track B) starts:
+
+| Module | Purpose | Eng-weeks (parallel, distinct staffing or 30% allocation) |
+|---|---|---|
+| `pc2-libs/aes-gcm-encrypt/` (Rust crate) | Encryption counterpart to existing `aes-gcm-decrypt`; replaces TS encryption code path | 1.5 |
+| `pc2-libs/cenc-encrypt/` (Rust crate) | CENC encryption side | 2 |
+| `pc2-libs/ddrm-envelope/` (Rust crate) | Canonical `.ddrm.json` envelope handler with test-vector suite | 2 |
+| `pc2-libs/chipotle-client/` (Rust crate) | Rust port of `chipotle-client.ts`; replaces TS via wasm-pack | 3 |
+| `pc2-libs/build/wasm-pack.sh` | Dual-target build pipeline (cargo + wasm-pack → Node.js consumable) | 0.5 |
+| **Total Track B parallel** | | **~9 eng-weeks (~0.5 FTE Q3-Q4 2026)** |
+
+**Net effect**: Track A v1.3.0 ships unchanged in scope and date. Track B foundation lands 8-12 weeks behind v1.3.0 GA, enabling Track B milestones from §11 to begin Q1 2027.
+
+**This is not optional, this is the cheapest insurance against Track A reaching mass adoption while Track B is still vapor.** If Track A v1.3.0 ships and gathers users without a working Track B foundation, we will be stuck in PC2 v1 Node.js indefinitely.
+
 ### 10.3 Success metric (single, measurable)
 
 > **"10 independent users complete an end-to-end packaging flow via the Monetisation Agent (file selected → packaged → priced → licensed → published to Exchange) within 30 days of v1.3.0 GA."**
@@ -1053,9 +1406,13 @@ Telemetry to capture (with explicit user opt-in, per existing PC2 telemetry cons
 
 Applying [McKinsey Three Horizons](https://www.mckinsey.com/business-functions/strategy-and-corporate-finance/our-insights/enduring-ideas-the-three-horizons-of-growth).
 
+> **v1.1 update (dual-track)**: Every horizon below has both a Track A (PC2 v1, AGPL Node.js) and a Track B (Runtime-native, MIT Rust/WASM) work stream, per §4.5.5. Tracks run **in parallel from day one**. Track A is broader (Mac/Linux/Server) and ships first. Track B is deeper (Linux-only initially, kernel-tight provider plane) and converges at v2.0.
+
 ### Horizon 1 — Ship (next 90 days)
 
 The FSM defined above + one immediate follow-up.
+
+**Track A (PC2 v1):**
 
 | Release | Date | What |
 |---|---|---|
@@ -1063,19 +1420,30 @@ The FSM defined above + one immediate follow-up.
 | **v1.3.1** | 2026 Q3+1mo | Hardening — full audit log (C9 complete), full Agent Console (C12 complete), Particle UA V2 verification. Confidence: **High** |
 | **v1.3.2** | 2026 Q3+2mo | Skill Capsule Authoring (C7 complete) + Renew/Repackage (C10). Confidence: **Medium** |
 
+**Track B (Runtime parallel work, ~0.5 FTE allocation):**
+
+| Milestone | Date | What |
+|---|---|---|
+| **B-0.1** | 2026 Q3 (parallel with v1.3.0) | Tier 1 Rust crates land in `pc2-libs/` (or new `elacity-monetisation-libs` repo): `aes-gcm-encrypt`, `cenc-encrypt`, `ddrm-envelope` initial drafts. Dual-target build pipeline (WASM for Node.js + native). Confidence: **High** |
+| **B-0.2** | 2026 Q4 (parallel with v1.3.2) | `chipotle-client` Rust port complete. PC2 v1 starts using Rust-WASM `chipotle-client` in place of TypeScript version (single source of truth achieved). Confidence: **High** |
+| **B-0.3** | 2026 Q4 | First `drm-provider-crate` PoC: capsule manifest, `Provider` trait implementation, `elastos://drm/decrypt(cid)` works against test CIDs. Coordinated with Anders via PR/ADR to Runtime repo. Confidence: **Medium** (depends on Anders' availability for review) |
+
 **H1 success criteria**:
-- 100 packagings completed across the user base by end of H1
+- 100 packagings completed across the user base by end of H1 (Track A)
 - 25 distinct creators publishing
 - 10 Skill Capsules published
 - Zero CRITICAL security findings in agent code paths
 - Average cloud-LLM fallback rate <5%
+- **Track B**: Rust crates pass test-vector parity with TypeScript predecessors (cryptographic operations produce byte-identical outputs)
 
 ### Horizon 2 — Validate (90 days to 18 months)
 
 The B2A commerce layer + on-chain agent identity. This horizon depends on **ERC-8004 final spec landing (estimated 2026 Q4)** and **Runtime alpha (no public timeline)** — risks tracked in `DECENTRALIZATION_TRAJECTORY.md` §5.
 
-| Release | Date (estimate) | What |
-|---|---|---|
+**Track A (PC2 v1):**
+
+| Release | Date (estimate) | What | Confidence |
+|---|---|---|---|
 | **v1.4.0** | 2026 Q4 | Portfolio CFO View (C11) + B2A Negotiation Alpha (C8 partial — auto-listing endpoint, no auto-negotiation) | High |
 | **v1.4.1** | 2027 Q1 | ERC-8004 pilot identity registration (optional flag) | Medium |
 | **v1.4.2** | 2027 Q1 | L402 payment rail (agent-to-agent micropayments) | Medium |
@@ -1083,24 +1451,36 @@ The B2A commerce layer + on-chain agent identity. This horizon depends on **ERC-
 | **v1.5.1** | 2027 Q2 | Community indexer integration (replaces Elacity GraphQL as default per DECENTRALIZATION_TRAJECTORY §6 Phase D) | High |
 | **v1.5.2** | 2027 Q3 | Threshold-custody pilot (FROST DKG ceremony — coordinated with DECENTRALIZATION_TRAJECTORY §6 Phase E) | Speculative |
 
+**Track B (Runtime-native):**
+
+| Milestone | Date (estimate) | What | Confidence |
+|---|---|---|---|
+| **B-1.0** | 2027 Q1 | `drm-provider` capsule ships as Runtime component (`elastos setup --with drm-provider`). Wealth Capsules created by PC2 v1 are openable in Runtime-native Home via this provider. Bidirectional interop proven. | Medium |
+| **B-1.1** | 2027 Q2 | `chain-provider` capsule ships. Enables Runtime-native EVM operations without going through PC2 v1. | Medium |
+| **B-1.2** | 2027 Q3 | `b2a-negotiation` provider capsule ships. First Runtime-native B2A transaction (agent → agent over Carrier). | Speculative |
+| **B-1.3** | 2027 Q4 | `monetisation-orchestrator` agent capsule alpha. Mirrors PC2 v1 Monetisation Agent capabilities but runs Runtime-native. Opt-in for users on Linux. | Speculative |
+
 **H2 success criteria**:
-- 1,000 packagings completed
+- 1,000 packagings completed (Track A)
 - 100 Skill Capsules published
 - First end-to-end B2A transaction completed (one agent buys from another, fully autonomous)
 - ≥3 supernode operators independent of Elacity Labs (per DECENTRALIZATION_TRAJECTORY §4.4)
 - ERC-8004 identity registry registrations: 100+
 - First FROST DKG ceremony completes (even if non-production)
+- **Track B**: `drm-provider` capsule downloaded ≥100 times from `elastos setup`; first proof of a Wealth Capsule packaged on PC2 v1 and opened in Runtime-native Home
 
 ### Horizon 3 — Build the option space (18 months to 36 months)
 
 Full agentic interoperability with the Runtime v2 trust model + threshold custody live + the rights-trading sub-economy. This is where the Manifesto's claims become operationally true.
 
-| Release | Date (estimate) | What |
-|---|---|---|
-| **v2.0** | 2027 Q4 | Runtime convergence — Monetisation Agent fully runs as a capsule with capability-token authority; DRM Provider Capsule live | Medium |
-| **v2.1** | 2028 Q1 | Threshold-custody live (FROST signing in production); Carrier-channel payment rail; agent-to-agent reputation markets | Speculative |
-| **v2.2** | 2028 Q2 | Skill Capsule marketplace at scale (1000+ published skills, agent buyers > human buyers) | Speculative |
-| **v3.0** | 2028 Q4 | Walkaway-passable end state (DECENTRALIZATION_TRAJECTORY §4.4 — all 6 criteria green) | Speculative |
+**Track A → Track B convergence:**
+
+| Release | Date (estimate) | What | Confidence |
+|---|---|---|---|
+| **v2.0** | 2027 Q4 | **Runtime convergence release** — both tracks present in single distribution. PC2 v1 continues for users on Mac/Windows; Runtime-native is recommended for Linux. Same Wealth Capsules openable on both. Same agent identity. Capability tokens enforce kernel-level isolation on Linux. | Medium |
+| **v2.1** | 2028 Q1 | Threshold-custody live (FROST signing in production via `frost-custody-shard` capsules per supernode); Carrier-channel payment rail (Track B native, no L402 needed for intra-Elacity); agent-to-agent reputation markets | Speculative |
+| **v2.2** | 2028 Q2 | Skill Capsule marketplace at scale (1000+ published skills, agent buyers > human buyers); Yrs-based multi-author Wealth Capsules (§7.5.5) | Speculative |
+| **v3.0** | 2028 Q4 | **Walkaway-passable end state** (DECENTRALIZATION_TRAJECTORY §4.4 — all 6 criteria green). Elacity Labs proven non-load-bearing. PC2 v1 deprecation path opens — but users not forced to migrate; the formats remain interoperable forever. | Speculative |
 
 **H3 success criteria**:
 - 100,000+ packagings across the network
@@ -1235,10 +1615,318 @@ The v1.3.0 alpha covers **5 of 8 principles partially**. The remaining 3 land in
 This mandate is **opinionated but not religious**. The plan would meaningfully change if any of the following becomes true:
 
 1. **Sasha rejects the FSM scope** — the 11 capabilities collapse to a tighter set; H1 ships less.
-2. **Anders' Runtime hits alpha in 2026 Q3 instead of 2027** — the FSM can ship against Runtime capability tokens directly, bypassing the v1.3 session-token compromise (ADR-005).
+2. **Anders' Runtime hits alpha in 2026 Q3 instead of 2027** — the FSM can ship against Runtime capability tokens directly, bypassing the v1.3 session-token compromise (ADR-005). Track A and Track B fuse earlier.
 3. **A major competitor ships a Monetisation Agent first** — re-evaluate whether Elacity's defensibility shifts from "first" to "best", which would push toward more capability depth (C7 deeper, C8 earlier).
 4. **GoDaddy DNS access remains blocked beyond 4 weeks** — some integration tasks that depend on `agent.ela.city` subdomains slip; not a blocker for v1.3 but affects v1.4 distribution.
 5. **A regulatory shift around AI agents** (EU AI Act enforcement, US executive order) — license-drafting (C5) and B2A negotiation (C8) may need additional compliance scaffolding; high-stakes regions may need a "regulated mode" toggle.
+6. **Anders accepts/rejects Elacity's `drm-provider` upstream PR** — if he accepts, our crates land in `elastos-runtime` itself and Track B distribution is via `elastos setup`; if he prefers Elacity ship a companion repo, Track B distribution is via `elastos setup --source elacity.com/runtime-capsules`. Both work; the choice changes maintenance ownership but not architecture.
+
+---
+
+### Appendix F — Canonical capsule manifests for Monetisation Agent components (v1.1)
+
+> Added v1.1 (2026-05-15). These are **draft** ElastOS Runtime capsule manifests for the new capsules in §4.5.3, conforming to the schema documented at [`elastos-runtime/docs/ARCHITECTURE.md` Capsule Manifest section](https://github.com/Elacity/elastos-runtime/blob/main/docs/ARCHITECTURE.md). They are not yet signed (signature added at build time via `elastos publish`). Production manifests will land in the Runtime capsules directory at `capsules/{name}/capsule.json`.
+
+#### F.1 `drm-provider` capsule manifest (Tier 1)
+
+```jsonc
+{
+  "schema": "elastos.capsule/v1",
+  "version": "0.1.0",
+  "name": "drm-provider",
+  "description": "Elacity dDRM access/decryption provider — capability-gated rights enforcement for encrypted content capsules",
+  "author": "did:key:z6Mk...elacity-foundation",
+  "publisher": "elacity.org",
+  "signature": "<ed25519-sig-added-at-build-time>",
+  "role": "provider",
+  "type": "wasm",
+  "entrypoint": "drm_provider.wasm",
+
+  "namespace": "elastos://drm/",
+  "actions_provided": [
+    "elastos://drm/encrypt(bytes, policy) -> { cid, envelope }",
+    "elastos://drm/decrypt(cid, token) -> bytes | denied",
+    "elastos://drm/license/check(cid, did) -> { hasAccess, terms, expiry }",
+    "elastos://drm/license/issue(cid, recipient, terms) -> signedReceipt",
+    "elastos://drm/license/revoke(cid, holder) -> { revoked }"
+  ],
+
+  "resources": {
+    "memory_mb": 256,
+    "cpu_shares": 200,
+    "disk_quota_mb": 100
+  },
+
+  "permissions": {
+    "network": false,
+    "storage": ["localhost://Users/self/.elacity/drm/*"],
+    "messaging": [
+      "elastos://chain/base/*",
+      "elastos://ipfs/*",
+      "elastos://did/*"
+    ],
+    "depends_on_providers": [
+      "elastos://chain/",
+      "elastos://ipfs/",
+      "elastos://did/"
+    ]
+  },
+
+  "audit": {
+    "emits_events_for": [
+      "encrypt", "decrypt", "license-check", "license-issue", "license-revoke"
+    ],
+    "retention_days": 365
+  }
+}
+```
+
+#### F.2 `monetisation-orchestrator` agent capsule manifest (Tier 1)
+
+```jsonc
+{
+  "schema": "elastos.capsule/v1",
+  "version": "0.1.0",
+  "name": "monetisation-orchestrator",
+  "description": "Elacity Monetisation Agent — conversational orchestration of packaging, pricing, licensing, tokenisation, and B2A negotiation",
+  "author": "did:key:z6Mk...elacity-foundation",
+  "publisher": "elacity.org",
+  "license": "AGPL-3.0-only",
+  "role": "agent",
+  "type": "wasm",
+  "entrypoint": "monetisation_orchestrator.wasm",
+
+  "actions_provided": [
+    "agent/conversation/start",
+    "agent/conversation/turn(input)",
+    "agent/conversation/end",
+    "agent/tools/list",
+    "agent/state/checkpoint"
+  ],
+
+  "resources": {
+    "memory_mb": 512,
+    "cpu_shares": 400
+  },
+
+  "permissions": {
+    "network": false,
+    "storage": ["localhost://Users/self/.elacity/agent/*"],
+    "messaging": [
+      "elastos://ai/*",
+      "elastos://drm/*",
+      "elastos://chain/*",
+      "elastos://ipfs/*",
+      "elastos://did/*"
+    ],
+    "depends_on_providers": [
+      "elastos://ai/",
+      "elastos://drm/",
+      "elastos://chain/",
+      "elastos://ipfs/",
+      "elastos://did/",
+      "elastos://localhost/"
+    ]
+  },
+
+  "capabilities_requested": [
+    {
+      "action": "read",
+      "resource": "localhost://Users/self/*",
+      "rationale": "Catalogue and classify files for packaging (C1)",
+      "duration": "session"
+    },
+    {
+      "action": "execute",
+      "resource": "elastos://drm/encrypt",
+      "rationale": "Package files into Wealth Capsules (C2)",
+      "duration": "session"
+    },
+    {
+      "action": "execute",
+      "resource": "elastos://chain/base/AccessToken.mint",
+      "rationale": "Mint capability tokens for buyers (C6)",
+      "duration": "per-use",
+      "max_uses": 100,
+      "user_confirmation_required": true
+    }
+  ],
+
+  "human_in_loop_gates": [
+    "before any chain transaction",
+    "before any IPFS publication",
+    "before any capability token issuance",
+    "before any external (non-local) LLM call"
+  ]
+}
+```
+
+#### F.3 `chain-provider` capsule manifest (Tier 1)
+
+```jsonc
+{
+  "schema": "elastos.capsule/v1",
+  "version": "0.1.0",
+  "name": "chain-provider",
+  "description": "EVM RPC + ABI namespace for Base / Optimism / Ethereum / ESC chains; gas estimation, transaction crafting, event subscription",
+  "author": "did:key:z6Mk...elacity-foundation",
+  "license": "MIT",
+  "role": "provider",
+  "type": "wasm",
+  "entrypoint": "chain_provider.wasm",
+
+  "namespace": "elastos://chain/",
+  "actions_provided": [
+    "elastos://chain/{network}/call(contract, abi, args)",
+    "elastos://chain/{network}/sendTx(tx, signer)",
+    "elastos://chain/{network}/getReceipt(txHash)",
+    "elastos://chain/{network}/subscribe(filter)",
+    "elastos://chain/{network}/estimateGas(tx)",
+    "elastos://chain/ens/resolve(name) -> address"
+  ],
+
+  "supported_networks": ["base", "optimism", "ethereum", "esc"],
+
+  "resources": {
+    "memory_mb": 128,
+    "cpu_shares": 100
+  },
+
+  "permissions": {
+    "network": true,
+    "network_allowlist": [
+      "*.alchemy.com",
+      "*.infura.io",
+      "rpc.ela.city",
+      "mainnet.base.org",
+      "*.public-rpc.com"
+    ],
+    "storage": ["localhost://Users/self/.elacity/chain-cache/*"]
+  }
+}
+```
+
+#### F.4 `b2a-negotiation` capsule manifest (Tier 1)
+
+```jsonc
+{
+  "schema": "elastos.capsule/v1",
+  "version": "0.1.0",
+  "name": "b2a-negotiation",
+  "description": "Business-to-Agent negotiation provider; MCP/A2A tool surface for capsule discovery, negotiation, and settlement",
+  "author": "did:key:z6Mk...elacity-foundation",
+  "license": "MIT",
+  "role": "provider",
+  "type": "wasm",
+  "entrypoint": "b2a_negotiation.wasm",
+
+  "namespace": "elastos://b2a/",
+  "actions_provided": [
+    "elastos://b2a/discover(filter)",
+    "elastos://b2a/propose(proposal)",
+    "elastos://b2a/counter(proposalId, counter)",
+    "elastos://b2a/agree(proposalId)",
+    "elastos://b2a/execute(proposalId)",
+    "elastos://b2a/settle(proposalId, payment)",
+    "elastos://b2a/attest(proposalId) -> signedReceipt"
+  ],
+
+  "mcp_endpoint": "elastos://tunnel/agents/{did}/mcp",
+
+  "resources": {
+    "memory_mb": 256,
+    "cpu_shares": 200
+  },
+
+  "permissions": {
+    "network": false,
+    "storage": ["localhost://Users/self/.elacity/b2a/*"],
+    "messaging": [
+      "elastos://carrier/*",
+      "elastos://tunnel/*",
+      "elastos://chain/*",
+      "elastos://drm/*"
+    ]
+  },
+
+  "rate_limits": {
+    "proposals_per_minute": 10,
+    "proposals_per_day": 1000,
+    "max_concurrent_negotiations": 50
+  }
+}
+```
+
+#### F.5 `portfolio-view` app capsule manifest (Tier 2)
+
+```jsonc
+{
+  "schema": "elastos.capsule/v1",
+  "version": "0.1.0",
+  "name": "portfolio-view",
+  "description": "CFO dashboard for a creator's Wealth Capsule portfolio — revenue, royalties, license events",
+  "author": "did:key:z6Mk...elacity-foundation",
+  "license": "AGPL-3.0-only",
+  "role": "app",
+  "type": "wasm",
+  "entrypoint": "portfolio_view.wasm",
+  "browser_assets": "browser/",
+
+  "resources": {
+    "memory_mb": 128,
+    "cpu_shares": 100
+  },
+
+  "permissions": {
+    "network": false,
+    "storage": [],
+    "messaging": [
+      "elastos://chain/*",
+      "elastos://drm/*",
+      "elastos://localhost/*"
+    ]
+  }
+}
+```
+
+#### F.6 Wealth Capsule manifest (content capsule template, OUTPUT of C2)
+
+```jsonc
+{
+  "schema": "elastos.capsule/v1",
+  "version": "1.0.0",
+  "name": "my-portfolio-2026",
+  "description": "Tom's photography portfolio — 47 images, Q2 2026",
+  "author": "did:key:z6Mk...tom-personal",
+  "license": "all-rights-reserved",
+  "role": "content",
+  "type": "data",
+
+  "content": {
+    "primary_cid": "bafy...portfolio-encrypted-archive",
+    "viewer_recommendation": "ddrm-viewer",
+    "mime_type": "application/elacity-wealth-capsule+ddrm"
+  },
+
+  "ddrm_envelope": {
+    "version": "1",
+    "protection_profile": "lite-image-bundle",
+    "encrypted_with": "aes-256-gcm",
+    "access_control": {
+      "contract": "0xC...3",
+      "chain": "base",
+      "min_holding": 1
+    },
+    "license_summary": "Single-user, non-commercial, viewing only. No derivatives."
+  },
+
+  "permissions": {
+    "network": false,
+    "storage": [],
+    "messaging": []
+  }
+}
+```
 
 ---
 
@@ -1246,7 +1934,14 @@ This mandate is **opinionated but not religious**. The plan would meaningfully c
 
 This document is a **proposal** awaiting CEO sign-off via §12. Once signed, the open ADRs and capability scopes become binding; the H1 FSM becomes the active engineering target; the DreamServer dispositions in §5 become the integration policy.
 
-**Total length**: ~1,650 lines. **Estimated review time**: 60-90 minutes for Sasha. **Estimated total implementation effort**: ~16-20 engineer-weeks for H1; ~17 for H2; ~7 for H3 = ~40-45 engineer-weeks across 24-36 months. **Per-quarter average burn**: ~5-6 engineer-weeks. This is one mid-senior engineer's continuous output.
+**Total length** (v1.1): ~1,900 lines. **Estimated review time**: 75-110 minutes for Sasha. **Estimated total implementation effort**: 
+- Track A H1: ~16-20 engineer-weeks 
+- Track B H1: ~9 engineer-weeks (parallel, ~0.5 FTE) 
+- Track A H2: ~17 engineer-weeks 
+- Track B H2: ~12 engineer-weeks 
+- H3 cross-track: ~7-15 engineer-weeks 
 
-**Last updated**: 2026-05-15.
+**Total**: ~60-75 engineer-weeks across 24-36 months. **Per-quarter average burn**: ~7-9 engineer-weeks. This is approximately one mid-senior engineer continuous (Track A) plus 0.3-0.5 FTE of Rust/Runtime work (Track B). It is feasible for the current team headcount if Track B can leverage one engineer with prior Rust experience.
+
+**Last updated**: 2026-05-15 (v1.1: Runtime convergence depth, WASM/Rust opportunities, dual-track strategy, canonical capsule manifests added).
 

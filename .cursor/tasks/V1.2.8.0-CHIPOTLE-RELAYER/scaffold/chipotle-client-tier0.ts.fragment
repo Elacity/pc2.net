@@ -1,0 +1,270 @@
+// =============================================================================
+// chipotle-client.ts  —  TIER 0 RELAYER PASTE-IN  (SCAFFOLD, not compiled)
+//
+// STATUS: pre-flight scaffold for v1.2.8.0. Production write is gated on
+//         C-1 (live `usageKey` rotation) and on the supernode-side
+//         relayer (lit-relay.js) being promoted to deploy/web-gateway/lib/.
+//
+// This file is NOT a complete .ts module — it is a paste-in fragment showing
+// the surgical insertions into the real chipotle-client.ts. The `.fragment`
+// extension keeps tsc / build pipelines from picking it up.
+//
+// Anchors (current line numbers in pc2-node/src/api/chipotle-client.ts as of
+// commit 52682c4fb):
+//   - SUPERNODE_PROVISION_URLS  declared at  ~line 65
+//   - executeLitAction()        defined at   ~line 571
+//   - executeLitAction() inside resolveApiKey() try/catch  at ~lines 575-590
+//   - module exports default object             at ~line 870
+// =============================================================================
+
+
+// ─── INSERTION 1: imports (top of file, alongside the existing
+// `getBaseRpcUrl` import) ────────────────────────────────────────────────────
+
+import {
+  getRelayerSigner,
+  type RelayerSigner,
+} from '../runtime/relayer-signer.js';
+
+
+// ─── INSERTION 2: relayer constants (immediately after SUPERNODE_PROVISION_URLS)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const RELAYER_AUTH_CHALLENGE_URLS = [
+  'https://69.164.241.210/api/ddrm/auth-challenge',
+  'https://38.242.211.112/api/ddrm/auth-challenge',
+];
+
+const RELAYER_LIT_ACTION_URLS = [
+  'https://69.164.241.210/api/ddrm/lit-action',
+  'https://38.242.211.112/api/ddrm/lit-action',
+];
+
+const RELAYER_TIMEOUT_MS = 15_000;
+
+// Must produce byte-for-byte the same string as the supernode helper
+// `buildRelayerAuthMessage()` in deploy/web-gateway/lib/lit-relay.js.
+// If you edit either, edit both.
+function buildRelayerAuthMessage(args: {
+  wallet: string;
+  nonce: string;
+  issuedAt: number;
+}): string {
+  return [
+    'PC2 \u2192 Chipotle relayer auth (v1)',
+    `wallet: ${args.wallet.toLowerCase()}`,
+    `nonce: ${args.nonce}`,
+    `issuedAt: ${Math.floor(args.issuedAt / 1000)}`,
+  ].join('\n');
+}
+
+
+// ─── INSERTION 3: Tier-0 helpers (anywhere above executeLitAction) ──────────
+
+interface RelayerChallenge {
+  nonce: string;
+  expiresAt: number;
+  statement: string;
+}
+
+async function fetchRelayerChallenge(
+  wallet: `0x${string}`,
+): Promise<{ url: string; challenge: RelayerChallenge } | null> {
+  for (const url of RELAYER_AUTH_CHALLENGE_URLS) {
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), RELAYER_TIMEOUT_MS);
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wallet }),
+        signal: ctrl.signal,
+      });
+      clearTimeout(t);
+      if (!resp.ok) continue;
+      const challenge = (await resp.json()) as RelayerChallenge;
+      const litActionUrl = url.replace('/auth-challenge', '/lit-action');
+      return { url: litActionUrl, challenge };
+    } catch {
+      continue; // try next supernode
+    }
+  }
+  return null;
+}
+
+/**
+ * Tier-0 entry point — try the supernode relayer first.
+ * Returns:
+ *   - LitActionResult on success (200 from Chipotle via relayer)
+ *   - null when no relayer is reachable / returns 503 (caller falls through
+ *     to Tier 1-4 unchanged)
+ *   - throws ChipotleError on definitive 4xx from the relayer (don't retry)
+ */
+async function executeLitActionViaRelayer(
+  params: LitActionParams,
+  signer: RelayerSigner,
+): Promise<LitActionResult | null> {
+  const wallet = (await signer.address()).toLowerCase() as `0x${string}`;
+
+  const got = await fetchRelayerChallenge(wallet);
+  if (!got) {
+    logger.debug('[Chipotle][Tier 0] no relayer reachable; falling through');
+    return null;
+  }
+  const { url: litActionUrl, challenge } = got;
+
+  const message = buildRelayerAuthMessage({
+    wallet,
+    nonce: challenge.nonce,
+    issuedAt: challenge.expiresAt - 120_000, // matches supernode TTL window
+  });
+  const signature = await signer.signMessage(message);
+
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), RELAYER_TIMEOUT_MS);
+  let resp: Response;
+  try {
+    resp = await fetch(litActionUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-PC2-Wallet': wallet,
+        'X-PC2-Sig': signature,
+        'X-PC2-Nonce': challenge.nonce,
+      },
+      body: JSON.stringify({
+        code: params.code,
+        js_params: params.jsParams || {},
+      }),
+      signal: ctrl.signal,
+    });
+  } catch (err) {
+    logger.warn(
+      `[Chipotle][Tier 0] relayer transport error: ${(err as Error).message}; ` +
+        'falling through to Tier 1-4',
+    );
+    return null;
+  } finally {
+    clearTimeout(t);
+  }
+
+  // Relayer-internal "I cannot reach Chipotle" → fall through.
+  if (resp.status === 503) return null;
+
+  const text = await resp.text();
+  let json: any;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new ChipotleError(
+      `Relayer returned non-JSON: ${text.substring(0, 200)}`,
+      resp.status,
+    );
+  }
+
+  if (!resp.ok) {
+    const errMsg =
+      typeof json === 'string'
+        ? json
+        : json?.error || json?.message || text.substring(0, 300);
+    throw new ChipotleError(
+      `Relayer HTTP ${resp.status}: ${errMsg}`,
+      resp.status,
+      json,
+    );
+  }
+
+  if (json.has_error) {
+    logger.warn(
+      `[Chipotle][Tier 0] Lit Action had errors. Logs: ${json.logs?.substring(0, 200)}`,
+    );
+  }
+
+  return {
+    response:
+      typeof json.response === 'string'
+        ? json.response
+        : JSON.stringify(json.response),
+    logs: json.logs || '',
+    hasError: json.has_error || false,
+  };
+}
+
+
+// ─── INSERTION 4: rewire executeLitAction() — replace the existing function
+// (currently at line 571). The diff is:
+//
+//   - put Tier 0 ABOVE the existing apiKey resolution
+//   - if Tier 0 succeeds → return its result
+//   - if Tier 0 returns null → fall through to the existing Tier 1-4 path
+//     (preserves dev-mode env, user-key Settings UI, cached provision, fresh
+//      provision GET — none of those code paths change)
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function executeLitAction(
+  params: LitActionParams,
+  config?: ChipotleConfig,
+): Promise<LitActionResult> {
+  // ── TIER 0: supernode relayer (NEW DEFAULT) ─────────────────────────────
+  // Skip Tier 0 only if the caller passed an explicit apiKey (operator/dev
+  // override) — that's the same escape hatch as Tier 1.
+  if (!config?.apiKey) {
+    try {
+      const signer = getRelayerSigner();
+      const tier0 = await executeLitActionViaRelayer(params, signer);
+      if (tier0) return tier0;
+    } catch (err) {
+      // Definitive relayer 4xx — surface to caller; do NOT fall through.
+      // (Falling through on 4xx would silently fall back to the on-disk
+      // usageKey, defeating the security improvement.)
+      if (err instanceof ChipotleError && err.status >= 400 && err.status < 500) {
+        throw err;
+      }
+      logger.warn(
+        `[Chipotle][Tier 0] non-fatal relayer error; falling through: ${(err as Error).message}`,
+      );
+    }
+  }
+
+  // ── TIER 1-4: existing path (unchanged below this line) ─────────────────
+  let apiKey = config?.apiKey;
+  let apiUrl = config?.apiUrl;
+
+  if (!apiKey) {
+    try {
+      apiKey = resolveApiKey();
+    } catch {
+      const provision = await ensureProvisioned();
+      if (provision?.usageKey) {
+        apiKey = provision.usageKey;
+        if (!apiUrl) apiUrl = provision.apiUrl;
+      } else {
+        throw new Error(
+          'No Chipotle API key configured and auto-provisioning from supernodes failed. ' +
+            'Set LIT_CHIPOTLE_USAGE_KEY env var or place the key in data/.chipotle-api-key',
+        );
+      }
+    }
+  }
+
+  apiUrl = apiUrl || resolveApiUrl();
+  const url = `${apiUrl}/core/v1/lit_action`;
+
+  // ... (rest of existing function unchanged — fetch + parse + return) ...
+}
+
+
+// =============================================================================
+// END OF SCAFFOLD
+//
+// Promote-time checklist (do these in this order):
+//   1. Implement secp256k1/keccak256 in relayer-signer.ts (see TODO at bottom
+//      of that file)
+//   2. Implement recoverPersonalSign() in lit-relay.js
+//   3. Wire the relayer routes into deploy/web-gateway/index.js
+//   4. Deploy lit-relay.js + index.js to ONE supernode (Contabo first)
+//   5. Smoke-test against an isolated PC2 instance with PC2_RELAYER_SIGNER_KEY
+//      set to a throwaway key (skip Tier 0's runtime-signer path)
+//   6. Paste the four insertions above into chipotle-client.ts
+//   7. Ship as v1.2.8.0
+// =============================================================================

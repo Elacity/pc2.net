@@ -281,10 +281,27 @@ Any further refinements based on a real production rollback should be folded bac
 
 ---
 
+## How CI changes since the dry-run reduce expected rollback frequency
+
+**2026-05-19 update.** Three CI hardening passes shipped after the 2026-05-16 dry-run materially reduce the **probability** of needing this procedure for the v1.2.8.x release window:
+
+1. **A-4 boot-smoke** + **V2 #3 boot-time SLA gate** (`smoke-test.yml`): every PR now actually starts pc2-node and asserts `/api/health` responds within 90 s. The v1.2.7.13 bug class (launcher status indicator stuck on `Stopped` because pc2-node never came alive within UI timeout) is now caught at PR time, not at user time.
+
+2. **Docker-smoke required gate** (`smoke-test.yml`): pc2-node's container path is exercised on every PR. The Dockerfile-rot bug class that surfaced 6 distinct issues during DOCKERFILE-REHAB-V1280 (Go version, config paths, missing WASM binaries, missing native deps) can no longer rot silently between releases.
+
+3. **V2 #1 binary execution smoke** (`smoke-test.yml`): the linux-x64 variants of `wireguard-go`, `amneziawg-go`, `wg`, `awg` are downloaded and executed on every PR run. The v1.2.7.8 root cause ("`pc2-binaries-v1` release referenced binaries that didn't exist") is now caught at PR time. Note: macOS variants are NOT covered by this gate; they still require §2.3 of the pre-tag checklist (manual install on real Mac).
+
+**These gates do not eliminate the need for this rollback procedure** — bugs in the Mac-specific privileged-install flow, Apple notarization, or real-network behaviour can still slip past CI. But the most common bug classes from the v1.2.7.x hot-patch cycle (missing binaries, container rot, init-time hangs) are now caught at the cheapest layer.
+
+The "hot-patch vs rollback" decision tree at the top of this document remains the right framework. The base rate of bugs reaching production should be lower, so you should reach for this procedure less often — but when you do, the steps below are still the canonical path.
+
+---
+
 ## Document metadata
 
 - **Source of truth**: this file.
 - **Owners**: release engineering (Sasha primary).
 - **Last updated**: see git log on this file.
 - **Last dry-run completed**: 2026-05-16 08:34 BST (see Appendix above).
-- **Tied to**: `PRE-TAG-CHECKLIST.md`, `.cursor/tasks/RELEASE-ENGINEERING-V1280/RELEASE-ENGINEERING-V1280.md`.
+- **Last CI-coverage update**: 2026-05-19 (V2 binary execution + boot SLA + docker-smoke promotion).
+- **Tied to**: `PRE-TAG-CHECKLIST.md`, `CI-HARDENING-A4-D1.md`, `CI-HARDENING-RELIABILITY-V2.md`, `DOCKERFILE-REHAB-V1280.md`, `.cursor/tasks/RELEASE-ENGINEERING-V1280/RELEASE-ENGINEERING-V1280.md`.

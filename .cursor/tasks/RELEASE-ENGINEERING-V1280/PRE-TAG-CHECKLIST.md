@@ -22,8 +22,17 @@
 ## Section 1 — CI gates (automated, but verify they ran)
 
 - [ ] **1.1** Latest `Smoke test (build + boot)` run for the release commit is **green overall** (`Smoke test summary` job conclusion = `success`). Visible at `https://github.com/Elacity/pc2.net/actions/workflows/smoke-test.yml?query=branch%3A<branch>`.
-  - **If red on a required matrix entry** (`linux-x64` or `darwin-arm64`): do not tag. Investigate the failing job, fix on the branch, push, wait for re-run, re-check.
-  - **If only experimental entries are red** (`linux-arm64` or `windows-x64`): acceptable for the Mac launcher release. Note the failure in the release notes' "Known issues" section so users on those platforms aren't surprised.
+
+  As of 2026-05-19 the workflow has **6 required gates** that must all be green for the summary to pass:
+  - **`Build + typecheck (linux-x64)`** — build, typecheck, unit tests, A-4 boot-smoke (with V2 #3 boot-time SLA gate: hard-fails if `/api/health` takes >90 s, warns at >60 s; observed cold-boot is 8-24 s)
+  - **`Build + typecheck (linux-arm64)`** — same as linux-x64, including A-4 boot-smoke + SLA gate (RPi-class architectural coverage)
+  - **`Build + typecheck (darwin-arm64)`** — same as linux-x64, including A-4 boot-smoke + SLA gate (Mac launcher's native arch)
+  - **`Build + typecheck (windows-x64)`** — build, typecheck, unit tests; boot-smoke skipped per A-4 design (process-management semantics differ)
+  - **`pc2-binaries-v1 asset integrity`** — asset count check + V2 #1 binary execution smoke (downloads + executes wireguard-go, amneziawg-go, wg, awg for linux-x64; detects corrupted/wrong-arch published binaries)
+  - **`Docker-smoke (pc2-node/Dockerfile)`** — required gate as of 2026-05-19; builds the container, waits for HEALTHCHECK + curls `/api/health`. Validates the deployment-target path catches Dockerfile rot before users do.
+
+  - **If red on any required gate**: do not tag. Investigate the failing job, fix on the branch, push, wait for re-run, re-check.
+  - **If a `::warning::` is visible in the boot-smoke logs** (boot took 60-90 s): not a release blocker but worth a paragraph in the release notes' "Known issues" — investigate before next release before it crosses the 90 s SLA ceiling.
 - [ ] **1.2** `pc2-binaries-v1` GitHub release exists and has the expected asset count:
   ```bash
   gh release view pc2-binaries-v1 -R Elacity/pc2.net --json assets --jq '.assets | length'  # expect 23
@@ -34,8 +43,15 @@
       -f release_tag=pc2-binaries-v1 -f replace_existing=true
     ```
     Wait for it to complete (~15-30 min for all platforms), re-check asset count, then proceed.
+
+  Note: §1.1's V2 #1 gate now also verifies that the **linux-x64 binaries actually execute** (file(1) ELF check + `--version` exit code). This catches a subset of the v1.2.7.x bug class earlier than the §1.2 asset-count check alone. **macOS variants are NOT covered by V2 #1** (CI runner is Linux x86-64) — they're still validated only by §2.3 manual transport check on real Mac.
 - [ ] **1.3** Asset names spot-check: `gh release view pc2-binaries-v1 -R Elacity/pc2.net --json assets --jq '.assets[].name' | sort` matches the platform / arch matrix the launcher expects to download. Specifically check that `wg-darwin-arm64`, `awg-darwin-arm64`, `wg-quick-darwin`, `awg-quick-darwin`, `wireguard-go-darwin-arm64`, `bash-darwin-arm64` are all present (v1.2.7.10 → v1.2.7.11 lessons; missing any of these silently falls Mac installs back to ActiveProxy).
   - **If any expected asset is missing**: same fix as §1.2 (re-run publish workflow). Don't tag against an incomplete binary set.
+- [ ] **1.4** Docker image build is reproducible from clean state (covered by §1.1 docker-smoke, but worth a sanity look at the run log):
+  ```bash
+  gh run list --workflow smoke-test.yml -R Elacity/pc2.net --branch <branch> --limit 1 --json conclusion,jobs --jq '.[0].jobs[] | select(.name=="Docker-smoke (pc2-node/Dockerfile)") | .conclusion'
+  ```
+  - Should return `"success"`. If anything else: the Dockerfile-based deployment path is broken; users running pc2-node in containers (Docker Hub, self-hosting communities) will hit failures. See `DOCKERFILE-REHAB-V1280.md` for the 6-bug repair history of 2026-05-19 in case the breakage looks similar.
 
 ## Section 2 — Manual fresh-install verification (THE most important gate)
 
@@ -131,18 +147,20 @@ Hot-patches are usually faster than rollbacks if the broken release has been liv
 
 ## Appendix B — What we learned from v1.2.7.7 → v1.2.7.13
 
-These are the specific failure modes that this checklist exists to catch. Mostly captured by the smoke test now (`Smoke test (build + boot)` + `setup-permissions-osascript.test.js` regression unit), but the manual gates in §2 are the safety net for everything else.
+These are the specific failure modes that this checklist exists to catch. Mostly captured by the smoke test now (`Smoke test (build + boot)` + `setup-permissions-osascript.test.js` regression unit + V2 binary execution smoke + V2 boot-time SLA gate as of 2026-05-19), but the manual gates in §2 are the safety net for everything else.
 
-| Release | What broke | Caught by which checklist item |
-|---|---|---|
-| v1.2.7.8 | Build OOM, missing `pc2-binaries-v1` release, transport label "ActiveProxy" on fresh Mac | §1.1 (smoke), §1.2-1.3 (assets), §2.3 (manual transport check) |
-| v1.2.7.9 | Sudoers entries not auto-installed on fresh Mac | §2.2 (full install flow) |
-| v1.2.7.10 | Bundled bash missing, `WG_QUICK_USERSPACE_IMPLEMENTATION` env var not propagating through sudo | §2.3 (transport check), §2.5 (relaunch silent) |
-| v1.2.7.11 | `awg` binary never bundled, bundled bin dir not on PATH inside sudo'd script, **osascript apostrophe-injection in setupMacOS** | §1.1 (smoke includes osascript unit test), §2.2 (full install flow) |
-| v1.2.7.12 | Password prompt on every relaunch (sudoers-marker.json missing), `awg-quick` calling `wg setconf` instead of `awg setconf` | §2.5 (relaunch silent) |
-| v1.2.7.13 | Launcher status indicator stuck on `Stopped` after pc2-node respawn | §2.6 (in-app update doesn't desync indicator) |
+| Release | What broke | Caught by which checklist item | Now also caught earlier by |
+|---|---|---|---|
+| v1.2.7.8 | Build OOM, missing `pc2-binaries-v1` release, transport label "ActiveProxy" on fresh Mac | §1.1 (smoke), §1.2-1.3 (assets), §2.3 (manual transport check) | V2 #1 binary execution smoke (catches missing/wrong-arch linux-x64 binaries before any human sees ActiveProxy on a fresh install) |
+| v1.2.7.9 | Sudoers entries not auto-installed on fresh Mac | §2.2 (full install flow) | (still manual — privileged install can't be CI-tested) |
+| v1.2.7.10 | Bundled bash missing, `WG_QUICK_USERSPACE_IMPLEMENTATION` env var not propagating through sudo | §2.3 (transport check), §2.5 (relaunch silent) | V2 #1 catches missing `bash-darwin-*` if it lands as a missing/corrupt asset; sudo-env propagation still §2.3 manual |
+| v1.2.7.11 | `awg` binary never bundled, bundled bin dir not on PATH inside sudo'd script, **osascript apostrophe-injection in setupMacOS** | §1.1 (smoke includes osascript unit test), §2.2 (full install flow) | V2 #1 explicitly verifies `awg-linux-x64` runs (ELF + `--version`); macOS `awg-darwin-arm64` still §2.3 manual |
+| v1.2.7.12 | Password prompt on every relaunch (sudoers-marker.json missing), `awg-quick` calling `wg setconf` instead of `awg setconf` | §2.5 (relaunch silent) | (still manual — sudoers state on real Mac) |
+| v1.2.7.13 | Launcher status indicator stuck on `Stopped` after pc2-node respawn | §2.6 (in-app update doesn't desync indicator) | V2 #3 boot-time SLA catches init-time regressions that don't crash but make UX awful (warns >60 s, fails >90 s) |
 
 If you find a new failure mode in production that this checklist doesn't catch, add a checklist item for it in the appropriate section **before** tagging the fix. The point of the checklist is that it grows monotonically — every hot-patch cycle teaches us something the checklist didn't ask about.
+
+**CI-coverage philosophy** (added 2026-05-19): cheap automated gates (CI) catch the bug class on the linux-x64 build runner; the macOS-specific bug surface is still validated only by §2 manual install. We do not (and largely cannot) replace §2 with CI — privileged install + real-network behaviour + Apple notarization need a real Mac. CI's job is to fail fast on bugs that don't need a Mac to surface.
 
 ---
 

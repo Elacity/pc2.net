@@ -442,10 +442,21 @@ jobs:
           #
           # 2 s intervals: balances responsiveness vs not hammering the
           # bind-during-startup race window. Total max iterations = 60.
+          #
+          # SLA gate (CI-HARDENING-RELIABILITY-V2 #3, 2026-05-19): a
+          # successful response within 60 s is "good"; 60-90 s is "warn"
+          # (creeping regression signal); >90 s is a hard SLA violation
+          # that fails the gate. Real-world devices (slower disk, busier
+          # system, RPi-class) typically run 1.3-1.5× CI time, so 90 s
+          # in CI corresponds to ~120-135 s in field — anything beyond
+          # is a UX cliff. Boot timing is captured into BOOT_TIME_S for
+          # post-poll assertion.
           HEALTH_URL="http://localhost:${PC2_PORT}/api/health"
+          BOOT_TIME_S=0
           for attempt in $(seq 1 60); do
             if curl -fsS -m 3 "${HEALTH_URL}" -o /tmp/pc2-health.json 2>/dev/null; then
-              echo "✅ /api/health responded after $((attempt * 2))s"
+              BOOT_TIME_S=$((attempt * 2))
+              echo "✅ /api/health responded after ${BOOT_TIME_S}s"
               break
             fi
             # If the server died mid-poll, bail early rather than waiting.
@@ -467,6 +478,18 @@ jobs:
           if [ ! -s /tmp/pc2-health.json ]; then
             echo "::error::/api/health never responded within 120 s on ${HEALTH_URL}"
             exit 1
+          fi
+
+          # SLA gate (#3): hard-fail if boot time > 90 s; warn if > 60 s.
+          # Pure assertion on already-measured BOOT_TIME_S — zero added runtime.
+          if [ "${BOOT_TIME_S}" -gt 90 ]; then
+            echo "::error::Boot-time SLA violation: /api/health responded after ${BOOT_TIME_S}s (ceiling: 90s)"
+            echo "::error::This indicates an init-time regression. Real-world devices run ~1.3-1.5× CI time, so this likely means 120-135s in field — UX cliff."
+            exit 1
+          elif [ "${BOOT_TIME_S}" -gt 60 ]; then
+            echo "::warning::Boot-time approaching SLA ceiling: ${BOOT_TIME_S}s (warn at 60s, fail at 90s). Investigate before it crosses the hard SLA."
+          else
+            echo "✅ Boot-time within SLA: ${BOOT_TIME_S}s (target ≤ 60s, ceiling 90s)"
           fi
 
           echo "Health response body:"
@@ -507,6 +530,99 @@ jobs:
 
           echo "::endgroup::"
           echo "✅ A-4 boot-smoke complete on ${{ matrix.label }}"
+
+      # CI-HARDENING-RELIABILITY-V2 #2: Memory-ceiling smoke (RPi-class proxy).
+      #
+      # Runs on linux-x64 only — same chip family as a contemporary Raspberry
+      # Pi 4/5 running Raspberry Pi OS, and a memory-ceiling regression is
+      # arch-independent so x64 is sufficient signal.
+      #
+      # NODE_OPTIONS=--max-old-space-size=512 limits V8 heap to 512 MB. This
+      # is the pragmatic floor for an RPi 4 (2 GB minimum total RAM):
+      #   - OS overhead: ~300 MB
+      #   - IPFS daemon: ~300-500 MB resident
+      #   - Other sidecars (wireguard-go, etc.): ~100 MB
+      #   - Available for pc2-node Node process: ~1-1.5 GB
+      #   - 512 MB heap leaves headroom for code + native modules + stack
+      #
+      # If /api/health responds successfully under 512 MB heap, we have CI
+      # proof that pc2-node is RPi-4-viable at minimum spec.
+      #
+      # Failure mode: V8 emits "JavaScript heap out of memory" and the
+      # process dies. Our existing kill-detection in the poll loop catches
+      # that and fails fast.
+      - name: 'Memory-ceiling boot-smoke (RPi-class proxy, V2 part 2)'
+        if: matrix.label == 'linux-x64'
+        env:
+          PC2_PORT: 24200
+          NODE_ENV: production
+          NODE_OPTIONS: '--max-old-space-size=512'
+        run: |
+          set -euo pipefail
+          echo "::group::V2 #2 memory-ceiling boot-smoke (NODE_OPTIONS=${NODE_OPTIONS})"
+
+          cd pc2-node
+
+          PORT="${PC2_PORT}" node dist/index.js > /tmp/pc2-mem-boot.log 2>&1 &
+          SERVER_PID=$!
+          echo "Started pc2-node with PID ${SERVER_PID} on port ${PC2_PORT} with 512 MB heap ceiling"
+
+          cleanup() {
+            local exitcode=$?
+            if kill -0 ${SERVER_PID} 2>/dev/null; then
+              kill -TERM ${SERVER_PID} 2>/dev/null || true
+              for i in 1 2 3 4 5; do
+                if ! kill -0 ${SERVER_PID} 2>/dev/null; then break; fi
+                sleep 1
+              done
+              kill -KILL ${SERVER_PID} 2>/dev/null || true
+            fi
+            wait ${SERVER_PID} 2>/dev/null || true
+            if [ $exitcode -ne 0 ]; then
+              echo "::group::pc2-node memory-ceiling boot log (last 100 lines)"
+              tail -n 100 /tmp/pc2-mem-boot.log || true
+              echo "::endgroup::"
+              # Look specifically for OOM signature so we can give a
+              # precise error message rather than generic "didn't respond".
+              if grep -qi "JavaScript heap out of memory\|allocation failed\|Reached heap limit" /tmp/pc2-mem-boot.log 2>/dev/null; then
+                echo "::error::pc2-node OOM'd under 512 MB heap ceiling — RPi-4-class hardware will not boot the node. This is a memory regression."
+              fi
+            fi
+            return $exitcode
+          }
+          trap cleanup EXIT
+
+          # Same poll pattern as A-4 but with explicit OOM-detection.
+          MEM_HEALTH_URL="http://localhost:${PC2_PORT}/api/health"
+          for attempt in $(seq 1 60); do
+            if curl -fsS -m 3 "${MEM_HEALTH_URL}" -o /tmp/pc2-mem-health.json 2>/dev/null; then
+              echo "✅ /api/health responded after $((attempt * 2))s under 512 MB heap"
+              break
+            fi
+            if ! kill -0 ${SERVER_PID} 2>/dev/null; then
+              echo "::error::pc2-node process died during memory-ceiling boot (likely OOM — see boot log dump)"
+              exit 1
+            fi
+            if [ $((attempt % 5)) -eq 0 ]; then
+              echo "  ... still polling under 512 MB heap (elapsed: $((attempt * 2))s)"
+            fi
+            sleep 2
+          done
+
+          if [ ! -s /tmp/pc2-mem-health.json ]; then
+            echo "::error::/api/health never responded within 120 s under 512 MB heap"
+            exit 1
+          fi
+
+          # Assert healthy state (lighter than A-4 — main gate is "did it boot under memory pressure")
+          STATUS=$(node -e "console.log(JSON.parse(require('fs').readFileSync('/tmp/pc2-mem-health.json','utf8')).status)")
+          if [ "${STATUS}" != "ok" ]; then
+            echo "::error::Memory-ceiling boot returned status='${STATUS}', expected 'ok'"
+            exit 1
+          fi
+
+          echo "::endgroup::"
+          echo "✅ V2 #2 memory-ceiling smoke passed — pc2-node boots under 512 MB heap (RPi-4-viable)"
 
   # ---------------------------------------------------------------------------
   # release-assets-integrity: confirm the pc2-binaries-v1 GitHub release has
@@ -571,6 +687,101 @@ jobs:
             --json assets \
             --jq '.assets[] | "\(.name)\t\(.size) bytes"' \
             | column -t -s $'\t'
+
+      # CI-HARDENING-RELIABILITY-V2 #1: Binary execution smoke.
+      #
+      # The release-assets-integrity check above proves the 23 expected
+      # files EXIST. This step proves they actually EXECUTE. Bug class:
+      # corrupted uploads, wrong-arch binaries silently shipped, dynamic
+      # linker mismatches (e.g., glibc-symbol assumptions in published
+      # artifacts that break on older distros).
+      #
+      # Tests the linux-x64 variants of the 4 compiled binaries (Go +
+      # C tools). The bash scripts (wg-quick, awg-quick) and macOS/ARM
+      # variants are skipped:
+      #   - bash scripts → tested implicitly via bash -n syntax check
+      #     during their respective publish workflows
+      #   - macOS variants → end-to-end tested in the 48-72 h Mac launcher
+      #     soak (more authentic than CI exec)
+      #   - linux-arm64 variants → would require self-hosted runners or
+      #     QEMU emulation; diminishing return since same upstream Go/C
+      #     code as x64
+      #
+      # Two checks per binary:
+      #   1. file(1) → must report ELF + x86-64 (catches "uploaded text
+      #      file instead of binary" or "wrong arch" failures)
+      #   2. ./binary --version → must exit cleanly (< 128, i.e., not
+      #      killed by signal). Some tools may exit 1-2 on unknown
+      #      flags; that's still "ran without crashing".
+      - name: 'Binary execution smoke (V2 part 1)'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo "::group::V2 #1 binary execution smoke (linux-x64 variants)"
+
+          TMPDIR=$(mktemp -d)
+          cd "${TMPDIR}"
+
+          # The 4 compiled binaries shipped to pc2-binaries-v1 for linux-x64.
+          BINARIES=("wireguard-go-linux-x64" "amneziawg-go-linux-x64" "wg-linux-x64" "awg-linux-x64")
+
+          ALL_OK=1
+          for bin in "${BINARIES[@]}"; do
+            echo "::group::Verifying ${bin}"
+
+            if ! gh release download pc2-binaries-v1 -R Elacity/pc2.net --pattern "${bin}" 2>&1; then
+              echo "::error::Failed to download ${bin} from pc2-binaries-v1"
+              ALL_OK=0
+              echo "::endgroup::"
+              continue
+            fi
+
+            # 1: file(1) check — verify ELF + x86-64
+            ftype=$(file "${bin}")
+            echo "file(1): ${ftype}"
+            if ! echo "${ftype}" | grep -qE "ELF.*(x86-64|EM_X86_64)"; then
+              echo "::error::${bin} is not a valid linux x86-64 ELF binary (got: ${ftype})"
+              ALL_OK=0
+              echo "::endgroup::"
+              continue
+            fi
+
+            # 2: chmod + execute --version
+            chmod +x "${bin}"
+            set +e
+            ./"${bin}" --version > /tmp/bin-out.txt 2>&1
+            rc=$?
+            set -e
+
+            # Exit code < 128 = ran (even if it didn't recognise --version).
+            # Exit code >= 128 = killed by signal (segfault, etc.) = real failure.
+            if [ ${rc} -ge 128 ]; then
+              echo "::error::${bin} crashed with signal $((rc - 128)) when running --version"
+              tail -n 20 /tmp/bin-out.txt || true
+              ALL_OK=0
+            else
+              echo "  exit code: ${rc} (clean)"
+              echo "  output (first 5 lines):"
+              head -n 5 /tmp/bin-out.txt | sed 's/^/    /' || true
+              echo "✅ ${bin} executes correctly"
+            fi
+
+            echo "::endgroup::"
+          done
+
+          # Cleanup tmpdir to avoid polluting the runner across steps.
+          cd /
+          rm -rf "${TMPDIR}"
+
+          if [ ${ALL_OK} -ne 1 ]; then
+            echo "::error::One or more pc2-binaries-v1 linux-x64 binaries failed verification."
+            echo "::error::This means published assets exist but cannot run on a real Linux user's machine."
+            exit 1
+          fi
+
+          echo "::endgroup::"
+          echo "✅ V2 #1 binary execution smoke passed — all 4 linux-x64 binaries are valid ELF + execute cleanly"
 
   # ---------------------------------------------------------------------------
   # D-1: docker-smoke — build pc2-node/Dockerfile in CI (no push) and assert

@@ -145,17 +145,34 @@ COPY --from=builder /app/pc2-node/frontend ./frontend
 COPY --from=builder /app/pc2-node/package.json ./
 COPY --from=builder /app/pc2-node/tsconfig.json ./
 
-# Copy configuration templates.
-# Bug 2 fix (2026-05-18 docker-smoke): The previous path `/app/config` was
-# the host's repo-root /config/ directory which only contains
-# pc2.json.example + pc2.production.json — NO default.json. The actual
-# default config lives at pc2-node/config/default.json. The runtime
-# loader (pc2-node/src/config/loader.ts:139) computes
-# DEFAULT_CONFIG_PATH = join(__dirname, '../../config/default.json')
-# which resolves to /app/config/default.json at runtime (since
-# __dirname = /app/src/config). Copying pc2-node/config to /app/config
-# satisfies that path.
+# Copy configuration files.
+# Two distinct config directories must merge into /app/config/ at runtime:
+#
+#   1. pc2-node/config/ on host → contains default.json + config.json +
+#      models-catalog.json. loader.ts:139 reads default.json from
+#      __dirname/../../config/default.json which resolves to
+#      /app/config/default.json at runtime (since __dirname = /app/src/config).
+#
+#   2. repo-root /config/ on host → contains pc2.json.example +
+#      pc2.production.json. docker-entrypoint.sh:24 reads
+#      /app/config/pc2.production.json on first run to seed the data
+#      volume's pc2.json.
+#
+# Bug 2 fix (2026-05-18 docker-smoke): The original Dockerfile only copied
+# /app/config (the repo-root /config/ on host) → loader couldn't find
+# default.json and exited with "Default config not found".
+#
+# Bug 6 fix (2026-05-18 docker-smoke): My initial Bug 2 fix only copied
+# pc2-node/config → docker-entrypoint.sh couldn't find pc2.production.json
+# and exited with "cp: can't stat /app/config/pc2.production.json".
+#
+# Final solution: copy BOTH directories. Order matters — pc2-node/config
+# first so its files exist; then repo-root /config/ contents merge in
+# without overwriting (pc2.json.example, pc2.production.json don't
+# collide with default.json, config.json, models-catalog.json).
 COPY --from=builder /app/pc2-node/config ./config
+COPY --from=builder /app/config/pc2.production.json ./config/pc2.production.json
+COPY --from=builder /app/config/pc2.json.example ./config/pc2.json.example
 
 # Copy pre-built WASM apps.
 # Bug 3 fix (2026-05-18 docker-smoke): The 7 .wasm binaries (cenc-decrypt,

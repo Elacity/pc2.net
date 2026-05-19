@@ -705,17 +705,13 @@
         if (!probes) return;
         const rows = [];
         const required = [
-            { key: 'apiKeyConfigured',       name: 'Tier 1 key on disk' },
-            { key: 'litActionCidConfigured', name: 'Lit Action CID set' },
-            { key: 'provisionCached',        name: 'Provision blob cached' },
+            { key: 'provisionCached', name: 'Provision blob cached' },
         ];
         for (const r of required) {
             const ok = probes[r.key] === true;
             tick(ok ? 'pass' : 'warn');
             rows.push(row(r.name, fmtBool(probes[r.key]), { cls: ok ? 'pass' : 'warn', label: ok ? 'yes' : 'no' }));
         }
-        const userOk = probes.userKeyConfigured === true;
-        rows.push(row('Tier 2 user key', fmtBool(probes.userKeyConfigured), { cls: userOk ? 'info' : 'muted', label: userOk ? 'set' : 'unset' }));
         const apiBadge = probes.apiHostReachable ? { cls: 'pass', label: 'ok' } : { cls: 'fail', label: 'unreach' };
         tick(probes.apiHostReachable ? 'pass' : 'fail');
         rows.push(row('Lit API host', fmtMs(probes.apiLatencyMs), apiBadge));

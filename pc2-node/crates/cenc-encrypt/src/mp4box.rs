@@ -289,6 +289,96 @@ pub fn parse_init_segment(data: &[u8]) -> Option<InitSegmentInfo> {
     })
 }
 
+/// Walk every `trak` in `moov` and return the first one whose first
+/// sample entry is NOT yet `encv`/`enca`. Used to drive the multi-track
+/// transform loop: callers iterate until this returns `None`, transforming
+/// each clear trak in turn.
+///
+/// Returns ancestor sizes/positions specific to the trak found (not just
+/// the first trak as `parse_init_segment` does). This is required for
+/// correctly resizing only the traversed trak's ancestors when its sample
+/// entry is wrapped in `sinf`.
+pub fn parse_first_clear_trak(data: &[u8]) -> Option<InitSegmentInfo> {
+    // Find moov.
+    let (moov_pos, moov_size, moov_hs) = find_child_box(data, 0, data.len(), b"moov")?;
+    let moov_content = moov_pos + moov_hs as usize;
+    let moov_end = moov_pos + moov_size as usize;
+
+    // Walk trak children of moov.
+    let mut tpos = moov_content;
+    while tpos + 8 <= moov_end {
+        let h = read_box_header(data, tpos)?;
+        if h.size < 8 || tpos + h.size as usize > moov_end { return None; }
+        if &h.box_type == b"trak" {
+            let trak_pos = tpos;
+            let trak_size = h.size;
+            let trak_hs = h.header_size;
+            let trak_end = trak_pos + trak_size as usize;
+            let trak_content = trak_pos + trak_hs as usize;
+
+            // mdia → minf → stbl → stsd
+            let (mdia_pos, mdia_size, mdia_hs) = find_child_box(data, trak_content, trak_end, b"mdia")?;
+            let mdia_end = mdia_pos + mdia_size as usize;
+            let mdia_content = mdia_pos + mdia_hs as usize;
+
+            let (minf_pos, minf_size, minf_hs) = find_child_box(data, mdia_content, mdia_end, b"minf")?;
+            let minf_end = minf_pos + minf_size as usize;
+            let minf_content = minf_pos + minf_hs as usize;
+
+            let (stbl_pos, stbl_size, stbl_hs) = find_child_box(data, minf_content, minf_end, b"stbl")?;
+            let stbl_end = stbl_pos + stbl_size as usize;
+            let stbl_content = stbl_pos + stbl_hs as usize;
+
+            let (stsd_pos, stsd_size, stsd_hs) = find_child_box(data, stbl_content, stbl_end, b"stsd")?;
+            let entry_start = stsd_pos + stsd_hs as usize + 8; // version+flags(4) + entry_count(4)
+            if entry_start + 8 > data.len() { return None; }
+            let entry_h = read_box_header(data, entry_start)?;
+
+            // Skip already-encrypted entries; advance to next trak.
+            if &entry_h.box_type == b"encv" || &entry_h.box_type == b"enca" {
+                tpos += trak_size as usize;
+                continue;
+            }
+
+            return Some(InitSegmentInfo {
+                sample_entry_type: entry_h.box_type,
+                sample_entry_offset: entry_start,
+                sample_entry_size: entry_h.size as usize,
+                sample_entry_header_size: entry_h.header_size,
+                stsd_offset: stsd_pos,
+                stsd_size: stsd_size as usize,
+                stbl_offset: stbl_pos,
+                stbl_size: stbl_size as usize,
+                ancestors: vec![
+                    (moov_pos, moov_size),
+                    (trak_pos, trak_size),
+                    (mdia_pos, mdia_size),
+                    (minf_pos, minf_size),
+                    (stbl_pos, stbl_size),
+                    (stsd_pos, stsd_size),
+                ],
+            });
+        }
+        tpos += h.size as usize;
+    }
+    None
+}
+
+/// Find a direct child box of a known type within a parent's content range.
+/// Returns (offset, size, header_size) on match, None otherwise.
+fn find_child_box(data: &[u8], parent_content: usize, parent_end: usize, target: &[u8; 4]) -> Option<(usize, u64, u64)> {
+    let mut pos = parent_content;
+    while pos + 8 <= parent_end {
+        let h = read_box_header(data, pos)?;
+        if h.size < 8 || pos + h.size as usize > parent_end { return None; }
+        if &h.box_type == target {
+            return Some((pos, h.size, h.header_size));
+        }
+        pos += h.size as usize;
+    }
+    None
+}
+
 fn collect_ancestor_positions(buf: &[u8], path: &[&[u8; 4]]) -> Vec<(usize, u64)> {
     let mut ancestors = Vec::new();
     let mut start = 0;
@@ -319,7 +409,7 @@ fn collect_ancestor_positions(buf: &[u8], path: &[&[u8; 4]]) -> Vec<(usize, u64)
 }
 
 /// Build a `senc` box for the given per-sample IVs.
-/// flags=0 (no subsamples — full-sample encryption)
+/// flags=0 — no subsamples (full-sample encryption).
 pub fn build_senc(ivs: &[[u8; 8]]) -> Vec<u8> {
     let sample_count = ivs.len() as u32;
     let mut content = Vec::with_capacity(4 + ivs.len() * 8);
@@ -328,6 +418,33 @@ pub fn build_senc(ivs: &[[u8; 8]]) -> Vec<u8> {
         content.extend_from_slice(iv);
     }
     make_fullbox(b"senc", 0, 0, &content)
+}
+
+/// Build a `senc` box with per-sample subsample tables.
+/// flags=0x000002 — subsample encryption (per ISO/IEC 23001-7 §7.2).
+/// Each sample carries: 8-byte IV + 2-byte subsample_count + N×(2-byte
+/// BytesOfClearData + 4-byte BytesOfProtectedData).
+pub fn build_senc_with_subsamples(
+    ivs: &[[u8; 8]],
+    subsamples: &[Vec<(u32, u32)>],
+) -> Vec<u8> {
+    assert_eq!(ivs.len(), subsamples.len(), "ivs/subsamples length mismatch");
+
+    let sample_count = ivs.len() as u32;
+    let mut content = Vec::with_capacity(4 + ivs.len() * (8 + 2 + 6));
+    content.extend_from_slice(&sample_count.to_be_bytes());
+    for (iv, subs) in ivs.iter().zip(subsamples.iter()) {
+        content.extend_from_slice(iv);
+        let sub_count = subs.len() as u16;
+        content.extend_from_slice(&sub_count.to_be_bytes());
+        for &(clear, protected) in subs {
+            // BytesOfClearData is u16 in the box; clamp.
+            let clear_u16 = clear.min(u16::MAX as u32) as u16;
+            content.extend_from_slice(&clear_u16.to_be_bytes());
+            content.extend_from_slice(&protected.to_be_bytes());
+        }
+    }
+    make_fullbox(b"senc", 0, 0x000002, &content)
 }
 
 /// Build a `tenc` box (Track Encryption Box).

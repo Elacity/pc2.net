@@ -1,3 +1,3 @@
 export { DIGITAL_ASSET_ABI, CENTRAL_STORAGE_ABI, CHANNEL_FACTORY_ABI, AUTHORITY_GATEWAY_ABI, OPERATIVE_BUYABLE_ABI, BASE_CONTRACTS, OP_TYPES, ROLE_TYPES, BASE_USDC, PUBLIC_ELACITY_CHANNEL, CORE_STORAGE_ABI, CHANNEL_CORE_ABI, } from './abis.js';
-export { ELACITY_ROYALTY_ADDRESS, ELACITY_ROYALTY_PERCENT, encodeOpRawData, encodeSellRawData, hashToContentId, } from './encode.js';
+export { ELACITY_ROYALTY_ADDRESS, ELACITY_ROYALTY_PERCENT, encodeOpRawData, encodeSellRawData, kidToContentId, hashToContentId, } from './encode.js';
 //# sourceMappingURL=index.js.map

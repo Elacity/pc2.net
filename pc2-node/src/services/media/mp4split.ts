@@ -520,6 +520,50 @@ export async function splitFragmentedMP4WASM(filePath: string): Promise<SplitRes
   }
 }
 
+/**
+ * Reduce a multi-track init segment to a single-track init for a given
+ * track type ("video" | "audio"). Calls the mp4-split WASM module in
+ * `split_init` mode, which keeps mvhd + the matching trak + filtered
+ * mvex (only the trex for the kept track) + udta.
+ *
+ * Used at packaging time to emit per-Representation init.mp4 files. Without
+ * this, sharing the same multi-track init across every Representation dir
+ * causes DASH demuxers to register N streams per Representation init (one
+ * per trak declared) — leading to "ghost" streams whose Representation has
+ * no matching segments, and player crashes when those ghost SourceBuffers
+ * are fed.
+ *
+ * Tracked: MEDIA-2026-05-18-CENC-PSSH-LIBAV-COMPLIANCE.
+ */
+export async function splitInitForTrackWASM (
+  initSegment: Buffer,
+  trackType: 'video' | 'audio',
+): Promise<Buffer> {
+  const { getWASMRuntime } = await import('../wasm/WASMRuntime.js');
+  const runtime = getWASMRuntime();
+
+  if ( ! cachedMp4SplitWasm ) {
+    const wasmPath = pathResolve(__dirname_mp4, '../../../wasm-apps/mp4-split/mp4-split.wasm');
+    if ( ! existsSync(wasmPath) ) {
+      throw new Error(`mp4-split WASM not found at ${wasmPath} — run scripts/build-wasm.sh mp4-split`);
+    }
+    cachedMp4SplitWasm = readFileSync(wasmPath).buffer;
+  }
+
+  const result = await runtime.executeMp4InitSplit(
+    cachedMp4SplitWasm,
+    initSegment,
+    trackType,
+    { timeoutMs: 10000 },
+  );
+
+  if ( ! result.success || ! result.initSegment ) {
+    throw new Error(`mp4-split split_init failed for ${trackType}: ${result.error || 'unknown error'}`);
+  }
+
+  return result.initSegment;
+}
+
 function splitFragmentedMP4FromBuffer(buf: Buffer, filePath: string): SplitResult {
   logger.info(`[mp4split] Parsing fragmented MP4 (JS): ${filePath} (${(buf.length / 1024 / 1024).toFixed(1)} MB)`);
 

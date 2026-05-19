@@ -2514,6 +2514,7 @@ export class DatabaseManager {
     asset_cid: string;
     metadata_cid: string;
     encrypt_hash: string;
+    kid?: string;
     channel: string;
     price?: string;
     currency_address?: string;
@@ -2530,10 +2531,10 @@ export class DatabaseManager {
     const result = db.prepare(`
       INSERT INTO publish_drafts (
         wallet_address, title, description, category, file_name, file_size, mime_type,
-        asset_cid, metadata_cid, encrypt_hash, channel, price, currency_address,
+        asset_cid, metadata_cid, encrypt_hash, kid, channel, price, currency_address,
         currency_symbol, copies, access_method, reseller_cut, royalty_partners,
         thumbnail_cid, adult, steps
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       record.wallet_address.toLowerCase(),
       record.title,
@@ -2545,6 +2546,7 @@ export class DatabaseManager {
       record.asset_cid,
       record.metadata_cid,
       record.encrypt_hash,
+      record.kid || null,
       record.channel,
       record.price || null,
       record.currency_address || null,

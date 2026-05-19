@@ -420,6 +420,7 @@ CREATE TABLE IF NOT EXISTS publish_drafts (
   asset_cid TEXT NOT NULL,
   metadata_cid TEXT NOT NULL,
   encrypt_hash TEXT NOT NULL,
+  kid TEXT,
   channel TEXT NOT NULL,
   price TEXT,
   currency_address TEXT,

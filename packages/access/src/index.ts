@@ -77,6 +77,8 @@ export {
   ELACITY_ROYALTY_PERCENT,
   encodeOpRawData,
   encodeSellRawData,
+  kidToContentId,
+  /** @deprecated use {@link kidToContentId} — removed next minor */
   hashToContentId,
   type MintDataParams,
   CORE_STORAGE_ABI,

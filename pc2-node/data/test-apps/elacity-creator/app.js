@@ -1529,9 +1529,16 @@
     encrypted.set(iv, 0);
     encrypted.set(new Uint8Array(cipherBuf), iv.length);
 
+    // Local-dev: generate a canonical 16-byte KID derived from a UUIDv4
+    // (dashes stripped) — same shape as the media KID. Asset minted in
+    // local-dev mode still produces a valid bytes16 contentId; the on-chain
+    // mapping points to a CEK that only this dev wallet can recover.
+    var devKidHex = (window.crypto || crypto).randomUUID().replace(/-/g, '');
+
     return {
       encrypted: encrypted,
       dataToEncryptHash: hashHex,
+      kid: devKidHex,
       keyId: 'local-dev:' + keyHex.substring(0, 16),
       algorithm: 'aes-gcm',
       _localDevKey: uint8ToBase64(rawKeyBytes),
@@ -1542,14 +1549,31 @@
 
   var PROGRESS_STEPS = ['prog-connect', 'prog-encrypt', 'prog-upload-asset', 'prog-upload-meta', 'prog-pin', 'prog-mint', 'prog-approve'];
 
-  function hashToContentId(hexHash) {
-    var clean = hexHash.startsWith('0x') ? hexHash.slice(2) : hexHash;
-    return '0x' + clean.slice(0, 32).padEnd(32, '0');
+  // Per MEDIA-2026-05-18-CENC-PSSH-LIBAV-COMPLIANCE: the V3 contract
+  // maintains a `KID => (Channel, TokenId)` mapping, so the on-chain
+  // bytes16 contentId MUST be the canonical KID — the same value pc2-node
+  // emits into pssh/tenc for media, and the same value
+  // /api/storage/lit/encrypt returns for non-media. There is NO valid
+  // hash-derived contentId; the legacy `hashToContentId` helper has been
+  // removed deliberately and must not be reintroduced.
+  function kidToContentId(kidHex) {
+    var clean = kidHex.startsWith('0x') ? kidHex.slice(2) : kidHex;
+    if (!/^[0-9a-fA-F]{32}$/.test(clean)) {
+      throw new Error('kidToContentId: expected 32 lowercase hex chars, got ' + JSON.stringify(kidHex));
+    }
+    return '0x' + clean.toLowerCase();
   }
 
   function encodeOpRawData(params) {
     var coder = ethers.AbiCoder.defaultAbiCoder();
-    var cid16 = hashToContentId(params.contentId);
+    // contentId MUST be a 0x-prefixed bytes16 (32 hex chars + 0x = 34 total)
+    // produced by kidToContentId(kid). Callers that hand in anything else
+    // are wrong — the fix is to plumb a real KID, not to derive one from a
+    // hash. See MEDIA-2026-05-18-CENC-PSSH-LIBAV-COMPLIANCE.
+    if ( typeof params.contentId !== 'string' || ! /^0x[0-9a-fA-F]{32}$/.test(params.contentId) ) {
+      throw new Error('encodeOpRawData: contentId must be a 0x-prefixed bytes16 KID, got ' + JSON.stringify(params.contentId));
+    }
+    var cid16 = params.contentId.toLowerCase();
     var metadataUri = 'ipfs://' + params.metadataCID;
     var isResellable = params.opType === OP_TYPES.BUY_AND_RESELL;
 
@@ -4118,10 +4142,14 @@
           if (pollInterval < 3000) pollInterval = Math.min(pollInterval + 300, 3000);
         }
 
-        // Media pipeline produces its own CID, CEK, etc.
+        // Media pipeline produces its own CID, CEK, KID.
         encryptResult = {
           encrypted: null,
           dataToEncryptHash: mediaEncodeResult.dataToEncryptHash || '',
+          // Canonical asset KID — used as on-chain bytes16 contentId,
+          // capsule kid, token metadata kid. Server returns 32 hex chars
+          // without 0x; kidToContentId re-prefixes.
+          kid: mediaEncodeResult.kid || '',
           actionCid: '',
           conditions: null,
           litCiphertext: mediaEncodeResult.ciphertext || '',
@@ -4156,6 +4184,10 @@
           encryptResult = {
             encrypted: base64ToUint8(litData.encryptedData),
             dataToEncryptHash: litData.dataToEncryptHash,
+            // Strip 0x prefix so the value is uniform with mediaEncodeResult.kid
+            // (server-side /api/storage/lit/encrypt emits "0x" + 32-hex). The
+            // contentId helper re-adds 0x. Width is 16 bytes / 32 hex chars.
+            kid: (litData.kid || '').replace(/^0x/, ''),
             actionCid: litData.actionCid,
             conditions: litData.conditions,
             litCiphertext: litData.litCiphertext,
@@ -4724,6 +4756,10 @@
           asset_cid: assetCid,
           metadata_cid: metaCid,
           encrypt_hash: encryptResult.dataToEncryptHash,
+          // Canonical asset KID — required for draft-resume mints to emit the
+          // correct on-chain bytes16 contentId. See
+          // MEDIA-2026-05-18-CENC-PSSH-LIBAV-COMPLIANCE.
+          kid: encryptResult.kid || '',
           channel: channel,
           wallet_choice: draftWalletType,
           price: String(price || 0),
@@ -4839,9 +4875,19 @@
               : accessMethod === 'buy_once' ? OP_TYPES.BUY_ONCE
                 : OP_TYPES.BUY_AND_RESELL;
 
+            // The contract maintains a KID => (Channel, TokenId) mapping,
+            // so the on-chain bytes16 contentId MUST be the canonical KID
+            // (same value libav extracts from pssh for media, same value
+            // /api/storage/lit/encrypt returns for non-media). No
+            // hash-derivation path — see
+            // MEDIA-2026-05-18-CENC-PSSH-LIBAV-COMPLIANCE.
+            if ( ! encryptResult.kid ) {
+              throw new Error('Mint refused: encryptResult.kid is missing. The KID is the asset identity and MUST be set by the encryption step.');
+            }
+            var contentIdSource = kidToContentId(encryptResult.kid);
             var opRawData = opType !== OP_TYPES.FREE
               ? encodeOpRawData({
-                contentId: encryptResult.dataToEncryptHash,
+                contentId: contentIdSource,
                 metadataCID: metaCid,
                 creatorAddress: effectiveAddr,
                 copies: copies,
@@ -4849,7 +4895,7 @@
                 resellerCut: resellerCut,
                 royalties: royaltyPartners,
               })
-              : ethers.AbiCoder.defaultAbiCoder().encode(['bytes16'], [hashToContentId(encryptResult.dataToEncryptHash)]);
+              : ethers.AbiCoder.defaultAbiCoder().encode(['bytes16'], [contentIdSource]);
             var sellRawData = opType !== OP_TYPES.FREE
               ? encodeSellRawData(copies, priceWei, selectedCurrency.address)
               : '0x';
@@ -5175,8 +5221,18 @@
       if (assetCid && state.walletAddress && encryptResult) {
         try {
           var walletAddr = state.walletAddress.toLowerCase();
-          var cleanHash = (encryptResult.dataToEncryptHash || '').replace(/^0x/, '');
-          var capsuleKid = cleanHash ? '0x' + cleanHash.slice(0, 32).padEnd(32, '0') : '';
+          // For media: capsule kid MUST equal the pc2-node-generated KID
+          // (which is also the on-chain bytes16 contentId — see
+          // MEDIA-2026-05-18-CENC-PSSH-LIBAV-COMPLIANCE). Falling back to
+          // the Lit-hash slice would store a different identifier in the
+          // local capsule than what the contract and pssh advertise.
+          var capsuleKid;
+          if (isMediaFile && mediaEncodeResult && mediaEncodeResult.kid) {
+            capsuleKid = kidToContentId(mediaEncodeResult.kid);
+          } else {
+            var cleanHash = (encryptResult.dataToEncryptHash || '').replace(/^0x/, '');
+            capsuleKid = cleanHash ? '0x' + cleanHash.slice(0, 32).padEnd(32, '0') : '';
+          }
           var assetMime = state.resolvedMime || 'application/octet-stream';
           var capsuleFolder = '/' + walletAddr + '/' + (
             isMediaFile ? 'Videos' :
@@ -6393,9 +6449,19 @@
             : accessMethod === 'buy_once' ? OP_TYPES.BUY_ONCE
               : OP_TYPES.BUY_AND_RESELL;
 
+          // Draft-resume mint requires the canonical KID, but the current
+          // draft schema only persists `encrypt_hash`. Until the schema is
+          // extended with a `kid` column (tracked as Phase B of
+          // MEDIA-2026-05-18-CENC-PSSH-LIBAV-COMPLIANCE), resuming a media
+          // mint would silently emit the wrong on-chain contentId. Fail
+          // loudly instead.
+          if ( ! draft.kid ) {
+            throw new Error('Draft-resume mint refused: this draft predates the KID-as-contentId migration. Restart the mint from scratch so the encryption step can attach a real KID.');
+          }
+          var draftContentId = kidToContentId(draft.kid);
           var opRawData = opType !== OP_TYPES.FREE
             ? encodeOpRawData({
-              contentId: encryptHash,
+              contentId: draftContentId,
               metadataCID: metaCid,
               creatorAddress: draftEffectiveAddr,
               copies: copies,
@@ -6403,7 +6469,7 @@
               resellerCut: draft.reseller_cut || 900,
               royalties: draft.royalty_partners ? JSON.parse(draft.royalty_partners) : [],
             })
-            : ethers.AbiCoder.defaultAbiCoder().encode(['bytes16'], [hashToContentId(encryptHash)]);
+            : ethers.AbiCoder.defaultAbiCoder().encode(['bytes16'], [draftContentId]);
           var sellRawData = opType !== OP_TYPES.FREE
             ? encodeSellRawData(copies, priceWei, selectedCurrency.address)
             : '0x';

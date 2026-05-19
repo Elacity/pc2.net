@@ -23,7 +23,7 @@ router.post('/', authenticate, async (req: AuthenticatedRequest, res: Response) 
 
     const {
       title, description, category, file_name, file_size, mime_type,
-      asset_cid, metadata_cid, encrypt_hash, channel, price,
+      asset_cid, metadata_cid, encrypt_hash, kid, channel, price,
       currency_address, currency_symbol, copies, access_method,
       reseller_cut, royalty_partners, thumbnail_cid, adult, steps,
     } = req.body;
@@ -44,6 +44,10 @@ router.post('/', authenticate, async (req: AuthenticatedRequest, res: Response) 
       asset_cid,
       metadata_cid,
       encrypt_hash,
+      // Canonical asset KID — required for draft-resume mints to emit the
+      // correct on-chain bytes16 contentId. See
+      // MEDIA-2026-05-18-CENC-PSSH-LIBAV-COMPLIANCE.
+      kid,
       channel,
       price,
       currency_address,

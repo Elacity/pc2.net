@@ -400,3 +400,15 @@ This guarantees #3 by construction.
   and `a17e506d-…`) and a Widevine marker we intentionally don't emit.
   Our current V3 system ID (`bf8ef85d-2c54-475d-8c1e-e27db60332a2`) is
   authoritative and stays.
+- **Sibling task (init-side + delivery-side counterpart)**:
+  [`MEDIA-2026-05-18-CENC-PSSH-LIBAV-COMPLIANCE`](../MEDIA-2026-05-18-CENC-PSSH-LIBAV-COMPLIANCE/MEDIA-2026-05-18-CENC-PSSH-LIBAV-COMPLIANCE.md)
+  landed the init-segment + delivery-side CENC compliance work (pssh
+  placement, `tenc` per trak via multi-trak transform, per-track init
+  split, AV1 subsample encryption, IV uniqueness, on-chain KID-as-contentId
+  unification, libav C harness for verification). This MPD
+  `<ContentProtection>` task is the manifest-layer counterpart — both
+  combined give a player on-MPD AND on-init protection signalling. See
+  [`docs/core/CENC_PACKAGING_COMPLIANCE.md`](../../docs/core/CENC_PACKAGING_COMPLIANCE.md)
+  (post-mortem) and
+  [`docs/core/MEDIA_DRM_PACKAGING.md`](../../docs/core/MEDIA_DRM_PACKAGING.md)
+  (engineering reference).

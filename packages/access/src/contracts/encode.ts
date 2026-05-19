@@ -24,7 +24,16 @@ export const ELACITY_ROYALTY_ADDRESS = '0x0917Aa260359670F7855a5454c630993ce40C5
 export const ELACITY_ROYALTY_PERCENT = 5;
 
 export interface MintDataParams {
-  /** Content identifier: dataToEncryptHash (non-media) or KID (media) */
+  /**
+   * Canonical 16-byte KID for the asset (32 hex chars, with or without
+   * `0x` prefix). For media: the value emitted by the encryption step
+   * (pc2-node's `dashPackager::generateCEK().kid`). For non-media: the
+   * value returned by `/api/storage/lit/encrypt` (`kid` field, 16-byte
+   * UUID-derived).
+   *
+   * Must NOT be a `dataToEncryptHash` slice — see `kidToContentId` and
+   * `docs/core/MEDIA_DRM_PACKAGING.md` §5.
+   */
   contentId: string;
   /** IPFS CID of the metadata envelope/directory */
   metadataCID: string;
@@ -45,13 +54,47 @@ export interface MintDataParams {
 }
 
 /**
- * Convert a hex string to a bytes16 content ID.
+ * Convert a canonical 16-byte KID (32 hex chars, with or without `0x`
+ * prefix or dashes) into the `0x`-prefixed bytes16 contentId expected
+ * by the DigitalAsset contract.
  *
- * For non-media assets, the input is typically a SHA-256 dataToEncryptHash (64 hex chars / 32 bytes).
- * We take the first 16 bytes (32 hex chars) and pad if shorter. This truncation is intentional:
- * bytes16 is what the contract stores. For media assets, the KID is already 16 bytes.
+ * The V3 contract maintains a `KID => (Channel, TokenId)` mapping, so
+ * the on-chain bytes16 MUST be the canonical KID of the asset — the
+ * same value embedded in the PSSH `cenc:lit-aes-gcm-v3` Data[] JSON
+ * and in tenc.default_KID. Throws on malformed input — there is NO
+ * valid contentId that isn't a 16-byte KID.
  *
- * All dashes are stripped (handles UUID-formatted KIDs with 4 dashes).
+ * See docs/core/MEDIA_DRM_PACKAGING.md §5 for the KID identity contract
+ * and docs/core/CENC_PACKAGING_COMPLIANCE.md for the 2026-05-18
+ * post-mortem of the bug we hit by deriving contentIds from hashes.
+ */
+export function kidToContentId(kidHex: string): string {
+  const clean = (kidHex.startsWith('0x') ? kidHex.slice(2) : kidHex)
+    .replace(/-/g, '')
+    .toLowerCase();
+  if (!/^[0-9a-f]{32}$/.test(clean)) {
+    throw new Error(
+      `kidToContentId: expected 32 hex chars (16-byte KID), got ${JSON.stringify(kidHex)}`,
+    );
+  }
+  return '0x' + clean;
+}
+
+/**
+ * @deprecated Use `kidToContentId(kid)` instead. Deriving the on-chain
+ * `bytes16` contentId from a SHA-256 `dataToEncryptHash` produces a
+ * value that has no relationship to the KID embedded in PSSH/tenc — the
+ * contract's `KID => (Channel, TokenId)` mapping then breaks for any
+ * libav-based consumer that extracts the KID from PSSH and looks the
+ * asset up by it. The post-mortem at
+ * `docs/core/CENC_PACKAGING_COMPLIANCE.md` (root cause #1) details the
+ * fallout. This function is kept as a single-version compatibility shim
+ * for callers that still construct contentIds from non-KID inputs;
+ * REMOVE in the next minor bump.
+ *
+ * For non-media assets, the calling code should generate a 16-byte KID
+ * (UUID-derived, matching the pc2-node `randomUUID().replace(/-/g, '')`
+ * pattern) at encryption time and pass that here via `kidToContentId`.
  */
 export function hashToContentId(hash: string): string {
   const clean = hash.startsWith('0x') ? hash.slice(2) : hash;
@@ -70,6 +113,10 @@ export function hashToContentId(hash: string): string {
  *   - resellerCut: only for opType=2
  *
  * For free content (opType 0): returns '0x'
+ *
+ * `params.contentId` MUST be a canonical KID (32 hex chars, or a
+ * `0x`-prefixed 34-char bytes16 already in the contract format).
+ * Anything else throws — see `kidToContentId` rationale.
  */
 export function encodeOpRawData(params: MintDataParams): string {
   const {
@@ -84,7 +131,9 @@ export function encodeOpRawData(params: MintDataParams): string {
 
   if (opType === OP_TYPES.FREE) return '0x';
 
-  const cid16 = hashToContentId(contentId);
+  // Accept either a pre-formatted `0x`-prefixed bytes16 OR a raw 32-hex
+  // KID; both route through kidToContentId so the validation is uniform.
+  const cid16 = kidToContentId(contentId);
   const metadataUri = `ipfs://${metadataCID}`;
 
   const creatorPer1000 = Math.round(creatorRoyaltyPercent * 10);

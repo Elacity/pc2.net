@@ -1774,42 +1774,24 @@ async function getLitClient() {
 }
 
 // ── Lit Action Configuration ───────────────────────────────────────
-// Our non-media Lit Action (deployed to IPFS — set after first deploy)
-const LIT_ACTION_CID_PATH = join(__litDirname, '../../data/.lit-action-cid');
+// Resolution is now provision-cache → hardcoded constant only. See
+// chipotle-client.ts `getDecryptActionCid()`. The legacy env/file
+// override path (LIT_ACTION_CID, data/.lit-action-cid) was removed; to
+// rotate the action, update the supernode provision payload.
+import { getDecryptActionCid } from './chipotle-client.js';
+const DEFAULT_NON_MEDIA_ACTION_CID = getDecryptActionCid();
 
-// Hardcoded fallback for the deployed sigauth Lit Action — used when neither
-// LIT_ACTION_CID env nor the data/.lit-action-cid file is present (typical
-// for a fresh node that has never run /api/storage/lit/deploy-action and
-// has no operator-supplied env override).
-//
-// Without this, every fresh install returned 503 from begin-session and
-// 500 from /api/media/init (chipotle path), breaking ALL playback and
-// non-media Creator packaging for end users.
-//
-// The value MUST match (a) what is currently registered with Chipotle
-// group `1` (`elacity-ddrm`) and (b) what existing assets reference in
-// their delegation `actionIpfsId` field at session-bind time. The
-// canonical V1.2 sigauth Lit Action — pinned to ≥2 IPFS providers,
-// registered with Chipotle group 1, and end-to-end verified across
-// PDF/PNG/MP4/MP3 on 2026-04-21 — is `bafkreihvm4…`. See:
-//   - docs/handover/V12_SIGAUTH_HANDOVER.md §6.2
-//   - docs/handover/IRZHY_LIT_ACTION_FIX_V12.md §3.1
-//   - pc2-node/.env (line 7)
-//
-// v1.2.1 hotfix mistakenly hardcoded a Wave-8 re-pin CID
-// (`QmX5JxcF…r5uk`) that was registered but never became
-// production-active. Result: fresh nodes (Jetson, Pi, fresh installer
-// runs without `.env`) saw `Lit Action denied: code=access_denied`
-// on every asset open even though the buyer held a valid AccessToken.
-// Reverted to `bafkreihvm4…` in v1.2.2.
-//
-// SINGLE SOURCE OF TRUTH per V12_SIGAUTH_HANDOVER.md §6.3 — keep
-// `chipotle-client.ts → getActionCid()` final fallback synchronized with
-// this constant. When we rotate the action, update BOTH in the same
-// commit.
-const DEFAULT_NON_MEDIA_ACTION_CID = 'bafkreihvm4zkyuefnuptlbdins6cmd2mbslj2xgnyzz3ssdg2ggg3jtkk4';
+// Legacy decrypt CIDs accepted in delegation.actionIpfsId for backwards
+// compatibility with assets encrypted under previous Lit Actions. Those
+// legacy actions return the plaintext CEK (≤32 bytes); the unified
+// `recoverCEKViaEnvelope` detects short payloads and passes them through.
+const LEGACY_NON_MEDIA_ACTION_CIDS: ReadonlySet<string> = new Set([
+  'bafkreihvm4zkyuefnuptlbdins6cmd2mbslj2xgnyzz3ssdg2ggg3jtkk4', // V1.2 sigauth non-media decrypt
+  'QmSHMSxPogSsNki51fenDzsrkKB3eJfRMHXEPZKqPk6EAb',              // legacy media decrypt
+]);
 
-let NON_MEDIA_ACTION_CID = process.env.LIT_ACTION_CID || '';
+let NON_MEDIA_ACTION_CID = DEFAULT_NON_MEDIA_ACTION_CID;
+logger.info(`[Lit] Action CID: ${NON_MEDIA_ACTION_CID}`);
 
 // ── Lit Backend Selection ─────────────────────────────────────────
 // LIT_BACKEND=datil (default)    — use Datil SDK (WebSocket, SIWE, capacity credits)
@@ -1821,18 +1803,6 @@ type LitBackend = 'chipotle' | 'datil';
 const LIT_BACKEND: LitBackend = (process.env.LIT_BACKEND as LitBackend) || 'chipotle';
 logger.info(`[Lit] Backend: ${LIT_BACKEND} (set LIT_BACKEND=chipotle for Chipotle REST API)`);
 
-if (!NON_MEDIA_ACTION_CID && existsSync(LIT_ACTION_CID_PATH)) {
-  NON_MEDIA_ACTION_CID = readFileSync(LIT_ACTION_CID_PATH, 'utf8').trim();
-  if (NON_MEDIA_ACTION_CID) {
-    logger.info(`[Lit] Loaded action CID from file: ${NON_MEDIA_ACTION_CID}`);
-  }
-}
-
-if (!NON_MEDIA_ACTION_CID) {
-  NON_MEDIA_ACTION_CID = DEFAULT_NON_MEDIA_ACTION_CID;
-  logger.info(`[Lit] Using hardcoded fallback action CID: ${NON_MEDIA_ACTION_CID}`);
-}
-
 /**
  * Returns the server's authoritative sigauth Lit Action CID. Used by other
  * modules (e.g. media.ts) so that legacy PSSH-recorded action CIDs are
@@ -1840,6 +1810,15 @@ if (!NON_MEDIA_ACTION_CID) {
  */
 export function getNonMediaActionCid(): string {
   return NON_MEDIA_ACTION_CID || '';
+}
+
+/**
+ * Returns true if the given CID is a known-good legacy decrypt action.
+ * Used to honor PSSH-recorded actionIpfsId for assets encrypted under
+ * previous Lit Actions instead of forcing them to the current CID.
+ */
+export function isLegacyNonMediaActionCid(cid: string): boolean {
+  return LEGACY_NON_MEDIA_ACTION_CIDS.has(cid);
 }
 
 const DEFAULT_AUTHORITY = '0x09dBe796f40ECEffEAccf243c3d758C4c1d8D87D';
@@ -2189,7 +2168,7 @@ router.post('/lit/encrypt', authenticate, async (req: AuthenticatedRequest, res:
     const effectiveActionCid = actionCid || NON_MEDIA_ACTION_CID;
     if (!effectiveActionCid) {
       res.status(400).json({
-        error: 'No Lit Action CID configured. Set LIT_ACTION_CID env var or pass actionCid in request body.',
+        error: 'No Lit Action CID configured. Pass actionCid in request body, or update the supernode provision payload.',
       });
       return;
     }
@@ -2229,38 +2208,46 @@ router.post('/lit/encrypt', authenticate, async (req: AuthenticatedRequest, res:
     let litBackend: 'chipotle' | 'datil';
 
     if (LIT_BACKEND === 'chipotle') {
-      const { encryptWithLitAction } = await import('./chipotle-client.js');
+      const { encryptWithLitAction, DEFAULT_AUTHORITY } = await import('./chipotle-client.js');
+
+      // Generate canonical 128-bit (16-byte) KID for non-media. Derived
+      // from a UUIDv4 with dashes stripped — same shape as the media KID
+      // produced by dashPackager::generateCEK(). Width matches the on-chain
+      // bytes16 contentId so a single identifier applies across asset
+      // types. See MEDIA-2026-05-18-CENC-PSSH-LIBAV-COMPLIANCE.
+      const { randomUUID } = await import('crypto');
+      const kidHex = randomUUID().replace(/-/g, '');
+      const kidBytes = Buffer.from(kidHex, 'hex');
+      const kidBase64 = kidBytes.toString('base64');
+
       const chipotleResult = await encryptWithLitAction({
-        dataToEncrypt: new TextEncoder().encode(cekBase64),
+        dataToEncrypt: Buffer.from(cekBase64, "base64"),
+        kid: kidBase64,
+        authority: DEFAULT_AUTHORITY,
         accessControlConditions: [],
       });
       litCiphertext = chipotleResult.ciphertext;
-      dataToEncryptHash = chipotleResult.dataToEncryptHash;
+      dataToEncryptHash = String(chipotleResult.dataToEncryptHash || '');
       litBackend = 'chipotle';
       logger.info(`[Lit] CEK encrypted via Chipotle PKP-AES. Hash: ${dataToEncryptHash?.substring(0, 20)}...`);
-    } else {
-      const client = await getLitClient();
-      const conditions = buildSelfRefConditions(effectiveActionCid);
-      const encryptResult = await client.encrypt({
-        dataToEncrypt: new TextEncoder().encode(cekBase64),
-        accessControlConditions: conditions,
-      });
-      litCiphertext = encryptResult.ciphertext;
-      dataToEncryptHash = encryptResult.dataToEncryptHash;
-      litBackend = 'datil';
-      logger.info(`[Lit] CEK encrypted via Datil BLS. Hash: ${dataToEncryptHash?.substring(0, 20)}...`);
-    }
 
-    res.json({
-      success: true,
-      litCiphertext,
-      dataToEncryptHash,
-      actionCid: effectiveActionCid,
-      conditions: LIT_BACKEND === 'datil' ? buildSelfRefConditions(effectiveActionCid) : [],
-      encryptedData: encryptedWithTag.toString('base64'),
-      iv: ivBase64,
-      litBackend,
-    });
+      res.json({
+        success: true,
+        litCiphertext,
+        dataToEncryptHash,
+        kid: '0x' + kidHex,
+        signature: chipotleResult.signature || '',
+        issuer: chipotleResult.issuer || '',
+        actionCid: effectiveActionCid,
+        conditions: [],
+        encryptedData: encryptedWithTag.toString('base64'),
+        iv: ivBase64,
+        litBackend,
+        format: 'hex',
+      });
+    } else {
+      throw new Error("Only Lit over Chipotle is supported");
+    }
   } catch (error: any) {
     logger.error('[Lit] Encryption error:', error);
     res.status(500).json({ error: error.message || 'Lit encryption failed' });
@@ -2284,6 +2271,10 @@ export interface DecryptParams {
   rpc?: string;
   buyerAddress: string;
   litBackend?: LitBackend;
+  /** V3 protection data: PKP issuer address (checksummed). Optional for legacy assets. */
+  issuer?: string;
+  /** V3 protection data: PKP signature over composite hash. Optional for legacy assets. */
+  signature?: string;
   /**
    * Optional session-key delegation bundle (Option C). When present,
    * Phase 2c passes these through to the Lit Action instead of
@@ -2347,26 +2338,31 @@ async function recoverCEKAndFetchData(params: DecryptParams, ipfsService?: any):
     const doLitCall = async (): Promise<string> => {
       try {
         if (effectiveBackend === 'chipotle') {
-          const { recoverNonMediaCEK } = await import('./chipotle-client.js');
-          // Phase 5 cutover: the delegation in params.secureViewSession is
-          // bound to the server-configured NON_MEDIA_ACTION_CID. The
-          // sigauth Lit Action self-checks del.actionIpfsId ===
-          // jsParams.actionIpfsId, so we must forward the same CID here
-          // regardless of what the asset's PSSH metadata carries.
-          if (!NON_MEDIA_ACTION_CID) {
+          const { recoverCEKViaEnvelope } = await import('./chipotle-client.js');
+          // Legacy support: if the asset's protection data carries its own
+          // actionIpfsId, use it (the asset was encrypted against that specific
+          // Lit Action and the delegation is bound to it). Otherwise fall back
+          // to the server's configured universal decrypt CID.
+          const effectiveActionCid = actionCid || NON_MEDIA_ACTION_CID;
+          if (!effectiveActionCid) {
             throw new Error('No Lit Action CID configured (NON_MEDIA_ACTION_CID)');
           }
-          const cekBase64 = await recoverNonMediaCEK({
+          if (actionCid && actionCid !== NON_MEDIA_ACTION_CID) {
+            logger.info(`[Lit] Using legacy actionCid from protection data: ${actionCid}`);
+          }
+          const cekBase64 = await recoverCEKViaEnvelope({
             litCiphertext,
             dataToEncryptHash,
             kid,
             buyerAddress,
-            actionCid: NON_MEDIA_ACTION_CID,
+            actionCid: effectiveActionCid,
             authority: effectiveAuthority,
             chain: effectiveChain,
             chainId: effectiveChainId,
             rpc: effectiveRpc,
-            secureViewSession: params.secureViewSession,
+            signature: params.signature,
+            issuer: params.issuer,
+            secureViewSession: params.secureViewSession!,
           });
           logger.info(`[Lit] CEK recovered in ${Date.now() - litStart}ms (Chipotle REST)`);
           cacheCEK(kid, buyerAddress, cekBase64);
@@ -2931,10 +2927,19 @@ router.post('/lit/complete-session', authenticate, async (req: AuthenticatedRequ
       return;
     }
 
-    // actionIpfsId sanity
-    if (delegationObj.actionIpfsId !== NON_MEDIA_ACTION_CID) {
-      res.status(400).json({ error: 'delegation.actionIpfsId does not match server-configured CID' });
+    // actionIpfsId sanity — accept the current configured CID or any
+    // known-good legacy CID (assets baked under previous Lit Actions
+    // carry their own actionIpfsId in PSSH and the delegation has to
+    // bind to that CID for the legacy Lit Action to accept it).
+    const delegationActionCid = delegationObj.actionIpfsId;
+    const isCurrentCid = delegationActionCid === NON_MEDIA_ACTION_CID;
+    const isLegacyCid = LEGACY_NON_MEDIA_ACTION_CIDS.has(delegationActionCid);
+    if (!isCurrentCid && !isLegacyCid) {
+      res.status(400).json({ error: 'delegation.actionIpfsId does not match server-configured or known-legacy CID' });
       return;
+    }
+    if (isLegacyCid) {
+      logger.info(`[SecureView.session] Legacy actionIpfsId accepted: ${delegationActionCid}`);
     }
 
     // EIP-191 first
@@ -3693,10 +3698,7 @@ router.post('/lit/deploy-action', authenticate, async (req: AuthenticatedRequest
     }
 
     NON_MEDIA_ACTION_CID = cid;
-    logger.info(`[Lit] Non-media Lit Action deployed: ${cid}`);
-
-    const cidPath = join(__litDirname, '../../data/.lit-action-cid');
-    writeFileSync(cidPath, cid, 'utf8');
+    logger.info(`[Lit] Non-media Lit Action deployed: ${cid} (in-process only — update supernode provision to persist across restarts)`);
 
     res.json({
       success: true,
@@ -3833,10 +3835,10 @@ router.post('/ipfs/upload-elacity', authenticate, async (req: AuthenticatedReque
     const cidV1 = CID.parse(cidV1String);
     const DAG_PB_CODEC = 0x70;
     let finalCid: string;
-    if ( cidV1.code === DAG_PB_CODEC ) {
+    if (cidV1.code === DAG_PB_CODEC) {
       try {
         finalCid = cidV1.toV0().toString();
-      } catch ( err ) {
+      } catch (err) {
         logger.warn(`[IPFS-Elacity] Unexpected CIDv1→CIDv0 conversion failure (codec=dag-pb): ${(err as Error).message} — using v1`);
         finalCid = cidV1String;
       }
@@ -3919,10 +3921,10 @@ router.post('/ipfs/upload-elacity-directory', authenticate, async (req: Authenti
     const cidV1 = CID.parse(cidV1String);
     const DAG_PB_CODEC = 0x70;
     let cidV0String: string;
-    if ( cidV1.code === DAG_PB_CODEC ) {
+    if (cidV1.code === DAG_PB_CODEC) {
       try {
         cidV0String = cidV1.toV0().toString();
-      } catch ( err ) {
+      } catch (err) {
         logger.warn(`[IPFS-Elacity] Unexpected CIDv1→CIDv0 conversion failure (codec=dag-pb): ${(err as Error).message} — using v1`);
         cidV0String = cidV1String;
       }

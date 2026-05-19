@@ -142,25 +142,26 @@ let detectedCodec: CodecType | null = null;
 export async function detectAvailableCodec(): Promise<CodecType> {
   if (detectedCodec) return detectedCodec;
 
-  // Check NVIDIA GPU
   try {
-    await execFileAsync('nvidia-smi', [], { timeout: 5000 });
     const { stdout } = await execFileAsync('ffmpeg', ['-hide_banner', '-encoders'], { timeout: 5000 });
-    if (stdout.includes('av1_nvenc')) {
-      detectedCodec = 'nvenc';
-      logger.info('[Encoder] Detected NVIDIA GPU with av1_nvenc support');
-      return detectedCodec;
-    }
-  } catch { /* no nvidia */ }
+    // Check NVIDIA GPU
+    try {
+      await execFileAsync('nvidia-smi', [], { timeout: 5000 });
+      if (stdout.includes('av1_nvenc')) {
+        detectedCodec = 'nvenc';
+        logger.info('[Encoder] Detected NVIDIA GPU with av1_nvenc support');
+        return detectedCodec;
+      }
+    } catch { /* no nvidia */ }
 
-  // Check SVT-AV1
-  try {
-    const { stdout } = await execFileAsync('ffmpeg', ['-hide_banner', '-encoders'], { timeout: 5000 });
-    if (stdout.includes('libsvtav1')) {
-      detectedCodec = 'svtav1';
-      logger.info('[Encoder] Detected SVT-AV1 (CPU) encoder');
-      return detectedCodec;
-    }
+    // Check SVT-AV1
+    try {
+      if (stdout.includes('libsvtav1')) {
+        detectedCodec = 'svtav1';
+        logger.info('[Encoder] Detected SVT-AV1 (CPU) encoder');
+        return detectedCodec;
+      }
+    } catch { /* fallback */ }
   } catch { /* fallback */ }
 
   detectedCodec = 'x264';

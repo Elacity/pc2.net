@@ -42,32 +42,53 @@ pub fn build_pssh(kid: &[u8; 16], data: &[u8]) -> Vec<u8> {
     make_fullbox(b"pssh", 1, 0, &content)
 }
 
-/// Build the Elacity dDRM protection data payload (JSON-encoded).
+/// Build the Elacity dDRM protection data payload (JSON-encoded, v3.0).
+///
+/// V3.0 aligns with the keystore service format. Fields that are not
+/// available at WASM time (kid, dataToEncryptHash, ciphertext, issuer,
+/// signature) are emitted as empty strings — the TS layer's
+/// `injectPSSHBox` is authoritative for fully-populated PSSH boxes;
+/// this rust path is a fallback for the optional `pssh_params` mode.
+#[allow(clippy::too_many_arguments)]
 pub fn build_elacity_pssh_data(
     authority: &str,
     chain_id: u32,
     rpc: &str,
     action_ipfs_id: &str,
     lit_backend: &str,
+    kid: &str,
+    data_to_encrypt_hash: &str,
+    ciphertext: &str,
+    issuer: &str,
+    signature: &str,
 ) -> Vec<u8> {
     let json = format!(
-        r#"{{"protocolVersion":"2.0","protectionType":"cenc:lit-aes-gcm-v3","variant":"eth.web3.clearkey","ciphersuite":"e8582013","data":{{"authority":"{}","chainId":{},"rpc":"{}","actionIpfsId":"{}","litBackend":"{}"}}}}"#,
-        authority, chain_id, rpc, action_ipfs_id, lit_backend
+        r#"{{"protocolVersion":"3.0","protectionType":"cenc:lit-aes-gcm-v3","variant":"eth.web3.clearkey","algorithm":"AES-128-CBC","data":{{"actionIpfsId":"{}","litBackend":"{}","chainId":{},"authority":"{}","rpc":"{}","kid":"{}","dataToEncryptHash":"{}","ciphertext":"{}","issuer":"{}","signature":"{}","format":"hex"}}}}"#,
+        action_ipfs_id, lit_backend, chain_id, authority, rpc, kid, data_to_encrypt_hash, ciphertext, issuer, signature
     );
     json.into_bytes()
 }
 
 /// Build a complete Elacity PSSH box ready for injection into an init segment.
+#[allow(clippy::too_many_arguments)]
 pub fn build_elacity_pssh(
-    kid: &[u8; 16],
+    kid_bytes: &[u8; 16],
     authority: &str,
     chain_id: u32,
     rpc: &str,
     action_ipfs_id: &str,
     lit_backend: &str,
+    kid_hex_0x: &str,
+    data_to_encrypt_hash: &str,
+    ciphertext: &str,
+    issuer: &str,
+    signature: &str,
 ) -> Vec<u8> {
-    let data = build_elacity_pssh_data(authority, chain_id, rpc, action_ipfs_id, lit_backend);
-    build_pssh(kid, &data)
+    let data = build_elacity_pssh_data(
+        authority, chain_id, rpc, action_ipfs_id, lit_backend,
+        kid_hex_0x, data_to_encrypt_hash, ciphertext, issuer, signature,
+    );
+    build_pssh(kid_bytes, &data)
 }
 
 #[cfg(test)]
@@ -101,8 +122,13 @@ mod tests {
             "0x580c26DefF267EF40A72CF10A4A42050F0641b8B",
             8453,
             "https://mainnet.base.org",
-            "QmcNdiSuT2c2zKwhGozTgvT12uP26gAWMw2D49GvcLj2Go",
+            "QmPBjQD7V4aFTZPxUwZ9gDPFJtcJ4SvsJdTh3QexTyRBbj",
             "chipotle",
+            "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "deadbeef",
+            "cafebabe",
+            "0x0000000000000000000000000000000000000000",
+            "00",
         );
 
         assert_eq!(&pssh[4..8], b"pssh");
@@ -111,6 +137,11 @@ mod tests {
         let json_str = std::str::from_utf8(&pssh[data_start..data_start + data_size]).unwrap();
         assert!(json_str.contains("chipotle"));
         assert!(json_str.contains("cenc:lit-aes-gcm-v3"));
+        assert!(json_str.contains("\"protocolVersion\":\"3.0\""));
+        assert!(json_str.contains("\"algorithm\":\"AES-128-CBC\""));
+        assert!(json_str.contains("\"format\":\"hex\""));
+        assert!(!json_str.contains("ciphersuite"));
+        assert!(json_str.contains("dataToEncryptHash"));
         assert!(json_str.contains("0x580c26DefF267EF"));
     }
 }

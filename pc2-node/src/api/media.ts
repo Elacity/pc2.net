@@ -14,14 +14,13 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 import * as crypto from 'crypto';
-import { webcrypto } from 'crypto';
+// webcrypto removed — ECDH operations moved to chipotle-client.ts
 import { parseMPD } from '../services/media/mpdParser.js';
+import { extractPSSHJson } from '../services/media/psshJson.js';
 import { mediaSessionManager } from '../services/media/sessionManager.js';
 import { getWASMRuntime } from '../services/wasm/WASMRuntime.js';
 import { createLogger } from '../utils/logger.js';
 import { getInternalIPFSGateway } from '../utils/urlUtils.js';
-
-const subtle = webcrypto.subtle;
 
 const logger = createLogger('media-api');
 const router = Router();
@@ -44,27 +43,6 @@ setInterval(() => {
     }
   });
 }, 120_000);
-
-// ── MPD cache for 412 two-phase /init flow ───────────────────────────
-// Phase 5 cutover requires /init to return 412 + {kid, actionIpfsId}
-// when no secureViewSession bundle is attached, so the player can ask
-// the parent frame to sign and retry. The MPD parse is the expensive
-// part of /init (IPFS fetch + PSSH extraction); we cache it briefly so
-// the retry doesn't pay that cost twice.
-interface CachedInitContext {
-  mpdText: string;
-  mpdBaseUrl: string;
-  cachedAt: number;
-}
-const initContextCache = new Map<string, CachedInitContext>();
-const INIT_CACHE_TTL_MS = 60_000;
-
-setInterval(() => {
-  const now = Date.now();
-  initContextCache.forEach((val, key) => {
-    if (now - val.cachedAt > INIT_CACHE_TTL_MS) initContextCache.delete(key);
-  });
-}, 60_000);
 
 interface AuthenticatedRequest extends Request {
   user?: { uuid: string; username: string };
@@ -201,16 +179,10 @@ router.post('/init', async (req: AuthenticatedRequest, res: Response) => {
       return;
     }
 
-    // 2. Fetch and parse MPD (cached briefly for the 412 → retry round-trip)
-    const cacheKey = mediaUri;
+    // 2. Fetch and parse MPD
     let mpdText: string;
     let mpdBaseUrl: string;
-    const cached = initContextCache.get(cacheKey);
-    if (cached && Date.now() - cached.cachedAt < INIT_CACHE_TTL_MS) {
-      mpdText = cached.mpdText;
-      mpdBaseUrl = cached.mpdBaseUrl;
-      logger.info(`[media/init] MPD cache hit for ${cacheKey}`);
-    } else {
+    {
       // MPD fetch with explicit per-gateway timeouts so a hung public IPFS
       // gateway (e.g. when the CID has not propagated to ipfs.ela.city yet)
       // never stalls playback for more than MPD_FETCH_TIMEOUT_MS.
@@ -352,7 +324,6 @@ router.post('/init', async (req: AuthenticatedRequest, res: Response) => {
         mpdText = await remote.response.text();
       }
       mpdBaseUrl = ipfsGateway + mediaUri + '/';
-      initContextCache.set(cacheKey, { mpdText, mpdBaseUrl, cachedAt: Date.now() });
     }
 
     const mpd = parseMPD(mpdText, mpdBaseUrl);
@@ -431,7 +402,6 @@ router.post('/init', async (req: AuthenticatedRequest, res: Response) => {
       chainId: number;
       rpc: string;
       litBackend: string;
-      secureViewSession?: import('./chipotle-client.js').SecureViewSessionBundle;
     } = {
       litCiphertext: encData.ciphertext || '',
       dataToEncryptHash: encData.hash || encData.dataToEncryptHash || '',
@@ -458,42 +428,32 @@ router.post('/init', async (req: AuthenticatedRequest, res: Response) => {
     // signed delegation (`actionIpfsId = NON_MEDIA_ACTION_CID`) matches what
     // is executed inside the TEE. Datil legacy media path keeps the PSSH CID.
     if ((litParams.litBackend || '').toLowerCase() === 'chipotle') {
-      const { getNonMediaActionCid } = await import('./storage.js');
+      const { getNonMediaActionCid, isLegacyNonMediaActionCid } = await import('./storage.js');
       const serverActionCid = getNonMediaActionCid();
       if (!serverActionCid) {
         res.status(500).json({ error: 'Server NON_MEDIA_ACTION_CID is not configured' });
         return;
       }
-      if (serverActionCid !== litParams.actionCid) {
-        logger.info(
-          `[media/init] Overriding PSSH actionIpfsId for chipotle: pssh=${litParams.actionCid} → server=${serverActionCid}`,
-        );
+      // Legacy support: if the PSSH carries a known-good legacy CID, honor
+      // it (the asset's delegation must bind to that same legacy CID so the
+      // legacy Lit Action will accept it). Otherwise override with the
+      // server's current universal CID.
+      if (litParams.actionCid && isLegacyNonMediaActionCid(litParams.actionCid)) {
+        logger.info(`[media/init] Legacy PSSH actionIpfsId honored: ${litParams.actionCid}`);
+      } else {
+        if (serverActionCid !== litParams.actionCid) {
+          logger.info(
+            `[media/init] Overriding PSSH actionIpfsId for chipotle: pssh=${litParams.actionCid} → server=${serverActionCid}`,
+          );
+        }
+        litParams.actionCid = serverActionCid;
       }
-      litParams.actionCid = serverActionCid;
     }
 
-    // ── Phase 5 sigauth: two-phase secure-view bundle ──────────────
-    // The player can't sign before /init because `kid` and
-    // `actionIpfsId` are only known after server-side MPD/PSSH parse.
-    // If the client didn't attach a bundle yet, hand them back the
-    // {kid, actionIpfsId} so they can request one from the parent
-    // wallet bridge and retry. The MPD is cached above so the retry
-    // skips the IPFS round-trip.
-    const incomingBundle = req.body.secureViewSession;
-    if (!incomingBundle || !incomingBundle.delegationCanonical || !incomingBundle.requestSig) {
-      const normalisedKid = litParams.kid && litParams.kid.startsWith('0x')
-        ? litParams.kid
-        : (litParams.kid ? `0x${litParams.kid}` : '');
-      logger.info(`[media/init] Phase-1 412 → needsSecureView kid=${normalisedKid} actionIpfsId=${litParams.actionCid}`);
-      res.status(412).json({
-        needsSecureView: {
-          kid: normalisedKid,
-          actionIpfsId: litParams.actionCid,
-        },
-      });
-      return;
-    }
-    litParams.secureViewSession = incomingBundle;
+    // Media flow uses a server-owned secure-view session built on demand
+    // inside `recoverMediaCEK` — no client wallet bridge or 412 handshake
+    // required. The on-chain `hasAccessByContentId(buyerAddress, kid)` check
+    // inside the Lit Action still gates playback.
 
     const { getServerWallet } = await import('./storage.js');
     const wallet = await getServerWallet();
@@ -625,6 +585,12 @@ router.post('/segment', async (req: AuthenticatedRequest, res: Response) => {
       // Cache raw init segment for WASM decryption (tenc extraction)
       session.initSegments.set(trackIdx, segmentBytes);
 
+      // Capture the packaging-time pssh bytes before strip removes them.
+      // The same bytes are spliced back into the cleaned, single-track init
+      // so libav/ffprobe and other ISOBMFF parsers can discover the box.
+      // Tracked in .cursor/tasks/MEDIA-2026-05-18-CENC-PSSH-LIBAV-COMPLIANCE.
+      const psshBoxBytes = extractFirstPSSHBox(segmentBytes);
+
       // Strip CENC encryption signaling via WASM (encv → av01, enca → mp4a/Opus,
       // remove sinf box, strip pssh boxes). Uses strip_init mode in cenc-decrypt.
       let cleanInit = await stripInitViaWASM(segmentBytes);
@@ -633,6 +599,12 @@ router.post('/segment', async (req: AuthenticatedRequest, res: Response) => {
       // Split multi-track init to single-track for MSE compatibility.
       // MSE requires each SourceBuffer to receive only its own track.
       cleanInit = await splitInitForTrackWithFallback(cleanInit, track.type);
+
+      if ( psshBoxBytes ) {
+        cleanInit = splicePSSHIntoInit(cleanInit, psshBoxBytes);
+      } else {
+        logger.warn(`[media/segment] No pssh box found in raw init — delivering without DRM discovery metadata`);
+      }
 
       res.setHeader('Content-Type', 'video/mp4');
       res.setHeader('Content-Length', String(cleanInit.length));
@@ -809,62 +781,12 @@ async function fetchBytesFromIPFS(pathOrUrl: string, localGateway: string, publi
   return Buffer.from(buf);
 }
 
-/**
- * Extract PSSH JSON payloads from an fMP4 init segment.
- * PSSH boxes contain JSON-encoded Lit Protocol DRM parameters.
- * The JSON is embedded as raw bytes in the PSSH box data field.
- *
- * The Elacity PSSH JSON has the form:
- *   {"protocolVersion":"...","protectionType":"...","data":{"actionIpfsId":"...",...}}
- * We search for `{"protocolVersion"` or `{"data":{` to find the JSON start,
- * then use brace counting to extract the complete object.
- */
-function extractPSSHJson(initSegment: Buffer): Array<{ protectionType: string; data: any }> {
-  const results: Array<{ protectionType: string; data: any }> = [];
-  const text = initSegment.toString('binary');
-
-  const markers = ['{"protocolVersion":', '{"data":{', '{"protectionType":'];
-  const visited = new Set<number>();
-
-  for (const marker of markers) {
-    let searchStart = 0;
-    while (true) {
-      const pos = text.indexOf(marker, searchStart);
-      if (pos === -1) break;
-      if (visited.has(pos)) { searchStart = pos + 1; continue; }
-      visited.add(pos);
-
-      let depth = 0;
-      let end = -1;
-      for (let i = pos; i < text.length && i < pos + 16384; i++) {
-        if (text[i] === '{') depth++;
-        else if (text[i] === '}') {
-          depth--;
-          if (depth === 0) { end = i + 1; break; }
-        }
-      }
-
-      if (end === -1) { searchStart = pos + 1; continue; }
-
-      const jsonStr = text.substring(pos, end);
-      try {
-        const parsed = JSON.parse(jsonStr);
-        if (parsed.data?.actionIpfsId) {
-          results.push({
-            protectionType: parsed.protectionType || 'unknown',
-            data: parsed.data,
-          });
-        }
-      } catch (e) {
-        logger.warn(`[media] Failed to parse PSSH JSON at offset ${pos}: ${(e as Error).message}`);
-      }
-      searchStart = end;
-    }
-  }
-
-  logger.info(`[media] Extracted ${results.length} PSSH entries from init segment (${initSegment.length} bytes)`);
-  return results;
-}
+// `extractPSSHJson` lives in `../services/media/psshJson.ts` so unit tests
+// can exercise it without dragging in the Express stack (mediaSessionManager
+// installs a never-unref'd cleanup setInterval at module load that keeps the
+// Node event loop alive). Re-exported here for callers that still import it
+// from `api/media`.
+export { extractPSSHJson } from '../services/media/psshJson.js';
 
 // ── JS strip functions — replaced by Rust/WASM in cenc-decrypt crate ──────────
 // Kept commented for one release cycle as a safety net. If WASM stripping works
@@ -1293,56 +1215,16 @@ async function startUserSessionSigs(
   return sessionSigs;
 }
 
-/**
- * Fetch and cache Lit Action JavaScript code by IPFS CID.
- * Media Lit Actions are stored on IPFS (not local like non-media-decrypt.js).
- * Chipotle requires inline code — so we fetch the JS source by CID.
- */
-const litActionCodeCache = new Map<string, string>();
-
-async function fetchLitActionCode(cid: string): Promise<string> {
-  const cached = litActionCodeCache.get(cid);
-  if (cached) return cached;
-
-  const gateways = [
-    `http://localhost:4200/ipfs/${cid}`,
-    `https://ipfs.ela.city/ipfs/${cid}`,
-    `https://gateway.pinata.cloud/ipfs/${cid}`,
-    `https://ipfs.io/ipfs/${cid}`,
-  ];
-
-  for (const url of gateways) {
-    try {
-      const resp = await fetch(url, { signal: AbortSignal.timeout(10000) });
-      if (resp.ok) {
-        const raw = await resp.text();
-        // Chipotle's allowlist is keyed on the byte-exact hash of the
-        // submitted `code` field. The runtime-internal CID we registered
-        // corresponds to the trailing-whitespace-stripped form (captured
-        // from a shell-based 403 probe during key rotation). Keeping the
-        // raw IPFS bytes here produces a different hash and triggers
-        // HTTP 403. See chipotle-client.ts getNonMediaActionCode() for
-        // the same normalisation on locally-loaded actions.
-        const code = raw.replace(/\s+$/, '');
-        if (code && code.length > 10) {
-          litActionCodeCache.set(cid, code);
-          logger.info(`[media/CEK] Fetched Lit Action code from ${url.includes('localhost') ? 'local' : 'remote'} IPFS (${code.length} chars)`);
-          return code;
-        }
-      }
-    } catch { /* try next gateway */ }
-  }
-
-  throw new Error(`Failed to fetch media Lit Action code from IPFS: ${cid}`);
-}
+// fetchLitActionCode, unwrapECDHEnvelope, and P-256 helpers moved to chipotle-client.ts (shared)
 
 /**
- * Recover the Content Encryption Key for media assets via Lit Protocol.
+ * Recover the Content Encryption Key for media assets.
  *
- * Media Lit Actions use an ECDH envelope: the caller sends an ephemeral
- * public key, the Lit Action decrypts the CEK internally, wraps it with
- * ECDH + AES-CBC, and returns the envelope. The caller unwraps to get
- * the raw 16-byte CENC AES-128-CTR key.
+ * Uses `recoverCEKWithServerSession` — the server itself builds and signs
+ * the secure-view delegation (with `getServerWallet()`) and a fresh
+ * ephemeral session keypair, so no client-side wallet bridge or 412
+ * handshake is involved. The on-chain `hasAccessByContentId(buyer, kid)`
+ * check inside the Lit Action still gates access.
  */
 async function recoverMediaCEK(
   litParams: {
@@ -1355,251 +1237,23 @@ async function recoverMediaCEK(
     chainId: number;
     rpc: string;
     litBackend: string;
-    secureViewSession?: import('./chipotle-client.js').SecureViewSessionBundle;
   },
   wallet: any,
-  prebuiltSessionSigs?: any,
+  _prebuiltSessionSigs?: any,
   buyerAddress?: string,
 ): Promise<string> {
-  const backend = litParams.litBackend || LIT_BACKEND || 'datil';
-
-  // Phase 5 cutover: media decryption requires a secure-view session
-  // bundle. The sigauth Lit Action authorises the caller from
-  // delegation.coveredAddresses, so `userAddress` is no longer sent.
-  if (!litParams.secureViewSession) {
-    throw new Error('[media/CEK] secureViewSession bundle is required for Lit decryption');
-  }
-
-  // Chipotle with direct CEK recovery (sigauth action)
-  if (backend === 'chipotle') {
-    logger.info(`[media/CEK] Chipotle direct CEK recovery via ${litParams.actionCid}, kid=${litParams.kid}`);
-    const { recoverNonMediaCEK } = await import('./chipotle-client.js');
-    const decryptedCek = await recoverNonMediaCEK({
-      litCiphertext: litParams.litCiphertext,
-      dataToEncryptHash: litParams.dataToEncryptHash,
-      kid: litParams.kid,
-      buyerAddress: buyerAddress || wallet.address,
-      actionCid: litParams.actionCid,
-      authority: litParams.authority,
-      chain: litParams.chain,
-      chainId: litParams.chainId,
-      rpc: litParams.rpc,
-      secureViewSession: litParams.secureViewSession,
-    });
-
-    const crypto = await import('crypto');
-    const cekHash = crypto.createHash('sha256').update(decryptedCek).digest('hex').slice(0, 12);
-    logger.info(`[media/CEK] Chipotle direct recovery complete, cekSha=${cekHash}`);
-    return decryptedCek;
-  }
-
-  // Datil path — ECDH envelope unwrapping
-  const keyAlg = { name: 'ECDH', namedCurve: 'P-256' } as const;
-  const keyPair = await subtle.generateKey(keyAlg, true, ['deriveKey', 'deriveBits']);
-  const rawPubKey = new Uint8Array(await subtle.exportKey('raw', keyPair.publicKey));
-  const publicKeyHex = Buffer.from(rawPubKey).toString('hex');
-
-  logger.info(`[media/CEK] Datil ECDH envelope recovery via ${litParams.actionCid}, kid=${litParams.kid}`);
-
-  let envelope: Buffer;
-
-  const { getLitClient, getExecuteSessionSigs } = await import('./storage.js');
-  const client = await getLitClient();
-
-  let sessionSigs: any;
-  if (prebuiltSessionSigs && Object.keys(prebuiltSessionSigs).length > 0) {
-    sessionSigs = prebuiltSessionSigs;
-  } else {
-    sessionSigs = await getExecuteSessionSigs(client, wallet);
-  }
-
-  const datilJsParams: Record<string, unknown> = {
-    keyAlg: { name: 'ECDH', namedCurve: 'P-256' },
-    publicKey: publicKeyHex,
-    ciphertext: litParams.litCiphertext,
+  const { recoverCEKWithServerSession } = await import('./chipotle-client.js');
+  return recoverCEKWithServerSession({
+    litCiphertext: litParams.litCiphertext,
     dataToEncryptHash: litParams.dataToEncryptHash,
-    kid: litParams.kid.startsWith('0x') ? litParams.kid : `0x${litParams.kid}`,
-    actionIpfsId: litParams.actionCid,
+    kid: litParams.kid,
+    buyerAddress: buyerAddress || wallet.address,
+    actionCid: litParams.actionCid,
     authority: litParams.authority,
     chain: litParams.chain,
     chainId: litParams.chainId,
     rpc: litParams.rpc,
-    delegation: litParams.secureViewSession.delegationCanonical,
-    delegationSig: litParams.secureViewSession.delegationSig,
-    request: litParams.secureViewSession.requestCanonical,
-    requestSig: litParams.secureViewSession.requestSig,
-  };
-  const executeParams: any = {
-    sessionSigs,
-    jsParams: datilJsParams,
-    ipfsId: litParams.actionCid,
-  };
-
-  const result = await client.executeJs(executeParams);
-  if (!result.response) throw new Error('Lit Action returned empty response');
-  envelope = Buffer.from(result.response, 'base64');
-  logger.info(`[media/CEK] Received envelope: ${envelope.length} bytes (Datil SDK)`);
-
-  return unwrapECDHEnvelope(envelope, keyPair.privateKey, rawPubKey, keyAlg);
-}
-
-/**
- * Unwrap an ECDH-wrapped license envelope from the media Lit Action.
- *
- * Envelope format:
- *   HEADER: format (3 bytes) + flag (1 byte)
- *   METADATA:
- *     ephemeral_pubkey_len (u16be) + ephemeral_pubkey
- *     signature_len (u16be) + signature + signer_compressed_pubkey (33 bytes)
- *   BODY:
- *     encrypted_cek_len (u32be) + encrypted_cek (AES-CBC)
- *
- * Decrypted payload (rawLicenseBytes):
- *   metadata_size (u32be) + metadata (issuer + exp) + key_count (u32be) + keys
- */
-async function unwrapECDHEnvelope(
-  envelope: Buffer,
-  privateKey: CryptoKey,
-  ourRawPubKey: Uint8Array,
-  keyAlg: { name: string; namedCurve: string },
-): Promise<string> {
-  let offset = 4; // skip header (3 bytes format + 1 byte flag)
-
-  // Read ephemeral public key
-  const ephPubKeyLen = (envelope[offset] << 8) | envelope[offset + 1];
-  offset += 2;
-  const ephPubKeyRaw = envelope.subarray(offset, offset + ephPubKeyLen);
-  offset += ephPubKeyLen;
-
-  // Skip signature
-  const sigLen = (envelope[offset] << 8) | envelope[offset + 1];
-  offset += 2;
-  offset += sigLen;
-  offset += 33; // compressed signer public key
-
-  // Read encrypted CEK
-  const encCekLen = (envelope[offset] << 24) | (envelope[offset + 1] << 16) |
-    (envelope[offset + 2] << 8) | envelope[offset + 3];
-  offset += 4;
-  const encryptedCek = envelope.subarray(offset, offset + encCekLen);
-
-  logger.info(`[media/CEK] Envelope: ephPubKey=${ephPubKeyLen}B, sig=${sigLen}B, encCEK=${encCekLen}B`);
-
-  // Decompress P-256 point if needed (Lit Action compresses for P-256)
-  let litPubKeyUncompressed: Uint8Array;
-  if (ephPubKeyRaw[0] === 0x02 || ephPubKeyRaw[0] === 0x03) {
-    litPubKeyUncompressed = decompressP256Point(ephPubKeyRaw);
-  } else {
-    litPubKeyUncompressed = new Uint8Array(ephPubKeyRaw);
-  }
-
-  // Import Lit's ephemeral public key
-  const litPubKey = await subtle.importKey(
-    'raw',
-    litPubKeyUncompressed,
-    { name: keyAlg.name, namedCurve: keyAlg.namedCurve },
-    false,
-    [],
-  );
-
-  // Derive shared AES-CBC-256 key via ECDH
-  const sharedKey = await subtle.deriveKey(
-    { name: keyAlg.name, namedCurve: keyAlg.namedCurve, public: litPubKey } as any,
-    privateKey,
-    { name: 'AES-CBC', length: 256 },
-    false,
-    ['decrypt'],
-  );
-
-  // IV = first 16 bytes of OUR raw public key (matches Lit Action's `pubKeyBuff.subarray(0, 16)`)
-  const iv = ourRawPubKey.subarray(0, 16);
-
-  // Decrypt
-  const decrypted = new Uint8Array(
-    await subtle.decrypt({ name: 'AES-CBC', iv }, sharedKey, encryptedCek),
-  );
-
-  // Parse rawLicenseBytes: metadataSize(u32) | metadata | keyCount(u32) | keys
-  const metaSize = (decrypted[0] << 24) | (decrypted[1] << 16) | (decrypted[2] << 8) | decrypted[3];
-  const bodyOffset = 4 + metaSize;
-  // const keyCount = (decrypted[bodyOffset] << 24) | ... — we expect 1 key
-  const cekStart = bodyOffset + 4;
-  const cekBytes = decrypted.subarray(cekStart, cekStart + 16);
-
-  // Verify structure: read keyCount at bodyOffset
-  const keyCount = (decrypted[bodyOffset] << 24) | (decrypted[bodyOffset + 1] << 16) |
-    (decrypted[bodyOffset + 2] << 8) | decrypted[bodyOffset + 3];
-  const cekHash = crypto.createHash('sha256').update(cekBytes).digest('hex').slice(0, 12);
-  logger.info(`[media/CEK] Unwrapped license: metaSize=${metaSize}, keyCount=${keyCount}, cekLen=${cekBytes.length}, cekSha=${cekHash}`);
-  const result = Buffer.from(cekBytes).toString('base64');
-  decrypted.fill(0);
-  return result;
-}
-
-/**
- * Decompress a compressed P-256 EC point (33 bytes → 65 bytes uncompressed).
- * P-256 curve: y² = x³ - 3x + b (mod p)
- */
-function decompressP256Point(compressed: Uint8Array): Uint8Array {
-  if (compressed.length !== 33) throw new Error(`Invalid compressed point length: ${compressed.length}`);
-  const prefix = compressed[0];
-  if (prefix !== 0x02 && prefix !== 0x03) throw new Error(`Invalid prefix: 0x${prefix.toString(16)}`);
-
-  const p = BigInt('0xFFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFF');
-  const b = BigInt('0x5AC635D8AA3A93E7B3EBBD55769886BC651D06B0CC53B0F63BCE3C3E27D2604B');
-  const a = p - 3n;
-
-  // Read x coordinate
-  let x = 0n;
-  for (let i = 1; i < 33; i++) {
-    x = (x << 8n) | BigInt(compressed[i]);
-  }
-
-  // y² = x³ + ax + b (mod p)
-  const x3 = modPow(x, 3n, p);
-  const rhs = (x3 + a * x + b) % p;
-  let y = modSqrt(rhs, p);
-
-  // Choose correct y based on prefix (even/odd)
-  const isOdd = (y & 1n) === 1n;
-  if ((prefix === 0x03) !== isOdd) {
-    y = p - y;
-  }
-
-  // Build uncompressed point: 0x04 || x (32 bytes) || y (32 bytes)
-  const result = new Uint8Array(65);
-  result[0] = 0x04;
-  const xBytes = bigintToBytes32(x);
-  const yBytes = bigintToBytes32(y);
-  result.set(xBytes, 1);
-  result.set(yBytes, 33);
-  return result;
-}
-
-function bigintToBytes32(n: bigint): Uint8Array {
-  const hex = n.toString(16).padStart(64, '0');
-  const bytes = new Uint8Array(32);
-  for (let i = 0; i < 32; i++) {
-    bytes[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
-  }
-  return bytes;
-}
-
-function modPow(base: bigint, exp: bigint, mod: bigint): bigint {
-  let result = 1n;
-  base = base % mod;
-  while (exp > 0n) {
-    if (exp & 1n) result = (result * base) % mod;
-    exp >>= 1n;
-    base = (base * base) % mod;
-  }
-  return result;
-}
-
-/** Tonelli-Shanks modular square root for P-256 (p === 3 mod 4 -> simple formula). */
-function modSqrt(a: bigint, p: bigint): bigint {
-  // For P-256, p === 3 (mod 4), so sqrt(a) = a^((p+1)/4) mod p
-  return modPow(a, (p + 1n) / 4n, p);
+  });
 }
 
 // ── Media Encoding Pipeline ──────────────────────────────────────────────────
@@ -1616,7 +1270,7 @@ import {
   checkFFmpegAvailable,
 } from '../services/media/encoder.js';
 import { ensureBento4 } from '../services/media/bento4.js';
-import { createEncryptedDASH } from '../services/media/dashPackager.js';
+import { createEncryptedDASH, extractFirstPSSHBox, splicePSSHIntoInit } from '../services/media/dashPackager.js';
 
 import { execFile } from 'child_process';
 import { promisify } from 'util';

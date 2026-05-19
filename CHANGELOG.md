@@ -121,6 +121,209 @@ T-1 instrumentation was validated end-to-end on Sasha's local node 2026-05-07 ~1
 
 ---
 
+## [v1.2.7.14] - 2026-05-07 - dDRM viewer + market UX patches (PDF DPR, zoom, 3D feed, creator label, channel icon)
+
+> **Scope**: Five user-visible bug fixes surfaced from testing feedback. Pure patch release — no protocol or schema changes, no companion launcher version required. Full release notes at [GitHub releases v1.2.7.14](https://github.com/Elacity/pc2.net/releases/tag/v1.2.7.14).
+
+### dDRM viewer
+
+- **PDFs sharp on 4K / HiDPI displays** — [`pc2-node/data/test-apps/ddrm-viewer/viewer.js`](pc2-node/data/test-apps/ddrm-viewer/viewer.js). Render bitmap at `scale × devicePixelRatio` (capped 3× for memory bounds) instead of a fixed 1.5×; CSS keeps `width: 100%` with an explicit `aspect-ratio` so the canvas doesn't cause layout jumps while loading.
+- **Zoom-in no longer scrolls the page downward** — `setZoom()` now recenters the viewport on every level change (`oldLevel > 0`) instead of only when `oldLevel !== 1`, so zooming in from 100% behaves the same as zooming in from any other level.
+
+### Elacity Market
+
+- **3D tab no longer flickers under narrow filters** — [`pc2-node/data/test-apps/elacity-market/app.js`](pc2-node/data/test-apps/elacity-market/app.js). When the API returns an empty page, mark the feed exhausted (`browseTotal = browseOffset`) so `IntersectionObserver` doesn't keep re-firing through `setupFeedObserver` recreations and showing skeleton loaders in a loop.
+- **"Creator" label no longer appears under every channel name** — [`pc2-node/data/test-apps/elacity-market/api.js`](pc2-node/data/test-apps/elacity-market/api.js). Removed `props.labelType` as a fallback for `channelName` in `catalogItemToNft` — `labelType` is a metadata role tag (always literal "Creator" for assets minted via elacity-creator) and was leaking into the channel-name slot for any channel without a cached display name. The downstream `GENERIC_NAMES` handler resolves the real channel name on-chain via `fetchChannelName`.
+- **Channel icons now render on feed cards** — cards now enrich missing channel info via `getOwnerAvatar(ch)` (the same resolver the channels directory has used successfully) instead of a brittle ad-hoc `imageURL || image` pattern that produced unresolvable URLs for some channels.
+
+### Compatibility
+
+Full backward compat. Patch-level app version bumps: `ddrm-viewer` 0.1.0 → 0.1.1, `elacity-market` 0.2.0 → 0.2.1. pc2-node service binary and launcher unchanged from v1.2.7.13. Diffstat: 7 files / +111 / −12 (commit `52682c4fb`).
+
+---
+
+## [v1.2.7.13] - 2026-05-06 - Launcher status indicator stays in sync after restart/update/respawn
+
+> **Scope**: Closes the launcher↔pc2-node status indicator desync that hit users every time pc2-node respawned without the launcher's `spawn()` call — macOS in-app update, macOS manual restart, Linux/Jetson terminal `pm2 restart pc2`, or crash + pm2/systemd auto-restart. In all four scenarios the launcher's tracked PID was dead but pc2-node was happily running — status was stuck on "Stopped" until the user manually quit + relaunched the launcher. Replaces PID-tracking with a heartbeat-file protocol. Full release notes at [GitHub releases v1.2.7.13](https://github.com/Elacity/pc2.net/releases/tag/v1.2.7.13).
+
+### How it works
+
+pc2-node writes `<pc2NodeDir>/data/runtime/heartbeat.json` every 2 s with `{ schema, pid, version, port, healthy, startedAt, lastUpdated, lastRestartReason }`. The launcher polls this file (1 s interval) as its single source of truth for "is pc2-node alive?" instead of tracking the child PID.
+
+| Heartbeat state | Launcher status |
+|---|---|
+| File missing | `stopped` (clean exit) |
+| File >5 s stale | `error` (likely crashed) |
+| File fresh, `healthy: false` | `stopping` |
+| File fresh, `healthy: true` | `running` |
+
+### Bonus: out-of-band restart trigger
+
+Anyone with write access to `<pc2NodeDir>/data/runtime/restart-requested.flag` can request a clean respawn — Web GUI, `scripts/update.sh`, external supervisor, or a one-off shell. pc2-node's flag watcher (`fs.watch` + 5 s polling fallback) consumes the flag, optionally honours a `reason: <tag>` line, calls `spawnDetachedRespawn`, and exits. The new pc2-node writes a fresh heartbeat with the new PID + version within ~2 s.
+
+```bash
+echo "reason: my-trigger" > ~/.pc2/pc2-node/data/runtime/restart-requested.flag
+```
+
+### Files
+
+- [`pc2-node/src/utils/runtime-heartbeat.ts`](pc2-node/src/utils/runtime-heartbeat.ts) (NEW, 333 LOC) — `RuntimeHeartbeat` class with heartbeat writer + flag watcher
+- [`pc2-node/src/index.ts`](pc2-node/src/index.ts) (+60 LOC) — wires heartbeat into `server.listen` + graceful shutdown
+- [`docs/wiki/Technical/RUNTIME_HEARTBEAT_PROTOCOL.md`](docs/wiki/Technical/RUNTIME_HEARTBEAT_PROTOCOL.md) (NEW, 303 LOC) — protocol contract for launcher integrators
+
+### Companion launcher release
+
+Requires `Elacity/elastos-launcher` **v1.2.7+** to see the desync fix in the launcher UI. Schema-versioned (`pc2.heartbeat.v1`): new launcher + old pc2-node falls through to existing `/health` polling; old launcher + new pc2-node ignores the file. No coordinated rollout required.
+
+---
+
+## [v1.2.7.12] - 2026-05-06 - Stealth mode actually works (sudoers marker + awg-quick subcmd rewrite)
+
+> **Scope**: Two regressions fixed from v1.2.7.11. The launcher sudoers re-prompt loop on every relaunch + AmneziaWG still failing at `wg setconf` with `Line unrecognized: 'Jc=5'`. Full release notes at [GitHub releases v1.2.7.12](https://github.com/Elacity/pc2.net/releases/tag/v1.2.7.12).
+
+### 1. Sudoers re-prompt loop on every launcher restart
+
+- **Root cause**: `checkWireGuardPermissions` was using `sudo -n -l <wg-quick> up <args>` as the primary "is sudo configured?" probe. On macOS this returns non-zero for non-root users in some keychain / sudoers configurations even when NOPASSWD rules match. Every startup logged `Passwordless sudo not configured` and re-fired the install path.
+- **Fix** — [`pc2-node/src/services/wireguard/setupPermissions.ts`](pc2-node/src/services/wireguard/setupPermissions.ts): SHA-256 marker file at `<wgDir>/sudoers-marker.json` written on successful install. Primary probe now reads the marker, hashes the entry we'd write today, compares — if equal AND the sudoers file still exists, trust without invoking sudo. `sudo -n -l` probe is now the secondary fallback (kept for first-install + sudoers-upgrade flows).
+
+### 2. AmneziaWG `wg setconf` rejecting Jc=5 etc.
+
+- **Root cause**: `amnezia-vpn/amneziawg-tools/src/wg-quick/darwin.bash` (master, Jan 2026) was rebased from upstream wireguard-tools but the maintainer forgot to swap `wg` → `awg`. So `awg-quick` on macOS literally called `wg setconf` / `wg show` / `wg showconf` at 7 sites — and plain `wg` rejects the AmneziaWG obfuscation keys (Jc, Jmin, Jmax, S1-S4, H1-H4). Only darwin was broken; `linux.bash` was already correct.
+- **Fix**: rewrite `wg <subcmd>` → `awg <subcmd>` for `setconf|show|showconf|syncconf|addconf` in the on-disk `awg-quick`. Build-time: [`pc2-node/scripts/fetch-binaries.sh`](pc2-node/scripts/fetch-binaries.sh) `inject_awg_subcommand_patches` (sed -E with `(^|[^a-zA-Z])wg <subcmd>` anchor so we never clobber `wg-quick`, `awg`, `wireguard-go`). Runtime: [`pc2-node/src/utils/binary-manager.ts`](pc2-node/src/utils/binary-manager.ts) `patchAwgQuickSubcommands` — same regex shape, idempotent via `# PC2_AWG_SUBCMD_PATCHED_v1` marker. Critical because `BinaryManager` skips re-download when the file exists, so the new build alone wouldn't reach existing v1.2.7.10/.11 installs.
+
+### Backward compat
+
+Pre-v1.2.7.12 sudoers files: existing entry content unchanged (paths/rules/SETENV all match), so v1.2.7.11 → v1.2.7.12 upgrade should NOT trigger a new password prompt for users with a working v1.2.7.11 install. Pre-v1.2.7.12 unpatched `awg-quick` scripts get the runtime patch on first launch under v1.2.7.12 (logged `awg-quick patched: wg <subcmd> → awg <subcmd>`). Linux kernel-mode users untouched (linux.bash already used `awg`). Windows untouched.
+
+### `pc2-binaries-v1` release assets unchanged
+
+The runtime patcher fixes existing users in-place, so `publish-pc2-binaries.yml` was NOT re-run. The 22 release assets from v1.2.7.11 still apply.
+
+---
+
+## [v1.2.7.11] - 2026-05-06 - Stealth mode end-to-end (AmneziaWG + VLESS Reality finally work)
+
+> **Scope**: Closes three intertwined bugs that were keeping AmneziaWG (stealth mode) and VLESS Reality from working on fresh-Mac installs even after v1.2.7.10. Also closes two leftover `setupPermissions.ts` bugs from v1.2.7.10. Full release notes at [GitHub releases v1.2.7.11](https://github.com/Elacity/pc2.net/releases/tag/v1.2.7.11).
+
+### The three intertwined bugs
+
+1. **`AmneziaWGService.ensureKeypair` searched the wrong directories** — used the older `findTool()` helper which only checked `/usr/local/bin`, `/opt/homebrew/bin`, and `which`. Never the bundled `~/.pc2/pc2-node/bin/<platform>-<arch>/` dir where v1.2.7.10's `wg` actually lives. Production logs showed `wg genkey` crashing with `wg: command not found` even with `wg` present in the bundled dir. Fixed by routing `findTool` through `findBinary` (which always checks bundled dir first). [`pc2-node/src/services/wireguard/AmneziaWGService.ts`](pc2-node/src/services/wireguard/AmneziaWGService.ts).
+
+2. **`awg` (the AmneziaWG fork of `wg`) was never bundled** — `awg-quick.darwin/linux` invokes `awg setconf` to install AmneziaWG obfuscation parameters (Jc/Jmin/Jmax/S1-S4/H1-H4/optional I1) — plain `wg` rejects those keys. Fixed by building `awg` from `amnezia-vpn/amneziawg-tools` alongside `wg` in `fetch-binaries.sh` and `.github/workflows/publish-pc2-binaries.yml`. Asset count: `pc2-binaries-v1` 18 → 22 (added `awg-darwin-arm64`, `awg-darwin-x64`, `awg-linux-x64`, `awg-linux-arm64`).
+
+3. **Bundled bin dir wasn't on `$PATH` inside the sudo'd script** — even with bundled `awg` shipped, sudo's `env_reset` + `secure_path` strips the bundled dir, so `awg-quick`'s internal `awg setconf` lookup fails. Fixed by injecting a self-locating PATH export right after the shebang in `wg-quick` and `awg-quick`:
+   ```bash
+   # PC2_PATH_SELF_LOCATION_v1
+   export PATH="$(cd "$(dirname "$0")" && pwd):$PATH"
+   ```
+   This runs *inside* the script's bash process, after sudo has dropped env_reset, so `secure_path` no longer applies. Patched at build time in `fetch-binaries.sh` and at runtime in `BinaryManager.patchTransportScriptPathSelfLocation()` — idempotent, so existing v1.2.7.10 installs upgrade in-place without needing a new bundle download.
+
+### Two leftover setupPermissions.ts bugs from v1.2.7.10
+
+- **osascript install dialog never appeared** on apostrophe-rich sudoers comment text. Previous code interpolated entry directly into `osascript -e 'do shell script "echo \"...\" > ..."'` and any embedded `'` terminated the outer single-quoted shell argument before osascript could run. Fix: write entry to `mktemp` file as the user (mode 0600), then have osascript run a fixed-shape `cp + chmod + rm` against known paths — no user-controlled string in the shell command anymore. Regression test: [`pc2-node/tests/unit/setup-permissions-osascript.test.js`](pc2-node/tests/unit/setup-permissions-osascript.test.js).
+- **`sudo -n <wg-quick> --version` probe always returned non-zero** because `wg-quick` has no `--version` flag. Probe always reported "not configured" → spurious osascript install attempts and misleading WARN logs on every relaunch. Fix: `sudo -n -l <wg-quick> up <args>` — exits 0 silently when a NOPASSWD rule matches and prints the matched rule (parseable for the SETENV flag).
+
+### Diffstat
+
+7 files / +455 / −99. Files: `AmneziaWGService.ts`, `setupPermissions.ts`, `binary-manager.ts`, `fetch-binaries.sh`, `.github/workflows/publish-pc2-binaries.yml`, two `package.json` version bumps.
+
+---
+
+## [v1.2.7.10] - 2026-05-05 - Fresh-Mac WireGuard fix (bundled bash + sudo env-var)
+
+> **Scope**: Closes the last two gaps stopping fresh-Mac (no Homebrew) users from getting working WireGuard / AmneziaWG. Linux + Windows users untouched. Full release notes at [GitHub releases v1.2.7.10](https://github.com/Elacity/pc2.net/releases/tag/v1.2.7.10).
+
+### 1. Bundled bash 5.2.21 (macOS only)
+
+Apple's `/bin/bash` is frozen at 3.2 (2007) for GPL3 licensing reasons. `wg-quick` and `awg-quick` refuse to run on bash <4 (`BASH_VERSINFO[0] >= 4` is a hard precondition). Until v1.2.7.10, every fresh Mac without Homebrew silently fell back to ActiveProxy because the WG cascade died on `wg-quick: Version mismatch: bash 3 detected, when bash 4+ required`.
+
+Bundled bash is built from upstream source (statically against libSystem only, no Homebrew or third-party deps), code-signed + notarised in CI alongside the other transport binaries, and downloaded by `BinaryManager` into `~/.pc2/pc2-node/bin/<platform>-<arch>/`. After download, [`patchMacOSScriptShebangs()`](pc2-node/src/utils/binary-manager.ts) rewrites the `#!` line of bundled `wg-quick`/`awg-quick` to point at it. GPL3 source: <https://ftp.gnu.org/gnu/bash/bash-5.2.21.tar.gz>.
+
+### 2. `WG_QUICK_USERSPACE_IMPLEMENTATION` env var via `sudo -E`
+
+`wg-quick.darwin` and `awg-quick` internally invoke `${WG_QUICK_USERSPACE_IMPLEMENTATION:-wireguard-go}` to find the userspace VPN engine. Under sudo, `secure_path=/usr/bin:/bin:/usr/sbin:/sbin` and our bundled `wireguard-go` / `amneziawg-go` becomes invisible. Even with bash fixed, the next line of wg-quick was failing with `wireguard-go: command not found`.
+
+Fix: [`WireGuardService.detectMode()`](pc2-node/src/services/wireguard/WireGuardService.ts) macOS branch now resolves `wgGoBinPath`. `wgQuickCmd()` / `awgQuickCmd()` pass it via env var with `sudo -E`. Sudoers rules upgraded from `NOPASSWD:` to `NOPASSWD:SETENV:` so the env var survives.
+
+### Cross-platform impact
+
+| Platform | What changes |
+|---|---|
+| **Fresh Mac (no Homebrew)** | Full fix. WireGuard cascade now reaches WG instead of stopping at ActiveProxy. |
+| **Mac with Homebrew** | `validateFound` resolves `/opt/homebrew/bin/bash`, no bundled-bash download. One osascript popup to upgrade pre-v1.2.7.10 sudoers entry to SETENV form. After that, identical UX. |
+| **Linux VPS (kernel WG)** | One terminal sudo prompt during `update.sh` to upgrade sudoers entry. Plain `sudo wg-quick up` works on both old and new rule forms — functionally identical runtime behaviour. |
+| **Linux Jetson (userspace fallback)** | One terminal prompt; gets fixed (was arguably broken on v1.2.7.9 because `sudo -E` rejects without setenv permission). |
+| **Windows** | Zero changes. Bash spec gated to `platforms: ['darwin']`; sudoers logic skipped. WireGuard runs as SYSTEM service. |
+
+### Upgrade notes
+
+Anyone on v1.2.7.9 sees the macOS osascript "Allow PC2 to install transport permissions?" dialog one more time on first connect — the new sudoers entry has the `SETENV:` flag the v1.2.7.9 entry was missing. After this one-time upgrade, the dialog never appears again. If declined, pc2 falls back to ActiveProxy (same as today). Full commit: `6467475ed`. Binaries: <https://github.com/Elacity/pc2.net/releases/tag/pc2-binaries-v1> (18 assets).
+
+---
+
+## [v1.2.7.9] - 2026-05-05 - Auto-install macOS + Linux WireGuard/AmneziaWG permissions
+
+> **Scope**: Hot-patch closing the silent-fallback-to-ActiveProxy issue Mac users hit on v1.2.7.0–v1.2.7.8 even after the binary distribution fix in v1.2.7.8 landed. Linux gets the same treatment via `update.sh`. Full release notes at [GitHub releases v1.2.7.9](https://github.com/Elacity/pc2.net/releases/tag/v1.2.7.9).
+
+### Root cause
+
+`wg-quick` (and `awg-quick`) on macOS+Linux need root to create the `utun` device and write routes. Both services call `sudo wg-quick up <conf>` / `sudo awg-quick up <conf>` internally. Since pc2-node runs headless under pm2 there's no TTY and no askpass program, so sudo failed immediately with "a terminal is required to read the password". The cascade silently fell to ActiveProxy, and the only visible signal was the orange "Active Proxy" badge in the cloud dropdown. The binaries were just half the story; the auth path was the other half.
+
+### Fix — two complementary paths
+
+**Path A: Runtime auto-prompt (macOS only)** — fires on first WireGuard connect attempt when sudoers is missing. Uses `osascript ... with administrator privileges` to show a native macOS auth dialog (Touch ID supported, system-modal). Covers launcher users who never run `update.sh` directly.
+
+**Path B: Update-time install (macOS + Linux)** — [`scripts/update.sh`](scripts/update.sh) Step 11 invokes the new [`scripts/setup-transport-permissions.sh`](scripts/setup-transport-permissions.sh) helper after the backend compile, before pm2 restart. Runs from the user's terminal where sudo can prompt cleanly. Idempotent, visudo-validated, skips when headless. Covers terminal-update users on both platforms (Mac, Ubuntu, Jetson, Debian-based VPS).
+
+Both paths install the SAME sudoers entry — single auth = both WireGuard AND AmneziaWG unlocked. VLESS Reality unblocks transitively because sing-box runs userspace and just tunnels through AWG. The grant is **scoped to ONLY the bundled binaries**, not general sudo. Removing `/etc/sudoers.d/pc2-wireguard` revokes the grant cleanly; pc2 will re-prompt on next launch.
+
+### Behaviour matrix
+
+| Update path | Platform | What happens |
+|---|---|---|
+| `bash scripts/update.sh` | macOS | Step 11 prompts in terminal during update. One password entry. |
+| `bash scripts/update.sh` | Linux (Jetson, VPS, Ubuntu) | Step 11 prompts in terminal during update. One password entry. |
+| Elastos Launcher | macOS | Update completes silently. On next pc2-node start, runtime osascript dialog appears (~5s after launcher closes). One password entry. |
+| Elastos Launcher | Linux | Rare path. Runtime fallback logs a hint pointing to manual `bash scripts/setup-transport-permissions.sh`. |
+| Headless server (no TTY, no GUI) | both | Skipped with hint. ActiveProxy fallback continues to work. No regression. |
+
+### Backward compat
+
+Existing `/etc/sudoers.d/pc2-wireguard` files from v1.2.7.0–v1.2.7.8 are detected as incomplete by `checkWireGuardPermissions()` and overwritten in-place to add `awg-quick`. Same filename — no orphan files left behind. If user dismisses the auth dialog OR the update-time install fails, `wg-quick up` fails the same way it did pre-v1.2.7.9 and the cascade falls to ActiveProxy. No regression on the failure path.
+
+---
+
+## [v1.2.7.8] - 2026-05-05 - Mac transport binaries + post-update endpoint recovery + build OOM fix
+
+> **Scope**: Community feedback hot-patch addressing three issues reported on the v1.2.7.5/v1.2.7.7 update path — silent update-script OOM on low-memory machines, post-update endpoint recovery (502 on `alm.ela.city`), and the "6/6 connected" misleading indicator that masked fallback to ActiveProxy. This is the release that first published `pc2-binaries-v1` properly — every prior fresh-Mac install since v1.2.7.0 had silently fallen to ActiveProxy because the GitHub release `BinaryManager` pointed at had never been populated. Full release notes at [GitHub releases v1.2.7.8](https://github.com/Elacity/pc2.net/releases/tag/v1.2.7.8).
+
+### Issue 1 — Update script silently fails on low-memory machines
+
+Webpack/rollup hit Node's default 4 GB heap during the GUI bundle build, then `npm run build:frontend || echo "skip"` swallowed the OOM as a "step skipped" message. Step 9 (`build:gui`) then died with a misleading "build failed".
+
+- [`src/gui/package.json`](src/gui/package.json): `--max-old-space-size=4096` on `build` and `build:only`
+- [`scripts/update.sh`](scripts/update.sh): presence-check on `build:frontend` script before running, so OOMs abort loudly under `set -e` instead of being conflated with "script not defined" on older revisions.
+
+### Issue 2 — Node offline / 502 on alm.ela.city after update
+
+`ConnectivityService.start()` was running before `UsernameService` had loaded its persisted username, so the connectivity cascade succeeded but `publicEndpoint` was never registered with the supernode. `alm.ela.city` couldn't route the request and returned 502.
+
+- [`pc2-node/src/services/boson/ConnectivityService.ts`](pc2-node/src/services/boson/ConnectivityService.ts): 60s post-cascade endpoint freshness retry. Polls every 5s for up to 60s after `start()`. Once `UsernameService.hasUsername()` becomes true and we're connected without a public endpoint, triggers `reconnect()` to register.
+
+### Issue 3 — macOS "6/6 connected" misleading; nodes silently fall to ActiveProxy
+
+**Root cause**: `BinaryManager` had been pointing at a `pc2-binaries-v1` GitHub release that was **never actually published** since v1.2.7.0. Every fresh-Mac install fell to ActiveProxy because `wg`/`wg-quick`/`wireguard-go`/`amneziawg-go` couldn't be downloaded. The "6/6 connected" indicator was reporting binary detection (which optimistically counted unavailable binaries as installable later), not the active transport.
+
+End-to-end fix:
+- [`pc2-node/src/utils/binary-manager.ts`](pc2-node/src/utils/binary-manager.ts): `wg` and `wg-quick` added to `TRANSPORT_BINARIES`. SHA-256 verification against `SHASUMS256.txt` (fail-closed for hash mismatch + missing-from-manifest). `stripDarwinQuarantine()` after install so notarised binaries spawn via sudo without first-run Gatekeeper prompts.
+- [`.github/workflows/publish-pc2-binaries.yml`](.github/workflows/publish-pc2-binaries.yml) (NEW): 5-job workflow that builds, signs + notarises 16 binaries (6 macOS-native get codesign + `xcrun notarytool`), generates `SHASUMS256.txt`, uploads to release. Already run 2026-05-05; all 17 assets live at <https://github.com/Elacity/pc2.net/releases/tag/pc2-binaries-v1>.
+- [`pc2-node/src/api/index.ts`](pc2-node/src/api/index.ts): `/api/system-readiness` now returns `transport={active,label,degraded,preferred}` alongside the X/Y components count. `overall` demotes from `"ready"` to `"degraded"` when components are all installed but routing falls to ActiveProxy.
+- [`src/gui/src/UI/UIWindowParticleLogin.js`](src/gui/src/UI/UIWindowParticleLogin.js): GUI login panel shows "Active transport: WireGuard" or "Active transport: ActiveProxy (fallback)" as a separate row. Badge dot demotes to amber when on a fallback transport.
+
+Commit `0dfc1b592` — see `git log v1.2.7.7..v1.2.7.8` for the full diff.
+
+---
+
 ## [v1.2.7.7] - 2026-05-04 - Launcher auto-restart + dark UI modals + channel management batch + on-chain plans/gates + name-sync architecture
 
 > **Scope**: Combined release covering the v1.2.7.6 launcher work (auto-respawn, dark UpdateModal, diagnostic-script polish) PLUS the v1.2.7.7 channel/playback/UX/on-chain batch, PLUS the cross-app name-sync architecture and stale-signer fixes that surfaced during testing. Single tag, single GitHub release. Eight discrete bugs (A-H), three on-chain V3 contract integrations (`bulkUpdatePlans`, `configureTokenOwnershipAccess`, `subscribePlan`), and a complete data-consistency layer between `elacity-creator`, `elacity-market`, and PC2's local catalog. Hot-deployed to Sasha's PC2 across multiple iterations 2026-05-04 morning → ~21:00 UTC-4; full handover at [`docs/handover/HANDOVER_2026-05-04_V1277_TESTING_NEXT_V1280_RELAYER.md`](docs/handover/HANDOVER_2026-05-04_V1277_TESTING_NEXT_V1280_RELAYER.md).

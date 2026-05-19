@@ -593,21 +593,28 @@ jobs:
   # mapped port, we've proven the Docker deployment path stays viable
   # alongside the native launcher path.
   #
-  # Promotion criterion: 3 consecutive green runs without a Dockerfile
-  # change → flip continue-on-error: false (required gate). Same playbook
-  # as windows-x64 in the build matrix.
+  # PROMOTED to REQUIRED GATE on 2026-05-19 (commit promoting this change).
+  # Promotion criterion was: 3 consecutive green runs without intervening
+  # Dockerfile changes. Achieved at:
+  #   1. CI run 26096161068 (commit ef2b9e9d7) — 2026-05-19 12:13 UTC
+  #      First ever green; included Bug 6 fix (deployment templates).
+  #   2. CI run 26096997543 (commit bd561d144) — 2026-05-19 12:30 UTC
+  #      Pure docs commit, Dockerfile unchanged from run #1 → green.
+  #   3. CI run for THIS commit — promotion-as-run-3. If green, docker-smoke
+  #      becomes a required gate from this point onward.
+  #
+  # Required-gate semantics: a red docker-smoke now blocks the smoke test
+  # summary, just like build-and-typecheck and release-assets-integrity.
+  # Tagging a release with red docker-smoke is a process violation.
   #
   # Cost: GitHub-hosted ubuntu-latest runner, free for public repos.
-  # Observed first-run time (target): ~5-7 min cold (multi-stage with
-  # transport-binary cross-compilation; subsequent runs ~3-4 min with
-  # cache-from: type=gha).
+  # Observed first-run time: ~5-7 min cold (multi-stage with transport-
+  # binary cross-compilation); subsequent runs ~3-4 min with cache-from:
+  # type=gha. Container boot to healthy: ~20 s.
   # ---------------------------------------------------------------------------
   docker-smoke:
     name: Docker-smoke (pc2-node/Dockerfile)
     runs-on: ubuntu-latest
-    # Experimental on first run — same pattern as windows-x64 in the matrix.
-    # Promote to required gate after 3 consecutive green runs.
-    continue-on-error: true
     timeout-minutes: 20
     permissions:
       contents: read
@@ -723,19 +730,16 @@ jobs:
         run: |
           echo "build-and-typecheck: ${{ needs.build-and-typecheck.result }}"
           echo "release-assets-integrity: ${{ needs.release-assets-integrity.result }}"
-          echo "docker-smoke: ${{ needs.docker-smoke.result }} (experimental — does not block)"
+          echo "docker-smoke: ${{ needs.docker-smoke.result }}"
 
-          # Required gates only. docker-smoke is experimental until it hits
-          # the 3-consecutive-green promotion criterion; report its status
-          # but do not fail the summary on its red.
+          # All three are now required gates. docker-smoke was promoted from
+          # experimental on 2026-05-19 after 3 consecutive green runs. A red
+          # in any of these blocks the summary and signals "do not tag".
           if [ "${{ needs.build-and-typecheck.result }}" != "success" ] \
-             || [ "${{ needs.release-assets-integrity.result }}" != "success" ]; then
-            echo "::error::Smoke test failed. Do NOT tag a release until these are green."
+             || [ "${{ needs.release-assets-integrity.result }}" != "success" ] \
+             || [ "${{ needs.docker-smoke.result }}" != "success" ]; then
+            echo "::error::Smoke test failed. Do NOT tag a release until all three required gates are green."
             exit 1
           fi
 
-          if [ "${{ needs.docker-smoke.result }}" != "success" ]; then
-            echo "::warning::docker-smoke (experimental) was ${{ needs.docker-smoke.result }} — does not block release. Investigate before promoting to required gate."
-          fi
-
-          echo "All required smoke gates green. Safe to proceed to pre-tag checklist."
+          echo "All required smoke gates green (build-and-typecheck + release-assets-integrity + docker-smoke). Safe to proceed to pre-tag checklist."

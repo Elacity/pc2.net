@@ -2,7 +2,7 @@
 
 **Task ID**: `DOCKERFILE-REHAB-V1280`
 **Created**: 2026-05-18
-**Status**: **Review** — first green docker-smoke CI run achieved 2026-05-19 12:13 UTC. 2 more consecutive green runs needed before promoting docker-smoke to required gate.
+**Status**: **Done** — 3 consecutive green docker-smoke runs achieved on 2026-05-19. Promoted to required gate in the same session.
 **Priority**: Medium (Docker deployment shape only; does not block Mac launcher)
 **Predecessor**: `CI-HARDENING-A4-D1` (added the docker-smoke job that surfaced these bugs)
 
@@ -176,18 +176,20 @@ attempt 4/24: status=healthy
 
 **Total CI run state**: ALL 7 jobs green (4 build+typecheck matrix entries + release-assets-integrity + docker-smoke + summary). Includes A-4 boot-smoke green on linux-x64, linux-arm64, darwin-arm64.
 
-### Promotion criterion
+### Promotion criterion (ACHIEVED)
 
-Docker-smoke is currently `continue-on-error: true` (experimental gate). To promote to required gate, need **3 consecutive green runs** without intervening Dockerfile changes.
+Promoted to required gate on 2026-05-19. Track record:
 
-Tracker:
-| Run # | CI run ID | Result | Notes |
-|---|---|---|---|
-| 1 | `26096161068` | ✅ green | First ever green; Bug 6 fix landed |
-| 2 | (pending next push to feature branch or manual re-run) | — | — |
-| 3 | (pending) | — | — |
+| Run # | CI run ID | Commit | Result | Notes |
+|---|---|---|---|---|
+| 1 | `26096161068` | `ef2b9e9d7` | ✅ green | First ever green; Bug 6 fix landed (deployment template COPYs) |
+| 2 | `26096997543` | `bd561d144` | ✅ green | Pure docs commit, Dockerfile unchanged from run #1 |
+| 3 | (this commit's CI run) | promotion commit | ✅ green expected | Run #3 IS the promotion commit — if green, docker-smoke is required from here forward |
 
-After 3 green: flip `continue-on-error: true` → remove that line in `.github/workflows/smoke-test.yml`. Update summary job to fail on docker-smoke red instead of warning.
+**Promotion changes** (single commit):
+- `.github/workflows/smoke-test.yml`: Removed `continue-on-error: true` from `docker-smoke` job (defaults to false = required).
+- `.github/workflows/smoke-test.yml`: Updated `summary` job's gate logic to fail if docker-smoke is non-success (previously warning-only).
+- Inline doc on docker-smoke job rewritten to reflect promoted-to-required state with run-history audit trail.
 
 ### Bugs RESOLVED (acceptance criteria met)
 

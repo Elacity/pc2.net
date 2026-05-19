@@ -6,6 +6,121 @@
 
 ---
 
+## [v1.2.8.0] - 2026-05-DD - Operator self-observability (Health & Support app + local telemetry) + resource-limit bug fix + release-engineering hardening
+
+> **Scope (DRAFT — pending tag)**: A focused operator-observability release. Ships a new built-in **Health & Support** app that lets operators run a one-click self-test on their PC2 node, view local telemetry (p50/p95/p99 latencies of critical paths), and compose a sanitised support report they can choose to send manually. Fixes a latent bug where resource-limit settings configured via API (`storage_limit`, `max_concurrent_wasm`, `max_memory_mb`, `wasm_timeout_ms`) were silently ignored on read. Plus a substantial under-the-hood investment in CI reliability and code structure to make future releases safer — none of which changes user-facing behaviour but all of which catches a class of bugs before they reach users. **No new outbound telemetry of any kind** — all observability is local-only; operators see their own data, nothing leaves the machine without an explicit user-initiated send. Branch: [`feat/t-1-telemetry-and-support`](https://github.com/Elacity/pc2.net/tree/feat/t-1-telemetry-and-support). 56 commits since v1.2.7.14; full pre-tag checklist at [`.cursor/tasks/RELEASE-ENGINEERING-V1280/PRE-TAG-CHECKLIST.md`](.cursor/tasks/RELEASE-ENGINEERING-V1280/PRE-TAG-CHECKLIST.md).
+
+### New built-in app — Health & Support (`elacity-health`)
+
+A new system-role app that auto-installs on first launch after upgrade. Users can find it in the start menu under "Health & Support". Three things in one window:
+
+1. **One-click health check** — runs the full `/api/diagnose` battery (database, transports, IPFS cluster, Lit/Chipotle config, supernode reachability, WASM runtimes, update channel) and shows green/yellow/red per system. Useful when something feels off — and useful to attach to a support thread when reporting a bug. Implemented in [`pc2-node/data/test-apps/elacity-health/`](pc2-node/data/test-apps/elacity-health/).
+2. **Live aggregate telemetry** — local p50/p95/p99 latencies of critical operations (currently: Chipotle CEK recovery, IPFS cluster pin forward, IPFS cluster pin query) computed from a JS-side aggregator over a local samples table. Shows operators where their node is slow without needing a stopwatch.
+3. **Support report composer** — preview / copy / download a structured JSON bundle describing the operator's environment (PC2 version, OS, hardware class, last diagnose result, recent telemetry summary). **Wallet addresses are hashed (SHA-256, 16-hex-char truncated), home paths are stripped, no IPs or content keys ever included.** The report is never sent automatically — operators copy or download it themselves and attach to a support thread. A persistent consent banner at the top of the app reinforces this.
+
+### T-1A — Self-Diagnostic probes (extended)
+
+Four new live probes added to [`pc2-node/src/api/diagnose.ts`](pc2-node/src/api/diagnose.ts):
+
+- **`probeLitConfig`** — reads the Lit network config and does a HEAD-only check (no quota burn against the Lit relay).
+- **`probeAllSupernodes`** — checks reachability of both supernodes' Kubo + Gateway endpoints in parallel.
+- **`probeWasmCrates`** — static `WebAssembly.compile()` on the 7 bundled WASM crates (no instantiate, no execute) so a corrupted crate is surfaced fast.
+- **`probeUpdateChannel`** — queries the GitHub releases API to verify the auto-updater can see the channel.
+
+All probes hard-bounded by `SHELL_TIMEOUT_MS`, fail-soft (any single probe failure doesn't crash the diagnose run), and sanitised through the shared redactor. Also adds an ESM `__dirname` polyfill that caught a latent runtime `ReferenceError` the type-checker had missed. The `resolvePc2Version()` helper now walks several `package.json` paths so desktop installs (which start PC2 via `node dist/index.js`, not `npm`) report the real version instead of `"unknown"`.
+
+### T-1B — Local-only support report API
+
+Two new authenticated endpoints in [`pc2-node/src/api/support.ts`](pc2-node/src/api/support.ts):
+
+- **`POST /api/support/report/preview`** — builds + returns the report bundle the operator would send. Zero network egress; the response IS the report. Operator decides what to do with it.
+- **`GET /api/support/report/policy`** — returns the policy document the report-bundle builder applies: which fields are always included, which are togglable, which are never included.
+
+Backed by a curated pure function in [`pc2-node/src/services/support/buildReportBundle.ts`](pc2-node/src/services/support/buildReportBundle.ts) with schema-versioned output. The shared redactor lives in [`pc2-node/src/utils/redact.ts`](pc2-node/src/utils/redact.ts) and is also reused by the diagnose endpoint.
+
+### T-1C — Local metric registry (instrumented hot paths)
+
+A local Counter/Histogram primitive in [`pc2-node/src/utils/metrics.ts`](pc2-node/src/utils/metrics.ts), backed by two new SQLite tables (migration 33 in [`pc2-node/src/storage/schema.sql`](pc2-node/src/storage/schema.sql)). Defence-in-depth bounds on every recorder: max 8 tags per metric, 64-char tag values, 80-char metric names, name-pattern enforcement, kill-switch via `PC2_TELEMETRY_DISABLED=true` environment variable, and **fail-soft** on every recording path (a metrics failure can never affect the operation being measured).
+
+Two high-value paths instrumented out of the gate:
+
+- **Chipotle CEK recovery** ([`pc2-node/src/api/chipotle-client.ts`](pc2-node/src/api/chipotle-client.ts)) — `chipotle.cek_recovery` counter + `chipotle.cek_recovery_ms` histogram on `recoverNonMediaCEK`, `recoverMediaCEKEnvelope`, `encryptWithLitAction`. Allow-listed error reason tags keep cardinality bounded.
+- **IPFS cluster pin forwarding** ([`pc2-node/src/services/clusterPin.ts`](pc2-node/src/services/clusterPin.ts)) — `cluster_pin.forward` and `cluster_pin.query` counters + `_ms` histograms. `classifyHttpStatus()` + `classifyNetworkError()` bucket response codes and error messages into low-cardinality reason tags.
+
+A new authenticated `GET /api/metrics/snapshot` endpoint in [`pc2-node/src/api/metrics.ts`](pc2-node/src/api/metrics.ts) returns the current counter/histogram state; the Health & Support app polls this to render the aggregate telemetry card.
+
+**Privacy posture (anonymous-by-design)**: tags MUST NOT contain wallets, IPs, KIDs, asset titles, channel names, or filesystem paths. Allowed tag values are short structural strings only: `outcome=success`, `kind=media`, `tier=1`, `reason=key_invalid`, etc. The `sanitise()` redactor catches wallets, DIDs, bearer tokens, mnemonics, and PEM blocks at multiple layers; `redactHomePath` strips `$HOME`; `hashWallet` returns SHA-256 truncated to the first 16 hex chars (never raw).
+
+### Bug fix — resource-limit settings now correctly applied
+
+PC2 has had API endpoints for several releases allowing operators to configure their node's resource limits:
+
+- `storage_limit` (e.g. `"auto"`, `"100GB"`, `"unlimited"`) — `POST /api/storage/limit` and `POST /api/resources/limits`
+- `max_concurrent_wasm` (1-32 parallel WASM executions) — `POST /api/resources/limits`
+- `max_memory_mb` (auto, 256, 512, 1024, 2048, 4096, 8192, or custom ≥128) — `POST /api/resources/limits`
+- `wasm_timeout_ms` (1000-300000 ms) — `POST /api/resources/limits`
+
+**The bug**: writes to these endpoints persisted to the local database correctly, but on every subsequent read (e.g. `GET /api/info`, `GET /api/resources`), the values were silently ignored — the system fell back to `config.json` defaults or hardcoded defaults. The "Database settings override config file" comment in [`pc2-node/src/api/resources.ts`](pc2-node/src/api/resources.ts) and [`pc2-node/src/api/supernode.ts`](pc2-node/src/api/supernode.ts) was inaccurate.
+
+**Root cause**: a pre-existing latent bug where the helper used to obtain the database handle (`getDb()`) returned `(global as any).db`, which was never set anywhere in the codebase. All `db?.getSetting(...)` calls in those files returned `undefined`, masked by the optional-chaining fallthrough.
+
+**Fix**: the broken helpers were removed and replaced with explicit `req.app.locals.db` lookups (the established Express pattern already used elsewhere in pc2-node).
+
+**What this means for existing users**:
+- If you've never used these endpoints to set non-default values: **no change in behaviour**. Defaults continue to apply.
+- If you previously set a non-default value via the API and were surprised it didn't seem to take effect — that wasn't your imagination; the fix makes your saved setting work correctly on the next request.
+- One caveat: WASM compute settings (`max_concurrent_wasm`, `max_memory_mb`, `wasm_timeout_ms`) are read at WASM-runtime initialisation, which happens once at PC2 startup. To apply newly-set compute limits after upgrade, **restart PC2 once**. Storage settings take effect on the next API request, no restart required.
+
+### Operator — automated supernode deploy script
+
+New [`scripts/deploy-supernode.sh`](scripts/deploy-supernode.sh) — single command to deploy a supernode (Kubo + IPFS relay + web gateway), with built-in smoke tests that abort the deploy if any of the three services fails to come up healthy. Replaces the previous manual `scp` + `ssh` + `systemctl restart` sequence. Operator-facing only.
+
+### Architecture — `(global as any).X` ambient-state cleanup
+
+As preparation for capsule-based deployment on the ElastOS Runtime, the few `(global as any).X` properties pc2-node used to share state across modules were audited and cleaned up:
+
+- `(global as any).pc2Config` — vestigial mutable cache. Removed entirely; readers now use the canonical `req.app.locals.config` and `req.app.locals.db`.
+- `(global as any).db` — latent bug, fixed (see above).
+- `(global as any).__filesystem` — retained as a deliberate defensive fallback for the Drivers tool-execution critical path; both sites are now explicitly commented to document the intent.
+- `(global as any).ipfsStorage` — consumer purged from `api/supernode.ts`; the single-write at bootstrap ([`pc2-node/src/index.ts`](pc2-node/src/index.ts)) is preserved as a legitimate startup-time exposure for non-Express callers.
+
+These are internal refactors with no API contract change. They reduce architectural coupling and prepare pc2-node modules for eventual migration into the Runtime's capsule architecture.
+
+### Under-the-hood — release engineering & CI reliability
+
+A meaningful investment in test infrastructure and code quality, all invisible to users but high leverage for everyone who develops or operates PC2:
+
+- **Cross-platform CI matrix** now spans **6 required gates**: build-and-typecheck on linux-x64 / linux-arm64 / darwin-arm64 / windows-x64, plus release-assets-integrity (catches the v1.2.7.8-class bug where the wrong asset count was published), plus docker-smoke (builds + runs the production Dockerfile, hits `/api/health` through a mapped port). Workflow: [`.github/workflows/smoke-test.yml`](.github/workflows/smoke-test.yml).
+- **Three V2 reliability gates** added on top: binary execution smoke (catches corrupted/wrong-arch published wireguard / amneziawg / wg / awg binaries — one level deeper than the asset-count gate); boot-time SLA assertion (warns at >60 s cold boot, fails at >90 s); and a third memory-ceiling gate that was attempted, calibrated twice, and dropped because the signal was too fragile to ship as a required gate — that work was spun out to [`PC2-MEMORY-PROFILE-RPI`](.cursor/tasks/OPTIMISATION-AND-REFACTORING-2026-05/PC2-MEMORY-PROFILE-RPI.md) for proper source-code memory profiling. Tracker: [`CI-HARDENING-RELIABILITY-V2.md`](.cursor/tasks/RELEASE-ENGINEERING-V1280/CI-HARDENING-RELIABILITY-V2.md).
+- **Dockerfile rehabilitation**: the docker-smoke gate immediately surfaced **6 critical bugs** in [`pc2-node/Dockerfile`](pc2-node/Dockerfile) — old Go version, missing config copy, missing WASM apps, two missing native bindings (sharp + @napi-rs/canvas), missing deployment templates. All fixed; docker-smoke now stays green run-after-run. Tracker: [`DOCKERFILE-REHAB-V1280.md`](.cursor/tasks/RELEASE-ENGINEERING-V1280/DOCKERFILE-REHAB-V1280.md).
+- **Capsule-readiness audit**: walked [`pc2-node/src`](pc2-node/src/) module-by-module, scored 160 / 163 functional modules (98.2%) for capsule-runtime portability. Found two mechanical-pattern blockers (concrete-class imports, ambient global singletons) which then drove the Phase 2-A through 2-D-helpers refactors. Reports: [`CAPSULE_READINESS_REPORT.md`](.cursor/tasks/OPTIMISATION-AND-REFACTORING-2026-05/CAPSULE_READINESS_REPORT.md), [`AUDIT_EXECUTIVE_SUMMARY.md`](.cursor/tasks/OPTIMISATION-AND-REFACTORING-2026-05/AUDIT_EXECUTIVE_SUMMARY.md).
+- **Phase 2 refactors** (six waves: types extraction, concrete-class → `import type`, route-layer singleton purge, sibling-orchestrator type-only imports, ambient `global.*` cleanup, deep WASM consumer threading) — together they eliminated the audit's mechanical blockers and surfaced the latent db-settings bug above as a side effect. None changes any API contract.
+- **Pre-tag checklist + rollback procedure**: [`PRE-TAG-CHECKLIST.md`](.cursor/tasks/RELEASE-ENGINEERING-V1280/PRE-TAG-CHECKLIST.md) and [`ROLLBACK-PROCEDURE.md`](.cursor/tasks/RELEASE-ENGINEERING-V1280/ROLLBACK-PROCEDURE.md), the latter validated with a real dry-run.
+
+### What this release does NOT do
+
+Honest about what's deferred so operators aren't surprised:
+
+- **No outbound telemetry of any kind.** The Health & Support app shows the operator their own data; nothing leaves the machine without the operator explicitly choosing to copy or download a support report and attach it manually.
+- **No opt-in dialog and no daily flusher.** Both deferred to v1.2.9.0. The metrics primitives + report API exist in v1.2.8.0 so the UX and infrastructure can shake out without committing to a fleet-wide ingest model yet.
+- **No supernode ingest endpoint.** Also v1.2.9.0.
+- **No Rust / WASM crate-internal panic capture.** Deferred to v1.2.9.0 Phase R.
+- **No new dDRM / playback / marketplace features.** This release is intentionally focused on observability + reliability; user-facing dDRM and AI feature work resumes in v1.2.9.x.
+
+### Operator-validated
+
+T-1 instrumentation was validated end-to-end on Sasha's local node 2026-05-07 ~13:09 ET — first real telemetry datum captured: `chipotle.cek_recovery{kind=non_media, outcome=success}=1, p50=2362ms`. The metrics primitive, the SQLite schema, the snapshot endpoint, and the live aggregate telemetry card all confirmed working on a real PC2 install.
+
+### Compatibility
+
+- No API contract changes.
+- No config file changes required.
+- No data migration required beyond the automatic SQLite migration 33 (creates `metrics_counters` + `metrics_histogram_samples` tables; takes <100 ms on first run after upgrade).
+- The Health & Support app auto-installs via the system-role manifest path on first launch after upgrade.
+- The resource-limit bug fix begins applying immediately on upgrade — saved settings start taking effect on the next request (storage) or next restart (compute).
+
+---
+
 ## [v1.2.7.7] - 2026-05-04 - Launcher auto-restart + dark UI modals + channel management batch + on-chain plans/gates + name-sync architecture
 
 > **Scope**: Combined release covering the v1.2.7.6 launcher work (auto-respawn, dark UpdateModal, diagnostic-script polish) PLUS the v1.2.7.7 channel/playback/UX/on-chain batch, PLUS the cross-app name-sync architecture and stale-signer fixes that surfaced during testing. Single tag, single GitHub release. Eight discrete bugs (A-H), three on-chain V3 contract integrations (`bulkUpdatePlans`, `configureTokenOwnershipAccess`, `subscribePlan`), and a complete data-consistency layer between `elacity-creator`, `elacity-market`, and PC2's local catalog. Hot-deployed to Sasha's PC2 across multiple iterations 2026-05-04 morning → ~21:00 UTC-4; full handover at [`docs/handover/HANDOVER_2026-05-04_V1277_TESTING_NEXT_V1280_RELAYER.md`](docs/handover/HANDOVER_2026-05-04_V1277_TESTING_NEXT_V1280_RELAYER.md).

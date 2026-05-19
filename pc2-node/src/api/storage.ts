@@ -3218,6 +3218,9 @@ router.post('/lit/secure-view', authenticate, async (req: AuthenticatedRequest, 
           logger.info(`[SecureView] Preflight: primary ${buyerAddress.substring(0, 10)} holds AccessToken`);
         } else {
           logger.warn(`[SecureView] Preflight: neither address holds AccessToken — proceeding with primary`);
+          // early exit
+          res.status(412).json({ error: 'You do not own this content' });
+          return;
         }
       } catch (preflightErr: any) {
         logger.warn(`[SecureView] Preflight access check failed (non-fatal): ${preflightErr.message}`);

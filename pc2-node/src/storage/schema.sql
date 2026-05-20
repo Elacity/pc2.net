@@ -438,6 +438,51 @@ CREATE TABLE IF NOT EXISTS publish_drafts (
 CREATE INDEX IF NOT EXISTS idx_drafts_wallet ON publish_drafts(wallet_address);
 CREATE INDEX IF NOT EXISTS idx_drafts_status ON publish_drafts(status);
 
+-- Migration 34: Publish intents — the Monetisation Agent's pre-encryption
+-- working state. Mirrors the input-side columns of publish_drafts (so the
+-- Creator app can reuse its existing wizard pre-fill logic with minimal
+-- field-name remapping) but OMITS the post-encryption columns
+-- (asset_cid / metadata_cid / encrypt_hash / steps). Those are only known
+-- after the Creator app's encrypt + IPFS pin step, so they cannot live in
+-- an intent. When the Creator consumes an intent via puter.args.resumeIntent,
+-- it copies these fields into a new publish_drafts row, fills in the post-
+-- encryption columns, and marks the intent as 'consumed' with
+-- consumed_draft_id pointing back to the resulting draft.
+-- See .cursor/tasks/AGENT-CREATOR-STUDIO-2026-05/PLAN.md §6 for the shared-
+-- intent / two-presentations architecture.
+CREATE TABLE IF NOT EXISTS publish_intents (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  wallet_address TEXT NOT NULL,
+  conversation_id TEXT,
+  status TEXT NOT NULL DEFAULT 'draft',
+  source_file_path TEXT,
+  title TEXT,
+  description TEXT,
+  category TEXT,
+  file_name TEXT,
+  file_size INTEGER,
+  mime_type TEXT,
+  tags TEXT,
+  channel TEXT,
+  price TEXT,
+  currency_address TEXT,
+  currency_symbol TEXT,
+  copies INTEGER DEFAULT 1,
+  access_method TEXT DEFAULT 'buy_once',
+  reseller_cut INTEGER DEFAULT 0,
+  royalty_partners TEXT,
+  license_profile TEXT DEFAULT 'perpetual_personal_view',
+  thumbnail_cid TEXT,
+  thumbnail_path TEXT,
+  adult INTEGER DEFAULT 0,
+  consumed_draft_id INTEGER,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  CHECK (status IN ('draft', 'handed_off', 'abandoned', 'consumed'))
+);
+CREATE INDEX IF NOT EXISTS idx_intents_wallet ON publish_intents(wallet_address);
+CREATE INDEX IF NOT EXISTS idx_intents_wallet_status ON publish_intents(wallet_address, status, updated_at DESC);
+
 -- Migration 22: Agent audit log — AI action tracking for after-the-fact review
 CREATE TABLE IF NOT EXISTS agent_audit_log (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

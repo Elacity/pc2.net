@@ -509,7 +509,7 @@ Same contracts on Base mainnet. Same Lit Protocol/Chipotle CEK envelope. Same wa
 - [ ] **IN PROGRESS (V3 contracts):** V3 contract migration — ✅ Creator Dashboard (`app.js`) fully migrated to V3 ABIs, tested channel creation + free/paid minting + royalty distribution. ✅ Market app (`wallet.js`) V3 addresses verified, no V2 crossovers. ✅ Wallet bridge Base chain support added. ⏳ Remaining: `sdk/config.ts` V3 addresses, `config/default.json` Content Indexer V3 entry, `chipotle-client.ts` V3 AuthorityGateway for `hasAccessByContentId`, `packages/access` vendor bundles. ⛔ Market E2E blocked on Elacity GraphQL indexer (0 V3 assets indexed). See `docs/core/V3_E2E_TESTING_STATUS.md`
 - [ ] **BLOCKED (V3 + Lit):** PDR Phase B — SDK extraction (`sdk/metadata.ts`, `sdk/contracts.ts`, `sdk/channels.ts`, `sdk/mint.ts`, `sdk/licensing.ts`, `sdk/compliance.ts`), Enterprise REST API (`/api/v1/content`, `/api/v1/license`, `/api/v1/compliance`), MCP Server for AI buyer agents (`elacity.content.*`, `elacity.license.*`)
 - [x] Deploy to supernodes (InterServer + Contabo) — **Deployed Apr 6, 2026**. Updated web-gateway with `/api/ddrm/provision` endpoint, wrote Chipotle usage API key + PKP ID to `/etc/pc2/` on both servers, added nginx route on Contabo. Both endpoints verified externally. Fresh PC2 nodes can now auto-provision Lit Chipotle credentials on first startup
-- [ ] Merge `feature/lit-chipotle-migration` -> `main`, tag v1.3.0
+- [x] ~~Merge `feature/lit-chipotle-migration` -> `main`, tag v1.3.0~~ — **superseded**: Lit Chipotle production migration landed via the v1.2.7.x patch line (key swap in v1.2.7.4, supernode-relayed credentials shipped earlier in v1.2.6.x). No separate v1.3.0 tag was needed for this work; v1.3.0 is now scoped to **Monetisation Agent Alpha** per the top-of-file snapshot + [`AGENTIC-PC2-MONETISATION-2026-05`](../../.cursor/tasks/AGENTIC-PC2-MONETISATION-2026-05/AGENTIC-PC2-MONETISATION-2026-05.md).
 
 **Omnichain ELA:**
 - [ ] Begin ELA liquidity deployment across target EVM chains
@@ -1190,6 +1190,8 @@ See docs/core/ELACITY_UNIVERSAL_ASSET_STRATEGY.md for marketplace vision.
 ---
 
 ## Monthly Release Cadence
+
+> **⚠️ Historical context — for the actuals see the top-of-file release-status snapshot.** This table preserves the originally-planned monthly cadence at the time of v1.2.0 tag (April 2026). Actual delivery diverged: instead of one v1.3.0 in May 2026, we shipped a v1.2.7.x patch line (14 patches over 5 days resolving fresh-Mac install + transport reliability + on-chain V3 contract integration) followed by v1.2.8.0 (operator self-observability, in flight). v1.3.0 has been re-scoped to **Monetisation Agent Alpha** per [`AGENTIC-PC2-MONETISATION-2026-05`](../../.cursor/tasks/AGENTIC-PC2-MONETISATION-2026-05/AGENTIC-PC2-MONETISATION-2026-05.md); the IPFS / AI Model Marketplace / dApp bundles / asset-packager work below was either completed inside v1.2.x or de-prioritised. The "Focus" column below should be read as *original intent*, not active commitment.
 
 Starting Month 1 (March 2026):
 

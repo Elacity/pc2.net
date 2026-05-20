@@ -2607,6 +2607,179 @@ export class DatabaseManager {
     return row?.c || 0;
   }
 
+  // ── Channels (for the Monetisation Agent's list_my_channels tool) ──
+
+  /**
+   * Return channels the given wallet has created, sourced from the cached
+   * channel_metadata table. Returns an empty array if the user has not
+   * opened the Creator app yet (cache is populated on first discovery).
+   * The Monetisation Agent uses this to constrain the channel field of
+   * publish_intents — it must NEVER invent channel addresses.
+   */
+  getChannelsByCreator(creatorAddress: string): Array<{ address: string; name: string | null; plans: string | null; token_access: string | null }> {
+    const db = this.getDB();
+    return db.prepare(`
+      SELECT address, name, plans, token_access
+      FROM channel_metadata
+      WHERE creator_address = ?
+      ORDER BY updated_at DESC
+      LIMIT 50
+    `).all(creatorAddress.toLowerCase()) as any[];
+  }
+
+  // ── Publish Intents (Monetisation Agent pre-encryption staging) ─────
+  // Mirror of the input-side of publish_drafts. The Creator app consumes
+  // an intent via puter.args.resumeIntent, pre-fills its wizard, encrypts
+  // + pins, then writes a real publish_drafts row and calls
+  // markIntentConsumed() to link the two. See PLAN.md §6.
+
+  insertIntent(record: {
+    wallet_address: string;
+    conversation_id?: string;
+    source_file_path?: string;
+    title?: string;
+    description?: string;
+    category?: string;
+    file_name?: string;
+    file_size?: number;
+    mime_type?: string;
+    tags?: string;
+    channel?: string;
+    price?: string;
+    currency_address?: string;
+    currency_symbol?: string;
+    copies?: number;
+    access_method?: string;
+    reseller_cut?: number;
+    royalty_partners?: string;
+    license_profile?: string;
+    thumbnail_cid?: string;
+    thumbnail_path?: string;
+    adult?: boolean;
+  }): number {
+    const db = this.getDB();
+    const result = db.prepare(`
+      INSERT INTO publish_intents (
+        wallet_address, conversation_id, source_file_path,
+        title, description, category, file_name, file_size, mime_type, tags,
+        channel, price, currency_address, currency_symbol, copies,
+        access_method, reseller_cut, royalty_partners, license_profile,
+        thumbnail_cid, thumbnail_path, adult
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      record.wallet_address.toLowerCase(),
+      record.conversation_id || null,
+      record.source_file_path || null,
+      record.title || null,
+      record.description || null,
+      record.category || null,
+      record.file_name || null,
+      record.file_size || null,
+      record.mime_type || null,
+      record.tags || null,
+      record.channel || null,
+      record.price || null,
+      record.currency_address || null,
+      record.currency_symbol || null,
+      record.copies || 1,
+      record.access_method || 'buy_once',
+      record.reseller_cut || 0,
+      record.royalty_partners || null,
+      record.license_profile || 'perpetual_personal_view',
+      record.thumbnail_cid || null,
+      record.thumbnail_path || null,
+      record.adult ? 1 : 0,
+    );
+    return result.lastInsertRowid as number;
+  }
+
+  getIntentsByWallet(walletAddress: string, status?: string, limit: number = 50): any[] {
+    const db = this.getDB();
+    if (status) {
+      return db.prepare(`
+        SELECT * FROM publish_intents
+        WHERE wallet_address = ? AND status = ?
+        ORDER BY updated_at DESC
+        LIMIT ?
+      `).all(walletAddress.toLowerCase(), status, limit);
+    }
+    return db.prepare(`
+      SELECT * FROM publish_intents
+      WHERE wallet_address = ?
+      ORDER BY updated_at DESC
+      LIMIT ?
+    `).all(walletAddress.toLowerCase(), limit);
+  }
+
+  getIntentById(id: number, walletAddress: string): any | undefined {
+    const db = this.getDB();
+    return db.prepare(`
+      SELECT * FROM publish_intents
+      WHERE id = ? AND wallet_address = ?
+    `).get(id, walletAddress.toLowerCase());
+  }
+
+  /**
+   * Partial update — only the fields present in `updates` are written.
+   * Field names must match the schema; unknown fields are silently ignored
+   * by the whitelist below to keep accidental injections off the table.
+   */
+  updateIntent(id: number, walletAddress: string, updates: Record<string, any>): boolean {
+    const ALLOWED_FIELDS = [
+      'source_file_path', 'title', 'description', 'category',
+      'file_name', 'file_size', 'mime_type', 'tags',
+      'channel', 'price', 'currency_address', 'currency_symbol', 'copies',
+      'access_method', 'reseller_cut', 'royalty_partners', 'license_profile',
+      'thumbnail_cid', 'thumbnail_path', 'adult',
+    ];
+    const setClauses: string[] = [];
+    const values: any[] = [];
+    for (const [key, value] of Object.entries(updates)) {
+      if (!ALLOWED_FIELDS.includes(key)) continue;
+      setClauses.push(`${key} = ?`);
+      values.push(key === 'adult' ? (value ? 1 : 0) : (value === undefined ? null : value));
+    }
+    if (setClauses.length === 0) return false;
+    setClauses.push(`updated_at = datetime('now')`);
+    values.push(id, walletAddress.toLowerCase());
+    const db = this.getDB();
+    const result = db.prepare(`
+      UPDATE publish_intents
+      SET ${setClauses.join(', ')}
+      WHERE id = ? AND wallet_address = ? AND status = 'draft'
+    `).run(...values);
+    return result.changes > 0;
+  }
+
+  markIntentHandedOff(id: number, walletAddress: string): boolean {
+    const db = this.getDB();
+    const result = db.prepare(`
+      UPDATE publish_intents
+      SET status = 'handed_off', updated_at = datetime('now')
+      WHERE id = ? AND wallet_address = ? AND status = 'draft'
+    `).run(id, walletAddress.toLowerCase());
+    return result.changes > 0;
+  }
+
+  markIntentConsumed(id: number, walletAddress: string, consumedDraftId: number): boolean {
+    const db = this.getDB();
+    const result = db.prepare(`
+      UPDATE publish_intents
+      SET status = 'consumed', consumed_draft_id = ?, updated_at = datetime('now')
+      WHERE id = ? AND wallet_address = ? AND status IN ('draft', 'handed_off')
+    `).run(consumedDraftId, id, walletAddress.toLowerCase());
+    return result.changes > 0;
+  }
+
+  deleteIntent(id: number, walletAddress: string): boolean {
+    const db = this.getDB();
+    const result = db.prepare(`
+      DELETE FROM publish_intents
+      WHERE id = ? AND wallet_address = ?
+    `).run(id, walletAddress.toLowerCase());
+    return result.changes > 0;
+  }
+
   // ============================================================================
   // Agent Audit Log Operations (AI action tracking — separate from API audit_logs)
   // ============================================================================

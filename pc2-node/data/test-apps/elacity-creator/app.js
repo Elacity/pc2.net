@@ -254,6 +254,7 @@
     metadataUploaded: false,
     metaCid: null,
     draftId: null,
+    intentId: null,
   };
 
   // ── DOM refs ──────────────────────────────────────────
@@ -4802,6 +4803,21 @@
               window.parent.postMessage({ msg: 'mint-draft-saved' }, '*');
             }
           } catch (_) { }
+          // If this draft originated from a Monetisation Agent intent (resumeIntent
+          // launch path), mark the intent 'consumed' and link it to the draft.
+          // Tracks the audit trail required by PLAN.md §11 (NR-4) — every minted
+          // asset whose origin was an agent intent retains a back-pointer.
+          if (state.intentId) {
+            try {
+              await pc2Fetch('/api/intents/' + state.intentId + '/status', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'consumed', consumed_draft_id: draftData.id }),
+              });
+            } catch (intentErr) {
+              console.warn('[Creator] Intent → draft linkage failed (non-blocking):', intentErr.message);
+            }
+          }
         }
       } catch (draftErr) {
         console.warn('[Creator] Draft auto-save failed:', draftErr.message);
@@ -5362,6 +5378,7 @@
     state.metadataUploaded = false;
     state.metaCid = null;
     state.draftId = null;
+    state.intentId = null;
     state._mintResolve = null;
     clearFile();
     // Reset thumbnail picker UI
@@ -6702,6 +6719,74 @@
       }
     }
 
+    // Resume from a Monetisation Agent intent (launched from AI chat).
+    // The intent contains the user's pre-encryption wizard input only —
+    // we still need to run the full encrypt + IPFS pin pipeline. This is
+    // structurally the "user dropped a file" path with all wizard fields
+    // pre-filled, NOT the "resume saved draft" path (which skips the
+    // pipeline). See AGENT-CREATOR-STUDIO-2026-05/PLAN.md §6 + §11.
+    async function resumeFromIntent(intentId) {
+      try {
+        var resp = await pc2Fetch('/api/intents/' + intentId);
+        if (!resp.ok) throw new Error('Intent not found');
+        var intent = await resp.json();
+
+        if (state.walletAddress && intent.wallet_address &&
+            state.walletAddress.toLowerCase() !== intent.wallet_address.toLowerCase()) {
+          showToast('Wallet mismatch — this intent belongs to a different wallet', 'error');
+          return;
+        }
+
+        state.intentId = intentId;
+
+        // Pre-fill wizard fields from the intent. Field names are mirrored
+        // between publish_intents and publish_drafts so this block matches
+        // resumeFromDraft above 1:1 for the input-side columns.
+        if (dom.assetTitle) dom.assetTitle.value = intent.title || '';
+        if (dom.assetDescription) dom.assetDescription.value = intent.description || '';
+        if (dom.assetCategory) dom.assetCategory.value = intent.category || '';
+        if (dom.assetPrice) dom.assetPrice.value = intent.price || '0';
+        if (dom.assetAccess) dom.assetAccess.value = intent.access_method || 'buy_and_resell';
+        if (dom.assetCopies) dom.assetCopies.value = intent.copies || 1;
+        var channelSel = dom.assetChannel;
+        if (channelSel && intent.channel) {
+          channelSel.value = intent.channel;
+          if (channelSel.value !== intent.channel) {
+            var intentOpt = document.createElement('option');
+            intentOpt.value = intent.channel;
+            intentOpt.textContent = (intent.title || 'Intent') + ' (' + intent.channel.substring(0, 8) + '...)';
+            channelSel.insertBefore(intentOpt, channelSel.firstChild);
+            channelSel.value = intent.channel;
+          }
+        }
+        var currSel = document.getElementById('asset-currency');
+        if (currSel && intent.currency_address) currSel.value = intent.currency_address;
+        var adultCheck = document.getElementById('adult-content-check');
+        if (adultCheck) adultCheck.checked = !!intent.adult;
+
+        if (!intent.source_file_path) {
+          showToast('Intent has no source file — please drop a file to continue', 'info');
+          return;
+        }
+
+        var fileResp = await pc2Fetch('/read', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: intent.source_file_path }),
+        });
+        if (!fileResp.ok) throw new Error('Could not read source file: ' + fileResp.status);
+        var contentType = fileResp.headers.get('Content-Type') || intent.mime_type || 'application/octet-stream';
+        var blob = await fileResp.blob();
+        var fileName = intent.file_name || intent.source_file_path.split('/').pop() || 'file';
+        var file = new File([blob], fileName, { type: contentType });
+        handleFileSelected(file);
+        showToast('Loaded intent #' + intentId + ' — review the wizard fields and continue', 'success');
+      } catch (err) {
+        console.error('[Creator] Resume from intent failed:', err);
+        showToast('Resume from intent failed: ' + (err.message || ''), 'error');
+      }
+    }
+
     // Pre-load file or resume draft when launched
     (function () {
       var puterArgs;
@@ -6710,7 +6795,15 @@
         puterArgs = raw ? JSON.parse(raw) : {};
       } catch (_) { puterArgs = {}; }
 
-      // Resume from draft takes priority
+      // Resume from a Monetisation Agent intent takes highest priority
+      // (the chat already collected the wizard fields; just pre-fill +
+      // pre-load the file and let the user click through).
+      if (puterArgs.resumeIntent) {
+        resumeFromIntent(puterArgs.resumeIntent);
+        return;
+      }
+
+      // Resume from draft takes priority over fresh-file paths
       if (puterArgs.resumeDraft) {
         resumeFromDraft(puterArgs.resumeDraft);
         return;

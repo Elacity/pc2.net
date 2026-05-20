@@ -510,6 +510,30 @@ async function UIDesktop(options) {
         }
     });
 
+    // ─────────────────────────────────────────────────────────────────
+    // Monetisation Agent — Creator hand-off (v1.3.0 S1)
+    // Fired by ToolExecutor.open_creator_to_mint after marking the intent
+    // 'handed_off'. We launch the Creator app with the intent_id; the
+    // Creator's resumeIntent handler (elacity-creator/app.js) loads the
+    // intent via GET /api/intents/:id, pre-fills its wizard, and writes
+    // a publish_drafts row on user confirmation. See
+    // .cursor/tasks/AGENT-CREATOR-STUDIO-2026-05/PLAN.md §10 (Option A).
+    // ─────────────────────────────────────────────────────────────────
+    window.socket.on('monetisation.open_creator', (data) => {
+        if (!data || typeof data.intent_id !== 'number') return;
+        const appName = data.app_name || 'elacity-creator';
+        const intentId = data.intent_id;
+        try {
+            launch_app({
+                name: appName,
+                window_title: 'Elacity Creator',
+                args: { resumeIntent: intentId },
+            });
+        } catch (err) {
+            console.error('[UIDesktop] Failed to launch Creator from monetisation handoff:', err);
+        }
+    });
+
     window.socket.on('item.removed', async (item) => {
         console.log('[Frontend] ✅ Received item.removed event:', item, 'socket.id:', window.socket.id);
         

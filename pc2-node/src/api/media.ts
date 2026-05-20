@@ -71,65 +71,21 @@ const LIT_BACKEND: LitBackend = (process.env.LIT_BACKEND as LitBackend) || 'chip
 // Chipotle: Two-phase SIWE auth is no longer needed (API key replaces it).
 // Datil: Full two-phase SIWE auth flow.
 router.post('/prepare-auth', async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const { buyerAddress } = req.body;
-    if (!buyerAddress) {
-      res.status(400).json({ error: 'buyerAddress is required' });
-      return;
-    }
-
-    if (LIT_BACKEND === 'chipotle') {
-      const requestId = crypto.randomUUID();
-      logger.info(`[media/prepare-auth] Chipotle mode — skipping SIWE, returning stub for ${buyerAddress}`);
-      res.json({ requestId, siweMessage: null, chipotleMode: true });
-      return;
-    }
-
-    // Datil: full two-phase SIWE auth
-    const requestId = crypto.randomUUID();
-    const { getLitClient, ensureDelegateeRegistered } = await import('./storage.js');
-    const client = await getLitClient();
-    await ensureDelegateeRegistered(buyerAddress);
-
-    let resolveAuthSig!: (authSig: any) => void;
-    let rejectAuthSig!: (error: Error) => void;
-    const authSigPromise = new Promise<any>((resolve, reject) => {
-      resolveAuthSig = resolve;
-      rejectAuthSig = reject;
-    });
-
-    let resolveSiweReady!: (msg: string) => void;
-    const siweReadyPromise = new Promise<string>((resolve) => {
-      resolveSiweReady = resolve;
-    });
-
-    const sessionSigsPromise = startUserSessionSigs(
-      client, buyerAddress,
-      async (siweMessage: string) => { resolveSiweReady(siweMessage); return authSigPromise; },
-    );
-
-    sessionSigsPromise.catch((err: any) => {
-      logger.warn(`[media/prepare-auth] Background session ${requestId} failed: ${err.message}`);
-      pendingAuthRequests.delete(requestId);
-    });
-
-    pendingAuthRequests.set(requestId, {
-      sessionSigsPromise, resolveAuthSig, rejectAuthSig, createdAt: Date.now(),
-    });
-
-    const siweMessage = await Promise.race([
-      siweReadyPromise,
-      new Promise<string>((_, reject) =>
-        setTimeout(() => reject(new Error('Timeout waiting for Lit auth callback')), 30_000),
-      ),
-    ]);
-
-    logger.info(`[media/prepare-auth] Request ${requestId}: SIWE message ready for ${buyerAddress}`);
-    res.json({ requestId, siweMessage });
-  } catch (error: any) {
-    logger.error(`[media/prepare-auth] Error: ${error.message}`, error);
-    res.status(500).json({ error: error.message });
+  const { buyerAddress } = req.body;
+  if (!buyerAddress) {
+    res.status(400).json({ error: 'buyerAddress is required' });
+    return;
   }
+
+  if (LIT_BACKEND === 'chipotle') {
+    const requestId = crypto.randomUUID();
+    logger.info(`[media/prepare-auth] Chipotle mode — skipping SIWE, returning stub for ${buyerAddress}`);
+    res.json({ requestId, siweMessage: null, chipotleMode: true });
+    return;
+  }
+
+  logger.error(`[media/prepare-auth] Unsupported lit backend: "${LIT_BACKEND}"`);
+  res.status(500).json({ error: "Unsupported lit backend" });
 });
 
 // ─── POST /api/media/init ────────────────────────────────────────────
@@ -454,37 +410,11 @@ router.post('/init', async (req: AuthenticatedRequest, res: Response) => {
     // inside `recoverMediaCEK` — no client wallet bridge or 412 handshake
     // required. The on-chain `hasAccessByContentId(buyerAddress, kid)` check
     // inside the Lit Action still gates playback.
-
-    const { getServerWallet } = await import('./storage.js');
-    const wallet = await getServerWallet();
     const buyerAddress = req.body.buyerAddress || '';
 
     let prebuiltSessionSigs: any = null;
 
-    if (LIT_BACKEND === 'datil') {
-      // Datil: resolve two-phase auth if requestId provided
-      const requestId = req.body.requestId || '';
-      const litAuthSig = req.body.litAuthSig || null;
-      if (requestId && litAuthSig?.sig) {
-        const pending = pendingAuthRequests.get(requestId);
-        if (!pending) {
-          res.status(400).json({ error: 'Auth session expired or invalid. Please try again.' });
-          return;
-        }
-        pending.resolveAuthSig(litAuthSig);
-        try {
-          prebuiltSessionSigs = await pending.sessionSigsPromise;
-          logger.info(`[media/init] Two-phase session sigs ready (${Object.keys(prebuiltSessionSigs).length} nodes)`);
-        } catch (sessErr: any) {
-          pendingAuthRequests.delete(requestId);
-          res.status(500).json({ error: `Lit session creation failed: ${sessErr.message}` });
-          return;
-        }
-        pendingAuthRequests.delete(requestId);
-      }
-    }
-
-    const cekBase64 = await recoverMediaCEK(litParams, wallet, prebuiltSessionSigs, buyerAddress);
+    const cekBase64 = await recoverMediaCEK(litParams, prebuiltSessionSigs, buyerAddress);
     logger.info(`[media/init] CEK recovered in ${Date.now() - requestStart}ms`);
 
     // 4. Create session
@@ -600,7 +530,7 @@ router.post('/segment', async (req: AuthenticatedRequest, res: Response) => {
       // MSE requires each SourceBuffer to receive only its own track.
       cleanInit = await splitInitForTrackWithFallback(cleanInit, track.type);
 
-      if ( psshBoxBytes ) {
+      if (psshBoxBytes) {
         cleanInit = splicePSSHIntoInit(cleanInit, psshBoxBytes);
       } else {
         logger.warn(`[media/segment] No pssh box found in raw init — delivering without DRM discovery metadata`);
@@ -1123,98 +1053,6 @@ async function decryptSegmentViaWASM(
   return result.decryptedBytes;
 }
 
-/**
- * Start Lit getSessionSigs with a callback-bridged auth flow.
- * The authNeededCallback constructs the SIWE message (with ReCap capabilities)
- * and delegates signing to the caller via onAuthNeeded.
- */
-async function startUserSessionSigs(
-  client: any,
-  buyerAddress: string,
-  onAuthNeeded: (siweMessage: string) => Promise<any>,
-): Promise<any> {
-  const {
-    LitAccessControlConditionResource,
-    LitActionResource,
-    RecapSessionCapabilityObject,
-  } = await import('@lit-protocol/auth-helpers');
-  const { LIT_ABILITY } = await import('@lit-protocol/constants');
-  const { SiweMessage } = await import('siwe');
-  const { ethers } = await import('ethers');
-
-  const checksumAddr = ethers.getAddress(buyerAddress);
-  const expiration = new Date(Date.now() + 15 * 60 * 1000).toISOString();
-
-  const accResource = new LitAccessControlConditionResource('*');
-  const actionResource = new LitActionResource('*');
-
-  const resourceAbilityRequests = [
-    { resource: accResource, ability: LIT_ABILITY.AccessControlConditionDecryption },
-    { resource: actionResource, ability: LIT_ABILITY.LitActionExecution },
-  ];
-
-  const sessionCapabilityObject = new RecapSessionCapabilityObject({}, []);
-  sessionCapabilityObject.addCapabilityForResource(accResource, LIT_ABILITY.AccessControlConditionDecryption);
-  sessionCapabilityObject.addCapabilityForResource(actionResource, LIT_ABILITY.LitActionExecution);
-
-  const sessionOpts: any = {
-    chain: 'ethereum',
-    expiration,
-    resourceAbilityRequests,
-    sessionCapabilityObject,
-    authNeededCallback: async (params: any) => {
-      // Construct the SIWE message using the params from the Lit SDK
-      // (includes session key URI, ReCap resources, nonce, etc.)
-      const siweMessage = new SiweMessage({
-        domain: params.domain || 'localhost',
-        address: checksumAddr,
-        statement: params.statement || 'Lit Protocol session signature',
-        uri: params.uri || 'https://localhost',
-        version: '1',
-        chainId: 1,
-        nonce: params.nonce || await client.getLatestBlockhash(),
-        expirationTime: params.expiration || expiration,
-        resources: params.resources || [],
-      });
-
-      const messageToSign = siweMessage.prepareMessage();
-      logger.info(`[media/auth] SIWE message prepared for ${checksumAddr}, uri=${params.uri?.substring(0, 40)}...`);
-
-      // Delegate signing to the frontend via the bridge
-      const authSig = await onAuthNeeded(messageToSign);
-
-      logger.info(`[media/auth] Received signed auth from frontend for ${authSig.address}`);
-      return authSig;
-    },
-  };
-
-  // Add capacity delegation if available
-  try {
-    const { getCapacityWallet, detectCapacityTokenId, getServerWallet } = await import('./storage.js');
-    const capacityWallet = await getCapacityWallet();
-    if (capacityWallet) {
-      const tokenId = await detectCapacityTokenId(capacityWallet.address);
-      if (tokenId) {
-        const { capacityDelegationAuthSig } = await client.createCapacityDelegationAuthSig({
-          dAppOwnerWallet: capacityWallet,
-          capacityTokenId: tokenId,
-          delegateeAddresses: [checksumAddr],
-          uses: '10',
-          expiration,
-        });
-        sessionOpts.capacityDelegationAuthSig = capacityDelegationAuthSig;
-        logger.info(`[media/auth] Capacity delegation attached for ${checksumAddr}`);
-      }
-    }
-  } catch (err: any) {
-    logger.warn(`[media/auth] Capacity delegation setup skipped: ${err.message}`);
-  }
-
-  const sessionSigs = await client.getSessionSigs(sessionOpts);
-  logger.info(`[media/auth] Session sigs created for ${checksumAddr}: ${Object.keys(sessionSigs).length} nodes`);
-  return sessionSigs;
-}
-
 // fetchLitActionCode, unwrapECDHEnvelope, and P-256 helpers moved to chipotle-client.ts (shared)
 
 /**
@@ -1238,7 +1076,6 @@ async function recoverMediaCEK(
     rpc: string;
     litBackend: string;
   },
-  wallet: any,
   _prebuiltSessionSigs?: any,
   buyerAddress?: string,
 ): Promise<string> {
@@ -1247,7 +1084,7 @@ async function recoverMediaCEK(
     litCiphertext: litParams.litCiphertext,
     dataToEncryptHash: litParams.dataToEncryptHash,
     kid: litParams.kid,
-    buyerAddress: buyerAddress || wallet.address,
+    buyerAddress: buyerAddress!,
     actionCid: litParams.actionCid,
     authority: litParams.authority,
     chain: litParams.chain,

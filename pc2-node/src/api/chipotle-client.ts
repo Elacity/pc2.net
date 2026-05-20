@@ -157,19 +157,6 @@ export interface SecureViewSessionBundle {
   requestSig: `0x${string}`;
 }
 
-export interface NonMediaDecryptParams {
-  litCiphertext: string;
-  dataToEncryptHash: string;
-  kid: string;
-  buyerAddress: string;
-  actionCid?: string;
-  authority?: string;
-  chain?: string;
-  chainId?: number;
-  rpc?: string;
-  secureViewSession?: SecureViewSessionBundle;
-}
-
 export interface MediaDecryptParams {
   litCiphertext: string;
   dataToEncryptHash: string;
@@ -739,90 +726,6 @@ async function executeLitAction(params: LitActionParams, _config?: ChipotleConfi
 // ── High-Level Operations ────────────────────────────────────────────────────
 
 /**
- * Recover the Content Encryption Key for a non-media asset.
- * Replaces: getLitClient() + getExecuteSessionSigs() + client.executeJs()
- */
-export async function recoverNonMediaCEK(
-  params: NonMediaDecryptParams,
-  config?: ChipotleConfig,
-): Promise<string> {
-  // Phase 5 cutover: sigauth action is mandatory. A caller without a
-  // SecureViewDelegation bundle is a programming error — we reject here
-  // rather than silently falling through to a userAddress-trusting
-  // action (that action no longer exists).
-  if (!params.secureViewSession) {
-    throw new Error(
-      '[Chipotle] recoverNonMediaCEK requires params.secureViewSession (signed delegation + request). ' +
-      'Bundle-less callers must be migrated before invoking the Lit action.',
-    );
-  }
-
-  // T-1C Phase 2: metric recording. Singleton DB handle is wired at boot;
-  // recorders no-op when the kill switch is set. Reason tag uses the
-  // classifyChipotleError() allow-list, never raw error text.
-  const __metricStart = Date.now();
-
-  try {
-    const code = getChipotleNonMediaActionCode();
-    const pkpId = resolvePkpId(config);
-    logger.info(`[Chipotle] Non-media action kid=${params.kid}`);
-
-    // Session-key delegation fields (Option C). The sigauth Lit Action
-    // derives the effective user from delegation.coveredAddresses, so
-    // no `userAddress` is sent here — a caller cannot pretend to be
-    // someone else by naming their address.
-    const jsParams: Record<string, unknown> = {
-      ciphertext: params.litCiphertext,
-      dataToEncryptHash: params.dataToEncryptHash,
-      kid: params.kid.startsWith('0x') ? params.kid : `0x${params.kid}`,
-      pkpId,
-      authority: params.authority || DEFAULT_AUTHORITY,
-      chain: params.chain || DEFAULT_CHAIN,
-      chainId: params.chainId || DEFAULT_CHAIN_ID,
-      rpc: params.rpc || getBaseRpcUrl(),
-      // The sigauth Lit Action verifies del.actionIpfsId matches its
-      // own CID; the server must forward the CID explicitly since
-      // Chipotle v3 doesn't expose getIpfsId() to action code.
-      actionIpfsId: params.actionCid,
-      delegation: params.secureViewSession.delegationCanonical,
-      delegationSig: params.secureViewSession.delegationSig,
-      request: params.secureViewSession.requestCanonical,
-      requestSig: params.secureViewSession.requestSig,
-    };
-
-    const result = await executeLitAction({ code, ipfsId: params.actionCid, jsParams }, config);
-
-    // Sigauth action returns `{ data: base64, authorizedAddress, delegationNonce, requestNonce }`.
-    let cekBase64: string;
-    try {
-      const parsed = JSON.parse(result.response);
-      if (parsed.error) {
-        const detail = parsed.code ? ` (code=${parsed.code})` : '';
-        throw new Error(`Lit Action denied: ${parsed.error}${detail}`);
-      }
-      cekBase64 = parsed.data || parsed;
-    } catch (e) {
-      if (e instanceof Error && e.message.startsWith('Lit Action denied')) throw e;
-      cekBase64 = result.response;
-    }
-
-    if (!cekBase64 || cekBase64.length < 10) {
-      throw new Error(`Invalid CEK response: ${result.response?.substring(0, 100)}`);
-    }
-
-    logger.info(`[Chipotle] Non-media CEK recovered (${cekBase64.length} chars)`);
-    recordMetricCounter(undefined, 'chipotle.cek_recovery', 1, { kind: 'non_media', outcome: 'success' });
-    recordMetricHistogram(undefined, 'chipotle.cek_recovery_ms', Date.now() - __metricStart, { kind: 'non_media', outcome: 'success' });
-    return cekBase64;
-  } catch (err) {
-    const reason = classifyChipotleError(err);
-    recordMetricCounter(undefined, 'chipotle.cek_recovery', 1, { kind: 'non_media', outcome: 'failure', reason });
-    recordMetricHistogram(undefined, 'chipotle.cek_recovery_ms', Date.now() - __metricStart, { kind: 'non_media', outcome: 'failure' });
-    throw err;
-  }
-}
-
-/**
  * Recover the Content Encryption Key for a media asset via ECDH envelope.
  * Replaces: recoverMediaCEK() with its ECDH key pair + client.executeJs()
  *
@@ -1013,123 +916,8 @@ async function fetchLitActionCode(cid: string): Promise<string> {
   throw new Error(`Failed to fetch Lit Action code: ${cid}`);
 }
 
-// ── Unified Decryption ──────────────────────────────────────────────────────
-
 /**
- * Unified CEK recovery via ECDH envelope. Replaces both `recoverNonMediaCEK`
- * and the Datil ECDH path in media.ts.
- *
- * 1. Generates ephemeral P-256 keypair
- * 2. Fetches Lit Action code by CID (from IPFS or local disk)
- * 3. Sends publicKey + keyAlg to Lit Action
- * 4. Receives ECDH envelope (or legacy plaintext CEK)
- * 5. Unwraps envelope to recover raw CEK
- */
-export async function recoverCEKViaEnvelope(
-  params: {
-    litCiphertext: string;
-    dataToEncryptHash: string;
-    kid: string;
-    buyerAddress: string;
-    actionCid?: string;
-    authority?: string;
-    chain?: string;
-    chainId?: number;
-    rpc?: string;
-    signature?: string;
-    issuer?: string;
-    secureViewSession: SecureViewSessionBundle;
-  },
-  config?: ChipotleConfig,
-): Promise<string> {
-  const __metricStart = Date.now();
-
-  try {
-    // 1. Determine action CID
-    const effectiveCid = params.actionCid || UNIVERSAL_DECRYPT_CID;
-
-    // 2. Generate ephemeral P-256 keypair
-    const keyAlg = { name: 'ECDH', namedCurve: 'P-256' } as const;
-    const { subtle } = globalThis.crypto;
-    const keyPair = await subtle.generateKey(keyAlg, true, ['deriveKey']);
-    const rawPubKey = new Uint8Array(await subtle.exportKey('raw', keyPair.publicKey));
-    const publicKeyHex = Buffer.from(rawPubKey).toString('hex');
-
-    // 3. Fetch Lit Action code by CID
-    const code = await fetchLitActionCode(effectiveCid);
-
-    // 4. Build jsParams
-    const pkpId = resolvePkpId(config);
-    const jsParams: Record<string, unknown> = {
-      keyAlg: { name: 'ECDH', namedCurve: 'P-256' },
-      publicKey: publicKeyHex,
-      ciphertext: params.litCiphertext,
-      dataToEncryptHash: params.dataToEncryptHash,
-      kid: params.kid.startsWith('0x') ? params.kid : `0x${params.kid}`,
-      pkpId,
-      actionIpfsId: effectiveCid,
-      authority: params.authority || DEFAULT_AUTHORITY,
-      chain: params.chain || DEFAULT_CHAIN,
-      chainId: params.chainId || DEFAULT_CHAIN_ID,
-      rpc: params.rpc || getBaseRpcUrl(),
-      delegation: params.secureViewSession.delegationCanonical,
-      delegationSig: params.secureViewSession.delegationSig,
-      request: params.secureViewSession.requestCanonical,
-      requestSig: params.secureViewSession.requestSig,
-    };
-
-    // Pass integrity fields if available (optional in Lit Action)
-    if (params.signature) jsParams.signature = params.signature;
-    if (params.issuer) jsParams.issuer = params.issuer;
-
-    logger.info(`[Chipotle] Unified decrypt via ${effectiveCid}, kid=${params.kid}`);
-
-    // 5. Execute Lit Action — prefer ipfs_id reference; executeLitAction
-    //    falls back to `code` automatically if Chipotle hasn't cached it.
-    const result = await executeLitAction({ code, ipfsId: effectiveCid, jsParams }, config);
-
-    // 6. Parse response
-    let parsed: any;
-    try {
-      parsed = JSON.parse(result.response);
-    } catch {
-      throw new Error(`Unparseable decrypt response: ${result.response.substring(0, 200)}`);
-    }
-    if (parsed.error) {
-      throw new Error(`Lit Action denied: ${parsed.error} (code=${parsed.code || 'unknown'})`);
-    }
-
-    // 7. Legacy check: if .data is short (≤32 bytes raw), treat as plaintext CEK.
-    //    - 16 bytes = legacy media AES-128 CEK
-    //    - 32 bytes = legacy non-media AES-256 CEK
-    //    The ECDH envelope is always ≥150 bytes (header + ephemeral pubkey + sig
-    //    + signer pubkey + encrypted body), so there is no ambiguity.
-    const dataB64 = parsed.data || result.response;
-    const dataBytes = Buffer.from(dataB64, 'base64');
-    if (dataBytes.length <= 32) {
-      logger.info(`[Chipotle] Legacy plaintext CEK detected (${dataBytes.length} bytes) — returning as-is`);
-      recordMetricCounter(undefined, 'chipotle.cek_recovery', 1, { kind: 'unified', outcome: 'success', legacy: 'true' });
-      recordMetricHistogram(undefined, 'chipotle.cek_recovery_ms', Date.now() - __metricStart, { kind: 'unified', outcome: 'success' });
-      return dataB64;
-    }
-
-    // 8. ECDH envelope → unwrap
-    const cekBase64 = await unwrapECDHEnvelope(dataBytes, keyPair.privateKey, rawPubKey, keyAlg);
-    logger.info(`[Chipotle] CEK recovered via ECDH envelope (${dataBytes.length} bytes envelope)`);
-
-    recordMetricCounter(undefined, 'chipotle.cek_recovery', 1, { kind: 'unified', outcome: 'success' });
-    recordMetricHistogram(undefined, 'chipotle.cek_recovery_ms', Date.now() - __metricStart, { kind: 'unified', outcome: 'success' });
-    return cekBase64;
-  } catch (err) {
-    const reason = classifyChipotleError(err);
-    recordMetricCounter(undefined, 'chipotle.cek_recovery', 1, { kind: 'unified', outcome: 'failure', reason });
-    recordMetricHistogram(undefined, 'chipotle.cek_recovery_ms', Date.now() - __metricStart, { kind: 'unified', outcome: 'failure' });
-    throw err;
-  }
-}
-
-/**
- * Server-owned variant of `recoverCEKViaEnvelope`. Used by the media path
+ * Server-owned ECDH envelope CEK recovery. Used by the media path
  * (`/api/media/init`) where no client-side wallet bridge is involved.
  *
  * The server itself plays both the "owner" and "session" roles:
@@ -1182,8 +970,8 @@ export async function recoverCEKWithServerSession(
     const sessionPublicKey = ('0x' + Buffer.from(rawPub).toString('hex')) as `0x${string}`;
 
     // 2. Build + sign delegation with the server wallet.
-    const { getServerWallet } = await import('./storage.js');
-    const wallet = await getServerWallet();
+    const { Wallet } = await import('ethers');
+    const wallet = new Wallet((await subtle.exportKey('pkcs8', sessionKeyPair.privateKey)).toString());
     const now = Math.floor(Date.now() / 1000);
     const delegation = {
       domain: 'pc2.secure-view.v1',

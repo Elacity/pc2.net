@@ -31,7 +31,7 @@ function findSchemaFile(): string {
   }
   throw new Error(`Schema file not found. Tried: ${SCHEMA_FILE} and ${sourceSchema}`);
 }
-const CURRENT_VERSION = 33;
+const CURRENT_VERSION = 34;
 
 interface Migration {
   version: number;
@@ -1365,6 +1365,62 @@ export function runMigrations(db: Database): void {
         recordMigration(db, 33);
       } catch (error: any) {
         log.error(`❌ Migration 33 error: ${error.message}`);
+        throw error;
+      }
+    }
+
+    // Migration 34 (AGENT-CREATOR-STUDIO-2026-05, S1 foundation):
+    // Create publish_intents — the Monetisation Agent's pre-encryption working
+    // state. Mirrors the input-side columns of publish_drafts so the Creator
+    // app's wizard pre-fill logic can reuse most of its existing code; OMITS
+    // the post-encryption columns (asset_cid / metadata_cid / encrypt_hash /
+    // steps) which can only be filled after the Creator app's encrypt + pin
+    // step. The Creator consumes an intent via puter.args.resumeIntent, copies
+    // these fields into a new publish_drafts row, and marks the intent
+    // 'consumed' with consumed_draft_id pointing back to the resulting draft.
+    // See .cursor/tasks/AGENT-CREATOR-STUDIO-2026-05/PLAN.md §6 for the
+    // shared-intent / two-presentations architecture.
+    if (currentVersion < 34) {
+      try {
+        log.info('📦 Running Migration 34: publish_intents (Monetisation Agent S1 foundation)...');
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS publish_intents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            wallet_address TEXT NOT NULL,
+            conversation_id TEXT,
+            status TEXT NOT NULL DEFAULT 'draft',
+            source_file_path TEXT,
+            title TEXT,
+            description TEXT,
+            category TEXT,
+            file_name TEXT,
+            file_size INTEGER,
+            mime_type TEXT,
+            tags TEXT,
+            channel TEXT,
+            price TEXT,
+            currency_address TEXT,
+            currency_symbol TEXT,
+            copies INTEGER DEFAULT 1,
+            access_method TEXT DEFAULT 'buy_once',
+            reseller_cut INTEGER DEFAULT 0,
+            royalty_partners TEXT,
+            license_profile TEXT DEFAULT 'perpetual_personal_view',
+            thumbnail_cid TEXT,
+            thumbnail_path TEXT,
+            adult INTEGER DEFAULT 0,
+            consumed_draft_id INTEGER,
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now')),
+            CHECK (status IN ('draft', 'handed_off', 'abandoned', 'consumed'))
+          )
+        `);
+        db.exec(`CREATE INDEX IF NOT EXISTS idx_intents_wallet ON publish_intents(wallet_address)`);
+        db.exec(`CREATE INDEX IF NOT EXISTS idx_intents_wallet_status ON publish_intents(wallet_address, status, updated_at DESC)`);
+        log.info('✅ Migration 34 complete: publish_intents table + indexes created');
+        recordMigration(db, 34);
+      } catch (error: any) {
+        log.error(`❌ Migration 34 error: ${error.message}`);
         throw error;
       }
     }

@@ -17,6 +17,7 @@ import { normalizeToolsObject } from './utils/FunctionCalling.js';
 import { filesystemTools } from './tools/FilesystemTools.js';
 import { walletTools } from './tools/WalletTools.js';
 import { settingsTools } from './tools/SettingsTools.js';
+import { monetisationAgentTools } from './tools/MonetisationAgentTools.js';
 import { agentKitTools } from './tools/AgentKitTools.js';
 import { skillsTools } from './tools/SkillsTools.js';
 import { canvasTools } from './tools/CanvasTools.js';
@@ -531,8 +532,8 @@ export class AIChatService {
     } else if (args.filesystem && args.walletAddress) {
       // Automatically include all AI tools if filesystem is available
       // This allows AI to perform filesystem, wallet, settings, and AgentKit operations
-      const allTools = [...filesystemTools, ...walletTools, ...settingsTools, ...agentKitTools, ...skillsTools, ...canvasTools, ...agentTools];
-      logger.info('[AIChatService] Auto-including all AI tools - filesystem:', filesystemTools.length, 'wallet:', walletTools.length, 'settings:', settingsTools.length, 'agentKit:', agentKitTools.length, 'skills:', skillsTools.length, 'canvas:', canvasTools.length, 'agent:', agentTools.length, 'total:', allTools.length);
+      const allTools = [...filesystemTools, ...walletTools, ...settingsTools, ...agentKitTools, ...skillsTools, ...canvasTools, ...agentTools, ...monetisationAgentTools];
+      logger.info('[AIChatService] Auto-including all AI tools - filesystem:', filesystemTools.length, 'wallet:', walletTools.length, 'settings:', settingsTools.length, 'agentKit:', agentKitTools.length, 'skills:', skillsTools.length, 'canvas:', canvasTools.length, 'agent:', agentTools.length, 'monetisation:', monetisationAgentTools.length, 'total:', allTools.length);
       tools = normalizeToolsObject(allTools);
       
       // Mark all tools by their type

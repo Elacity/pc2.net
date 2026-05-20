@@ -1339,6 +1339,7 @@
       description: params.description,
       image: params.image || '',
       category: categories[0] || '',
+      kid: params.kid || '',
       media: {
         uri: 'ipfs://' + params.assetCid,
         contentType: contentType,
@@ -1404,6 +1405,7 @@
       type: contentType,
       description: 'Details about the content, technical informations, etc.',
       image: params.image,
+      kid: params.kid || '',
       properties: {
         // keep this here for backward compatibility
         size: params.size,
@@ -1432,6 +1434,7 @@
       title: `Contract - ${params.title}`,
       type: 'MCO',
       description: 'Media Contract Ontology (MCO) formatted in JSON',
+      kid: params.kid || '',
       properties: {
         chainId: BASE_CHAIN_ID,
         channel: params.channel || DEFAULT_CHANNEL,
@@ -1467,7 +1470,7 @@
         description: 'Allow owner to access the content',
         image: imageUri,
         properties: {
-          kid: params.kid || params.dataToEncryptHash || '',
+          kid: params.kid || '',
           title: params.title,
         },
       };
@@ -1481,7 +1484,7 @@
         description: '10 shares = 1% of revenue',
         image: imageUri,
         properties: {
-          kid: params.kid || params.dataToEncryptHash || '',
+          kid: params.kid || '',
           title: params.title,
         },
       };
@@ -1495,7 +1498,7 @@
           description: 'Allow owner to distribute the content via trade',
           image: imageUri,
           properties: {
-            kid: params.kid || params.dataToEncryptHash || '',
+            kid: params.kid || '',
             title: params.title,
           },
         };
@@ -1570,7 +1573,7 @@
     // produced by kidToContentId(kid). Callers that hand in anything else
     // are wrong — the fix is to plumb a real KID, not to derive one from a
     // hash. See MEDIA-2026-05-18-CENC-PSSH-LIBAV-COMPLIANCE.
-    if ( typeof params.contentId !== 'string' || ! /^0x[0-9a-fA-F]{32}$/.test(params.contentId) ) {
+    if (typeof params.contentId !== 'string' || ! /^0x[0-9a-fA-F]{32}$/.test(params.contentId)) {
       throw new Error('encodeOpRawData: contentId must be a 0x-prefixed bytes16 KID, got ' + JSON.stringify(params.contentId));
     }
     var cid16 = params.contentId.toLowerCase();
@@ -3297,12 +3300,12 @@
     switch ((duration.unit || '').toLowerCase()) {
       case 'seconds': return Math.floor(v);
       case 'minutes': return Math.floor(v * 60);
-      case 'hours':   return Math.floor(v * 3600);
-      case 'days':    return Math.floor(v * 86400);
-      case 'weeks':   return Math.floor(v * 604800);
-      case 'months':  return Math.floor(v * 2592000);
-      case 'years':   return Math.floor(v * 31104000);
-      default:        return Math.floor(v * 86400);
+      case 'hours': return Math.floor(v * 3600);
+      case 'days': return Math.floor(v * 86400);
+      case 'weeks': return Math.floor(v * 604800);
+      case 'months': return Math.floor(v * 2592000);
+      case 'years': return Math.floor(v * 31104000);
+      default: return Math.floor(v * 86400);
     }
   }
 
@@ -4189,6 +4192,8 @@
             // contentId helper re-adds 0x. Width is 16 bytes / 32 hex chars.
             kid: (litData.kid || '').replace(/^0x/, ''),
             actionCid: litData.actionCid,
+            signature: litData.signature || '',
+            issuer: litData.issuer || '',
             conditions: litData.conditions,
             litCiphertext: litData.litCiphertext,
             iv: litData.iv,
@@ -4590,6 +4595,8 @@
         envelope.asset.protections[0].litCiphertext = encryptResult.litCiphertext;
         envelope.asset.protections[0].iv = encryptResult.iv || '';
         envelope.asset.protections[0].litBackend = encryptResult.litBackend || 'chipotle';
+        if (encryptResult.signature) envelope.asset.protections[0].signature = encryptResult.signature;
+        if (encryptResult.issuer) envelope.asset.protections[0].issuer = encryptResult.issuer;
       }
 
       if (isMediaFile && mediaEncodeResult) {
@@ -4612,6 +4619,8 @@
             litCiphertext: encryptResult.litCiphertext || '',
             iv: encryptResult.iv || '',
             litBackend: encryptResult.litBackend || 'chipotle',
+            ...(encryptResult.signature && { signature: encryptResult.signature }),
+            ...(encryptResult.issuer && { issuer: encryptResult.issuer }),
           }];
           envelope.asset.mpdUri = mediaEncodeResult.mpdUri;
           envelope.asset.kid = mediaEncodeResult.kid;
@@ -4621,12 +4630,15 @@
         if (mediaEncodeResult.duration) envelope.media.duration = mediaEncodeResult.duration;
         if (mediaEncodeResult.resolution) envelope.media.resolution = mediaEncodeResult.resolution;
         if (mediaEncodeResult.codec) envelope.media.codec = mediaEncodeResult.codec;
+      } else if (encryptResult.kid) {
+        // Non-media: surface KID at the asset level as the canonical on-chain identifier
+        envelope.asset.kid = encryptResult.kid;
       }
 
-      // Content integrity proof — buyers (and AI agents) can verify post-purchase
-      if (originalContentHash && envelope.asset.protections && envelope.asset.protections[0]) {
-        envelope.asset.protections[0].contentHash = originalContentHash;
-        envelope.asset.protections[0].contentHashAlgorithm = 'SHA-256';
+      // Content integrity proof — move to asset level (not inside protections)
+      if (originalContentHash) {
+        envelope.asset.contentHash = originalContentHash;
+        envelope.asset.contentHashAlgorithm = 'SHA-256';
       }
 
       // Content stats for buyer trust signals (machine-readable by AI agents)
@@ -4657,7 +4669,8 @@
         envelope.asset._localKey = encryptResult._localDevKey;
       }
 
-      var kid = (isMediaFile && mediaEncodeResult) ? mediaEncodeResult.kid : (encryptResult.dataToEncryptHash || '');
+      var kid = (isMediaFile && mediaEncodeResult) ? mediaEncodeResult.kid : (encryptResult.kid || '');
+      envelope.kid = kid;
 
       var contentJson = buildContentJson({
         assetCid: assetCid,
@@ -4680,6 +4693,8 @@
         currency: selectedCurrency,
         royalties: royaltyPartners,
         mimeType: state.resolvedMime || 'application/octet-stream',
+        kid: kid,
+        title: title,
       });
 
       var tokenTypeFiles = buildTokenTypeJsons({
@@ -4881,7 +4896,7 @@
             // /api/storage/lit/encrypt returns for non-media). No
             // hash-derivation path — see
             // MEDIA-2026-05-18-CENC-PSSH-LIBAV-COMPLIANCE.
-            if ( ! encryptResult.kid ) {
+            if (!encryptResult.kid) {
               throw new Error('Mint refused: encryptResult.kid is missing. The KID is the asset identity and MUST be set by the encryption step.');
             }
             var contentIdSource = kidToContentId(encryptResult.kid);
@@ -5230,8 +5245,7 @@
           if (isMediaFile && mediaEncodeResult && mediaEncodeResult.kid) {
             capsuleKid = kidToContentId(mediaEncodeResult.kid);
           } else {
-            var cleanHash = (encryptResult.dataToEncryptHash || '').replace(/^0x/, '');
-            capsuleKid = cleanHash ? '0x' + cleanHash.slice(0, 32).padEnd(32, '0') : '';
+            capsuleKid = encryptResult.kid ? kidToContentId(encryptResult.kid) : '';
           }
           var assetMime = state.resolvedMime || 'application/octet-stream';
           var capsuleFolder = '/' + walletAddr + '/' + (
@@ -5285,6 +5299,8 @@
             capsule.iv = encryptResult.iv || '';
             capsule.actionCid = encryptResult.actionCid || '';
             capsule.litBackend = encryptResult.litBackend || 'chipotle';
+            if (encryptResult.signature) capsule.signature = encryptResult.signature;
+            if (encryptResult.issuer) capsule.issuer = encryptResult.issuer;
           }
 
           capsule.signedBy = state.walletAddress;
@@ -6455,7 +6471,7 @@
           // MEDIA-2026-05-18-CENC-PSSH-LIBAV-COMPLIANCE), resuming a media
           // mint would silently emit the wrong on-chain contentId. Fail
           // loudly instead.
-          if ( ! draft.kid ) {
+          if (!draft.kid) {
             throw new Error('Draft-resume mint refused: this draft predates the KID-as-contentId migration. Restart the mint from scratch so the encryption step can attach a real KID.');
           }
           var draftContentId = kidToContentId(draft.kid);

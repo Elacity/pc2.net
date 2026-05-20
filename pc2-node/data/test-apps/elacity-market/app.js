@@ -1631,6 +1631,9 @@
     var buyerAddress = Wallet.isConnected() ? (getBuyerAddressForAsset(nft) || Wallet.getAddress()) : '';
     var authority = resolveAssetProtectionField(rawAsset, 'authority', '');
     var chainId = resolveAssetProtectionField(rawAsset, 'chainId', 8453);
+    var skillSignature = resolveAssetProtectionField(rawAsset, 'signature', '');
+    var skillIssuer = resolveAssetProtectionField(rawAsset, 'issuer', '');
+    var skillActionCid = resolveAssetProtectionField(rawAsset, 'actionCid', '');
 
     var skillId = (meta.name || nft.name || 'skill').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 
@@ -1652,7 +1655,10 @@
         encryptedDataCid: encryptedDataCid,
         buyerAddress: buyerAddress,
         authority: authority,
-        chainId: chainId
+        chainId: chainId,
+        ...(skillActionCid && { actionCid: skillActionCid }),
+        ...(skillSignature && { signature: skillSignature }),
+        ...(skillIssuer && { issuer: skillIssuer }),
       })
     })
       .then(function (resp) { return resp.json(); })
@@ -4025,10 +4031,17 @@
       descriptor.encryptedDataCid = cid;
       descriptor.mimeType = asset.mimeType || media.contentType || media.mimeType || 'application/octet-stream';
       descriptor.dataToEncryptHash = dataToEncryptHash;
-      descriptor.kid = cleanHash ? '0x' + cleanHash.slice(0, 32).padEnd(32, '0') : '';
+      // Prefer asset.kid (UUID-derived, written by creator since NONMEDIA-LIT-MIGRATION-2026-05).
+      // Fall back to hash-slice for assets published before the migration.
+      descriptor.kid = resolveAssetProtectionField(asset, 'kid', '')
+        || (cleanHash ? '0x' + cleanHash.slice(0, 32).padEnd(32, '0') : '');
       descriptor.litCiphertext = resolveAssetProtectionField(asset, 'litCiphertext', '') || '';
       descriptor.iv = resolveAssetProtectionField(asset, 'iv', '') || '';
       descriptor.actionCid = resolveAssetProtectionField(asset, 'actionCid', '');
+      var descSignature = resolveAssetProtectionField(asset, 'signature', '');
+      var descIssuer = resolveAssetProtectionField(asset, 'issuer', '');
+      if (descSignature) descriptor.signature = descSignature;
+      if (descIssuer) descriptor.issuer = descIssuer;
     } else {
       var localGateway = window.location.origin + '/ipfs/';
       descriptor.cid = cid;
@@ -4467,7 +4480,10 @@
 
     var dataToEncryptHash = resolveAssetProtectionField(asset, 'dataToEncryptHash', '') || enc.dataToEncryptHash || enc.hash || '';
     var cleanHash = dataToEncryptHash.startsWith('0x') ? dataToEncryptHash.slice(2) : dataToEncryptHash;
-    var kid = cleanHash ? ('0x' + cleanHash.slice(0, 32).padEnd(32, '0')) : '';
+    // Prefer asset.kid (UUID-derived, written by creator since NONMEDIA-LIT-MIGRATION-2026-05).
+    // Fall back to hash-slice for assets published before the migration.
+    var kid = resolveAssetProtectionField(asset, 'kid', '')
+      || (cleanHash ? '0x' + cleanHash.slice(0, 32).padEnd(32, '0') : '');
 
     var mime = asset.mimeType || media.contentType || media.mimeType || 'application/octet-stream';
     var buyerAddr = getBuyerAddressForAsset(nft) || Wallet.getAddress() || '';
@@ -4477,12 +4493,14 @@
     var iv = resolveAssetProtectionField(asset, 'iv', '') || enc.iv || '';
     var actionCid = resolveAssetProtectionField(asset, 'actionCid', '') || enc.actionCid || enc.actionIpfsId || '';
     var authority = resolveAssetProtectionField(asset, 'authority', '') || enc.authority || props.authority || '';
+    var signature = resolveAssetProtectionField(asset, 'signature', '') || enc.signature || '';
+    var issuer = resolveAssetProtectionField(asset, 'issuer', '') || enc.issuer || '';
     var title = meta.name || nft.name || 'Untitled';
 
     if (!cid || !kid || !litCiphertext) {
       var missing = [];
       if (!cid) missing.push('cid');
-      if (!kid) missing.push('kid (dataToEncryptHash)');
+      if (!kid) missing.push('kid');
       if (!litCiphertext) missing.push('litCiphertext');
       console.error('[Viewer] Missing fields:', missing.join(', '), {
         tokenURI: nft.tokenURI,
@@ -4507,9 +4525,10 @@
     };
     if (actionCid) viewerArgs.actionCid = actionCid;
     if (authority) viewerArgs.authority = authority;
+    if (signature) viewerArgs.signature = signature;
+    if (issuer) viewerArgs.issuer = issuer;
     var litBackend = resolveAssetProtectionField(asset, 'litBackend', '') || enc.litBackend || '';
     if (litBackend) viewerArgs.litBackend = litBackend;
-    if (authority) viewerArgs.authority = authority;
 
     window.parent.postMessage({
       $: 'puter-ipc',

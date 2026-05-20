@@ -2338,7 +2338,7 @@ async function recoverCEKAndFetchData(params: DecryptParams, ipfsService?: any):
     const doLitCall = async (): Promise<string> => {
       try {
         if (effectiveBackend === 'chipotle') {
-          const { recoverCEKViaEnvelope } = await import('./chipotle-client.js');
+          const { recoverCEKWithServerSession } = await import('./chipotle-client.js');
           // Legacy support: if the asset's protection data carries its own
           // actionIpfsId, use it (the asset was encrypted against that specific
           // Lit Action and the delegation is bound to it). Otherwise fall back
@@ -2350,7 +2350,11 @@ async function recoverCEKAndFetchData(params: DecryptParams, ipfsService?: any):
           if (actionCid && actionCid !== NON_MEDIA_ACTION_CID) {
             logger.info(`[Lit] Using legacy actionCid from protection data: ${actionCid}`);
           }
-          const cekBase64 = await recoverCEKViaEnvelope({
+          // The Lit Action encrypts the ECDH envelope for del.sessionPublicKey.
+          // recoverCEKWithServerSession generates a server-side session keypair so
+          // the server controls that key and can unwrap the envelope. The client
+          // session bundle is already verified at the HTTP layer before this call.
+          const cekBase64 = await recoverCEKWithServerSession({
             litCiphertext,
             dataToEncryptHash,
             kid,
@@ -2362,9 +2366,8 @@ async function recoverCEKAndFetchData(params: DecryptParams, ipfsService?: any):
             rpc: effectiveRpc,
             signature: params.signature,
             issuer: params.issuer,
-            secureViewSession: params.secureViewSession!,
           });
-          logger.info(`[Lit] CEK recovered in ${Date.now() - litStart}ms (Chipotle REST)`);
+          logger.info(`[Lit] CEK recovered in ${Date.now() - litStart}ms (Chipotle server-session)`);
           cacheCEK(kid, buyerAddress, cekBase64);
           return cekBase64;
         }

@@ -1007,6 +1007,8 @@ router.post('/skills/install', authenticate, async (req: AuthenticatedRequest, r
     const {
       skillId, kid, litCiphertext, dataToEncryptHash, iv,
       encryptedDataCid, buyerAddress, authority, chainId,
+      // V3 integrity fields — optional; absent on legacy assets (backward compat)
+      signature, issuer, actionCid,
     } = req.body;
 
     if (!skillId || !kid || !litCiphertext || !dataToEncryptHash || !iv || !encryptedDataCid || !buyerAddress) {
@@ -1035,6 +1037,9 @@ router.post('/skills/install', authenticate, async (req: AuthenticatedRequest, r
       buyerAddress,
       authority,
       chainId,
+      ...(signature && { signature }),
+      ...(issuer && { issuer }),
+      ...(actionCid && { actionCid }),
     };
 
     const decryptedBytes = await decryptAssetTwoLayer(decryptParams, ipfs);

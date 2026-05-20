@@ -33,6 +33,9 @@ import {
   REQUEST_FRESHNESS_WINDOW_SECONDS,
   type SecureViewDelegation,
 } from '../utils/secureViewSession.js';
+import type { LitBackend, DecryptParams, WASMRenderResult, CEKRecoveryResult, RenderContext } from './renderer/types.js';
+import { resolveRenderer } from './renderer/secure-view/registry.js';
+export type { DecryptParams } from './renderer/types.js';
 
 const router = Router();
 
@@ -1575,7 +1578,6 @@ logger.info(`[Lit] Action CID: ${NON_MEDIA_ACTION_CID}`);
 //   Chipotle uses PKP-AES (Lit.Actions.Encrypt/Decrypt) for new assets.
 //   Datil uses threshold BLS (client.encrypt/decryptAndCombine) for existing assets.
 //   The litBackend metadata field on each asset tracks which scheme was used.
-type LitBackend = 'chipotle' | 'datil';
 const LIT_BACKEND: LitBackend = (process.env.LIT_BACKEND as LitBackend) || 'chipotle';
 logger.info(`[Lit] Backend: ${LIT_BACKEND} (set LIT_BACKEND=chipotle for Chipotle REST API)`);
 
@@ -1868,51 +1870,6 @@ router.post('/lit/encrypt', authenticate, async (req: AuthenticatedRequest, res:
     res.status(500).json({ error: error.message || 'Lit encryption failed' });
   }
 });
-
-/**
- * Shared two-layer decryption: Lit Action recovers CEK, then AES-GCM decrypts file.
- * Returns raw decrypted Buffer. Caller is responsible for zeroing it after use.
- */
-export interface DecryptParams {
-  litCiphertext: string;
-  dataToEncryptHash: string;
-  iv: string;
-  encryptedDataCid: string;
-  kid: string;
-  actionCid?: string;
-  authority?: string;
-  chain?: string;
-  chainId?: number;
-  rpc?: string;
-  buyerAddress: string;
-  litBackend?: LitBackend;
-  /** V3 protection data: PKP issuer address (checksummed). Optional for legacy assets. */
-  issuer?: string;
-  /** V3 protection data: PKP signature over composite hash. Optional for legacy assets. */
-  signature?: string;
-  /**
-   * Optional session-key delegation bundle (Option C). When present,
-   * Phase 2c passes these through to the Lit Action instead of
-   * `userAddress`. When absent, the legacy `userAddress` path runs.
-   */
-  secureViewSession?: {
-    delegationCanonical: string;
-    delegationSig: `0x${string}`;
-    requestCanonical: string;
-    requestSig: `0x${string}`;
-  };
-}
-
-/**
- * Recover the CEK via Lit Protocol and fetch encrypted bytes from IPFS.
- * Returns { cekBase64, encryptedBytes } — the CEK is base64-encoded, the
- * encrypted bytes are raw. Neither the CEK nor plaintext is exposed here;
- * callers choose whether to AES-decrypt in Node.js or delegate to WASM.
- */
-interface CEKRecoveryResult {
-  cekBase64: string;
-  encryptedBytes: Buffer;
-}
 
 async function recoverCEKAndFetchData(params: DecryptParams, ipfsService?: any): Promise<CEKRecoveryResult> {
   const {
@@ -2210,23 +2167,6 @@ async function loadRendererBinary(): Promise<ArrayBuffer> {
   cachedRendererBinary = await runtime.loadFromFile(DDRM_RENDERER_PATH);
   logger.info(`[SecureView] dDRM renderer WASM loaded (${cachedRendererBinary.byteLength} bytes)`);
   return cachedRendererBinary;
-}
-
-interface WASMRenderResult {
-  contentType: string;
-  rendered: Buffer;
-  totalPages?: number;
-  executionTimeMs: number;
-  /** EPUB: total spine chapters. */
-  totalChapters?: number;
-  /** EPUB: table of contents (cached on first chapter request). */
-  chapters?: Array<{ title: string; chapter_index: number; href: string }>;
-  /** EPUB: `true` when rendition:layout=pre-paginated (fall back to pixel-lock). */
-  fixedLayout?: boolean;
-  /** EPUB: publication title from OPF metadata. */
-  epubTitle?: string;
-  /** EPUB: publication author from OPF metadata. */
-  epubAuthor?: string;
 }
 
 /**
@@ -2823,382 +2763,42 @@ router.post('/lit/secure-view', authenticate, async (req: AuthenticatedRequest, 
       return;
     }
 
-    // ── WASM Renderer Path ──────────────────────────────
-    // For images, text, PDFs, EPUB, and CBZ: decrypt + render inside WASM
-    // linear memory. Plaintext stays in WASM; CEK passes through Node.js
-    // during MemFS write.
-    const wasmCodeTypes = ['application/javascript', 'application/json', 'application/xml', 'application/x-yaml', 'application/toml', 'application/x-sh'];
-    const isEpub = mime === 'application/epub+zip' || mime === 'application/epub';
-    const isCbz = mime === 'application/vnd.comicbook+zip' || mime === 'application/x-cbz';
-    const wasmSupportedTypes = mime.startsWith('image/')
-      || mime.startsWith('text/')
-      || mime === 'application/pdf'
-      || wasmCodeTypes.includes(mime)
-      || isEpub
-      || isCbz;
-    if (wasmSupportedTypes) {
-      try {
-        const wasmResult = await renderViaWASM(
-          effectiveBody,
-          mime,
-          maxWidth,
-          pageNum,
-          ipfsService,
-          typeof reqChapter === 'number' ? reqChapter : undefined,
-          typeof reqViewportWidth === 'number' ? Math.min(Math.max(reqViewportWidth, 320), 1600) : undefined,
-        );
-        if (wasmResult) {
-          // Fixed-layout EPUB: tell the client to retry as pixel-lock.
-          if (wasmResult.fixedLayout && wasmResult.rendered.length === 0) {
-            res.set('X-Renderer', 'wasm');
-            res.set('X-Asset-Layout', 'fixed');
-            if (wasmResult.totalChapters) {
-              res.set('X-Asset-Chapters', String(wasmResult.totalChapters));
-            }
-            if (wasmResult.epubTitle) res.set('X-Asset-Title', encodeURIComponent(wasmResult.epubTitle));
-            if (wasmResult.epubAuthor) res.set('X-Asset-Author', encodeURIComponent(wasmResult.epubAuthor));
-            res.status(409).json({
-              error: 'epub-fixed-layout',
-              message: 'Pre-paginated EPUB detected — use pixel-lock tier per chapter.',
-              totalChapters: wasmResult.totalChapters || 0,
-            });
-            logger.info(`[SecureView] EPUB fixed-layout detected (${wasmResult.totalChapters} chapters) for ${resolvedBuyer}`);
-            return;
-          }
-
-          res.set('Content-Type', wasmResult.contentType);
-          res.set('Content-Length', String(wasmResult.rendered.length));
-          res.set('X-Renderer', 'wasm');
-          if (wasmResult.totalPages) res.set('X-Asset-Pages', String(wasmResult.totalPages));
-          if (wasmResult.totalChapters) res.set('X-Asset-Chapters', String(wasmResult.totalChapters));
-          if (wasmResult.epubTitle) res.set('X-Asset-Title', encodeURIComponent(wasmResult.epubTitle));
-          if (wasmResult.epubAuthor) res.set('X-Asset-Author', encodeURIComponent(wasmResult.epubAuthor));
-          if (wasmResult.chapters && wasmResult.chapters.length > 0) {
-            // TOC is returned once; client caches it for the session.
-            const tocB64 = Buffer.from(JSON.stringify(wasmResult.chapters), 'utf8').toString('base64');
-            res.set('X-Asset-TOC', tocB64);
-          }
-          if (isEpub) {
-            // Strict CSP for sanitized HTML: no JS, no remote resources.
-            // Images are inlined as data-URIs by the WASM sanitizer.
-            res.set(
-              'Content-Security-Policy',
-              "default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:; base-uri 'none'; form-action 'none';",
-            );
-          }
-          res.send(wasmResult.rendered);
-          logger.info(`[SecureView] WASM rendered ${mime}: ${wasmResult.rendered.length} bytes (wasm: ${wasmResult.executionTimeMs}ms, total: ${Date.now() - requestStart}ms) for ${resolvedBuyer}`);
-          return;
-        }
-      } catch (wasmErr: any) {
-        logger.warn(`[SecureView] WASM renderer failed, falling back to Node.js: ${wasmErr.message}`);
-        // EPUB and CBZ have no Node.js fallback — surface the error.
-        if (isEpub || isCbz) {
-          res.status(500).json({ error: `Ebook/comic render failed: ${wasmErr.message}` });
-          return;
-        }
-      }
-    }
-
-    // ── Node.js Fallback Path ───────────────────────────
-    // Used for PDFs (WASM PDF not yet implemented) and when WASM fails.
-    const decryptedBytes = await decryptAssetTwoLayer(effectiveBody, ipfsService);
-
-    // ── Image pipeline (fallback) ────────────────────────
-    if (mime.startsWith('image/')) {
-      let sharpMod: any;
-      try {
-        const mod = await import('sharp');
-        sharpMod = mod.default || mod;
-      } catch {
-        decryptedBytes.fill(0);
-        res.status(500).json({ error: 'Sharp not available for image rendering' });
-        return;
-      }
-
-      const watermarkText = `${buyerAddress.substring(0, 10)}...${buyerAddress.substring(buyerAddress.length - 6)}`;
-      const timestamp = new Date().toISOString().split('T')[0];
-
-      const metadata = await sharpMod(decryptedBytes).metadata();
-      const imgW = Math.min(metadata.width || 800, maxWidth);
-      const imgH = metadata.height ? Math.round(metadata.height * (imgW / (metadata.width || 800))) : 600;
-
-      const watermarkSvg = Buffer.from(`<svg width="${imgW}" height="${imgH}" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <pattern id="wm" x="0" y="0" width="320" height="180" patternUnits="userSpaceOnUse" patternTransform="rotate(-25)">
-            <text x="10" y="30" font-family="monospace" font-size="13" fill="rgba(255,255,255,0.18)" stroke="rgba(0,0,0,0.08)" stroke-width="0.5">${watermarkText}</text>
-            <text x="10" y="52" font-family="monospace" font-size="10" fill="rgba(255,255,255,0.12)">${timestamp}</text>
-          </pattern>
-        </defs>
-        <rect width="100%" height="100%" fill="url(#wm)"/>
-      </svg>`);
-
-      const rendered = await sharpMod(decryptedBytes)
-        .resize({ width: maxWidth, withoutEnlargement: true })
-        .composite([{ input: watermarkSvg, gravity: 'centre' }])
-        .jpeg({ quality: 82 })
-        .toBuffer();
-
-      decryptedBytes.fill(0);
-
-      res.set('Content-Type', 'image/jpeg');
-      res.set('Content-Length', String(rendered.length));
-      res.set('X-Renderer', 'nodejs-sharp');
-      res.send(rendered);
-
-      logger.info(`[SecureView] Image rendered (fallback): ${rendered.length} bytes (${imgW}x${imgH}, total: ${Date.now() - requestStart}ms) for ${buyerAddress}`);
+    // ── Content-type dispatch ─────────────────────────────────────────
+    const renderer = resolveRenderer(mime);
+    if (!renderer) {
+      res.status(415).json({
+        error: `Secure viewing not yet supported for ${mime}. Use /lit/decrypt for raw access.`,
+        mimeType: mime,
+      });
       return;
     }
 
-    // ── PDF pipeline ─────────────────────────────────────
-    if (mime === 'application/pdf') {
-      let pdfjsMod: any;
-      let canvasMod: any;
-      let sharpMod: any;
-      try {
-        pdfjsMod = await import('pdfjs-dist/legacy/build/pdf.mjs');
-        canvasMod = await import('canvas');
-        const smod = await import('sharp');
-        sharpMod = smod.default || smod;
-      } catch {
-        decryptedBytes.fill(0);
-        res.status(500).json({ error: 'PDF.js/Canvas/Sharp not available for PDF rendering' });
-        return;
-      }
+    const renderCtx: RenderContext = {
+      effectiveBody,
+      mime,
+      maxWidth,
+      page: pageNum,
+      chapter: typeof reqChapter === 'number' ? reqChapter : undefined,
+      viewportWidth: typeof reqViewportWidth === 'number' ? Math.min(Math.max(reqViewportWidth, 320), 1600) : undefined,
+      buyerAddress: resolvedBuyer,
+      ipfsService,
+      requestStart,
+    };
 
-      const createCanvas = canvasMod.createCanvas;
-      const registerFont = canvasMod.registerFont;
-      const uint8 = new Uint8Array(decryptedBytes);
+    const output = await renderer.render(renderCtx, { renderViaWASM, decryptAssetTwoLayer });
 
-      const pdfjsResolved = fileURLToPath(import.meta.resolve('pdfjs-dist/legacy/build/pdf.mjs'));
-      const fontDir = join(dirname(pdfjsResolved), '..', '..', 'standard_fonts');
+    for (const [key, value] of Object.entries(output.headers)) {
+      res.set(key, value);
+    }
 
-      if (registerFont) {
-        const fonts = [
-          { file: 'LiberationSans-Regular.ttf', family: 'LiberationSans' },
-          { file: 'LiberationSans-Bold.ttf', family: 'LiberationSans', weight: 'bold' },
-          { file: 'LiberationSans-Italic.ttf', family: 'LiberationSans', style: 'italic' },
-          { file: 'LiberationSans-BoldItalic.ttf', family: 'LiberationSans', weight: 'bold', style: 'italic' },
-        ];
-        for (const f of fonts) {
-          try { registerFont(join(fontDir, f.file), { family: f.family, weight: f.weight, style: f.style }); } catch { /* already registered */ }
-        }
-      }
-
-      class NodeCanvasFactory {
-        create(w: number, h: number) { const c = createCanvas(w, h); return { canvas: c, context: c.getContext('2d') }; }
-        reset(cc: any, w: number, h: number) { cc.canvas.width = w; cc.canvas.height = h; }
-        destroy(cc: any) { cc.canvas.width = 0; cc.canvas.height = 0; }
-      }
-
-      const pdfDoc = await pdfjsMod.getDocument({
-        data: uint8,
-        canvasFactory: new NodeCanvasFactory(),
-        useSystemFonts: true,
-        disableFontFace: true,
-      }).promise;
-      const totalPages = pdfDoc.numPages;
-      const requestedPage = Math.max(1, Math.min(pageNum || 1, totalPages));
-
-      const pdfPage = await pdfDoc.getPage(requestedPage);
-      const viewport = pdfPage.getViewport({ scale: 1.0 });
-      const scale = Math.min(maxWidth / viewport.width, 2.0);
-      const scaledVp = pdfPage.getViewport({ scale });
-
-      const cvs = createCanvas(scaledVp.width, scaledVp.height);
-      const ctx = cvs.getContext('2d');
-
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, scaledVp.width, scaledVp.height);
-
-      await pdfPage.render({ canvasContext: ctx, viewport: scaledVp }).promise;
-
-      const textContent = await pdfPage.getTextContent();
-      ctx.fillStyle = '#000000';
-      for (const item of textContent.items as any[]) {
-        if (!item.str || !item.transform) continue;
-        const tx = item.transform;
-        const fontSize = Math.sqrt(tx[0] * tx[0] + tx[1] * tx[1]) * scale;
-        const x = tx[4] * scale;
-        const y = scaledVp.height - (tx[5] * scale);
-        ctx.font = `${fontSize}px LiberationSans, Helvetica, Arial, sans-serif`;
-        ctx.fillText(item.str, x, y);
-      }
-
-      const wmText = `${buyerAddress.substring(0, 10)}...${buyerAddress.substring(buyerAddress.length - 6)}`;
-      ctx.save();
-      ctx.globalAlpha = 0.08;
-      ctx.font = '18px monospace';
-      ctx.fillStyle = '#888';
-      ctx.translate(scaledVp.width / 2, scaledVp.height / 2);
-      ctx.rotate(-Math.PI / 6);
-      for (let y = -scaledVp.height; y < scaledVp.height; y += 120) {
-        for (let x = -scaledVp.width; x < scaledVp.width; x += 280) {
-          ctx.fillText(wmText, x, y);
-        }
-      }
-      ctx.restore();
-
-      const pngBuf = cvs.toBuffer('image/png');
-      decryptedBytes.fill(0);
-
-      const rendered = await sharpMod(pngBuf).jpeg({ quality: 85 }).toBuffer();
-
-      res.set('Content-Type', 'image/jpeg');
-      res.set('Content-Length', String(rendered.length));
-      res.set('X-Asset-Pages', String(totalPages));
-      res.set('X-Asset-Page', String(requestedPage));
-      res.set('X-Renderer', 'nodejs-pdfjs');
-      res.send(rendered);
-
-      logger.info(`[SecureView] PDF page ${requestedPage}/${totalPages} rendered: ${rendered.length} bytes (total: ${Date.now() - requestStart}ms) for ${buyerAddress}`);
+    if (output.status !== 200) {
+      res.status(output.status).json(output.errorBody);
       return;
     }
 
-    // ── Text pipeline (fallback) ─────────────────────────
-    if (mime.startsWith('text/')) {
-      let canvasMod: any;
-      let sharpMod: any;
-      try {
-        canvasMod = await import('canvas');
-        const smod = await import('sharp');
-        sharpMod = smod.default || smod;
-      } catch {
-        decryptedBytes.fill(0);
-        res.status(500).json({ error: 'Canvas/Sharp not available for text rendering' });
-        return;
-      }
-
-      const createCanvas = canvasMod.createCanvas;
-      const text = decryptedBytes.toString('utf8');
-      decryptedBytes.fill(0);
-
-      const fontSize = 14;
-      const lineHeight = 20;
-      const padding = 24;
-      const canvasW = 640;
-      const maxCharsPerLine = Math.floor((canvasW - padding * 2) / (fontSize * 0.6));
-      const maxOutputLines = 2000;
-
-      // Word-wrap all lines
-      const wrappedLines: string[] = [];
-      for (const rawLine of text.split('\n')) {
-        if (wrappedLines.length >= maxOutputLines) break;
-        if (rawLine.trim() === '') {
-          wrappedLines.push('');
-          continue;
-        }
-        const words = rawLine.split(/\s+/);
-        let current = '';
-        for (const word of words) {
-          if (wrappedLines.length >= maxOutputLines) break;
-          if (current.length + word.length + 1 > maxCharsPerLine && current.length > 0) {
-            wrappedLines.push(current);
-            current = '';
-          }
-          if (word.length > maxCharsPerLine && current.length === 0) {
-            for (let s = 0; s < word.length && wrappedLines.length < maxOutputLines; s += maxCharsPerLine) {
-              wrappedLines.push(word.substring(s, s + maxCharsPerLine));
-            }
-            continue;
-          }
-          current = current.length > 0 ? current + ' ' + word : word;
-        }
-        if (current.length > 0 && wrappedLines.length < maxOutputLines) {
-          wrappedLines.push(current);
-        }
-      }
-
-      const canvasH = Math.max(200, padding * 2 + wrappedLines.length * lineHeight);
-
-      const cvs = createCanvas(canvasW, canvasH);
-      const ctx = cvs.getContext('2d');
-
-      ctx.fillStyle = '#1e1e1e';
-      ctx.fillRect(0, 0, canvasW, canvasH);
-
-      ctx.fillStyle = '#d4d4d4';
-      ctx.font = `${fontSize}px monospace`;
-      ctx.textBaseline = 'top';
-
-      let y = padding;
-      for (const line of wrappedLines) {
-        if (y + lineHeight > canvasH - padding) break;
-        ctx.fillText(line, padding, y);
-        y += lineHeight;
-      }
-
-      const wmText = `${buyerAddress.substring(0, 10)}...${buyerAddress.substring(buyerAddress.length - 6)}`;
-      ctx.save();
-      ctx.globalAlpha = 0.06;
-      ctx.font = '16px monospace';
-      ctx.fillStyle = '#aaa';
-      ctx.translate(canvasW / 2, canvasH / 2);
-      ctx.rotate(-Math.PI / 6);
-      for (let wy = -canvasH; wy < canvasH; wy += 100) {
-        for (let wx = -canvasW; wx < canvasW; wx += 260) {
-          ctx.fillText(wmText, wx, wy);
-        }
-      }
-      ctx.restore();
-
-      const pngBuf = cvs.toBuffer('image/png');
-      const rendered = await sharpMod(pngBuf).jpeg({ quality: 85 }).toBuffer();
-
-      res.set('Content-Type', 'image/jpeg');
-      res.set('Content-Length', String(rendered.length));
-      res.set('X-Renderer', 'nodejs-canvas');
-      res.send(rendered);
-
-      logger.info(`[SecureView] Text rendered (fallback): ${rendered.length} bytes (${wrappedLines.length} lines, total: ${Date.now() - requestStart}ms) for ${buyerAddress}`);
-      return;
-    }
-
-    // ── Audio passthrough ─────────────────────────────────
-    // Audio can't be rendered as an image — decrypt and pass through for playback.
-    // The viewer displays an HTML5 audio player with anti-piracy measures.
-    if (mime.startsWith('audio/')) {
-      const audioLen = decryptedBytes.length;
-      res.set('Content-Type', mime);
-      res.set('Content-Length', String(audioLen));
-      res.set('X-Renderer', 'passthrough');
-      res.set('X-Asset-Type', 'audio');
-      res.send(Buffer.from(decryptedBytes));
-      decryptedBytes.fill(0);
-      logger.info(`[SecureView] Audio passthrough: ${mime}, ${audioLen} bytes (total: ${Date.now() - requestStart}ms) for ${buyerAddress}`);
-      return;
-    }
-
-    // ── Interactive content passthrough ───────────────────
-    // 3D models, datasets, fonts, and archives are decrypted via WASM (CEK
-    // stays in WASM linear memory) then passed to the client for interactive
-    // rendering (Three.js, table, @font-face, JSZip). Blob URLs are revoked
-    // after the client loads the content.
-    const passthroughPrefixes = ['model/', 'font/'];
-    const passthroughExact = [
-      'text/csv', 'text/tab-separated-values',
-      'application/zip', 'application/gzip', 'application/x-tar',
-      'application/vnd.ms-fontobject',
-    ];
-    const isPassthrough = passthroughPrefixes.some(p => mime.startsWith(p)) || passthroughExact.includes(mime);
-    if (isPassthrough) {
-      const len = decryptedBytes.length;
-      res.set('Content-Type', mime);
-      res.set('Content-Length', String(len));
-      res.set('X-Renderer', 'passthrough');
-      res.set('X-Asset-Type', mime.split('/')[0]);
-      res.send(Buffer.from(decryptedBytes));
-      decryptedBytes.fill(0);
-      logger.info(`[SecureView] Passthrough: ${mime}, ${len} bytes (total: ${Date.now() - requestStart}ms) for ${buyerAddress}`);
-      return;
-    }
-
-    // ── Unsupported type ─────────────────────────────────
-    decryptedBytes.fill(0);
-    res.status(415).json({
-      error: `Secure viewing not yet supported for ${mime}. Use /lit/decrypt for raw access.`,
-      mimeType: mime,
-    });
+    res.set('Content-Type', output.contentType!);
+    res.set('Content-Length', String(output.body!.length));
+    res.send(output.body);
 
   } catch (error: any) {
     logger.error('[SecureView] Error:', error);

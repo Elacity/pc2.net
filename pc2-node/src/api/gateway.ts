@@ -12,7 +12,7 @@ import { logger } from '../utils/logger.js';
 import { parseSkillFrontmatter } from '../utils/skill-parser.js';
 import { getGatewayService } from '../services/gateway/index.js';
 import { decryptAssetTwoLayer } from './storage.js';
-import type { DecryptParams } from './storage.js';
+import type { DecryptParams } from './renderer/types.js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import fs from 'fs';

@@ -969,9 +969,11 @@ export async function recoverCEKWithServerSession(
     const rawPub = new Uint8Array(await subtle.exportKey('raw', sessionKeyPair.publicKey));
     const sessionPublicKey = ('0x' + Buffer.from(rawPub).toString('hex')) as `0x${string}`;
 
-    // 2. Build + sign delegation with the server wallet.
+    // 2. Build + sign delegation with an ephemeral secp256k1 wallet.
+    //    ownerAddress only needs to match the delegationSig — the Lit Action
+    //    access gate checks coveredAddresses[0] (buyerAddress) on-chain, not ownerAddress.
     const { Wallet } = await import('ethers');
-    const wallet = new Wallet((await subtle.exportKey('pkcs8', sessionKeyPair.privateKey)).toString());
+    const wallet = Wallet.createRandom();
     const now = Math.floor(Date.now() / 1000);
     const delegation = {
       domain: 'pc2.secure-view.v1',

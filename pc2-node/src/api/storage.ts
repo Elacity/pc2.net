@@ -2770,8 +2770,18 @@ router.post('/lit/secure-view', authenticate, async (req: AuthenticatedRequest, 
         const normalizedKid = kid.startsWith('0x') ? kid : `0x${kid}`;
 
         const [primaryHas, altHas] = await Promise.all([
-          gateway.hasAccessByContentId(buyerAddress, normalizedKid).catch(() => false),
-          gateway.hasAccessByContentId(buyerAddressAlt, normalizedKid).catch(() => false),
+          gateway.hasAccessByContentId(buyerAddress, normalizedKid).catch(
+            () => {
+              logger.warn(`[SecureView] Preflight: ${buyerAddress.substring(0, 10)} hasAccessByContentId failed`);
+              return false;
+            }
+          ),
+          gateway.hasAccessByContentId(buyerAddressAlt, normalizedKid).catch(
+            () => {
+              logger.warn(`[SecureView] Preflight: ${buyerAddressAlt.substring(0, 10)} hasAccessByContentId failed`);
+              return false;
+            }
+          ),
         ]);
 
         if (!primaryHas && altHas) {

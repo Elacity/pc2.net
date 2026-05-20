@@ -439,3 +439,146 @@ decryption via Lit license recovery) play assets end-to-end as of 2026-05-18.
 - ✅ Deliberate divergence (custom systemId, JSON payload) documented in
   [`MEDIA_DRM_PACKAGING.md`](MEDIA_DRM_PACKAGING.md) §4 and §13 so future
   contributors don't read "DASH" and assume Widevine/PlayReady applies.
+
+---
+
+## 15. Non-Media Lit Migration (2026-05-20)
+
+This section records the work done to align the non-media encrypt/decrypt path
+with the Chipotle v3 architecture that was already live for media after commit
+`592a3be4f`.
+
+### 15.1 What Changed
+
+#### Phase 1 — Server-side threading (`gateway.ts`, `storage.ts`)
+
+`signature`, `issuer`, and `actionCid` — returned by `/lit/encrypt` since v3 —
+were not threaded through the non-media decrypt cycle. Added:
+
+- `gateway.ts` `/skills/install`: destructures and conditionally spreads the
+  three fields into `DecryptParams`.
+- `storage.ts` `/lit/secure-view`: no explicit destructure needed —
+  `effectiveBody = { ...req.body }` already carries the fields through to
+  `decryptAssetTwoLayer`.
+
+#### Phase 2 — Creator app KID fixes (`elacity-creator/app.js`)
+
+Four KID bugs were present, all caused by using `dataToEncryptHash` as a
+fallback KID when `encryptResult.kid` was available:
+
+| Bug | Location | Fix |
+|-----|----------|-----|
+| `kid` field in `buildEncryptedEnvelope` | line ~4667 | `encryptResult.kid \|\| ''` replaces hash fallback |
+| Capsule `kid` (non-media) | line ~4902 | `kidToContentId(encryptResult.kid)` replaces hash-slice |
+| `buildTokenTypeJsons` (×3 token types) | lines ~1470/1484/1498 | `params.kid \|\| ''` — removed `\|\| params.dataToEncryptHash` |
+| `asset.kid` missing in metadata root | line ~4628 area | `envelope.asset.kid = encryptResult.kid` added |
+
+Additional changes in Phase 2:
+
+- `envelope.kid = kid` written at the root `asset` object level (next to
+  `.media` and `.image`) — the canonical asset identifier, critical for
+  downstream decrypt routing.
+- `contentHash` and `contentHashAlgorithm` moved from `protections[0]` to
+  `envelope.asset` directly.
+- `signature` and `issuer` from `/lit/encrypt` stored in `protections[0]` and
+  in the capsule (conditionally, both media and non-media paths).
+- `kid: kid, title: title` added to the `buildContractJson` call — previously
+  `contract.json` always had `kid: ""`.
+
+#### Phase 3 — Market app KID + signature threading (`elacity-market/app.js`)
+
+- `buildDdrmDescriptor`: KID now reads `resolveAssetProtectionField(asset, 'kid', '')`
+  first (new assets), with a hash-slice fallback (old assets without `asset.kid`).
+  `signature` and `issuer` extracted and forwarded.
+- `launchViewerPopup`: same KID fix; `signature`/`issuer` added to `viewerArgs`
+  conditionally.
+- `installSkillFromNFT`: `skillSignature`, `skillIssuer`, `skillActionCid`
+  extracted and forwarded to the server.
+
+#### Phase 4 — Viewer KID normalisation + `bad_req_kid` fix (`ddrm-viewer/viewer.js`)
+
+- `assetParams`: `signature` and `issuer` added via `p()`.
+- `buildBody()`: forwards both fields conditionally.
+- **`bad_req_kid` root cause**: `assetParams.kid` was stored without `0x` prefix.
+  The Lit Action compares `String(req.kid).toLowerCase()` (from the signed
+  request, no prefix) against `normalizedKid` (server adds `0x` to
+  `jsParams.kid`). Mismatch → 403.
+  Fix: `kid: rawKid && !rawKid.startsWith('0x') ? '0x' + rawKid : rawKid` in
+  `assetParams` so the signed request carries `0xae469...` matching the server's
+  normalized kid.
+
+#### Phase 5 — Dead code retirement
+
+| Deleted | File | Notes |
+|---------|------|-------|
+| `NonMediaDecryptParams` interface | `chipotle-client.ts` | Superseded by server-session path |
+| `recoverNonMediaCEK()` | `chipotle-client.ts` | Replaced by `recoverCEKWithServerSession` |
+| `recoverCEKViaEnvelope()` | `chipotle-client.ts` | Client-session approach — see §15.3 |
+| Datil SDK non-media decrypt branch | `storage.ts` | `LIT_BACKEND=datil` decrypt path gone; `litBackend` type/config retained for future use |
+| `packages/access` (`@elacity-js/access`) | repo root | Entire package deleted — Lit SDK wrapper no longer used anywhere |
+| `vendor/access/elacity-access.browser.js` (×4) | test-apps + installed-apps | ~170 MB of dead browser bundles |
+| All `@lit-protocol/**` dynamic imports | `storage.ts`, `media.ts` | Removed by author after confirming no active callers |
+
+### 15.2 Bugs Fixed
+
+**`bad_req_kid` (403 on `/lit/secure-view`)**
+The viewer was passing the KID without `0x` prefix into the signed session
+request. The Lit Action's `bad_req_kid` check compared `req.kid` (from the
+request canonical, no prefix) against `jsParams.kid` (server-normalised to
+`0x`). Fixed in viewer `assetParams` construction (Phase 4).
+
+**`DOMException: bad decrypt` (AES-CBC failure in ECDH unwrap)**
+`recoverCEKViaEnvelope` was passed the *client's* `secureViewSession`. The Lit
+Action encrypts the ECDH envelope for `del.sessionPublicKey` — the client's
+browser ephemeral key. The server tried to unwrap with its own ephemeral ECDH
+key (a different key). Result: every decrypt attempt failed.
+Fixed by switching `recoverCEKAndFetchData` to `recoverCEKWithServerSession`,
+which generates a server-owned P-256 keypair and places its public half as
+`del.sessionPublicKey`, so the server can always unwrap the envelope.
+
+**`kid: ""` in `metadata.json` root + `contract.json`**
+`buildMetadataEnvelope` had `kid: params.kid || ''` at the root but the call
+site never passed `kid` in `metaParams`. Similarly `buildContractJson`. Fixed
+by writing `envelope.kid = kid` after the `kid` variable is computed, and
+adding `kid`/`title` to the `buildContractJson` call.
+
+### 15.3 Known Design Limitation — Server-signed Delegation
+
+`recoverCEKWithServerSession` currently generates the delegation itself, signing
+it with a **throwaway `ethers.Wallet.createRandom()` secp256k1 keypair**.
+`ownerAddress` in the delegation is this throwaway address, not the authenticated
+user's wallet.
+
+**Why this works today**: the Lit Action's access gate checks
+`hasAccessByContentId(coveredAddresses[0], kid)` on-chain. `coveredAddresses[0]`
+is set to `buyerAddress` (sourced from the verified JWT, not from the client).
+`ownerAddress` is only used to verify the `delegationSig` — there is no on-chain
+privilege check on it. Security is therefore enforced by the JWT authentication
+layer and the on-chain AccessToken check, not by the delegation signer identity.
+
+**Why it is architecturally wrong**: the session bundle design (§12) was built
+around the premise that the asset owner's wallet signs the delegation, creating
+a full authorization chain: *wallet ownership → delegation → session key → Lit
+Action CEK release*. The server bypassing this with a throwaway key breaks the
+chain — a compromised server could issue delegations for any address it chooses.
+
+**The correct fix** requires the Lit Action to accept a separate `publicKey`
+jsParam (distinct from `del.sessionPublicKey`) for ECDH envelope targeting.
+The flow would be:
+
+1. Client (`/lit/begin-session`) receives `delegationCanonical` with
+   `ownerAddress = user's wallet`, `sessionPublicKey = client's ephemeral P-256 key`.
+2. User signs delegation with their wallet → `delegationSig`.
+3. Client signs request with ephemeral session key → `requestSig`.
+4. Server generates its own ECDH P-256 keypair for envelope unwrapping.
+5. Server calls Lit Action with the user-signed session bundle **plus**
+   `publicKey = serverECDHPubKey` as a separate jsParam.
+6. Lit Action: verifies user delegation + request, checks on-chain access,
+   encrypts ECDH envelope for `publicKey` (server key), not `del.sessionPublicKey`.
+7. Server unwraps with its ECDH private key.
+
+This requires a Lit Action change (add `publicKey` override path alongside the
+existing `del.sessionPublicKey` path). Until that change lands, the server-signed
+delegation path remains the operative implementation. **Do not refactor
+`recoverCEKWithServerSession` to use the user's session bundle without first
+confirming `UNIVERSAL_DECRYPT_CID` supports the two-key model.**

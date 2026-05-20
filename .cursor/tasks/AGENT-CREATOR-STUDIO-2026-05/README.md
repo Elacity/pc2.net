@@ -2,9 +2,20 @@
 
 **Task ID**: `AGENT-CREATOR-STUDIO-2026-05`
 **Created**: 2026-05-20
-**Status**: **Proposed** — awaiting Sasha sign-off on [`PLAN.md`](./PLAN.md) §15
+**Status**: **InProgress** — S1 implementation landing on `feat/t-1-telemetry-and-support`
 **Priority**: High (this is the v1.3.0 user-facing thrust per [`docs/core/ROADMAP.md`](../../../docs/core/ROADMAP.md) release-status snapshot)
-**Branch**: `feat/t-1-telemetry-and-support` (this PR is doc-only; execution will fork a fresh branch after sign-off and after v1.2.8.0 ships)
+**Branch**: `feat/t-1-telemetry-and-support` (continuing the active session per Sasha 2026-05-20; no fresh branch fork)
+
+### Mint-handoff decision (PLAN.md §10)
+**Option A — `[Open in Creator]` only.** Decided 2026-05-20 by Sasha. No `[Mint now]` button in the chat for S1.
+Rationale: ships in ~1 week vs ~1.5–2 for Option B, halves the R5 (drift) surface, and lets us layer a `[Mint now]` button on top in S2 with one extra ticket once we have real telemetry. The Creator app is the canonical UI for wallet signing in S1.
+
+### S1 execution status (commits on `feat/t-1-telemetry-and-support`)
+- [x] `2f170e229` — PLAN.md + README.md doc landing
+- [x] `bd21cbdc3` — backend foundation (migration 34, REST `/api/intents`, 6 agent tools, ToolExecutor cases)
+- [x] `f15b6b881` — frontend mode picker (`UIAIChat.js`) + Creator hand-off (`elacity-creator/app.js`) + Socket.IO directive (`UIDesktop.js`)
+- [x] NR-4 regression test (`pc2-node/tests/unit/publish-intents-schema-and-mirror.test.js`, 7 assertions — passes locally)
+- [ ] Live smoke pass on dev (drop file → chat through wizard → land on Creator confirmation page → mint)
 
 ## Description
 
@@ -30,7 +41,7 @@ See [`PLAN.md`](./PLAN.md) — the full design document. Headline:
 
 ## Implementation plan
 
-**This ticket is the planning ticket — it produces `PLAN.md` only.** Execution happens in a separate follow-up ticket after sign-off.
+### Planning (commit `2f170e229`)
 
 - [x] Reuse inventory across 4 substrate layers (AI runtime, dDRM packaging, wallet bridge, app-host/WASM) — `PLAN.md` §3
 - [x] Architectural model + diagram (shared intent format, two presentations) — `PLAN.md` §6
@@ -43,34 +54,80 @@ See [`PLAN.md`](./PLAN.md) — the full design document. Headline:
 - [x] No-regret items NR-1 to NR-4 — `PLAN.md` §12
 - [x] Capability arc + S2/S3/S4 parking — `PLAN.md` §5.5 + §13
 - [x] Persona / system prompt finalised text — `PLAN.md` §5.4
-- [ ] **Sasha sign-off** — `PLAN.md` §15
+- [x] **Option A vs Option B decision** — Option A chosen (see status block above)
 
-## Acceptance criteria for this (planning) ticket
+### Execution (S1)
 
-- `PLAN.md` is complete and self-contained — a contributor unfamiliar with the project should be able to read it and understand the design
-- All claims about existing code cite a real file path or function name
-- The `publish_intents` vs `publish_drafts` correction is clearly explained (this was the mid-execution discovery)
-- The Option A vs Option B mint-handoff decision is presented with enough detail for Sasha to pick without a follow-up Q&A round
-- NR-4 (the launch-gating regression test) is described precisely enough that the harness can be specced
+Backend (commit `bd21cbdc3`):
+- [x] Migration 34: `publish_intents` table — `pc2-node/src/storage/migrations.ts` + `schema.sql`
+- [x] DatabaseManager: `insertIntent` / `getIntentsByWallet` / `getIntentById` / `updateIntent` / `markIntentHandedOff` / `markIntentConsumed` / `deleteIntent` + `getChannelsByCreator`
+- [x] REST API: `pc2-node/src/api/intents.ts` (POST / GET / GET-by-id / PUT / PATCH-status / DELETE) with field validation
+- [x] Tool definitions: `pc2-node/src/services/ai/tools/MonetisationAgentTools.ts` — 6 tools per PLAN.md §7
+- [x] Tool executor: 6 case clauses in `pc2-node/src/services/ai/tools/ToolExecutor.ts`
+- [x] Tool registration: `AIChatService.ts` includes `monetisationAgentTools` in `allTools`
+
+Frontend (commit `f15b6b881`):
+- [x] Chat-mode picker: `src/gui/src/UI/AI/UIAIChat.js` (General / Monetisation Agent)
+- [x] System-prompt injection on every send when monetisation mode is active
+- [x] Socket.IO directive: `src/gui/src/UI/UIDesktop.js` listens for `monetisation.open_creator` and calls `launch_app`
+- [x] Creator app: `puter.args.resumeIntent` handler + `resumeFromIntent(intentId)` + post-mint `markIntentConsumed` linkage in `pc2-node/data/test-apps/elacity-creator/app.js`
+
+Tests:
+- [x] NR-4 regression test (7 assertions, all passing) — `pc2-node/tests/unit/publish-intents-schema-and-mirror.test.js`
+
+Remaining (pre-tag for v1.3.0):
+- [ ] Live smoke on dev — drop a file in the side chat → talk through wizard fields → click "Open in Creator" → confirm pre-fill is identical to manual flow → mint → verify `publish_intents.status = consumed` with `consumed_draft_id` populated
+- [ ] Multi-LLM verification — repeat smoke on at least 2 of {Claude-Sonnet, GPT-4o-mini, Gemini-Pro, local DeepSeek}
+- [ ] CI green on `feat/t-1-telemetry-and-support` after these commits (tracking)
+
+## Acceptance criteria (S1)
+
+Planning:
+- [x] `PLAN.md` is complete and self-contained — a contributor unfamiliar with the project can read it and understand the design
+- [x] All claims about existing code cite a real file path or function name
+- [x] The `publish_intents` vs `publish_drafts` correction is clearly explained
+- [x] Option A vs Option B decision presented + Option A chosen
+
+Execution (functional):
+- [x] Agent-built `publish_intents` row mirrors the input-side columns of `publish_drafts` byte-for-byte (NR-4 enforced by static + behavioural tests)
+- [x] State machine `draft → handed_off → consumed` works and the `consumed_draft_id` back-pointer preserves the audit trail
+- [x] Mint pipeline UNCHANGED — the Creator app's encrypt + opRawData + sign + mint code path is the same whether the user dropped a file manually or came in via `resumeIntent`
+- [x] Mode picker doesn't affect General-mode behaviour (system prompt only injected when monetisation mode is active)
+- [ ] **Live smoke** — see implementation plan above (pre-tag gate)
 
 ## Files in this task folder
 
 - [`PLAN.md`](./PLAN.md) — the design document
 - [`README.md`](./README.md) — this file
 
-## Files to modify (execution ticket, not this one)
+## Files modified (S1 execution, all on `feat/t-1-telemetry-and-support`)
 
-To be specified in the execution follow-up ticket once Option A vs Option B is decided. The expected surface area (Option A) is summarised in `PLAN.md` §4 — six things, no more.
+Backend:
+- `pc2-node/src/storage/migrations.ts` (+59 LOC, version bump 33 → 34, migration 34 block)
+- `pc2-node/src/storage/schema.sql` (+45 LOC, `publish_intents` CREATE + indexes)
+- `pc2-node/src/storage/database.ts` (+173 LOC, intent CRUD + `getChannelsByCreator`)
+- `pc2-node/src/api/intents.ts` (NEW, ~295 LOC)
+- `pc2-node/src/api/index.ts` (+2 LOC, route registration)
+- `pc2-node/src/services/ai/tools/MonetisationAgentTools.ts` (NEW, ~204 LOC)
+- `pc2-node/src/services/ai/tools/ToolExecutor.ts` (+319 LOC, 6 case clauses + `decorateIntentRow` helper)
+- `pc2-node/src/services/ai/AIChatService.ts` (+5 LOC, register `monetisationAgentTools` in `allTools`)
+
+Frontend:
+- `src/gui/src/UI/AI/UIAIChat.js` (+66 LOC, mode-state + picker UI + change handler + system-prompt injection)
+- `src/gui/src/UI/UIDesktop.js` (+24 LOC, `monetisation.open_creator` Socket.IO handler)
+- `pc2-node/data/test-apps/elacity-creator/app.js` (+95 LOC, `resumeFromIntent` + bootstrap branch + post-mint intent-consumed PATCH)
+
+Tests:
+- `pc2-node/tests/unit/publish-intents-schema-and-mirror.test.js` (NEW, 7 assertions covering NR-4)
 
 ## Testing strategy
 
-- Doc-only PR — no runtime tests apply. Lint check (`ReadLints`) on the markdown files only
-- Internal links resolve; no references to the parked AGENTIC-PC2-MONETISATION mandate
-- All cross-references to other PC2 paths (`pc2-node/...`, `src/gui/...`, `packages/access/...`) point to files that actually exist on the current branch
+- **Unit**: `npm run test:unit` — 21/21 passing (includes the 7 new NR-4 assertions). Run from `pc2-node/`.
+- **Static analysis**: `tsc --noEmit` clean across the full pc2-node project. ESLint clean on all touched files.
+- **Live smoke** (pre-tag, not yet run): drop a file in the side chat in Monetisation mode → talk through fields → `[Open in Creator]` → confirm pre-fill identical to manual flow → mint → verify `publish_intents.status = consumed` with `consumed_draft_id` populated.
 
 ## Notes
 
-- This ticket replaces the **AGENTIC-PC2-MONETISATION-2026-05** mandate as the v1.3.0 driving plan, per Sasha 2026-05-19. The AGENTIC mandate document is parked, not deleted, for historical context
-- Branch hygiene: this doc-only PR lands on `feat/t-1-telemetry-and-support` because that's where the active session is. Execution branches separately **after** v1.2.8.0 is tagged
-- The 4-line uncommitted edit to `docs/core/ROADMAP.md` (a leftover from the prior session's housekeeping pass) is committed alongside this task's PLAN.md + README.md in a single doc-only PR
-- Cursor session continuity: this task is the resumption point after the prior session paused mid-execution. The synthesis source-of-truth is `/Users/mtk/.cursor/plans/agent-creator-studio_2cc543fd.plan.md` (read-only); `PLAN.md` here is its expanded, code-cited, sign-off-ready form
+- This ticket replaces the **AGENTIC-PC2-MONETISATION-2026-05** mandate as the v1.3.0 driving plan, per Sasha 2026-05-19. The AGENTIC mandate document is parked, not deleted, for historical context.
+- Branch hygiene: S1 lands on `feat/t-1-telemetry-and-support` per Sasha 2026-05-20 ("we are not trying to switch or create a new branch"). The v1.2.8.0 release path is unblocked — none of these commits touch the v1.2.8.0 telemetry/Health-app surface.
+- Cursor session continuity: this task is the resumption point after the prior session paused mid-planning. `PLAN.md` here is the expanded, code-cited, sign-off-ready form.

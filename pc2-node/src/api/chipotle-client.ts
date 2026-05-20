@@ -87,6 +87,17 @@ const KNOWN_BAD_NON_MEDIA_DECRYPT_CIDS = new Set<string>([
   'QmX5JxcFhyasptCWMA6unFPm3TRYjPSkJb5HhN8289r5uk',
 ]);
 
+// Known-good legacy decrypt Lit Action CIDs. A client-supplied `actionCid`
+// (sourced from asset protection data / the request body) is honoured only
+// when it is the current production CID or one of these. Any other CID is
+// rejected before a Lit Action is invoked — an unrecognised CID could point
+// at an action that skips the kid↔ciphertext binding check or the on-chain
+// access gate. Keep in sync with storage.ts `LEGACY_NON_MEDIA_ACTION_CIDS`.
+const LEGACY_DECRYPT_ACTION_CIDS = new Set<string>([
+  'bafkreihvm4zkyuefnuptlbdins6cmd2mbslj2xgnyzz3ssdg2ggg3jtkk4', // V1.2 sigauth non-media decrypt
+  'QmSHMSxPogSsNki51fenDzsrkKB3eJfRMHXEPZKqPk6EAb',              // legacy media decrypt
+]);
+
 const SUPERNODE_PROVISION_URLS = [
   'https://69.164.241.210/api/ddrm/provision',
   'https://38.242.211.112/api/ddrm/provision',
@@ -539,6 +550,24 @@ function getActionCid(): string {
 }
 
 /**
+ * Throws if `cid` is not an allowlisted decrypt Lit Action. The allowlist is
+ * the current production CID (`getActionCid()`), the hardcoded fallback
+ * (`UNIVERSAL_DECRYPT_CID`), and the known-good legacy CIDs. Callers pass a
+ * client-influenced `actionCid`; without this gate an arbitrary CID could
+ * select a Lit Action that skips the kid↔ciphertext binding or access checks.
+ */
+function assertAllowedDecryptCid(cid: string): void {
+  if (
+    cid === getActionCid() ||
+    cid === UNIVERSAL_DECRYPT_CID ||
+    LEGACY_DECRYPT_ACTION_CIDS.has(cid)
+  ) {
+    return;
+  }
+  throw new Error(`Rejected non-allowlisted decrypt actionCid: ${cid}`);
+}
+
+/**
  * Returns the active universal-encrypt Lit Action CID.
  * Priority: provision config (`actions.encrypt`) → hardcoded constant.
  */
@@ -953,6 +982,7 @@ export async function recoverCEKWithServerSession(
 
   try {
     const effectiveCid = params.actionCid || UNIVERSAL_DECRYPT_CID;
+    assertAllowedDecryptCid(effectiveCid);
     const effectiveChainId = params.chainId || DEFAULT_CHAIN_ID;
     const normalizedKid = params.kid.startsWith('0x')
       ? params.kid.toLowerCase()

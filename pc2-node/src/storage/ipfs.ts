@@ -437,7 +437,7 @@ export class IPFSStorage {
           signal: AbortSignal.timeout(5000),
         }).then(
           () => {
-            log.info(`Successfully dialed peer (${event.detail.id.toString()})`);
+            log.debug(`Successfully dialed peer (${event.detail.id.toString()})`);
           }
         ).catch((err) => {
           log.debug(`Failed to dial peer (${event.detail.id.toString()}):`, (err as Error)?.message);

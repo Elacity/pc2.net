@@ -20,7 +20,7 @@ import {
   getClusterPinRetryQueueSnapshot,
   queryClusterPinStatus,
 } from '../services/clusterPin.js';
-import { getBaseRpcUrl } from '../utils/rpc.js';
+import { getBaseRpcUrl, rotateBaseRpc } from '../utils/rpc.js';
 import {
   buildDelegationPayload,
   canonicalize,
@@ -2562,6 +2562,56 @@ router.get(
  *   Capsule. Capability scopes consumed: drm:decrypt, drm:verify-access,
  *   storage:fetch. Provided: drm:render. See PC2_CONVERGENCE_INVENTORY.
  */
+
+/** True when an ethers error originated from an HTTP 5xx RPC response. */
+function isRpcHttp5xx(err: any): boolean {
+  const status =
+    err?.info?.response?.statusCode ??
+    err?.info?.responseStatus ??
+    err?.status;
+  if (typeof status === 'number') return status >= 500 && status < 600;
+  // ethers v6 surfaces a 5xx as code SERVER_ERROR with the status in the
+  // message, e.g. "server response 503 Service Unavailable".
+  const text = `${err?.shortMessage ?? ''} ${err?.message ?? ''}`;
+  return err?.code === 'SERVER_ERROR' && /\b5\d\d\b/.test(text);
+}
+
+const RPC_5XX_MAX_RETRIES = 5;
+
+/**
+ * Runs `fn`, and if it fails with an HTTP 5xx RPC error, rotates the Base RPC
+ * endpoint and retries `fn`. `fn` is expected to read the current endpoint via
+ * `getBaseRpcUrl()`, so the rotation takes effect on the next attempt. Non-5xx
+ * errors propagate immediately; the last 5xx error propagates once retries
+ * are exhausted.
+ */
+async function withRpc5xxRetry<T>(fn: () => Promise<T>, retriesLeft = RPC_5XX_MAX_RETRIES): Promise<T> {
+  try {
+    return await fn();
+  } catch (err) {
+    if (!isRpcHttp5xx(err) || retriesLeft <= 0) throw err;
+    logger.warn(`[SecureView] Preflight: RPC ${getBaseRpcUrl()} returned 5xx — rotating (${retriesLeft} retries left)`);
+    rotateBaseRpc();
+    return withRpc5xxRetry(fn, retriesLeft - 1);
+  }
+}
+
+/** Calls `hasAccessByContentId`, rotating the Base RPC on 5xx (see withRpc5xxRetry). */
+function hasAccessByContentIdWithFailover(
+  holder: string,
+  normalizedKid: string,
+  authorityAddr: string,
+): Promise<boolean> {
+  return withRpc5xxRetry(async () => {
+    const { ethers } = await import('ethers');
+    const provider = new ethers.JsonRpcProvider(getBaseRpcUrl());
+    const gateway = new ethers.Contract(authorityAddr, [
+      'function hasAccessByContentId(address holder, bytes16 contentId) view returns (bool)',
+    ], provider);
+    return gateway.hasAccessByContentId(holder, normalizedKid) as Promise<boolean>;
+  });
+}
+
 router.post('/lit/secure-view', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   // Telemetry hook (A5b §P0): "Door 4" of the v1.2 funnel. Fires exactly
   // once per node lifetime — the first time a paid-content decrypt SUCCEEDS
@@ -2704,21 +2754,16 @@ router.post('/lit/secure-view', authenticate, async (req: AuthenticatedRequest, 
 
     if (buyerAddressAlt && buyerAddressAlt.toLowerCase() !== buyerAddress.toLowerCase()) {
       try {
-        const { ethers } = await import('ethers');
-        const provider = new ethers.JsonRpcProvider(rpcUrl);
-        const gateway = new ethers.Contract(authorityAddr, [
-          'function hasAccessByContentId(address holder, bytes16 contentId) view returns (bool)',
-        ], provider);
         const normalizedKid = kid.startsWith('0x') ? kid : `0x${kid}`;
 
         const [primaryHas, altHas] = await Promise.all([
-          gateway.hasAccessByContentId(buyerAddress, normalizedKid).catch(
+          hasAccessByContentIdWithFailover(buyerAddress, normalizedKid, authorityAddr).catch(
             (err: Error) => {
               logger.warn(`[SecureView] Preflight: ${buyerAddress.substring(0, 10)} hasAccessByContentId failed: ${err}`);
               return false;
             }
           ),
-          gateway.hasAccessByContentId(buyerAddressAlt, normalizedKid).catch(
+          hasAccessByContentIdWithFailover(buyerAddressAlt, normalizedKid, authorityAddr).catch(
             (err: Error) => {
               logger.warn(`[SecureView] Preflight: ${buyerAddressAlt.substring(0, 10)} hasAccessByContentId failed: ${err}`);
               return false;

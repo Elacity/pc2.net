@@ -23,8 +23,8 @@
   'use strict';
 
   var LOG_TAG = '[PC2 SecureView]';
-  function log()  { try { console.log.apply(console, [LOG_TAG].concat([].slice.call(arguments))); } catch (_) {} }
-  function warn() { try { console.warn.apply(console, [LOG_TAG].concat([].slice.call(arguments))); } catch (_) {} }
+  function log() { try { console.log.apply(console, [LOG_TAG].concat([].slice.call(arguments))); } catch (_) { } }
+  function warn() { try { console.warn.apply(console, [LOG_TAG].concat([].slice.call(arguments))); } catch (_) { } }
 
   if (globalScope.pc2SecureView) {
     log('already initialized; skipping');
@@ -36,8 +36,8 @@
     warn('PC2SecureViewSession not loaded; secure-view disabled.');
     globalScope.pc2SecureView = {
       ensureSession: function () { return Promise.reject(new Error('PC2SecureViewSession not loaded')); },
-      signRequest:   function () { return Promise.reject(new Error('PC2SecureViewSession not loaded')); },
-      revoke:        function () { return Promise.resolve(); },
+      signRequest: function () { return Promise.reject(new Error('PC2SecureViewSession not loaded')); },
+      revoke: function () { return Promise.resolve(); },
     };
     return;
   }
@@ -47,10 +47,10 @@
   // In-memory session cache; on first call we hydrate from IndexedDB
   // (so reloads + new tabs reuse the same delegation until expiry).
   var sessionState = {
-    bootstrapped:      false,
-    bootstrapPromise:  null,
-    delegationRecord:  null, // { delegation, delegationCanonical, delegationSig, sessionPublicKey, ownerAddress, expiresAt }
-    keyPair:           null, // CryptoKeyPair (P-256, private key non-extractable)
+    bootstrapped: false,
+    bootstrapPromise: null,
+    delegationRecord: null, // { delegation, delegationCanonical, delegationSig, sessionPublicKey, ownerAddress, expiresAt }
+    keyPair: null, // CryptoKeyPair (P-256, private key non-extractable)
   };
 
   function isEmbeddedLogin() {
@@ -122,7 +122,7 @@
       if (globalScope.localStorage) {
         return globalScope.localStorage.getItem('auth_token') || '';
       }
-    } catch (_) {}
+    } catch (_) { }
     return '';
   }
 
@@ -226,7 +226,7 @@
         return resp.json();
       }).then(function (data) {
         var delegation = data && data.delegation;
-        var canonical  = data && data.delegationCanonical;
+        var canonical = data && data.delegationCanonical;
         if (!delegation || !canonical) throw new Error('begin-session returned invalid payload');
         var ownerAddress = delegation.ownerAddress;
         log('runDelegationFlow: resolving signer address (embedded=' + isEmbeddedLogin() + ', ownerAddress=' + ownerAddress + ')…');
@@ -266,8 +266,8 @@
             || '').toLowerCase();
           var walletLabel = loginMethod === 'metamask' ? 'MetaMask'
             : loginMethod === 'walletconnect' ? 'your wallet app'
-            : loginMethod === 'coinbase' ? 'Coinbase Wallet'
-            : 'your wallet';
+              : loginMethod === 'coinbase' ? 'Coinbase Wallet'
+                : 'your wallet';
 
           var overlay = null;
           var hintTimer1 = null;
@@ -308,19 +308,19 @@
               log('runDelegationFlow: complete-session status=' + resp.status);
               if (!resp.ok) throw new Error('complete-session failed: ' + resp.status);
               var record = {
-                delegation:           delegation,
-                delegationCanonical:  canonical,
-                delegationSig:        delegationSig,
-                sessionPublicKey:     kp.sessionPublicKey,
-                ownerAddress:         ownerAddress,
-                expiresAt:            delegation.expiresAt,
+                delegation: delegation,
+                delegationCanonical: canonical,
+                delegationSig: delegationSig,
+                sessionPublicKey: kp.sessionPublicKey,
+                ownerAddress: ownerAddress,
+                expiresAt: delegation.expiresAt,
               };
               return Promise.all([
                 SVS.saveSessionKey(kp.keyPair),
                 SVS.persistDelegation(record),
               ]).then(function () {
                 log('runDelegationFlow: session persisted to IndexedDB');
-                sessionState.keyPair          = kp.keyPair;
+                sessionState.keyPair = kp.keyPair;
                 sessionState.delegationRecord = record;
                 return sessionState;
               });
@@ -387,19 +387,19 @@
     log('signRequest: kid=' + params.kid);
     return ensureSession().then(function (state) {
       var rec = state.delegationRecord;
-      var kp  = state.keyPair;
+      var kp = state.keyPair;
       if (!rec || !kp) throw new Error('Secure-view session not initialized');
       log('signRequest: signing request with ephemeral P-256 (actionIpfsId=' + rec.delegation.actionIpfsId + ')');
       return SVS.signRequest(kp, {
-        kid:           params.kid,
-        actionIpfsId:  rec.delegation.actionIpfsId,
+        kid: params.kid,
+        actionIpfsId: rec.delegation.actionIpfsId,
       }).then(function (signed) {
         log('signRequest: bundle ready');
         return {
-          delegation:    rec.delegationCanonical,
+          delegation: rec.delegationCanonical,
           delegationSig: rec.delegationSig,
-          request:       signed.requestCanonical,
-          requestSig:    signed.requestSig,
+          request: signed.requestCanonical,
+          requestSig: signed.requestSig,
         };
       });
     });
@@ -414,17 +414,17 @@
       serverRevokeUrl: '/api/storage/lit/revoke-session',
       fetch: function (url, opts) { return authFetch(url, opts); },
     }).then(function () {
-      sessionState.bootstrapped     = false;
+      sessionState.bootstrapped = false;
       sessionState.bootstrapPromise = null;
       sessionState.delegationRecord = null;
-      sessionState.keyPair          = null;
+      sessionState.keyPair = null;
     });
   }
 
   globalScope.pc2SecureView = {
     ensureSession: ensureSession,
-    signRequest:   signRequest,
-    revoke:        revoke,
+    signRequest: signRequest,
+    revoke: revoke,
     // Inspector for debugging / session indicator UI:
     getActiveDelegation: function () {
       return SVS.getActiveDelegation();

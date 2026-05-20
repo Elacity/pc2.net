@@ -10,6 +10,7 @@
  * Zero Python dependency. Zero mp4encrypt dependency.
  */
 
+import { Buffer } from 'buffer';
 import * as crypto from 'crypto';
 import { existsSync, readdirSync, readFileSync, mkdirSync, writeFileSync } from 'fs';
 import { writeFile } from 'fs/promises';
@@ -17,7 +18,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { logger } from '../../utils/logger.js';
 import { encryptWithLitAction, buildSelfRefConditions, type EncryptResult } from '../../api/chipotle-client.js';
-import { splitFragmentedMP4WASM } from './mp4split.js';
+import { splitFragmentedMP4WASM, splitInitForTrackWASM } from './mp4split.js';
 import { generateMPD, buildMPDTracks } from './mpdGenerator.js';
 import { getWASMRuntime } from '../wasm/WASMRuntime.js';
 import { resolve as pathResolve } from 'path';
@@ -27,8 +28,7 @@ const __dirname = dirname(__filename);
 
 const ELACITY_SYSTEM_ID = 'bf2c86c1d9ff4ab1b4be45ae4d99e1fe';
 
-const MEDIA_DECRYPT_ACTION_CID = 'QmSHMSxPogSsNki51fenDzsrkKB3eJfRMHXEPZKqPk6EAb';
-const MEDIA_ENCRYPT_ACTION_CID = 'QmdwzJvfgCRvNh9pQ63zroFozR9CfJdiweqTCkVMubD47U';
+import { getDecryptActionCid, getEncryptActionCid } from '../../api/chipotle-client.js';
 
 import { getBaseRpcUrl } from '../../utils/rpc.js';
 
@@ -62,16 +62,19 @@ interface PSSHProtectionData {
   protocolVersion: string;
   protectionType: string;
   variant: string;
-  ciphersuite: string;
+  algorithm: string;
   data: {
-    authority: string;
-    chainId: number;
-    rpc: string;
     actionIpfsId: string;
     litBackend: string;
-    ciphertext: string;
-    hash: string;
+    chainId: number;
+    authority: string;
+    rpc: string;
     kid: string;
+    dataToEncryptHash: string;
+    ciphertext: string;
+    issuer: string;
+    signature: string;
+    format: string;
   };
 }
 
@@ -98,22 +101,23 @@ loadCENCEncryptWasm().catch((err) =>
 
 export function generateCEK(): { cek: Buffer; kid: string } {
   const cek = crypto.randomBytes(16);
+  // KID must be independent of CEK — random UUID sanitised to 32 hex chars
   const kid = crypto.randomUUID().replace(/-/g, '');
   return { cek, kid };
 }
 
 // ─── CEK Encryption via Chipotle ────────────────────────────────────────────
 
-export async function encryptMediaCEK(cek: Buffer): Promise<EncryptResult> {
-  const cekBase64 = cek.toString('base64');
-  const dataToEncrypt = new TextEncoder().encode(cekBase64);
-  const conditions = buildSelfRefConditions(MEDIA_ENCRYPT_ACTION_CID);
+export async function encryptMediaCEK(cek: Buffer, kid: string): Promise<EncryptResult> {
+  const conditions = buildSelfRefConditions(getEncryptActionCid());
 
   const MAX_RETRIES = 5;
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
       const result = await encryptWithLitAction({
-        dataToEncrypt,
+        dataToEncrypt: cek,
+        kid: Buffer.from(kid, 'hex').toString('base64'),
+        authority: DEFAULT_AUTHORITY,
         accessControlConditions: conditions,
       });
       logger.info(`[DASHPackager] CEK encrypted via Chipotle (hash: ${result.dataToEncryptHash.substring(0, 12)}...)`);
@@ -141,29 +145,30 @@ export async function encryptMediaCEK(cek: Buffer): Promise<EncryptResult> {
 
 // ─── PSSH Construction ──────────────────────────────────────────────────────
 
-export function buildPSSHJson(outputDir: string, encryptResult: { ciphertext: string; dataToEncryptHash: string }): string {
-  const cleanHash = encryptResult.dataToEncryptHash.startsWith('0x')
-    ? encryptResult.dataToEncryptHash.slice(2)
-    : encryptResult.dataToEncryptHash;
-  const contractKid = '0x' + cleanHash.slice(0, 32).padEnd(32, '0');
-
-  const protectionData: PSSHProtectionData = {
-    protocolVersion: '2.0',
+function buildProtectionData(kid: string, encryptResult: EncryptResult): PSSHProtectionData {
+  return {
+    protocolVersion: '3.0',
     protectionType: 'cenc:lit-aes-gcm-v3',
     variant: 'eth.web3.clearkey',
-    ciphersuite: 'e8582013',
+    algorithm: 'AES-128-CBC',
     data: {
-      authority: DEFAULT_AUTHORITY,
-      chainId: DEFAULT_CHAIN_ID,
-      rpc: DEFAULT_RPC,
-      actionIpfsId: MEDIA_DECRYPT_ACTION_CID,
+      actionIpfsId: getDecryptActionCid(),
       litBackend: 'chipotle',
+      chainId: DEFAULT_CHAIN_ID,
+      authority: DEFAULT_AUTHORITY,
+      rpc: DEFAULT_RPC,
+      kid: kid.startsWith('0x') ? kid : `0x${kid}`,
+      dataToEncryptHash: encryptResult.dataToEncryptHash,
       ciphertext: encryptResult.ciphertext,
-      hash: encryptResult.dataToEncryptHash,
-      kid: contractKid,
+      issuer: encryptResult.issuer || '',
+      signature: encryptResult.signature || '',
+      format: 'hex',
     },
   };
+}
 
+export function buildPSSHJson(outputDir: string, kid: string, encryptResult: EncryptResult): string {
+  const protectionData = buildProtectionData(kid, encryptResult);
   const psshPath = join(outputDir, `pssh-${ELACITY_SYSTEM_ID}.json`);
   writeFileSync(psshPath, JSON.stringify(protectionData));
   return psshPath;
@@ -202,38 +207,32 @@ function buildBinaryPSSHBox(kidHex: string, jsonPayload: string): Buffer {
   return buf;
 }
 
-function injectPSSHBox(
-  initData: Buffer,
-  contractKidHex: string,
-  encryptResult: { ciphertext: string; dataToEncryptHash: string },
-): Buffer {
-  const psshJson = JSON.stringify({
-    protocolVersion: '2.0',
-    protectionType: 'cenc:lit-aes-gcm-v3',
-    variant: 'eth.web3.clearkey',
-    ciphersuite: 'e8582013',
-    data: {
-      authority: DEFAULT_AUTHORITY,
-      chainId: DEFAULT_CHAIN_ID,
-      rpc: DEFAULT_RPC,
-      actionIpfsId: MEDIA_DECRYPT_ACTION_CID,
-      litBackend: 'chipotle',
-      ciphertext: encryptResult.ciphertext,
-      hash: encryptResult.dataToEncryptHash,
-      kid: '0x' + contractKidHex,
-    },
-  });
-
-  const psshBox = buildBinaryPSSHBox(contractKidHex, psshJson);
-
+/**
+ * Splice a pre-built pssh box into an init segment as the LAST child of
+ * `moov` (after every `trak`). This matches bento4 / mp4encrypt's layout
+ * (`Ap4CommonEncryption.cpp` ~L1554-1578) and is the canonical CENC slot.
+ *
+ * Why end-of-moov (not post-mvhd, not root-sibling):
+ *   - libav `mov_read_pssh()` attaches `AVEncryptionInitInfo` to the
+ *     last-registered `AVStream` at parse time. Placement before `trak`
+ *     means no stream exists yet → side-data silently dropped.
+ *   - Chromium MSE rejects init segments with an unexpected `pssh` at the
+ *     file root (`CHUNK_DEMUXER_ERROR_APPEND_FAILED: Invalid top-level
+ *     ISO BMFF box type pssh`). A root-level pssh sibling was tried earlier
+ *     as belt-and-braces for non-ffmpeg parsers — it breaks dash.js /
+ *     browser EME and is non-standard. Removed.
+ *
+ * See .cursor/tasks/MEDIA-2026-05-18-CENC-PSSH-LIBAV-COMPLIANCE.
+ */
+export function splicePSSHIntoInit (initData: Buffer, psshBox: Buffer): Buffer {
   let moovOffset = -1;
   let moovSize = 0;
   let pos = 0;
-  while (pos + 8 <= initData.length) {
+  while ( pos + 8 <= initData.length ) {
     const size = initData.readUInt32BE(pos);
     const type = initData.toString('ascii', pos + 4, pos + 8);
-    if (size < 8) break;
-    if (type === 'moov') {
+    if ( size < 8 ) break;
+    if ( type === 'moov' ) {
       moovOffset = pos;
       moovSize = size;
       break;
@@ -241,22 +240,62 @@ function injectPSSHBox(
     pos += size;
   }
 
-  if (moovOffset === -1) {
+  if ( moovOffset === -1 ) {
     return Buffer.concat([initData, psshBox]);
   }
 
   const moovEnd = moovOffset + moovSize;
-  const result = Buffer.alloc(initData.length + psshBox.length);
-  initData.copy(result, 0, 0, moovEnd);
-  psshBox.copy(result, moovEnd);
-  if (moovEnd < initData.length) {
-    initData.copy(result, moovEnd + psshBox.length, moovEnd);
+  const out = Buffer.alloc(initData.length + psshBox.length);
+  initData.copy(out, 0, 0, moovEnd);
+  psshBox.copy(out, moovEnd);
+  if ( moovEnd < initData.length ) {
+    initData.copy(out, moovEnd + psshBox.length, moovEnd);
   }
 
+  // Grow moov's declared size by exactly one pssh (the in-moov copy).
   const newMoovSize = moovSize + psshBox.length;
-  result.writeUInt32BE(newMoovSize, moovOffset);
+  out.writeUInt32BE(newMoovSize, moovOffset);
 
-  return result;
+  return out;
+}
+
+/**
+ * Locate the first `pssh` box in an init segment (top-level scan first, then
+ * walk inside `moov`). Returns null if absent. Used by the `/segment` init
+ * delivery path to recover the box bytes that `stripInitViaWASM()` is about
+ * to remove, so they can be re-spliced into the cleaned output.
+ */
+export function extractFirstPSSHBox (initData: Buffer): Buffer | null {
+  let pos = 0;
+  let moovOffset = -1;
+  let moovSize = 0;
+  while ( pos + 8 <= initData.length ) {
+    const size = initData.readUInt32BE(pos);
+    const type = initData.toString('ascii', pos + 4, pos + 8);
+    if ( size < 8 ) break;
+    if ( type === 'pssh' ) {
+      return Buffer.from(initData.subarray(pos, pos + size));
+    }
+    if ( type === 'moov' ) {
+      moovOffset = pos;
+      moovSize = size;
+    }
+    pos += size;
+  }
+
+  if ( moovOffset === -1 ) return null;
+  const moovEnd = moovOffset + moovSize;
+  let inner = moovOffset + 8;
+  while ( inner + 8 <= moovEnd ) {
+    const csize = initData.readUInt32BE(inner);
+    const ctype = initData.toString('ascii', inner + 4, inner + 8);
+    if ( csize < 8 || inner + csize > moovEnd ) break;
+    if ( ctype === 'pssh' ) {
+      return Buffer.from(initData.subarray(inner, inner + csize));
+    }
+    inner += csize;
+  }
+  return null;
 }
 
 // ─── WASM-based DASH Packaging ──────────────────────────────────────────────
@@ -266,7 +305,7 @@ export async function packageDASH(
   outputDir: string,
   cekHex: string,
   kid: string,
-  encryptResult: { ciphertext: string; dataToEncryptHash: string },
+  encryptResult: EncryptResult,
 ): Promise<string> {
   const wasmBinary = await loadCENCEncryptWasm();
   // Phase 2-D-helpers: INTENTIONAL service-internal ambient.
@@ -283,10 +322,8 @@ export async function packageDASH(
 
   const cekB64 = Buffer.from(cekHex, 'hex').toString('base64');
 
-  const cleanHash = encryptResult.dataToEncryptHash.startsWith('0x')
-    ? encryptResult.dataToEncryptHash.slice(2)
-    : encryptResult.dataToEncryptHash;
-  const contractKidHex = cleanHash.slice(0, 32).padEnd(32, '0');
+  // Use the independently generated KID for CENC encryption (padded to 32 hex chars)
+  const contractKidHex = kid.padEnd(32, '0');
 
   logger.info(`[DASHPackager] Splitting fragmented MP4(s) via WASM...`);
   const splitResult = await splitFragmentedMP4WASM(fragmentedFiles[0]);
@@ -308,23 +345,68 @@ export async function packageDASH(
     throw new Error(`WASM init transform failed: ${initResult.error}`);
   }
 
-  const transformedInit = injectPSSHBox(initResult.outputBytes, contractKidHex, encryptResult);
-  logger.info(`[DASHPackager] Init segment transformed: ${initSegment.length} → ${transformedInit.length} bytes (${initResult.executionTimeMs}ms)`);
+  // Multi-track init with sinf/tenc, NO pssh yet — pssh is spliced per-track
+  // below so each per-Representation init.mp4 ends up with its own pssh box
+  // attached to its single stream. See MEDIA-2026-05-18-CENC-PSSH-LIBAV-COMPLIANCE.
+  const multiTrackTransformedInit = Buffer.from(initResult.outputBytes);
+
+  // Build the pssh box bytes once; reused byte-identically across every
+  // per-track init splice so libav extraction yields the same payload
+  // regardless of which track's init the player reads.
+  const protectionData = buildProtectionData(kid, encryptResult);
+  const psshBox = buildBinaryPSSHBox(contractKidHex, JSON.stringify(protectionData));
+
+  logger.info(`[DASHPackager] Init segment transformed: ${initSegment.length} → ${multiTrackTransformedInit.length} bytes (${initResult.executionTimeMs}ms; pssh ${psshBox.length}B will be spliced per-track)`);
 
   const encryptedSegments: Map<number, Buffer[]> = new Map();
   let totalEncryptTimeMs = 0;
   let segIdx = 0;
 
+  // Map trackId → track type so per-segment encryption picks the right
+  // clear-leader (codec frame headers MUST stay readable pre-decryption).
+  const trackTypeById = new Map<number, 'video' | 'audio'>();
+  for ( const t of tracks ) trackTypeById.set(t.trackId, t.type);
+
+  // Clear-leader bytes per codec.
+  //
+  // Video (AV1): 32 B kept clear so libav can parse OBU headers + leb128
+  // size + start of uncompressed_header before hitting encrypted payload.
+  // Without this, dav1d errors with "obu_forbidden_bit out of range".
+  //
+  // Audio (AAC): 0 B — full-sample CTR encryption matching bento4
+  // (`Ap4CommonEncryption.cpp` has no AAC subsample mapper). The cenc-encrypt
+  // Rust side emits senc with NO subsample table (flag=0) when clear leader
+  // is zero, exactly matching bento4 wire format. Subsample encryption for
+  // raw AAC mp4a samples isn't broadly supported by decryption stacks — our
+  // first attempt with clear_leader=16 caused MSE to blacklist every audio
+  // segment and made the libav C-player reject decrypted AAC packets.
+  //
+  // See MEDIA-2026-05-18-CENC-PSSH-LIBAV-COMPLIANCE for full analysis.
+  const CLEAR_LEADER_VIDEO = 32;
+  const CLEAR_LEADER_AUDIO = 0;
+
+  // Global running sample counter across every segment (and every track) so
+  // each sample gets a strictly increasing IV seed. The WASM derives per-sample
+  // IV = (seed + sample_index_within_segment) as BE u64, matching bento4's
+  // random-base+counter scheme. Bumping by seg.sampleCount before the next
+  // segment guarantees no IV collision under the same CEK — required for
+  // AES-CTR's {KID, IV} uniqueness per ISO/IEC 23001-7 §9.4.1.
+  let globalSampleCounter = 0n;
+
   for (const seg of segments) {
     segIdx++;
     const ivSeedBytes = Buffer.alloc(8);
-    ivSeedBytes.writeUInt32BE(segIdx, 4);
+    ivSeedBytes.writeBigUInt64BE(globalSampleCounter);
+
+    const trackType = trackTypeById.get(seg.trackId) || 'video';
+    const clearLeader = trackType === 'audio' ? CLEAR_LEADER_AUDIO : CLEAR_LEADER_VIDEO;
 
     const segCommand = JSON.stringify({
       cek_b64: cekB64,
       kid_hex: contractKidHex,
       mode: 'encrypt_segment',
       iv_seed_b64: ivSeedBytes.toString('base64'),
+      clear_leader: clearLeader,
     });
 
     const segResult = await wasmRuntime.executeCENCEncrypt(
@@ -341,7 +423,9 @@ export async function packageDASH(
     }
     encryptedSegments.get(seg.trackId)!.push(segResult.outputBytes);
 
-    if (segIdx % 10 === 0) {
+    globalSampleCounter += BigInt(seg.sampleCount || 0);
+
+    if ( segIdx % 10 === 0 ) {
       logger.info(`[DASHPackager] Encrypted ${segIdx}/${segments.length} segments...`);
     }
   }
@@ -352,14 +436,20 @@ export async function packageDASH(
   const mpdTracks = buildMPDTracks(tracks, segments);
 
   for (const track of mpdTracks) {
-    const dirType = track.info.type === 'video' ? 'video' : 'audio';
-    const trackDir = join(dashDir, dirType, String(track.info.trackId));
+    const trackDir = join(dashDir, track.repId);
     mkdirSync(trackDir, { recursive: true });
 
-    await writeFile(join(trackDir, 'init.mp4'), transformedInit);
+    // Per-Representation init: reduce the multi-track transformed init down
+    // to this track's trak only (mvex's trex filtered to the same), then
+    // splice the shared pssh box bytes. Result: each init.mp4 declares one
+    // AVStream and carries its own copy of the pssh — DASH demuxers see
+    // exactly one stream per Representation, no ghosts.
+    const singleTrackInit = await splitInitForTrackWASM(multiTrackTransformedInit, track.info.type);
+    const trackInit = splicePSSHIntoInit(singleTrackInit, psshBox);
+    await writeFile(join(trackDir, 'init.mp4'), trackInit);
 
     const trackEncSegs = encryptedSegments.get(track.info.trackId) || [];
-    for (let i = 0; i < trackEncSegs.length; i++) {
+    for ( let i = 0; i < trackEncSegs.length; i++ ) {
       await writeFile(join(trackDir, `seg-${i + 1}.m4s`), trackEncSegs[i]);
     }
   }
@@ -367,23 +457,7 @@ export async function packageDASH(
   const mpdXml = generateMPD(mpdTracks, totalDuration);
   await writeFile(join(dashDir, 'stream.mpd'), mpdXml, 'utf-8');
 
-  const psshJson = JSON.stringify({
-    protocolVersion: '2.0',
-    protectionType: 'cenc:lit-aes-gcm-v3',
-    variant: 'eth.web3.clearkey',
-    ciphersuite: 'e8582013',
-    data: {
-      authority: DEFAULT_AUTHORITY,
-      chainId: DEFAULT_CHAIN_ID,
-      rpc: DEFAULT_RPC,
-      actionIpfsId: MEDIA_DECRYPT_ACTION_CID,
-      litBackend: 'chipotle',
-      ciphertext: encryptResult.ciphertext,
-      hash: encryptResult.dataToEncryptHash,
-      kid: '0x' + contractKidHex,
-    },
-  });
-  await writeFile(join(dashDir, `pssh-${ELACITY_SYSTEM_ID}.json`), psshJson, 'utf-8');
+  await writeFile(join(dashDir, `pssh-${ELACITY_SYSTEM_ID}.json`), JSON.stringify(protectionData), 'utf-8');
 
   logger.info(`[DASHPackager] DASH package created at ${dashDir} (${mpdTracks.length} tracks)`);
   return dashDir;
@@ -447,7 +521,7 @@ export async function createEncryptedDASH(
 
   let encryptResult: EncryptResult;
   try {
-    encryptResult = await encryptMediaCEK(cek);
+    encryptResult = await encryptMediaCEK(cek, kid);
   } finally {
     cek.fill(0);
   }
@@ -460,8 +534,7 @@ export async function createEncryptedDASH(
     cid,
     mpdUri: `ipfs://${cid}/stream.mpd`,
     kid,
-    ciphertext: encryptResult.ciphertext,
-    dataToEncryptHash: encryptResult.dataToEncryptHash,
+    ...encryptResult,
     litBackend: 'chipotle',
     size,
   };

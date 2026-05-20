@@ -33,6 +33,9 @@ import {
   REQUEST_FRESHNESS_WINDOW_SECONDS,
   type SecureViewDelegation,
 } from '../utils/secureViewSession.js';
+import type { LitBackend, DecryptParams, WASMRenderResult, CEKRecoveryResult, RenderContext } from './renderer/types.js';
+import { resolveRenderer } from './renderer/secure-view/registry.js';
+export type { DecryptParams } from './renderer/types.js';
 
 const router = Router();
 
@@ -1548,268 +1551,26 @@ router.delete('/nft/pin/:cid', authenticate, async (req: AuthenticatedRequest, r
 
 const __litFilename = fileURLToPath(import.meta.url);
 const __litDirname = dirname(__litFilename);
-const LIT_KEY_PATH = join(__litDirname, '../../data/.lit-server-key');
-const CAPACITY_KEY_PATH = join(__litDirname, '../../data/.lit-capacity-key');
-const CAPACITY_TOKEN_ID_PATH = join(__litDirname, '../../data/.lit-capacity-token-id');
-const LIT_RELAYER_CONFIG_PATH = join(__litDirname, '../../data/.lit-relayer-config');
-
-const LIT_RELAYER_URL = 'https://datil-relayer.getlit.dev';
-
-function getConfiguredCapacityTokenId(): string {
-  if (process.env.LIT_CAPACITY_TOKEN_ID) return process.env.LIT_CAPACITY_TOKEN_ID;
-  if (existsSync(CAPACITY_TOKEN_ID_PATH)) return readFileSync(CAPACITY_TOKEN_ID_PATH, 'utf8').trim();
-  return '';
-}
-
-interface RelayerConfig {
-  apiKey: string;
-  payerSecretKey: string;
-}
-
-function getRelayerConfig(): RelayerConfig | null {
-  const apiKey = process.env.LIT_RELAYER_API_KEY;
-  const payerSecretKey = process.env.LIT_PAYER_SECRET_KEY;
-  if (apiKey && payerSecretKey) return { apiKey, payerSecretKey };
-
-  if (existsSync(LIT_RELAYER_CONFIG_PATH)) {
-    try {
-      const raw = readFileSync(LIT_RELAYER_CONFIG_PATH, 'utf8').trim();
-      const parsed = JSON.parse(raw);
-      if (parsed.apiKey && parsed.payerSecretKey) return parsed;
-    } catch { /* ignore parse errors */ }
-  }
-  return null;
-}
-
-let delegateeRegistered = false;
-
-async function ensureDelegateeRegistered(walletAddress: string): Promise<void> {
-  if (delegateeRegistered) return;
-
-  const config = getRelayerConfig();
-  if (!config) {
-    logger.info('[Lit] No relayer config — skipping auto-registration (may already be registered)');
-    delegateeRegistered = true;
-    return;
-  }
-
-  try {
-    const resp = await fetch(`${LIT_RELAYER_URL}/add-users`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'api-key': config.apiKey,
-        'payer-secret-key': config.payerSecretKey,
-      },
-      body: JSON.stringify([walletAddress]),
-    });
-    const result = await resp.json() as any;
-    if (result.success) {
-      logger.info(`[Lit] Registered as delegatee via Payment Delegation DB (tx: ${result.txHash || 'submitted'})`);
-    } else {
-      logger.warn(`[Lit] Delegatee registration response:`, result);
-    }
-  } catch (err: any) {
-    logger.warn(`[Lit] Delegatee auto-registration failed (may already be registered): ${err.message}`);
-  }
-  delegateeRegistered = true;
-}
-
-let cachedCapacityTokenId: string | null = null;
-
-let cachedServerWallet: any = null;
-let cachedCapacityWallet: any = null;
-
-async function getServerWallet() {
-  if (cachedServerWallet) return cachedServerWallet;
-
-  const { ethers } = await import('ethers');
-
-  if (existsSync(LIT_KEY_PATH)) {
-    const key = readFileSync(LIT_KEY_PATH, 'utf8').trim();
-    cachedServerWallet = new ethers.Wallet(key);
-    logger.info(`[Lit] Server wallet loaded: ${cachedServerWallet.address}`);
-  } else {
-    const dataDir = dirname(LIT_KEY_PATH);
-    if (!existsSync(dataDir)) mkdirSync(dataDir, { recursive: true });
-
-    cachedServerWallet = ethers.Wallet.createRandom();
-    writeFileSync(LIT_KEY_PATH, cachedServerWallet.privateKey, { mode: 0o600 });
-    logger.info(`[Lit] Generated new server wallet: ${cachedServerWallet.address}`);
-  }
-
-  return cachedServerWallet;
-}
-
-/**
- * Load the capacity credit owner wallet.
- * This wallet must own the RLI NFT (capacity credit) on Chronicle Yellowstone.
- * Store its private key in data/.lit-capacity-key or set LIT_CAPACITY_KEY env var.
- */
-async function getCapacityWallet(): Promise<any | null> {
-  if (cachedCapacityWallet !== null) return cachedCapacityWallet || null;
-
-  const { ethers } = await import('ethers');
-  const envKey = process.env.LIT_CAPACITY_KEY;
-
-  if (envKey) {
-    cachedCapacityWallet = new ethers.Wallet(envKey.trim());
-    logger.info(`[Lit] Capacity wallet loaded from env: ${cachedCapacityWallet.address}`);
-    return cachedCapacityWallet;
-  }
-
-  if (existsSync(CAPACITY_KEY_PATH)) {
-    const key = readFileSync(CAPACITY_KEY_PATH, 'utf8').trim();
-    cachedCapacityWallet = new ethers.Wallet(key);
-    logger.info(`[Lit] Capacity wallet loaded from file: ${cachedCapacityWallet.address}`);
-    return cachedCapacityWallet;
-  }
-
-  logger.info('[Lit] No capacity credit wallet found (not required if registered in Payment Delegation DB).');
-  logger.info('[Lit] Optional: set LIT_CAPACITY_KEY env var for legacy delegation, or configure LIT_RELAYER_API_KEY + LIT_PAYER_SECRET_KEY for auto-registration.');
-  cachedCapacityWallet = false;
-  return null;
-}
-
-/**
- * Auto-detect the latest valid RLI token owned by the capacity wallet.
- * Queries the Chronicle Yellowstone chain for the wallet's RLI balance
- * and finds a non-expired token.
- */
-async function detectCapacityTokenId(capacityWalletAddress: string): Promise<string> {
-  const configured = getConfiguredCapacityTokenId();
-  if (configured) {
-    logger.info(`[Lit] Using configured capacity token ID: ${configured}`);
-    return configured;
-  }
-
-  if (cachedCapacityTokenId) return cachedCapacityTokenId;
-
-  try {
-    const { ethers } = await import('ethers');
-    const { LIT_RPC } = await import('@lit-protocol/constants');
-    const provider = new ethers.JsonRpcProvider(LIT_RPC.CHRONICLE_YELLOWSTONE);
-
-    const RLI_CONTRACT = '0xd3DEC8965Aa9676a6AfB4e4D05DA14E28D8f11e8';
-    const rliAbi = [
-      'function balanceOf(address owner) view returns (uint256)',
-      'function tokenOfOwnerByIndex(address owner, uint256 index) view returns (uint256)',
-      'function capacity(uint256 tokenId) view returns (uint256 requestsPerKilosecond, uint256 expiresAt)',
-    ];
-
-    const rli = new ethers.Contract(RLI_CONTRACT, rliAbi, provider);
-    const balance = await rli.balanceOf(capacityWalletAddress);
-    const count = Number(balance);
-
-    if (count === 0) {
-      logger.warn('[Lit] Capacity wallet owns no RLI tokens');
-      return '';
-    }
-
-    let bestTokenId = '';
-    let bestExpiry = 0;
-    const now = Math.floor(Date.now() / 1000);
-
-    for (let i = 0; i < Math.min(count, 30); i++) {
-      try {
-        const tokenId = await rli.tokenOfOwnerByIndex(capacityWalletAddress, i);
-        const cap = await rli.capacity(tokenId);
-        const expiresAt = Number(cap.expiresAt);
-        if (expiresAt > now && expiresAt > bestExpiry) {
-          bestExpiry = expiresAt;
-          bestTokenId = tokenId.toString();
-        }
-      } catch { continue; }
-    }
-
-    if (bestTokenId) {
-      const expiryDate = new Date(bestExpiry * 1000).toISOString().split('T')[0];
-      logger.info(`[Lit] Auto-detected capacity token #${bestTokenId} (expires ${expiryDate})`);
-      cachedCapacityTokenId = bestTokenId;
-      return bestTokenId;
-    }
-
-    logger.warn('[Lit] All RLI tokens are expired');
-    return '';
-  } catch (err: any) {
-    logger.error('[Lit] Failed to auto-detect capacity token:', err.message);
-    return getConfiguredCapacityTokenId();
-  }
-}
-
-let litClientInstance: any = null;
-let litConnecting: Promise<void> | null = null;
-
-async function getLitClient() {
-  if (litClientInstance?.ready) {
-    return litClientInstance;
-  }
-
-  if (litConnecting) {
-    await litConnecting;
-    if (litClientInstance?.ready) return litClientInstance;
-  }
-
-  const { LitNodeClientNodeJs } = await import('@lit-protocol/lit-node-client-nodejs');
-  const { LIT_NETWORK } = await import('@lit-protocol/constants');
-
-  litClientInstance = new LitNodeClientNodeJs({
-    litNetwork: LIT_NETWORK.Datil,
-    debug: false,
-    connectTimeout: 120000,
-  });
-
-  litConnecting = litClientInstance.connect().then(() => {
-    logger.info(`[Lit] Connected to Datil production (${litClientInstance.connectedNodes?.size || 0} nodes)`);
-    litConnecting = null;
-  }).catch((err: Error) => {
-    logger.error('[Lit] Connection failed:', err.message);
-    litClientInstance = null;
-    litConnecting = null;
-    throw err;
-  });
-
-  await litConnecting;
-  return litClientInstance;
-}
 
 // ── Lit Action Configuration ───────────────────────────────────────
-// Our non-media Lit Action (deployed to IPFS — set after first deploy)
-const LIT_ACTION_CID_PATH = join(__litDirname, '../../data/.lit-action-cid');
+// Resolution is now provision-cache → hardcoded constant only. See
+// chipotle-client.ts `getDecryptActionCid()`. The legacy env/file
+// override path (LIT_ACTION_CID, data/.lit-action-cid) was removed; to
+// rotate the action, update the supernode provision payload.
+import { getDecryptActionCid } from './chipotle-client.js';
+const DEFAULT_NON_MEDIA_ACTION_CID = getDecryptActionCid();
 
-// Hardcoded fallback for the deployed sigauth Lit Action — used when neither
-// LIT_ACTION_CID env nor the data/.lit-action-cid file is present (typical
-// for a fresh node that has never run /api/storage/lit/deploy-action and
-// has no operator-supplied env override).
-//
-// Without this, every fresh install returned 503 from begin-session and
-// 500 from /api/media/init (chipotle path), breaking ALL playback and
-// non-media Creator packaging for end users.
-//
-// The value MUST match (a) what is currently registered with Chipotle
-// group `1` (`elacity-ddrm`) and (b) what existing assets reference in
-// their delegation `actionIpfsId` field at session-bind time. The
-// canonical V1.2 sigauth Lit Action — pinned to ≥2 IPFS providers,
-// registered with Chipotle group 1, and end-to-end verified across
-// PDF/PNG/MP4/MP3 on 2026-04-21 — is `bafkreihvm4…`. See:
-//   - docs/handover/V12_SIGAUTH_HANDOVER.md §6.2
-//   - docs/handover/IRZHY_LIT_ACTION_FIX_V12.md §3.1
-//   - pc2-node/.env (line 7)
-//
-// v1.2.1 hotfix mistakenly hardcoded a Wave-8 re-pin CID
-// (`QmX5JxcF…r5uk`) that was registered but never became
-// production-active. Result: fresh nodes (Jetson, Pi, fresh installer
-// runs without `.env`) saw `Lit Action denied: code=access_denied`
-// on every asset open even though the buyer held a valid AccessToken.
-// Reverted to `bafkreihvm4…` in v1.2.2.
-//
-// SINGLE SOURCE OF TRUTH per V12_SIGAUTH_HANDOVER.md §6.3 — keep
-// `chipotle-client.ts → getActionCid()` final fallback synchronized with
-// this constant. When we rotate the action, update BOTH in the same
-// commit.
-const DEFAULT_NON_MEDIA_ACTION_CID = 'bafkreihvm4zkyuefnuptlbdins6cmd2mbslj2xgnyzz3ssdg2ggg3jtkk4';
+// Legacy decrypt CIDs accepted in delegation.actionIpfsId for backwards
+// compatibility with assets encrypted under previous Lit Actions. Those
+// legacy actions return the plaintext CEK (≤32 bytes); the unified
+// `recoverCEKViaEnvelope` detects short payloads and passes them through.
+const LEGACY_NON_MEDIA_ACTION_CIDS: ReadonlySet<string> = new Set([
+  'bafkreihvm4zkyuefnuptlbdins6cmd2mbslj2xgnyzz3ssdg2ggg3jtkk4', // V1.2 sigauth non-media decrypt
+  'QmSHMSxPogSsNki51fenDzsrkKB3eJfRMHXEPZKqPk6EAb',              // legacy media decrypt
+]);
 
-let NON_MEDIA_ACTION_CID = process.env.LIT_ACTION_CID || '';
+let NON_MEDIA_ACTION_CID = DEFAULT_NON_MEDIA_ACTION_CID;
+logger.info(`[Lit] Action CID: ${NON_MEDIA_ACTION_CID}`);
 
 // ── Lit Backend Selection ─────────────────────────────────────────
 // LIT_BACKEND=datil (default)    — use Datil SDK (WebSocket, SIWE, capacity credits)
@@ -1817,21 +1578,8 @@ let NON_MEDIA_ACTION_CID = process.env.LIT_ACTION_CID || '';
 //   Chipotle uses PKP-AES (Lit.Actions.Encrypt/Decrypt) for new assets.
 //   Datil uses threshold BLS (client.encrypt/decryptAndCombine) for existing assets.
 //   The litBackend metadata field on each asset tracks which scheme was used.
-type LitBackend = 'chipotle' | 'datil';
 const LIT_BACKEND: LitBackend = (process.env.LIT_BACKEND as LitBackend) || 'chipotle';
 logger.info(`[Lit] Backend: ${LIT_BACKEND} (set LIT_BACKEND=chipotle for Chipotle REST API)`);
-
-if (!NON_MEDIA_ACTION_CID && existsSync(LIT_ACTION_CID_PATH)) {
-  NON_MEDIA_ACTION_CID = readFileSync(LIT_ACTION_CID_PATH, 'utf8').trim();
-  if (NON_MEDIA_ACTION_CID) {
-    logger.info(`[Lit] Loaded action CID from file: ${NON_MEDIA_ACTION_CID}`);
-  }
-}
-
-if (!NON_MEDIA_ACTION_CID) {
-  NON_MEDIA_ACTION_CID = DEFAULT_NON_MEDIA_ACTION_CID;
-  logger.info(`[Lit] Using hardcoded fallback action CID: ${NON_MEDIA_ACTION_CID}`);
-}
 
 /**
  * Returns the server's authoritative sigauth Lit Action CID. Used by other
@@ -1840,6 +1588,15 @@ if (!NON_MEDIA_ACTION_CID) {
  */
 export function getNonMediaActionCid(): string {
   return NON_MEDIA_ACTION_CID || '';
+}
+
+/**
+ * Returns true if the given CID is a known-good legacy decrypt action.
+ * Used to honor PSSH-recorded actionIpfsId for assets encrypted under
+ * previous Lit Actions instead of forcing them to the current CID.
+ */
+export function isLegacyNonMediaActionCid(cid: string): boolean {
+  return LEGACY_NON_MEDIA_ACTION_CIDS.has(cid);
 }
 
 const DEFAULT_AUTHORITY = '0x09dBe796f40ECEffEAccf243c3d758C4c1d8D87D';
@@ -2005,167 +1762,6 @@ export function getCEKCacheStats() {
 }
 
 /**
- * Build access conditions for Lit encrypt/decrypt.
- *
- * ONLY the self-referential check: ensures only the designated Lit Action
- * code (pinned on IPFS, immutable) can trigger decryption.
- *
- * The actual on-chain access verification (hasAccessByContentId) is performed
- * INSIDE the Lit Action code itself, where it checks the real buyer's address
- * passed via jsParams. This avoids the :userAddress problem where the server
- * wallet would be checked instead of the buyer.
- */
-// Self-referential condition: only the Lit Action with this exact CID can decrypt.
-// The action is pinned to Pinata (Lit's IPFS backend) so Lit nodes can fetch it.
-// The action code itself performs the on-chain hasAccessByContentId() check.
-function buildSelfRefConditions(outerActionCid: string, chain = 'base') {
-  return [
-    {
-      conditionType: 'evmBasic',
-      contractAddress: '',
-      standardContractType: '',
-      chain,
-      method: '',
-      parameters: [':currentActionIpfsId'],
-      returnValueTest: {
-        comparator: '=',
-        value: outerActionCid,
-      },
-    },
-  ];
-}
-
-async function createServerAuthSig(client: any, wallet: any) {
-  const { createSiweMessage, generateAuthSig } = await import('@lit-protocol/auth-helpers');
-
-  const nonce = await client.getLatestBlockhash();
-  const toSign = await createSiweMessage({
-    walletAddress: wallet.address,
-    nonce,
-    expiration: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-  });
-
-  return generateAuthSig({ signer: wallet, toSign });
-}
-
-/**
- * Generate session signatures for Lit Action execution.
- * Requires both AccessControlConditionDecryption and LitActionExecution abilities.
- */
-// Session sigs cache: avoids expensive Lit node handshake on every request.
-// Sigs are valid for 15 min; we cache for 10 min to leave safety margin.
-const SESSION_SIGS_TTL_MS = 10 * 60 * 1000;
-let cachedSessionSigs: { sigs: any; createdAt: number } | null = null;
-let sessionSigsPromise: Promise<any> | null = null;
-
-async function getExecuteSessionSigs(client: any, wallet: any) {
-  if (cachedSessionSigs && (Date.now() - cachedSessionSigs.createdAt) < SESSION_SIGS_TTL_MS) {
-    logger.info(`[Lit] Reusing cached session sigs (age: ${Math.round((Date.now() - cachedSessionSigs.createdAt) / 1000)}s)`);
-    return cachedSessionSigs.sigs;
-  }
-
-  // Coalesce concurrent requests: if another call is already generating sigs, wait for it
-  if (sessionSigsPromise) {
-    logger.info('[Lit] Session sigs generation in progress — waiting...');
-    return sessionSigsPromise;
-  }
-
-  sessionSigsPromise = (async () => {
-    try {
-      const {
-        LitAccessControlConditionResource,
-        LitActionResource,
-        RecapSessionCapabilityObject,
-      } = await import('@lit-protocol/auth-helpers');
-      const { LIT_ABILITY } = await import('@lit-protocol/constants');
-      const { SiweMessage } = await import('siwe');
-
-      const capacityWallet = await getCapacityWallet();
-      const expiration = new Date(Date.now() + 15 * 60 * 1000).toISOString();
-
-      const accResource = new LitAccessControlConditionResource('*');
-      const actionResource = new LitActionResource('*');
-
-      const resourceAbilityRequests = [
-        { resource: accResource, ability: LIT_ABILITY.AccessControlConditionDecryption },
-        { resource: actionResource, ability: LIT_ABILITY.LitActionExecution },
-      ];
-
-      const sessionCapabilityObject = new RecapSessionCapabilityObject({}, []);
-      sessionCapabilityObject.addCapabilityForResource(
-        accResource,
-        LIT_ABILITY.AccessControlConditionDecryption
-      );
-      sessionCapabilityObject.addCapabilityForResource(
-        actionResource,
-        LIT_ABILITY.LitActionExecution
-      );
-
-      const sessionOpts: any = {
-        chain: 'ethereum',
-        expiration,
-        resourceAbilityRequests,
-        sessionCapabilityObject,
-        authNeededCallback: async (params: any) => {
-          const siweMessage = new SiweMessage({
-            domain: params.domain || 'localhost',
-            address: wallet.address,
-            statement: params.statement || 'Lit Protocol session signature',
-            uri: params.uri || 'https://localhost/login',
-            version: '1',
-            chainId: 1,
-            nonce: params.nonce || await client.getLatestBlockhash(),
-            expirationTime: params.expiration || expiration,
-            resources: params.resources || [],
-          });
-          const messageToSign = siweMessage.prepareMessage();
-          const signature = await wallet.signMessage(messageToSign);
-          return {
-            sig: signature,
-            derivedVia: 'web3.eth.personal.sign',
-            signedMessage: messageToSign,
-            address: wallet.address,
-          };
-        },
-      };
-
-      await ensureDelegateeRegistered(wallet.address);
-
-      if (capacityWallet) {
-        const tokenId = await detectCapacityTokenId(capacityWallet.address);
-        if (tokenId) {
-          try {
-            const { capacityDelegationAuthSig } = await client.createCapacityDelegationAuthSig({
-              dAppOwnerWallet: capacityWallet,
-              capacityTokenId: tokenId,
-              delegateeAddresses: [wallet.address],
-              uses: '10',
-              expiration: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-            });
-            sessionOpts.capacityDelegationAuthSig = capacityDelegationAuthSig;
-            logger.info(`[Lit] Capacity delegation attached (token #${tokenId})`);
-          } catch (delegErr: any) {
-            logger.warn(`[Lit] Capacity delegation auth sig failed (delegation DB should cover): ${delegErr.message}`);
-          }
-        } else {
-          logger.warn('[Lit] No valid capacity token found — relying on Payment Delegation DB');
-        }
-      }
-
-      const sessionSigs = await client.getSessionSigs(sessionOpts);
-      logger.info(`[Lit] Session sigs generated (${Object.keys(sessionSigs).length} nodes) — cached for ${SESSION_SIGS_TTL_MS / 60000} min`);
-
-      cachedSessionSigs = { sigs: sessionSigs, createdAt: Date.now() };
-      return sessionSigs;
-    } finally {
-      sessionSigsPromise = null;
-    }
-  })();
-
-  return sessionSigsPromise;
-}
-
-/**
  * POST /api/storage/lit/encrypt
  * Two-layer encryption: AES-GCM for the file, Lit Protocol for the CEK.
  *
@@ -2189,7 +1785,7 @@ router.post('/lit/encrypt', authenticate, async (req: AuthenticatedRequest, res:
     const effectiveActionCid = actionCid || NON_MEDIA_ACTION_CID;
     if (!effectiveActionCid) {
       res.status(400).json({
-        error: 'No Lit Action CID configured. Set LIT_ACTION_CID env var or pass actionCid in request body.',
+        error: 'No Lit Action CID configured. Pass actionCid in request body, or update the supernode provision payload.',
       });
       return;
     }
@@ -2230,84 +1826,51 @@ router.post('/lit/encrypt', authenticate, async (req: AuthenticatedRequest, res:
     let litBackend: 'chipotle' | 'datil';
 
     if (LIT_BACKEND === 'chipotle') {
-      const { encryptWithLitAction } = await import('./chipotle-client.js');
+      const { encryptWithLitAction, DEFAULT_AUTHORITY } = await import('./chipotle-client.js');
+
+      // Generate canonical 128-bit (16-byte) KID for non-media. Derived
+      // from a UUIDv4 with dashes stripped — same shape as the media KID
+      // produced by dashPackager::generateCEK(). Width matches the on-chain
+      // bytes16 contentId so a single identifier applies across asset
+      // types. See MEDIA-2026-05-18-CENC-PSSH-LIBAV-COMPLIANCE.
+      const { randomUUID } = await import('crypto');
+      const kidHex = randomUUID().replace(/-/g, '');
+      const kidBytes = Buffer.from(kidHex, 'hex');
+      const kidBase64 = kidBytes.toString('base64');
+
       const chipotleResult = await encryptWithLitAction({
-        dataToEncrypt: new TextEncoder().encode(cekBase64),
+        dataToEncrypt: Buffer.from(cekBase64, "base64"),
+        kid: kidBase64,
+        authority: DEFAULT_AUTHORITY,
         accessControlConditions: [],
       });
       litCiphertext = chipotleResult.ciphertext;
-      dataToEncryptHash = chipotleResult.dataToEncryptHash;
+      dataToEncryptHash = String(chipotleResult.dataToEncryptHash || '');
       litBackend = 'chipotle';
       logger.info(`[Lit] CEK encrypted via Chipotle PKP-AES. Hash: ${dataToEncryptHash?.substring(0, 20)}...`);
-    } else {
-      const client = await getLitClient();
-      const conditions = buildSelfRefConditions(effectiveActionCid);
-      const encryptResult = await client.encrypt({
-        dataToEncrypt: new TextEncoder().encode(cekBase64),
-        accessControlConditions: conditions,
-      });
-      litCiphertext = encryptResult.ciphertext;
-      dataToEncryptHash = encryptResult.dataToEncryptHash;
-      litBackend = 'datil';
-      logger.info(`[Lit] CEK encrypted via Datil BLS. Hash: ${dataToEncryptHash?.substring(0, 20)}...`);
-    }
 
-    res.json({
-      success: true,
-      litCiphertext,
-      dataToEncryptHash,
-      actionCid: effectiveActionCid,
-      conditions: LIT_BACKEND === 'datil' ? buildSelfRefConditions(effectiveActionCid) : [],
-      encryptedData: encryptedWithTag.toString('base64'),
-      iv: ivBase64,
-      litBackend,
-    });
+      res.json({
+        success: true,
+        litCiphertext,
+        dataToEncryptHash,
+        kid: '0x' + kidHex,
+        signature: chipotleResult.signature || '',
+        issuer: chipotleResult.issuer || '',
+        actionCid: effectiveActionCid,
+        conditions: [],
+        encryptedData: encryptedWithTag.toString('base64'),
+        iv: ivBase64,
+        litBackend,
+        format: 'hex',
+      });
+    } else {
+      throw new Error("Only Lit over Chipotle is supported");
+    }
   } catch (error: any) {
     logger.error('[Lit] Encryption error:', error);
     res.status(500).json({ error: error.message || 'Lit encryption failed' });
   }
 });
-
-/**
- * Shared two-layer decryption: Lit Action recovers CEK, then AES-GCM decrypts file.
- * Returns raw decrypted Buffer. Caller is responsible for zeroing it after use.
- */
-export interface DecryptParams {
-  litCiphertext: string;
-  dataToEncryptHash: string;
-  iv: string;
-  encryptedDataCid: string;
-  kid: string;
-  actionCid?: string;
-  authority?: string;
-  chain?: string;
-  chainId?: number;
-  rpc?: string;
-  buyerAddress: string;
-  litBackend?: LitBackend;
-  /**
-   * Optional session-key delegation bundle (Option C). When present,
-   * Phase 2c passes these through to the Lit Action instead of
-   * `userAddress`. When absent, the legacy `userAddress` path runs.
-   */
-  secureViewSession?: {
-    delegationCanonical: string;
-    delegationSig: `0x${string}`;
-    requestCanonical: string;
-    requestSig: `0x${string}`;
-  };
-}
-
-/**
- * Recover the CEK via Lit Protocol and fetch encrypted bytes from IPFS.
- * Returns { cekBase64, encryptedBytes } — the CEK is base64-encoded, the
- * encrypted bytes are raw. Neither the CEK nor plaintext is exposed here;
- * callers choose whether to AES-decrypt in Node.js or delegate to WASM.
- */
-interface CEKRecoveryResult {
-  cekBase64: string;
-  encryptedBytes: Buffer;
-}
 
 async function recoverCEKAndFetchData(params: DecryptParams, ipfsService?: any): Promise<CEKRecoveryResult> {
   const {
@@ -2348,87 +1911,40 @@ async function recoverCEKAndFetchData(params: DecryptParams, ipfsService?: any):
     const doLitCall = async (): Promise<string> => {
       try {
         if (effectiveBackend === 'chipotle') {
-          const { recoverNonMediaCEK } = await import('./chipotle-client.js');
-          // Phase 5 cutover: the delegation in params.secureViewSession is
-          // bound to the server-configured NON_MEDIA_ACTION_CID. The
-          // sigauth Lit Action self-checks del.actionIpfsId ===
-          // jsParams.actionIpfsId, so we must forward the same CID here
-          // regardless of what the asset's PSSH metadata carries.
-          if (!NON_MEDIA_ACTION_CID) {
+          const { recoverCEKWithServerSession } = await import('./chipotle-client.js');
+          // Legacy support: if the asset's protection data carries its own
+          // actionIpfsId, use it (the asset was encrypted against that specific
+          // Lit Action and the delegation is bound to it). Otherwise fall back
+          // to the server's configured universal decrypt CID.
+          const effectiveActionCid = actionCid || NON_MEDIA_ACTION_CID;
+          if (!effectiveActionCid) {
             throw new Error('No Lit Action CID configured (NON_MEDIA_ACTION_CID)');
           }
-          const cekBase64 = await recoverNonMediaCEK({
+          if (actionCid && actionCid !== NON_MEDIA_ACTION_CID) {
+            logger.info(`[Lit] Using legacy actionCid from protection data: ${actionCid}`);
+          }
+          // The Lit Action encrypts the ECDH envelope for del.sessionPublicKey.
+          // recoverCEKWithServerSession generates a server-side session keypair so
+          // the server controls that key and can unwrap the envelope. The client
+          // session bundle is already verified at the HTTP layer before this call.
+          const cekBase64 = await recoverCEKWithServerSession({
             litCiphertext,
             dataToEncryptHash,
             kid,
             buyerAddress,
-            actionCid: NON_MEDIA_ACTION_CID,
+            actionCid: effectiveActionCid,
             authority: effectiveAuthority,
             chain: effectiveChain,
             chainId: effectiveChainId,
             rpc: effectiveRpc,
-            secureViewSession: params.secureViewSession,
+            signature: params.signature,
+            issuer: params.issuer,
           });
-          logger.info(`[Lit] CEK recovered in ${Date.now() - litStart}ms (Chipotle REST)`);
+          logger.info(`[Lit] CEK recovered in ${Date.now() - litStart}ms (Chipotle server-session)`);
           cacheCEK(kid, buyerAddress, cekBase64);
           return cekBase64;
         }
-
-        // Datil fallback (LIT_BACKEND=datil). Phase 5 cutover: the
-        // sigauth Lit Action recovers the authorised address from
-        // delegation.coveredAddresses, so `userAddress` is no longer
-        // sent as a jsParam. NON_MEDIA_ACTION_CID is authoritative.
-        const wallet = await getServerWallet();
-        const client = await getLitClient();
-        const sessionSigs = await getExecuteSessionSigs(client, wallet);
-
-        if (!NON_MEDIA_ACTION_CID) {
-          throw new Error('No Lit Action CID configured (NON_MEDIA_ACTION_CID)');
-        }
-        if (!params.secureViewSession) {
-          // Belt-and-braces: the HTTP handler already rejects bundle-less
-          // requests, but recoverCEKAndFetchData is also called from
-          // other code paths and we want the sigauth invariant enforced
-          // at the Lit boundary too.
-          throw new Error('secureViewSession bundle is required for Lit decryption');
-        }
-
-        const datilNonMediaParams: Record<string, unknown> = {
-          ciphertext: litCiphertext,
-          dataToEncryptHash,
-          kid: kid.startsWith('0x') ? kid : `0x${kid}`,
-          actionIpfsId: NON_MEDIA_ACTION_CID,
-          authority: effectiveAuthority,
-          chain: effectiveChain,
-          chainId: effectiveChainId,
-          rpc: effectiveRpc,
-          delegation: params.secureViewSession.delegationCanonical,
-          delegationSig: params.secureViewSession.delegationSig,
-          request: params.secureViewSession.requestCanonical,
-          requestSig: params.secureViewSession.requestSig,
-        };
-        const executeParams: any = {
-          sessionSigs,
-          jsParams: datilNonMediaParams,
-          ipfsId: NON_MEDIA_ACTION_CID,
-        };
-
-        const result = await client.executeJs(executeParams);
-        if (!result.response) throw new Error('Lit Action returned empty response');
-
-        let cekBase64: string;
-        try {
-          const parsed = JSON.parse(result.response);
-          if (parsed.error) throw new Error(parsed.error);
-          cekBase64 = parsed.data || result.response;
-        } catch (e: any) {
-          if (e.message?.includes('Access denied')) throw e;
-          cekBase64 = result.response;
-        }
-
-        logger.info(`[Lit] CEK recovered in ${Date.now() - litStart}ms (Datil SDK)`);
-        cacheCEK(kid, buyerAddress, cekBase64);
-        return cekBase64;
+        throw new Error(`Unsupported LIT_BACKEND: ${effectiveBackend}`);
       } finally {
         pendingLitCalls.delete(coalescingKey);
       }
@@ -2654,23 +2170,6 @@ async function loadRendererBinary(wasmRuntime: WASMRuntime): Promise<ArrayBuffer
   cachedRendererBinary = await wasmRuntime.loadFromFile(DDRM_RENDERER_PATH);
   logger.info(`[SecureView] dDRM renderer WASM loaded (${cachedRendererBinary.byteLength} bytes)`);
   return cachedRendererBinary;
-}
-
-interface WASMRenderResult {
-  contentType: string;
-  rendered: Buffer;
-  totalPages?: number;
-  executionTimeMs: number;
-  /** EPUB: total spine chapters. */
-  totalChapters?: number;
-  /** EPUB: table of contents (cached on first chapter request). */
-  chapters?: Array<{ title: string; chapter_index: number; href: string }>;
-  /** EPUB: `true` when rendition:layout=pre-paginated (fall back to pixel-lock). */
-  fixedLayout?: boolean;
-  /** EPUB: publication title from OPF metadata. */
-  epubTitle?: string;
-  /** EPUB: publication author from OPF metadata. */
-  epubAuthor?: string;
 }
 
 /**
@@ -2933,10 +2432,19 @@ router.post('/lit/complete-session', authenticate, async (req: AuthenticatedRequ
       return;
     }
 
-    // actionIpfsId sanity
-    if (delegationObj.actionIpfsId !== NON_MEDIA_ACTION_CID) {
-      res.status(400).json({ error: 'delegation.actionIpfsId does not match server-configured CID' });
+    // actionIpfsId sanity — accept the current configured CID or any
+    // known-good legacy CID (assets baked under previous Lit Actions
+    // carry their own actionIpfsId in PSSH and the delegation has to
+    // bind to that CID for the legacy Lit Action to accept it).
+    const delegationActionCid = delegationObj.actionIpfsId;
+    const isCurrentCid = delegationActionCid === NON_MEDIA_ACTION_CID;
+    const isLegacyCid = LEGACY_NON_MEDIA_ACTION_CIDS.has(delegationActionCid);
+    if (!isCurrentCid && !isLegacyCid) {
+      res.status(400).json({ error: 'delegation.actionIpfsId does not match server-configured or known-legacy CID' });
       return;
+    }
+    if (isLegacyCid) {
+      logger.info(`[SecureView.session] Legacy actionIpfsId accepted: ${delegationActionCid}`);
     }
 
     // EIP-191 first
@@ -3204,8 +2712,18 @@ router.post('/lit/secure-view', authenticate, async (req: AuthenticatedRequest, 
         const normalizedKid = kid.startsWith('0x') ? kid : `0x${kid}`;
 
         const [primaryHas, altHas] = await Promise.all([
-          gateway.hasAccessByContentId(buyerAddress, normalizedKid).catch(() => false),
-          gateway.hasAccessByContentId(buyerAddressAlt, normalizedKid).catch(() => false),
+          gateway.hasAccessByContentId(buyerAddress, normalizedKid).catch(
+            (err: Error) => {
+              logger.warn(`[SecureView] Preflight: ${buyerAddress.substring(0, 10)} hasAccessByContentId failed: ${err}`);
+              return false;
+            }
+          ),
+          gateway.hasAccessByContentId(buyerAddressAlt, normalizedKid).catch(
+            (err: Error) => {
+              logger.warn(`[SecureView] Preflight: ${buyerAddressAlt.substring(0, 10)} hasAccessByContentId failed: ${err}`);
+              return false;
+            }
+          ),
         ]);
 
         if (!primaryHas && altHas) {
@@ -3215,6 +2733,9 @@ router.post('/lit/secure-view', authenticate, async (req: AuthenticatedRequest, 
           logger.info(`[SecureView] Preflight: primary ${buyerAddress.substring(0, 10)} holds AccessToken`);
         } else {
           logger.warn(`[SecureView] Preflight: neither address holds AccessToken — proceeding with primary`);
+          // early exit
+          res.status(412).json({ error: 'You do not own this content' });
+          return;
         }
       } catch (preflightErr: any) {
         logger.warn(`[SecureView] Preflight access check failed (non-fatal): ${preflightErr.message}`);
@@ -3244,386 +2765,48 @@ router.post('/lit/secure-view', authenticate, async (req: AuthenticatedRequest, 
       return;
     }
 
-    // ── WASM Renderer Path ──────────────────────────────
-    // For images, text, PDFs, EPUB, and CBZ: decrypt + render inside WASM
-    // linear memory. Plaintext stays in WASM; CEK passes through Node.js
-    // during MemFS write.
-    const wasmCodeTypes = ['application/javascript', 'application/json', 'application/xml', 'application/x-yaml', 'application/toml', 'application/x-sh'];
-    const isEpub = mime === 'application/epub+zip' || mime === 'application/epub';
-    const isCbz = mime === 'application/vnd.comicbook+zip' || mime === 'application/x-cbz';
-    const wasmSupportedTypes = mime.startsWith('image/')
-      || mime.startsWith('text/')
-      || mime === 'application/pdf'
-      || wasmCodeTypes.includes(mime)
-      || isEpub
-      || isCbz;
-    if (wasmSupportedTypes) {
-      try {
-        const wasmRuntime = req.app.locals.wasmRuntime as WASMRuntime;
-        const wasmResult = await renderViaWASM(
-          effectiveBody,
-          mime,
-          maxWidth,
-          wasmRuntime,
-          pageNum,
-          ipfsService,
-          typeof reqChapter === 'number' ? reqChapter : undefined,
-          typeof reqViewportWidth === 'number' ? Math.min(Math.max(reqViewportWidth, 320), 1600) : undefined,
-        );
-        if (wasmResult) {
-          // Fixed-layout EPUB: tell the client to retry as pixel-lock.
-          if (wasmResult.fixedLayout && wasmResult.rendered.length === 0) {
-            res.set('X-Renderer', 'wasm');
-            res.set('X-Asset-Layout', 'fixed');
-            if (wasmResult.totalChapters) {
-              res.set('X-Asset-Chapters', String(wasmResult.totalChapters));
-            }
-            if (wasmResult.epubTitle) res.set('X-Asset-Title', encodeURIComponent(wasmResult.epubTitle));
-            if (wasmResult.epubAuthor) res.set('X-Asset-Author', encodeURIComponent(wasmResult.epubAuthor));
-            res.status(409).json({
-              error: 'epub-fixed-layout',
-              message: 'Pre-paginated EPUB detected — use pixel-lock tier per chapter.',
-              totalChapters: wasmResult.totalChapters || 0,
-            });
-            logger.info(`[SecureView] EPUB fixed-layout detected (${wasmResult.totalChapters} chapters) for ${resolvedBuyer}`);
-            return;
-          }
-
-          res.set('Content-Type', wasmResult.contentType);
-          res.set('Content-Length', String(wasmResult.rendered.length));
-          res.set('X-Renderer', 'wasm');
-          if (wasmResult.totalPages) res.set('X-Asset-Pages', String(wasmResult.totalPages));
-          if (wasmResult.totalChapters) res.set('X-Asset-Chapters', String(wasmResult.totalChapters));
-          if (wasmResult.epubTitle) res.set('X-Asset-Title', encodeURIComponent(wasmResult.epubTitle));
-          if (wasmResult.epubAuthor) res.set('X-Asset-Author', encodeURIComponent(wasmResult.epubAuthor));
-          if (wasmResult.chapters && wasmResult.chapters.length > 0) {
-            // TOC is returned once; client caches it for the session.
-            const tocB64 = Buffer.from(JSON.stringify(wasmResult.chapters), 'utf8').toString('base64');
-            res.set('X-Asset-TOC', tocB64);
-          }
-          if (isEpub) {
-            // Strict CSP for sanitized HTML: no JS, no remote resources.
-            // Images are inlined as data-URIs by the WASM sanitizer.
-            res.set(
-              'Content-Security-Policy',
-              "default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:; base-uri 'none'; form-action 'none';",
-            );
-          }
-          res.send(wasmResult.rendered);
-          logger.info(`[SecureView] WASM rendered ${mime}: ${wasmResult.rendered.length} bytes (wasm: ${wasmResult.executionTimeMs}ms, total: ${Date.now() - requestStart}ms) for ${resolvedBuyer}`);
-          return;
-        }
-      } catch (wasmErr: any) {
-        logger.warn(`[SecureView] WASM renderer failed, falling back to Node.js: ${wasmErr.message}`);
-        // EPUB and CBZ have no Node.js fallback — surface the error.
-        if (isEpub || isCbz) {
-          res.status(500).json({ error: `Ebook/comic render failed: ${wasmErr.message}` });
-          return;
-        }
-      }
-    }
-
-    // ── Node.js Fallback Path ───────────────────────────
-    // Used for PDFs (WASM PDF not yet implemented) and when WASM fails.
-    const fallbackWasmRuntime = req.app.locals.wasmRuntime as WASMRuntime;
-    const decryptedBytes = await decryptAssetTwoLayer(effectiveBody, ipfsService, fallbackWasmRuntime);
-
-    // ── Image pipeline (fallback) ────────────────────────
-    if (mime.startsWith('image/')) {
-      let sharpMod: any;
-      try {
-        const mod = await import('sharp');
-        sharpMod = mod.default || mod;
-      } catch {
-        decryptedBytes.fill(0);
-        res.status(500).json({ error: 'Sharp not available for image rendering' });
-        return;
-      }
-
-      const watermarkText = `${buyerAddress.substring(0, 10)}...${buyerAddress.substring(buyerAddress.length - 6)}`;
-      const timestamp = new Date().toISOString().split('T')[0];
-
-      const metadata = await sharpMod(decryptedBytes).metadata();
-      const imgW = Math.min(metadata.width || 800, maxWidth);
-      const imgH = metadata.height ? Math.round(metadata.height * (imgW / (metadata.width || 800))) : 600;
-
-      const watermarkSvg = Buffer.from(`<svg width="${imgW}" height="${imgH}" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <pattern id="wm" x="0" y="0" width="320" height="180" patternUnits="userSpaceOnUse" patternTransform="rotate(-25)">
-            <text x="10" y="30" font-family="monospace" font-size="13" fill="rgba(255,255,255,0.18)" stroke="rgba(0,0,0,0.08)" stroke-width="0.5">${watermarkText}</text>
-            <text x="10" y="52" font-family="monospace" font-size="10" fill="rgba(255,255,255,0.12)">${timestamp}</text>
-          </pattern>
-        </defs>
-        <rect width="100%" height="100%" fill="url(#wm)"/>
-      </svg>`);
-
-      const rendered = await sharpMod(decryptedBytes)
-        .resize({ width: maxWidth, withoutEnlargement: true })
-        .composite([{ input: watermarkSvg, gravity: 'centre' }])
-        .jpeg({ quality: 82 })
-        .toBuffer();
-
-      decryptedBytes.fill(0);
-
-      res.set('Content-Type', 'image/jpeg');
-      res.set('Content-Length', String(rendered.length));
-      res.set('X-Renderer', 'nodejs-sharp');
-      res.send(rendered);
-
-      logger.info(`[SecureView] Image rendered (fallback): ${rendered.length} bytes (${imgW}x${imgH}, total: ${Date.now() - requestStart}ms) for ${buyerAddress}`);
+    // ── Content-type dispatch ─────────────────────────────────────────
+    const renderer = resolveRenderer(mime);
+    if (!renderer) {
+      res.status(415).json({
+        error: `Secure viewing not yet supported for ${mime}. Use /lit/decrypt for raw access.`,
+        mimeType: mime,
+      });
       return;
     }
 
-    // ── PDF pipeline ─────────────────────────────────────
-    if (mime === 'application/pdf') {
-      let pdfjsMod: any;
-      let canvasMod: any;
-      let sharpMod: any;
-      try {
-        pdfjsMod = await import('pdfjs-dist/legacy/build/pdf.mjs');
-        canvasMod = await import('canvas');
-        const smod = await import('sharp');
-        sharpMod = smod.default || smod;
-      } catch {
-        decryptedBytes.fill(0);
-        res.status(500).json({ error: 'PDF.js/Canvas/Sharp not available for PDF rendering' });
-        return;
-      }
+    const renderCtx: RenderContext = {
+      effectiveBody,
+      mime,
+      maxWidth,
+      page: pageNum,
+      chapter: typeof reqChapter === 'number' ? reqChapter : undefined,
+      viewportWidth: typeof reqViewportWidth === 'number' ? Math.min(Math.max(reqViewportWidth, 320), 1600) : undefined,
+      buyerAddress: resolvedBuyer,
+      ipfsService,
+      requestStart,
+    };
 
-      const createCanvas = canvasMod.createCanvas;
-      const registerFont = canvasMod.registerFont;
-      const uint8 = new Uint8Array(decryptedBytes);
-
-      const pdfjsResolved = fileURLToPath(import.meta.resolve('pdfjs-dist/legacy/build/pdf.mjs'));
-      const fontDir = join(dirname(pdfjsResolved), '..', '..', 'standard_fonts');
-
-      if (registerFont) {
-        const fonts = [
-          { file: 'LiberationSans-Regular.ttf', family: 'LiberationSans' },
-          { file: 'LiberationSans-Bold.ttf', family: 'LiberationSans', weight: 'bold' },
-          { file: 'LiberationSans-Italic.ttf', family: 'LiberationSans', style: 'italic' },
-          { file: 'LiberationSans-BoldItalic.ttf', family: 'LiberationSans', weight: 'bold', style: 'italic' },
-        ];
-        for (const f of fonts) {
-          try { registerFont(join(fontDir, f.file), { family: f.family, weight: f.weight, style: f.style }); } catch { /* already registered */ }
-        }
-      }
-
-      class NodeCanvasFactory {
-        create(w: number, h: number) { const c = createCanvas(w, h); return { canvas: c, context: c.getContext('2d') }; }
-        reset(cc: any, w: number, h: number) { cc.canvas.width = w; cc.canvas.height = h; }
-        destroy(cc: any) { cc.canvas.width = 0; cc.canvas.height = 0; }
-      }
-
-      const pdfDoc = await pdfjsMod.getDocument({
-        data: uint8,
-        canvasFactory: new NodeCanvasFactory(),
-        useSystemFonts: true,
-        disableFontFace: true,
-      }).promise;
-      const totalPages = pdfDoc.numPages;
-      const requestedPage = Math.max(1, Math.min(pageNum || 1, totalPages));
-
-      const pdfPage = await pdfDoc.getPage(requestedPage);
-      const viewport = pdfPage.getViewport({ scale: 1.0 });
-      const scale = Math.min(maxWidth / viewport.width, 2.0);
-      const scaledVp = pdfPage.getViewport({ scale });
-
-      const cvs = createCanvas(scaledVp.width, scaledVp.height);
-      const ctx = cvs.getContext('2d');
-
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, scaledVp.width, scaledVp.height);
-
-      await pdfPage.render({ canvasContext: ctx, viewport: scaledVp }).promise;
-
-      const textContent = await pdfPage.getTextContent();
-      ctx.fillStyle = '#000000';
-      for (const item of textContent.items as any[]) {
-        if (!item.str || !item.transform) continue;
-        const tx = item.transform;
-        const fontSize = Math.sqrt(tx[0] * tx[0] + tx[1] * tx[1]) * scale;
-        const x = tx[4] * scale;
-        const y = scaledVp.height - (tx[5] * scale);
-        ctx.font = `${fontSize}px LiberationSans, Helvetica, Arial, sans-serif`;
-        ctx.fillText(item.str, x, y);
-      }
-
-      const wmText = `${buyerAddress.substring(0, 10)}...${buyerAddress.substring(buyerAddress.length - 6)}`;
-      ctx.save();
-      ctx.globalAlpha = 0.08;
-      ctx.font = '18px monospace';
-      ctx.fillStyle = '#888';
-      ctx.translate(scaledVp.width / 2, scaledVp.height / 2);
-      ctx.rotate(-Math.PI / 6);
-      for (let y = -scaledVp.height; y < scaledVp.height; y += 120) {
-        for (let x = -scaledVp.width; x < scaledVp.width; x += 280) {
-          ctx.fillText(wmText, x, y);
-        }
-      }
-      ctx.restore();
-
-      const pngBuf = cvs.toBuffer('image/png');
-      decryptedBytes.fill(0);
-
-      const rendered = await sharpMod(pngBuf).jpeg({ quality: 85 }).toBuffer();
-
-      res.set('Content-Type', 'image/jpeg');
-      res.set('Content-Length', String(rendered.length));
-      res.set('X-Asset-Pages', String(totalPages));
-      res.set('X-Asset-Page', String(requestedPage));
-      res.set('X-Renderer', 'nodejs-pdfjs');
-      res.send(rendered);
-
-      logger.info(`[SecureView] PDF page ${requestedPage}/${totalPages} rendered: ${rendered.length} bytes (total: ${Date.now() - requestStart}ms) for ${buyerAddress}`);
-      return;
-    }
-
-    // ── Text pipeline (fallback) ─────────────────────────
-    if (mime.startsWith('text/')) {
-      let canvasMod: any;
-      let sharpMod: any;
-      try {
-        canvasMod = await import('canvas');
-        const smod = await import('sharp');
-        sharpMod = smod.default || smod;
-      } catch {
-        decryptedBytes.fill(0);
-        res.status(500).json({ error: 'Canvas/Sharp not available for text rendering' });
-        return;
-      }
-
-      const createCanvas = canvasMod.createCanvas;
-      const text = decryptedBytes.toString('utf8');
-      decryptedBytes.fill(0);
-
-      const fontSize = 14;
-      const lineHeight = 20;
-      const padding = 24;
-      const canvasW = 640;
-      const maxCharsPerLine = Math.floor((canvasW - padding * 2) / (fontSize * 0.6));
-      const maxOutputLines = 2000;
-
-      // Word-wrap all lines
-      const wrappedLines: string[] = [];
-      for (const rawLine of text.split('\n')) {
-        if (wrappedLines.length >= maxOutputLines) break;
-        if (rawLine.trim() === '') {
-          wrappedLines.push('');
-          continue;
-        }
-        const words = rawLine.split(/\s+/);
-        let current = '';
-        for (const word of words) {
-          if (wrappedLines.length >= maxOutputLines) break;
-          if (current.length + word.length + 1 > maxCharsPerLine && current.length > 0) {
-            wrappedLines.push(current);
-            current = '';
-          }
-          if (word.length > maxCharsPerLine && current.length === 0) {
-            for (let s = 0; s < word.length && wrappedLines.length < maxOutputLines; s += maxCharsPerLine) {
-              wrappedLines.push(word.substring(s, s + maxCharsPerLine));
-            }
-            continue;
-          }
-          current = current.length > 0 ? current + ' ' + word : word;
-        }
-        if (current.length > 0 && wrappedLines.length < maxOutputLines) {
-          wrappedLines.push(current);
-        }
-      }
-
-      const canvasH = Math.max(200, padding * 2 + wrappedLines.length * lineHeight);
-
-      const cvs = createCanvas(canvasW, canvasH);
-      const ctx = cvs.getContext('2d');
-
-      ctx.fillStyle = '#1e1e1e';
-      ctx.fillRect(0, 0, canvasW, canvasH);
-
-      ctx.fillStyle = '#d4d4d4';
-      ctx.font = `${fontSize}px monospace`;
-      ctx.textBaseline = 'top';
-
-      let y = padding;
-      for (const line of wrappedLines) {
-        if (y + lineHeight > canvasH - padding) break;
-        ctx.fillText(line, padding, y);
-        y += lineHeight;
-      }
-
-      const wmText = `${buyerAddress.substring(0, 10)}...${buyerAddress.substring(buyerAddress.length - 6)}`;
-      ctx.save();
-      ctx.globalAlpha = 0.06;
-      ctx.font = '16px monospace';
-      ctx.fillStyle = '#aaa';
-      ctx.translate(canvasW / 2, canvasH / 2);
-      ctx.rotate(-Math.PI / 6);
-      for (let wy = -canvasH; wy < canvasH; wy += 100) {
-        for (let wx = -canvasW; wx < canvasW; wx += 260) {
-          ctx.fillText(wmText, wx, wy);
-        }
-      }
-      ctx.restore();
-
-      const pngBuf = cvs.toBuffer('image/png');
-      const rendered = await sharpMod(pngBuf).jpeg({ quality: 85 }).toBuffer();
-
-      res.set('Content-Type', 'image/jpeg');
-      res.set('Content-Length', String(rendered.length));
-      res.set('X-Renderer', 'nodejs-canvas');
-      res.send(rendered);
-
-      logger.info(`[SecureView] Text rendered (fallback): ${rendered.length} bytes (${wrappedLines.length} lines, total: ${Date.now() - requestStart}ms) for ${buyerAddress}`);
-      return;
-    }
-
-    // ── Audio passthrough ─────────────────────────────────
-    // Audio can't be rendered as an image — decrypt and pass through for playback.
-    // The viewer displays an HTML5 audio player with anti-piracy measures.
-    if (mime.startsWith('audio/')) {
-      const audioLen = decryptedBytes.length;
-      res.set('Content-Type', mime);
-      res.set('Content-Length', String(audioLen));
-      res.set('X-Renderer', 'passthrough');
-      res.set('X-Asset-Type', 'audio');
-      res.send(Buffer.from(decryptedBytes));
-      decryptedBytes.fill(0);
-      logger.info(`[SecureView] Audio passthrough: ${mime}, ${audioLen} bytes (total: ${Date.now() - requestStart}ms) for ${buyerAddress}`);
-      return;
-    }
-
-    // ── Interactive content passthrough ───────────────────
-    // 3D models, datasets, fonts, and archives are decrypted via WASM (CEK
-    // stays in WASM linear memory) then passed to the client for interactive
-    // rendering (Three.js, table, @font-face, JSZip). Blob URLs are revoked
-    // after the client loads the content.
-    const passthroughPrefixes = ['model/', 'font/'];
-    const passthroughExact = [
-      'text/csv', 'text/tab-separated-values',
-      'application/zip', 'application/gzip', 'application/x-tar',
-      'application/vnd.ms-fontobject',
-    ];
-    const isPassthrough = passthroughPrefixes.some(p => mime.startsWith(p)) || passthroughExact.includes(mime);
-    if (isPassthrough) {
-      const len = decryptedBytes.length;
-      res.set('Content-Type', mime);
-      res.set('Content-Length', String(len));
-      res.set('X-Renderer', 'passthrough');
-      res.set('X-Asset-Type', mime.split('/')[0]);
-      res.send(Buffer.from(decryptedBytes));
-      decryptedBytes.fill(0);
-      logger.info(`[SecureView] Passthrough: ${mime}, ${len} bytes (total: ${Date.now() - requestStart}ms) for ${buyerAddress}`);
-      return;
-    }
-
-    // ── Unsupported type ─────────────────────────────────
-    decryptedBytes.fill(0);
-    res.status(415).json({
-      error: `Secure viewing not yet supported for ${mime}. Use /lit/decrypt for raw access.`,
-      mimeType: mime,
+    const wasmRuntime = req.app.locals.wasmRuntime as WASMRuntime;
+    const output = await renderer.render(renderCtx, {
+      renderViaWASM: (params, mime, maxWidth, page, ipfsService, chapter, viewportWidth) =>
+        renderViaWASM(params, mime, maxWidth, wasmRuntime, page, ipfsService, chapter, viewportWidth),
+      decryptAssetTwoLayer: (params, ipfsService) =>
+        decryptAssetTwoLayer(params, ipfsService, wasmRuntime),
     });
 
+    for (const [key, value] of Object.entries(output.headers)) {
+      res.set(key, value);
+    }
+
+    if (output.status !== 200) {
+      res.status(output.status).json(output.errorBody);
+      return;
+    }
+
+    res.set('Content-Type', output.contentType!);
+    res.set('Content-Length', String(output.body!.length));
+    res.send(output.body);
   } catch (error: any) {
     logger.error('[SecureView] Error:', error);
     const status = error.message?.includes('Access denied') ? 403 : 500;
@@ -3698,10 +2881,7 @@ router.post('/lit/deploy-action', authenticate, async (req: AuthenticatedRequest
     }
 
     NON_MEDIA_ACTION_CID = cid;
-    logger.info(`[Lit] Non-media Lit Action deployed: ${cid}`);
-
-    const cidPath = join(__litDirname, '../../data/.lit-action-cid');
-    writeFileSync(cidPath, cid, 'utf8');
+    logger.info(`[Lit] Non-media Lit Action deployed: ${cid} (in-process only — update supernode provision to persist across restarts)`);
 
     res.json({
       success: true,
@@ -3838,10 +3018,10 @@ router.post('/ipfs/upload-elacity', authenticate, async (req: AuthenticatedReque
     const cidV1 = CID.parse(cidV1String);
     const DAG_PB_CODEC = 0x70;
     let finalCid: string;
-    if ( cidV1.code === DAG_PB_CODEC ) {
+    if (cidV1.code === DAG_PB_CODEC) {
       try {
         finalCid = cidV1.toV0().toString();
-      } catch ( err ) {
+      } catch (err) {
         logger.warn(`[IPFS-Elacity] Unexpected CIDv1→CIDv0 conversion failure (codec=dag-pb): ${(err as Error).message} — using v1`);
         finalCid = cidV1String;
       }
@@ -3924,10 +3104,10 @@ router.post('/ipfs/upload-elacity-directory', authenticate, async (req: Authenti
     const cidV1 = CID.parse(cidV1String);
     const DAG_PB_CODEC = 0x70;
     let cidV0String: string;
-    if ( cidV1.code === DAG_PB_CODEC ) {
+    if (cidV1.code === DAG_PB_CODEC) {
       try {
         cidV0String = cidV1.toV0().toString();
-      } catch ( err ) {
+      } catch (err) {
         logger.warn(`[IPFS-Elacity] Unexpected CIDv1→CIDv0 conversion failure (codec=dag-pb): ${(err as Error).message} — using v1`);
         cidV0String = cidV1String;
       }
@@ -3992,23 +3172,4 @@ router.post('/ipfs/upload-elacity-directory', authenticate, async (req: Authenti
   }
 });
 
-// Backend-specific initialization
-// Lit SDK (Datil) is ALWAYS needed for encryption (Chipotle doesn't support it).
-// Pre-warm the SDK lazily — it connects on first encrypt request.
-if (LIT_BACKEND === 'datil') {
-  // Full pre-warm: Datil used for both decrypt AND encrypt
-  setTimeout(async () => {
-    try {
-      const [wallet, client] = await Promise.all([getServerWallet(), getLitClient()]);
-      await getExecuteSessionSigs(client, wallet);
-      logger.info('[Lit] Pre-warm complete: Datil client connected + session sigs cached');
-    } catch (err: any) {
-      logger.warn(`[Lit] Pre-warm failed (will retry on first request): ${err.message}`);
-    }
-  }, 2000);
-} else {
-  logger.info('[Lit] Chipotle REST backend for decrypt. Datil SDK will lazy-connect on first encrypt request.');
-}
-
-export { getServerWallet, getLitClient, getExecuteSessionSigs, ensureDelegateeRegistered, getCapacityWallet, detectCapacityTokenId };
 export default router;

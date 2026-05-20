@@ -4,12 +4,22 @@
   "description": "AES-128-CTR CENC encryption + PSSH generation for fMP4 media",
   "target": "wasm32-wasip1",
   "binary": "cenc-encrypt.wasm",
-  "sha256": null,
-  "capabilities": ["drm:encrypt"],
-  "provider_operations": ["drm:encrypt-media"],
+  "sha256": "7a96a641f0978ed1fa6727090bb9b9c8179b660cf17e4185da23b2a369e99238",
+  "capabilities": [
+    "drm:encrypt"
+  ],
+  "provider_operations": [
+    "drm:encrypt-media"
+  ],
   "memfs": {
-    "input": ["/input/command.json", "/input/segment.bin"],
-    "output": ["/output/result.json", "/output/segment.bin"]
+    "input": [
+      "/input/command.json",
+      "/input/segment.bin"
+    ],
+    "output": [
+      "/output/result.json",
+      "/output/segment.bin"
+    ]
   },
   "runtime_compatibility": {
     "wasi_preview": 1,

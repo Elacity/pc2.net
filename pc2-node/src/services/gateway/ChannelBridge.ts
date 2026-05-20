@@ -112,20 +112,20 @@ export class ChannelBridge {
   private filesystem?: FilesystemManager;
   private io?: any;  // Socket.IO for WebSocket events
   private ownerWalletAddress?: string;  // PC2 node owner's wallet for API key lookup
-  
+
   // Session storage (keyed by channel:senderId or channel:groupId)
   private sessions: Map<string, SessionContext> = new Map();
-  
+
   // Session timeout (30 minutes)
   private readonly SESSION_TIMEOUT = 30 * 60 * 1000;
-  
+
   // Max history per session
   private readonly MAX_HISTORY = 20;
-  
+
   // Ownership verification cache for purchased skills: skillId -> { verified, expiresAt }
   private ownershipCache: Map<string, { verified: boolean; expiresAt: number }> = new Map();
   private readonly OWNERSHIP_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-  
+
   constructor(
     aiService: AIChatService,
     gateway: GatewayService,
@@ -142,31 +142,31 @@ export class ChannelBridge {
     this.filesystem = options?.filesystem;
     this.ownerWalletAddress = options?.ownerWalletAddress;
     this.io = options?.io;
-    
+
     // Register message handler with gateway
     this.gateway.setMessageHandler(this.handleMessage.bind(this));
-    
+
     // Start session cleanup timer
     setInterval(() => this.cleanupSessions(), 5 * 60 * 1000); // Every 5 minutes
-    
+
     logger.info('[ChannelBridge] Initialized');
   }
-  
+
   /**
    * Handle an inbound message from a channel
    */
   async handleMessage(message: ChannelMessage): Promise<void> {
     const { channel, sender, content } = message;
-    
+
     logger.info(`[ChannelBridge] Processing message from ${channel}`, {
       sender: sender.id,
       isGroup: sender.isGroup,
       textLength: content.text?.length,
     });
-    
+
     // Get or create session
     const session = this.getOrCreateSession(message);
-    
+
     // Get agent for this session
     const agent = this.getAgentForSession(session);
     if (!agent) {
@@ -174,13 +174,13 @@ export class ChannelBridge {
       await this.sendErrorReply(message, 'No AI agent configured. Please check your PC2 settings.');
       return;
     }
-    
+
     // Check if agent is enabled
     if (!agent.enabled) {
       await this.sendErrorReply(message, 'This AI agent is currently disabled.');
       return;
     }
-    
+
     // Add user message to history
     session.messageHistory.push({
       role: 'user',
@@ -189,18 +189,18 @@ export class ChannelBridge {
       channel,
       senderName: sender.name,
     });
-    
+
     // Trim history if too long
     if (session.messageHistory.length > this.MAX_HISTORY) {
       session.messageHistory = session.messageHistory.slice(-this.MAX_HISTORY);
     }
-    
+
     session.lastActivity = new Date();
-    
+
     try {
       // Process message with AI
       const response = await this.processWithAI(message, session, agent);
-      
+
       // Add assistant response to history
       session.messageHistory.push({
         role: 'assistant',
@@ -208,16 +208,16 @@ export class ChannelBridge {
         timestamp: new Date().toISOString(),
         channel,
       });
-      
+
       // Send reply
       await this.sendReply(message, response);
-      
+
     } catch (error: any) {
       logger.error(`[ChannelBridge] Error processing message:`, error);
       await this.sendErrorReply(message, 'Sorry, I encountered an error. Please try again.');
     }
   }
-  
+
   /**
    * Process a message with the AI service
    */
@@ -227,11 +227,11 @@ export class ChannelBridge {
     agent: AgentConfig
   ): Promise<string> {
     const { content } = message;
-    
+
     // Get channel settings for model selection
     const channelConfig = this.gateway.getChannelConfig(session.channel);
     const channelModel = channelConfig?.settings?.model;
-    
+
     // Load persistent memory for the agent using AgentMemoryManager
     let memoryContent: string | undefined;
     if (this.filesystem && this.ownerWalletAddress) {
@@ -242,10 +242,10 @@ export class ChannelBridge {
           this.ownerWalletAddress,
           agent.id
         );
-        
+
         // Build full memory context string (includes MEMORY.md + recent daily notes)
         memoryContent = await memoryManager.buildContextString();
-        
+
         if (memoryContent) {
           logger.info('[ChannelBridge] Loaded agent memory:', {
             agentId: agent.id,
@@ -257,7 +257,7 @@ export class ChannelBridge {
         logger.debug('[ChannelBridge] No memory for agent:', agent.id, error.message);
       }
     }
-    
+
     // Load active skills with metadata for trust boundary enforcement
     const MAX_ACTIVE_SKILLS = 10;
     let loadedSkills: LoadedSkill[] = [];
@@ -288,16 +288,16 @@ export class ChannelBridge {
         }
       }
     }
-    
+
     // Build messages array for AI with memory context and skills
     const messages = this.buildMessages(session, agent, content.text || '', memoryContent, loadedSkills);
-    
+
     // Get tool filter based on agent permissions
     const toolFilter = this.getToolFilter(agent.permissions);
-    
+
     // Determine which model to use: channel setting > agent setting > default
     let modelToUse = channelModel || agent.model;
-    
+
     // Ensure the model includes the provider prefix for proper routing
     // The AI service uses "provider:model" format to determine which provider to use
     if (modelToUse && !modelToUse.includes(':')) {
@@ -307,21 +307,21 @@ export class ChannelBridge {
         modelToUse = `${provider}:${modelToUse}`;
       }
     }
-    
+
     // Build request based on agent permissions
     // Always pass walletAddress for API key lookup (Claude, OpenAI, etc.)
     // But only provide filesystem when file permissions allow
     // Tools are only enabled when BOTH filesystem AND walletAddress are provided
     const hasAnyFilePermission = toolFilter.allowFilesystemRead || toolFilter.allowFilesystemWrite;
     const hasWalletPermission = toolFilter.allowWalletRead;
-    
+
     // Map thinking level to temperature
     // fast = 0.3 (quick, deterministic, cheaper)
     // balanced = 0.7 (default)
     // deep = 0.9 (thorough, creative, costlier)
     const temperatureMap: Record<string, number> = { fast: 0.3, balanced: 0.7, deep: 0.9 };
     const temperature = temperatureMap[agent.thinkingLevel || 'fast'];
-    
+
     // For tools to work, AIChatService requires both filesystem AND walletAddress
     // So we control tools by controlling whether we pass filesystem
     const request: CompleteRequest = {
@@ -337,7 +337,7 @@ export class ChannelBridge {
       // Pass agent ID for per-agent memory isolation
       agentId: agent.id,
     };
-    
+
     logger.info(`[ChannelBridge] Sending to AI`, {
       agent: agent.id,
       model: modelToUse,
@@ -349,10 +349,10 @@ export class ChannelBridge {
       hasWallet: !!request.walletAddress,
       toolsEnabled: !!request.filesystem && !!request.walletAddress,
     });
-    
+
     // Get AI response
     const completion = await this.aiService.complete(request);
-    
+
     // Extract text response
     const responseText = this.extractResponseText(completion);
 
@@ -365,10 +365,10 @@ export class ChannelBridge {
         responseLength: responseText.length,
       }, undefined, sessionKey);
     }
-    
+
     return responseText;
   }
-  
+
   /**
    * Build messages array for AI, including system prompt and history
    */
@@ -380,11 +380,11 @@ export class ChannelBridge {
     loadedSkills?: LoadedSkill[]
   ): Array<{ role: 'system' | 'user' | 'assistant'; content: string }> {
     const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [];
-    
+
     // System prompt with agent context, memory, and skills
     const systemPrompt = this.buildSystemPrompt(session, agent, memoryContent, loadedSkills);
     messages.push({ role: 'system', content: systemPrompt });
-    
+
     // Add history (excluding the current message which is added separately)
     const historyToInclude = session.messageHistory.slice(0, -1);
     for (const msg of historyToInclude) {
@@ -393,13 +393,13 @@ export class ChannelBridge {
         content: msg.content,
       });
     }
-    
+
     // Add current message
     messages.push({ role: 'user', content: currentMessage });
-    
+
     return messages;
   }
-  
+
   /**
    * Compute SHA-256 hash of content.
    */
@@ -575,10 +575,10 @@ export class ChannelBridge {
    */
   private buildSystemPrompt(session: SessionContext, agent: AgentConfig, memoryContent?: string, loadedSkills?: LoadedSkill[]): string {
     const parts: string[] = [];
-    
+
     // Get soul content from agent configuration (not channel settings)
     const soulContent = agent.soulContent || agent.customSoul;
-    
+
     // Agent identity with soul/personality
     if (soulContent) {
       // Use custom soul content from agent
@@ -589,11 +589,11 @@ export class ChannelBridge {
       parts.push(`You are ${agent.name}, an AI assistant running on a PC2 sovereign node.`);
       parts.push(`\nThe user is messaging you via ${session.channel}.`);
     }
-    
+
     if (session.isGroup) {
       parts.push(`This is a group chat.`);
     }
-    
+
     // Inject persistent memory if available
     if (memoryContent && memoryContent.trim()) {
       parts.push(`\n## Your Memory`);
@@ -601,11 +601,11 @@ export class ChannelBridge {
       parts.push(memoryContent);
       parts.push(`\nYou can use the update_memory tool to save new important facts about the user.`);
     }
-    
+
     // Permissions context
     const perms = agent.permissions;
     parts.push(`\n## Your Capabilities`);
-    
+
     if (perms.fileRead) {
       parts.push(`- You can read files from the user's PC2 storage`);
     }
@@ -622,7 +622,7 @@ export class ChannelBridge {
     if (perms.reminders) {
       parts.push(`- You can set reminders and scheduled tasks`);
     }
-    
+
     // Inject active skills with trust boundaries
     if (loadedSkills && loadedSkills.length > 0) {
       parts.push(`\n## Active Skills`);
@@ -639,7 +639,7 @@ export class ChannelBridge {
         parts.push(`\n[End of skill: ${skill.name}]`);
       }
     }
-    
+
     // Restrictions
     parts.push(`\n## Restrictions`);
     if (!perms.fileWrite) {
@@ -654,7 +654,7 @@ export class ChannelBridge {
     parts.push(`- You CANNOT send cryptocurrency transactions via messaging (this is disabled for security)`);
     parts.push(`- You CANNOT call transfer_tokens, swap_tokens, or any transaction-creating functions`);
     parts.push(`- If user asks to send/transfer/swap crypto, explain they must do this from the PC2 desktop interface`);
-    
+
     // Response guidelines based on personality
     parts.push(`\n## Response Guidelines`);
     parts.push(`- Keep responses concise as they're sent via messaging`);
@@ -663,7 +663,7 @@ export class ChannelBridge {
       parts.push(`- Be helpful, friendly, and respect user privacy`);
     }
     parts.push(`- If you cannot do something, explain why clearly`);
-    
+
     const prompt = parts.join('\n');
     logger.debug('[ChannelBridge] System prompt built', {
       agentId: agent.id,
@@ -672,7 +672,7 @@ export class ChannelBridge {
     });
     return prompt;
   }
-  
+
   /**
    * Get tool filter based on agent permissions
    */
@@ -685,7 +685,7 @@ export class ChannelBridge {
       allowSettings: false,     // Agents shouldn't modify settings
     };
   }
-  
+
   /**
    * Extract text response from AI completion
    */
@@ -694,38 +694,38 @@ export class ChannelBridge {
     if (typeof completion === 'string') {
       return completion;
     }
-    
+
     if (completion.content) {
       return completion.content;
     }
-    
+
     if (completion.message?.content) {
       return completion.message.content;
     }
-    
+
     if (completion.choices?.[0]?.message?.content) {
       return completion.choices[0].message.content;
     }
-    
+
     logger.warn('[ChannelBridge] Unexpected completion format:', completion);
     return 'I processed your message but had trouble formatting the response.';
   }
-  
+
   /**
    * Get or create a session for a message
    */
   private getOrCreateSession(message: ChannelMessage): SessionContext {
     const { channel, sender } = message;
-    const sessionKey = sender.isGroup 
+    const sessionKey = sender.isGroup
       ? `${channel}:group:${sender.groupId}`
       : `${channel}:dm:${sender.id}`;
-    
+
     let session = this.sessions.get(sessionKey);
-    
+
     if (!session) {
       // Determine which agent handles this channel
       const agentId = this.getAgentIdForChannel(channel, sender.id);
-      
+
       session = {
         agentId,
         channel,
@@ -736,27 +736,27 @@ export class ChannelBridge {
         messageHistory: [],
         lastActivity: new Date(),
       };
-      
+
       this.sessions.set(sessionKey, session);
       logger.info(`[ChannelBridge] Created new session: ${sessionKey}`);
     } else if (sender.name && !session.senderName) {
       // Update sender name if we didn't have it before
       session.senderName = sender.name;
     }
-    
+
     return session;
   }
-  
+
   /**
    * Determine which agent should handle a channel/sender
    */
   private getAgentIdForChannel(channel: ChannelType, senderId: string): string {
     const agents = this.gateway.getAgents();
     const savedChannels = this.gateway.getSavedChannels();
-    
+
     // Find saved channels of this type
     const channelsOfType = savedChannels.filter(c => c.type === channel);
-    
+
     // Find an agent tethered to any of these saved channels
     for (const agent of agents) {
       if (agent.enabled && agent.tetheredChannels) {
@@ -767,19 +767,19 @@ export class ChannelBridge {
         }
       }
     }
-    
+
     // Fall back to default agent
     const config = this.gateway.getConfig();
     return config.defaultAgentId;
   }
-  
+
   /**
    * Get agent configuration for a session
    */
   private getAgentForSession(session: SessionContext): AgentConfig | undefined {
     return this.gateway.getAgent(session.agentId);
   }
-  
+
   /**
    * Send a reply to a channel
    */
@@ -787,7 +787,7 @@ export class ChannelBridge {
     const reply: ChannelReply = {
       channel: originalMessage.channel,
       target: {
-        id: originalMessage.sender.isGroup 
+        id: originalMessage.sender.isGroup
           ? originalMessage.sender.groupId!
           : originalMessage.sender.id,
         isGroup: originalMessage.sender.isGroup,
@@ -797,43 +797,43 @@ export class ChannelBridge {
         replyToId: originalMessage.id,
       },
     };
-    
+
     await this.gateway.sendReply(reply);
   }
-  
+
   /**
    * Send an error reply
    */
   private async sendErrorReply(originalMessage: ChannelMessage, errorText: string): Promise<void> {
     await this.sendReply(originalMessage, `❌ ${errorText}`);
   }
-  
+
   /**
    * Cleanup expired sessions
    */
   private cleanupSessions(): void {
     const now = Date.now();
     let cleaned = 0;
-    
+
     for (const [key, session] of this.sessions) {
       if (now - session.lastActivity.getTime() > this.SESSION_TIMEOUT) {
         this.sessions.delete(key);
         cleaned++;
       }
     }
-    
+
     if (cleaned > 0) {
       logger.info(`[ChannelBridge] Cleaned up ${cleaned} expired sessions`);
     }
   }
-  
+
   /**
    * Get session count (for monitoring)
    */
   getSessionCount(): number {
     return this.sessions.size;
   }
-  
+
   /**
    * Get sessions for a specific channel (for debugging)
    */

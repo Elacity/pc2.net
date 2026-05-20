@@ -13,6 +13,7 @@ import { createLogger } from './logger.js';
 const log = createLogger('rpc');
 
 const DEFAULT_BASE_RPC_URLS = [
+  'https://base.gateway.tenderly.co/3qh3pdc6nLsJ7QdAOn3mNb',
   'https://mainnet.base.org',
   'https://base.llamarpc.com',
   'https://base-rpc.publicnode.com',

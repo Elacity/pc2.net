@@ -4,20 +4,21 @@
  * Replaces the entire Lit SDK (@lit-protocol/*) with a single HTTP call.
  * No SIWE, no session sigs, no capacity credits, no WebSocket connections.
  *
- * Three-tier API key resolution:
- *   Tier 1: Elacity-provided shared key (default for all PC2 nodes)
- *   Tier 2: User-provided key (self-sovereign, set in Settings UI)
- *   Tier 3: Future — Elacity dDRM API product key
+ * Execution is routed through an Elacity-hosted proxy that holds the
+ * X-Api-Key server-side — the client never handles the key.
  *
- * Auto-provisioning: If no key is found locally, the client fetches
- * the shared config from an Elacity supernode on first use.
+ * Config resolution is now two-source only:
+ *   - data/.chipotle-provision.json (signed envelope from supernode)
+ *   - in-code constants (hardcoded fallbacks below)
+ *
+ * The supernode-served `usageKey` is no longer persisted to disk.
  */
 
 import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import https from 'https';
-import { createPublicKey, verify as cryptoVerify } from 'crypto';
+import { createPublicKey, randomBytes, verify as cryptoVerify } from 'crypto';
 import { createLogger } from '../utils/logger.js';
 import { getBaseRpcUrl } from '../utils/rpc.js';
 import { recordMetricCounter, recordMetricHistogram } from '../utils/metrics.js';
@@ -31,17 +32,17 @@ const logger = createLogger('chipotle');
  * privacy + cardinality concern (uncapped error strings would let raw
  * KIDs / addresses leak into telemetry tags).
  */
-function classifyChipotleError (err: unknown): string {
-    const msg = (err instanceof Error ? err.message : String(err || '')).toLowerCase();
-    if (msg.includes('lit action denied')) return 'action_denied';
-    if (msg.includes('invalid cek')) return 'bad_cek';
-    if (msg.includes('rate') && msg.includes('limit')) return 'rate_limited';
-    if (msg.includes('timeout') || msg.includes('etimedout')) return 'timeout';
-    if (msg.includes('fetch') || msg.includes('network') || msg.includes('econnrefused')) return 'network';
-    if (msg.includes('unauthorized') || msg.includes('401')) return 'unauthorized';
-    if (msg.includes('forbidden') || msg.includes('403')) return 'forbidden';
-    if (msg.includes('500') || msg.includes('502') || msg.includes('503')) return 'server_error';
-    return 'other';
+function classifyChipotleError(err: unknown): string {
+  const msg = (err instanceof Error ? err.message : String(err || '')).toLowerCase();
+  if (msg.includes('lit action denied')) return 'action_denied';
+  if (msg.includes('invalid cek')) return 'bad_cek';
+  if (msg.includes('rate') && msg.includes('limit')) return 'rate_limited';
+  if (msg.includes('timeout') || msg.includes('etimedout')) return 'timeout';
+  if (msg.includes('fetch') || msg.includes('network') || msg.includes('econnrefused')) return 'network';
+  if (msg.includes('unauthorized') || msg.includes('401')) return 'unauthorized';
+  if (msg.includes('forbidden') || msg.includes('403')) return 'forbidden';
+  if (msg.includes('500') || msg.includes('502') || msg.includes('503')) return 'server_error';
+  return 'other';
 }
 
 const __filename = fileURLToPath(import.meta.url);
@@ -50,15 +51,24 @@ const DATA_DIR = join(__dirname, '../../data');
 
 // ── File Paths ───────────────────────────────────────────────────────────────
 
-const CHIPOTLE_KEY_PATH = join(DATA_DIR, '.chipotle-api-key');
-const USER_KEY_PATH = join(DATA_DIR, '.chipotle-user-key');
-const LIT_ACTION_CID_PATH = join(DATA_DIR, '.lit-action-cid');
 const PROVISION_CACHE_PATH = join(DATA_DIR, '.chipotle-provision.json');
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
+// Allowlist values for `apiUrl` in supernode-served provision blobs. The
+// field is validated for defense-in-depth even though execution always
+// routes through LIT_ACTION_PROXY_URL below.
 const DEFAULT_API_URL = 'https://api.chipotle.litprotocol.com';
 const DEV_API_URL = 'https://api.dev.litprotocol.com';
+
+// Lit action execution is routed through an Elacity-hosted proxy that holds
+// the X-Api-Key server-side. The proxy forwards to the Lit API verbatim, so
+// callers append the same `/core/v1/...` path.
+const LIT_ACTION_PROXY_URL = 'https://europe-west1-elacity.cloudfunctions.net/chipotle-proxy';
+
+// Universal Lit Action CIDs — V3 unified encrypt/decrypt
+export const UNIVERSAL_ENCRYPT_CID = 'QmVEz3dDnQD1n96gMd2mFZWXdEDsRiPMumx86qMzhT35gY';
+export const UNIVERSAL_DECRYPT_CID = 'QmPBjQD7V4aFTZPxUwZ9gDPFJtcJ4SvsJdTh3QexTyRBbj';
 
 const DEFAULT_AUTHORITY = '0x09dBe796f40ECEffEAccf243c3d758C4c1d8D87D';
 const DEFAULT_CHAIN = 'base';
@@ -111,13 +121,18 @@ const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export interface ChipotleConfig {
-  apiUrl?: string;
-  apiKey?: string;
   pkpId?: string;
 }
 
 export interface LitActionParams {
   code: string;
+  /**
+   * Optional IPFS CID of the Lit Action. When present, executeLitAction
+   * first attempts to invoke the action by CID reference (server-cached),
+   * and falls back to sending the full `code` only if Chipotle returns a
+   * "No cached code found" error. Saves bandwidth on hot actions.
+   */
+  ipfsId?: string;
   jsParams: Record<string, unknown>;
 }
 
@@ -142,19 +157,6 @@ export interface SecureViewSessionBundle {
   requestSig: `0x${string}`;
 }
 
-export interface NonMediaDecryptParams {
-  litCiphertext: string;
-  dataToEncryptHash: string;
-  kid: string;
-  buyerAddress: string;
-  actionCid?: string;
-  authority?: string;
-  chain?: string;
-  chainId?: number;
-  rpc?: string;
-  secureViewSession?: SecureViewSessionBundle;
-}
-
 export interface MediaDecryptParams {
   litCiphertext: string;
   dataToEncryptHash: string;
@@ -171,12 +173,16 @@ export interface MediaDecryptParams {
 
 export interface EncryptParams {
   dataToEncrypt: Uint8Array;
+  kid?: string;
+  authority?: string;
   accessControlConditions: Record<string, unknown>[];
 }
 
 export interface EncryptResult {
   ciphertext: string;
   dataToEncryptHash: string;
+  issuer?: string;
+  signature?: string;
 }
 
 // ── Auto-Provisioning from Supernode ─────────────────────────────────────────
@@ -185,16 +191,17 @@ interface ProvisionConfig {
   version: number;
   network: string;
   apiUrl: string;
-  usageKey: string;
+  // usageKey is intentionally NOT part of the persisted shape — the proxy
+  // holds it server-side. Supernodes may still include it in the signed
+  // envelope (legacy), in which case it's stripped before write.
   pkpId: string;
   authority: string;
   chain: string;
   chainId: number;
   rpc: string;
   actions: {
-    nonMediaEncrypt: string;
-    nonMediaDecrypt: string;
-    mediaDecrypt?: string;
+    encrypt: string;
+    decrypt: string;
   };
 }
 
@@ -271,9 +278,6 @@ function validateProvisionPayload(p: ProvisionConfig): { ok: true } | { ok: fals
   if (!p || typeof p !== 'object') return { ok: false, reason: 'payload_not_object' };
   if (typeof p.apiUrl !== 'string' || !ALLOWED_PROVISION_API_URLS.has(p.apiUrl)) {
     return { ok: false, reason: `apiUrl_not_allowlisted:${p.apiUrl}` };
-  }
-  if (typeof p.usageKey !== 'string' || p.usageKey.length < 16 || p.usageKey === 'REPLACE_WITH_USAGE_API_KEY') {
-    return { ok: false, reason: 'usageKey_missing_or_placeholder' };
   }
   if (typeof p.pkpId !== 'string' || !p.pkpId.startsWith('0x')) {
     return { ok: false, reason: 'pkpId_invalid' };
@@ -394,11 +398,13 @@ async function fetchProvisionFromSupernode(): Promise<ProvisionConfig | null> {
         logger.warn(`[Chipotle] Supernode ${url} rejected: ${result.reason}`);
         continue;
       }
-      const config = result.config;
+      // Strip usageKey before persisting — proxy holds the API key
+      // server-side; PC2 never needs it on disk.
+      const { usageKey: _unused, ...persistable } = result.config as ProvisionConfig & { usageKey?: string };
+      const config = persistable as ProvisionConfig;
 
       if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
       writeFileSync(PROVISION_CACHE_PATH, JSON.stringify(config, null, 2), { mode: 0o600 });
-      writeFileSync(CHIPOTLE_KEY_PATH, config.usageKey, { mode: 0o600 });
 
       cachedProvision = config;
       logger.info(`[Chipotle] Auto-provisioned from supernode (network: ${config.network}, pkpId: ${config.pkpId.substring(0, 10)}...)`);
@@ -424,40 +430,7 @@ async function ensureProvisioned(): Promise<ProvisionConfig | null> {
   return provisionPromise;
 }
 
-// ── API Key Resolution ───────────────────────────────────────────────────────
-
-function resolveApiKey(): string {
-  // Tier 2: User-provided key takes priority (self-sovereign)
-  const envUserKey = process.env.LIT_CHIPOTLE_USER_KEY;
-  if (envUserKey) return envUserKey;
-
-  if (existsSync(USER_KEY_PATH)) {
-    const key = readFileSync(USER_KEY_PATH, 'utf8').trim();
-    if (key) {
-      logger.info('[Chipotle] Using user-provided API key (Tier 2 self-sovereign)');
-      return key;
-    }
-  }
-
-  // Tier 1: Shared Elacity key (default for all PC2 nodes)
-  const envSharedKey = process.env.LIT_CHIPOTLE_USAGE_KEY;
-  if (envSharedKey) return envSharedKey;
-
-  if (existsSync(CHIPOTLE_KEY_PATH)) {
-    const key = readFileSync(CHIPOTLE_KEY_PATH, 'utf8').trim();
-    if (key) return key;
-  }
-
-  // Tier 0: Check cached provision (from supernode auto-fetch)
-  const provision = loadCachedProvision();
-  if (provision?.usageKey) return provision.usageKey;
-
-  throw new Error(
-    'No Chipotle API key configured. ' +
-    'The node will auto-provision from a supernode on the next dDRM operation, ' +
-    'or set LIT_CHIPOTLE_USAGE_KEY env var, or place the key in data/.chipotle-api-key',
-  );
-}
+// ── PKP Resolution ───────────────────────────────────────────────────────────
 
 function resolvePkpId(config?: ChipotleConfig): string {
   if (config?.pkpId) return config.pkpId;
@@ -466,15 +439,12 @@ function resolvePkpId(config?: ChipotleConfig): string {
   return DEFAULT_PKP_ID;
 }
 
-function resolveApiUrl(): string {
-  return process.env.LIT_CHIPOTLE_API_URL || DEFAULT_API_URL;
-}
-
 // ── Lit Action Code Loading ──────────────────────────────────────────────────
 
 let cachedNonMediaCode: string | null = null;
 let cachedChipotleNonMediaCode: string | null = null;
 let cachedChipotleEncryptCode: string | null = null;
+let cachedUniversalEncryptCode: string | null = null;
 
 function getNonMediaActionCode(): string {
   if (cachedNonMediaCode) return cachedNonMediaCode;
@@ -528,53 +498,64 @@ function getChipotleEncryptCode(): string {
   return cachedChipotleEncryptCode;
 }
 
-function getActionCid(): string {
-  // Tier 1: explicit env override (operator/dev workflow).
-  const envCid = process.env.LIT_ACTION_CID;
-  if (envCid) return envCid;
-
-  // Tier 2: on-disk override file written by `/api/storage/lit/deploy-action`
-  // or by an operator dropping a CID into `data/.lit-action-cid`.
-  if (existsSync(LIT_ACTION_CID_PATH)) {
-    const cid = readFileSync(LIT_ACTION_CID_PATH, 'utf8').trim();
-    if (cid) return cid;
+function getUniversalEncryptCode(): string {
+  if (cachedUniversalEncryptCode) return cachedUniversalEncryptCode;
+  const actionPath = join(DATA_DIR, 'lit-actions/universal-encrypt-chipotle.js');
+  if (!existsSync(actionPath)) {
+    throw new Error(`Universal encrypt Lit Action not found at ${actionPath}.`);
   }
+  cachedUniversalEncryptCode = readFileSync(actionPath, 'utf8');
+  return cachedUniversalEncryptCode;
+}
 
-  // Tier 3: supernode-provisioned config (Wave 8+). The signed
-  // ProvisionConfig delivered by `/api/ddrm/provision` carries
-  // `actions.nonMediaDecrypt` — the CID Elacity Labs has registered
-  // with Chipotle for the current fleet. Honouring it here means a
-  // future rotation requires only updating the supernode payload; no
-  // PC2 redeploy or env juggling on every node in the world.
+function getActionCid(): string {
+  // Tier 1: supernode-provisioned config. The signed ProvisionConfig
+  // delivered by `/api/ddrm/provision` carries `actions.decrypt` — the
+  // universal decrypt CID Elacity Labs has registered with Chipotle for
+  // the current fleet. Honouring it here means a future rotation requires
+  // only updating the supernode payload; no PC2 redeploy.
   //
   // Defensive: a stale cache or a supernode that briefly served a
   // known-bad CID would otherwise propagate the v1.2.1 access_denied
   // footgun to every existing PC2 node. Reject those CIDs explicitly
-  // and fall through to Tier 4 (the trusted hardcoded default) with a
+  // and fall through to Tier 2 (the trusted hardcoded default) with a
   // loud warn log so the issue is visible in `pc2 logs`.
   const provision = loadCachedProvision();
-  const provisionedCid = provision?.actions?.nonMediaDecrypt;
+  const provisionedCid = provision?.actions?.decrypt;
   if (provisionedCid) {
     if (KNOWN_BAD_NON_MEDIA_DECRYPT_CIDS.has(provisionedCid)) {
       logger.warn(
-        `[Chipotle] Cached supernode provision contains known-bad nonMediaDecrypt CID "${provisionedCid}" — ignoring and using hardcoded fallback. Delete data/.chipotle-provision.json to re-fetch from supernode.`,
+        `[Chipotle] Cached supernode provision contains known-bad decrypt CID "${provisionedCid}" — ignoring and using hardcoded fallback. Delete data/.chipotle-provision.json to re-fetch from supernode.`,
       );
     } else {
       return provisionedCid;
     }
   }
 
-  // Tier 4: hardcoded fallback — must stay in lock-step with `storage.ts`
-  // → `DEFAULT_NON_MEDIA_ACTION_CID`. The `bafkrei…` value is the
-  // canonical V1.2 sigauth action registered with Chipotle group 1 and
-  // pinned to ≥2 IPFS providers. Rotation procedure: update BOTH in the
-  // same commit, see V12_SIGAUTH_HANDOVER.md §6.2.
-  //
-  // (v1.2.1 incorrectly hardcoded `QmX5JxcF…r5uk` here, which is a
-  // Wave-8 re-pin that was registered but not production-active. Fresh
-  // nodes saw `access_denied` on every asset. Fixed in v1.2.2.)
-  return 'bafkreihvm4zkyuefnuptlbdins6cmd2mbslj2xgnyzz3ssdg2ggg3jtkk4';
+  // Tier 2: hardcoded fallback — must stay in lock-step with `storage.ts`
+  // → `DEFAULT_NON_MEDIA_ACTION_CID`. Rotation procedure: update BOTH in
+  // the same commit.
+  return UNIVERSAL_DECRYPT_CID;
 }
+
+/**
+ * Returns the active universal-encrypt Lit Action CID.
+ * Priority: provision config (`actions.encrypt`) → hardcoded constant.
+ */
+export const getEncryptActionCid = (): string => {
+  const provision = loadCachedProvision();
+  const provisionedCid = provision?.actions?.encrypt;
+  if (provisionedCid) {
+    return provisionedCid;
+  }
+  return UNIVERSAL_ENCRYPT_CID;
+};
+
+/**
+ * Returns the active universal-decrypt Lit Action CID.
+ * Same tier resolution as `getActionCid()`, clearer name for V3 unified flow.
+ */
+export const getDecryptActionCid = (): string => getActionCid();
 
 // ── Core REST Client ─────────────────────────────────────────────────────────
 
@@ -589,61 +570,145 @@ class ChipotleError extends Error {
   }
 }
 
-async function executeLitAction(params: LitActionParams, config?: ChipotleConfig): Promise<LitActionResult> {
-  let apiKey = config?.apiKey;
-  let apiUrl = config?.apiUrl;
+// ── ipfs_id Negative Cache ───────────────────────────────────────────────────
+// Chipotle keeps an in-memory cache of Lit Action code keyed by IPFS CID.
+// Once we have seen "no cached code found" for a CID, we skip the ipfs_id
+// attempt for a short TTL — avoids paying a wasted roundtrip on every call
+// while the cache is cold. After TTL we probe again so a server warm-up
+// (someone else's call, or a deploy) gets noticed.
+const NO_CACHED_CODE_TTL_MS = 60_000; // 1 minute
+const noCachedCodeMisses = new Map<string, number>(); // cid -> expiry epoch ms
 
-  if (!apiKey) {
+function isIpfsIdNegativelyCached(cid: string): boolean {
+  const expiry = noCachedCodeMisses.get(cid);
+  if (!expiry) return false;
+  if (Date.now() < expiry) return true;
+  noCachedCodeMisses.delete(cid); // expired — retry the fast path
+  return false;
+}
+
+function markIpfsIdNotCached(cid: string): void {
+  noCachedCodeMisses.set(cid, Date.now() + NO_CACHED_CODE_TTL_MS);
+}
+
+async function executeLitAction(params: LitActionParams, _config?: ChipotleConfig): Promise<LitActionResult> {
+  const url = `${LIT_ACTION_PROXY_URL}/core/v1/lit_action`;
+
+  const postBody = async (body: Record<string, unknown>): Promise<{ status: number; text: string; json: any }> => {
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const text = await resp.text();
+    // Don't throw on non-JSON — some Chipotle error paths return a raw
+    // text body and we still want isNoCachedCodeError() to match. The
+    // outer status check decides whether to surface an error.
+    let json: any = null;
     try {
-      apiKey = resolveApiKey();
+      json = JSON.parse(text);
     } catch {
-      const provision = await ensureProvisioned();
-      if (provision?.usageKey) {
-        apiKey = provision.usageKey;
-        if (!apiUrl) apiUrl = provision.apiUrl;
-      } else {
-        throw new Error(
-          'No Chipotle API key configured and auto-provisioning from supernodes failed. ' +
-          'Set LIT_CHIPOTLE_USAGE_KEY env var or place the key in data/.chipotle-api-key',
-        );
+      json = null;
+    }
+    return { status: resp.status, text, json };
+  };
+
+  /**
+   * Extract a raw error message string from a Chipotle response.
+   * Handles every shape we have observed:
+   *   - JSON-encoded string body: `"No cached code found..."` → json is a string
+   *   - Wrapped error object: `{ "error": "..." }` or `{ "message": "..." }`
+   *   - Raw text body (no JSON parse): use `text` directly
+   *   - Nested detail: `{ "error": { "message": "..." } }`
+   *
+   * Returns the message verbatim — callers decide whether to match
+   * case-sensitively or not.
+   */
+  const extractErrorMessage = (json: any, text: string): string => {
+    if (typeof json === 'string') return json;
+    if (json && typeof json === 'object') {
+      const candidates = [json.error, json.message, json.detail, json.reason];
+      for (const c of candidates) {
+        if (typeof c === 'string') return c;
+        if (c && typeof c === 'object' && typeof c.message === 'string') return c.message;
       }
     }
+    return text || '';
+  };
+
+  /**
+   * Detect Chipotle's "ipfs_id submitted but no cached code available"
+   * response. Canonical body observed in production:
+   *
+   *   "No cached code found. Submit the action code at least once
+   *    before referencing it by IPFS ID.: cache miss for IPFS ID <cid>"
+   *
+   * Strict matcher — requires the exact anchor phrase. We do NOT match
+   * looser variants ("code not cached", isolated "cache miss") because:
+   *   - They could occur inside an unrelated Lit Action error bubble.
+   *   - A false positive silently retries with `code`, which would
+   *     replace a real error with a delayed, mis-attributed one.
+   * If Chipotle changes the wording we will see the original error,
+   * the fast path will hard-fail, and we update the anchor here.
+   */
+  const NO_CACHED_CODE_ANCHOR = /No cached code found/i;
+  const isNoCachedCodeError = (status: number, json: any, text: string): boolean => {
+    // Restrict to 4xx — server errors (5xx) should propagate, not silently
+    // trigger a fallback that would shadow the underlying problem.
+    if (status < 400 || status >= 500) return false;
+    return NO_CACHED_CODE_ANCHOR.test(extractErrorMessage(json, text));
+  };
+
+  // 1. Prefer ipfs_id reference when caller provides it — avoids shipping
+  //    the full Lit Action source on every call. Skip the attempt entirely
+  //    if we recently learned this CID is not cached server-side (negative
+  //    cache, see executeLitAction state below).
+  let attempt: { status: number; text: string; json: any } | null = null;
+  const shouldSkipIpfsId = params.ipfsId ? isIpfsIdNegativelyCached(params.ipfsId) : false;
+  if (params.ipfsId && !shouldSkipIpfsId) {
+    logger.debug(`[Chipotle] POST ${url} (ipfs_id: ${params.ipfsId}, params: ${Object.keys(params.jsParams).join(',')})`);
+    attempt = await postBody({
+      ipfs_id: params.ipfsId,
+      js_params: params.jsParams || {},
+    });
+
+    if (isNoCachedCodeError(attempt.status, attempt.json, attempt.text)) {
+      logger.info(`[Chipotle] ipfs_id ${params.ipfsId} not cached server-side — falling back to inline code`);
+      markIpfsIdNotCached(params.ipfsId);
+      attempt = null;
+    }
+  } else if (params.ipfsId && shouldSkipIpfsId) {
+    logger.debug(`[Chipotle] Skipping ipfs_id ${params.ipfsId} (negative cache hit)`);
   }
 
-  apiUrl = apiUrl || resolveApiUrl();
-  const url = `${apiUrl}/core/v1/lit_action`;
-
-  logger.debug(`[Chipotle] POST ${url} (code: ${params.code.length} chars, params: ${Object.keys(params.jsParams).join(',')})`);
-
-  const resp = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Api-Key': apiKey,
-    },
-    body: JSON.stringify({
+  // 2. Fallback (or default) — send the full source.
+  if (!attempt) {
+    logger.debug(`[Chipotle] POST ${url} (code: ${params.code.length} chars, params: ${Object.keys(params.jsParams).join(',')})`);
+    attempt = await postBody({
       code: params.code,
       js_params: params.jsParams || {},
-    }),
-  });
+    });
+  }
 
-  const text = await resp.text();
-  let json: any;
-  try {
-    json = JSON.parse(text);
-  } catch {
+  const { status, text, json } = attempt;
+
+  if (status >= 400) {
+    const errMsg = typeof json === 'string'
+      ? json
+      : (json?.error || json?.message || json?.detail || text.substring(0, 300));
     throw new ChipotleError(
-      `Chipotle returned non-JSON: ${text.substring(0, 200)}`,
-      resp.status,
+      `Chipotle HTTP ${status}: ${errMsg}`,
+      status,
+      json,
     );
   }
 
-  if (!resp.ok) {
-    const errMsg = typeof json === 'string' ? json : json?.error || json?.message || text.substring(0, 300);
+  // Some success responses return non-JSON bodies (raw text) — surface that
+  // explicitly instead of returning the literal string "null".
+  if (json === null) {
     throw new ChipotleError(
-      `Chipotle HTTP ${resp.status}: ${errMsg}`,
-      resp.status,
-      json,
+      `Chipotle returned non-JSON success body: ${text.substring(0, 200)}`,
+      status,
     );
   }
 
@@ -659,90 +724,6 @@ async function executeLitAction(params: LitActionParams, config?: ChipotleConfig
 }
 
 // ── High-Level Operations ────────────────────────────────────────────────────
-
-/**
- * Recover the Content Encryption Key for a non-media asset.
- * Replaces: getLitClient() + getExecuteSessionSigs() + client.executeJs()
- */
-export async function recoverNonMediaCEK(
-  params: NonMediaDecryptParams,
-  config?: ChipotleConfig,
-): Promise<string> {
-  // Phase 5 cutover: sigauth action is mandatory. A caller without a
-  // SecureViewDelegation bundle is a programming error — we reject here
-  // rather than silently falling through to a userAddress-trusting
-  // action (that action no longer exists).
-  if (!params.secureViewSession) {
-    throw new Error(
-      '[Chipotle] recoverNonMediaCEK requires params.secureViewSession (signed delegation + request). ' +
-        'Bundle-less callers must be migrated before invoking the Lit action.',
-    );
-  }
-
-  // T-1C Phase 2: metric recording. Singleton DB handle is wired at boot;
-  // recorders no-op when the kill switch is set. Reason tag uses the
-  // classifyChipotleError() allow-list, never raw error text.
-  const __metricStart = Date.now();
-
-  try {
-    const code = getChipotleNonMediaActionCode();
-    const pkpId = resolvePkpId(config);
-    logger.info(`[Chipotle] Non-media action kid=${params.kid}`);
-
-    // Session-key delegation fields (Option C). The sigauth Lit Action
-    // derives the effective user from delegation.coveredAddresses, so
-    // no `userAddress` is sent here — a caller cannot pretend to be
-    // someone else by naming their address.
-    const jsParams: Record<string, unknown> = {
-      ciphertext: params.litCiphertext,
-      dataToEncryptHash: params.dataToEncryptHash,
-      kid: params.kid.startsWith('0x') ? params.kid : `0x${params.kid}`,
-      pkpId,
-      authority: params.authority || DEFAULT_AUTHORITY,
-      chain: params.chain || DEFAULT_CHAIN,
-      chainId: params.chainId || DEFAULT_CHAIN_ID,
-      rpc: params.rpc || getBaseRpcUrl(),
-      // The sigauth Lit Action verifies del.actionIpfsId matches its
-      // own CID; the server must forward the CID explicitly since
-      // Chipotle v3 doesn't expose getIpfsId() to action code.
-      actionIpfsId: params.actionCid,
-      delegation: params.secureViewSession.delegationCanonical,
-      delegationSig: params.secureViewSession.delegationSig,
-      request: params.secureViewSession.requestCanonical,
-      requestSig: params.secureViewSession.requestSig,
-    };
-
-    const result = await executeLitAction({ code, jsParams }, config);
-
-    // Sigauth action returns `{ data: base64, authorizedAddress, delegationNonce, requestNonce }`.
-    let cekBase64: string;
-    try {
-      const parsed = JSON.parse(result.response);
-      if (parsed.error) {
-        const detail = parsed.code ? ` (code=${parsed.code})` : '';
-        throw new Error(`Lit Action denied: ${parsed.error}${detail}`);
-      }
-      cekBase64 = parsed.data || parsed;
-    } catch (e) {
-      if (e instanceof Error && e.message.startsWith('Lit Action denied')) throw e;
-      cekBase64 = result.response;
-    }
-
-    if (!cekBase64 || cekBase64.length < 10) {
-      throw new Error(`Invalid CEK response: ${result.response?.substring(0, 100)}`);
-    }
-
-    logger.info(`[Chipotle] Non-media CEK recovered (${cekBase64.length} chars)`);
-    recordMetricCounter(undefined, 'chipotle.cek_recovery', 1, { kind: 'non_media', outcome: 'success' });
-    recordMetricHistogram(undefined, 'chipotle.cek_recovery_ms', Date.now() - __metricStart, { kind: 'non_media', outcome: 'success' });
-    return cekBase64;
-  } catch (err) {
-    const reason = classifyChipotleError(err);
-    recordMetricCounter(undefined, 'chipotle.cek_recovery', 1, { kind: 'non_media', outcome: 'failure', reason });
-    recordMetricHistogram(undefined, 'chipotle.cek_recovery_ms', Date.now() - __metricStart, { kind: 'non_media', outcome: 'failure' });
-    throw err;
-  }
-}
 
 /**
  * Recover the Content Encryption Key for a media asset via ECDH envelope.
@@ -783,7 +764,7 @@ export async function recoverMediaCEKEnvelope(
       requestSig: params.secureViewSession.requestSig,
     };
 
-    const result = await executeLitAction({ code: mediaActionCode, jsParams }, config);
+    const result = await executeLitAction({ code: mediaActionCode, ipfsId: params.actionCid, jsParams }, config);
 
     // Media Lit Action returns a base64-encoded binary ECDH envelope
     const envelope = Buffer.from(result.response, 'base64');
@@ -818,19 +799,26 @@ export async function encryptWithLitAction(
   try {
     const pkpId = resolvePkpId(config);
 
-    // params.dataToEncrypt is the UTF-8 bytes of the base64 CEK string.
-    // Pass it directly as a string to the Lit Action so Decrypt returns
-    // the same string — no double-base64 encoding.
-    const plaintext = new TextDecoder().decode(params.dataToEncrypt);
+    // params.dataToEncrypt is the raw bytes of the CEK.
+    // Convert to base64 string to send to Lit Action.
+    const plaintext = Buffer.from(params.dataToEncrypt).toString("base64");
 
-    const code = getChipotleEncryptCode();
+    const code = getUniversalEncryptCode();
+
+    const jsParams: Record<string, unknown> = {
+      pkpId,
+      plaintext,
+      kid: params.kid,           // base64-encoded KID bytes
+      authority: params.authority, // hex, 0x-prefixed
+      outputFormat: 'hex',
+    };
 
     const result = await executeLitAction(
-      { code, jsParams: { pkpId, plaintext } },
+      { code, ipfsId: UNIVERSAL_ENCRYPT_CID, jsParams },
       config,
     );
 
-    let parsed: { ciphertext?: string; error?: string };
+    let parsed: { ciphertext?: string; error?: string; hash?: string; issuer?: string; signature?: string };
     try {
       parsed = JSON.parse(result.response);
     } catch {
@@ -845,8 +833,16 @@ export async function encryptWithLitAction(
       throw new Error('Chipotle encrypt returned no ciphertext');
     }
 
-    const crypto = await import('crypto');
-    const hash = crypto.createHash('sha256').update(plaintext).digest('hex');
+    let hash = parsed.hash;
+
+    if (!hash) {
+      const crypto = await import('crypto');
+      const toHashCompisite = new Uint8Array(params.dataToEncrypt.byteLength + 16 + 20);
+      toHashCompisite.set(params.dataToEncrypt);
+      toHashCompisite.set(Buffer.from(params.kid || '0x00000000000000000000000000000000', 'hex'), params.dataToEncrypt.byteLength);
+      toHashCompisite.set(Buffer.from(params.authority || '0x0000000000000000000000000000000000000000', 'hex'), params.dataToEncrypt.byteLength + 16);
+      hash = crypto.createHash('sha256').update(toHashCompisite).digest('hex');
+    }
 
     logger.info(`[Chipotle] Encrypted ${params.dataToEncrypt.length} bytes via PKP-AES (pkpId: ${pkpId.substring(0, 10)}...)`);
 
@@ -855,6 +851,7 @@ export async function encryptWithLitAction(
     return {
       ciphertext: parsed.ciphertext,
       dataToEncryptHash: hash,
+      ...(parsed as { issuer?: string; signature?: string }),
     };
   } catch (err) {
     const reason = classifyChipotleError(err);
@@ -862,6 +859,375 @@ export async function encryptWithLitAction(
     recordMetricHistogram(undefined, 'chipotle.encrypt_ms', Date.now() - __metricStart, { outcome: 'failure' });
     throw err;
   }
+}
+
+// ── Lit Action Code Fetching ─────────────────────────────────────────────────
+
+const litActionCodeCache = new Map<string, string>();
+
+/**
+ * Fetch and cache Lit Action JavaScript code by IPFS CID.
+ * Tries local file first, then IPFS gateways. Moved from media.ts to share
+ * across all decrypt paths.
+ */
+async function fetchLitActionCode(cid: string): Promise<string> {
+  // Check local file first (for actions shipped with the node)
+  const localPath = join(DATA_DIR, `lit-actions/${cid}.js`);
+  if (existsSync(localPath)) {
+    const code = readFileSync(localPath, 'utf8').replace(/\s+$/, '');
+    if (code && code.length > 10) {
+      litActionCodeCache.set(cid, code);
+      return code;
+    }
+  }
+
+  const cached = litActionCodeCache.get(cid);
+  if (cached) return cached;
+
+  const gateways = [
+    `https://gateway.pinata.cloud/ipfs/${cid}`,
+    `https://ipfs.io/ipfs/${cid}`,
+    `http://localhost:4200/ipfs/${cid}`,
+    `https://ipfs.ela.city/ipfs/${cid}`,
+  ];
+
+  for (const url of gateways) {
+    try {
+      const resp = await fetch(url, { signal: AbortSignal.timeout(10000) });
+      if (resp.ok) {
+        const code = (await resp.text()).replace(/\s+$/, '');
+        if (code && code.length > 10) {
+          litActionCodeCache.set(cid, code);
+          logger.info(`[Chipotle] Fetched Lit Action code from ${url.includes('localhost') ? 'local' : 'remote'} IPFS (${code.length} chars)`);
+          return code;
+        }
+      }
+    } catch { /* try next gateway */ }
+  }
+
+  // Fallback: try loading universal-decrypt from local disk
+  const universalPath = join(DATA_DIR, 'lit-actions/universal-decrypt-chipotle.js');
+  if (cid === UNIVERSAL_DECRYPT_CID && existsSync(universalPath)) {
+    const code = readFileSync(universalPath, 'utf8').replace(/\s+$/, '');
+    litActionCodeCache.set(cid, code);
+    return code;
+  }
+
+  throw new Error(`Failed to fetch Lit Action code: ${cid}`);
+}
+
+/**
+ * Server-owned ECDH envelope CEK recovery. Used by the media path
+ * (`/api/media/init`) where no client-side wallet bridge is involved.
+ *
+ * The server itself plays both the "owner" and "session" roles:
+ *  - generates an ephemeral ECDSA P-256 keypair (extractable so it can be
+ *    re-imported as ECDH for the envelope unwrap, matching the technique
+ *    used by `tools/lit-direct-decrypt.mjs`),
+ *  - signs the delegation with `getServerWallet()` (ownerAddress = server),
+ *  - signs the per-request bundle with the ephemeral session key,
+ *  - calls the Lit Action,
+ *  - unwraps the envelope locally with the same ephemeral key.
+ *
+ * The on-chain access gate inside the Lit Action still enforces
+ * `hasAccessByContentId(buyerAddress, kid)`, so buyers without the
+ * AccessToken are denied regardless of who signed the delegation.
+ */
+export async function recoverCEKWithServerSession(
+  params: {
+    litCiphertext: string;
+    dataToEncryptHash: string;
+    kid: string;
+    buyerAddress: string;
+    actionCid?: string;
+    authority?: string;
+    chain?: string;
+    chainId?: number;
+    rpc?: string;
+    signature?: string;
+    issuer?: string;
+  },
+  config?: ChipotleConfig,
+): Promise<string> {
+  const __metricStart = Date.now();
+
+  try {
+    const effectiveCid = params.actionCid || UNIVERSAL_DECRYPT_CID;
+    const effectiveChainId = params.chainId || DEFAULT_CHAIN_ID;
+    const normalizedKid = params.kid.startsWith('0x')
+      ? params.kid.toLowerCase()
+      : '0x' + params.kid.toLowerCase();
+
+    // 1. Generate ephemeral session keypair (ECDSA for signing). `extractable: true`
+    //    so we can re-import the private scalar as ECDH for envelope unwrap.
+    const { subtle } = globalThis.crypto;
+    const sessionKeyPair = await subtle.generateKey(
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      true,
+      ['sign', 'verify'],
+    );
+    const rawPub = new Uint8Array(await subtle.exportKey('raw', sessionKeyPair.publicKey));
+    const sessionPublicKey = ('0x' + Buffer.from(rawPub).toString('hex')) as `0x${string}`;
+
+    // 2. Build + sign delegation with an ephemeral secp256k1 wallet.
+    //    ownerAddress only needs to match the delegationSig — the Lit Action
+    //    access gate checks coveredAddresses[0] (buyerAddress) on-chain, not ownerAddress.
+    const { Wallet } = await import('ethers');
+    const wallet = Wallet.createRandom();
+    const now = Math.floor(Date.now() / 1000);
+    const delegation = {
+      domain: 'pc2.secure-view.v1',
+      ownerAddress: wallet.address,
+      coveredAddresses: [params.buyerAddress],
+      sessionPublicKey,
+      actionIpfsId: effectiveCid,
+      chainId: effectiveChainId,
+      issuedAt: now,
+      expiresAt: now + 3600,
+      nonce: '0x' + randomBytes(16).toString('hex'),
+    };
+    const delegationCanonical = canonicalize(delegation);
+    const delegationSig = (await wallet.signMessage(delegationCanonical)) as `0x${string}`;
+
+    // 3. Build + sign per-request bundle with the ephemeral session key.
+    const request = {
+      domain: 'pc2.secure-view.request.v1',
+      kid: normalizedKid,
+      actionIpfsId: effectiveCid,
+      requestedAt: now,
+      requestNonce: '0x' + randomBytes(8).toString('hex'),
+    };
+    const requestCanonical = canonicalize(request);
+    const reqSigBuf = await subtle.sign(
+      { name: 'ECDSA', hash: 'SHA-256' },
+      sessionKeyPair.privateKey,
+      new TextEncoder().encode(requestCanonical),
+    );
+    const requestSig = ('0x' + Buffer.from(reqSigBuf).toString('hex')) as `0x${string}`;
+
+    // 4. Re-import the ECDSA private scalar as ECDH so we can run deriveKey
+    //    against the PKP ephemeral public key in `unwrapECDHEnvelope`.
+    const jwk = await subtle.exportKey('jwk', sessionKeyPair.privateKey);
+    delete (jwk as Record<string, unknown>).alg;
+    delete (jwk as Record<string, unknown>).key_ops;
+    const keyAlg = { name: 'ECDH', namedCurve: 'P-256' } as const;
+    const ecdhPrivateKey = await subtle.importKey('jwk', jwk, keyAlg, false, ['deriveKey']);
+
+    // 5. Call the Lit Action.
+    const code = await fetchLitActionCode(effectiveCid);
+    const pkpId = resolvePkpId(config);
+    const jsParams: Record<string, unknown> = {
+      keyAlg,
+      ciphertext: params.litCiphertext,
+      dataToEncryptHash: params.dataToEncryptHash,
+      kid: normalizedKid,
+      pkpId,
+      actionIpfsId: effectiveCid,
+      authority: params.authority || DEFAULT_AUTHORITY,
+      chain: params.chain || DEFAULT_CHAIN,
+      chainId: effectiveChainId,
+      rpc: params.rpc || getBaseRpcUrl(),
+      delegation: delegationCanonical,
+      delegationSig,
+      request: requestCanonical,
+      requestSig,
+    };
+    if (params.signature) jsParams.signature = params.signature;
+    if (params.issuer) jsParams.issuer = params.issuer;
+
+    logger.info(`[Chipotle] Server-session decrypt via ${effectiveCid}, kid=${params.kid}`);
+    const result = await executeLitAction({ code, ipfsId: effectiveCid, jsParams }, config);
+
+    let parsed: any;
+    try {
+      parsed = JSON.parse(result.response);
+    } catch {
+      throw new Error(`Unparseable decrypt response: ${result.response.substring(0, 200)}`);
+    }
+    if (parsed.error) {
+      throw new Error(`Lit Action denied: ${parsed.error} (code=${parsed.code || 'unknown'})`);
+    }
+
+    const dataB64 = parsed.data || result.response;
+    const dataBytes = Buffer.from(dataB64, 'base64');
+    if (dataBytes.length <= 32) {
+      logger.info(`[Chipotle] Legacy plaintext CEK detected (${dataBytes.length} bytes) — returning as-is`);
+      recordMetricCounter(undefined, 'chipotle.cek_recovery', 1, { kind: 'server_session', outcome: 'success', legacy: 'true' });
+      recordMetricHistogram(undefined, 'chipotle.cek_recovery_ms', Date.now() - __metricStart, { kind: 'server_session', outcome: 'success' });
+      return dataB64;
+    }
+
+    const cekBase64 = await unwrapECDHEnvelope(dataBytes, ecdhPrivateKey, rawPub, keyAlg);
+    logger.info(`[Chipotle] CEK recovered via server-session ECDH envelope (${dataBytes.length} bytes envelope)`);
+
+    recordMetricCounter(undefined, 'chipotle.cek_recovery', 1, { kind: 'server_session', outcome: 'success' });
+    recordMetricHistogram(undefined, 'chipotle.cek_recovery_ms', Date.now() - __metricStart, { kind: 'server_session', outcome: 'success' });
+    return cekBase64;
+  } catch (err) {
+    const reason = classifyChipotleError(err);
+    recordMetricCounter(undefined, 'chipotle.cek_recovery', 1, { kind: 'server_session', outcome: 'failure', reason });
+    recordMetricHistogram(undefined, 'chipotle.cek_recovery_ms', Date.now() - __metricStart, { kind: 'server_session', outcome: 'failure' });
+    throw err;
+  }
+}
+
+// ── ECDH Envelope Unwrapping ─────────────────────────────────────────────────
+// Shared by both media and non-media decrypt paths. Extracted from media.ts.
+
+/**
+ * Unwrap an ECDH-wrapped license envelope from the Lit Action.
+ *
+ * Envelope format:
+ *   HEADER: format (3 bytes) + flag (1 byte)
+ *   METADATA:
+ *     ephemeral_pubkey_len (u16be) + ephemeral_pubkey
+ *     signature_len (u16be) + signature + signer_compressed_pubkey (33 bytes)
+ *   BODY:
+ *     encrypted_cek_len (u32be) + encrypted_cek (AES-CBC)
+ *
+ * Decrypted payload (rawLicenseBytes):
+ *   metadata_size (u32be) + metadata (issuer + exp + audience) + key_count (u32be) + keys
+ */
+export async function unwrapECDHEnvelope(
+  envelope: Buffer,
+  privateKey: CryptoKey,
+  ourRawPubKey: Uint8Array,
+  keyAlg: { name: string; namedCurve: string },
+): Promise<string> {
+  const { subtle } = globalThis.crypto;
+  let offset = 4; // skip header (3 bytes format + 1 byte flag)
+
+  // Read ephemeral public key
+  const ephPubKeyLen = (envelope[offset] << 8) | envelope[offset + 1];
+  offset += 2;
+  const ephPubKeyRaw = envelope.subarray(offset, offset + ephPubKeyLen);
+  offset += ephPubKeyLen;
+
+  // Skip signature
+  const sigLen = (envelope[offset] << 8) | envelope[offset + 1];
+  offset += 2;
+  offset += sigLen;
+  offset += 33; // compressed signer public key
+
+  // Read encrypted CEK
+  const encCekLen = (envelope[offset] << 24) | (envelope[offset + 1] << 16) |
+    (envelope[offset + 2] << 8) | envelope[offset + 3];
+  offset += 4;
+  const encryptedCek = envelope.subarray(offset, offset + encCekLen);
+
+  logger.info(`[Chipotle] Envelope: ephPubKey=${ephPubKeyLen}B, sig=${sigLen}B, encCEK=${encCekLen}B`);
+
+  // Decompress P-256 point if needed (Lit Action compresses for P-256)
+  const litPubKeyUncompressed = (ephPubKeyRaw[0] === 0x02 || ephPubKeyRaw[0] === 0x03)
+    ? decompressP256Point(ephPubKeyRaw)
+    : new Uint8Array(ephPubKeyRaw);
+
+  // Import Lit's ephemeral public key
+  const litPubKey = await subtle.importKey(
+    'raw',
+    litPubKeyUncompressed as BufferSource,
+    { name: keyAlg.name, namedCurve: keyAlg.namedCurve },
+    false,
+    [],
+  );
+
+  // Derive shared AES-CBC-256 key via ECDH
+  const sharedKey = await subtle.deriveKey(
+    { name: keyAlg.name, namedCurve: keyAlg.namedCurve, public: litPubKey } as any,
+    privateKey,
+    { name: 'AES-CBC', length: 256 },
+    false,
+    ['decrypt'],
+  );
+
+  // IV = first 16 bytes of OUR raw public key (matches Lit Action's pubKeyBuff.subarray(0, 16))
+  const iv = ourRawPubKey.slice(0, 16);
+
+  // Decrypt — copy to fresh ArrayBuffers to satisfy strict BufferSource typing
+  const encCekCopy = new Uint8Array(encryptedCek);
+  const decrypted = new Uint8Array(
+    await subtle.decrypt(
+      { name: 'AES-CBC', iv: iv as unknown as ArrayBuffer },
+      sharedKey,
+      encCekCopy as unknown as ArrayBuffer,
+    ),
+  );
+
+  // Parse rawLicenseBytes: metadataSize(u32) | metadata | keyCount(u32) | keys
+  const metaSize = (decrypted[0] << 24) | (decrypted[1] << 16) | (decrypted[2] << 8) | decrypted[3];
+  const bodyOffset = 4 + metaSize;
+  const keyCount = (decrypted[bodyOffset] << 24) | (decrypted[bodyOffset + 1] << 16) |
+    (decrypted[bodyOffset + 2] << 8) | decrypted[bodyOffset + 3];
+  const cekStart = bodyOffset + 4;
+
+  // Read all key bytes — total remaining bytes after keyCount header
+  const cekBytes = decrypted.subarray(cekStart);
+  logger.info(`[Chipotle] Unwrapped license: metaSize=${metaSize}, keyCount=${keyCount}, cekLen=${cekBytes.length}`);
+
+  const result = Buffer.from(cekBytes).toString('base64');
+
+  // Zero sensitive memory
+  decrypted.fill(0);
+  return result;
+}
+
+/**
+ * Decompress a compressed P-256 EC point (33 bytes → 65 bytes uncompressed).
+ * P-256 curve: y² = x³ - 3x + b (mod p)
+ */
+export function decompressP256Point(compressed: Uint8Array): Uint8Array {
+  if (compressed.length !== 33) throw new Error(`Invalid compressed point length: ${compressed.length}`);
+  const prefix = compressed[0];
+  if (prefix !== 0x02 && prefix !== 0x03) throw new Error(`Invalid prefix: 0x${prefix.toString(16)}`);
+
+  const p = BigInt('0xFFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFF');
+  const b = BigInt('0x5AC635D8AA3A93E7B3EBBD55769886BC651D06B0CC53B0F63BCE3C3E27D2604B');
+  const a = p - 3n;
+
+  let x = 0n;
+  for (let i = 1; i < 33; i++) {
+    x = (x << 8n) | BigInt(compressed[i]);
+  }
+
+  const x3 = modPow(x, 3n, p);
+  const rhs = (x3 + a * x + b) % p;
+  let y = modSqrt(rhs, p);
+
+  const isOdd = (y & 1n) === 1n;
+  if ((prefix === 0x03) !== isOdd) {
+    y = p - y;
+  }
+
+  const result = new Uint8Array(65);
+  result[0] = 0x04;
+  result.set(bigintToBytes32(x), 1);
+  result.set(bigintToBytes32(y), 33);
+  return result;
+}
+
+function bigintToBytes32(n: bigint): Uint8Array {
+  const hex = n.toString(16).padStart(64, '0');
+  const bytes = new Uint8Array(32);
+  for (let i = 0; i < 32; i++) {
+    bytes[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
+  }
+  return bytes;
+}
+
+function modPow(base: bigint, exp: bigint, mod: bigint): bigint {
+  let result = 1n;
+  base = base % mod;
+  while (exp > 0n) {
+    if (exp & 1n) result = (result * base) % mod;
+    exp >>= 1n;
+    base = (base * base) % mod;
+  }
+  return result;
+}
+
+/** Tonelli-Shanks modular square root for P-256 (p === 3 mod 4 → simple formula). */
+function modSqrt(a: bigint, p: bigint): bigint {
+  return modPow(a, (p + 1n) / 4n, p);
 }
 
 // ── Utility: Build Self-Referential Conditions ───────────────────────────────
@@ -883,37 +1249,11 @@ export function buildSelfRefConditions(actionCid: string, chain = 'base') {
   ];
 }
 
-// ── Utility: Save/Read User Key ──────────────────────────────────────────────
-
-export function saveUserApiKey(key: string): void {
-  if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
-  writeFileSync(USER_KEY_PATH, key, { mode: 0o600 });
-  logger.info('[Chipotle] User API key saved (Tier 2 self-sovereign)');
-}
-
-export function getUserApiKey(): string | null {
-  if (existsSync(USER_KEY_PATH)) {
-    const key = readFileSync(USER_KEY_PATH, 'utf8').trim();
-    return key || null;
-  }
-  return null;
-}
-
-export function clearUserApiKey(): void {
-  if (existsSync(USER_KEY_PATH)) {
-    writeFileSync(USER_KEY_PATH, '', { mode: 0o600 });
-    logger.info('[Chipotle] User API key cleared (reverted to Tier 1)');
-  }
-}
-
 // ── Utility: Get Current Config Info ─────────────────────────────────────────
 
 export function getChipotleInfo() {
-  const userKey = getUserApiKey();
   return {
-    apiUrl: resolveApiUrl(),
-    tier: userKey ? 2 : 1,
-    tierLabel: userKey ? 'Self-sovereign (user-provided key)' : 'Shared Elacity key',
+    apiUrl: LIT_ACTION_PROXY_URL,
     actionCid: getActionCid(),
     authority: DEFAULT_AUTHORITY,
     chain: DEFAULT_CHAIN,
@@ -925,12 +1265,12 @@ export function getChipotleInfo() {
 
 export {
   executeLitAction,
-  resolveApiKey,
-  resolveApiUrl,
   getActionCid,
   getNonMediaActionCode,
   getChipotleNonMediaActionCode,
   getChipotleEncryptCode,
+  getUniversalEncryptCode,
   ChipotleError,
   DEFAULT_PKP_ID,
+  DEFAULT_AUTHORITY,
 };

@@ -31,7 +31,7 @@ function findSchemaFile(): string {
   }
   throw new Error(`Schema file not found. Tried: ${SCHEMA_FILE} and ${sourceSchema}`);
 }
-const CURRENT_VERSION = 33;
+const CURRENT_VERSION = 34;
 
 interface Migration {
   version: number;
@@ -832,6 +832,7 @@ export function runMigrations(db: Database): void {
             asset_cid TEXT NOT NULL,
             metadata_cid TEXT NOT NULL,
             encrypt_hash TEXT NOT NULL,
+            kid TEXT,
             channel TEXT NOT NULL,
             price TEXT,
             currency_address TEXT,
@@ -1239,6 +1240,7 @@ export function runMigrations(db: Database): void {
             asset_cid TEXT NOT NULL,
             metadata_cid TEXT NOT NULL,
             encrypt_hash TEXT NOT NULL,
+            kid TEXT,
             channel TEXT NOT NULL,
             price TEXT,
             currency_address TEXT,
@@ -1431,6 +1433,23 @@ export function runMigrations(db: Database): void {
     } catch (error: any) {
       log.warn('⚠️  Could not check/recreate FTS5 table:', error.message);
     }
+
+    // Migration 34: Add `kid` column to publish_drafts so draft-resume mints
+    // can emit the canonical KID as on-chain bytes16 contentId (matches the
+    // KID embedded in pssh/tenc on IPFS-pinned init segments). Tracked in
+    // MEDIA-2026-05-18-CENC-PSSH-LIBAV-COMPLIANCE.
+    if (currentVersion < 34) {
+      try {
+        db.exec('ALTER TABLE publish_drafts ADD COLUMN kid TEXT');
+        log.info('✅ Migration 34: Added kid column to publish_drafts');
+      } catch (error: any) {
+        if (!error.message.includes('duplicate column')) {
+          log.warn(`⚠️  Migration 34 warning: ${error.message}`);
+        }
+      }
+      recordMigration(db, 34);
+    }
+
     log.info('✅ Database schema is up to date');
   } else {
     log.warn(`⚠️  Database version (${currentVersion}) is newer than expected (${CURRENT_VERSION})`);

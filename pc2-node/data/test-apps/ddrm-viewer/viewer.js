@@ -163,17 +163,22 @@
     return puterArgs[key] || params.get(key) || fallback;
   }
 
+  var rawKid = p('kid', '');
   var assetParams = {
     litCiphertext:     p('litCiphertext', ''),
     dataToEncryptHash: p('dataToEncryptHash', ''),
     encryptedDataCid:  p('encryptedDataCid', ''),
     iv:                p('iv', ''),
-    kid:               p('kid', ''),
+    // Lit Action compares req.kid (from signed session) against 0x-normalised jsParams.kid.
+    // Normalise here so the session request and jsParams carry the same format.
+    kid:               rawKid && !rawKid.startsWith('0x') ? '0x' + rawKid : rawKid,
     buyerAddress:      p('buyerAddress', ''),
     buyerAddressAlt:   p('buyerAddressAlt', ''),
     mimeType:          p('mimeType', 'application/octet-stream'),
     actionCid:         p('actionCid', ''),
     authority:         p('authority', ''),
+    signature:         p('signature', ''),
+    issuer:            p('issuer', ''),
     title:             p('title', ''),
     maxWidth:          Math.min(window.innerWidth * (window.devicePixelRatio || 1), 1600),
   };
@@ -427,6 +432,8 @@
     if (assetParams.buyerAddressAlt) body.buyerAddressAlt = assetParams.buyerAddressAlt;
     if (assetParams.actionCid) body.actionCid = assetParams.actionCid;
     if (assetParams.authority) body.authority = assetParams.authority;
+    if (assetParams.signature) body.signature = assetParams.signature;
+    if (assetParams.issuer) body.issuer = assetParams.issuer;
     if (assetParams.litBackend) body.litBackend = assetParams.litBackend;
     return body;
   }

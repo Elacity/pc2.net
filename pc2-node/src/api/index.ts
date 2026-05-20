@@ -103,13 +103,13 @@ const proxyGraphqlRateLimiter = rateLimit({
     message: { error: 'Too many GraphQL requests to upstream proxy. Slow down.' },
 });
 
-export function setupAPI (app: Express): void {
+export function setupAPI(app: Express): void {
     // Debug middleware for specific routes (enable as needed)
     app.use((req: Request, res: Response, next: NextFunction) => {
-    // Uncomment to debug specific routes:
-    // if (req.path === '/move') {
-    //   logger.info(`[Route Debug] ${req.method} ${req.path}: url=${req.url}`);
-    // }
+        // Uncomment to debug specific routes:
+        // if (req.path === '/move') {
+        //   logger.info(`[Route Debug] ${req.method} ${req.path}: url=${req.url}`);
+        // }
         next();
     });
 
@@ -135,7 +135,7 @@ export function setupAPI (app: Express): void {
         let terminalIsolation = 'unknown';
         try {
             const terminalService = getTerminalService();
-            if ( terminalService ) {
+            if (terminalService) {
                 terminalStatus = terminalService.isAvailable() ? 'available' : 'unavailable';
                 terminalIsolation = terminalService.getEffectiveIsolationMode();
             }
@@ -171,14 +171,14 @@ export function setupAPI (app: Express): void {
         } = { enabled: false };
         try {
             const cfg = getClusterPinConfig();
-            if ( cfg ) {
+            if (cfg) {
                 const probe = getClusterPinProbeState();
                 const retry = getClusterPinRetryQueueSnapshot();
                 let lastProbe: 'ok' | 'error' | 'unknown' = 'unknown';
-                if ( probe ) {
-                    if ( probe.lastStatus === 'error' ) {
+                if (probe) {
+                    if (probe.lastStatus === 'error') {
                         lastProbe = 'error';
-                    } else if ( typeof probe.lastStatus === 'number' && probe.lastStatus >= 200 && probe.lastStatus < 300 ) {
+                    } else if (typeof probe.lastStatus === 'number' && probe.lastStatus >= 200 && probe.lastStatus < 300) {
                         lastProbe = 'ok';
                     } else {
                         lastProbe = 'error';
@@ -232,7 +232,7 @@ export function setupAPI (app: Express): void {
             },
         };
 
-        if ( config ) {
+        if (config) {
             health.owner = {
                 set: config.owner.wallet_address !== null,
                 tethered_wallets: config.owner.tethered_wallets.length,
@@ -240,7 +240,7 @@ export function setupAPI (app: Express): void {
         }
 
         // If critical components are missing, mark as degraded
-        if ( ! db ) {
+        if (!db) {
             health.status = 'degraded';
         }
 
@@ -276,7 +276,7 @@ export function setupAPI (app: Express): void {
         // v1.2.7.8: also capture the *active* cascade selection for the GUI's
         // "what transport is actually being used?" indicator (Fix 3.A).
         let activeNatType: string | null = null;
-        if ( bosonService && typeof bosonService.getStatus === 'function' ) {
+        if (bosonService && typeof bosonService.getStatus === 'function') {
             try {
                 const bosonStatus = bosonService.getStatus();
                 wgStatus = bosonStatus?.wireguard || null;
@@ -416,7 +416,7 @@ export function setupAPI (app: Express): void {
                     ? `Installed ${report.downloaded} binaries. Failed: ${report.failed.join(', ')}`
                     : `All transport binaries installed successfully (${report.downloaded} downloaded)`,
             });
-        } catch ( err ) {
+        } catch (err) {
             res.status(500).json({ success: false, message: (err as Error).message });
         }
     });
@@ -449,14 +449,14 @@ export function setupAPI (app: Express): void {
     // Get IPFS instance from filesystem if available
     const ipfs = filesystem?.getIPFS() || null;
 
-    if ( db && filesystem ) {
+    if (db && filesystem) {
         const publicRouter = createPublicRouter(db, filesystem, ipfs);
         app.use(publicRouter);
         logger.info('[API] Public IPFS gateway enabled at /ipfs/:cid and /public/:wallet/*');
 
         const nodeConfig = app.locals.config as Config | undefined;
         const uploadLimit = nodeConfig?.seeding?.max_upload_mbps ?? 0;
-        if ( uploadLimit > 0 ) {
+        if (uploadLimit > 0) {
             setBandwidthLimit(uploadLimit);
         }
     } else {
@@ -480,21 +480,21 @@ export function setupAPI (app: Express): void {
     // User profile endpoint (per-wallet settings)
     app.post('/api/user/profile', authenticate, async (req: AuthenticatedRequest, res: Response) => {
         try {
-            if ( ! req.user ) {
+            if (!req.user) {
                 return res.status(401).json({ error: 'Unauthorized' });
             }
 
             const db = req.app.locals.db;
             const { display_name } = req.body;
 
-            if ( display_name !== undefined ) {
+            if (display_name !== undefined) {
                 // Save per-wallet display name
                 const key = `user_${req.user.wallet_address}_display_name`;
                 db?.setSetting(key, display_name);
             }
 
             res.json({ success: true });
-        } catch ( error ) {
+        } catch (error) {
             log.error('[User Profile] Error:', error);
             res.status(500).json({ error: 'Failed to save profile' });
         }
@@ -502,7 +502,7 @@ export function setupAPI (app: Express): void {
 
     app.get('/api/user/profile', authenticate, async (req: AuthenticatedRequest, res: Response) => {
         try {
-            if ( ! req.user ) {
+            if (!req.user) {
                 return res.status(401).json({ error: 'Unauthorized' });
             }
 
@@ -511,7 +511,7 @@ export function setupAPI (app: Express): void {
             const displayName = db?.getSetting(key) || '';
 
             res.json({ display_name: displayName });
-        } catch ( error ) {
+        } catch (error) {
             log.error('[User Profile] Error:', error);
             res.status(500).json({ error: 'Failed to get profile' });
         }
@@ -520,7 +520,7 @@ export function setupAPI (app: Express): void {
     // Login history endpoint (per-wallet)
     app.get('/api/user/login-history', authenticate, async (req: AuthenticatedRequest, res: Response) => {
         try {
-            if ( ! req.user ) {
+            if (!req.user) {
                 return res.status(401).json({ error: 'Unauthorized' });
             }
 
@@ -545,7 +545,7 @@ export function setupAPI (app: Express): void {
             }));
 
             res.json({ logins });
-        } catch ( error ) {
+        } catch (error) {
             log.error('[Login History] Error:', error);
             res.json({ logins: [] });
         }
@@ -554,7 +554,7 @@ export function setupAPI (app: Express): void {
     // List sessions endpoint for Session Manager
     app.get('/auth/list-sessions', authenticate, async (req: AuthenticatedRequest, res: Response) => {
         try {
-            if ( ! req.user ) {
+            if (!req.user) {
                 return res.status(401).json({ error: 'Unauthorized' });
             }
 
@@ -580,7 +580,7 @@ export function setupAPI (app: Express): void {
             }));
 
             res.json(result);
-        } catch ( error ) {
+        } catch (error) {
             log.error('[List Sessions] Error:', error);
             res.json([]);
         }
@@ -589,7 +589,7 @@ export function setupAPI (app: Express): void {
     // Revoke session endpoint
     app.post('/auth/revoke-session', authenticate, async (req: AuthenticatedRequest, res: Response) => {
         try {
-            if ( ! req.user ) {
+            if (!req.user) {
                 return res.status(401).json({ error: 'Unauthorized' });
             }
 
@@ -604,7 +604,7 @@ export function setupAPI (app: Express): void {
       `).run(walletAddress, `${uuid}%`);
 
             res.json({ success: true });
-        } catch ( error ) {
+        } catch (error) {
             log.error('[Revoke Session] Error:', error);
             res.status(500).json({ error: 'Failed to revoke session' });
         }
@@ -647,7 +647,7 @@ export function setupAPI (app: Express): void {
     // Content Catalog (on-chain indexed content — public read, no auth needed for browsing)
     app.get('/api/catalog', (req: Request, res: Response) => {
         const catalogDb = req.app.locals.db as DatabaseManager | undefined;
-        if ( ! catalogDb ) return res.status(503).json({ error: 'Database not available' });
+        if (!catalogDb) return res.status(503).json({ error: 'Database not available' });
 
         const { asset_type, creator, channel, search, limit: l, offset: o } = req.query;
         const result = catalogDb.getCatalogItems({
@@ -680,18 +680,18 @@ export function setupAPI (app: Express): void {
    */
     app.post('/api/catalog/reindex', reindexRateLimiter, authenticate, async (req: Request, res: Response) => {
         const indexer = req.app.locals.indexerService;
-        if ( ! indexer ) return res.status(503).json({ error: 'Indexer not available' });
+        if (!indexer) return res.status(503).json({ error: 'Indexer not available' });
         try {
             const result = await indexer.triggerScan();
             res.json({ success: true, ...result });
-        } catch ( err: any ) {
+        } catch (err: any) {
             res.status(500).json({ error: err.message });
         }
     });
 
     app.get('/api/catalog/stats', (req: Request, res: Response) => {
         const catalogDb = req.app.locals.db as DatabaseManager | undefined;
-        if ( ! catalogDb ) return res.status(503).json({ error: 'Database not available' });
+        if (!catalogDb) return res.status(503).json({ error: 'Database not available' });
 
         const stats = catalogDb.getCatalogStats();
         const indexer = req.app.locals.indexerService;
@@ -725,8 +725,8 @@ export function setupAPI (app: Express): void {
     app.get('/api/catalog/indexer-status', (req: Request, res: Response) => {
         const catalogDb = req.app.locals.db as DatabaseManager | undefined;
         const indexer = req.app.locals.indexerService;
-        if ( ! catalogDb ) return res.status(503).json({ error: 'Database not available' });
-        if ( ! indexer ) return res.status(503).json({ error: 'Indexer not available' });
+        if (!catalogDb) return res.status(503).json({ error: 'Database not available' });
+        if (!indexer) return res.status(503).json({ error: 'Indexer not available' });
 
         const stats = catalogDb.getCatalogStats();
         const indexerStatus = indexer.getIndexerStatus();
@@ -763,10 +763,10 @@ export function setupAPI (app: Express): void {
 
     app.get('/api/catalog/content/:contentId', (req: Request, res: Response) => {
         const catalogDb = req.app.locals.db as DatabaseManager | undefined;
-        if ( ! catalogDb ) return res.status(503).json({ error: 'Database not available' });
+        if (!catalogDb) return res.status(503).json({ error: 'Database not available' });
 
         const item = catalogDb.getCatalogItemByContentId(req.params.contentId) as any;
-        if ( ! item ) return res.status(404).json({ error: 'Asset not found' });
+        if (!item) return res.status(404).json({ error: 'Asset not found' });
 
         const pinnedCids = new Set(catalogDb.getPinnedCIDs());
         item.is_local = !!(item.content_cid && pinnedCids.has(item.content_cid));
@@ -776,16 +776,16 @@ export function setupAPI (app: Express): void {
 
     app.get('/api/catalog/asset/:address/:tokenId', (req: Request, res: Response) => {
         const catalogDb = req.app.locals.db as DatabaseManager | undefined;
-        if ( ! catalogDb ) return res.status(503).json({ error: 'Database not available' });
+        if (!catalogDb) return res.status(503).json({ error: 'Database not available' });
 
         const item = catalogDb.getCatalogItemByToken(req.params.address, req.params.tokenId) as any;
-        if ( ! item ) return res.status(404).json({ error: 'Asset not found in local catalog' });
+        if (!item) return res.status(404).json({ error: 'Asset not found in local catalog' });
 
         const pinnedCids = new Set(catalogDb.getPinnedCIDs());
         item.is_local = !!(item.content_cid && pinnedCids.has(item.content_cid));
 
         const channelMeta = catalogDb.getChannelMetadata(item.channel_address);
-        if ( channelMeta ) {
+        if (channelMeta) {
             item._channelMeta = channelMeta;
         }
 
@@ -794,17 +794,17 @@ export function setupAPI (app: Express): void {
 
     app.get('/api/catalog/operative/:address', (req: Request, res: Response) => {
         const catalogDb = req.app.locals.db as DatabaseManager | undefined;
-        if ( ! catalogDb ) return res.status(503).json({ error: 'Database not available' });
+        if (!catalogDb) return res.status(503).json({ error: 'Database not available' });
 
         const item = catalogDb.getCatalogItemByOperative(req.params.address) as any;
-        if ( ! item ) return res.status(404).json({ error: 'Asset not found' });
+        if (!item) return res.status(404).json({ error: 'Asset not found' });
 
         res.json({ success: true, item });
     });
 
     app.get('/api/catalog/providers/:cid', async (req: Request, res: Response) => {
         const catalogIpfs = ipfs;
-        if ( ! catalogIpfs ) return res.status(503).json({ error: 'IPFS not available' });
+        if (!catalogIpfs) return res.status(503).json({ error: 'IPFS not available' });
 
         const { cid } = req.params;
 
@@ -855,7 +855,7 @@ export function setupAPI (app: Express): void {
 
     app.get('/api/catalog/creator/:address', (req: Request, res: Response) => {
         const catalogDb = req.app.locals.db as DatabaseManager | undefined;
-        if ( ! catalogDb ) return res.status(503).json({ error: 'Database not available' });
+        if (!catalogDb) return res.status(503).json({ error: 'Database not available' });
 
         const stats = catalogDb.getCreatorStats(req.params.address);
         const cdnStatsData = req.app.locals.seedingService?.getStats?.() ?? null;
@@ -875,7 +875,7 @@ export function setupAPI (app: Express): void {
 
     app.get('/api/catalog/channels', async (req: Request, res: Response) => {
         const catalogDb = req.app.locals.db as DatabaseManager | undefined;
-        if ( ! catalogDb ) return res.status(503).json({ error: 'Database not available' });
+        if (!catalogDb) return res.status(503).json({ error: 'Database not available' });
 
         const channels = catalogDb.getCatalogChannels();
 
@@ -891,27 +891,27 @@ export function setupAPI (app: Express): void {
         const MAX_NAME_RESOLVES_PER_REQUEST = 25;
         const unresolved = visibleChannels.filter(ch => !ch.name).slice(0, MAX_NAME_RESOLVES_PER_REQUEST);
 
-        if ( unresolved.length > 0 ) {
+        if (unresolved.length > 0) {
             await Promise.all(unresolved.map(async (ch) => {
                 try {
                     const result = await baseRpcCall('eth_call', [
                         { to: ch.address, data: '0x06fdde03' },
                         'latest',
                     ], 5000);
-                    if ( typeof result === 'string' && result.length >= 130 ) {
+                    if (typeof result === 'string' && result.length >= 130) {
                         const hex = result.replace('0x', '');
                         const length = parseInt(hex.slice(64, 128), 16);
-                        if ( length > 0 && length < 256 ) {
+                        if (length > 0 && length < 256) {
                             const nameHex = hex.slice(128, 128 + length * 2);
                             const buf = Buffer.from(nameHex, 'hex');
                             const name = buf.toString('utf8').replace(/\0+$/, '').trim();
-                            if ( name ) {
+                            if (name) {
                                 catalogDb.updateChannelMetadata(ch.address, { name });
                                 ch.name = name;
                             }
                         }
                     }
-                } catch ( err: any ) {
+                } catch (err: any) {
                     logger.debug(`[catalog/channels] name() resolve failed for ${ch.address}: ${err.message}`);
                 }
             }));
@@ -923,7 +923,7 @@ export function setupAPI (app: Express): void {
 
     app.get('/api/catalog/channel/:address', (req: Request, res: Response) => {
         const catalogDb = req.app.locals.db as DatabaseManager | undefined;
-        if ( ! catalogDb ) return res.status(503).json({ error: 'Database not available' });
+        if (!catalogDb) return res.status(503).json({ error: 'Database not available' });
 
         const { address } = req.params;
         const meta = catalogDb.getChannelMetadata(address);
@@ -932,7 +932,7 @@ export function setupAPI (app: Express): void {
 
     app.put('/api/catalog/channel/:address', authenticate, (req: AuthenticatedRequest, res: Response) => {
         const catalogDb = req.app.locals.db as DatabaseManager | undefined;
-        if ( ! catalogDb ) return res.status(503).json({ error: 'Database not available' });
+        if (!catalogDb) return res.status(503).json({ error: 'Database not available' });
 
         const { address } = req.params;
         const { name, description, categories, image, coverImage, plans, tokenAccess } = req.body || {};
@@ -942,7 +942,7 @@ export function setupAPI (app: Express): void {
             catalogDb.updateChannelMetadata(address, { name, description, categories, image, coverImage, plans, tokenAccess }, wallet);
             const updated = catalogDb.getChannelMetadata(address);
             res.json({ success: true, channel: updated });
-        } catch ( err: any ) {
+        } catch (err: any) {
             logger.error(`[API] Channel metadata update failed: ${err.message}`);
             res.status(500).json({ error: err.message });
         }
@@ -950,7 +950,7 @@ export function setupAPI (app: Express): void {
 
     app.get('/api/catalog/owned/:address', (req: Request, res: Response) => {
         const catalogDb = req.app.locals.db as DatabaseManager | undefined;
-        if ( ! catalogDb ) return res.status(503).json({ error: 'Database not available' });
+        if (!catalogDb) return res.status(503).json({ error: 'Database not available' });
 
         const { limit: l, offset: o } = req.query;
         const result = catalogDb.getOwnedCatalogItems(req.params.address, {
@@ -969,7 +969,7 @@ export function setupAPI (app: Express): void {
 
     app.get('/api/catalog/operatives', (req: Request, res: Response) => {
         const catalogDb = req.app.locals.db as DatabaseManager | undefined;
-        if ( ! catalogDb ) return res.status(503).json({ error: 'Database not available' });
+        if (!catalogDb) return res.status(503).json({ error: 'Database not available' });
 
         try {
             const db = catalogDb.getDB();
@@ -979,14 +979,14 @@ export function setupAPI (app: Express): void {
         WHERE operative_address IS NOT NULL AND operative_address != ''
       `).all() as { address: string }[];
             res.json({ success: true, operatives: rows.map(r => r.address) });
-        } catch ( err: any ) {
+        } catch (err: any) {
             res.status(500).json({ error: err.message });
         }
     });
 
     app.get('/api/catalog/seeding', (req: Request, res: Response) => {
         const catalogDb = req.app.locals.db as DatabaseManager | undefined;
-        if ( ! catalogDb ) return res.status(503).json({ error: 'Database not available' });
+        if (!catalogDb) return res.status(503).json({ error: 'Database not available' });
 
         const seedingStats = catalogDb.getNodeSeedingStats();
         const seedingService = req.app.locals.seedingService;
@@ -1023,10 +1023,10 @@ export function setupAPI (app: Express): void {
     // Categories: assets (per-asset), channels (aggregated by channel), my-channels (channels user owns)
     app.get('/api/catalog/earnings/:address', async (req: Request, res: Response) => {
         const catalogDb = req.app.locals.db as DatabaseManager | undefined;
-        if ( ! catalogDb ) return res.status(503).json({ error: 'Database not available' });
+        if (!catalogDb) return res.status(503).json({ error: 'Database not available' });
 
         const walletAddress = req.params.address;
-        if ( !walletAddress || !/^0x[a-fA-F0-9]{40}$/.test(walletAddress) ) {
+        if (!walletAddress || !/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
             return res.status(400).json({ error: 'Invalid wallet address' });
         }
 
@@ -1037,10 +1037,10 @@ export function setupAPI (app: Express): void {
 
         // Serve from server-side cache if fresh (unless force-refresh)
         const cacheKey = `${walletAddress.toLowerCase()}:${category}`;
-        if ( ! forceRefresh ) {
+        if (!forceRefresh) {
             const cached = earningsCache.get(cacheKey);
             const ttl = cached?.partial ? EARNINGS_PARTIAL_TTL : EARNINGS_CACHE_TTL;
-            if ( cached && Date.now() - cached.ts < ttl ) {
+            if (cached && Date.now() - cached.ts < ttl) {
                 return res.json(cached.data);
             }
         } else {
@@ -1059,12 +1059,12 @@ export function setupAPI (app: Express): void {
             const { items: catalogItems } = catalogDb.getCatalogItems({ limit: 500 });
 
             // "my-channels" — return channels owned by this address with aggregated on-chain rewards
-            if ( category === 'my-channels' ) {
+            if (category === 'my-channels') {
                 const channels = catalogDb.getCatalogChannels();
                 const owned = channels.filter(ch =>
                     ch.creator.toLowerCase() === walletAddress.toLowerCase());
 
-                if ( owned.length === 0 ) {
+                if (owned.length === 0) {
                     const emptyResp = { success: true, items: { total: 0, data: [] }, rewards: [] };
                     earningsCache.set(cacheKey, { data: emptyResp, ts: Date.now(), partial: false });
                     return res.json(emptyResp);
@@ -1075,18 +1075,18 @@ export function setupAPI (app: Express): void {
                     'function rewardsOf(address user, address payToken) view returns (uint256)',
                 ];
 
-                async function callWithRetryMC (
+                async function callWithRetryMC(
                     opAddr: string,
                     call: (c: any) => Promise<bigint>,
                     retries = 3,
                 ): Promise<bigint> {
-                    for ( let i = 0; i <= retries; i++ ) {
+                    for (let i = 0; i <= retries; i++) {
                         try {
                             const p = i === 0 ? provider : new ethers.JsonRpcProvider(getBaseRpcUrl());
                             const c = new ethers.Contract(opAddr, OPERATIVE_ABI_MC, p);
                             return await call(c);
                         } catch {
-                            if ( i < retries ) {
+                            if (i < retries) {
                                 rotateBaseRpc();
                                 await new Promise(r => setTimeout(r, 200 * (i + 1)));
                             }
@@ -1098,7 +1098,7 @@ export function setupAPI (app: Express): void {
                 const channelResults: any[] = [];
                 const rewardsSummaryMC: any[] = [];
 
-                for ( const ch of owned ) {
+                for (const ch of owned) {
                     // v1.2.7.5: also exclude zero-address operatives — they
                     // represent assets where on-chain operative deployment
                     // failed or is still pending; balanceOf on 0x0 always
@@ -1114,16 +1114,16 @@ export function setupAPI (app: Express): void {
                     let totalRoyaltyShares = 0;
                     const operativesWithRewards: string[] = [];
 
-                    for ( const asset of chAssets ) {
+                    for (const asset of chAssets) {
                         try {
                             const royaltyBal = await callWithRetryMC(asset.operative_address!, (c) => c.balanceOf(walletAddress, 2));
-                            if ( royaltyBal === BigInt(-1) ) continue;
+                            if (royaltyBal === BigInt(-1)) continue;
                             const rewards = await callWithRetryMC(asset.operative_address!, (c) => c.rewardsOf(walletAddress, USDC));
                             const rewardsVal = rewards === BigInt(-1) ? BigInt(0) : rewards;
                             totalRoyaltyShares += Number(royaltyBal);
                             const rewardsUSDC = Number(ethers.formatUnits(rewardsVal, 6));
                             totalRewards += rewardsUSDC;
-                            if ( rewardsUSDC > 0 ) operativesWithRewards.push(asset.operative_address!);
+                            if (rewardsUSDC > 0) operativesWithRewards.push(asset.operative_address!);
                         } catch {
                             // skip failed operative
                         }
@@ -1145,8 +1145,8 @@ export function setupAPI (app: Express): void {
                         __typename: 'OwnedChannel',
                     });
 
-                    if ( totalRewards > 0 ) {
-                        for ( const opAddr of operativesWithRewards ) {
+                    if (totalRewards > 0) {
+                        for (const opAddr of operativesWithRewards) {
                             rewardsSummaryMC.push({
                                 name: ch.name || 'Untitled Channel',
                                 address: opAddr,
@@ -1167,15 +1167,15 @@ export function setupAPI (app: Express): void {
             }
 
             const operativeSet = new Map<string, typeof catalogItems>();
-            for ( const item of catalogItems ) {
-                if ( ! item.operative_address ) continue;
+            for (const item of catalogItems) {
+                if (!item.operative_address) continue;
                 const opLower = item.operative_address.toLowerCase();
                 // v1.2.7.5: skip zero-address operatives upfront — they
                 // represent failed/pending operative deployments and any
                 // balanceOf call against 0x0 reverts. Skipping pre-RPC
                 // avoids wasted retries and log noise.
-                if ( opLower === ZERO_ADDRESS ) continue;
-                if ( ! operativeSet.has(opLower) ) operativeSet.set(opLower, []);
+                if (opLower === ZERO_ADDRESS) continue;
+                if (!operativeSet.has(opLower)) operativeSet.set(opLower, []);
                 operativeSet.get(opLower)!.push(item);
             }
 
@@ -1202,22 +1202,22 @@ export function setupAPI (app: Express): void {
 
             let skippedCount = 0;
 
-            function makeProvider () {
+            function makeProvider() {
                 return new ethers.JsonRpcProvider(getBaseRpcUrl());
             }
 
-            async function callWithRetry (
+            async function callWithRetry(
                 opAddr: string,
                 call: (op: any) => Promise<bigint>,
                 retries = 3,
             ): Promise<bigint> {
-                for ( let i = 0; i <= retries; i++ ) {
+                for (let i = 0; i <= retries; i++) {
                     try {
                         const p = i === 0 ? provider : makeProvider();
                         const c = new ethers.Contract(opAddr, OPERATIVE_ABI, p);
                         return await call(c);
                     } catch {
-                        if ( i < retries ) {
+                        if (i < retries) {
                             rotateBaseRpc();
                             await new Promise(r => setTimeout(r, 200 * (i + 1)));
                         }
@@ -1227,10 +1227,10 @@ export function setupAPI (app: Express): void {
             }
 
             // Query operatives sequentially to avoid public RPC rate-limiting
-            for ( const [opAddr, items] of operativeSet ) {
+            for (const [opAddr, items] of operativeSet) {
                 try {
                     const royaltyBal = await callWithRetry(opAddr, (op) => op.balanceOf(walletAddress, 2));
-                    if ( royaltyBal === BigInt(-1) ) {
+                    if (royaltyBal === BigInt(-1)) {
                         // v1.2.7.5: per-op transient RPC failure is noise at
                         // warn level. We summarise once at the end if any
                         // operative was skipped (see EARNINGS_PARTIAL_TTL
@@ -1247,7 +1247,7 @@ export function setupAPI (app: Express): void {
                     const royaltyCount = Number(royaltyBal);
                     const rewardsUSDC = Number(ethers.formatUnits(rewardsVal, 6));
 
-                    if ( royaltyCount > 0 || rewardsUSDC > 0 ) {
+                    if (royaltyCount > 0 || rewardsUSDC > 0) {
                         const item = items[0];
                         const sharePct = royaltyCount / 10;
 
@@ -1264,7 +1264,7 @@ export function setupAPI (app: Express): void {
                             __typename: 'RoyaltyAsset',
                         });
 
-                        if ( rewardsUSDC > 0 ) {
+                        if (rewardsUSDC > 0) {
                             rewardsSummary.push({
                                 name: item.name || 'Untitled',
                                 address: opAddr,
@@ -1273,17 +1273,17 @@ export function setupAPI (app: Express): void {
                             });
                         }
                     }
-                } catch ( err ) {
+                } catch (err) {
                     log.warn(`[Earnings] Operative ${opAddr} query failed:`, (err as Error).message);
                 }
             }
 
             // For "channels" category, aggregate asset results by channel_address
-            if ( category === 'channels' ) {
+            if (category === 'channels') {
                 const channelMap = new Map<string, { items: EarningsItem[]; totalRewards: number; totalShare: number }>();
-                for ( const asset of assetResults ) {
+                for (const asset of assetResults) {
                     const chKey = asset.ledger.toLowerCase();
-                    if ( ! channelMap.has(chKey) ) channelMap.set(chKey, { items: [], totalRewards: 0, totalShare: 0 });
+                    if (!channelMap.has(chKey)) channelMap.set(chKey, { items: [], totalRewards: 0, totalShare: 0 });
                     const entry = channelMap.get(chKey)!;
                     entry.items.push(asset);
                     entry.totalRewards += asset.unclaimedRewards;
@@ -1291,10 +1291,10 @@ export function setupAPI (app: Express): void {
                 }
 
                 const channelResults: (EarningsItem & { itemsCount?: number })[] = [];
-                for ( const [chAddr, entry] of channelMap ) {
+                for (const [chAddr, entry] of channelMap) {
                     const first = entry.items[0];
                     const catalogChannel = catalogDb.getCatalogChannels().find(
-                                    ch => ch.address.toLowerCase() === chAddr);
+                        ch => ch.address.toLowerCase() === chAddr);
                     channelResults.push({
                         address: chAddr,
                         name: catalogChannel?.name || first.name || 'Untitled Channel',
@@ -1334,13 +1334,13 @@ export function setupAPI (app: Express): void {
             // we don't re-hammer the RPC on every poll. Single warn here
             // (instead of one per skipped operative) keeps logs scannable.
             earningsCache.set(cacheKey, { data: assetsResponse, ts: Date.now(), partial: skippedCount > 0 });
-            if ( skippedCount > 0 ) {
-                log.warn(`[Earnings] ${skippedCount} operative(s) skipped due to RPC failures — caching partial result for ${ EARNINGS_PARTIAL_TTL / 1000 }s`);
+            if (skippedCount > 0) {
+                log.warn(`[Earnings] ${skippedCount} operative(s) skipped due to RPC failures — caching partial result for ${EARNINGS_PARTIAL_TTL / 1000}s`);
             }
             res.json(assetsResponse);
-        } catch ( err: any ) {
+        } catch (err: any) {
             log.warn('[Earnings] On-chain query failed:', err.message);
-            res.status(500).json({ error: `Failed to query on-chain earnings: ${ err.message}` });
+            res.status(500).json({ error: `Failed to query on-chain earnings: ${err.message}` });
         }
     });
 
@@ -1355,8 +1355,8 @@ export function setupAPI (app: Express): void {
         try {
             const upstream = 'https://base.ela.city/api/2.0/graphql';
             const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-            if ( req.headers.authorization ) headers['Authorization'] = req.headers.authorization as string;
-            if ( req.headers['x-eth-signer'] ) headers['X-ETH-Signer'] = req.headers['x-eth-signer'] as string;
+            if (req.headers.authorization) headers['Authorization'] = req.headers.authorization as string;
+            if (req.headers['x-eth-signer']) headers['X-ETH-Signer'] = req.headers['x-eth-signer'] as string;
 
             const resp = await fetch(upstream, {
                 method: 'POST',
@@ -1365,8 +1365,8 @@ export function setupAPI (app: Express): void {
             });
             const data = await resp.text();
             res.status(resp.status).set('Content-Type', 'application/json').send(data);
-        } catch ( err: any ) {
-            res.status(502).json({ error: `GraphQL proxy failed: ${ err.message || String(err)}` });
+        } catch (err: any) {
+            res.status(502).json({ error: `GraphQL proxy failed: ${err.message || String(err)}` });
         }
     });
 
@@ -1377,8 +1377,8 @@ export function setupAPI (app: Express): void {
         try {
             const upstream = 'https://ela.city/api/2.0/graphql';
             const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-            if ( req.headers.authorization ) headers['Authorization'] = req.headers.authorization as string;
-            if ( req.headers['x-eth-signer'] ) headers['X-ETH-Signer'] = req.headers['x-eth-signer'] as string;
+            if (req.headers.authorization) headers['Authorization'] = req.headers.authorization as string;
+            if (req.headers['x-eth-signer']) headers['X-ETH-Signer'] = req.headers['x-eth-signer'] as string;
 
             const resp = await fetch(upstream, {
                 method: 'POST',
@@ -1387,8 +1387,8 @@ export function setupAPI (app: Express): void {
             });
             const data = await resp.text();
             res.status(resp.status).set('Content-Type', 'application/json').send(data);
-        } catch ( err: any ) {
-            res.status(502).json({ error: `ESC NFT GraphQL proxy failed: ${ err.message || String(err)}` });
+        } catch (err: any) {
+            res.status(502).json({ error: `ESC NFT GraphQL proxy failed: ${err.message || String(err)}` });
         }
     });
 
@@ -1414,7 +1414,7 @@ export function setupAPI (app: Express): void {
             });
         });
         proxyReq.on('error', (err) => {
-            res.status(502).json({ error: `ESC RPC proxy failed: ${ err.message || String(err)}` });
+            res.status(502).json({ error: `ESC RPC proxy failed: ${err.message || String(err)}` });
         });
         proxyReq.on('timeout', () => {
             proxyReq.destroy();
@@ -1430,15 +1430,15 @@ export function setupAPI (app: Express): void {
         try {
             const upstream = `https://ela.city/api/${req.params.path}`;
             const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-            if ( req.headers.authorization ) headers['Authorization'] = req.headers.authorization as string;
-            if ( req.headers['x-eth-signer'] ) headers['X-ETH-Signer'] = req.headers['x-eth-signer'] as string;
+            if (req.headers.authorization) headers['Authorization'] = req.headers.authorization as string;
+            if (req.headers['x-eth-signer']) headers['X-ETH-Signer'] = req.headers['x-eth-signer'] as string;
 
             const fetchOpts: RequestInit = {
                 method: req.method,
                 headers,
             };
 
-            if ( ['POST', 'PUT', 'PATCH'].includes(req.method) ) {
+            if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
                 fetchOpts.body = JSON.stringify(req.body);
             }
 
@@ -1446,13 +1446,13 @@ export function setupAPI (app: Express): void {
             const contentType = resp.headers.get('content-type') || 'application/json';
             const data = await resp.arrayBuffer();
             res.status(resp.status).set('Content-Type', contentType).send(Buffer.from(data));
-        } catch ( err: any ) {
-            res.status(502).json({ error: `ESC NFT REST proxy failed: ${ err.message || String(err)}` });
+        } catch (err: any) {
+            res.status(502).json({ error: `ESC NFT REST proxy failed: ${err.message || String(err)}` });
         }
     });
 
     // Installed Apps (dApp Store) — requires db for registration
-    if ( db ) {
+    if (db) {
         const dataDir = process.env.PC2_DATA_DIR || path.join(process.cwd(), 'data');
         const appInstallService = new AppInstallService(db, ipfs, dataDir);
         app.locals.appInstallService = appInstallService;
@@ -1475,25 +1475,25 @@ export function setupAPI (app: Express): void {
         // so upgrading testers see the same clean catalog as fresh installs.
         // Real dApp-Centre installs have a real IPFS CID and are untouched.
         const testAppsDir = path.join(dataDir, 'test-apps');
-        if ( fs.existsSync(testAppsDir) ) {
+        if (fs.existsSync(testAppsDir)) {
             const systemBundleNames = new Set<string>();
 
-            for ( const appFolder of fs.readdirSync(testAppsDir, { withFileTypes: true }) ) {
-                if ( ! appFolder.isDirectory() ) continue;
+            for (const appFolder of fs.readdirSync(testAppsDir, { withFileTypes: true })) {
+                if (!appFolder.isDirectory()) continue;
                 const appName = appFolder.name;
 
                 const manifestPath = path.join(testAppsDir, appName, 'app.json');
-                if ( ! fs.existsSync(manifestPath) ) continue;
+                if (!fs.existsSync(manifestPath)) continue;
 
                 let manifest: any;
                 try {
                     manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
-                } catch ( err: any ) {
+                } catch (err: any) {
                     logger.warn(`[API] ⚠️  Failed to read ${appName}/app.json: ${err.message}`);
                     continue;
                 }
 
-                if ( manifest.role !== 'system' ) {
+                if (manifest.role !== 'system') {
                     // Non-system bundle: skip auto-install. (Cleanup of any prior
                     // local: install for this name happens in the second pass below.)
                     continue;
@@ -1503,10 +1503,10 @@ export function setupAPI (app: Express): void {
 
                 try {
                     const existing = appInstallService.get(appName);
-                    if ( existing ) appInstallService.uninstall(appName);
+                    if (existing) appInstallService.uninstall(appName);
                     appInstallService.installFromLocal(manifest, path.join(testAppsDir, appName));
                     logger.info(`[API] ✅ Synced bundled system app: ${appName}`);
-                } catch ( err: any ) {
+                } catch (err: any) {
                     logger.warn(`[API] ⚠️  Failed to sync ${appName}: ${err.message}`);
                 }
             }
@@ -1516,17 +1516,17 @@ export function setupAPI (app: Express): void {
             // supernode-manager, wallet-test from earlier boots).
             try {
                 const allInstalled = appInstallService.list();
-                for ( const inst of allInstalled ) {
-                    if ( ! inst.cid?.startsWith('local:') ) continue;
-                    if ( systemBundleNames.has(inst.app_name) ) continue;
+                for (const inst of allInstalled) {
+                    if (!inst.cid?.startsWith('local:')) continue;
+                    if (systemBundleNames.has(inst.app_name)) continue;
                     try {
                         appInstallService.uninstall(inst.app_name);
                         logger.info(`[API] 🧹 Removed stale auto-installed bundle: ${inst.app_name}`);
-                    } catch ( err: any ) {
+                    } catch (err: any) {
                         logger.warn(`[API] ⚠️  Failed to clean up ${inst.app_name}: ${err.message}`);
                     }
                 }
-            } catch ( err: any ) {
+            } catch (err: any) {
                 logger.warn(`[API] ⚠️  Failed to enumerate installed apps for cleanup: ${err.message}`);
             }
         }
@@ -1540,7 +1540,7 @@ export function setupAPI (app: Express): void {
 
     // Rate limit status endpoint
     app.get('/api/rate-limit/status', authenticate, (req: AuthenticatedRequest, res: Response) => {
-        if ( ! req.user ) {
+        if (!req.user) {
             res.status(401).json({ error: 'Unauthorized' });
             return;
         }
@@ -1549,7 +1549,7 @@ export function setupAPI (app: Express): void {
         const status = getRateLimitStatus(req.user.wallet_address, apiKeyId);
         res.json({
             success: true,
-            wallet: `${req.user.wallet_address.substring(0, 10) }...`,
+            wallet: `${req.user.wallet_address.substring(0, 10)}...`,
             api_key_id: apiKeyId || 'session',
             limits: status,
         });
@@ -1596,7 +1596,7 @@ export function setupAPI (app: Express): void {
     const uploadTmpDir = dataDir
         ? path.join(dataDir, 'tmp', 'pc2-uploads')
         : path.join(os.tmpdir(), 'pc2-uploads');
-    if ( ! fs.existsSync(uploadTmpDir) ) fs.mkdirSync(uploadTmpDir, { recursive: true });
+    if (!fs.existsSync(uploadTmpDir)) fs.mkdirSync(uploadTmpDir, { recursive: true });
     logger.info(`[API] Upload temp directory: ${uploadTmpDir}`);
 
     // SEC-A19 (2026-04 Wave 5.5): the on-disk filename MUST NOT include
@@ -1620,7 +1620,7 @@ export function setupAPI (app: Express): void {
 
     // Restore endpoint with disk-based storage (backups can be GB — avoids OOM)
     const restoreUploadDir = path.join(uploadTmpDir, 'restore');
-    if ( ! fs.existsSync(restoreUploadDir) ) fs.mkdirSync(restoreUploadDir, { recursive: true });
+    if (!fs.existsSync(restoreUploadDir)) fs.mkdirSync(restoreUploadDir, { recursive: true });
 
     // SEC-A19 (2026-04 Wave 5.5): same as above. The route-level
     // `isValidBackupFilename` check (Wave 5) gates *use* of the backup;
@@ -1699,7 +1699,7 @@ export function setupAPI (app: Express): void {
         try {
             const { address, page = '1', pageSize = '20' } = req.query;
 
-            if ( !address || typeof address !== 'string' ) {
+            if (!address || typeof address !== 'string') {
                 res.status(400).json({ error: 'Address is required' });
                 return;
             }
@@ -1712,7 +1712,7 @@ export function setupAPI (app: Express): void {
             const data = await response.json();
 
             res.json(data);
-        } catch ( error ) {
+        } catch (error) {
             logger.error('[Elastos Proxy] Error:', error);
             res.status(500).json({ error: 'Failed to fetch Elastos transactions' });
         }

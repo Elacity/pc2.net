@@ -305,9 +305,6 @@ const KNOWN_WASM_CRATES: ReadonlyArray<{ name: string; relPath: string }> = [
 const UPDATE_CHANNEL_URL = 'https://api.github.com/repos/Elacity/pc2.net/releases/latest';
 
 interface LitConfigProbe {
-    apiKeyConfigured: boolean;
-    userKeyConfigured: boolean;
-    litActionCidConfigured: boolean;
     provisionCached: boolean;
     apiHostReachable: boolean;
     apiLatencyMs: number | null;
@@ -317,37 +314,24 @@ interface LitConfigProbe {
 /**
  * Lit Protocol / Chipotle health probe. Config-only — does NOT call any
  * Lit Action and therefore burns ZERO Lit Protocol quota. Verifies that:
- *   - the four chipotle-client.ts state files exist on disk and are non-empty
+ *   - the supernode-provisioned config is cached on disk
  *   - the Lit API host is reachable (HEAD request, no auth, no JSON body)
  *
- * Why HEAD-only: a real round-trip would require a SIWE-signed delegation +
- * burn one Lit Action call against the leaked usageKey. Both are hostile to a
- * "click me to check things" diagnostic surface. Real round-trip moves to T-1B
- * once SIWE-gated relayer endpoints exist (the relayer, not the user, owns
- * the quota cost).
+ * Since the X-Api-Key now lives server-side on the Elacity proxy, there are
+ * no per-node key files to probe — the proxy reachability and provision
+ * presence are the only meaningful local signals.
  */
 async function probeLitConfig (dataDir: string): Promise<LitConfigProbe> {
     const result: LitConfigProbe = {
-        apiKeyConfigured: false,
-        userKeyConfigured: false,
-        litActionCidConfigured: false,
         provisionCached: false,
         apiHostReachable: false,
         apiLatencyMs: null,
         error: null,
     };
 
-    // File-existence checks. We never read the values — only check size > 0.
-    // Path layout mirrors chipotle-client.ts DATA_DIR resolution.
     try {
-        const apiKeyPath     = path.join(dataDir, '.chipotle-api-key');
-        const userKeyPath    = path.join(dataDir, '.chipotle-user-key');
-        const cidPath        = path.join(dataDir, '.lit-action-cid');
-        const provisionPath  = path.join(dataDir, '.chipotle-provision.json');
-        result.apiKeyConfigured       = existsSync(apiKeyPath)    && statSync(apiKeyPath).size    > 0;
-        result.userKeyConfigured      = existsSync(userKeyPath)   && statSync(userKeyPath).size   > 0;
-        result.litActionCidConfigured = existsSync(cidPath)       && statSync(cidPath).size       > 0;
-        result.provisionCached        = existsSync(provisionPath) && statSync(provisionPath).size > 0;
+        const provisionPath = path.join(dataDir, '.chipotle-provision.json');
+        result.provisionCached = existsSync(provisionPath) && statSync(provisionPath).size > 0;
     } catch (err: any) {
         result.error = sanitise(err?.message || 'config_check_failed');
     }

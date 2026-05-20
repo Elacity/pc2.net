@@ -12,7 +12,7 @@ import { logger } from '../utils/logger.js';
 import { parseSkillFrontmatter } from '../utils/skill-parser.js';
 import { getGatewayService } from '../services/gateway/index.js';
 import { decryptAssetTwoLayer } from './storage.js';
-import type { DecryptParams } from './storage.js';
+import type { DecryptParams } from './renderer/types.js';
 import type { WASMRuntime } from '../services/wasm/WASMRuntime.js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -39,19 +39,19 @@ function sanitizeAgentId(agentId: string): string {
   if (!agentId || typeof agentId !== 'string') {
     throw new Error('Agent ID is required');
   }
-  
+
   // Check for path traversal attempts
   if (agentId.includes('..') || agentId.includes('/') || agentId.includes('\\')) {
     throw new Error('Agent ID contains invalid path characters');
   }
-  
+
   // Only allow safe characters
   const sanitized = agentId.replace(/[^a-zA-Z0-9_\-]/g, '-');
-  
+
   if (sanitized.length === 0) {
     throw new Error('Agent ID is empty after sanitization');
   }
-  
+
   return sanitized;
 }
 
@@ -63,7 +63,7 @@ router.get('/status', authenticate, async (req: AuthenticatedRequest, res: Respo
   try {
     const gateway = getGatewayService(req.app.locals.db);
     const status = gateway.getStatus();
-    
+
     res.json({
       success: true,
       data: status,
@@ -85,7 +85,7 @@ router.get('/config', authenticate, async (req: AuthenticatedRequest, res: Respo
   try {
     const gateway = getGatewayService(req.app.locals.db);
     const config = gateway.getConfig();
-    
+
     // Mask sensitive data (tokens, API keys)
     const maskedConfig = {
       ...config,
@@ -103,7 +103,7 @@ router.get('/config', authenticate, async (req: AuthenticatedRequest, res: Respo
         })
       ),
     };
-    
+
     res.json({
       success: true,
       data: maskedConfig,
@@ -124,17 +124,17 @@ router.get('/config', authenticate, async (req: AuthenticatedRequest, res: Respo
 router.post('/enable', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { enabled } = req.body;
-    
+
     if (typeof enabled !== 'boolean') {
       return res.status(400).json({
         success: false,
         error: 'enabled must be a boolean',
       });
     }
-    
+
     const gateway = getGatewayService(req.app.locals.db);
     await gateway.setEnabled(enabled);
-    
+
     res.json({
       success: true,
       data: { enabled },
@@ -157,12 +157,12 @@ router.get('/channels', authenticate, async (req: AuthenticatedRequest, res: Res
     const gateway = getGatewayService(req.app.locals.db);
     const config = gateway.getConfig();
     const status = gateway.getStatus();
-    
+
     // Build channel list with status
     const channels = ['whatsapp', 'telegram', 'discord', 'signal', 'webchat'].map(ch => {
       const channelType = ch as ChannelType;
       const channelConfig = config.channels[channelType];
-      
+
       return {
         type: channelType,
         enabled: channelConfig?.enabled || false,
@@ -175,7 +175,7 @@ router.get('/channels', authenticate, async (req: AuthenticatedRequest, res: Res
         info: getChannelInfo(channelType, channelConfig),
       };
     });
-    
+
     res.json({
       success: true,
       data: channels,
@@ -194,7 +194,7 @@ router.get('/channels', authenticate, async (req: AuthenticatedRequest, res: Res
  */
 function getChannelInfo(type: ChannelType, config?: ChannelConfig): Record<string, any> {
   if (!config) return {};
-  
+
   switch (type) {
     case 'whatsapp':
       return {
@@ -230,18 +230,18 @@ router.get('/channels/:channel', authenticate, async (req: AuthenticatedRequest,
   try {
     const channel = req.params.channel as ChannelType;
     const validChannels: ChannelType[] = ['whatsapp', 'telegram', 'discord', 'signal', 'webchat'];
-    
+
     if (!validChannels.includes(channel)) {
       return res.status(400).json({
         success: false,
         error: `Invalid channel: ${channel}`,
       });
     }
-    
+
     const gateway = getGatewayService(req.app.locals.db);
     const config = gateway.getChannelConfig(channel);
     const status = gateway.getStatus();
-    
+
     res.json({
       success: true,
       data: {
@@ -267,17 +267,17 @@ router.put('/channels/:channel', authenticate, async (req: AuthenticatedRequest,
   try {
     const channel = req.params.channel as ChannelType;
     const validChannels: ChannelType[] = ['whatsapp', 'telegram', 'discord', 'signal', 'webchat'];
-    
+
     if (!validChannels.includes(channel)) {
       return res.status(400).json({
         success: false,
         error: `Invalid channel: ${channel}`,
       });
     }
-    
+
     const gateway = getGatewayService(req.app.locals.db);
     await gateway.updateChannelConfig(channel, req.body);
-    
+
     res.json({
       success: true,
       data: { channel, updated: true },
@@ -298,9 +298,9 @@ router.put('/channels/:channel', authenticate, async (req: AuthenticatedRequest,
 router.post('/channels/:channel/connect', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const channel = req.params.channel as ChannelType;
-    
+
     const gateway = getGatewayService(req.app.locals.db);
-    
+
     // First update config if provided
     if (req.body) {
       await gateway.updateChannelConfig(channel, {
@@ -308,20 +308,20 @@ router.post('/channels/:channel/connect', authenticate, async (req: Authenticate
         ...req.body,
       });
     }
-    
+
     // Then connect
     await gateway.connectChannel(channel);
-    
+
     // Get updated config to include bot username etc.
     const channelConfig = gateway.getChannelConfig(channel);
-    const botUsername = channelConfig?.telegram?.botUsername || 
-                        channelConfig?.discord?.botUsername || 
-                        undefined;
-    
+    const botUsername = channelConfig?.telegram?.botUsername ||
+      channelConfig?.discord?.botUsername ||
+      undefined;
+
     res.json({
       success: true,
-      data: { 
-        channel, 
+      data: {
+        channel,
         connected: true,
         botUsername, // Return the bot username
       },
@@ -343,11 +343,11 @@ router.post('/channels/:channel/connect', authenticate, async (req: Authenticate
 router.get('/channels/whatsapp/qr', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const gateway = getGatewayService(req.app.locals.db);
-    
+
     // Get the stored QR code
     const qrCode = gateway.getWhatsAppQR();
     let qrDataUrl: string | null = null;
-    
+
     if (qrCode) {
       // Generate data URL image for browser display
       try {
@@ -364,7 +364,7 @@ router.get('/channels/whatsapp/qr', authenticate, async (req: AuthenticatedReque
         logger.error('[Gateway API] QR generation failed:', e.message);
       }
     }
-    
+
     res.json({
       success: true,
       data: {
@@ -389,13 +389,13 @@ router.get('/channels/whatsapp/qr', authenticate, async (req: AuthenticatedReque
 router.post('/channels/:channel/disconnect', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const channel = req.params.channel as ChannelType;
-    
+
     const gateway = getGatewayService(req.app.locals.db);
     await gateway.disconnectChannel(channel);
-    
+
     // Update config
     await gateway.updateChannelConfig(channel, { enabled: false });
-    
+
     res.json({
       success: true,
       data: { channel, connected: false },
@@ -456,7 +456,7 @@ router.get('/agents', authenticate, async (req: AuthenticatedRequest, res: Respo
   try {
     const gateway = getGatewayService(req.app.locals.db);
     const agents = gateway.getAgents();
-    
+
     res.json({
       success: true,
       data: agents,
@@ -477,17 +477,17 @@ router.get('/agents', authenticate, async (req: AuthenticatedRequest, res: Respo
 router.get('/agents/:agentId', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const agentId = sanitizeAgentId(req.params.agentId);
-    
+
     const gateway = getGatewayService(req.app.locals.db);
     const agent = gateway.getAgent(agentId);
-    
+
     if (!agent) {
       return res.status(404).json({
         success: false,
         error: `Agent not found: ${agentId}`,
       });
     }
-    
+
     res.json({
       success: true,
       data: agent,
@@ -508,7 +508,7 @@ router.get('/agents/:agentId', authenticate, async (req: AuthenticatedRequest, r
 router.post('/agents', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const agent = req.body as AgentConfig;
-    
+
     // Validate required fields
     if (!agent.id || !agent.name || !agent.workspace) {
       return res.status(400).json({
@@ -516,10 +516,10 @@ router.post('/agents', authenticate, async (req: AuthenticatedRequest, res: Resp
         error: 'Agent must have id, name, and workspace',
       });
     }
-    
+
     // Sanitize agent ID to prevent path traversal
     agent.id = sanitizeAgentId(agent.id);
-    
+
     // Set defaults
     if (!agent.permissions) {
       agent.permissions = {
@@ -539,10 +539,10 @@ router.post('/agents', authenticate, async (req: AuthenticatedRequest, res: Resp
     if (agent.enabled === undefined) {
       agent.enabled = true;
     }
-    
+
     const gateway = getGatewayService(req.app.locals.db);
     await gateway.upsertAgent(agent);
-    
+
     res.json({
       success: true,
       data: agent,
@@ -564,25 +564,25 @@ router.put('/agents/:agentId', authenticate, async (req: AuthenticatedRequest, r
   try {
     const agentId = sanitizeAgentId(req.params.agentId);
     const updates = req.body;
-    
+
     const gateway = getGatewayService(req.app.locals.db);
     const existing = gateway.getAgent(agentId);
-    
+
     if (!existing) {
       return res.status(404).json({
         success: false,
         error: `Agent not found: ${agentId}`,
       });
     }
-    
+
     const updated: AgentConfig = {
       ...existing,
       ...updates,
       id: agentId, // Ensure ID doesn't change
     };
-    
+
     await gateway.upsertAgent(updated);
-    
+
     res.json({
       success: true,
       data: updated,
@@ -603,7 +603,7 @@ router.put('/agents/:agentId', authenticate, async (req: AuthenticatedRequest, r
 router.delete('/agents/:agentId', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const agentId = sanitizeAgentId(req.params.agentId);
-    
+
     // Protect default agent from deletion
     if (agentId === 'personal') {
       return res.status(400).json({
@@ -611,17 +611,17 @@ router.delete('/agents/:agentId', authenticate, async (req: AuthenticatedRequest
         error: 'Cannot delete the default personal agent',
       });
     }
-    
+
     const gateway = getGatewayService(req.app.locals.db);
     const deleted = await gateway.removeAgent(agentId);
-    
+
     if (!deleted) {
       return res.status(404).json({
         success: false,
         error: `Agent not found: ${agentId}`,
       });
     }
-    
+
     res.json({
       success: true,
       data: { agentId, deleted: true },
@@ -643,7 +643,7 @@ router.get('/pairings', authenticate, async (req: AuthenticatedRequest, res: Res
   try {
     const gateway = getGatewayService(req.app.locals.db);
     const pairings = gateway.getPendingPairings();
-    
+
     res.json({
       success: true,
       data: pairings,
@@ -664,17 +664,17 @@ router.get('/pairings', authenticate, async (req: AuthenticatedRequest, res: Res
 router.post('/pairings/:channel/:senderId/approve', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { channel, senderId } = req.params;
-    
+
     const gateway = getGatewayService(req.app.locals.db);
     const approved = await gateway.approvePairing(channel as ChannelType, senderId);
-    
+
     if (!approved) {
       return res.status(404).json({
         success: false,
         error: 'Pairing request not found or expired',
       });
     }
-    
+
     res.json({
       success: true,
       data: { channel, senderId, approved: true },
@@ -697,7 +697,7 @@ router.get('/channels/:channel/settings', authenticate, async (req: Authenticate
     const channel = req.params.channel as ChannelType;
     const gateway = getGatewayService(req.app.locals.db);
     const config = gateway.getChannelConfig(channel);
-    
+
     // Extract settings from config
     const settings = {
       model: config?.settings?.model || 'ollama:llama3.2',
@@ -710,7 +710,7 @@ router.get('/channels/:channel/settings', authenticate, async (req: Authenticate
         messagesPerHour: 100,
       },
     };
-    
+
     res.json({
       success: true,
       data: settings,
@@ -732,9 +732,9 @@ router.post('/channels/:channel/settings', authenticate, async (req: Authenticat
   try {
     const channel = req.params.channel as ChannelType;
     const { model, personality, customSoul, soulContent, accessMode, rateLimit } = req.body;
-    
+
     const gateway = getGatewayService(req.app.locals.db);
-    
+
     // Update channel config with settings
     await gateway.updateChannelConfig(channel, {
       settings: {
@@ -746,9 +746,9 @@ router.post('/channels/:channel/settings', authenticate, async (req: Authenticat
         rateLimit,
       },
     });
-    
+
     logger.info(`[Gateway API] Channel ${channel} settings updated`);
-    
+
     res.json({
       success: true,
       data: { channel, settingsUpdated: true },
@@ -774,14 +774,14 @@ router.get('/saved-channels', authenticate, async (req: AuthenticatedRequest, re
   try {
     const gateway = getGatewayService(req.app.locals.db);
     const channels = gateway.getSavedChannels();
-    
+
     // Mask tokens
     const masked = channels.map(ch => ({
       ...ch,
       telegram: ch.telegram ? { ...ch.telegram, botToken: '***' + (ch.telegram.botToken?.slice(-4) || '') } : undefined,
       discord: ch.discord ? { ...ch.discord, botToken: '***' + (ch.discord.botToken?.slice(-4) || '') } : undefined,
     }));
-    
+
     res.json({ success: true, data: masked });
   } catch (error: any) {
     logger.error('[Gateway API] Error getting saved channels:', error);
@@ -798,14 +798,14 @@ router.get('/saved-channels/type/:type', authenticate, async (req: Authenticated
     const { type } = req.params;
     const gateway = getGatewayService(req.app.locals.db);
     const channels = gateway.getSavedChannelsByType(type as ChannelType);
-    
+
     // Mask tokens
     const masked = channels.map(ch => ({
       ...ch,
       telegram: ch.telegram ? { ...ch.telegram, botToken: '***' + (ch.telegram.botToken?.slice(-4) || '') } : undefined,
       discord: ch.discord ? { ...ch.discord, botToken: '***' + (ch.discord.botToken?.slice(-4) || '') } : undefined,
     }));
-    
+
     res.json({ success: true, data: masked });
   } catch (error: any) {
     logger.error('[Gateway API] Error getting saved channels by type:', error);
@@ -822,18 +822,18 @@ router.get('/saved-channels/:channelId', authenticate, async (req: Authenticated
     const { channelId } = req.params;
     const gateway = getGatewayService(req.app.locals.db);
     const channel = gateway.getSavedChannel(channelId);
-    
+
     if (!channel) {
       return res.status(404).json({ success: false, error: 'Saved channel not found' });
     }
-    
+
     // Mask tokens
     const masked = {
       ...channel,
       telegram: channel.telegram ? { ...channel.telegram, botToken: '***' + (channel.telegram.botToken?.slice(-4) || '') } : undefined,
       discord: channel.discord ? { ...channel.discord, botToken: '***' + (channel.discord.botToken?.slice(-4) || '') } : undefined,
     };
-    
+
     res.json({ success: true, data: masked });
   } catch (error: any) {
     logger.error('[Gateway API] Error getting saved channel:', error);
@@ -848,13 +848,13 @@ router.get('/saved-channels/:channelId', authenticate, async (req: Authenticated
 router.post('/saved-channels', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { type, name, telegram, discord, whatsapp } = req.body;
-    
+
     if (!type || !name) {
       return res.status(400).json({ success: false, error: 'type and name are required' });
     }
-    
+
     const gateway = getGatewayService(req.app.locals.db);
-    
+
     const channel: SavedChannel = {
       id: `${type}-${Date.now()}`,
       type,
@@ -864,11 +864,11 @@ router.post('/saved-channels', authenticate, async (req: AuthenticatedRequest, r
       discord,
       whatsapp,
     };
-    
+
     await gateway.upsertSavedChannel(channel);
-    
+
     logger.info(`[Gateway API] Saved channel ${channel.id} created`);
-    
+
     res.json({ success: true, data: { ...channel, telegram: channel.telegram ? { ...channel.telegram, botToken: '***' } : undefined } });
   } catch (error: any) {
     logger.error('[Gateway API] Error creating saved channel:', error);
@@ -884,24 +884,24 @@ router.put('/saved-channels/:channelId', authenticate, async (req: Authenticated
   try {
     const { channelId } = req.params;
     const { name, telegram, discord, whatsapp } = req.body;
-    
+
     const gateway = getGatewayService(req.app.locals.db);
     const existing = gateway.getSavedChannel(channelId);
-    
+
     if (!existing) {
       return res.status(404).json({ success: false, error: 'Saved channel not found' });
     }
-    
+
     // Prevent overwriting real tokens with masked versions (***...)
     const mergedTelegram = telegram ? {
       ...existing.telegram,
       ...telegram,
       // Keep existing token if incoming token is masked or empty
-      botToken: (telegram.botToken && !telegram.botToken.startsWith('***')) 
-        ? telegram.botToken 
+      botToken: (telegram.botToken && !telegram.botToken.startsWith('***'))
+        ? telegram.botToken
         : existing.telegram?.botToken,
     } : existing.telegram;
-    
+
     const mergedDiscord = discord ? {
       ...existing.discord,
       ...discord,
@@ -909,7 +909,7 @@ router.put('/saved-channels/:channelId', authenticate, async (req: Authenticated
         ? discord.botToken
         : existing.discord?.botToken,
     } : existing.discord;
-    
+
     const updated: SavedChannel = {
       ...existing,
       name: name || existing.name,
@@ -917,11 +917,11 @@ router.put('/saved-channels/:channelId', authenticate, async (req: Authenticated
       discord: mergedDiscord,
       whatsapp: whatsapp || existing.whatsapp,
     };
-    
+
     await gateway.upsertSavedChannel(updated);
-    
+
     logger.info(`[Gateway API] Saved channel ${channelId} updated`);
-    
+
     res.json({ success: true, data: { ...updated, telegram: updated.telegram ? { ...updated.telegram, botToken: '***' } : undefined } });
   } catch (error: any) {
     logger.error('[Gateway API] Error updating saved channel:', error);
@@ -936,12 +936,12 @@ router.put('/saved-channels/:channelId', authenticate, async (req: Authenticated
 router.delete('/saved-channels/:channelId', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { channelId } = req.params;
-    
+
     const gateway = getGatewayService(req.app.locals.db);
     await gateway.deleteSavedChannel(channelId);
-    
+
     logger.info(`[Gateway API] Saved channel ${channelId} deleted`);
-    
+
     res.json({ success: true, data: { channelId, deleted: true } });
   } catch (error: any) {
     logger.error('[Gateway API] Error deleting saved channel:', error);
@@ -956,10 +956,10 @@ router.delete('/saved-channels/:channelId', authenticate, async (req: Authentica
 router.post('/saved-channels/:channelId/connect', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { channelId } = req.params;
-    
+
     const gateway = getGatewayService(req.app.locals.db);
     const result = await gateway.connectSavedChannel(channelId);
-    
+
     if (result.success) {
       logger.info(`[Gateway API] Saved channel ${channelId} connected`);
       res.json({ success: true, data: { channelId, connected: true } });
@@ -1008,6 +1008,8 @@ router.post('/skills/install', authenticate, async (req: AuthenticatedRequest, r
     const {
       skillId, kid, litCiphertext, dataToEncryptHash, iv,
       encryptedDataCid, buyerAddress, authority, chainId,
+      // V3 integrity fields — optional; absent on legacy assets (backward compat)
+      signature, issuer, actionCid,
     } = req.body;
 
     if (!skillId || !kid || !litCiphertext || !dataToEncryptHash || !iv || !encryptedDataCid || !buyerAddress) {
@@ -1036,6 +1038,9 @@ router.post('/skills/install', authenticate, async (req: AuthenticatedRequest, r
       buyerAddress,
       authority,
       chainId,
+      ...(signature && { signature }),
+      ...(issuer && { issuer }),
+      ...(actionCid && { actionCid }),
     };
 
     const wasmRuntime = req.app.locals.wasmRuntime as WASMRuntime;

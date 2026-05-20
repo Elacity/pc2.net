@@ -30,6 +30,13 @@ pub struct EncryptCommand {
     pub iv_seed_b64: Option<String>,
     /// Default sample size (from tfhd) if trun doesn't have per-sample sizes.
     pub default_sample_size: Option<u32>,
+    /// Number of bytes at the start of every sample to leave in the clear
+    /// (subsample encryption). Required > 0 for video (AV1 OBU headers) and
+    /// audio (AAC frame syntactic-element headers) — full-sample encryption
+    /// breaks client-side codec parsers. Caller picks per codec.
+    /// See MEDIA-2026-05-18-CENC-PSSH-LIBAV-COMPLIANCE.
+    #[serde(default)]
+    pub clear_leader: u32,
     /// PSSH parameters (for transform_init and build_pssh modes).
     pub pssh_params: Option<PSSHParams>,
 }
@@ -41,6 +48,18 @@ pub struct PSSHParams {
     pub rpc: String,
     pub action_ipfs_id: String,
     pub lit_backend: String,
+    // V3.0 protection data fields. Default to empty if caller omits them —
+    // the TS `injectPSSHBox` is authoritative for fully-populated PSSH.
+    #[serde(default)]
+    pub kid: String,
+    #[serde(default)]
+    pub data_to_encrypt_hash: String,
+    #[serde(default)]
+    pub ciphertext: String,
+    #[serde(default)]
+    pub issuer: String,
+    #[serde(default)]
+    pub signature: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -106,7 +125,7 @@ fn process_encrypt_segment(cmd: &EncryptCommand, segment_data: &[u8]) -> (String
     let mdat_content = &segment_data[parsed.mdat_content_offset..parsed.mdat_content_offset + (parsed.mdat_size - (parsed.mdat_content_offset - parsed.mdat_offset))];
 
     let cek_arr: [u8; 16] = cek_bytes[..16].try_into().unwrap();
-    let (encrypted_mdat, ivs) = match cenc::encrypt_samples(mdat_content, &cek_arr, &sample_sizes, &iv_seed) {
+    let (encrypted_mdat, ivs, subsamples) = match cenc::encrypt_samples(mdat_content, &cek_arr, &sample_sizes, &iv_seed, cmd.clear_leader) {
         Ok(r) => r,
         Err(e) => {
             cek_bytes.iter_mut().for_each(|b| *b = 0);
@@ -116,7 +135,22 @@ fn process_encrypt_segment(cmd: &EncryptCommand, segment_data: &[u8]) -> (String
 
     cek_bytes.iter_mut().for_each(|b| *b = 0);
 
-    let senc_box = mp4box::build_senc(&ivs);
+    // Choose senc form based on whether any sample has a non-zero clear
+    // leader. With a clear leader (video / AV1), subsample form (flag=0x02)
+    // is required so the decryptor knows which bytes to skip. Without one
+    // (audio / AAC, matching bento4), emit the simpler full-sample form
+    // (flag=0) — broader compatibility with downstream decryption stacks
+    // that don't implement subsample-with-zero-clear correctly.
+    let any_real_clear = subsamples.iter()
+        .any(|subs| subs.iter().any(|s| s.clear > 0));
+    let senc_box = if any_real_clear {
+        let subsamples_pairs: Vec<Vec<(u32, u32)>> = subsamples.iter()
+            .map(|subs| subs.iter().map(|s| (s.clear, s.protected)).collect())
+            .collect();
+        mp4box::build_senc_with_subsamples(&ivs, &subsamples_pairs)
+    } else {
+        mp4box::build_senc(&ivs)
+    };
 
     let moof_content_start = parsed.moof_offset + parsed.moof_header_size as usize;
     let traf_abs = moof_content_start + parsed.traf_offset_in_moof;
@@ -183,45 +217,66 @@ fn process_transform_init(cmd: &EncryptCommand, init_data: &[u8]) -> (String, Op
         Err(e) => return (error_result(&format!("kid hex decode: {e}")), None),
     };
 
-    let info = match mp4box::parse_init_segment(init_data) {
-        Some(i) => i,
-        None => return (error_result("could not parse init segment (no moov/trak/stsd)"), None),
-    };
+    // Multi-trak transform: every trak in moov whose first sample entry is
+    // still in cleartext form (avc1, av01, mp4a, …) gets its sample entry
+    // wrapped in `sinf/frma/schm/schi/tenc` and its 4cc rewritten to
+    // `encv`/`enca`. Before this loop existed, only the FIRST trak was
+    // transformed — leaving multi-track audio inits with a plain `mp4a`
+    // entry and breaking client-side decryption (player saw cleartext
+    // declaration but encrypted segment bytes).
+    // See MEDIA-2026-05-18-CENC-PSSH-LIBAV-COMPLIANCE.
+    let mut output = init_data.to_vec();
+    let mut transformed_count = 0usize;
+    let max_iterations = 32; // safety bound against pathological inputs
 
-    let original_format = info.sample_entry_type;
-    let encrypted_type: [u8; 4] = match &original_format {
-        b"avc1" | b"avc3" | b"hev1" | b"hvc1" | b"av01" | b"vp09" => *b"encv",
-        b"mp4a" | b"Opus" | b"fLaC" | b"ac-3" | b"ec-3" => *b"enca",
-        _ => {
-            if original_format[0].is_ascii_lowercase() {
-                *b"enca"
-            } else {
-                *b"encv"
+    for _ in 0..max_iterations {
+        let info = match mp4box::parse_first_clear_trak(&output) {
+            Some(i) => i,
+            None => break,
+        };
+
+        let original_format = info.sample_entry_type;
+        let encrypted_type: [u8; 4] = match &original_format {
+            b"avc1" | b"avc3" | b"hev1" | b"hvc1" | b"av01" | b"vp09" => *b"encv",
+            b"mp4a" | b"Opus" | b"fLaC" | b"ac-3" | b"ec-3" => *b"enca",
+            _ => {
+                if original_format[0].is_ascii_lowercase() {
+                    *b"enca"
+                } else {
+                    *b"encv"
+                }
             }
+        };
+
+        let sinf = mp4box::build_sinf(&original_format, 8, &kid_bytes);
+        let sinf_len = sinf.len();
+
+        let entry_end = info.sample_entry_offset + info.sample_entry_size;
+
+        let mut new_output = Vec::with_capacity(output.len() + sinf_len);
+        new_output.extend_from_slice(&output[..entry_end]);
+        new_output.extend_from_slice(&sinf);
+        new_output.extend_from_slice(&output[entry_end..]);
+        output = new_output;
+
+        let type_offset = info.sample_entry_offset + 4;
+        if type_offset + 4 <= output.len() {
+            output[type_offset..type_offset + 4].copy_from_slice(&encrypted_type);
         }
-    };
 
-    let sinf = mp4box::build_sinf(&original_format, 8, &kid_bytes);
-    let sinf_len = sinf.len();
+        let new_entry_size = info.sample_entry_size as u64 + sinf_len as u64;
+        mp4box::write_box_size(&mut output, info.sample_entry_offset, new_entry_size);
 
-    let entry_end = info.sample_entry_offset + info.sample_entry_size;
+        for &(pos, orig_size) in &info.ancestors {
+            let new_size = orig_size + sinf_len as u64;
+            mp4box::write_box_size(&mut output, pos, new_size);
+        }
 
-    let mut output = Vec::with_capacity(init_data.len() + sinf_len + 100);
-    output.extend_from_slice(&init_data[..entry_end]);
-    output.extend_from_slice(&sinf);
-    output.extend_from_slice(&init_data[entry_end..]);
-
-    let type_offset = info.sample_entry_offset + 4;
-    if type_offset + 4 <= output.len() {
-        output[type_offset..type_offset + 4].copy_from_slice(&encrypted_type);
+        transformed_count += 1;
     }
 
-    let new_entry_size = info.sample_entry_size as u64 + sinf_len as u64;
-    mp4box::write_box_size(&mut output, info.sample_entry_offset, new_entry_size);
-
-    for &(pos, orig_size) in &info.ancestors {
-        let new_size = orig_size + sinf_len as u64;
-        mp4box::write_box_size(&mut output, pos, new_size);
+    if transformed_count == 0 {
+        return (error_result("could not find any clear traks to transform (no moov/trak/stsd, or all already encv/enca)"), None);
     }
 
     if let Some(pssh_params) = &cmd.pssh_params {
@@ -232,15 +287,38 @@ fn process_transform_init(cmd: &EncryptCommand, init_data: &[u8]) -> (String, Op
             &pssh_params.rpc,
             &pssh_params.action_ipfs_id,
             &pssh_params.lit_backend,
+            &pssh_params.kid,
+            &pssh_params.data_to_encrypt_hash,
+            &pssh_params.ciphertext,
+            &pssh_params.issuer,
+            &pssh_params.signature,
         );
 
-        let moov_pos = info.ancestors.first().map(|a| a.0).unwrap_or(0);
-        let moov_h = mp4box::read_box_header(&output, moov_pos);
-        if let Some(h) = moov_h {
-            let moov_end = moov_pos + h.size as usize;
+        // Place pssh as the last child of moov (after every trak) so libav's
+        // mov_read_pssh attaches AVEncryptionInitInfo to already-registered
+        // AVStreams. No root-level sibling — Chromium MSE rejects it.
+        // See MEDIA-2026-05-18-CENC-PSSH-LIBAV-COMPLIANCE.
+        let pssh_len = pssh_box.len();
+
+        // Locate moov at the top level (offset shifted after multi-trak transform).
+        let mut moov_pos = 0usize;
+        let mut tp = 0usize;
+        while tp + 8 <= output.len() {
+            let h = match mp4box::read_box_header(&output, tp) {
+                Some(h) => h,
+                None => break,
+            };
+            if h.size < 8 || tp + h.size as usize > output.len() { break; }
+            if &h.box_type == b"moov" {
+                moov_pos = tp;
+                break;
+            }
+            tp += h.size as usize;
+        }
+        if let Some(moov_h) = mp4box::read_box_header(&output, moov_pos) {
+            let moov_end = moov_pos + moov_h.size as usize;
             output.splice(moov_end..moov_end, pssh_box.iter().cloned());
-            let pssh_len = pssh_box.len();
-            let new_moov_size = h.size + pssh_len as u64;
+            let new_moov_size = moov_h.size + pssh_len as u64;
             mp4box::write_box_size(&mut output, moov_pos, new_moov_size);
         }
     }
@@ -278,6 +356,11 @@ fn process_build_pssh(cmd: &EncryptCommand) -> (String, Option<Vec<u8>>) {
         &pssh_params.rpc,
         &pssh_params.action_ipfs_id,
         &pssh_params.lit_backend,
+        &pssh_params.kid,
+        &pssh_params.data_to_encrypt_hash,
+        &pssh_params.ciphertext,
+        &pssh_params.issuer,
+        &pssh_params.signature,
     );
 
     let result = EncryptResult {

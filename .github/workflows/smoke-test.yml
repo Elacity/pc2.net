@@ -56,11 +56,13 @@ on:
       - main
       - 'feat/**'
       - 'release/**'
+      - 'chore/**'
   pull_request:
     branches:
       - main
       - 'feat/**'
       - 'release/**'
+      - 'chore/**'
   workflow_dispatch:
     inputs:
       include_intel_mac:

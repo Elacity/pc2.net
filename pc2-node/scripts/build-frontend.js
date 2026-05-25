@@ -182,9 +182,13 @@ async function main() {
       writeFileSync(gitkeepPath, '');
     }
 
-    // Generate index.html if it doesn't exist
+    // Generate index.html on every build so the cache-buster query string
+    // is always fresh. Without this, the browser keeps serving the previous
+    // bundle.min.js because the static `?v=1.2.7.7` query never changes
+    // across builds and a hard refresh (Cmd+Shift+R) is not enough to evict
+    // an aggressively cached copy on some setups.
     const indexHtmlPath = join(TARGET_DIR, 'index.html');
-    if (!existsSync(indexHtmlPath)) {
+    {
       console.log('\n📄 Generating index.html...');
       // Generate index.html with full initialization code
       const HTML_TEMPLATE = `<!DOCTYPE html>
@@ -193,7 +197,7 @@ async function main() {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ElastOS - Personal Cloud</title>
-    <link rel="stylesheet" href="/bundle.min.css?v=1.2.7.7">
+    <link rel="stylesheet" href="/bundle.min.css?v=__BUILD_TS__">
     
     <!-- Initialize API origin before SDK loads -->
     <script>
@@ -655,7 +659,7 @@ async function main() {
     </script>
     
     <div id="app"></div>
-    <script src="/bundle.min.js?v=1.2.7.7"></script>
+    <script src="/bundle.min.js?v=__BUILD_TS__"></script>
     <script src="/pc2-wallet-bridge.js?v=20260430a"></script>
     <!-- Secure-view session manager (Option C session-key delegation).
          Owns the ephemeral P-256 key + 24h delegation. Iframes call
@@ -728,15 +732,31 @@ async function main() {
     </script>
 </body>
 </html>`;
-      writeFileSync(indexHtmlPath, HTML_TEMPLATE, 'utf8');
-      console.log(`   ✅ Created: ${indexHtmlPath}`);
+      const buildTs = Date.now().toString();
+      const rendered = HTML_TEMPLATE.replace(/__BUILD_TS__/g, buildTs);
+      writeFileSync(indexHtmlPath, rendered, 'utf8');
+      console.log(`   ✅ Created: ${indexHtmlPath} (cache-buster v=${buildTs})`);
     }
 
     // CRITICAL: Sync particle-auth build to src/particle-auth
     // The server checks multiple paths and src/particle-auth is found FIRST
     // If we don't sync, stale bundles will be served causing debugging nightmares
+    //
+    // Two valid paths land particle-auth at PARTICLE_AUTH_TARGET:
+    //   A) `npm run build:pc2` from the repo root (the standard flow) runs
+    //      `build:particle-auth` which BUILDS in packages/particle-auth/
+    //      then `mv ./dist ../../src/particle-auth`. By the time build-frontend.js
+    //      runs (inside build:server → build:backend), packages/particle-auth/dist
+    //      is GONE because it was moved, and src/particle-auth/ is already populated.
+    //   B) `npm run build:frontend` directly (developer iterating on GUI only) —
+    //      packages/particle-auth/dist may exist if the dev built particle-auth
+    //      in place without the package.json mv step, in which case we sync here.
+    //
+    // The warning below ONLY fires if BOTH paths are empty — a genuine "you
+    // forgot to build particle-auth at all" failure, not the previous
+    // misleading "dist not found" message that fired on every standard build.
     if (existsSync(PARTICLE_AUTH_SOURCE)) {
-      console.log('\n📦 Syncing particle-auth build...');
+      console.log('\n📦 Syncing particle-auth build from packages/...');
       
       // Remove old particle-auth directory
       if (existsSync(PARTICLE_AUTH_TARGET)) {
@@ -773,8 +793,17 @@ async function main() {
           console.log('   ✅ Injected PUTER_API_ORIGIN fix into particle-auth');
         }
       }
+    } else if (existsSync(PARTICLE_AUTH_TARGET)) {
+      // Path A above — build:particle-auth (in repo root package.json) has
+      // already moved the dist directly to src/particle-auth, so there's
+      // nothing for us to sync. This is the standard `npm run build:pc2`
+      // flow and is the expected state, not an error.
+      console.log('\n📦 particle-auth already at target (moved by build:particle-auth — standard build:pc2 flow)');
     } else {
-      console.warn(`\n⚠️  particle-auth dist not found: ${PARTICLE_AUTH_SOURCE}`);
+      // Neither source nor target — genuine missing-build failure.
+      console.warn(`\n⚠️  particle-auth not found at either:`);
+      console.warn(`     ${PARTICLE_AUTH_SOURCE}`);
+      console.warn(`     ${PARTICLE_AUTH_TARGET}`);
       console.warn('   Run: cd packages/particle-auth && npm run build');
     }
 

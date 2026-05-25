@@ -1011,14 +1011,102 @@ jobs:
           echo "✅ pc2-node/dist/index.js present (${size})"
 
   # ---------------------------------------------------------------------------
+  # install-arm-script-smoke: runs the actual scripts/install-arm.sh as a
+  # real Pi user would, inside the same Pi-OS-equivalent container as
+  # build-pi-os. This is the gate that catches drift in the install script
+  # itself (apt-get list, Node install path, build invocation) — not just
+  # the inline build flow build-pi-os already validates.
+  #
+  # Why two Pi-OS gates rather than one?
+  # - build-pi-os validates that pc2-node CAN be built on Pi OS Bookworm.
+  # - install-arm-script-smoke validates that our DOCUMENTED ONE-LINER
+  #   (the curl | bash command in README Quick Start) actually works.
+  # If install-arm.sh's apt-get list ever loses a canvas dev-header, this
+  # gate goes red even if build-pi-os stays green — because build-pi-os
+  # uses an inline apt-get list, whereas this gate uses the script's.
+  #
+  # CI-mode (PC2_CI_MODE=1, defined in install-arm.sh's main()) skips the
+  # WireGuard / PM2 / Sing-Box / firewall steps that need kernel + systemd
+  # access. Those are validated by real-Pi soak testing, not CI.
+  #
+  # Status: experimental — continue-on-error: true, NOT in summary.needs.
+  # Promotion criterion: 5 consecutive green runs without revert, then add
+  # to summary.needs (same pattern as build-pi-os + windows-x64).
+  install-arm-script-smoke:
+    name: Install script smoke (install-arm.sh — experimental)
+    runs-on: ubuntu-24.04-arm
+    continue-on-error: true
+    timeout-minutes: 30
+    container:
+      image: arm64v8/debian:bookworm-slim
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      # Container minimum prereqs: install-arm.sh uses `sudo` everywhere and
+      # bookworm-slim doesn't ship sudo. Install it + curl/git so the script
+      # can do its own apt-get update + NodeSource + clone. We deliberately
+      # do NOT pre-install everything the script needs — the gate's job is
+      # to prove the SCRIPT installs what it needs, not us.
+      - name: Minimum container prereqs (sudo + curl)
+        run: |
+          set -euo pipefail
+          apt-get update
+          apt-get install -y --no-install-recommends sudo ca-certificates curl
+
+      # Checkout: we need the IN-BRANCH copy of install-arm.sh, not main's.
+      # install-arm.sh will then do its OWN git clone of $PC2_BRANCH into
+      # $PC2_DIR — that's two clones, fine in CI, the realistic user flow.
+      - name: Checkout (for in-branch install-arm.sh)
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 1
+
+      # The actual gate: run install-arm.sh exactly as a Pi user would, but
+      # with PC2_CI_MODE=1 so it skips the host-only steps. PC2_BRANCH points
+      # at the branch this CI run is testing so the script clones our work,
+      # not main.
+      - name: Run install-arm.sh (PC2_CI_MODE=1, branch under test)
+        env:
+          PC2_CI_MODE: '1'
+          PC2_BRANCH: ${{ github.ref_name }}
+          PC2_DIR: /tmp/pc2-install-test
+          # install-arm.sh's install_pc2 step runs `npm run build:pc2` which
+          # spawns tsc and Vite. 4 GB heap is what build-pi-os uses too.
+          NODE_OPTIONS: '--max-old-space-size=4096'
+        run: |
+          set -euo pipefail
+          bash scripts/install-arm.sh
+
+      # The acceptance check: pc2-node/dist/index.js inside $PC2_DIR. This
+      # mirrors build-pi-os's verify step but targets the install_pc2 output.
+      - name: Verify install_pc2 produced a built tree
+        env:
+          PC2_DIR: /tmp/pc2-install-test
+        run: |
+          set -euo pipefail
+          missing=()
+          [ -f "$PC2_DIR/pc2-node/dist/index.js" ] || missing+=("$PC2_DIR/pc2-node/dist/index.js")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::install-arm.sh ran but did not produce expected build outputs:"
+            printf '  %s\n' "${missing[@]}"
+            exit 1
+          fi
+          size=$(du -h "$PC2_DIR/pc2-node/dist/index.js" | cut -f1)
+          echo "✅ install-arm.sh produced $PC2_DIR/pc2-node/dist/index.js (${size})"
+
+  # ---------------------------------------------------------------------------
   # summary: roll up matrix results into a single "ok / not ok" output so the
   # status badge + branch protection rule have one thing to point at.
   # ---------------------------------------------------------------------------
   summary:
     name: Smoke test summary
-    # build-pi-os is INTENTIONALLY omitted from needs: while experimental.
-    # Promote (add to needs:) only after 5 consecutive green runs — see
-    # .cursor/tasks/CI-RASPBERRY-PI-COVERAGE-2026-05 for the promotion path.
+    # build-pi-os + install-arm-script-smoke are INTENTIONALLY omitted from
+    # needs: while experimental. Promote (add to needs:) only after 5
+    # consecutive green runs each — see CI-RASPBERRY-PI-COVERAGE-2026-05
+    # for the promotion path.
     needs: [build-and-typecheck, release-assets-integrity, docker-smoke]
     if: always()
     runs-on: ubuntu-latest

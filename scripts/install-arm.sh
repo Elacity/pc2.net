@@ -1003,13 +1003,29 @@ main() {
     fi
     install_prerequisites
     install_nodejs
-    install_pm2
-    install_wireguard
-    install_amneziawg
-    install_singbox
-    install_voice_tools
+
+    # CI mode (PC2_CI_MODE=1) — the steps below this point require host
+    # privileges that aren't available inside a Docker container: kernel
+    # module loading (WireGuard, AmneziaWG), systemd (PM2 service install),
+    # and persistent firewall rules. CI just needs to verify the build path
+    # works on a Pi-OS-like distro; the runtime/service-management steps
+    # are validated by real-Pi soak runs, not CI.
+    #
+    # See task .cursor/tasks/CI-RASPBERRY-PI-COVERAGE-2026-05 for the gate
+    # that exercises this codepath.
+    if [ "${PC2_CI_MODE:-0}" != "1" ]; then
+        install_pm2
+        install_wireguard
+        install_amneziawg
+        install_singbox
+        install_voice_tools
+    fi
+
     install_pc2
-    start_pc2
+
+    if [ "${PC2_CI_MODE:-0}" != "1" ]; then
+        start_pc2
+    fi
     print_success
 }
 

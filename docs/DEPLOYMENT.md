@@ -2,6 +2,8 @@
 
 This guide covers deploying PC2 Node to a VPS or cloud server for multi-user access.
 
+> **Related — Public Trial Host (`try.pc2.net`)**: a separate deployment shape is planned for the public try-before-download demo. It runs throwaway per-visitor Docker containers on a single dedicated VPS with strict isolation, no production credentials, and a persistent sovereignty banner. See [`.cursor/tasks/PUBLIC-CLOUD-PC2-2026-05/PLAN.md`](../.cursor/tasks/PUBLIC-CLOUD-PC2-2026-05/PLAN.md) for the full architecture + hosting comparison and [`docs/handover/HANDOVER_2026-05-25_PUBLIC_CLOUD_PC2.md`](./handover/HANDOVER_2026-05-25_PUBLIC_CLOUD_PC2.md) for the fresh-agent handover. The trial-host runbook (`docs/deployment/PUBLIC_TRIAL_RUNBOOK.md`) will land in the implementation PR once the §0 decisions are Agreed. Trial-host setup is **distinct** from this single-node deployment; do not conflate the two.
+
 ## Quick Start (Docker)
 
 ### Prerequisites

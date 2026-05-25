@@ -534,7 +534,7 @@ The single decision Sasha makes after reading this plan. PLAN.md must cost both 
 
 ---
 
-## 11. Risk register (top 9, after scope-narrowing)
+## 11. Risk register (top 10, after scope-narrowing)
 
 Each risk has a detection signal — a metric counter or telemetry tag that fires when the risk materialises, so we can spot it in the wild.
 
@@ -549,6 +549,7 @@ Each risk has a detection signal — a metric counter or telemetry tag that fire
 | R9 | `@elacity-js/access` vs Creator-app `opRawData` encoding divergence | Latent (already exists) | Agent uses NEITHER for mint in S1 (handoff to Creator), so divergence doesn't bite us in S1. NR-4 catches it before S2 introduces in-chat mint | NR-4 regression test runs on every PR |
 | R10 | Cloud LLM sees file metadata (privacy leak) | Only if user opts in × Medium | Explicit consent dialog showing exactly what bytes leave; cumulative-bytes-sent banner; default is Ollama (local) | `agent.monetisation.cloud_provider_bytes_out` |
 | R12 | Together AI / non-FC providers can't run monetisation mode | Known × Low | Monetisation mode only enables on FC-capable providers; UI shows "switch to Claude/OpenAI/Ollama for monetisation features" | `agent.monetisation.mode.disabled_for_provider` |
+| R13 | Trust model — CEK exposure at WASM-host boundary on operator-controlled PC2 nodes | Structural × High (for non-creator viewers) | Out of scope for the Monetisation Agent itself (we hand off to the existing Creator + Lit Actions path). Agent invariant: never accept, return, log, or persist a CEK. Long-term mitigation lives in the dDRM refactor track (CEK generation inside WASM, ECDH-wrapped envelope only at host boundary, integrity check inside Lit TEE — already in flight via `NONMEDIA-LIT-MIGRATION-2026-05` + `MEDIA-2026-05-18-CENC-PSSH-LIBAV-COMPLIANCE`). Affects v2 capability arc, not S1. | Code-review gate on `MonetisationAgentTools.ts` (JSDoc INVARIANT block); zero `cek`, `key`, or `private_key` strings in agent telemetry counters |
 
 **Risks explicitly removed by scope-narrowing** (in S1 the Creator app owns these exactly as it does today, no new exposure):
 - ~~Mint succeeds + listing approval fails~~ — Creator's existing two-step flow handles this

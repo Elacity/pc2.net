@@ -908,6 +908,16 @@ jobs:
     container:
       image: arm64v8/debian:bookworm-slim
 
+    # Inside a container, GitHub Actions defaults run steps to `sh -e {0}`,
+    # which on Debian is `dash`. dash does NOT support `set -o pipefail` or
+    # bash array syntax (e.g. `missing=()`), both of which our hardening
+    # blocks rely on. Bash is included in `debian:bookworm-slim` by default,
+    # so opting all steps in this job into bash is one line + zero install
+    # cost. First-iteration finding 2026-05-25, run #54 job 77743052717.
+    defaults:
+      run:
+        shell: bash
+
     steps:
       # The container is intentionally bare. We install everything a Pi
       # user would install, in the same order. This step IS the validated

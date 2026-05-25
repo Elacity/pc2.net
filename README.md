@@ -44,31 +44,39 @@ PC2 is **the cloud that lives in YOUR house**. Not a subscription. Not a service
 
 ## ⚡ Quick Start
 
-### From Source (Recommended for Developers)
+Pick the path that matches your hardware. All three end the same way: open a browser, connect a wallet, your PC2 desktop is live.
+
+### 🖥️ Desktop App — Mac · Windows · Linux
+
+Zero-code install. The **ElastOS Launcher** is a signed, notarised desktop app that handles install, updates, and the first-run wizard for you.
+
+📥 **[Download ElastOS Launcher → docs.ela.city](https://docs.ela.city)**
+
+- **Mac**: `ElastOS-X.Y.Z.dmg` — drag to Applications, open
+- **Windows**: `ElastOS.Setup.X.Y.Z.exe` — runs PC2 under WSL2 (the installer will prompt to enable WSL2 if needed)
+- **Linux**: `ElastOS-X.Y.Z.AppImage` — `chmod +x` then double-click
+
+> 💡 The Mac build is Apple-notarised, so it opens with no "unidentified developer" warning.
+
+### 🍓 Raspberry Pi (4 / 5) or any headless ARM Linux device
+
+One command. Takes ~15–20 min on a Pi 5:
 
 ```bash
-# Clone the repository
-git clone https://github.com/Elacity/pc2.net
-cd pc2.net
-
-# Install dependencies
-npm install
-
-# Start the server
-npm start
+curl -sSL https://raw.githubusercontent.com/Elacity/pc2.net/main/scripts/install-arm.sh | bash
 ```
 
-**→ Open your browser at `http://localhost:4202`**
+Installs Node 20, system libraries, WireGuard, builds PC2, and starts it as a background service under PM2 (so it auto-restarts on boot). When it finishes it prints a URL like `http://<your-pi-ip>:4200` — open that in any browser on your network.
 
-### Docker
+### 🐧 Headless Linux x64 (Docker)
+
+One command for any Linux server / VPS / x86 box without a desktop:
 
 ```bash
-docker run -p 4202:4202 ghcr.io/elacity/pc2:latest
+curl -sSL https://raw.githubusercontent.com/Elacity/pc2.net/main/scripts/install-pc2.sh | bash
 ```
 
-### Raspberry Pi Image (Coming Soon)
-
-Download the pre-built image, flash to SD card, and boot.
+Installs Docker if needed, pulls the latest PC2 image, and starts it on port 4100. Print-out at the end has the setup token and URL.
 
 ---
 
@@ -121,6 +129,8 @@ Download the pre-built image, flash to SD card, and boot.
 ---
 
 ## 🖥️ Installation
+
+> The [Quick Start](#-quick-start) above is the recommended path for most users (desktop app, one-line server install, or one-line Pi install). The section below is for **developers** who want to clone the repo, modify the code, or run PC2 on hardware/configurations the install scripts don't cover yet.
 
 ### System Requirements
 

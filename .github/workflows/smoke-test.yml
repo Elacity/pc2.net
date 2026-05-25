@@ -997,7 +997,7 @@ jobs:
 
       # Cheap structural assertion that the build actually produced output.
       # Mirrors the existing matrix entry's verification step.
-      - name: Verify build outputs exist
+      - name: Verify build outputs exist + are valid JS
         run: |
           set -euo pipefail
           missing=()
@@ -1007,8 +1007,20 @@ jobs:
             printf '  %s\n' "${missing[@]}"
             exit 1
           fi
+          # Size sanity (catches truncated tsc output that du would hide).
+          size_bytes=$(stat -c '%s' pc2-node/dist/index.js 2>/dev/null || stat -f '%z' pc2-node/dist/index.js)
+          if [ "${size_bytes:-0}" -lt 10000 ]; then
+            echo "::error::pc2-node/dist/index.js is ${size_bytes} bytes (expected ≥ 10000)"
+            exit 1
+          fi
+          # Syntactic JS validity (catches corrupted tsc emit that size alone misses).
+          node --check pc2-node/dist/index.js
           size=$(du -h pc2-node/dist/index.js | cut -f1)
-          echo "✅ pc2-node/dist/index.js present (${size})"
+          echo "✅ pc2-node/dist/index.js present (${size}), ≥10KB, valid JS"
+          # NB: build-pi-os intentionally does NOT run a boot test — it only
+          # runs `npm run build:backend` (no frontend assets, no particle-auth),
+          # so pc2-node would refuse to start. Boot smoke is covered by the
+          # install-arm-script-smoke gate which runs the full build:pc2 chain.
 
   # ---------------------------------------------------------------------------
   # install-arm-script-smoke: runs the actual scripts/install-arm.sh as a
@@ -1080,22 +1092,145 @@ jobs:
           set -euo pipefail
           bash scripts/install-arm.sh
 
-      # The acceptance check: pc2-node/dist/index.js inside $PC2_DIR. This
-      # mirrors build-pi-os's verify step but targets the install_pc2 output.
-      - name: Verify install_pc2 produced a built tree
+      # ─────────────────────────────────────────────────────────────────────
+      # Acceptance check #1: artifact integrity.
+      #
+      # build:pc2 produces four artifacts that pc2-node REQUIRES at runtime:
+      #
+      #   1. src/particle-auth/    — Particle Network auth dist (built from
+      #                              packages/particle-auth → moved here by
+      #                              the build:particle-auth script).
+      #   2. pc2-node/frontend/bundle.min.js  — Puter GUI bundle (built
+      #                              from src/gui via build:gui).
+      #   3. pc2-node/frontend/bundle.min.css — GUI styles (same source).
+      #   4. pc2-node/dist/index.js — pc2-node backend entry (tsc output
+      #                              from build:server → build:backend).
+      #
+      # Just checking "file exists" isn't enough — a half-failed build can
+      # produce empty 0-byte stubs. We additionally check each artifact is
+      # at least a conservative minimum size (catches truncation regressions
+      # without being brittle to legitimate version-to-version size drift).
+      #
+      # And for the JS entry, we run `node --check` to confirm the file is
+      # syntactically valid JavaScript — catches the case where tsc emits
+      # something but corrupts it mid-write.
+      - name: Verify install_pc2 produced ALL expected artifacts
         env:
           PC2_DIR: /tmp/pc2-install-test
         run: |
           set -euo pipefail
+          cd "$PC2_DIR"
+
+          # Format: "path:min_bytes:label"
+          artifacts=(
+            "src/particle-auth:1024:particle-auth dist"
+            "pc2-node/frontend/bundle.min.js:100000:GUI bundle JS"
+            "pc2-node/frontend/bundle.min.css:10000:GUI bundle CSS"
+            "pc2-node/dist/index.js:10000:pc2-node backend entry"
+          )
+
           missing=()
-          [ -f "$PC2_DIR/pc2-node/dist/index.js" ] || missing+=("$PC2_DIR/pc2-node/dist/index.js")
+          too_small=()
+          for entry in "${artifacts[@]}"; do
+            IFS=':' read -r path min label <<< "$entry"
+            if [ -d "$path" ]; then
+              size=$(du -sb "$path" 2>/dev/null | cut -f1)
+            elif [ -f "$path" ]; then
+              size=$(stat -c '%s' "$path" 2>/dev/null || stat -f '%z' "$path")
+            else
+              missing+=("$label ($path)")
+              continue
+            fi
+            if [ "${size:-0}" -lt "$min" ]; then
+              too_small+=("$label ($path): ${size} bytes, expected ≥ ${min}")
+            else
+              printf '  ✓ %-30s %10s bytes (≥ %s)\n' "$label" "$size" "$min"
+            fi
+          done
+
           if [ ${#missing[@]} -gt 0 ]; then
-            echo "::error::install-arm.sh ran but did not produce expected build outputs:"
+            echo "::error::Missing build artifacts:"
             printf '  %s\n' "${missing[@]}"
+          fi
+          if [ ${#too_small[@]} -gt 0 ]; then
+            echo "::error::Build artifacts smaller than expected (likely truncated):"
+            printf '  %s\n' "${too_small[@]}"
+          fi
+          if [ ${#missing[@]} -gt 0 ] || [ ${#too_small[@]} -gt 0 ]; then
             exit 1
           fi
-          size=$(du -h "$PC2_DIR/pc2-node/dist/index.js" | cut -f1)
-          echo "✅ install-arm.sh produced $PC2_DIR/pc2-node/dist/index.js (${size})"
+
+          echo ""
+          echo "Syntactically validating pc2-node/dist/index.js with node --check..."
+          node --check pc2-node/dist/index.js
+          echo "✅ All build artifacts present, sized correctly, and parseable"
+
+      # ─────────────────────────────────────────────────────────────────────
+      # Acceptance check #2: boot smoke.
+      #
+      # Build artifacts existing is NOT proof pc2-node actually RUNS. tsc
+      # produces dist/index.js even if a native module is unresolvable at
+      # require()-time; npm install may quietly leave half-installed native
+      # deps that surface only on first `node dist/index.js`. We need to
+      # actually start the process and confirm the HTTP server comes up.
+      #
+      # Mirrors docker-smoke's pattern: start in background, poll a
+      # well-known unauthenticated endpoint (/api/health, returns 200 once
+      # the Express app is listening — fail-soft on subsystem init so it's
+      # a true "process is alive + binding port" probe), retry every 5 s
+      # for up to 90 s (matches Dockerfile HEALTHCHECK start-period=60s +
+      # 30 s headroom), kill cleanly on success or failure.
+      #
+      # If pc2-node crashes before listening (e.g. native module load
+      # error, missing artifact in the install tree, port conflict), we
+      # dump the last 200 lines of its log to make the failure debuggable
+      # without re-running.
+      - name: Boot test — pc2-node actually runs + serves /api/health
+        env:
+          PC2_DIR: /tmp/pc2-install-test
+          PC2_PORT: '4200'
+          NODE_ENV: production
+        run: |
+          set -uo pipefail
+          cd "$PC2_DIR"
+
+          LOG=/tmp/pc2-boot.log
+
+          echo "::group::Starting pc2-node in background"
+          node pc2-node/dist/index.js > "$LOG" 2>&1 &
+          PC2_PID=$!
+          echo "  pid=$PC2_PID port=$PC2_PORT"
+          echo "::endgroup::"
+
+          # Ensure we always kill the background process even if the script
+          # exits via error — prevents the runner from hanging on cleanup.
+          trap 'kill "$PC2_PID" 2>/dev/null || true; wait "$PC2_PID" 2>/dev/null || true' EXIT
+
+          echo "::group::Polling /api/health (up to 90 s)"
+          status="starting"
+          for attempt in $(seq 1 18); do
+            code=$(curl -fsS -o /dev/null -w '%{http_code}' "http://localhost:${PC2_PORT}/api/health" 2>/dev/null || echo "000")
+            echo "  attempt ${attempt}/18 (t=$((attempt * 5))s): /api/health → ${code}"
+            if [ "$code" = "200" ]; then
+              echo "✅ pc2-node healthy after $((attempt * 5))s"
+              status="healthy"
+              break
+            fi
+            if ! kill -0 "$PC2_PID" 2>/dev/null; then
+              echo "::error::pc2-node process died before /api/health responded"
+              status="died"
+              break
+            fi
+            sleep 5
+          done
+          echo "::endgroup::"
+
+          if [ "$status" != "healthy" ]; then
+            echo "::group::pc2-node logs (last 200 lines)"
+            tail -200 "$LOG" || true
+            echo "::endgroup::"
+            exit 1
+          fi
 
   # ---------------------------------------------------------------------------
   # summary: roll up matrix results into a single "ok / not ok" output so the

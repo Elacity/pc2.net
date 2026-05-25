@@ -844,21 +844,46 @@ PARTICLE_EOF
         print_ok "Fixed particle-auth build script (yarn → npm)"
     fi
 
-    print_step "Installing dependencies (this takes a few minutes on ARM)..."
-    $RUN_AS npm install --legacy-peer-deps --ignore-scripts || true
-
+    # A-7 install order: pc2-node FIRST, esbuild race-guard rebuild, then
+    # root LAST. Anything else breaks tsc type resolution and produces the
+    # TS2307 "Cannot find module" cascade Eric hit on 2026-05-25 (root cause
+    # of the install-arm.sh script smoke gate going red on its first run).
+    #
+    # Why this order matters:
+    #   - pc2-node has its own package.json with its own dependency graph
+    #     (ethers, helia, libp2p/*, @photostructure/sqlite, etc.). It MUST
+    #     resolve them locally before the root install can hoist anything.
+    #   - The root install reads pc2-node/node_modules to decide what to
+    #     hoist; if pc2-node hasn't been installed yet, root hoisting is
+    #     broken and tsc sees half-resolved type declarations.
+    #   - npm rebuild esbuild between the two installs avoids a known race
+    #     where esbuild's postinstall fails on ARM if multiple npm
+    #     processes touch it concurrently.
+    #   - --ignore-scripts (previous behaviour) skipped postinstall hooks
+    #     that set up type-declaration symlinks; that's why we now run
+    #     scripts. canvas's postinstall may fail on bare Pi OS without the
+    #     system libs install_prerequisites just installed; canvas is in
+    #     optionalDependencies so the install continues. Real failures
+    #     (esbuild, sharp, native modules) now surface properly.
+    #   - No `|| true` — if npm install fails, we WANT the script to halt
+    #     so the user sees the actual error, not a misleading "PC2 built"
+    #     followed by a runtime failure 10 minutes later.
+    #
+    # This order is the same one .github/workflows/smoke-test.yml uses for
+    # the build-pi-os gate (line ~960), which is now consistently green on
+    # Pi OS Bookworm 64-bit (arm64v8/debian:bookworm-slim).
+    print_step "Installing pc2-node dependencies first (A-7 order)..."
     cd pc2-node
-    $RUN_AS npm install --legacy-peer-deps || true
+    $RUN_AS npm ci --no-audit --no-fund --legacy-peer-deps
     cd ..
 
-    # Rebuild native modules (canvas is optional — if it fails, thumbnails just won't work)
-    print_step "Building native modules..."
-    $RUN_AS npm rebuild 2>&1 || true
+    print_step "esbuild race-guard rebuild..."
     cd pc2-node
-    $RUN_AS npm rebuild sharp 2>&1 || true
-    $RUN_AS npm rebuild canvas 2>&1 || print_warn "Canvas compilation failed (thumbnails for PDFs/text disabled). This is optional and non-critical."
-    $RUN_AS npm rebuild 2>&1 || true
+    $RUN_AS npm rebuild esbuild --no-audit --no-fund
     cd ..
+
+    print_step "Installing root + GUI dependencies last..."
+    $RUN_AS npm install --no-audit --no-fund --legacy-peer-deps
 
     print_step "Building PC2..."
     $RUN_AS npm run build:pc2

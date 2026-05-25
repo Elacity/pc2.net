@@ -863,11 +863,150 @@ jobs:
           echo "Cleanup complete."
 
   # ---------------------------------------------------------------------------
+  # build-pi-os: simulates a fresh Raspberry Pi OS Bookworm 64-bit install
+  # inside a Docker container running on the existing ubuntu-24.04-arm runner.
+  #
+  # Why this gate exists (2026-05-25 — tracked in
+  # .cursor/tasks/CI-RASPBERRY-PI-COVERAGE-2026-05):
+  # A Pi 5 community member hit a build-from-source failure with 20 TS2307
+  # "Cannot find module" errors across ethers, siwe, @lit-protocol/*, and
+  # canvas. Root cause: Raspberry Pi OS Bookworm doesn't ship the C dev
+  # headers (Cairo, Pango, libjpeg, ...) that `canvas` (in optionalDeps)
+  # needs to compile during `npm install`. canvas silently skips, breaking
+  # tsc type resolution for a chain of dependents. The existing linux-arm64
+  # matrix entry doesn't catch this because Ubuntu's runner ships those libs
+  # (or installs them in the canvas-libs step at line 214).
+  #
+  # Why a separate job, not a 5th matrix entry: the matrix's existing steps
+  # (cache, environment-baseline, apt-get on the host, etc.) are written for
+  # the runner's native Ubuntu 24.04. Running them inside a Debian-Bookworm
+  # container would require conditional logic in many steps and obscure the
+  # gate's intent. A standalone job is cleaner and self-documenting.
+  #
+  # Status: experimental — continue-on-error: true, NOT in summary.needs.
+  # Promotion criterion: 5 consecutive green runs without revert, then add
+  # to summary.needs (same path windows-x64 is on; same path docker-smoke
+  # was on before promotion 2026-05-19).
+  #
+  # Expected runtime: ~10-15 min cold cache (Debian apt-get is slower than
+  # the Ubuntu runner's pre-warmed apt cache; npm ci is the same).
+  # ---------------------------------------------------------------------------
+  build-pi-os:
+    name: Build (Raspberry Pi OS simulation — experimental)
+    runs-on: ubuntu-24.04-arm
+    # Experimental gate — red runs do NOT block the workflow or release tag.
+    # See task .cursor/tasks/CI-RASPBERRY-PI-COVERAGE-2026-05 for promotion
+    # criteria and the "what success looks like" definition.
+    continue-on-error: true
+    timeout-minutes: 30
+
+    # arm64v8/debian:bookworm-slim — Raspberry Pi OS Bookworm 64-bit is itself
+    # a Debian Bookworm derivative. The slim variant matches the bare-OS
+    # state a real Pi user starts from (no pre-installed dev libs).
+    container:
+      image: arm64v8/debian:bookworm-slim
+
+    steps:
+      # The container is intentionally bare. We install everything a Pi
+      # user would install, in the same order. This step IS the validated
+      # recipe we'll share with community members once green.
+      - name: Install Node 20 + system libs (mirrors documented Pi install path)
+        run: |
+          set -euo pipefail
+
+          echo "::group::apt-get prerequisites"
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            curl ca-certificates git build-essential pkg-config \
+            libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev \
+            librsvg2-dev libpixman-1-dev
+          echo "::endgroup::"
+
+          echo "::group::Node.js 20.x via NodeSource"
+          # NodeSource is the documented Debian install path for Node 20.
+          # Pi OS users following our README will hit this same script.
+          curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+          apt-get install -y --no-install-recommends nodejs
+          echo "::endgroup::"
+
+          echo "::group::Environment diagnostics"
+          echo "Node:   $(node --version)"
+          echo "npm:    $(npm --version)"
+          echo "Arch:   $(uname -m)"
+          echo "Kernel: $(uname -r)"
+          echo "OS:     $(grep PRETTY_NAME /etc/os-release | cut -d= -f2-)"
+          echo "Disk:   $(df -h / | tail -1)"
+          echo "::endgroup::"
+
+      # actions/checkout uses git which we just apt-installed above.
+      # No submodules — same rationale as the existing matrix's checkout step.
+      - name: Checkout (no submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 1
+
+      # Install order is identical to the existing matrix entry (A-7 plan,
+      # see line 251 above): pc2-node first, npm rebuild esbuild race-guard,
+      # then root with --legacy-peer-deps. Keeping order identical means a
+      # failure here is genuinely distro-specific, not order-related.
+      - name: Install pc2-node + root dependencies (A-7 order)
+        env:
+          NODE_OPTIONS: '--max-old-space-size=4096'
+          NPM_CONFIG_LEGACY_PEER_DEPS: 'true'
+        run: |
+          set -euo pipefail
+
+          echo "::group::pc2-node npm ci (installed FIRST — see A-7 plan)"
+          (cd pc2-node && npm ci --no-audit --no-fund)
+          echo "::endgroup::"
+
+          echo "::group::pc2-node npm rebuild esbuild (race-guard)"
+          (cd pc2-node && npm rebuild esbuild --no-audit --no-fund)
+          echo "::endgroup::"
+
+          echo "::group::Root npm install (installed LAST)"
+          npm install --no-audit --no-fund --legacy-peer-deps
+          echo "::endgroup::"
+
+      # The exact step the Pi community member is failing at on 2026-05-25.
+      # If this passes here, our install recipe is correct and we can share
+      # it with confidence. If it fails, we iterate until green BEFORE
+      # asking any Pi user to try it.
+      - name: Build pc2-node backend (tsc — the user-reported failure point)
+        env:
+          NODE_OPTIONS: '--max-old-space-size=4096'
+        run: |
+          set -euo pipefail
+          echo "::group::npm run build:backend"
+          cd pc2-node
+          npm run build:backend
+          echo "::endgroup::"
+
+      # Cheap structural assertion that the build actually produced output.
+      # Mirrors the existing matrix entry's verification step.
+      - name: Verify build outputs exist
+        run: |
+          set -euo pipefail
+          missing=()
+          [ -f "pc2-node/dist/index.js" ] || missing+=("pc2-node/dist/index.js")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing build outputs:"
+            printf '  %s\n' "${missing[@]}"
+            exit 1
+          fi
+          size=$(du -h pc2-node/dist/index.js | cut -f1)
+          echo "✅ pc2-node/dist/index.js present (${size})"
+
+  # ---------------------------------------------------------------------------
   # summary: roll up matrix results into a single "ok / not ok" output so the
   # status badge + branch protection rule have one thing to point at.
   # ---------------------------------------------------------------------------
   summary:
     name: Smoke test summary
+    # build-pi-os is INTENTIONALLY omitted from needs: while experimental.
+    # Promote (add to needs:) only after 5 consecutive green runs — see
+    # .cursor/tasks/CI-RASPBERRY-PI-COVERAGE-2026-05 for the promotion path.
     needs: [build-and-typecheck, release-assets-integrity, docker-smoke]
     if: always()
     runs-on: ubuntu-latest

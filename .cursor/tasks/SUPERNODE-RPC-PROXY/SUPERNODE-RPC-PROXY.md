@@ -2,7 +2,7 @@
 
 **Task ID**: SUPERNODE-RPC-PROXY
 **Created**: 2026-04-29
-**Status**: InProgress — client-side plumbing shipped 2026-04-29 (default-off); supernode-side deployment still pending
+**Status**: InProgress — client-side plumbing shipped 2026-04-29 (default-off); supernode-side deployment still pending. **2026-05-25 update**: DNS ownership confirmed + cert infrastructure unblocked; only `rpc.ela.city` repoint at GoDaddy (Sasha deferred from same-session) + Contabo nginx vhost deploy remain. Wildcard cert already covers the hostname; no separate certbot run needed. See §"2026-05-25 — DNS ownership confirmed" below.
 **Priority**: **P0 — bumped 2026-05-02**. User hit a hard transaction failure during v1.2.7 cluster-pin smoke test on Jetson: Particle Auth `getPrimaryAssets()` timed out 6× in a row (15 s each), then Send dialog returned `MetaMask - RPC Error: RPC endpoint returned too many errors, retrying in 0.37 minutes`. Root cause: public RPC fallback chain (llamarpc → publicnode → ankr → blockpi → mainnet.base.org) all rate-limited at once. NOT a v1.2.7 regression — same failure mode exists on every prior version, but it now blocks the v1.2.7 acceptance test (can't verify cluster pin if user can't mint). v1.2.8 must ship Phase 2 (supernode proxy live on Contabo, default `BASE_RPC_URLS` includes it first).
 
 ## Description
@@ -350,6 +350,49 @@ After the Jetson smoke-test passed (cluster pin verified 2/2 in 730ms via Alchem
 | `ipfs.ela.city` | CNAME → `cdn.ela.city` | Cloudflare-fronted, separate path |
 
 **Important caveat**: Before any future plan touches `rpc.ela.city`, verify ownership — that DNS record may belong to Elacity (the parent org) rather than the User's pc2.net repo. Asking who currently controls that record is a prerequisite to repointing it. See `docs/core/SUPERNODE_CAPABILITY_ASSESSMENT.md` lines 444 + 488 for the original "decide DNS policy" + "does it belong to us?" questions.
+
+---
+
+### 2026-05-25 — DNS ownership confirmed + infrastructure prerequisites landed
+
+**Status update**: The "ownership unclear" caveat above is **resolved as of 2026-05-25**. Sasha regained GoDaddy admin access during the cert/DNS audit session and confirmed all `*.ela.city` records are under his control (no separate Elacity-org ownership boundary). Existing `rpc.ela.city` record is editable.
+
+| Subdomain | New Target (2026-05-25) | New Status |
+|---|---|---|
+| **`elastossmartchain.ela.city`** | **38.242.211.112** (Contabo) | ✅ **LIVE 2026-05-25** — A record edited at GoDaddy; propagated globally; strict-TLS probe against refreshed wildcard cert verified. Unblocks SEC-WAVE6 A8 code patch. |
+| `rpc.ela.city` | still 34.147.212.166 | ⏳ **Deferred 2026-05-25** by Sasha (conservative choice — did Item 1 only that session). Edit to `38.242.211.112` is a 1-min GoDaddy action when ready; wildcard cert already covers it, no separate cert work needed. **This is the unblock for Phase 2 deploy below.** |
+| `supernode.ela.city` | still 34.142.19.27 | ⏳ Unused — no code references. Optional cleanup; Sasha left it for now. |
+
+**Infrastructure unblocks landed same session (no GoDaddy access needed)**:
+1. Contabo `*.ela.city` cert was 3 days expired (NotAfter `2026-05-21`) — invisible day-to-day because of `rejectUnauthorized:false` in clients, but would have broken Phase 2 immediately if shipped. Fresh cert pushed from InterServer; Contabo nginx reloaded; verified externally. New NotAfter: `2026-08-13`.
+2. `/root/pc2/backup-to-contabo.sh` on InterServer patched so future acme.sh renewals auto-propagate to Contabo with no manual intervention (was the root cause of the 3-day expiry — script was rsyncing a stale dir + never reloading Contabo nginx).
+3. Net result: when `rpc.ela.city` is repointed, the Phase 2 nginx vhost on Contabo can ship immediately — wildcard cert already valid, propagation pipeline already auto-renewing.
+
+See [`GODADDY-DNS-BACKLOG-2026-05`](../GODADDY-DNS-BACKLOG-2026-05/GODADDY-DNS-BACKLOG-2026-05.md) for the complete session log + acceptance criteria checklist.
+
+#### Suggested scope expansion — bundle SEC-WAVE6 A8 nginx vhost into Phase 2
+
+Same-day (2026-05-25 PM) live-probe finding on the SEC-WAVE6 A8 work surfaced an additional Contabo nginx requirement that is naturally co-located with this task's Phase 2 nginx work:
+
+| Item | Where | Why bundle |
+|---|---|---|
+| `server { server_name elastossmartchain.ela.city; ... }` block proxying `/rpc/esc` to the existing ESC RPC backend on Contabo | Same Contabo nginx | A8 code patch (3 files in `pc2-node`, ~30 min) is gated on this server-side change. Without the block, `https://elastossmartchain.ela.city/rpc/esc` 404s instead of returning JSON-RPC. |
+| `server { server_name rpc.ela.city; ... }` block proxying `/base` to Alchemy free-tier (this task's MVP) | Same Contabo nginx | Phase 2's primary deliverable. |
+
+Bundling rationale: **one `nginx -t && systemctl reload nginx` cycle for two new server blocks**, instead of two separate sessions. Both blocks use the existing wildcard cert (no new certbot run). Both have small blast radius (explicit server_name → no impact on default or wildcard vhosts).
+
+Recommended execution order when ready to ship Phase 2:
+1. Edit `rpc.ela.city` A record at GoDaddy → `38.242.211.112` (1 min — Sasha)
+2. SSH to Contabo, audit existing default vhost's `location /rpc/esc { proxy_pass ... }` to identify the local ESC RPC backend port (5 min)
+3. Drop both new server blocks into `/etc/nginx/sites-available/{elastossmartchain.ela.city,rpc.ela.city}.conf`, symlink to `sites-enabled/` (15 min)
+4. `nginx -t && systemctl reload nginx` (1 min)
+5. Strict-TLS probes against both new hostnames — expect JSON-RPC, not 404 (5 min)
+6. Ship A8 code patch (`pc2-node` 3-file diff, atomic commit) — Sasha is unblocked for this (30 min)
+7. Ship Phase 2 client-side `BASE_RPC_URLS` update in `pc2-node/src/static.ts` to put `https://rpc.ela.city/base` first (15 min)
+
+Total bundled effort: ~75–90 min. Cleaner than serialising A8 → SUPERNODE-RPC-PROXY as two separate sessions touching the same nginx config.
+
+See [`SEC-2026-04-22-WAVE6-HARDENING.md`](../SEC-2026-04-22-WAVE6-HARDENING/SEC-2026-04-22-WAVE6-HARDENING.md) §"2026-05-25 PM — A8 live-probe finding" for the full nginx snippet + verification procedure for the `elastossmartchain.ela.city` block.
 
 **Options evaluated for unblocking community-node parity**:
 

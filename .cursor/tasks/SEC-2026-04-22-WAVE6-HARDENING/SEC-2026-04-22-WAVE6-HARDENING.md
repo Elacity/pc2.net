@@ -2,7 +2,7 @@
 
 **Task ID**: `SEC-2026-04-22-WAVE6-HARDENING`
 **Created**: 2026-04-22
-**Status**: 🟢 **Part 1 SHIPPED (4/8 + 1 deferred) — Part 2: 3/4 SHIPPED (A7, A11, A16); A8 PARKED on DNS (Sash travelling)**
+**Status**: 🟡 **Part 1 SHIPPED (4/8 + 1 deferred) — Part 2: 3/4 SHIPPED (A7, A11, A16); A8 PARTIALLY UNBLOCKED 2026-05-25 — DNS + cert prereqs landed, but live probe revealed a second prereq: Contabo's nginx routes `elastossmartchain.ela.city` to the wrong upstream (returns 404 "User not found" instead of ESC RPC). Server block needed on Contabo before code patch can ship safely. See §"2026-05-25 PM — A8 live-probe finding" below.**
 **Priority**: P1 — close before kill-switches flip to strict (Phase C)
 **Findings closed**: A6 (system restart shell), A7 (`curl|sh` install), A8 (TLS verify off), A9 (open path-proxy), A10 (unauth GraphQL/reindex), A11 (DNS-rebind SSRF bypass), A12 (wallet proposal binding), **A16 (`/file` unsigned capability URL)**, A18 (scheduler dangerous-action gate — added 2026-04-22 post-Wave-5 audit)
 **Source**: Internal audit performed 2026-04-22. See [`SEC_2026_04_21_AUDIT_DISPOSITION.md`](../../../docs/handover/SEC_2026_04_21_AUDIT_DISPOSITION.md) §"Internal Audit Findings (2026-04-22)". A16 was discovered during the Wave 5 A4 sweep (2026-04-22) and rolled into this wave per Sash's call (`"for a16 i follow your reccomendation"`).
@@ -29,17 +29,118 @@
 | **A11** | `9887429e7` | `/api/http` and `/api/download` now `dns.lookup({all,verbatim})` once, validate every returned IP against the private/loopback/link-local blocklist, then build a per-request `undici.Agent` with `connect.lookup` overridden to return the pinned IP — closing the rebind window. IPv6 ULA fc00::/7 + link-local fe80::/10 + IPv4-mapped + CGNAT 100.64/10 added to the blocklist. `undici@^7.19.1` pinned as a direct dep. |
 | **A16** | `2a9e39386` | New `pc2-node/src/utils/fileUrlSigner.ts` (HMAC-SHA256 sign+verify, 32-byte key at `data/.file-url-signing-key` mode 0600, generated on first call, cached in memory). `handleFile` now verifies the URL on every request. `FILE_URL_SIGNING_REQUIRED` kill-switch defaults OFF for v1.2.1 → log-only window via `[file] legacy-unsigned`. All 3 server-side mint sites (`other.ts` /sign, `other.ts` open_item, `filesystem.ts` copy thumbnail) updated to produce real HMAC signatures with 24h TTL. |
 
-### ⏳ Wave 6 part 2 — REMAINING (1/4)
+### 🟡 Wave 6 part 2 — A8 PARTIALLY UNBLOCKED 2026-05-25 (one prereq remains)
 
-| Finding | One-line | Blocker |
+| Finding | One-line | State |
 |---|---|---|
-| **A8**  | `/api/esc-rpc` TLS pinning — replace `rejectUnauthorized:false` with hostname + public CA (Option 1, locked-in). | **Decision locked (2026-04-23)**: Option 1, hostname = **`elastossmartchain.ela.city`**. Live probe of `38.242.211.112:443` confirmed it already serves a valid Let's Encrypt `*.ela.city` wildcard cert (the in-code comment "self-signed cert" is wrong). **Blocker**: Sash is travelling and his DNS provider requires SMS 2FA on a number he can't reach. Parked. **When unblocked**: Sash adds `A elastossmartchain.ela.city → 38.242.211.112` (TTL 30 min) → agent verifies propagation → switches proxy + 4 other `38.242.211.112` call sites to the hostname → removes 5x `rejectUnauthorized:false` → atomic commit. |
+| **A8**  | `/api/esc-rpc` TLS pinning — replace `rejectUnauthorized:false` with hostname + public CA (Option 1, locked-in). | **DNS + cert prereqs landed 2026-05-25 (PM).** (1) `A elastossmartchain.ela.city → 38.242.211.112` edited at GoDaddy; propagated globally (`dig +short elastossmartchain.ela.city` → `38.242.211.112` from multiple resolvers). (2) Contabo `*.ela.city` wildcard cert refreshed (NotAfter `2026-08-13`) — was 3 days expired prior to the session; pushed from InterServer's acme.sh live dir to Contabo, nginx gracefully reloaded, strict-TLS handshake verified externally. (3) InterServer's `/root/pc2/backup-to-contabo.sh` was patched in the same session to (a) refresh `/etc/nginx/ssl/wildcard/` from acme.sh's live dir before rsync, and (b) `systemctl reload nginx` on Contabo after rsync — so future renewals propagate without manual intervention. **NEW BLOCKER discovered 2026-05-25 PM via live probe**: Contabo's nginx routes the new hostname to a **different upstream** than the raw-IP path (the wildcard `*.ela.city` server block proxies `Host: elastossmartchain.ela.city` to a user-profile backend; the default vhost is what proxies `/rpc/esc` correctly). Probe results: `https://elastossmartchain.ela.city/rpc/esc` returns `404 {"error":"User not found","username":"elastossmartchain"}` vs `https://38.242.211.112/rpc/esc` returns `{"result":"0x23253a6"}`. **Resolution**: add an explicit nginx server block on Contabo for `server_name elastossmartchain.ela.city;` with the same `location /rpc/esc { proxy_pass ... }` as the default vhost. ~30–45 min server work + reload. **Then** the code patch can safely ship (~30 min). See §"2026-05-25 PM — A8 live-probe finding" below. |
 
 ### 🔁 Deferred to Wave 6.5/7
 
 | Finding | One-line |
 |---|---|
 | **A9**  | `esc-nft` prefix allowlist — per Sash's decision: enumerate every desktop UI `esc-nft/:path` call against the live UI for an hour first, then ship the allowlist. |
+
+---
+
+### 2026-05-25 PM — A8 live-probe finding
+
+After the morning's DNS + cert work landed, an "are-you-confident-it-doesn't-break-anything?" check by Sash prompted an end-to-end **application-layer** probe (not just TLS handshake). The probe revealed that the DNS + cert prereqs are **necessary but not sufficient** to safely ship the A8 code patch.
+
+#### The probe
+
+```bash
+# Path 1: NEW hostname, strict TLS — what A8 code patch would use
+$ curl -sS https://elastossmartchain.ela.city/rpc/esc \
+    -X POST -H 'Content-Type: application/json' \
+    -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'
+{"error":"User not found","username":"elastossmartchain"}   # ← HTTP 404, WRONG
+
+# Path 2: raw IP, --insecure — what production does today
+$ curl -sS --insecure https://38.242.211.112/rpc/esc \
+    -X POST -H 'Content-Type: application/json' \
+    -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'
+{"jsonrpc":"2.0","id":1,"result":"0x23253a6"}               # ← current block, CORRECT
+```
+
+Same Contabo box (`38.242.211.112:443`), same cert, same port. Different upstream service depending on `Host:` header. Nginx is doing SNI/server_name routing as designed; we just don't have a server block for `elastossmartchain.ela.city` that exposes the `/rpc/esc` location.
+
+#### What's happening at the nginx layer
+
+Inferred from the response shape (`Server: nginx/1.18.0 (Ubuntu)` header + `{"error":"User not found","username":"elastossmartchain"}` body):
+
+- **Raw-IP request** (`Host: 38.242.211.112`) → no `server_name` match → nginx falls through to the **default vhost**, which has the `/rpc/esc` `location` block proxying to the ESC RPC backend (likely a local Go-ethereum or similar service on Contabo). ✅
+- **Hostname request** (`Host: elastossmartchain.ela.city`) → matches a **`*.ela.city` wildcard server block**, which proxies to a user-profile / marketplace backend that treats the first label of the hostname as a username and 404s on unknown handles. ❌
+
+The wildcard catching unknown `*.ela.city` subdomains is intentional and useful (it serves per-user marketplace subdomains correctly), but it now intercepts our new ESC RPC hostname.
+
+#### Why earlier verification missed it
+
+What was verified this morning:
+- ✅ DNS propagation (`dig +short` across 5 public resolvers)
+- ✅ Cert validity + chain (`openssl s_client` confirmed `*.ela.city` LE cert, NotAfter `2026-08-13`)
+- ✅ Strict-TLS handshake from external probe
+
+What was **not** verified until the probe above:
+- ❌ Application-layer behaviour when connecting by the new hostname
+
+TLS handshake success only tells you you've reached the right **server**. It does not tell you nginx will route you to the right **upstream service** once inside. Layer-7 verification is its own check.
+
+#### Resolution path
+
+**Required server-side work on Contabo (before A8 code patch can ship safely):**
+
+Add an explicit nginx server block on Contabo (alongside the existing default + wildcard vhosts):
+
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name elastossmartchain.ela.city;
+    ssl_certificate     /etc/ssl/elacity/fullchain.pem;
+    ssl_certificate_key /etc/ssl/elacity/privkey.pem;
+
+    location /rpc/esc {
+        proxy_pass http://127.0.0.1:<port-of-current-esc-rpc-backend>;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 30s;
+    }
+
+    # Reject other paths cleanly so we don't accidentally proxy unintended traffic
+    location / {
+        return 404;
+    }
+}
+```
+
+Pre-deploy checks:
+1. SSH to Contabo, `nginx -T 2>&1 | grep -A 30 'server_name.*default\|listen.*default'` to find the existing `location /rpc/esc` block in the default vhost and copy its `proxy_pass` upstream verbatim.
+2. Drop the new block into `/etc/nginx/sites-available/`, symlink to `sites-enabled/`, `nginx -t` for syntax, `systemctl reload nginx`.
+3. Re-run the strict-TLS probe — expect JSON-RPC response, not "User not found".
+
+Blast radius: low. Nginx server_name matching is exact-first, then wildcard. A new explicit block for `elastossmartchain.ela.city` does not affect the default vhost (raw-IP path still works → existing PC2 v1.2.7.x users keep working) and does not affect the wildcard (other `*.ela.city` subdomains keep routing as before).
+
+**Alternative path (bundle into SUPERNODE-RPC-PROXY Phase 2):**
+
+Since SUPERNODE-RPC-PROXY Phase 2 will already touch Contabo's nginx config (to add the `rpc.ela.city` server block fronting Alchemy), bundle the `elastossmartchain.ela.city` block into the same deploy. One `nginx -t && systemctl reload` for both new blocks. Cleaner; defers A8 by ~2-3h of RPC-proxy work.
+
+**Effort revision for A8:**
+
+| Component | Time | Status |
+|---|---|---|
+| DNS edit at GoDaddy | done 2026-05-25 | ✅ shipped |
+| Contabo cert refresh | done 2026-05-25 | ✅ shipped |
+| Auto-propagation pipeline patch on InterServer | done 2026-05-25 | ✅ shipped |
+| Nginx server block on Contabo for `elastossmartchain.ela.city` | **30–45 min** | ⏳ **outstanding** (new) |
+| Code patch (3 files, atomic commit) | 30 min | ⏳ outstanding (gated on nginx work above) |
+| Verification + smoke + deploy | 15 min | ⏳ outstanding |
+| **Total remaining** | **~75–90 min** | (was estimated as 30 min before this finding) |
+
+#### Defence-in-depth note (no production impact today)
+
+Until the nginx block + code patch ship, **existing PC2 v1.2.7.x users are unaffected** — they continue connecting by raw IP, hit the default vhost, get the working ESC RPC. The hostname-based path simply isn't exercised by any in-the-wild code yet. The A8 finding remains a defence-in-depth gap (MITM-able TLS), not an active outage.
 
 ### 🧪 Verification done so far
 

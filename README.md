@@ -63,10 +63,12 @@ Zero-code install. The **ElastOS Launcher** is a signed, notarised desktop app t
 One command. Takes ~15–20 min on a Pi 5:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/Elacity/pc2.net/main/scripts/install-arm.sh | bash
+curl -sSL https://raw.githubusercontent.com/Elacity/pc2.net/main/scripts/install-arm.sh | sudo bash
 ```
 
-Installs Node 20, system libraries, WireGuard, builds PC2, and starts it as a background service under PM2 (so it auto-restarts on boot). When it finishes it prints a URL like `http://<your-pi-ip>:4200` — open that in any browser on your network.
+Installs Node 20, system libraries, WireGuard + AmneziaWG, builds PC2, writes the scoped sudoers entries that unlock 6/6 transport networking, and starts PC2 as a background service under PM2 (so it auto-restarts on boot).
+
+You'll be asked for your password **once at the start** — that single prompt covers the entire install (system packages, WireGuard kernel modules, AmneziaWG transport permissions, PM2 boot integration). PC2 still installs into your normal user's home directory (e.g. `/home/pi/pc2.net`), not `/root`. When it finishes it prints a URL like `http://<your-pi-ip>:4200` — open that in any browser on your network.
 
 ### 🐧 Headless Linux x64 (Docker)
 

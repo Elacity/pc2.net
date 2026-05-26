@@ -161,15 +161,21 @@ async function build (options) {
             //if(options?.verbose)
             console.log(stats.toString());
             
-            // Webpack outputs to main.js, rename it to bundle.min.js
+            // Webpack outputs to main.js, rename it to bundle.min.js.
+            // In some webpack configs the bundle is emitted directly to
+            // bundle.min.js (no rename step needed) — in that case the
+            // rename branch is a no-op and we should NOT warn. Only warn
+            // when neither artifact exists, which is a real build failure.
             const mainJsPath = path.join(__dirname, 'dist', 'main.js');
             const bundleJsPath = path.join(__dirname, 'dist', 'bundle.min.js');
             if (fs.existsSync(mainJsPath)) {
                 fs.copyFileSync(mainJsPath, bundleJsPath);
                 fs.unlinkSync(mainJsPath);
                 console.log('✅ Created bundle.min.js from webpack output');
+            } else if (fs.existsSync(bundleJsPath)) {
+                console.log('✅ webpack emitted bundle.min.js directly');
             } else {
-                console.warn('⚠️  webpack did not output main.js, bundle.min.js may be missing');
+                console.warn('⚠️  webpack did not produce bundle.min.js — GUI bundle missing');
             }
             resolve();
         });

@@ -2,7 +2,7 @@
 
 **Task ID**: CI-RASPBERRY-PI-COVERAGE-2026-05
 **Created**: 2026-05-25
-**Status**: 🟢 **Review (TWO gates GREEN; build-pi-os at 5/5 — promotion-eligible, install-arm-script-smoke at 1/5)** — awaiting Sasha sign-off before file follow-up PR to add to `summary.needs`.
+**Status**: 🟢 **Review (TWO gates GREEN; build-pi-os at 6/6 — promotion-eligible, install-arm-script-smoke at 3/5)** — awaiting Sasha sign-off before file follow-up PR to add to `summary.needs`.
 **Priority**: Medium (release-adjacent, explicitly NOT a release blocker for end-of-week tag, but unlocks shipping the one-liner to non-technical users with confidence)
 **Owner**: Agent (CI workflow author) + Sasha (review + push approval)
 
@@ -181,14 +181,17 @@ The "linux-arm64 promoted 2026-05-16 after 5 consecutive green runs" comment at 
 - [x] Audit install-arm.sh against the proven A-7 order — found 3 latent bugs (wrong order, `--ignore-scripts`, `|| true` masking)
 - [x] Fix install-arm.sh's `install_pc2` to use A-7 order, drop `--ignore-scripts`, drop error-masking `|| true` (commit `0dcf7366e`)
 - [x] Fix dangling `submodules/particle-auth` git index entry that caused Windows checkout warning (commit `f08c72e8a`)
-- [x] Fix misleading `particle-auth dist not found` warning in `build-frontend.js` — recognise the moved-by-build:particle-auth state as success (commit pending)
+- [x] Fix misleading `particle-auth dist not found` warning in `build-frontend.js` — recognise the moved-by-build:particle-auth state as success (commit `7c73388bb`)
+- [x] **One-prompt sudo UX for non-technical Pi users** — README Pi line `\| bash` → `\| sudo bash` so the user is asked for their password ONCE upfront instead of mid-install when the sudo cred cache expires; install-arm.sh already correctly handles `SUDO_USER` so PC2 still installs into the user's real home dir, not `/root` (commit `78cd3ef58`)
+- [x] **Silence cosmetic webpack warning** — `src/gui/utils.js` now logs `✅ webpack emitted bundle.min.js directly` instead of the misleading `⚠️ webpack did not output main.js, bundle.min.js may be missing` when webpack writes the bundle directly without an intermediate main.js (commit `78cd3ef58`)
 
 ### Phase 3 — install-arm-script-smoke gate (full build:pc2 + boot)
 - [x] Add `PC2_CI_MODE=1` flag to install-arm.sh — skips host-only steps (WireGuard, PM2, sing-box, voice) so the script can run in a container (commit `b733e6729`)
 - [x] Add `install-arm-script-smoke` job that runs install-arm.sh end-to-end with CI mode (same commit)
 - [x] **Strengthen acceptance**: full artifact integrity (4 artifacts, size-bounded), `node --check`, **boot smoke** via `node dist/index.js` + poll `/api/health` (commit `a712cef5f`)
 - [x] First green achieved with strengthened gate (run [26413600247](https://github.com/Elacity/pc2.net/actions/runs/26413600247))
-- [ ] Accumulate 4 more consecutive greens before promotion
+- [x] Greens 2 + 3 (cosmetic warning fix run + sudo+webpack UX run): [26415767504](https://github.com/Elacity/pc2.net/actions/runs/26415767504), [26434598753](https://github.com/Elacity/pc2.net/actions/runs/26434598753)
+- [ ] Accumulate 2 more consecutive greens before promotion
 
 ### Phase 4 — Promotion + Eric delivery (deferred until v1.2.8 ships)
 - [ ] After 5 greens on install-arm-script-smoke, file follow-up `CI-PI-OS-PROMOTE-REQUIRED-2026-XX` to add both Pi gates to `summary.needs`

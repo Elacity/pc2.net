@@ -1,0 +1,34 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build:gui",
+      "type": "shell",
+      "command": "npm run build:gui",
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "sourceMaps": true,
+      },
+      "group": "build",
+      "presentation": {
+        "panel": "shared",
+        "reveal": "always",
+      },
+    },    
+    {
+      "label": "build:pc2-backend",
+      "type": "shell",
+      "command": "npm run build:backend",
+      "options": {
+        "cwd": "${workspaceFolder}/pc2-node"
+      },
+      "group": "build",
+      "presentation": {
+        "panel": "shared",
+        "reveal": "always",
+      },
+      "problemMatcher": "$tsc",
+      "dependsOn": ["build:gui"]
+    }
+  ]
+}

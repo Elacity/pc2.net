@@ -122,7 +122,7 @@ mod tests {
             "0x580c26DefF267EF40A72CF10A4A42050F0641b8B",
             8453,
             "https://mainnet.base.org",
-            "QmPBjQD7V4aFTZPxUwZ9gDPFJtcJ4SvsJdTh3QexTyRBbj",
+            "QmRSpGFftbiWQBkHFEi9FUhtigfPbcCkezuuEUNUJcFr6h",
             "chipotle",
             "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "deadbeef",

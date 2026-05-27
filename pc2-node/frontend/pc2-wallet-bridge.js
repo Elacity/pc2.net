@@ -73,7 +73,7 @@
     43114: ['https://api.avax.network/ext/bc/C/rpc', 'https://avalanche-c-chain-rpc.publicnode.com'],
     250: ['https://rpc.ftm.tools', 'https://fantom-rpc.publicnode.com'],
     25: ['https://evm.cronos.org'],
-    8453: ['https://mainnet.base.org', 'https://base-rpc.publicnode.com', 'https://1rpc.io/base']
+    8453: ['https://mainnet.base.org', 'https://base-rpc.publicnode.com']
   };
 
   // Chain metadata for wallet_addEthereumChain

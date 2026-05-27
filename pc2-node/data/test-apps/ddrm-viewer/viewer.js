@@ -52,7 +52,7 @@
 
   var SECURE_VIEW_SIGN_TIMEOUT_MS = 60000;
 
-  function requestSignedBundleFromParent(kid, actionIpfsId) {
+  function requestTokenFromParent(opts) {
     // Prefer window.pc2Wallet — this is the unambiguous PC2 provider
     // shim reference. window.ethereum can be hijacked by MetaMask /
     // TronLink / Phantom inside iframes, in which case
@@ -73,7 +73,7 @@
 
       provider.request({
         method: 'pc2_secureView_sign',
-        params: [{ kid: kid, actionIpfsId: actionIpfsId }]
+        params: [{ refresh: !!(opts && opts.refresh) }]
       }).then(function (bundle) {
         if (settled) return;
         settled = true;
@@ -88,33 +88,33 @@
     });
   }
 
-  function augmentBodyWithSession(body) {
-    if (!body || !body.kid) return Promise.resolve(body);
-    // actionIpfsId is bound into the delegation server-side; the parent
-    // already knows it from /lit/begin-session, so we don't need to
-    // pass it from here. We forward whatever the asset metadata gave
-    // us (if any) so the parent can sanity-check.
-    return requestSignedBundleFromParent(body.kid, body.actionIpfsId)
-      .then(function (bundle) {
-        if (!bundle) return body;
-        body.delegation = bundle.delegation;
-        body.delegationSig = bundle.delegationSig;
-        body.request = bundle.request;
-        body.requestSig = bundle.requestSig;
-        return body;
-      })
-      .catch(function (err) {
-        console.warn('[Viewer] Secure-view session unavailable; falling back to legacy:', err && err.message);
-        return body;
-      });
-  }
-
+  // POST /lit/secure-view with the parent-held bearer token. On
+  // session_token_invalid (server restarted, session evicted) ask the
+  // parent to drop the stale token and re-bootstrap, then retry once.
   function secureViewPost(body) {
-    return augmentBodyWithSession(body).then(function (finalBody) {
-      return authFetch('/api/storage/lit/secure-view', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(finalBody),
+    function callOnce(refresh) {
+      return requestTokenFromParent({ refresh: refresh })
+        .then(function (bundle) {
+          var headers = { 'Content-Type': 'application/json' };
+          if (bundle && bundle.token) {
+            body.sessionToken = bundle.token;
+            headers['X-SecureView-Session'] = bundle.token;
+          }
+          return authFetch('/api/storage/lit/secure-view', {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify(body),
+          });
+        });
+    }
+    return callOnce(false).then(function (resp) {
+      if (resp.status !== 401) return resp;
+      return resp.clone().json().catch(function () { return {}; }).then(function (payload) {
+        if (payload && payload.error === 'session_token_invalid') {
+          console.warn('[Viewer] Session token invalid — refreshing and retrying');
+          return callOnce(true);
+        }
+        return resp;
       });
     });
   }
@@ -177,8 +177,8 @@
     mimeType:          p('mimeType', 'application/octet-stream'),
     actionCid:         p('actionCid', ''),
     authority:         p('authority', ''),
-    signature:         p('signature', ''),
-    issuer:            p('issuer', ''),
+    signature:         p('signature', null),
+    issuer:            p('issuer', null),
     title:             p('title', ''),
     maxWidth:          Math.min(window.innerWidth * (window.devicePixelRatio || 1), 1600),
   };

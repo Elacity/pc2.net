@@ -216,7 +216,7 @@ export function recordMetricHistogram (
  * counter for outcome bookkeeping. Designed to be a one-line wrap:
  *
  *   const cek = await observeMs(db, 'chipotle.cek_recovery_ms', { kind: 'media' },
- *                               () => recoverMediaCEKEnvelope(...));
+ *                               () => recoverCEKEnvelope(...));
  */
 export async function observeMs<T> (
     db: DatabaseManager | undefined,

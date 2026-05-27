@@ -665,8 +665,8 @@ async function main() {
          Owns the ephemeral P-256 key + 24h delegation. Iframes call
          window.ethereum.request({ method: 'pc2_secureView_sign' }) to
          get a signed bundle with NO wallet prompt per asset. -->
-    <script src="/pc2-secure-view-session.js?v=20260421a"></script>
-    <script src="/pc2-secure-view.js?v=20260501c"></script>
+    <script src="/pc2-secure-view-session.js?v=20260527a"></script>
+    <script src="/pc2-secure-view.js?v=20260527a"></script>
     <!-- NOTE: gui.js is already bundled into bundle.min.js - do NOT include separately -->
     
     <!-- Initialize GUI -->

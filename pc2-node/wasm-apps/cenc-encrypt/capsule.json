@@ -1,10 +1,10 @@
 {
   "name": "cenc-encrypt",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "AES-128-CTR CENC encryption + PSSH generation for fMP4 media",
   "target": "wasm32-wasip1",
   "binary": "cenc-encrypt.wasm",
-  "sha256": "7a96a641f0978ed1fa6727090bb9b9c8179b660cf17e4185da23b2a369e99238",
+  "sha256": "9a2755c3ae40c9eb3b5389d05c19784a64d15593c2f045b154094178bffd8d19",
   "capabilities": [
     "drm:encrypt"
   ],

@@ -1,23 +1,21 @@
 /**
- * PC2 Secure-View Manager — Parent-frame owner of the Option C
- * session-key delegation.
+ * PC2 Secure-View Manager — parent-frame token bookkeeper.
  *
- * Lives in the PC2 parent (top) frame alongside pc2-wallet-bridge.js.
- * Owns:
- *   1. The non-extractable P-256 ephemeral key (via PC2SecureViewSession).
- *   2. The 24h delegation signed by the user's wallet (one prompt at
- *      session start, ZERO prompts on subsequent asset opens).
- *   3. A silent per-asset signRequest({ kid }) called from iframes via
- *      window.ethereum.request({ method: 'pc2_secureView_sign' })
- *      handled by pc2-wallet-bridge.js.
+ * Backend owns the P-256 session keypair. The parent frame:
+ *   1. Calls /lit/begin-session to obtain a delegation payload.
+ *   2. Asks the user's wallet to `personal_sign` it (one prompt at session
+ *      start — the cryptographic binding between wallet and server-side
+ *      session key).
+ *   3. Posts the signature to /lit/complete-session and receives an opaque
+ *      bearer token.
+ *   4. Persists the token in IndexedDB and hands it out to iframes via the
+ *      `pc2_secureView_sign` RPC; iframes attach it as `sessionToken` /
+ *      `Authorization: Bearer` on content requests.
+ *   5. Pre-emptively renews via /lit/renew-session before delegation expiry
+ *      (one fresh wallet sig — same server keypair, new timestamps + nonce).
  *
- * This file is the architectural counterpart of viewer.js's old
- * bootstrapSession() — moved out of the iframe so:
- *   - Wallet prompts only ever come from the top frame (works with
- *     wallet extensions that block iframe prompts).
- *   - Per-asset opens are silent ("double-click to open" UX).
- *   - One session covers all secure-view consumers (viewer, creator,
- *     future apps) on this PC2 origin.
+ * No keypair, no canonical-JSON signing, no ECDH unwrap in the browser. The
+ * CEK lives only in Node heap inside BackendSessionView.
  */
 (function initParentSecureView(globalScope) {
   'use strict';
@@ -42,16 +40,27 @@
     return;
   }
 
+  // Seconds of grace before delegation expiry — pre-emptive renewal kicks
+  // in when the cached token is within this window of expiry.
+  var RENEWAL_GRACE_SECONDS = 60;
+  var DEFAULT_CHAIN_ID = 8453;
+
   var EXTERNAL_WALLET_METHODS = ['metamask', 'walletconnect', 'coinbase'];
 
-  // In-memory session cache; on first call we hydrate from IndexedDB
-  // (so reloads + new tabs reuse the same delegation until expiry).
+  /**
+   * In-memory cache of the active session. Hydrated from IndexedDB at
+   * bootstrap; cleared on renewal failures or wallet changes.
+   */
   var sessionState = {
-    bootstrapped:      false,
-    bootstrapPromise:  null,
-    delegationRecord:  null, // { delegation, delegationCanonical, delegationSig, sessionPublicKey, ownerAddress, expiresAt }
-    keyPair:           null, // CryptoKeyPair (P-256, private key non-extractable)
+    bootstrapped:     false,
+    bootstrapPromise: null,
+    token:            null, // opaque bearer string from /complete-session
+    sessionId:        null, // P-256 publicKey hex (server-issued)
+    ownerAddress:     null, // wallet address that authorised the session
+    expiresAt:        null, // unix seconds — matches delegation.expiresAt
   };
+
+  // ── Wallet integration (unchanged from the keypair-era design) ──────────
 
   function isEmbeddedLogin() {
     var method = (globalScope.user && globalScope.user.login_method)
@@ -61,20 +70,10 @@
     return true;
   }
 
-  // Locate the EIP-1193 provider for external wallets. We deliberately
-  // do NOT do EIP-6963 here: pc2-wallet-bridge.js already discovers the
-  // user's chosen provider and (for non-embedded login) the bridge's
-  // own personal_sign path is reused below — but only by going through
-  // window.ethereum. The user picks once at login; we follow that pick.
   function getExternalProvider() {
     var p = globalScope.ethereum;
     if (!p) return null;
-    if (p.isPC2WalletBridge) {
-      // Defensive: if the bridge installed itself as window.ethereum
-      // (it shouldn't in the parent), reach through to the underlying
-      // provider so we don't recurse.
-      return p._underlying || null;
-    }
+    if (p.isPC2WalletBridge) return p._underlying || null;
     return p;
   }
 
@@ -137,297 +136,289 @@
     return globalScope.fetch(url, opts);
   }
 
+  // ── Wallet prompt UX (external wallets only) ────────────────────────────
+  //
+  // EverlastingOS-class bug guard: when the user signs a delegation via an
+  // external wallet (MetaMask / WalletConnect / Coinbase), the only cue is
+  // the wallet's own popup. If the popup is blocked, sits in another window,
+  // or is dismissed unread, the bundle never builds and every subsequent
+  // open returns session_token_required — the user has no idea what went
+  // wrong. We surface a bottom-right corner toast so the page itself cues
+  // "your wallet is waiting on you" without a backdrop takeover.
+
+  function describeWallet() {
+    var loginMethod = ((globalScope.user || {}).login_method
+      || (globalScope.localStorage && globalScope.localStorage.getItem('pc2_login_method'))
+      || '').toLowerCase();
+    if (loginMethod === 'metamask') return 'MetaMask';
+    if (loginMethod === 'walletconnect') return 'your wallet app';
+    if (loginMethod === 'coinbase') return 'Coinbase Wallet';
+    return 'your wallet';
+  }
+
+  function showPromptOverlay(titleText) {
+    if (isEmbeddedLogin()) return null;
+    if (typeof globalScope.pc2ShowLoginStatusOverlay !== 'function') return null;
+    var walletLabel = describeWallet();
+    var overlay = globalScope.pc2ShowLoginStatusOverlay({
+      id: 'pc2-secureview-delegation-overlay',
+      title: titleText,
+      message: 'Check ' + walletLabel + ' — one signature unlocks paid content.',
+      hint: '',
+      position: 'corner',
+    });
+    var t1 = setTimeout(function () {
+      if (overlay && overlay.update) overlay.update({ hint: 'Still waiting — open ' + walletLabel + ' to approve.' });
+    }, 8000);
+    var t2 = setTimeout(function () {
+      if (overlay && overlay.update) overlay.update({ hint: 'If your wallet didn’t prompt, the popup may have been blocked.' });
+    }, 20000);
+    return {
+      hide: function () {
+        clearTimeout(t1); clearTimeout(t2);
+        if (overlay && overlay.hide) overlay.hide();
+      },
+    };
+  }
+
+  // ── Backend session lifecycle ───────────────────────────────────────────
+
   /**
-   * Restore an existing session from IndexedDB if still valid.
-   * Resolves to the cached state, or null if no usable session exists.
+   * Validate that a signer address resolved from the wallet matches what
+   * the server expects from the PC2-authenticated session. Throws on
+   * mismatch — bootstrap will be retried once the wallet selection is
+   * corrected.
    */
-  function tryRestoreSession() {
-    log('tryRestoreSession: loading delegation from IndexedDB…');
-    return SVS.getActiveDelegation().then(function (active) {
-      if (!active) {
-        log('tryRestoreSession: no active delegation (or expired)');
-        return null;
+  function resolveSignerOrThrow(expectedOwnerAddress) {
+    return getSignerAddress().then(function (signerAddr) {
+      if (!signerAddr) throw new Error('No wallet account available for signing');
+      if (
+        expectedOwnerAddress &&
+        String(signerAddr).toLowerCase() !== String(expectedOwnerAddress).toLowerCase()
+      ) {
+        throw new Error('Wallet account does not match authenticated PC2 session');
       }
-      log('tryRestoreSession: delegation found, expiresAt=' + active.expiresAt + ' actionIpfsId=' + active.delegation.actionIpfsId);
-
-      // Cache-ownership gate. Server-side /secure-view refuses any
-      // request whose delegation.ownerAddress does not match the
-      // authenticated session. If the user logged out and back in
-      // under a different wallet, the IndexedDB delegation is stale
-      // and every non-media open will 403. Detect the mismatch here,
-      // purge the cache, and let ensureSession() re-bootstrap under
-      // the current wallet. Fall through on unknown current wallet
-      // (window.user not populated yet) — the server 403 is still the
-      // final authority.
-      var currentWallet = (globalScope.user && globalScope.user.wallet_address) || '';
-      var cachedOwner = (active.delegation && active.delegation.ownerAddress) || '';
-      if (currentWallet && cachedOwner && currentWallet.toLowerCase() !== cachedOwner.toLowerCase()) {
-        warn('tryRestoreSession: cached delegation owner does not match current session — purging (cached=' + cachedOwner.substring(0, 10) + '… current=' + currentWallet.substring(0, 10) + '…)');
-        return SVS.revokeSession({}).then(function () { return null; });
-      }
-
-      // Action-CID staleness gate. The Lit Action self-checks
-      //   del.actionIpfsId === jsParams.actionIpfsId
-      // inside the TEE, so a delegation cached against a now-rotated
-      // action CID will fail every secure-view call with the cryptic
-      // "Lit Action denied" error until the delegation expires
-      // (potentially months). Detect the mismatch up-front by asking
-      // the server which CID it's bound to, purge the cache, and let
-      // ensureSession() re-bootstrap with the current CID.
-      // Fail-open: if /server-info is unreachable we keep the cache
-      // and let the server be the final authority.
-      var cachedActionCid = (active.delegation && active.delegation.actionIpfsId) || '';
-      return authFetch('/api/storage/lit/server-info', { method: 'GET' })
-        .then(function (resp) { return resp && resp.ok ? resp.json() : null; })
-        .catch(function () { return null; })
-        .then(function (serverInfo) {
-          var serverActionCid = (serverInfo && serverInfo.actionCid) || '';
-          if (serverActionCid && cachedActionCid && serverActionCid !== cachedActionCid) {
-            warn('tryRestoreSession: cached delegation actionIpfsId is stale — purging (cached=' + cachedActionCid.substring(0, 12) + '… server=' + serverActionCid.substring(0, 12) + '…)');
-            return SVS.revokeSession({}).then(function () { return null; });
-          }
-          return active;
-        })
-        .then(function (validatedActive) {
-          if (!validatedActive) return null;
-          return SVS.loadSessionKey().then(function (kp) {
-            if (!kp) {
-              log('tryRestoreSession: delegation present but session keypair missing — will re-delegate');
-              return null;
-            }
-            log('tryRestoreSession: restored cached session (no wallet prompt needed)');
-            sessionState.delegationRecord = validatedActive;
-            sessionState.keyPair = kp;
-            return sessionState;
-          });
-        });
+      return signerAddr;
     });
   }
 
   /**
-   * Run the one-time delegation flow:
-   *   1. Generate ephemeral P-256 key (private key non-extractable).
-   *   2. POST sessionPublicKey to /lit/begin-session.
-   *   3. personal_sign the canonical delegation with the user's wallet.
-   *   4. POST { delegation, delegationSig } to /lit/complete-session.
-   *   5. Persist key + delegation in IndexedDB.
+   * /lit/complete-session — submit a wallet signature, receive bearer token.
+   * Persists the result to IndexedDB and updates `sessionState`.
    */
-  function runDelegationFlow() {
-    log('runDelegationFlow: generating ephemeral P-256 keypair…');
-    return SVS.createEphemeralKey().then(function (kp) {
-      log('runDelegationFlow: POST /api/storage/lit/begin-session');
-      return authFetch('/api/storage/lit/begin-session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionPublicKey: kp.sessionPublicKey }),
-      }).then(function (resp) {
-        log('runDelegationFlow: begin-session status=' + resp.status);
-        if (!resp.ok) throw new Error('begin-session failed: ' + resp.status);
-        return resp.json();
-      }).then(function (data) {
-        var delegation = data && data.delegation;
-        var canonical  = data && data.delegationCanonical;
-        if (!delegation || !canonical) throw new Error('begin-session returned invalid payload');
-        var ownerAddress = delegation.ownerAddress;
-        log('runDelegationFlow: resolving signer address (embedded=' + isEmbeddedLogin() + ', ownerAddress=' + ownerAddress + ')…');
+  function completeSession(sessionId, delegationSig) {
+    return authFetch('/api/storage/lit/complete-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: sessionId, delegationSig: delegationSig }),
+    }).then(function (resp) {
+      log('completeSession: status=' + resp.status);
+      if (!resp.ok) {
+        return resp.text().then(function (body) { throw new Error('complete-session failed: ' + resp.status + ' ' + body); });
+      }
+      return resp.json();
+    }).then(function (result) {
+      sessionState.token     = result.token;
+      sessionState.sessionId = result.sessionId;
+      sessionState.expiresAt = result.expiresAt;
+      return SVS.persistSession({
+        token:     result.token,
+        sessionId: result.sessionId,
+        expiresAt: result.expiresAt,
+      }).then(function () { return result; });
+    });
+  }
 
-        return getSignerAddress().then(function (signerAddr) {
-          log('runDelegationFlow: signer resolved: ' + signerAddr);
-          if (!signerAddr) throw new Error('No wallet account available for signing');
-          if (String(signerAddr).toLowerCase() !== String(ownerAddress).toLowerCase()) {
-            throw new Error('Wallet account does not match authenticated PC2 session');
-          }
-          log('runDelegationFlow: requesting personal_sign (wallet prompt expected)…');
+  /**
+   * Full session creation flow:
+   *   1. POST /lit/begin-session         → { sessionId, delegationCanonical }
+   *   2. wallet.personal_sign(canonical) → delegationSig
+   *   3. POST /lit/complete-session      → { token, expiresAt }
+   *   4. Persist { token, sessionId, expiresAt } to IndexedDB.
+   */
+  function runSessionFlow(expectedOwnerAddress) {
+    log('runSessionFlow: POST /api/storage/lit/begin-session');
+    return authFetch('/api/storage/lit/begin-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chainId: DEFAULT_CHAIN_ID }),
+    }).then(function (resp) {
+      log('runSessionFlow: begin-session status=' + resp.status);
+      if (!resp.ok) throw new Error('begin-session failed: ' + resp.status);
+      return resp.json();
+    }).then(function (data) {
+      var sessionId = data && data.sessionId;
+      var canonical = data && data.delegationCanonical;
+      if (!sessionId || !canonical) throw new Error('begin-session returned invalid payload');
 
-          // EverlastingOS-class bug guard: when the user signs the one-time
-          // 24h delegation via an EXTERNAL wallet (MetaMask / WalletConnect /
-          // Coinbase), the only cue is the wallet's own popup. If the popup
-          // is blocked, sits in another window, or is dismissed unread, the
-          // bundle never builds and every subsequent open returns
-          // session_bundle_required — the user has no idea what went wrong.
-          //
-          // We surface a parent-frame BOTTOM-RIGHT corner toast (same visual
-          // pattern as buildWalletConnectPanel in UIWindowParticleSigning,
-          // and as the email-login signature overlay from #21) so the page
-          // itself cues "your wallet is waiting on you" — without a backdrop
-          // takeover. For external wallets the wallet popup is already in
-          // the browser-extension area (outside the page) or another window
-          // entirely, so a fullscreen backdrop would add visual noise without
-          // adding visibility. Embedded (Particle email/social) login already
-          // gets forced-attention UI from UIWindowParticleSigning (centered
-          // iframe + backdrop), so we deliberately skip the overlay there to
-          // avoid stacking two cues on top of one another.
-          //
-          // Cleanup is mandatory on BOTH success and failure so a rejected /
-          // cancelled signature never leaves a frozen overlay behind.
-          var external = !isEmbeddedLogin();
-          var loginMethod = ((globalScope.user || {}).login_method
-            || (globalScope.localStorage && globalScope.localStorage.getItem('pc2_login_method'))
-            || '').toLowerCase();
-          var walletLabel = loginMethod === 'metamask' ? 'MetaMask'
-            : loginMethod === 'walletconnect' ? 'your wallet app'
-            : loginMethod === 'coinbase' ? 'Coinbase Wallet'
-            : 'your wallet';
-
-          var overlay = null;
-          var hintTimer1 = null;
-          var hintTimer2 = null;
-          if (external && typeof globalScope.pc2ShowLoginStatusOverlay === 'function') {
-            overlay = globalScope.pc2ShowLoginStatusOverlay({
-              id: 'pc2-secureview-delegation-overlay',
-              title: 'Approve secure-view session',
-              message: 'Check ' + walletLabel + ' \u2014 one signature unlocks paid content for 24h.',
-              hint: '',
-              position: 'corner',
-            });
-            hintTimer1 = setTimeout(function () {
-              if (overlay && overlay.update) {
-                overlay.update({ hint: 'Still waiting \u2014 open ' + walletLabel + ' to approve.' });
-              }
-            }, 8000);
-            hintTimer2 = setTimeout(function () {
-              if (overlay && overlay.update) {
-                overlay.update({ hint: 'If your wallet didn\u2019t prompt, the popup may have been blocked.' });
-              }
-            }, 20000);
-          }
-          function clearOverlay() {
-            if (hintTimer1) { clearTimeout(hintTimer1); hintTimer1 = null; }
-            if (hintTimer2) { clearTimeout(hintTimer2); hintTimer2 = null; }
-            if (overlay && overlay.hide) { overlay.hide(); overlay = null; }
-          }
-
-          return walletPersonalSign(canonical, signerAddr).then(function (delegationSig) {
-            clearOverlay();
-            log('runDelegationFlow: delegation signed, POST /api/storage/lit/complete-session');
-            return authFetch('/api/storage/lit/complete-session', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ delegation: canonical, delegationSig: delegationSig }),
-            }).then(function (resp) {
-              log('runDelegationFlow: complete-session status=' + resp.status);
-              if (!resp.ok) throw new Error('complete-session failed: ' + resp.status);
-              var record = {
-                delegation:           delegation,
-                delegationCanonical:  canonical,
-                delegationSig:        delegationSig,
-                sessionPublicKey:     kp.sessionPublicKey,
-                ownerAddress:         ownerAddress,
-                expiresAt:            delegation.expiresAt,
-              };
-              return Promise.all([
-                SVS.saveSessionKey(kp.keyPair),
-                SVS.persistDelegation(record),
-              ]).then(function () {
-                log('runDelegationFlow: session persisted to IndexedDB');
-                sessionState.keyPair          = kp.keyPair;
-                sessionState.delegationRecord = record;
-                return sessionState;
-              });
-            });
-          }).catch(function (err) {
-            // Cancelled / rejected / timed-out signature, or network failure
-            // during complete-session. Tear down the overlay before
-            // bubbling so the user isn't stuck behind a frozen modal.
-            clearOverlay();
-            throw err;
-          });
+      sessionState.sessionId = sessionId;
+      return resolveSignerOrThrow(expectedOwnerAddress).then(function (signerAddr) {
+        sessionState.ownerAddress = signerAddr;
+        log('runSessionFlow: requesting personal_sign (wallet prompt expected)…');
+        var overlay = showPromptOverlay('Approve secure-view session');
+        return walletPersonalSign(canonical, signerAddr).then(function (delegationSig) {
+          if (overlay) overlay.hide();
+          log('runSessionFlow: delegation signed, completing session');
+          return completeSession(sessionId, delegationSig);
+        }).catch(function (err) {
+          if (overlay) overlay.hide();
+          throw err;
         });
       });
     });
   }
 
   /**
-   * Idempotent session bootstrap. Subsequent calls reuse the cached
-   * promise so concurrent iframe requests collapse into a single
-   * wallet prompt.
+   * Renew an existing session — same keypair, fresh delegation. Wallet
+   * signs again (single prompt); no new keypair generation server-side.
    */
-  function ensureSession() {
-    if (sessionState.bootstrapped && sessionState.delegationRecord && sessionState.keyPair) {
+  function runRenewalFlow(sessionId, expectedOwnerAddress) {
+    log('runRenewalFlow: POST /api/storage/lit/renew-session');
+    return authFetch('/api/storage/lit/renew-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: sessionId, chainId: DEFAULT_CHAIN_ID }),
+    }).then(function (resp) {
+      log('runRenewalFlow: renew-session status=' + resp.status);
+      if (!resp.ok) throw new Error('renew-session failed: ' + resp.status);
+      return resp.json();
+    }).then(function (data) {
+      var canonical = data && data.delegationCanonical;
+      if (!canonical) throw new Error('renew-session returned invalid payload');
+      return resolveSignerOrThrow(expectedOwnerAddress).then(function (signerAddr) {
+        sessionState.ownerAddress = signerAddr;
+        log('runRenewalFlow: requesting personal_sign for renewed delegation…');
+        var overlay = showPromptOverlay('Renew secure-view session');
+        return walletPersonalSign(canonical, signerAddr).then(function (delegationSig) {
+          if (overlay) overlay.hide();
+          return completeSession(sessionId, delegationSig);
+        }).catch(function (err) {
+          if (overlay) overlay.hide();
+          throw err;
+        });
+      });
+    });
+  }
+
+  /**
+   * Idempotent bootstrap. Concurrent callers collapse into one promise so
+   * the wallet is never prompted twice for the same session creation.
+   * Resolves once `sessionState.token` is populated.
+   */
+  function bootstrap() {
+    if (sessionState.bootstrapped && sessionState.token) {
       return Promise.resolve(sessionState);
     }
     if (sessionState.bootstrapPromise) {
-      log('ensureSession: re-using in-flight bootstrap promise');
+      log('bootstrap: re-using in-flight bootstrap promise');
       return sessionState.bootstrapPromise;
     }
 
-    log('ensureSession: bootstrapping…');
-    sessionState.bootstrapPromise = tryRestoreSession()
-      .then(function (restored) { return restored || runDelegationFlow(); })
-      .then(function (state) {
-        log('ensureSession: bootstrap complete');
+    log('bootstrap: hydrating from IndexedDB…');
+    sessionState.bootstrapPromise = SVS.loadSession()
+      .then(function (stored) {
+        if (stored && stored.token) {
+          log('bootstrap: restored cached token (no wallet prompt needed)');
+          sessionState.token     = stored.token;
+          sessionState.sessionId = stored.sessionId;
+          sessionState.expiresAt = stored.expiresAt;
+          return sessionState;
+        }
+        log('bootstrap: no usable cached token — running full session flow');
+        return runSessionFlow(null);
+      })
+      .then(function () {
         sessionState.bootstrapped = true;
         sessionState.bootstrapPromise = null;
-        return state;
+        return sessionState;
       })
       .catch(function (err) {
-        warn('ensureSession: bootstrap failed:', err && err.message);
+        warn('bootstrap: failed:', err && err.message);
         sessionState.bootstrapPromise = null;
         throw err;
       });
-
     return sessionState.bootstrapPromise;
   }
 
   /**
-   * Sign a per-asset SecureViewRequest. Called by pc2-wallet-bridge.js
-   * in response to pc2_secureView_sign RPC from iframes. Returns
-   * { delegation, delegationSig, request, requestSig } — exactly the
-   * canonical strings the server-side verifier expects.
-   *
-   * NOTE: actionIpfsId is bound into the delegation server-side, so we
-   * always use the value from the persisted delegation, ignoring any
-   * value the iframe might pass. This prevents an iframe from being
-   * tricked into requesting a different action.
+   * Return a valid token; renew pre-emptively if the cached one is within
+   * `RENEWAL_GRACE_SECONDS` of expiry. Callers should treat the resolved
+   * value as a fresh bearer token good for at least the grace window.
    */
-  function signRequest(params) {
-    if (!params || !params.kid) {
-      return Promise.reject(new Error('signRequest requires kid'));
-    }
-    log('signRequest: kid=' + params.kid);
-    return ensureSession().then(function (state) {
-      var rec = state.delegationRecord;
-      var kp  = state.keyPair;
-      if (!rec || !kp) throw new Error('Secure-view session not initialized');
-      log('signRequest: signing request with ephemeral P-256 (actionIpfsId=' + rec.delegation.actionIpfsId + ')');
-      return SVS.signRequest(kp, {
-        kid:           params.kid,
-        actionIpfsId:  rec.delegation.actionIpfsId,
-      }).then(function (signed) {
-        log('signRequest: bundle ready');
-        return {
-          delegation:    rec.delegationCanonical,
-          delegationSig: rec.delegationSig,
-          request:       signed.requestCanonical,
-          requestSig:    signed.requestSig,
-        };
-      });
+  function getTokenOrRenew() {
+    return bootstrap().then(function () {
+      var now = Math.floor(Date.now() / 1000);
+      var exp = sessionState.expiresAt || 0;
+      if (exp && exp - now < RENEWAL_GRACE_SECONDS) {
+        log('getTokenOrRenew: delegation within grace window — renewing');
+        sessionState.bootstrapPromise = null;
+        return runRenewalFlow(sessionState.sessionId, sessionState.ownerAddress).then(function () {
+          return sessionState.token;
+        });
+      }
+      return sessionState.token;
     });
   }
 
   /**
-   * Revoke the current session locally and tell the server to
-   * blocklist the delegation nonce.
+   * Iframe RPC handler (`pc2_secureView_sign`) — invoked by
+   * pc2-wallet-bridge.js. With backend sessions, the parent frame no longer
+   * signs anything; it just hands back the current bearer token so the
+   * iframe can attach it to its API requests.
+   *
+   * Returns `{ token, sessionId }`. Keeps the `signRequest` name for
+   * backward compatibility with `window.pc2SecureView.signRequest` callers.
+   *
+   * Accepts `{ refresh: true }` to force a hard reset: clears the cached
+   * token (memory + IndexedDB) and re-bootstraps. Iframes call this after
+   * a 401 `session_token_invalid` — the in-memory backend session may
+   * have been lost across a server restart while the browser kept its
+   * stale IndexedDB token.
    */
-  function revoke() {
-    return SVS.revokeSession({
-      serverRevokeUrl: '/api/storage/lit/revoke-session',
-      fetch: function (url, opts) { return authFetch(url, opts); },
-    }).then(function () {
-      sessionState.bootstrapped     = false;
-      sessionState.bootstrapPromise = null;
-      sessionState.delegationRecord = null;
-      sessionState.keyPair          = null;
+  function signRequest(params) {
+    var refresh = !!(params && params.refresh);
+    var prep;
+    if (refresh) {
+      log('signRequest: refresh requested — clearing cached token');
+      prep = revoke();
+    } else {
+      prep = Promise.resolve();
+    }
+    return prep.then(function () {
+      return getTokenOrRenew();
+    }).then(function (token) {
+      return { token: token, sessionId: sessionState.sessionId };
     });
   }
 
+  /**
+   * Local revoke: clear the cached token and IndexedDB record. There is no
+   * server-side revoke for backend sessions (the token is the only way to
+   * use the session; deleting it suffices). Legacy /revoke-session is no
+   * longer wired up.
+   */
+  function revoke() {
+    sessionState.bootstrapped     = false;
+    sessionState.bootstrapPromise = null;
+    sessionState.token            = null;
+    sessionState.sessionId        = null;
+    sessionState.ownerAddress     = null;
+    sessionState.expiresAt        = null;
+    return SVS.clearSession();
+  }
+
   globalScope.pc2SecureView = {
-    ensureSession: ensureSession,
+    ensureSession: bootstrap,
     signRequest:   signRequest,
     revoke:        revoke,
-    // Inspector for debugging / session indicator UI:
-    getActiveDelegation: function () {
-      return SVS.getActiveDelegation();
+    getToken:      getTokenOrRenew,
+    getState:      function () {
+      return {
+        token:        sessionState.token,
+        sessionId:    sessionState.sessionId,
+        ownerAddress: sessionState.ownerAddress,
+        expiresAt:    sessionState.expiresAt,
+      };
     },
   };
   log('ready (parent secure-view manager installed)');

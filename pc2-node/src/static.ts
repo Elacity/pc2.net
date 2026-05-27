@@ -310,7 +310,6 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
     .filter((s) => s.length > 0);
   const BASE_RPC_URLS = [
     ...supernodeRpcUrlsEnv,
-    'https://base.llamarpc.com',
     'https://base-rpc.publicnode.com',
     'https://rpc.ankr.com/base',
     'https://base.blockpi.network/v1/rpc/public',

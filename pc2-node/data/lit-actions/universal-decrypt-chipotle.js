@@ -1,10 +1,10 @@
 /**
- * Lit Action: Media Asset CEK Decryption (Chipotle/PKP-AES) — Session Auth
+ * Lit Action: Media Asset CEK Decryption (Chipotle/PKP-AES) - Session Auth
  *
  * Called once per viewing session. The player decrypts every DASH segment
  * client-side with the recovered CEK; Lit is not involved per-segment.
  *
- * ── Execution flow (main) ────────────────────────────────────────────────
+ * -- Execution flow (main) ------------------------------------------------
  *
  *  1. Session-bundle validation
  *       Rejects if delegationRaw / delegationSig / requestRaw / requestSig
@@ -19,10 +19,10 @@
  *       request.kid        === jsParams.kid  (case-insensitive, 0x-normalised)
  *
  *  3. Temporal checks
- *       delegation.issuedAt  ≤ now + 5 s  (clock-skew allowance)
- *       delegation.expiresAt ≥ now
- *       expiresAt − issuedAt ≤ 86 400 s  (max 24-hour window)
- *       |now − request.requestedAt| ≤ 60 s  (replay prevention)
+ *       delegation.issuedAt  <= now + 5 s  (clock-skew allowance)
+ *       delegation.expiresAt >= now
+ *       expiresAt - issuedAt <= 86400 s  (max 24-hour window)
+ *       |now - request.requestedAt| <= 60 s  (replay prevention)
  *
  *  4. Delegation signature verification
  *       Primary: ecrecover(delegationRaw) === delegation.ownerAddress
@@ -36,50 +36,53 @@
  *
  *  6. On-chain access check
  *       Calls hasAccessByContentId(holder, contentId) on jsParams.authority
- *       for each address in delegation.coveredAddresses. First match wins.
+ *       for delegation.ownerAddress (the recovered signer, i.e. the EOA) and
+ *       then for the deterministic ERC-4337 smart account derived from that
+ *       EOA via resolveSmartAccountAddress(). First match wins.
  *
  *  7. CEK decryption
- *       Lit.Actions.Decrypt({ pkpId, ciphertext }) → base64-encoded raw key.
+ *       Lit.Actions.Decrypt({ pkpId, ciphertext }) -> base64-encoded raw key.
  *
- *  8. CEK ↔ KID ↔ authority binding
- *       SHA-256(cekRawBytes ‖ kidBytes ‖ authorityBytes) must equal jsParams.dataToEncryptHash.
- *       Produced at encrypt time with the same triple — swapping authority or KID invalidates the hash.
+ *  8. CEK <-> KID <-> authority binding
+ *       SHA-256(cekRawBytes || kidBytes || authorityBytes) must equal jsParams.dataToEncryptHash.
+ *       Produced at encrypt time with the same triple - swapping authority or KID invalidates the hash.
  *       Optional: recover issuer from jsParams.signature over hashBytes.
  *
- *  9. CEK envelope  →  envelopeCEK()
+ *  9. CEK envelope -> envelopeCEK()
  *       Wraps the raw CEK bytes for the client (see wire format below).
  *
- * ── envelopeCEK wire format ──────────────────────────────────────────────
+ * -- envelopeCEK wire format ----------------------------------------------
  *
  *  The response field returned in the Lit setResponse JSON is
  *  base64(envelopeCEK.response). Its byte layout:
  *
- *  ┌─────────────────────────────────────────────────────────────────────┐
- *  │ HEADER  (4 B)                                                       │
- *  │   format3[3]   "raw" as sequence of bytes, null-padded                          │
- *  │   flag  [1]    0x02                                                 │
- *  ├─────────────────────────────────────────────────────────────────────┤
- *  │ METADATA                                                            │
- *  │   pkLen [2]    u16be — byte length of the PKP public key (33)       │
- *  │   pk    [33]   PKP compressed P-256 public key (ECDH counterpart)   │
- *  │   sigLen[2]    u16be — byte length of the ECDSA signature (65)      │
- *  │   sig   [65]   secp256k1 sig over SHA-256(encryptedBody): r‖s‖v     │
- *  │   signer[33]   PKP compressed secp256k1 public key                  │
- *  ├─────────────────────────────────────────────────────────────────────┤
- *  │ BODY                                                                │
- *  │   bodyLen[4]   u32be — byte length of encryptedBody                 │
- *  │   encryptedBody[N]                                                  │
- *  │     AES-CBC-256, key = ECDH(pkpKey_P256, sessionPubKey_P256)        │
- *  │     IV = sessionPubKey bytes [0..15]  (first 16 B of 65-B raw key)  │
- *  │                                                                     │
- *  │     Plaintext layout (rawLicenseBytes.body):                        │
- *  │       metaLen [4]   u32be(issuer.length + 8)  — always 28           │
- *  │       issuer  [20]  issuer Ethereum address bytes                   │
- *  │       exp     [8]   u64be Unix timestamp (now + 4 h)                │
- *  │       audience[20]  audience Ethereum address bytes                 │
- *  │       keyCount[4]   u32be(1)                                        │
- *  │       cek     [16]  raw AES content-encryption key                  │
- *  └─────────────────────────────────────────────────────────────────────┘
+ *  +---------------------------------------------------------------------+
+ *  | HEADER  (4 B)                                                       |
+ *  |   format3[3]   "raw" as sequence of bytes, null-padded              |
+ *  |   flag  [1]    0x03  (0x02 = legacy fixed-IV; 0x03 = random IV)    |
+ *  +---------------------------------------------------------------------+
+ *  | METADATA                                                            |
+ *  |   pkLen [2]    u16be - byte length of the PKP public key (33)       |
+ *  |   pk    [33]   PKP compressed P-256 public key (ECDH counterpart)   |
+ *  |   iv    [16]   random AES-CBC IV (fresh per envelopeCEK call)       |
+ *  |   sigLen[2]    u16be - byte length of the ECDSA signature (65)      |
+ *  |   sig   [65]   secp256k1 sig over SHA-256(encryptedBody): r||s||v   |
+ *  |   signer[33]   PKP compressed secp256k1 public key                  |
+ *  +---------------------------------------------------------------------+
+ *  | BODY                                                                |
+ *  |   bodyLen[4]   u32be - byte length of encryptedBody                 |
+ *  |   encryptedBody[N]                                                  |
+ *  |     AES-CBC-256, key = ECDH(pkpKey_P256, sessionPubKey_P256)        |
+ *  |     IV = random 16 bytes from METADATA iv field (v3)                |
+ *  |                                                                     |
+ *  |     Plaintext layout (rawLicenseBytes.body):                        |
+ *  |       metaLen [4]   u32be(issuer.length + 8)  - always 28           |
+ *  |       issuer  [20]  issuer Ethereum address bytes                   |
+ *  |       exp     [8]   u64be Unix timestamp (now + 4 h)                |
+ *  |       audience[20]  audience Ethereum address bytes                 |
+ *  |       keyCount[4]   u32be(1)                                        |
+ *  |       cek     [16]  raw AES content-encryption key                  |
+ *  +---------------------------------------------------------------------+
  *
  *  The client derives the shared secret with its own P-256 private key and
  *  the PKP public key transmitted in the METADATA block, then decrypts the
@@ -170,8 +173,8 @@ const PKCS8_HEADERS = {
 };
 
 // Convert an Ed25519 public key (Edwards y-coordinate, 32 B little-endian) to
-// its X25519 counterpart (Montgomery u-coordinate) via u = (1+y)/(1−y) mod p.
-// This is the deterministic direction: Ed25519 → X25519 is unambiguous.
+// its X25519 counterpart (Montgomery u-coordinate) via u = (1+y)/(1-y) mod p.
+// This is the deterministic direction: Ed25519 -> X25519 is unambiguous.
 function ed25519ToX25519(edPubBytes) {
   const p = (1n << 255n) - 19n;
   const bytes = new Uint8Array(edPubBytes);
@@ -303,7 +306,7 @@ async function isValidSignatureEip1271(ownerAddress, canonicalText, signatureHex
 
 function rawLicenseBytes(c) {
   const format3 = new TextEncoder().encode((c.targetFormat || "").slice(0, 3).padEnd(3, "\0"));
-  const flag = new Uint8Array([0x02]);
+  const flag = new Uint8Array([0x03]);
   const issuer = toU8(c.issuer || new Uint8Array());
   const exp8 = u64be(c.exp ?? 0);
   const audience = toU8(c.audience || new Uint8Array());
@@ -325,12 +328,12 @@ async function envelopeCEK(params) {
   const curveName = keyAlg.namedCurve ?? keyAlg.name; // 'P-256' or 'X25519'
 
   // 1. Import the consumer public key.
-  // X25519 mode: sessionPublicKey is an Ed25519 key — convert to X25519 Montgomery form for ECDH.
+  // X25519 mode: sessionPublicKey is an Ed25519 key - convert to X25519 Montgomery form for ECDH.
   const remoteKeyRaw = hexToBytes(params.remotePublicKey.replace(/^0x/, ""));
   const pubKeyBuff = keyAlg.name === "X25519" ? ed25519ToX25519(remoteKeyRaw) : remoteKeyRaw;
   const pubKey = await crypto.subtle.importKey("raw", pubKeyBuff, keyAlg, false, []);
 
-  // 2. Import PKP private key — Web Crypto requires PKCS8 wrapping for raw EC scalars
+  // 2. Import PKP private key - Web Crypto requires PKCS8 wrapping for raw EC scalars
   const privKeyRaw = await Lit.Actions.getPrivateKey({ pkpId: params.pkpId });
   const privKeyNormalized = privKeyRaw.startsWith("0x") ? privKeyRaw : "0x" + privKeyRaw;
   const privKeyBytes = ethers.utils.arrayify(privKeyNormalized);
@@ -366,14 +369,15 @@ async function envelopeCEK(params) {
     targetFormat: "raw",
   });
 
-  const iv = pubKeyBuff.subarray(0, 16);
+  const iv = crypto.getRandomValues(new Uint8Array(16));
   const encryptedCek = await crypto.subtle.encrypt({ name: "AES-CBC", iv }, sharedKey, rawFormatted);
 
   // 5. Derive PKP ephemeral public key from the imported private key
   const ephemeralPublicKey = await extractCompressedPublicKey(pkpPrivateKey, keyAlg);
 
   // 6. sign response
-  const { signer, signature } = await signPayload(privKeyRaw, encryptedCek);
+  const signerPrivateKey = await Lit.Actions.getLitActionPrivateKey({ pkpId: params.pkpId });
+  const { signer, signature } = await signPayload(signerPrivateKey, encryptedCek);
 
   // 7. Build response
   const response = concatBytes(
@@ -384,6 +388,9 @@ async function envelopeCEK(params) {
     // ECDH public key
     u16be(ephemeralPublicKey.byteLength),
     ephemeralPublicKey,
+
+    // AES-CBC IV (16 bytes, fixed-width - no length prefix needed)
+    iv,
 
     // ECDSA Signature
     u16be(signature.byteLength),
@@ -413,6 +420,41 @@ async function signPayload(privKeyRaw, payload) {
   };
 }
 
+// Chain-specific ERC-4337 factory + entryPoint used to derive the
+// counterfactual smart account address from an EOA (no deployment required).
+const CONTRACT_ADDRS = {
+  factory: "0xb3f15a44f91a08a93a11c6fbf6a4933c623275fe",
+  entryPoint: "0xba418fa699622de824b258c61eb150ed7a13967b",
+};
+
+// Resolve the deterministic smart account address for a given EOA.
+// Falls back to the EOA itself if the chain is not in CONTRACT_ADDRS or the
+// eth_call fails, so the EOA access check still runs.
+async function resolveSmartAccountAddress(ownerAddress, rpcUrl) {
+  const { factory, entryPoint } = CONTRACT_ADDRS;
+
+  const initData = `0x2ede3bc0${ownerAddress.slice(2).padStart(64, "0")}`;
+  const initDataLen = ((initData.length - 2) / 2).toString(16).padStart(64, "0");
+  const epPadded = entryPoint.slice(2).padStart(64, "0");
+  const initDataPadded = initData.slice(2).padEnd(64, "0");
+  const callData =
+    `0x2e7a1a83${epPadded}0000000000000000000000000000000000000000000000000000000000000060` +
+    `0000000000000000000000000000000000000000000000000000000000000000${initDataLen}${initDataPadded}`;
+
+  try {
+    const response = await fetch(rpcUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_call", params: [{ to: factory, data: callData }, "latest"] }),
+    });
+    const result = await response.json();
+    if (!result || !result.result || result.result.length < 40) return toChecksum(ownerAddress);
+    return toChecksum(`0x${result.result.slice(-40)}`);
+  } catch {
+    return toChecksum(ownerAddress);
+  }
+}
+
 function deny(code, extra) {
   Lit.Actions.setResponse({
     response: JSON.stringify(Object.assign({ error: "Access denied", code }, extra || {})),
@@ -434,7 +476,7 @@ async function main(params) {
     // lit-based arguments
     pkpId,
     actionIpfsId,
-    // key agreement algorithm — { name: 'ECDH', namedCurve: 'P-256' } | { name: 'X25519' }
+    // key agreement algorithm - { name: 'ECDH', namedCurve: 'P-256' } | { name: 'X25519' }
     keyAlg: keyAlgParam,
     // session and delegation
     delegation: delegationRaw,
@@ -471,7 +513,6 @@ async function main(params) {
   if (del.domain !== DELEGATION_DOMAIN) return deny("bad_domain");
   if (req.domain !== REQUEST_DOMAIN) return deny("bad_req_domain");
   if (Number(del.chainId) !== Number(chainId)) return deny("bad_chain");
-  if (del.actionIpfsId !== actionIpfsId) return deny("bad_action_cid");
   if (req.actionIpfsId !== actionIpfsId) return deny("bad_req_action_cid");
 
   const normalizedKid = kid.startsWith("0x") ? kid : "0x" + kid;
@@ -516,23 +557,15 @@ async function main(params) {
   const provider = ethers.providers ? new ethers.providers.JsonRpcProvider(rpc) : new ethers.JsonRpcProvider(rpc);
   const gateway = new ethers.Contract(toChecksum(authority), abi, provider);
 
-  if (!Array.isArray(del.coveredAddresses) || del.coveredAddresses.length === 0) {
-    return deny("no_covered_addresses");
-  }
-
-  let authorizedAddress = null;
-  for (const addr of del.coveredAddresses) {
-    try {
-      const ok = await gateway.hasAccessByContentId(toChecksum(addr), normalizedKid);
-      if (ok) {
-        authorizedAddress = toChecksum(addr);
-        break;
-      }
-    } catch {
-      /* keep trying */
-    }
-  }
-  if (!authorizedAddress) return deny("access_denied");
+  // Resolve both candidate addresses then check access in parallel.
+  // coveredAddresses is no longer used - the signer IS the subject of the access check.
+  const smartAcct = await resolveSmartAccountAddress(del.ownerAddress, rpc);
+  const candidates = Array.from(new Set([toChecksum(del.ownerAddress), toChecksum(smartAcct)]));
+  const accessResults = await Promise.all(
+    candidates.map((addr) => gateway.hasAccessByContentId(addr, normalizedKid).catch(() => false)),
+  );
+  if (!accessResults.some((e) => e)) return deny("access_denied");
+  const authorizedAddress = candidates[accessResults.findIndex((e) => e)];
 
   let cek;
   try {
@@ -541,7 +574,7 @@ async function main(params) {
     return deny("decrypt_failed", { detail: String((e && e.message) || e) });
   }
 
-  // Recompute SHA-256(cekBytes ‖ kidBytes ‖ authorityBytes) inside the TEE and compare
+  // Recompute SHA-256(cekBytes || kidBytes || authorityBytes) inside the TEE and compare
   // against dataToEncryptHash produced at encrypt time. Swapping authority or KID changes
   // the preimage, so the hash will not match and access is denied.
   const cekRawBytes = ethers.utils.base64.decode(cek);

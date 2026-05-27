@@ -59,38 +59,30 @@ function apiOrigin() {
   return sp.get('puter.api_origin') || window.location.origin;
 }
 
-async function apiFetch(path, body) {
+async function apiFetch(path, body, extraHeaders) {
+  const headers = {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer ' + getAuthToken(),
+  };
+  if (extraHeaders) Object.assign(headers, extraHeaders);
   const res = await fetch(apiOrigin() + path, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + getAuthToken(),
-    },
+    headers: headers,
     body: JSON.stringify(body),
   });
   return res;
 }
 
-// ── Secure-view session bundle (Phase 5 sigauth) ─────────────────────
+// ── Secure-view session bearer token ────────────────────────────────
 //
-// /api/media/init now requires a `secureViewSession` bundle signed by
-// the user's ephemeral P-256 key (managed by the parent PC2 frame —
-// see pc2-node/frontend/pc2-secure-view.js). Because the player only
-// learns `kid` and `actionIpfsId` after the server parses the MPD's
-// PSSH, /init runs in two phases:
-//
-//   Phase 1: POST /init without bundle → server parses MPD, caches it,
-//            returns 412 + { needsSecureView: { kid, actionIpfsId } }.
-//   Phase 2: Player asks parent to sign that {kid, actionIpfsId},
-//            re-POSTs /init with bundle attached → server reuses cached
-//            MPD, recovers CEK, returns sessionId.
-//
-// All Lit-bound signing happens in the parent (one wallet prompt at
-// session start, silent thereafter for 24h). This iframe never touches
-// window.ethereum for Lit, only for non-Lit operations.
+// The parent PC2 frame (pc2-secure-view.js) owns the persistent backend
+// secure-view session: one wallet prompt at session start, an opaque
+// bearer token stored in IndexedDB, silent for the next 24h. The player
+// asks the parent for the current token via the wallet-bridge RPC and
+// attaches it as `X-SecureView-Session` on every secure-content request.
 const SECURE_VIEW_SIGN_TIMEOUT_MS = 60000;
 
-function requestSignedBundleFromParent(kid, actionIpfsId) {
+function requestSessionTokenFromParent() {
   const provider = window.pc2Wallet
     || (window.ethereum && window.ethereum.isPC2WalletBridge ? window.ethereum : null);
   if (!provider || typeof provider.request !== 'function') {
@@ -106,12 +98,16 @@ function requestSignedBundleFromParent(kid, actionIpfsId) {
 
     provider.request({
       method: 'pc2_secureView_sign',
-      params: [{ kid: kid, actionIpfsId: actionIpfsId }],
+      params: [{}],
     }).then(function (bundle) {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      resolve(bundle);
+      if (!bundle || !bundle.token) {
+        reject(new Error('Parent secure-view bridge returned no session token'));
+        return;
+      }
+      resolve(bundle.token);
     }).catch(function (err) {
       if (settled) return;
       settled = true;
@@ -121,39 +117,33 @@ function requestSignedBundleFromParent(kid, actionIpfsId) {
   });
 }
 
-// Performs a /api/media/init call that transparently handles the 412
-// → sign-in-parent → retry round-trip. `buildBody` MUST be a function
-// returning a fresh body each invocation (we mutate the second copy).
-async function mediaInitWithSecureView(buildBody) {
-  const firstRes = await apiFetch('/api/media/init', buildBody());
-  if (firstRes.status !== 412) return firstRes;
-
-  let payload;
-  try { payload = await firstRes.json(); } catch (_) { payload = {}; }
-  const need = payload && payload.needsSecureView;
-  if (!need || !need.kid || !need.actionIpfsId) {
-    return firstRes;
+// In-memory cache of the secure-view token. The parent itself caches in
+// IndexedDB and handles pre-emptive renewal, but caching here avoids an
+// RPC round-trip per segment fetch.
+let __secureViewToken = null;
+async function getSecureViewHeaders() {
+  if (!__secureViewToken) {
+    __secureViewToken = await requestSessionTokenFromParent();
   }
+  return { 'X-SecureView-Session': __secureViewToken };
+}
 
-  console.log('[player] /init returned 412 — requesting secure-view bundle from parent: kid=' + need.kid);
-  const bundle = await requestSignedBundleFromParent(need.kid, need.actionIpfsId);
-  // The parent bridge (pc2-secure-view.js) returns { delegation, delegationSig,
-  // request, requestSig } where `delegation` and `request` are already
-  // canonical JSON strings. The server expects them under the names
-  // `delegationCanonical` / `requestCanonical` inside a `secureViewSession`
-  // object, so we just rename here.
-  if (!bundle || !bundle.delegation || !bundle.delegationSig || !bundle.request || !bundle.requestSig) {
-    throw new Error('Parent secure-view bridge returned an incomplete bundle.');
+// Drops the cached token; the next getSecureViewHeaders() call will
+// re-ask the parent (which may renew via /lit/renew-session).
+function invalidateSecureViewToken() {
+  __secureViewToken = null;
+}
+
+async function mediaInit(buildBody) {
+  const headers = await getSecureViewHeaders();
+  let res = await apiFetch('/api/media/init', buildBody(), headers);
+  if (res.status === 401) {
+    // Token expired or revoked — refresh once and retry.
+    invalidateSecureViewToken();
+    const retryHeaders = await getSecureViewHeaders();
+    res = await apiFetch('/api/media/init', buildBody(), retryHeaders);
   }
-
-  const retryBody = buildBody();
-  retryBody.secureViewSession = {
-    delegationCanonical: bundle.delegation,
-    delegationSig: bundle.delegationSig,
-    requestCanonical: bundle.request,
-    requestSig: bundle.requestSig,
-  };
-  return apiFetch('/api/media/init', retryBody);
+  return res;
 }
 
 // ─── State ───────────────────────────────────────────────────────────
@@ -298,7 +288,7 @@ async function refreshSession() {
       }
 
       // Re-init the session to get a new sessionId with fresh CEK
-      const initRes = await mediaInitWithSecureView(function () {
+      const initRes = await mediaInit(function () {
         const initBody = {
           channel: CHANNEL,
           tokenId: TOKEN_ID,
@@ -321,11 +311,12 @@ async function refreshSession() {
       sessionId = data.sessionId;
 
       // Re-send init segments so the server caches them for WASM tenc extraction
+      const segHeaders = await getSecureViewHeaders();
       if (videoTrackIdx !== -1) {
-        await apiFetch('/api/media/segment', { sessionId, trackIndex: videoTrackIdx, init: true });
+        await apiFetch('/api/media/segment', { sessionId, trackIndex: videoTrackIdx, init: true }, segHeaders);
       }
       if (audioTrackIdx !== -1) {
-        await apiFetch('/api/media/segment', { sessionId, trackIndex: audioTrackIdx, init: true });
+        await apiFetch('/api/media/segment', { sessionId, trackIndex: audioTrackIdx, init: true }, segHeaders);
       }
 
       console.log('[player] Session refreshed: ' + sessionId);
@@ -346,12 +337,20 @@ async function fetchSegmentWithRetry(trackIndex, segmentNumber, init) {
   for (let attempt = 0; attempt < MAX_SEGMENT_RETRIES; attempt++) {
     try {
       const t0 = performance.now();
-      const res = await apiFetch('/api/media/segment', body);
+      let segHeaders = await getSecureViewHeaders();
+      let res = await apiFetch('/api/media/segment', body, segHeaders);
+
+      if (res.status === 401) {
+        // Secure-view token expired or rotated — refresh and retry once.
+        invalidateSecureViewToken();
+        segHeaders = await getSecureViewHeaders();
+        res = await apiFetch('/api/media/segment', body, segHeaders);
+      }
 
       if (res.status === 410) {
         await refreshSession();
         body.sessionId = sessionId;
-        const retryRes = await apiFetch('/api/media/segment', body);
+        const retryRes = await apiFetch('/api/media/segment', body, segHeaders);
         if (!retryRes.ok) {
           const err = await retryRes.json().catch(() => ({ error: retryRes.statusText }));
           throw new Error(err.error || 'Failed to fetch segment after session refresh');
@@ -932,7 +931,7 @@ async function init() {
     }
 
     async function tryInit(buyerAddr) {
-      return mediaInitWithSecureView(function () { return buildInitBody(buyerAddr); });
+      return mediaInit(function () { return buildInitBody(buyerAddr); });
     }
 
     async function isAccessError(res) {

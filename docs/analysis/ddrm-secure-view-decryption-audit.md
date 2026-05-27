@@ -12,27 +12,29 @@ The secure-view pipeline keeps raw file bytes entirely in server memory. It rend
 
 The diagram below corrects a common assumption: **the client's session bundle is NOT forwarded to the Lit Action** in the non-media path. The server verifies the bundle as a gateway check, then makes its own independent Lit call signed with a server-generated throwaway wallet + server ephemeral key. The Lit Action enforces access via the on-chain `hasAccessByContentId` call against `coveredAddresses[0]` (the authenticated buyer's address).
 
-```
-Browser                     PC2 Node (server)                Lit Network (TEE)
-  │                              │                                  │
-  │──begin-session ─────────────>│ buildDelegationPayload()         │
-  │<─ unsigned delegation ───────│                                  │
-  │                              │                                  │
-  │ walletSign(delegation)       │                                  │
-  │                              │                                  │
-  │──complete-session ──────────>│ verifyDelegationEip191/1271()    │
-  │<─ { ok, expiresAt } ─────────│                                  │
-  │                              │                                  │
-  │ (per asset open)             │                                  │
-  │ ephemeralKey.sign(request)   │                                  │
-  │──secure-view ───────────────>│ verifySecureViewBundle() [gate]  │
-  │                              │   ↓ (passes) generate server     │
-  │                              │   session (throwaway wallet +    │──> Lit Action
-  │                              │   server P-256 keypair)          │    hasAccessByContentId()
-  │                              │   recoverCEKWithServerSession()──>│    Lit.Actions.Decrypt(CEK)
-  │                              │                                  │
-  │<─ rendered pixels ───────────│<── CEK ─────────────────────────│
-  │                              │ AES-decrypt + render             │
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant N as PC2 Node (server)
+    participant L as Lit Network (TEE)
+
+    B->>N: begin-session
+    N-->>B: unsigned delegation (buildDelegationPayload())
+
+    Note over B: walletSign(delegation)
+
+    B->>N: complete-session
+    N-->>B: { ok, expiresAt } (verifyDelegationEip191/1271())
+
+    Note over B: (per asset open)<br/>ephemeralKey.sign(request)
+
+    B->>N: secure-view
+    Note over N: verifySecureViewBundle() [gate]<br/>↓ (passes) generate server session<br/>(throwaway wallet + server P-256 keypair)
+    N->>L: recoverCEKWithServerSession()
+    Note over L: Lit Action<br/>hasAccessByContentId()<br/>Lit.Actions.Decrypt(CEK)
+    L-->>N: CEK
+    Note over N: AES-decrypt + render
+    N-->>B: rendered pixels
 ```
 
 **Media path differs**: `recoverMediaCEKEnvelope()` does forward the client's bundle directly to the Lit Action (required by `params.secureViewSession`). The non-media and media paths have asymmetric trust models.

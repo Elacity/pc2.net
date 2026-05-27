@@ -8,6 +8,7 @@
 import { Router, Request, Response } from 'express';
 import { createHash } from 'crypto';
 import { authenticate, AuthenticatedRequest } from './middleware.js';
+import { requireSecureViewSession, type SecureViewRequest } from './middleware/secureViewSession.js';
 import { logger } from '../utils/logger.js';
 import { parseSkillFrontmatter } from '../utils/skill-parser.js';
 import { getGatewayService } from '../services/gateway/index.js';
@@ -1003,7 +1004,7 @@ router.get('/audit', authenticate, async (req: AuthenticatedRequest, res: Respon
  * Decrypt a purchased SKILL.md via Lit Protocol and install to user filesystem.
  * Ownership is verified by Lit Action on-chain (hasAccessByContentId).
  */
-router.post('/skills/install', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+router.post('/skills/install', authenticate, requireSecureViewSession, async (req: SecureViewRequest, res: Response) => {
   try {
     const {
       skillId, kid, litCiphertext, dataToEncryptHash, iv,
@@ -1044,7 +1045,8 @@ router.post('/skills/install', authenticate, async (req: AuthenticatedRequest, r
     };
 
     const wasmRuntime = req.app.locals.wasmRuntime as WASMRuntime;
-    const decryptedBytes = await decryptAssetTwoLayer(decryptParams, ipfs, wasmRuntime);
+    const sessionView = req.secureViewSession!.view;
+    const decryptedBytes = await decryptAssetTwoLayer(decryptParams, ipfs, wasmRuntime, sessionView);
     const skillContent = decryptedBytes.toString('utf-8');
 
     // Verify it's a valid SKILL.md (has frontmatter)

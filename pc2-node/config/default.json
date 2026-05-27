@@ -87,16 +87,14 @@
     "chain_name": "base",
     "rpc_urls": [
       "https://mainnet.base.org",
-      "https://base.llamarpc.com",
       "https://base-rpc.publicnode.com",
-      "https://1rpc.io/base",
       "https://base.meowrpc.com"
     ]
   },
   "content_indexer": {
     "enabled": true,
     "scan_interval_minutes": 5,
-    "rpc_urls": ["https://mainnet.base.org", "https://base.llamarpc.com", "https://base-rpc.publicnode.com", "https://1rpc.io/base", "https://base.meowrpc.com"],
+    "rpc_urls": ["https://mainnet.base.org", "https://base-rpc.publicnode.com", "https://base.meowrpc.com"],
     "max_blocks_per_scan": 10000,
     "metadata_fetch_concurrency": 3,
     "metadata_gateway_urls": ["https://ipfs.ela.city/ipfs/", "https://dweb.link/ipfs/", "https://cloudflare-ipfs.com/ipfs/"],

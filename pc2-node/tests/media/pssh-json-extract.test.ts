@@ -88,7 +88,7 @@ test('extracts Elacity pssh from real bento4 mp4dash init fixture', () => {
 
   assert.equal(entries.length, 1, 'expected exactly one Elacity entry (ClearKey sibling is skipped)');
   assert.equal(entries[0].protectionType, 'cenc:lit-aes-gcm-v3');
-  assert.equal(entries[0].data.actionIpfsId, 'QmPBjQD7V4aFTZPxUwZ9gDPFJtcJ4SvsJdTh3QexTyRBbj');
+  assert.equal(entries[0].data.actionIpfsId, 'QmP7ecWFdyFKV9vkHCuNT1WPeFkpB7MekR9Zbv9gGAr8AB');
   assert.equal(entries[0].data.kid, '6214d1c6c17a5d07a841be6242e6240b');
   assert.equal(entries[0].data.litBackend, 'chipotle');
 });

@@ -487,6 +487,12 @@ Please try recreating the link.`);
                             title:             descriptor.title || 'Untitled',
                             actionCid:         descriptor.actionCid || '',
                             authority:         descriptor.authority || '',
+                            ...(descriptor.issuer && {
+                                issuer: descriptor.issuer,
+                            }),
+                            ...(descriptor.signature && {
+                                signature: descriptor.signature,
+                            }),
                         },
                     });
                 } else {

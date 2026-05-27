@@ -21,6 +21,9 @@ export class PdfRenderer implements ContentRenderer {
         return wasmSuccess(wasmResult);
       }
     } catch (wasmErr: any) {
+      if (wasmErr.message?.match(/Rejected\ non\-allowlisted/ig)) {
+        return { status: 503, errorBody: { error: wasmErr.message }, headers: {} };
+      }
       logger.warn(`[SecureView] WASM renderer failed, falling back to Node.js: ${wasmErr.message}`);
     }
 

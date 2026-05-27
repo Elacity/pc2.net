@@ -17,17 +17,6 @@ export interface DecryptParams {
   issuer?: string;
   /** V3 protection data: PKP signature over composite hash. Optional for legacy assets. */
   signature?: string;
-  /**
-   * Optional session-key delegation bundle (Option C). When present,
-   * Phase 2c passes these through to the Lit Action instead of
-   * `userAddress`. When absent, the legacy `userAddress` path runs.
-   */
-  secureViewSession?: {
-    delegationCanonical: string;
-    delegationSig: `0x${string}`;
-    requestCanonical: string;
-    requestSig: `0x${string}`;
-  };
 }
 
 export interface CEKRecoveryResult {

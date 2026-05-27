@@ -6,6 +6,7 @@
 
 import { Router, Response } from 'express';
 import { authenticate, requireOwner, AuthenticatedRequest } from './middleware.js';
+import { requireSecureViewSession, type SecureViewRequest } from './middleware/secureViewSession.js';
 import { recordTelemetryOnSuccess } from './telemetry.js';
 import { logger } from '../utils/logger.js';
 import { getEffectiveStorageLimit } from './info.js';
@@ -22,16 +23,12 @@ import {
 } from '../services/clusterPin.js';
 import { getBaseRpcUrl, rotateBaseRpc } from '../utils/rpc.js';
 import {
-  buildDelegationPayload,
   canonicalize,
-  verifyDelegationEip191,
   verifyDelegationEip1271,
-  verifySecureViewBundle,
   revokeDelegation,
   _getSessionCacheStats,
   MAX_DELEGATION_WINDOW_SECONDS,
   REQUEST_FRESHNESS_WINDOW_SECONDS,
-  type SecureViewDelegation,
 } from '../utils/secureViewSession.js';
 import type { LitBackend, DecryptParams, WASMRenderResult, CEKRecoveryResult, RenderContext } from './renderer/types.js';
 import { resolveRenderer } from './renderer/secure-view/registry.js';
@@ -1872,10 +1869,18 @@ router.post('/lit/encrypt', authenticate, async (req: AuthenticatedRequest, res:
   }
 });
 
-async function recoverCEKAndFetchData(params: DecryptParams, ipfsService?: any): Promise<CEKRecoveryResult> {
+async function recoverWithSession(
+  params: DecryptParams,
+  ipfsService: any | undefined,
+  sessionView: import('./chipotle-client.js').BackendSessionView,
+): Promise<CEKRecoveryResult> {
   const {
-    litCiphertext, dataToEncryptHash, encryptedDataCid, kid,
-    actionCid, buyerAddress,
+    litCiphertext, 
+    dataToEncryptHash, 
+    encryptedDataCid, 
+    kid,
+    actionCid, 
+    buyerAddress,
   } = params;
 
   // Server-controlled: never derive from client-supplied values
@@ -1911,7 +1916,8 @@ async function recoverCEKAndFetchData(params: DecryptParams, ipfsService?: any):
     const doLitCall = async (): Promise<string> => {
       try {
         if (effectiveBackend === 'chipotle') {
-          const { recoverCEKWithServerSession } = await import('./chipotle-client.js');
+          const { recoverCEKEnvelope } = await import('./chipotle-client.js');
+
           // Legacy support: if the asset's protection data carries its own
           // actionIpfsId, use it (the asset was encrypted against that specific
           // Lit Action and the delegation is bound to it). Otherwise fall back
@@ -1923,28 +1929,40 @@ async function recoverCEKAndFetchData(params: DecryptParams, ipfsService?: any):
           if (actionCid && actionCid !== NON_MEDIA_ACTION_CID) {
             logger.info(`[Lit] Using legacy actionCid from protection data: ${actionCid}`);
           }
-          // The Lit Action encrypts the ECDH envelope for del.sessionPublicKey.
-          // recoverCEKWithServerSession generates a server-side session keypair so
-          // the server controls that key and can unwrap the envelope. The client
-          // session bundle is already verified at the HTTP layer before this call.
-          const cekBase64 = await recoverCEKWithServerSession({
-            litCiphertext,
-            dataToEncryptHash,
-            kid,
-            buyerAddress,
-            actionCid: effectiveActionCid,
-            authority: effectiveAuthority,
-            chain: effectiveChain,
-            chainId: effectiveChainId,
-            rpc: effectiveRpc,
-            signature: params.signature,
-            issuer: params.issuer,
-          });
-          logger.info(`[Lit] CEK recovered in ${Date.now() - litStart}ms (Chipotle server-session)`);
+
+          const envelope = await recoverCEKEnvelope(
+            {
+              litCiphertext,
+              dataToEncryptHash,
+              kid,
+              actionCid: effectiveActionCid,
+              authority: effectiveAuthority,
+              chain: effectiveChain,
+              chainId: effectiveChainId,
+              rpc: effectiveRpc,
+              ...(params.signature && { signature: params.signature }),
+              ...(params.issuer && { issuer: params.issuer }),
+            },
+            sessionView,
+          );
+
+          let cekBase64: string;
+          if (envelope.length <= 32) {
+            // Legacy plaintext CEK — pre-envelope Lit Actions returned the CEK directly.
+            cekBase64 = envelope.toString('base64');
+          } else {
+            await sessionView.unwrapEnvelope(envelope);
+            cekBase64 = sessionView.cekBase64;
+          }
+
+          logger.info(`[Lit] CEK recovered in ${Date.now() - litStart}ms (Chipotle backend session)`);
           cacheCEK(kid, buyerAddress, cekBase64);
           return cekBase64;
         }
         throw new Error(`Unsupported LIT_BACKEND: ${effectiveBackend}`);
+      } catch(e){
+        logger.error(`[Lit] Execution failed`, e);
+        throw e;
       } finally {
         pendingLitCalls.delete(coalescingKey);
       }
@@ -2014,8 +2032,9 @@ export async function decryptAssetTwoLayer(
   params: DecryptParams,
   ipfsService: any,
   wasmRuntime: WASMRuntime,
+  sessionView: import('./chipotle-client.js').BackendSessionView,
 ): Promise<Buffer> {
-  const { cekBase64, encryptedBytes } = await recoverCEKAndFetchData(params, ipfsService);
+  const { cekBase64, encryptedBytes } = await recoverWithSession(params, ipfsService, sessionView);
 
   // Chipotle REST API may return base64 without padding — the Rust WASM
   // decrypt-only code path requires standard padded base64.
@@ -2183,12 +2202,13 @@ async function renderViaWASM(
   mime: string,
   maxWidth: number,
   wasmRuntime: WASMRuntime,
+  sessionView: import('./chipotle-client.js').BackendSessionView,
   page?: number,
   ipfsService?: any,
   chapter?: number,
   viewportWidth?: number,
 ): Promise<WASMRenderResult | null> {
-  const { cekBase64, encryptedBytes } = await recoverCEKAndFetchData(params, ipfsService);
+  const { cekBase64, encryptedBytes } = await recoverWithSession(params, ipfsService, sessionView);
 
   const paddedCek = cekBase64.length % 4 === 0 ? cekBase64 : cekBase64 + '='.repeat(4 - (cekBase64.length % 4));
 
@@ -2251,29 +2271,25 @@ async function renderViaWASM(
 }
 
 // ────────────────────────────────────────────────────────────────────
-// Secure-View Session endpoints (Option C — session-key delegation)
+// Secure-View Session endpoints (BackendSessionService — server-owned P-256)
 //
-// These endpoints implement the client-facing half of the Lit Action
-// signature-auth protocol defined in
-// `.cursor/tasks/LIT-ACTION-SIGNATURE-AUTH/DESIGN.md`.
+// Architecture:
+//   1. /lit/begin-session   — backend generates a P-256 keypair, builds an
+//                              unsigned delegation payload, returns
+//                              { sessionId, delegationCanonical }.
+//   2. The client wallet signs delegationCanonical (personal_sign).
+//   3. /lit/complete-session — backend verifies ecrecover(sig) === ownerAddress
+//                              and issues an opaque bearer token.
+//   4. Subsequent content requests carry sessionToken; the server loads
+//                              the BackendSessionView from it to sign per-asset
+//                              requests and unwrap CEK envelopes.
+//   5. /lit/renew-session    — same keypair, fresh delegation (new timestamps
+//                              + nonce); wallet re-signs without keypair churn.
+//   6. /lit/revoke-session   — nonce-based per-node revoke list (best-effort).
 //
-// Lifecycle:
-//   1. Client calls /begin-session with its ephemeral P-256 pubkey;
-//      server returns an unsigned SecureViewDelegation payload bound
-//      to the current Lit Action CID, chain, and owner.
-//   2. User's wallet signs the canonical JSON (EIP-191 personal_sign);
-//      client posts { delegation, delegationSig } to /complete-session.
-//      Server verifies (EIP-191 first, EIP-1271 fallback via viem
-//      PublicClient) and returns { ok: true, expiresAt }.
-//   3. On every /lit/secure-view call the client attaches
-//      { delegation, delegationSig, request, requestSig } — the
-//      request fields are silently produced by the ephemeral key.
-//   4. /revoke-session adds the delegation nonce to the per-node
-//      revoke map for the rest of its natural window.
-//
-// No delegation state is persisted across PC2 restarts — each node
-// re-verifies on every request, and the Lit Action inside the TEE
-// is the real access boundary.
+// The CEK is recovered ONLY inside BackendSessionView (Node heap) and only
+// surfaces to MediaSession.cekBase64. The Lit Action inside the TEE is the
+// authoritative access boundary.
 // ────────────────────────────────────────────────────────────────────
 
 /** Lazy viem PublicClient for EIP-1271 eth_calls. */
@@ -2304,94 +2320,54 @@ async function ethCallAdapter(tx: { to: `0x${string}`; data: `0x${string}` }): P
 
 /**
  * POST /api/storage/lit/begin-session
- * Body: { sessionPublicKey: `0x04${string}`, coveredAddresses?: `0x${string}`[], ttlSeconds?: number }
- * Returns: { delegation: SecureViewDelegation, delegationCanonical: string, expectedActionIpfsId: string }
+ * Body: { chainId?: number, ttlSeconds?: number }
+ * Returns: { sessionId, delegationCanonical, expiresAt }
  *
- * `sessionPublicKey` is the client's ephemeral P-256 SEC1 uncompressed
- * public key (65 bytes). `coveredAddresses` defaults to
- * `[wallet_address, smart_account_address]` from the authenticated
- * session — clients can pass a subset but cannot introduce addresses
- * not attested by the PC2 session.
+ * Backend generates the P-256 session keypair. The client never sees the
+ * private key. `ownerAddress` comes from the authenticated PC2 session —
+ * we never trust the request body for it. The client must have the user's
+ * wallet sign `delegationCanonical` (`personal_sign`) and submit it to
+ * `/lit/complete-session` to receive the bearer token.
  */
 router.post('/lit/begin-session', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const walletAddress = req.user?.wallet_address;
-    const smartAccountAddress = req.user?.smart_account_address;
     if (!walletAddress) {
       res.status(401).json({ error: 'Not authenticated' });
       return;
     }
 
-    const { sessionPublicKey, coveredAddresses, ttlSeconds } = req.body || {};
-    if (typeof sessionPublicKey !== 'string' || !/^0x04[0-9a-fA-F]{128}$/.test(sessionPublicKey)) {
-      res.status(400).json({ error: 'sessionPublicKey must be 65-byte SEC1 uncompressed P-256 hex (0x04||X||Y)' });
-      return;
-    }
+    const { chainId, ttlSeconds } = req.body || {};
 
-    const defaultCovered: `0x${string}`[] = [walletAddress as `0x${string}`];
-    if (smartAccountAddress && smartAccountAddress.toLowerCase() !== walletAddress.toLowerCase()) {
-      defaultCovered.push(smartAccountAddress as `0x${string}`);
-    }
-
-    let requestedCovered: `0x${string}`[] = defaultCovered;
-    if (Array.isArray(coveredAddresses) && coveredAddresses.length > 0) {
-      // Must be a subset of the authenticated session's addresses — we
-      // never let the client smuggle addresses we haven't verified.
-      const allowed = new Set(defaultCovered.map((a) => a.toLowerCase()));
-      const filtered = coveredAddresses.filter(
-        (a: unknown): a is `0x${string}` =>
-          typeof a === 'string' && /^0x[0-9a-fA-F]{40}$/.test(a) && allowed.has(a.toLowerCase()),
-      );
-      if (filtered.length === 0) {
-        res.status(400).json({ error: 'coveredAddresses contains no address from the authenticated session' });
-        return;
-      }
-      requestedCovered = filtered;
-    }
-
-    const actionIpfsId = NON_MEDIA_ACTION_CID;
-    if (!actionIpfsId) {
-      res.status(503).json({ error: 'Lit Action CID not configured on this node' });
-      return;
-    }
-
-    const ttl = Math.min(
-      Number.isFinite(ttlSeconds) ? Math.max(60, Number(ttlSeconds)) : MAX_DELEGATION_WINDOW_SECONDS,
-      MAX_DELEGATION_WINDOW_SECONDS,
-    );
-
-    const delegation = buildDelegationPayload({
-      ownerAddress: walletAddress as `0x${string}`,
-      coveredAddresses: requestedCovered,
-      sessionPublicKey: sessionPublicKey as `0x${string}`,
-      actionIpfsId,
-      chainId: 8453,
-      ttlSeconds: ttl,
+    const { sessionService } = await import('../services/session/BackendSessionService.js');
+    const result = await sessionService.createSession({
+      ownerAddress: walletAddress,
+      chainId: Number.isFinite(chainId) ? Number(chainId) : undefined,
+      ttlSeconds: Number.isFinite(ttlSeconds) ? Math.max(60, Number(ttlSeconds)) : undefined,
     });
 
     res.json({
-      delegation,
-      delegationCanonical: canonicalize(delegation),
-      expectedActionIpfsId: actionIpfsId,
+      sessionId: result.sessionId,
+      delegationCanonical: result.delegationCanonical,
+      expiresAt: result.expiresAt,
       maxDelegationWindowSeconds: MAX_DELEGATION_WINDOW_SECONDS,
       requestFreshnessWindowSeconds: REQUEST_FRESHNESS_WINDOW_SECONDS,
     });
   } catch (err: any) {
     logger.error(`[SecureView.session] begin-session failed: ${err.message}`);
-    res.status(500).json({ error: err.message || 'begin-session failed' });
+    res.status(err.statusCode || 500).json({ error: err.message || 'begin-session failed' });
   }
 });
 
 /**
  * POST /api/storage/lit/complete-session
- * Body: { delegation: string | SecureViewDelegation, delegationSig: string }
- * Returns: { ok: true, ownerAddress, expiresAt, coveredAddresses } | { error }
+ * Body: { sessionId, delegationSig }
+ * Returns: { ok: true, token, sessionId, expiresAt }
  *
- * Server verifies the delegation was legitimately signed by the owner
- * address (EIP-191 first, EIP-1271 via eth_call fallback). This is a
- * "try it now" check — the client can confirm its session is workable
- * before attempting to open any assets. No state is persisted: every
- * /lit/secure-view re-verifies independently.
+ * Verifies that `ecrecover(delegationSig)` matches the session's
+ * `ownerAddress` (set at `/begin-session` from the PC2 auth context).
+ * Issues an opaque bearer token that the client stores and presents on
+ * subsequent content requests via `sessionToken`.
  */
 router.post('/lit/complete-session', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -2401,87 +2377,107 @@ router.post('/lit/complete-session', authenticate, async (req: AuthenticatedRequ
       return;
     }
 
-    const { delegation: delIn, delegationSig } = req.body || {};
-    if (!delIn || typeof delegationSig !== 'string') {
-      res.status(400).json({ error: 'Missing delegation or delegationSig' });
+    const { sessionId, delegationSig } = req.body || {};
+    if (typeof sessionId !== 'string' || typeof delegationSig !== 'string') {
+      res.status(400).json({ error: 'sessionId and delegationSig required' });
       return;
     }
 
-    // Accept either canonical JSON string or a parsed object.
-    let delegationObj: SecureViewDelegation;
-    let delegationCanonical: string;
-    if (typeof delIn === 'string') {
-      try {
-        delegationObj = JSON.parse(delIn);
-      } catch {
-        res.status(400).json({ error: 'delegation is not valid JSON' });
-        return;
-      }
-      delegationCanonical = delIn;
-    } else {
-      delegationObj = delIn;
-      delegationCanonical = canonicalize(delIn);
+    const { sessionService } = await import('../services/session/BackendSessionService.js');
+    const stored = sessionService.getSessionById(sessionId);
+    if (!stored) {
+      res.status(404).json({ error: 'Session not found' });
+      return;
     }
-
-    // Session sanity: delegation.ownerAddress must match the authenticated wallet.
-    if (
-      typeof delegationObj.ownerAddress !== 'string' ||
-      delegationObj.ownerAddress.toLowerCase() !== walletAddress.toLowerCase()
-    ) {
-      res.status(403).json({ error: 'delegation.ownerAddress does not match authenticated session' });
+    // Cross-check ownerAddress against the PC2-authenticated wallet — only
+    // the same wallet that started the session can complete it.
+    if (stored.ownerAddress.toLowerCase() !== walletAddress.toLowerCase()) {
+      res.status(403).json({ error: 'sessionId does not belong to authenticated session' });
       return;
     }
 
-    // actionIpfsId sanity — accept the current configured CID or any
-    // known-good legacy CID (assets baked under previous Lit Actions
-    // carry their own actionIpfsId in PSSH and the delegation has to
-    // bind to that CID for the legacy Lit Action to accept it).
-    const delegationActionCid = delegationObj.actionIpfsId;
-    const isCurrentCid = delegationActionCid === NON_MEDIA_ACTION_CID;
-    const isLegacyCid = LEGACY_NON_MEDIA_ACTION_CIDS.has(delegationActionCid);
-    if (!isCurrentCid && !isLegacyCid) {
-      res.status(400).json({ error: 'delegation.actionIpfsId does not match server-configured or known-legacy CID' });
-      return;
-    }
-    if (isLegacyCid) {
-      logger.info(`[SecureView.session] Legacy actionIpfsId accepted: ${delegationActionCid}`);
-    }
-
-    // EIP-191 first
-    const recovered = await verifyDelegationEip191(delegationCanonical, delegationSig as `0x${string}`);
-    let valid = recovered !== null && recovered.toLowerCase() === delegationObj.ownerAddress.toLowerCase();
-
-    // EIP-1271 fallback — for smart wallets where the owner address IS a contract.
-    if (!valid) {
+    let confirmed: { token: string; expiresAt: number; sessionId: string };
+    try {
+      confirmed = sessionService.confirmSession({ sessionId, delegationSig });
+    } catch (confirmErr: any) {
+      // Defense-in-depth: EIP-191 fallback failed. Try EIP-1271 (smart wallet)
+      // before giving up — sessionService only does plain ecrecover.
       try {
         const { hashMessage } = await import('viem');
-        const messageHash = hashMessage(delegationCanonical) as `0x${string}`;
-        valid = await verifyDelegationEip1271(
-          delegationObj.ownerAddress as `0x${string}`,
+        const messageHash = hashMessage(stored.delegationCanonical) as `0x${string}`;
+        const okEip1271 = await verifyDelegationEip1271(
+          stored.ownerAddress as `0x${string}`,
           messageHash,
           delegationSig as `0x${string}`,
           ethCallAdapter,
         );
-      } catch (e: any) {
-        logger.debug(`[SecureView.session] EIP-1271 fallback threw: ${e.message}`);
+        if (!okEip1271) {
+          throw confirmErr;
+        }
+        // Manually mint the token — bypassing confirmSession's ecrecover check.
+        const { randomBytes } = await import('node:crypto');
+        const token = randomBytes(32).toString('hex');
+        sessionService.importSession({ ...stored, token, delegationSig });
+        confirmed = { token, expiresAt: stored.expiresAt, sessionId: stored.id };
+      } catch {
+        res.status(confirmErr.statusCode || 400).json({
+          error: confirmErr.message || 'delegationSig does not verify (EIP-191 + EIP-1271 both failed)',
+        });
+        return;
       }
-    }
-
-    if (!valid) {
-      res.status(400).json({ error: 'Delegation signature does not verify (EIP-191 + EIP-1271 both failed)' });
-      return;
     }
 
     res.json({
       ok: true,
-      ownerAddress: delegationObj.ownerAddress,
-      expiresAt: delegationObj.expiresAt,
-      coveredAddresses: delegationObj.coveredAddresses,
-      actionIpfsId: delegationObj.actionIpfsId,
+      token: confirmed.token,
+      sessionId: confirmed.sessionId,
+      expiresAt: confirmed.expiresAt,
     });
   } catch (err: any) {
     logger.error(`[SecureView.session] complete-session failed: ${err.message}`);
-    res.status(500).json({ error: err.message || 'complete-session failed' });
+    res.status(err.statusCode || 500).json({ error: err.message || 'complete-session failed' });
+  }
+});
+
+/**
+ * POST /api/storage/lit/renew-session
+ * Body: { sessionId, chainId?, ttlSeconds? }
+ * Returns: { sessionId, delegationCanonical, expiresAt }
+ *
+ * Same P-256 keypair; the server only rotates the delegation timestamps
+ * and nonce. The previous bearer token is cleared — the client must call
+ * `/lit/complete-session` with a fresh wallet signature to obtain a new one.
+ */
+router.post('/lit/renew-session', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const walletAddress = req.user?.wallet_address;
+    if (!walletAddress) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const { sessionId, chainId, ttlSeconds } = req.body || {};
+    if (typeof sessionId !== 'string') {
+      res.status(400).json({ error: 'sessionId required' });
+      return;
+    }
+
+    const { sessionService } = await import('../services/session/BackendSessionService.js');
+    const result = await sessionService.renewSession({
+      sessionId,
+      ownerAddress: walletAddress,
+      chainId: Number.isFinite(chainId) ? Number(chainId) : undefined,
+      ttlSeconds: Number.isFinite(ttlSeconds) ? Math.max(60, Number(ttlSeconds)) : undefined,
+    });
+
+    res.json({
+      sessionId,
+      delegationCanonical: result.delegationCanonical,
+      expiresAt: result.expiresAt,
+    });
+  } catch (err: any) {
+    logger.error(`[SecureView.session] renew-session failed: ${err.message}`);
+    res.status(err.statusCode || 500).json({ error: err.message || 'renew-session failed' });
   }
 });
 
@@ -2585,7 +2581,7 @@ const RPC_5XX_MAX_RETRIES = 5;
  * errors propagate immediately; the last 5xx error propagates once retries
  * are exhausted.
  */
-async function withRpc5xxRetry<T>(fn: () => Promise<T>, retriesLeft = RPC_5XX_MAX_RETRIES): Promise<T> {
+export async function withRpc5xxRetry<T>(fn: () => Promise<T>, retriesLeft = RPC_5XX_MAX_RETRIES): Promise<T> {
   try {
     return await fn();
   } catch (err) {
@@ -2597,7 +2593,7 @@ async function withRpc5xxRetry<T>(fn: () => Promise<T>, retriesLeft = RPC_5XX_MA
 }
 
 /** Calls `hasAccessByContentId`, rotating the Base RPC on 5xx (see withRpc5xxRetry). */
-function hasAccessByContentIdWithFailover(
+export function hasAccessByContentIdWithFailover(
   holder: string,
   normalizedKid: string,
   authorityAddr: string,
@@ -2612,7 +2608,7 @@ function hasAccessByContentIdWithFailover(
   });
 }
 
-router.post('/lit/secure-view', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+router.post('/lit/secure-view', authenticate, requireSecureViewSession, async (req: SecureViewRequest, res: Response) => {
   // Telemetry hook (A5b §P0): "Door 4" of the v1.2 funnel. Fires exactly
   // once per node lifetime — the first time a paid-content decrypt SUCCEEDS
   // (response status 2xx). Uses res.on('finish') because this handler has
@@ -2629,104 +2625,20 @@ router.post('/lit/secure-view', authenticate, async (req: AuthenticatedRequest, 
       maxWidth: reqMaxWidth,
       viewportWidth: reqViewportWidth,
       litBackend: reqLitBackend,
-      // Session-key delegation fields (Option C) — optional until
-      // Phase 2d swaps the Lit Action CID to the verifying version.
-      delegation: delegationIn,
-      delegationSig,
-      request: sessionRequestIn,
-      requestSig,
+
+      // ciphertext integrity verification payload
+      issuer,
+      signature,
     } = req.body;
 
-    // Derive buyer addresses from authenticated session — never trust client
+    // Derive buyer addresses from authenticated session — never trust client.
+    // `requireSecureViewSession` middleware has already cross-checked that
+    // the bearer token's ownerAddress matches one of these.
     const buyerAddress = req.user?.wallet_address;
-    const buyerAddressAlt = req.user?.smart_account_address || undefined;
 
     if (!litCiphertext || !dataToEncryptHash || !kid || !buyerAddress || !iv || !encryptedDataCid) {
       res.status(400).json({ error: 'Missing required fields for secure view' });
       return;
-    }
-
-    // ── Session-sig enforcement (Phase 5 hard cutover) ──
-    // The secure-view session bundle is now MANDATORY. The legacy
-    // `userAddress`-in-jsParams path has been retired; any request
-    // without { delegation, delegationSig, request, requestSig } is
-    // rejected outright. The Lit Action still re-verifies everything
-    // independently — this block fails malformed / expired / replayed
-    // bundles fast, before we spend a $0.01 Lit call.
-    const hasAnyBundleField =
-      delegationIn !== undefined ||
-      delegationSig !== undefined ||
-      sessionRequestIn !== undefined ||
-      requestSig !== undefined;
-
-    if (
-      !hasAnyBundleField ||
-      delegationIn === undefined ||
-      typeof delegationSig !== 'string' ||
-      sessionRequestIn === undefined ||
-      typeof requestSig !== 'string'
-    ) {
-      logger.warn(
-        `[SecureView] Request rejected: session bundle missing or incomplete (buyer=${buyerAddress.substring(0, 10)}…)`,
-      );
-      res.status(401).json({
-        error: 'session_bundle_required',
-        message:
-          'Secure-view requires a signed delegation + request bundle. Call POST /api/storage/lit/begin-session first.',
-      });
-      return;
-    }
-
-    {
-      const delegationCanonical =
-        typeof delegationIn === 'string' ? delegationIn : canonicalize(delegationIn);
-      const requestCanonical =
-        typeof sessionRequestIn === 'string' ? sessionRequestIn : canonicalize(sessionRequestIn);
-
-      const { hashMessage } = await import('viem');
-      const verify = await verifySecureViewBundle(
-        {
-          delegation: delegationCanonical,
-          delegationSig: delegationSig as `0x${string}`,
-          request: requestCanonical,
-          requestSig: requestSig as `0x${string}`,
-        },
-        {
-          expectedActionIpfsId: NON_MEDIA_ACTION_CID,
-          expectedChainId: 8453,
-          expectedKid: kid,
-          ethCall: ethCallAdapter,
-          messageHashForEip1271: hashMessage(delegationCanonical) as `0x${string}`,
-        },
-      );
-
-      if (!verify.ok) {
-        logger.warn(`[SecureView] Session bundle rejected: ${verify.error}`);
-        res.status(401).json({ error: 'session_bundle_invalid', code: verify.error });
-        return;
-      }
-
-      // Cross-check against authenticated session: delegation owner
-      // must match the PC2-authenticated wallet. Prevents a user with
-      // session X from handing us a delegation signed by a different
-      // wallet Y.
-      const del = verify.delegation!;
-      if (
-        del.ownerAddress.toLowerCase() !== buyerAddress.toLowerCase() &&
-        (!buyerAddressAlt || del.ownerAddress.toLowerCase() !== buyerAddressAlt.toLowerCase())
-      ) {
-        logger.warn(
-          `[SecureView] 403 delegation/session mismatch: owner=${del.ownerAddress.substring(0, 10)}… buyer=${buyerAddress.substring(0, 10)}… buyerAlt=${(buyerAddressAlt || '').substring(0, 10) || '(none)'}…`,
-        );
-        res.status(403).json({ error: 'delegation.ownerAddress does not match authenticated session' });
-        return;
-      }
-
-      // Set a header so ops can see the session layer is in effect.
-      res.setHeader('X-SecureView-Session', 'verified');
-      logger.info(
-        `[SecureView] Session bundle verified: owner=${del.ownerAddress.substring(0, 10)}… covered=${del.coveredAddresses.length}`,
-      );
     }
 
     const mime = (mimeType || 'application/octet-stream').toLowerCase();
@@ -2752,56 +2664,10 @@ router.post('/lit/secure-view', authenticate, async (req: AuthenticatedRequest, 
     const authorityAddr = DEFAULT_AUTHORITY;
     let resolvedBuyer = buyerAddress;
 
-    if (buyerAddressAlt && buyerAddressAlt.toLowerCase() !== buyerAddress.toLowerCase()) {
-      try {
-        const normalizedKid = kid.startsWith('0x') ? kid : `0x${kid}`;
-
-        const [primaryHas, altHas] = await Promise.all([
-          hasAccessByContentIdWithFailover(buyerAddress, normalizedKid, authorityAddr).catch(
-            (err: Error) => {
-              logger.warn(`[SecureView] Preflight: ${buyerAddress.substring(0, 10)} hasAccessByContentId failed: ${err}`);
-              return false;
-            }
-          ),
-          hasAccessByContentIdWithFailover(buyerAddressAlt, normalizedKid, authorityAddr).catch(
-            (err: Error) => {
-              logger.warn(`[SecureView] Preflight: ${buyerAddressAlt.substring(0, 10)} hasAccessByContentId failed: ${err}`);
-              return false;
-            }
-          ),
-        ]);
-
-        if (!primaryHas && altHas) {
-          resolvedBuyer = buyerAddressAlt;
-          logger.info(`[SecureView] Preflight: primary ${buyerAddress.substring(0, 10)} lacks AccessToken, using alt ${buyerAddressAlt.substring(0, 10)}`);
-        } else if (primaryHas) {
-          logger.info(`[SecureView] Preflight: primary ${buyerAddress.substring(0, 10)} holds AccessToken`);
-        } else {
-          logger.warn(`[SecureView] Preflight: neither address holds AccessToken — proceeding with primary`);
-          // early exit
-          res.status(412).json({ error: 'You do not own this content' });
-          return;
-        }
-      } catch (preflightErr: any) {
-        logger.warn(`[SecureView] Preflight access check failed (non-fatal): ${preflightErr.message}`);
-      }
-    }
-
     effectiveBody.buyerAddress = resolvedBuyer;
     effectiveBody.rpc = rpcUrl;
     effectiveBody.authority = authorityAddr;
-
-    // Pre-canonicalized session bundle forwarded to the Lit Action
-    // via recoverNonMediaCEK. Always populated — the bundle is
-    // mandatory (enforced above) and has been verified.
-    effectiveBody.secureViewSession = {
-      delegationCanonical:
-        typeof delegationIn === 'string' ? delegationIn : canonicalize(delegationIn),
-      delegationSig: delegationSig as `0x${string}`,
-      requestCanonical:
-        typeof sessionRequestIn === 'string' ? sessionRequestIn : canonicalize(sessionRequestIn),
-      requestSig: requestSig as `0x${string}`,
-    };
+    effectiveBody.litBackend = reqLitBackend;
 
     // ── Rate Limiting ────────────────────────────────────
     if (!checkLitRateLimit(buyerAddress)) {
@@ -2833,11 +2699,12 @@ router.post('/lit/secure-view', authenticate, async (req: AuthenticatedRequest, 
     };
 
     const wasmRuntime = req.app.locals.wasmRuntime as WASMRuntime;
+    const sessionView = req.secureViewSession!.view;
     const output = await renderer.render(renderCtx, {
       renderViaWASM: (params, mime, maxWidth, page, ipfsService, chapter, viewportWidth) =>
-        renderViaWASM(params, mime, maxWidth, wasmRuntime, page, ipfsService, chapter, viewportWidth),
+        renderViaWASM({ ...params, issuer, signature }, mime, maxWidth, wasmRuntime, sessionView, page, ipfsService, chapter, viewportWidth),
       decryptAssetTwoLayer: (params, ipfsService) =>
-        decryptAssetTwoLayer(params, ipfsService, wasmRuntime),
+        decryptAssetTwoLayer({ ...params, issuer, signature}, ipfsService, wasmRuntime, sessionView),
     });
 
     for (const [key, value] of Object.entries(output.headers)) {

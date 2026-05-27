@@ -7,6 +7,8 @@
  */
 
 import { Router, type Request, type Response } from 'express';
+import { authenticate } from './middleware.js';
+import { requireSecureViewSession, type SecureViewRequest } from './middleware/secureViewSession.js';
 import { resolve as pathResolve, dirname, join } from 'path';
 import { existsSync, readFileSync, mkdirSync as fsMkdirSync, rmSync as fsRmSync } from 'fs';
 import { fileURLToPath } from 'url';
@@ -89,7 +91,7 @@ router.post('/prepare-auth', async (req: AuthenticatedRequest, res: Response) =>
 });
 
 // ─── POST /api/media/init ────────────────────────────────────────────
-router.post('/init', async (req: AuthenticatedRequest, res: Response) => {
+router.post('/init', authenticate, requireSecureViewSession, async (req: SecureViewRequest, res: Response) => {
   const requestStart = Date.now();
   try {
     const { channel, tokenId, mediaUri: clientMediaUri, tokenURI, title: clientTitle, authority: clientAuthority } = req.body;
@@ -98,6 +100,9 @@ router.post('/init', async (req: AuthenticatedRequest, res: Response) => {
       return;
     }
 
+    // mediaSessionManager keys media sessions on the PC2 auth token (kept
+    // for /segment lookups); the secure-view BackendSessionView is the
+    // separate concern owned by the middleware.
     const authToken = getAuthToken(req);
     if (!authToken) {
       res.status(401).json({ error: 'Authentication required' });
@@ -406,15 +411,14 @@ router.post('/init', async (req: AuthenticatedRequest, res: Response) => {
       }
     }
 
-    // Media flow uses a server-owned secure-view session built on demand
-    // inside `recoverMediaCEK` — no client wallet bridge or 412 handshake
-    // required. The on-chain `hasAccessByContentId(buyerAddress, kid)` check
-    // inside the Lit Action still gates playback.
-    const buyerAddress = req.body.buyerAddress || '';
-
-    let prebuiltSessionSigs: any = null;
-
-    const cekBase64 = await recoverMediaCEK(litParams, prebuiltSessionSigs, buyerAddress);
+    // The middleware has already loaded the BackendSessionView. Pass it
+    // straight to the recovery helper — the session's P-256 keypair is the
+    // ECDH target for the Lit Action's CEK envelope; its wallet-signed
+    // delegation is the ownership proof the Lit Action verifies on-chain via
+    // `hasAccessByContentId(del.ownerAddress, kid)`. Buyer address is encoded
+    // in `del.ownerAddress` — no separate `coveredAddresses` field.
+    const sessionView = req.secureViewSession!.view;
+    const cekBase64 = await recoverMediaCEK(litParams, sessionView);
     logger.info(`[media/init] CEK recovered in ${Date.now() - requestStart}ms`);
 
     // 4. Create session
@@ -464,7 +468,12 @@ router.post('/init', async (req: AuthenticatedRequest, res: Response) => {
 });
 
 // ─── POST /api/media/segment ─────────────────────────────────────────
-router.post('/segment', async (req: AuthenticatedRequest, res: Response) => {
+// `requireSecureViewSession` enforces a live secure-view bearer token on
+// every segment fetch. The middleware also cross-checks that the session's
+// ownerAddress still matches the PC2-authenticated wallet — so a stolen
+// segment URL with a fresh PC2 cookie cannot continue streaming after the
+// secure-view session has been revoked or its wallet has rotated.
+router.post('/segment', authenticate, requireSecureViewSession, async (req: SecureViewRequest, res: Response) => {
   try {
     const { sessionId, trackIndex, segmentNumber, init } = req.body;
     if (!sessionId) {
@@ -472,6 +481,8 @@ router.post('/segment', async (req: AuthenticatedRequest, res: Response) => {
       return;
     }
 
+    // mediaSessionManager keys media sessions on the PC2 auth token — kept
+    // for backward-compat with the /init persisted session identifier.
     const authToken = getAuthToken(req);
     if (!authToken) {
       res.status(401).json({ error: 'Authentication required' });
@@ -1062,11 +1073,14 @@ async function decryptSegmentViaWASM(
 /**
  * Recover the Content Encryption Key for media assets.
  *
- * Uses `recoverCEKWithServerSession` — the server itself builds and signs
- * the secure-view delegation (with `getServerWallet()`) and a fresh
- * ephemeral session keypair, so no client-side wallet bridge or 412
- * handshake is involved. The on-chain `hasAccessByContentId(buyer, kid)`
- * check inside the Lit Action still gates access.
+ * Takes a pre-resurrected `BackendSessionView` from the middleware, calls
+ * `recoverCEKEnvelope` to fetch the ECDH envelope, then asks the view to
+ * unwrap it. The CEK lives only inside `BackendSessionView._cekBase64`
+ * (Node heap) and is read via the `cekBase64` getter directly into
+ * `MediaSession.cekBase64`. It must not be logged or returned over HTTP.
+ *
+ * The Lit Action's `hasAccessByContentId(del.ownerAddress, kid)` check is
+ * the access gate — the session's wallet signature binds buyer→session key.
  */
 async function recoverMediaCEK(
   litParams: {
@@ -1080,21 +1094,33 @@ async function recoverMediaCEK(
     rpc: string;
     litBackend: string;
   },
-  _prebuiltSessionSigs?: any,
-  buyerAddress?: string,
+  session: import('./chipotle-client.js').BackendSessionView,
 ): Promise<string> {
-  const { recoverCEKWithServerSession } = await import('./chipotle-client.js');
-  return recoverCEKWithServerSession({
-    litCiphertext: litParams.litCiphertext,
-    dataToEncryptHash: litParams.dataToEncryptHash,
-    kid: litParams.kid,
-    buyerAddress: buyerAddress!,
-    actionCid: litParams.actionCid,
-    authority: litParams.authority,
-    chain: litParams.chain,
-    chainId: litParams.chainId,
-    rpc: litParams.rpc,
-  });
+  const { recoverCEKEnvelope } = await import('./chipotle-client.js');
+
+  const envelope = await recoverCEKEnvelope(
+    {
+      litCiphertext: litParams.litCiphertext,
+      dataToEncryptHash: litParams.dataToEncryptHash,
+      kid: litParams.kid,
+      actionCid: litParams.actionCid,
+      authority: litParams.authority,
+      chain: litParams.chain,
+      chainId: litParams.chainId,
+      rpc: litParams.rpc,
+    },
+    session,
+  );
+
+  // Legacy short payload: plaintext CEK ≤ 32 bytes — return as-is.
+  if (envelope.length <= 32) {
+    logger.info(`[Media] Legacy plaintext CEK (${envelope.length} bytes) — returning as-is`);
+    return envelope.toString('base64');
+  }
+
+  await session.unwrapEnvelope(envelope);
+  // CEK lives in session._cekBase64 (Node heap only). Do not log or forward.
+  return session.cekBase64;
 }
 
 // ── Media Encoding Pipeline ──────────────────────────────────────────────────

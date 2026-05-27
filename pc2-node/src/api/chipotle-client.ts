@@ -19,6 +19,7 @@ import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import https from 'https';
 import { createPublicKey, randomBytes, verify as cryptoVerify } from 'crypto';
+import type { StoredSession } from '../services/session/BackendSessionService.js';
 import { createLogger } from '../utils/logger.js';
 import { getBaseRpcUrl } from '../utils/rpc.js';
 import { recordMetricCounter, recordMetricHistogram } from '../utils/metrics.js';
@@ -68,7 +69,7 @@ const LIT_ACTION_PROXY_URL = 'https://europe-west1-elacity.cloudfunctions.net/ch
 
 // Universal Lit Action CIDs — V3 unified encrypt/decrypt
 export const UNIVERSAL_ENCRYPT_CID = 'QmVEz3dDnQD1n96gMd2mFZWXdEDsRiPMumx86qMzhT35gY';
-export const UNIVERSAL_DECRYPT_CID = 'QmPBjQD7V4aFTZPxUwZ9gDPFJtcJ4SvsJdTh3QexTyRBbj';
+export const UNIVERSAL_DECRYPT_CID = 'QmfQfBESVaKD9LAghGXYo768ih6ntaXFRpe88HdCoQ3t3M';
 
 const DEFAULT_AUTHORITY = '0x09dBe796f40ECEffEAccf243c3d758C4c1d8D87D';
 const DEFAULT_CHAIN = 'base';
@@ -85,6 +86,8 @@ const DEFAULT_PKP_ID = '0x68dcf3dc3c38d726e8a7cdca8ab318f49552c05d';
 // CHIPOTLE-REJECT-KNOWN-BAD-CID — see docs/handover/HANDOVER_2026-05-03_V1272_FRESH_MAC_HOTPATCH.md
 const KNOWN_BAD_NON_MEDIA_DECRYPT_CIDS = new Set<string>([
   'QmX5JxcFhyasptCWMA6unFPm3TRYjPSkJb5HhN8289r5uk',
+  'bafkreihvm4zkyuefnuptlbdins6cmd2mbslj2xgnyzz3ssdg2ggg3jtkk4',
+  'QmSHMSxPogSsNki51fenDzsrkKB3eJfRMHXEPZKqPk6EAb',              // legacy media decrypt  
 ]);
 
 // Known-good legacy decrypt Lit Action CIDs. A client-supplied `actionCid`
@@ -94,9 +97,16 @@ const KNOWN_BAD_NON_MEDIA_DECRYPT_CIDS = new Set<string>([
 // at an action that skips the kid↔ciphertext binding check or the on-chain
 // access gate. Keep in sync with storage.ts `LEGACY_NON_MEDIA_ACTION_CIDS`.
 const LEGACY_DECRYPT_ACTION_CIDS = new Set<string>([
-  'bafkreihvm4zkyuefnuptlbdins6cmd2mbslj2xgnyzz3ssdg2ggg3jtkk4', // V1.2 sigauth non-media decrypt
-  'QmSHMSxPogSsNki51fenDzsrkKB3eJfRMHXEPZKqPk6EAb',              // legacy media decrypt
+  'bafybeiamslb2nn53t3kjrhzkorhcvrhfwevuemk5bkgkbzvu7pq5sezeay',
+  'QmPBjQD7V4aFTZPxUwZ9gDPFJtcJ4SvsJdTh3QexTyRBbj',
 ]);
+
+const LEGACY_DECRYPT_ACTION_REMAP: Record<string, string> = {
+  'bafybeiamslb2nn53t3kjrhzkorhcvrhfwevuemk5bkgkbzvu7pq5sezeay': UNIVERSAL_DECRYPT_CID,
+  'QmPBjQD7V4aFTZPxUwZ9gDPFJtcJ4SvsJdTh3QexTyRBbj': UNIVERSAL_DECRYPT_CID,
+  'QmSHMSxPogSsNki51fenDzsrkKB3eJfRMHXEPZKqPk6EAb': UNIVERSAL_DECRYPT_CID,
+  'QmRSpGFftbiWQBkHFEi9FUhtigfPbcCkezuuEUNUJcFr6h': UNIVERSAL_DECRYPT_CID,
+}
 
 const SUPERNODE_PROVISION_URLS = [
   'https://69.164.241.210/api/ddrm/provision',
@@ -166,20 +176,227 @@ export interface SecureViewSessionBundle {
   delegationSig: `0x${string}`;
   requestCanonical: string;
   requestSig: `0x${string}`;
+  /** ECDH algorithm the client session key supports. Defaults to P-256 if absent. */
+  keyAlg?: { name: string; namedCurve?: string };
 }
 
-export interface MediaDecryptParams {
-  litCiphertext: string;
-  dataToEncryptHash: string;
-  kid: string;
-  buyerAddress: string;
-  actionCid: string;
-  publicKeyHex: string;
-  authority?: string;
-  chain?: string;
-  chainId?: number;
-  rpc?: string;
-  secureViewSession?: SecureViewSessionBundle;
+// ── Secure-View session constants (shared with BackendSessionService) ─────────
+
+/** Canonical JSON `domain` for the wallet-signed delegation. */
+export const DELEGATION_DOMAIN = 'pc2.secure-view.v1' as const;
+
+/** Canonical JSON `domain` for the session-signed per-asset request. */
+export const REQUEST_DOMAIN = 'pc2.secure-view.request.v1' as const;
+
+/** Hard cap on delegation TTL — matches `MAX_DELEGATION_WINDOW_SECONDS` in `utils/secureViewSession.ts`. */
+export const MAX_DELEGATION_TTL_SECONDS = 24 * 3600;
+
+/** Generate a 0x-prefixed random hex string of `byteLength` bytes (CSPRNG-backed). */
+export function randomHex(byteLength: number): `0x${string}` {
+  return ('0x' + randomBytes(byteLength).toString('hex')) as `0x${string}`;
+}
+
+// ── ISessionView abstraction ──────────────────────────────────────────────────
+
+/**
+ * Abstraction over a secure-view session for CEK envelope recovery.
+ *
+ * Implementations:
+ *   - ClientBundleSessionView — wraps a client-provided {delegation, request} bundle.
+ *   - BackendSessionView      — server-owned P-256 session; CEK stays in Node heap.
+ *   - (future) DdrmSessionView — ddrm WASM; CEK in linear memory only.
+ */
+export interface ISessionView {
+  /** Canonical delegation JSON (sorted keys, no whitespace), wallet-signed. */
+  readonly delegationCanonical: string;
+  readonly delegationSig: `0x${string}`;
+  /** ECDH algorithm forwarded to the Lit Action as `jsParams.keyAlg`. */
+  readonly keyAlg: { name: string; namedCurve?: string };
+  /**
+   * Build + sign a per-asset request. Must use a fresh nonce + `requestedAt`.
+   * May return a pre-built request (client-bundle path) when the private key
+   * is held client-side and only a one-shot bundle is available.
+   */
+  signRequest(params: { kid: string; actionIpfsId: string }): Promise<{
+    requestCanonical: string;
+    requestSig: `0x${string}`;
+  }>;
+  /**
+   * Unwrap the Lit ECDH envelope and store the CEK in implementation-internal
+   * memory. Never returns the CEK to the caller.
+   *
+   * - BackendSessionView: stores in a private Node-heap field; accessible only
+   *   via the `cekBase64` getter (not part of this interface).
+   * - ClientBundleSessionView: throws — the server must not unwrap using a key
+   *   it does not hold.
+   * - (future) Ddrm WASM path: stores at `session->license->keys[0]` in WASM
+   *   linear memory; only consumed by WASM decrypt routines.
+   */
+  unwrapEnvelope(envelope: Buffer): Promise<void>;
+}
+
+/**
+ * ISessionView backed by a pre-signed bundle from the client (412 handshake
+ * or `/api/storage/lit/secure-view` request body).
+ *
+ * `signRequest()` returns the bundle's pre-built request — valid within the
+ * Lit Action's 60-second `requestedAt` freshness window. Callers must invoke
+ * `recoverCEKEnvelope` within a few seconds of receiving the bundle.
+ *
+ * `unwrapEnvelope()` intentionally throws: the server does not hold the
+ * client's private key. Use `BackendSessionView` for the actual ECDH unwrap.
+ */
+export class ClientBundleSessionView implements ISessionView {
+  readonly delegationCanonical: string;
+  readonly delegationSig: `0x${string}`;
+  readonly keyAlg: { name: string; namedCurve?: string };
+
+  private readonly _requestCanonical: string;
+  private readonly _requestSig: `0x${string}`;
+
+  constructor(bundle: SecureViewSessionBundle) {
+    this.delegationCanonical = bundle.delegationCanonical;
+    this.delegationSig = bundle.delegationSig;
+    this._requestCanonical = bundle.requestCanonical;
+    this._requestSig = bundle.requestSig;
+    this.keyAlg = bundle.keyAlg ?? { name: 'ECDH', namedCurve: 'P-256' };
+  }
+
+  async signRequest(_params: { kid: string; actionIpfsId: string }): Promise<{
+    requestCanonical: string;
+    requestSig: `0x${string}`;
+  }> {
+    return { requestCanonical: this._requestCanonical, requestSig: this._requestSig };
+  }
+
+  async unwrapEnvelope(_envelope: Buffer): Promise<void> {
+    throw new Error(
+      'ClientBundleSessionView.unwrapEnvelope: the server does not hold the client ' +
+      'session private key. Use BackendSessionView.unwrapEnvelope instead.',
+    );
+  }
+}
+
+/**
+ * ISessionView backed by a persistent server-side P-256 session.
+ *
+ * Session lifecycle:
+ *   1. `BackendSessionService.createSession()` → generates P-256 keypair, returns delegationCanonical
+ *   2. Client wallet `personal_sign(delegationCanonical)` → delegationSig (ownership proof)
+ *   3. `BackendSessionService.confirmSession()` → verifies sig, stores session, issues bearer token
+ *   4. Subsequent requests: `Authorization: Bearer <token>` → load BackendSessionView → sign + unwrap
+ *
+ * The P-256 public key is `del.sessionPublicKey`. The Lit Action encrypts the CEK envelope to it.
+ * `BackendSessionView` unwraps using the stored private key — no publicKeyHex override needed.
+ *
+ * Ownership proof chain:
+ *   - `delegationCanonical` includes `ownerAddress` + `sessionPublicKey`.
+ *   - The wallet signature over it is the binding "owner authorises this session key".
+ *   - `BackendSessionService.confirmSession` verifies `ecrecover(delegationSig) === ownerAddress`
+ *     before issuing the bearer token; the Lit Action verifies the same check inside the TEE.
+ */
+export class BackendSessionView implements ISessionView {
+  readonly delegationCanonical: string;
+  readonly delegationSig: `0x${string}`;
+  readonly keyAlg = { name: 'ECDH', namedCurve: 'P-256' } as const;
+
+  private readonly _signingKey: CryptoKey;
+  private readonly _ecdhKey: CryptoKey;
+  private _cekBase64: string | null = null;
+
+  private constructor(
+    delegationCanonical: string,
+    delegationSig: `0x${string}`,
+    signingKey: CryptoKey,
+    ecdhKey: CryptoKey,
+  ) {
+    this.delegationCanonical = delegationCanonical;
+    this.delegationSig = delegationSig;
+    this._signingKey = signingKey;
+    this._ecdhKey = ecdhKey;
+  }
+
+  /**
+   * Re-import a stored P-256 session into two WebCrypto keys: one for ECDSA
+   * signing (per-asset requests), one for ECDH (envelope unwrap).
+   *
+   * Uses `privateKeyJwk` directly on Node — the equivalent re-import in any
+   * other language is `curve + privateKeyRaw` (32-byte big-endian scalar).
+   */
+  static async fromStoredSession(session: StoredSession): Promise<BackendSessionView> {
+    const { subtle } = globalThis.crypto;
+    const jwk = session.privateKeyJwk;
+    const base: JsonWebKey = {
+      kty: jwk.kty,
+      crv: jwk.crv,
+      x: jwk.x,
+      y: jwk.y,
+      d: jwk.d,
+    };
+    const signingKey = await subtle.importKey(
+      'jwk',
+      { ...base, key_ops: ['sign'] },
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      false,
+      ['sign'],
+    );
+    const ecdhKey = await subtle.importKey(
+      'jwk',
+      { ...base, key_ops: ['deriveKey'] },
+      { name: 'ECDH', namedCurve: 'P-256' },
+      false,
+      ['deriveKey'],
+    );
+    return new BackendSessionView(
+      session.delegationCanonical,
+      session.delegationSig as `0x${string}`,
+      signingKey,
+      ecdhKey,
+    );
+  }
+
+  async signRequest(params: { kid: string; actionIpfsId: string }): Promise<{
+    requestCanonical: string;
+    requestSig: `0x${string}`;
+  }> {
+    const normalizedKid = params.kid.startsWith('0x')
+      ? params.kid.toLowerCase()
+      : '0x' + params.kid.toLowerCase();
+    const req = {
+      actionIpfsId: params.actionIpfsId,
+      domain: REQUEST_DOMAIN,
+      kid: normalizedKid,
+      requestNonce: randomHex(8),
+      requestedAt: Math.floor(Date.now() / 1000),
+    };
+    const canonical = canonicalize(req);
+    const bytes = new TextEncoder().encode(canonical);
+    const sig = await globalThis.crypto.subtle.sign(
+      { name: 'ECDSA', hash: 'SHA-256' },
+      this._signingKey,
+      bytes,
+    );
+    return {
+      requestCanonical: canonical,
+      requestSig: ('0x' + Buffer.from(sig).toString('hex')) as `0x${string}`,
+    };
+  }
+
+  /** P-256 ECDH unwrap. CEK stored in Node heap only — never returned to callers. */
+  async unwrapEnvelope(envelope: Buffer): Promise<void> {
+    this._cekBase64 = await unwrapECDHEnvelope(envelope, this._ecdhKey, {
+      name: 'ECDH',
+      namedCurve: 'P-256',
+    });
+  }
+
+  /** Only exit point for the CEK. Write directly to `MediaSession.cekBase64`; do not log. */
+  get cekBase64(): string {
+    if (!this._cekBase64) {
+      throw new Error('BackendSessionView: call unwrapEnvelope() before reading cekBase64');
+    }
+    return this._cekBase64;
+  }
 }
 
 export interface EncryptParams {
@@ -235,7 +452,7 @@ interface SignedProvisionEnvelope {
  * level, arrays preserved positionally, no whitespace. Must match the
  * signer's canonical form byte-for-byte.
  */
-function canonicalize(value: unknown): string {
+export function canonicalize(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
   if (Array.isArray(value)) {
     return '[' + value.map((v) => canonicalize(v)).join(',') + ']';
@@ -732,6 +949,21 @@ async function executeLitAction(params: LitActionParams, _config?: ChipotleConfi
     );
   }
 
+  if (status === 200 && typeof json === 'object') {
+    // extract response
+    // treat on-purpose response emitted by the implementation
+    // HTTP response here is 200 but the content of the json is an error we need to decode
+    // has_error and logs here are useless
+    const { response: jsonResponse } = json || {};
+    if (jsonResponse?.error) {
+      throw new ChipotleError(
+        (`Lit Execution Error: ${jsonResponse?.error} (code=${jsonResponse?.code}) ${jsonResponse?.detail || ''}`).trim(),
+        403,
+        json,
+      );      
+    }
+  }
+
   // Some success responses return non-JSON bodies (raw text) — surface that
   // explicitly instead of returning the literal string "null".
   if (json === null) {
@@ -753,61 +985,6 @@ async function executeLitAction(params: LitActionParams, _config?: ChipotleConfi
 }
 
 // ── High-Level Operations ────────────────────────────────────────────────────
-
-/**
- * Recover the Content Encryption Key for a media asset via ECDH envelope.
- * Replaces: recoverMediaCEK() with its ECDH key pair + client.executeJs()
- *
- * The caller still handles ECDH key generation and envelope unwrapping.
- * This function just runs the Lit Action and returns the raw base64 envelope.
- */
-export async function recoverMediaCEKEnvelope(
-  params: MediaDecryptParams,
-  mediaActionCode: string,
-  config?: ChipotleConfig,
-): Promise<Buffer> {
-  // Phase 5 cutover: sigauth bundle is mandatory. See recoverNonMediaCEK.
-  if (!params.secureViewSession) {
-    throw new Error(
-      '[Chipotle] recoverMediaCEKEnvelope requires params.secureViewSession (signed delegation + request).',
-    );
-  }
-
-  const __metricStart = Date.now();
-
-  try {
-    const jsParams: Record<string, unknown> = {
-      keyAlg: { name: 'ECDH', namedCurve: 'P-256' },
-      publicKey: params.publicKeyHex,
-      ciphertext: params.litCiphertext,
-      dataToEncryptHash: params.dataToEncryptHash,
-      kid: params.kid.startsWith('0x') ? params.kid : `0x${params.kid}`,
-      actionIpfsId: params.actionCid,
-      authority: params.authority || DEFAULT_AUTHORITY,
-      chain: params.chain || DEFAULT_CHAIN,
-      chainId: params.chainId || DEFAULT_CHAIN_ID,
-      rpc: params.rpc || getBaseRpcUrl(),
-      delegation: params.secureViewSession.delegationCanonical,
-      delegationSig: params.secureViewSession.delegationSig,
-      request: params.secureViewSession.requestCanonical,
-      requestSig: params.secureViewSession.requestSig,
-    };
-
-    const result = await executeLitAction({ code: mediaActionCode, ipfsId: params.actionCid, jsParams }, config);
-
-    // Media Lit Action returns a base64-encoded binary ECDH envelope
-    const envelope = Buffer.from(result.response, 'base64');
-    logger.info(`[Chipotle] Media CEK envelope received (${envelope.length} bytes)`);
-    recordMetricCounter(undefined, 'chipotle.cek_recovery', 1, { kind: 'media', outcome: 'success' });
-    recordMetricHistogram(undefined, 'chipotle.cek_recovery_ms', Date.now() - __metricStart, { kind: 'media', outcome: 'success' });
-    return envelope;
-  } catch (err) {
-    const reason = classifyChipotleError(err);
-    recordMetricCounter(undefined, 'chipotle.cek_recovery', 1, { kind: 'media', outcome: 'failure', reason });
-    recordMetricHistogram(undefined, 'chipotle.cek_recovery_ms', Date.now() - __metricStart, { kind: 'media', outcome: 'failure' });
-    throw err;
-  }
-}
 
 /**
  * Encrypt data using Chipotle's PKP-AES encryption (Lit.Actions.Encrypt).
@@ -946,28 +1123,23 @@ async function fetchLitActionCode(cid: string): Promise<string> {
 }
 
 /**
- * Server-owned ECDH envelope CEK recovery. Used by the media path
- * (`/api/media/init`) where no client-side wallet bridge is involved.
+ * Execute the Lit Action decrypt and return the raw ECDH envelope `Buffer`.
  *
- * The server itself plays both the "owner" and "session" roles:
- *  - generates an ephemeral ECDSA P-256 keypair (extractable so it can be
- *    re-imported as ECDH for the envelope unwrap, matching the technique
- *    used by `tools/lit-direct-decrypt.mjs`),
- *  - signs the delegation with `getServerWallet()` (ownerAddress = server),
- *  - signs the per-request bundle with the ephemeral session key,
- *  - calls the Lit Action,
- *  - unwraps the envelope locally with the same ephemeral key.
+ * The Lit Action encrypts the envelope to `del.sessionPublicKey` (the
+ * backend session's P-256 public key). The caller must then call
+ * `session.unwrapEnvelope(envelope)` to store the CEK internally, then
+ * read `(session as BackendSessionView).cekBase64`.
  *
- * The on-chain access gate inside the Lit Action still enforces
- * `hasAccessByContentId(buyerAddress, kid)`, so buyers without the
- * AccessToken are denied regardless of who signed the delegation.
+ * The CEK is NEVER present in the return value of this function. Legacy
+ * Lit Actions returned plaintext CEK ≤ 32 bytes wrapped as a short buffer;
+ * callers detect this via `envelope.length <= 32` and treat the buffer
+ * itself as the CEK bytes rather than calling `unwrapEnvelope`.
  */
-export async function recoverCEKWithServerSession(
+export async function recoverCEKEnvelope(
   params: {
     litCiphertext: string;
     dataToEncryptHash: string;
     kid: string;
-    buyerAddress: string;
     actionCid?: string;
     authority?: string;
     chain?: string;
@@ -976,78 +1148,36 @@ export async function recoverCEKWithServerSession(
     signature?: string;
     issuer?: string;
   },
+  session: ISessionView,
   config?: ChipotleConfig,
-): Promise<string> {
+): Promise<Buffer> {
   const __metricStart = Date.now();
 
   try {
-    const effectiveCid = params.actionCid || UNIVERSAL_DECRYPT_CID;
+    let effectiveCid = params.actionCid || UNIVERSAL_DECRYPT_CID;
     assertAllowedDecryptCid(effectiveCid);
+    effectiveCid = LEGACY_DECRYPT_ACTION_REMAP[effectiveCid] || effectiveCid;
     const effectiveChainId = params.chainId || DEFAULT_CHAIN_ID;
     const normalizedKid = params.kid.startsWith('0x')
       ? params.kid.toLowerCase()
       : '0x' + params.kid.toLowerCase();
 
-    // 1. Generate ephemeral session keypair (ECDSA for signing). `extractable: true`
-    //    so we can re-import the private scalar as ECDH for envelope unwrap.
-    const { subtle } = globalThis.crypto;
-    const sessionKeyPair = await subtle.generateKey(
-      { name: 'ECDSA', namedCurve: 'P-256' },
-      true,
-      ['sign', 'verify'],
-    );
-    const rawPub = new Uint8Array(await subtle.exportKey('raw', sessionKeyPair.publicKey));
-    const sessionPublicKey = ('0x' + Buffer.from(rawPub).toString('hex')) as `0x${string}`;
-
-    // 2. Build + sign delegation with an ephemeral secp256k1 wallet.
-    //    ownerAddress only needs to match the delegationSig — the Lit Action
-    //    access gate checks coveredAddresses[0] (buyerAddress) on-chain, not ownerAddress.
-    const { Wallet } = await import('ethers');
-    const wallet = Wallet.createRandom();
-    const now = Math.floor(Date.now() / 1000);
-    const delegation = {
-      domain: 'pc2.secure-view.v1',
-      ownerAddress: wallet.address,
-      coveredAddresses: [params.buyerAddress],
-      sessionPublicKey,
-      actionIpfsId: effectiveCid,
-      chainId: effectiveChainId,
-      issuedAt: now,
-      expiresAt: now + 3600,
-      nonce: '0x' + randomBytes(16).toString('hex'),
-    };
-    const delegationCanonical = canonicalize(delegation);
-    const delegationSig = (await wallet.signMessage(delegationCanonical)) as `0x${string}`;
-
-    // 3. Build + sign per-request bundle with the ephemeral session key.
-    const request = {
-      domain: 'pc2.secure-view.request.v1',
+    // Build + sign the per-asset request bundle. For BackendSessionView this
+    // produces a fresh ECDSA-signed request; for ClientBundleSessionView this
+    // returns the pre-signed bundle from the client.
+    const { requestCanonical, requestSig } = await session.signRequest({
       kid: normalizedKid,
       actionIpfsId: effectiveCid,
-      requestedAt: now,
-      requestNonce: '0x' + randomBytes(8).toString('hex'),
-    };
-    const requestCanonical = canonicalize(request);
-    const reqSigBuf = await subtle.sign(
-      { name: 'ECDSA', hash: 'SHA-256' },
-      sessionKeyPair.privateKey,
-      new TextEncoder().encode(requestCanonical),
-    );
-    const requestSig = ('0x' + Buffer.from(reqSigBuf).toString('hex')) as `0x${string}`;
+    });
 
-    // 4. Re-import the ECDSA private scalar as ECDH so we can run deriveKey
-    //    against the PKP ephemeral public key in `unwrapECDHEnvelope`.
-    const jwk = await subtle.exportKey('jwk', sessionKeyPair.privateKey);
-    delete (jwk as Record<string, unknown>).alg;
-    delete (jwk as Record<string, unknown>).key_ops;
-    const keyAlg = { name: 'ECDH', namedCurve: 'P-256' } as const;
-    const ecdhPrivateKey = await subtle.importKey('jwk', jwk, keyAlg, false, ['deriveKey']);
-
-    // 5. Call the Lit Action.
     const code = await fetchLitActionCode(effectiveCid);
     const pkpId = resolvePkpId(config);
+
+    // The Lit Action uses `del.sessionPublicKey` as the ECDH target — no
+    // `publicKey` override needed. `del.sessionPublicKey` IS the backend
+    // session's P-256 public key (set at createSession).
     const jsParams: Record<string, unknown> = {
-      keyAlg,
+      keyAlg: session.keyAlg,
       ciphertext: params.litCiphertext,
       dataToEncryptHash: params.dataToEncryptHash,
       kid: normalizedKid,
@@ -1057,15 +1187,15 @@ export async function recoverCEKWithServerSession(
       chain: params.chain || DEFAULT_CHAIN,
       chainId: effectiveChainId,
       rpc: params.rpc || getBaseRpcUrl(),
-      delegation: delegationCanonical,
-      delegationSig,
+      delegation: session.delegationCanonical,
+      delegationSig: session.delegationSig,
       request: requestCanonical,
       requestSig,
     };
     if (params.signature) jsParams.signature = params.signature;
     if (params.issuer) jsParams.issuer = params.issuer;
 
-    logger.info(`[Chipotle] Server-session decrypt via ${effectiveCid}, kid=${params.kid}`);
+    logger.info(`[Chipotle] recoverCEKEnvelope via ${effectiveCid}, kid=${params.kid}`);
     const result = await executeLitAction({ code, ipfsId: effectiveCid, jsParams }, config);
 
     let parsed: any;
@@ -1079,24 +1209,16 @@ export async function recoverCEKWithServerSession(
     }
 
     const dataB64 = parsed.data || result.response;
-    const dataBytes = Buffer.from(dataB64, 'base64');
-    if (dataBytes.length <= 32) {
-      logger.info(`[Chipotle] Legacy plaintext CEK detected (${dataBytes.length} bytes) — returning as-is`);
-      recordMetricCounter(undefined, 'chipotle.cek_recovery', 1, { kind: 'server_session', outcome: 'success', legacy: 'true' });
-      recordMetricHistogram(undefined, 'chipotle.cek_recovery_ms', Date.now() - __metricStart, { kind: 'server_session', outcome: 'success' });
-      return dataB64;
-    }
+    const envelope = Buffer.from(dataB64, 'base64');
 
-    const cekBase64 = await unwrapECDHEnvelope(dataBytes, ecdhPrivateKey, rawPub, keyAlg);
-    logger.info(`[Chipotle] CEK recovered via server-session ECDH envelope (${dataBytes.length} bytes envelope)`);
-
-    recordMetricCounter(undefined, 'chipotle.cek_recovery', 1, { kind: 'server_session', outcome: 'success' });
-    recordMetricHistogram(undefined, 'chipotle.cek_recovery_ms', Date.now() - __metricStart, { kind: 'server_session', outcome: 'success' });
-    return cekBase64;
+    logger.info(`[Chipotle] CEK envelope received (${envelope.length} bytes)`);
+    recordMetricCounter(undefined, 'chipotle.cek_recovery', 1, { kind: 'envelope', outcome: 'success' });
+    recordMetricHistogram(undefined, 'chipotle.cek_recovery_ms', Date.now() - __metricStart, { kind: 'envelope', outcome: 'success' });
+    return envelope;
   } catch (err) {
     const reason = classifyChipotleError(err);
-    recordMetricCounter(undefined, 'chipotle.cek_recovery', 1, { kind: 'server_session', outcome: 'failure', reason });
-    recordMetricHistogram(undefined, 'chipotle.cek_recovery_ms', Date.now() - __metricStart, { kind: 'server_session', outcome: 'failure' });
+    recordMetricCounter(undefined, 'chipotle.cek_recovery', 1, { kind: 'envelope', outcome: 'failure', reason });
+    recordMetricHistogram(undefined, 'chipotle.cek_recovery_ms', Date.now() - __metricStart, { kind: 'envelope', outcome: 'failure' });
     throw err;
   }
 }
@@ -1107,24 +1229,23 @@ export async function recoverCEKWithServerSession(
 /**
  * Unwrap an ECDH-wrapped license envelope from the Lit Action.
  *
- * Envelope format:
- *   HEADER: format (3 bytes) + flag (1 byte)
- *   METADATA:
- *     ephemeral_pubkey_len (u16be) + ephemeral_pubkey
- *     signature_len (u16be) + signature + signer_compressed_pubkey (33 bytes)
- *   BODY:
- *     encrypted_cek_len (u32be) + encrypted_cek (AES-CBC)
+ * Two wire-format versions are supported (byte 3 of the header is the version flag):
  *
- * Decrypted payload (rawLicenseBytes):
- *   metadata_size (u32be) + metadata (issuer + exp + audience) + key_count (u32be) + keys
+ *   v2 (flag = 0x02) — legacy, fixed IV:
+ *     HEADER(4) | pkLen(2) + pk(33) | sigLen(2) + sig(65) + signer(33) | bodyLen(4) + body
+ *     IV = first 16 bytes of the session public key (predictable, fixed per session)
+ *
+ *   v3 (flag = 0x03) — random IV:
+ *     HEADER(4) | pkLen(2) + pk(33) | iv(16) | sigLen(2) + sig(65) + signer(33) | bodyLen(4) + body
+ *     IV = random 16 bytes generated by the Lit Action and embedded in the envelope
  */
 export async function unwrapECDHEnvelope(
   envelope: Buffer,
   privateKey: CryptoKey,
-  ourRawPubKey: Uint8Array,
   keyAlg: { name: string; namedCurve: string },
 ): Promise<string> {
   const { subtle } = globalThis.crypto;
+  const version = envelope[3]; // 0x02 = legacy fixed-IV, 0x03 = random IV
   let offset = 4; // skip header (3 bytes format + 1 byte flag)
 
   // Read ephemeral public key
@@ -1132,6 +1253,15 @@ export async function unwrapECDHEnvelope(
   offset += 2;
   const ephPubKeyRaw = envelope.subarray(offset, offset + ephPubKeyLen);
   offset += ephPubKeyLen;
+
+  // Read AES-CBC IV: v3 embeds it in the envelope; v2 derives it from the ephemeral pubkey
+  let iv: Uint8Array;
+  if (version === 0x03) {
+    iv = envelope.subarray(offset, offset + 16);
+    offset += 16;
+  } else {
+    iv = new Uint8Array(ephPubKeyRaw.subarray(0, 16));
+  }
 
   // Skip signature
   const sigLen = (envelope[offset] << 8) | envelope[offset + 1];
@@ -1145,7 +1275,7 @@ export async function unwrapECDHEnvelope(
   offset += 4;
   const encryptedCek = envelope.subarray(offset, offset + encCekLen);
 
-  logger.info(`[Chipotle] Envelope: ephPubKey=${ephPubKeyLen}B, sig=${sigLen}B, encCEK=${encCekLen}B`);
+  logger.info(`[Chipotle] Envelope: ephPubKey=${ephPubKeyLen}B, iv=16B, sig=${sigLen}B, encCEK=${encCekLen}B`);
 
   // Decompress P-256 point if needed (Lit Action compresses for P-256)
   const litPubKeyUncompressed = (ephPubKeyRaw[0] === 0x02 || ephPubKeyRaw[0] === 0x03)
@@ -1169,9 +1299,6 @@ export async function unwrapECDHEnvelope(
     false,
     ['decrypt'],
   );
-
-  // IV = first 16 bytes of OUR raw public key (matches Lit Action's pubKeyBuff.subarray(0, 16))
-  const iv = ourRawPubKey.slice(0, 16);
 
   // Decrypt — copy to fresh ArrayBuffers to satisfy strict BufferSource typing
   const encCekCopy = new Uint8Array(encryptedCek);

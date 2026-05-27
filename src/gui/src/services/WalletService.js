@@ -88,9 +88,7 @@ class WalletService {
             ],
             8453: [
                 'https://mainnet.base.org',
-                'https://base.llamarpc.com',
                 'https://rpc.ankr.com/base',
-                'https://1rpc.io/base',
             ],
             137: [
                 'https://polygon-rpc.com',

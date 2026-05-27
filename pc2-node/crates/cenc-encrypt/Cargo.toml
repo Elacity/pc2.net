@@ -1,6 +1,6 @@
 [package]
 name = "cenc-encrypt"
-version = "0.1.0"
+version = "1.1.0"
 edition = "2021"
 description = "CENC (Common Encryption) AES-128-CTR encryptor for fMP4/DASH segments — runs in WASM sandbox"
 license = "MIT"

@@ -29,6 +29,34 @@
       },
       "problemMatcher": "$tsc",
       "dependsOn": ["build:gui"]
+    },
+    {
+      // Build the ddrm-decrypt WASM with DWARF debug info preserved. Used as
+      // the preLaunchTask for the "Node: debug pc2-node + ddrm-decrypt
+      // source (WASM DWARF)" launch config. The script picks the
+      // `release-debug` profile (from the crate's Cargo.toml), skips
+      // wasm-opt, and refreshes the capsule.json sha so the runtime sha
+      // pin still matches at load.
+      "label": "build:ddrm-decrypt-debug",
+      "type": "shell",
+      "command": "bash scripts/build-wasm.sh ddrm-decrypt --debug",
+      "options": {
+        "cwd": "${workspaceFolder}/pc2-node"
+      },
+      "group": "build",
+      "presentation": {
+        "panel": "shared",
+        "reveal": "always"
+      }
+    },
+    {
+      // Combined task: build everything needed to launch pc2-node with
+      // ddrm-decrypt source-level debugging — GUI + backend (chained via
+      // `build:pc2-backend.dependsOn`) plus the DWARF-preserving WASM build.
+      "label": "build:pc2-node+ddrm-decrypt-debug",
+      "dependsOn": ["build:pc2-backend", "build:ddrm-decrypt-debug"],
+      "dependsOrder": "sequence",
+      "problemMatcher": []
     }
   ]
 }

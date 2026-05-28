@@ -14,7 +14,21 @@ const CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
 export interface MediaSession {
   id: string;
-  cekBase64: string;
+  /**
+   * Base64 CEK for the JS-backed session view path. The /segment handler
+   * passes this to `cenc-decrypt` WASM with the segment bytes. Mutually
+   * exclusive with `wasmRequestHandle`.
+   */
+  cekBase64?: string;
+  /**
+   * `ddrm-decrypt` WASM L2 request handle for the WASM-backed session view
+   * path. The /segment handler calls
+   * `WasmDdrmDecryptRuntime.requestDecryptSegment(handle, init, seg)`
+   * directly. The CEK lives only in WASM linear memory; this handle is
+   * the opaque key into the L2 registry. Mutually exclusive with
+   * `cekBase64`.
+   */
+  wasmRequestHandle?: number;
   mpd: ParsedMPD;
   mpdBaseUrl: string;
   channel: string;
@@ -34,17 +48,24 @@ class MediaSessionManager {
   }
 
   create(params: {
-    cekBase64: string;
+    /** Set for JS-backed sessions; the /segment handler passes this to cenc-decrypt. */
+    cekBase64?: string;
+    /** Set for WASM-backed sessions; the /segment handler passes this to ddrm-decrypt. */
+    wasmRequestHandle?: number;
     mpd: ParsedMPD;
     mpdBaseUrl: string;
     channel: string;
     tokenId: string;
     authToken: string;
   }): MediaSession {
+    if (!params.cekBase64 && params.wasmRequestHandle === undefined) {
+      throw new Error('MediaSession.create: one of `cekBase64` or `wasmRequestHandle` must be provided');
+    }
     const id = crypto.randomUUID();
     const session: MediaSession = {
       id,
       cekBase64: params.cekBase64,
+      wasmRequestHandle: params.wasmRequestHandle,
       mpd: params.mpd,
       mpdBaseUrl: params.mpdBaseUrl,
       channel: params.channel,

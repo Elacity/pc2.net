@@ -241,9 +241,19 @@
         return;
       }
       var arg = (data.params && data.params[0]) || {};
-      sv.signRequest({ kid: arg.kid, actionIpfsId: arg.actionIpfsId })
+      // Forward the iframe's full options object. The `refresh: true` flag
+      // (sent after a 401 `session_token_invalid`) is what tells
+      // pc2-secure-view.js to clear its cached token + IndexedDB record and
+      // re-bootstrap with a fresh wallet sign. Without forwarding this, the
+      // manager hands back the same stale token and the iframe's retry hits
+      // the same 401 forever.
+      sv.signRequest({
+        kid: arg.kid,
+        actionIpfsId: arg.actionIpfsId,
+        refresh: !!arg.refresh,
+      })
         .then(function (bundle) {
-          console.log('[PC2 Bridge] OK pc2_secureView_sign | kid=' + arg.kid + ' | reqId=' + data.id);
+          console.log('[PC2 Bridge] OK pc2_secureView_sign | kid=' + arg.kid + ' | refresh=' + !!arg.refresh + ' | reqId=' + data.id);
           respond({
             type: 'pc2-wallet-rpc-response',
             id: data.id, method: data.method, result: bundle

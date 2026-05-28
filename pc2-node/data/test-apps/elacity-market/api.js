@@ -390,22 +390,28 @@ var ElacityAPI = (function () {
       }\n\
     }';
 
-  var CHECK_CHANNEL_ACCESS_QUERY = '\n\
-    query CheckChannelAccess($address: String!, $subscriber: String!) {\n\
-      access: checkChannelAccess(address: $address, subscriber: $subscriber) {\n\
-        haveAccess\n\
-        model {\n\
-          __typename\n\
-          ... on AccessModelOwner {\n\
-            isOwner\n\
-          }\n\
-          ... on AccessModelSubscription {\n\
-            planId\n\
-            expiresAt\n\
-          }\n\
-        }\n\
-      }\n\
-    }';
+  var CHECK_CHANNEL_ACCESS_QUERY = `
+  query CheckChannelAccess($address: String!, $subscriber: String!) {
+    access: checkChannelAccess(address: $address, subscriber: $subscriber) {
+      haveAccess
+      model {
+        __typename
+        ... on AccessModelOwner {
+          type
+        }
+        ... on AccessModelSubscription {
+          type
+          planId
+          expiresAt
+        }
+        ...on AccessModelToken {
+          type
+          address
+          balance
+        }
+      }
+    }
+  }`;
 
   var SUBSCRIBE_CHANNEL_MUTATION = '\n\
     mutation SubscribeChannel($to: String!) {\n\

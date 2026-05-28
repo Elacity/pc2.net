@@ -199,12 +199,45 @@ export function randomHex(byteLength: number): `0x${string}` {
 // ── ISessionView abstraction ──────────────────────────────────────────────────
 
 /**
+ * Decryption surface, separated from session lifecycle so WASM-backed
+ * implementations don't have to expose CEK bytes via a getter. Both
+ * `BackendSessionView` (CEK in Node heap) and `WasmSessionView` (CEK in WASM
+ * linear memory) implement this — consumers depend on the interface, not on
+ * `cekBase64`.
+ *
+ * Each method is a no-op until `unwrapEnvelope()` (from `ISessionView`) has
+ * stored the CEK. Implementations throw if called before the unwrap.
+ */
+export interface ICencDecryptor {
+  /**
+   * Full-asset AES-256-GCM (Chipotle two-layer outer envelope). `ciphertext`
+   * is `payload || authTag` (last 16 bytes are the GCM tag). `iv` is the
+   * 12-byte (or larger) nonce from the asset metadata.
+   */
+  decryptAsset(ciphertext: Uint8Array, iv: Uint8Array): Promise<Buffer>;
+
+  /**
+   * fMP4/CENC segment decrypt. `initSegment` is consulted for `tenc` (IV size);
+   * the segment's `senc` carries per-sample IVs. AES-128-CTR.
+   *
+   * **Phase-2 status:** implemented on `WasmSessionView` (Phase 3); on
+   * `BackendSessionView` this throws until Phase 5 wires `WASMRuntime`
+   * injection. Today the JS backend's media path still calls the standalone
+   * `decryptSegmentViaWASM` helper in `media.ts` directly.
+   */
+  decryptSegment(initSegment: Uint8Array | null, segment: Uint8Array): Promise<Buffer>;
+
+  /** Release any per-request key material (zero in WASM, GC in Node). */
+  dispose(): Promise<void>;
+}
+
+/**
  * Abstraction over a secure-view session for CEK envelope recovery.
  *
  * Implementations:
  *   - ClientBundleSessionView — wraps a client-provided {delegation, request} bundle.
  *   - BackendSessionView      — server-owned P-256 session; CEK stays in Node heap.
- *   - (future) DdrmSessionView — ddrm WASM; CEK in linear memory only.
+ *   - WasmSessionView         — ddrm WASM (Phase 3); CEK in linear memory only.
  */
 export interface ISessionView {
   /** Canonical delegation JSON (sorted keys, no whitespace), wallet-signed. */
@@ -295,7 +328,7 @@ export class ClientBundleSessionView implements ISessionView {
  *   - `BackendSessionService.confirmSession` verifies `ecrecover(delegationSig) === ownerAddress`
  *     before issuing the bearer token; the Lit Action verifies the same check inside the TEE.
  */
-export class BackendSessionView implements ISessionView {
+export class BackendSessionView implements ISessionView, ICencDecryptor {
   readonly delegationCanonical: string;
   readonly delegationSig: `0x${string}`;
   readonly keyAlg = { name: 'ECDH', namedCurve: 'P-256' } as const;
@@ -326,6 +359,15 @@ export class BackendSessionView implements ISessionView {
   static async fromStoredSession(session: StoredSession): Promise<BackendSessionView> {
     const { subtle } = globalThis.crypto;
     const jwk = session.privateKeyJwk;
+    if ( ! jwk ) {
+      // The factory in BackendSessionService routes WASM-backed sessions to
+      // WasmSessionView; if we got here without a JWK the caller bypassed
+      // the factory and handed us a malformed record.
+      throw new Error(
+        'BackendSessionView.fromStoredSession: stored session has no privateKeyJwk ' +
+        '— this is a WASM-backed session; use WasmSessionView.fromStoredSession instead.',
+      );
+    }
     const base: JsonWebKey = {
       kty: jwk.kty,
       crv: jwk.crv,
@@ -390,12 +432,270 @@ export class BackendSessionView implements ISessionView {
     });
   }
 
-  /** Only exit point for the CEK. Write directly to `MediaSession.cekBase64`; do not log. */
+  /**
+   * Only direct exit point for the CEK. Phase-5 will migrate the remaining
+   * callers (`media.ts /segment`, `storage.ts renderViaWASM`) to call
+   * `decryptSegment` / `decryptAsset` instead so this getter can be deleted.
+   * Until then it is the legacy bridge between this view and the existing
+   * WASM-runtime / node:crypto invocations in those files.
+   */
   get cekBase64(): string {
-    if (!this._cekBase64) {
+    if ( ! this._cekBase64 ) {
       throw new Error('BackendSessionView: call unwrapEnvelope() before reading cekBase64');
     }
     return this._cekBase64;
+  }
+
+  // ── ICencDecryptor ────────────────────────────────────────────────────────
+
+  /**
+   * AES-256-GCM decrypt of a full Chipotle two-layer asset blob. Mirrors the
+   * node:crypto fallback in `storage.ts decryptAssetTwoLayer` so a future
+   * consumer migration is a one-liner. The CEK is borrowed for the duration
+   * of one `createDecipheriv` call and never returned.
+   */
+  async decryptAsset(ciphertext: Uint8Array, iv: Uint8Array): Promise<Buffer> {
+    if ( ! this._cekBase64 ) {
+      throw new Error('BackendSessionView.decryptAsset: call unwrapEnvelope() first');
+    }
+    const cekBytes = Buffer.from(this._cekBase64, 'base64');
+    try {
+      if (cekBytes.length !== 32) {
+        throw new Error(`BackendSessionView.decryptAsset: expected 32-byte CEK, got ${cekBytes.length}`);
+      }
+      const AUTH_TAG_LEN = 16;
+      if (ciphertext.length < AUTH_TAG_LEN) {
+        throw new Error('BackendSessionView.decryptAsset: ciphertext shorter than GCM tag');
+      }
+      const ct = Buffer.from(ciphertext);
+      const payload = ct.subarray(0, ct.length - AUTH_TAG_LEN);
+      const tag = ct.subarray(ct.length - AUTH_TAG_LEN);
+
+      // Import here to keep this module's top-level import surface narrow.
+      const { createDecipheriv } = await import('node:crypto');
+      const decipher = createDecipheriv('aes-256-gcm', cekBytes, Buffer.from(iv));
+      decipher.setAuthTag(tag);
+      const plaintext = Buffer.concat([decipher.update(payload), decipher.final()]);
+      if (plaintext.length === 0) {
+        throw new Error('BackendSessionView.decryptAsset: AES-GCM produced empty plaintext');
+      }
+      return plaintext;
+    } finally {
+      cekBytes.fill(0);
+    }
+  }
+
+  /**
+   * Not implemented on the JS backend yet — `media.ts /segment` still calls
+   * the `decryptSegmentViaWASM` helper directly with `view.cekBase64`.
+   * Migration to this method requires threading `WASMRuntime` into the view
+   * (constructor injection) and is deferred to Phase 5 of
+   * `DDRM-DECRYPT-WASM` so this turn stays additive.
+   *
+   * The interface declares the method so `WasmSessionView` (Phase 3) can
+   * implement it from day one and consumers gain a uniform call shape.
+   */
+  async decryptSegment(_initSegment: Uint8Array | null, _segment: Uint8Array): Promise<Buffer> {
+    throw new Error(
+      'BackendSessionView.decryptSegment: not yet wired — use the decryptSegmentViaWASM ' +
+      'helper in media.ts for now. Full implementation lands in Phase 5 alongside the ' +
+      'WASMRuntime injection.',
+    );
+  }
+
+  /** Drop the CEK reference. V8 string GC is non-deterministic; treat as a hint. */
+  async dispose(): Promise<void> {
+    this._cekBase64 = null;
+  }
+}
+
+/**
+ * ISessionView backed by the `ddrm-decrypt` WASM runtime.
+ *
+ * The P-256 keypair lives entirely in WASM linear memory and is identified by
+ * an opaque `wasmHandle: u32`. The CEK (after `unwrapEnvelope`) lives only in
+ * the WASM L2 request registry — there is no JS-side cekBase64 anywhere on
+ * this class. `decrypt*` methods are the only way to use it; they return
+ * plaintext bytes only.
+ *
+ * Lifecycle parity with `BackendSessionView`:
+ *   1. `createSession({ backend: 'wasm' })` → calls `WasmDdrmDecryptRuntime.sessionCreate`,
+ *      stores `{ sessionId (uuid), publicKeyHex (decompressed) }` in `FileSessionStore`.
+ *   2. Wallet signs the same delegation canonical JSON (the signed payload also
+ *      includes `backend: 'wasm'` so an attacker cannot downgrade by stripping it).
+ *   3. `confirmSession` issues a bearer token as today.
+ *   4. Subsequent requests → middleware calls `WasmSessionView.fromStoredSession`,
+ *      which uses `wasm.session_lookup(sessionId)`. If the lookup returns null
+ *      (process restart since session creation), the middleware emits
+ *      `session_token_invalid` and the client re-bootstraps.
+ *
+ * Failure mode: if the WASM runtime fails to load or traps mid-call, the
+ * caller sees a `DdrmDecryptError`. The runtime singleton attempts one
+ * auto-reload on a trap; a second trap exits the process.
+ */
+export class WasmSessionView implements ISessionView, ICencDecryptor {
+  readonly delegationCanonical: string;
+  readonly delegationSig: `0x${string}`;
+  readonly keyAlg = { name: 'ECDH', namedCurve: 'P-256' } as const;
+  /** UUID — `BackendSessionService.StoredSession.id` for WASM-backed sessions. */
+  readonly sessionId: string;
+  /** Decompressed `0x04||X||Y` — same shape as `BackendSessionView`'s publicKeyHex. */
+  readonly publicKeyHex: string;
+
+  /** WASM-side session handle, cached for the lifetime of this view. */
+  private readonly _wasmHandle: number;
+  /** WASM-side L2 request handle, set by `unwrapEnvelope`. */
+  private _requestHandle: number | null = null;
+
+  /**
+   * The WASM L2 request handle from `unwrapEnvelope`, exposed for callers
+   * that need to persist it across HTTP requests (e.g. `MediaSession`
+   * holds it for the duration of playback so subsequent `/segment` calls
+   * can decrypt without re-running the Lit action). Returns `null` until
+   * `unwrapEnvelope()` has been called.
+   *
+   * The handle itself is opaque — it cannot be used to read the CEK; it
+   * is only valid as the first argument to `request_decrypt_*` calls on
+   * the same `WasmDdrmDecryptRuntime` instance.
+   */
+  get requestHandle(): number | null {
+    return this._requestHandle;
+  }
+
+  /**
+   * Attach an existing WASM L2 request handle to this view, skipping the
+   * Lit-action call and `unwrapEnvelope`. Used by the JS-side cache in
+   * `storage.ts recoverWithSession` so multi-page PDFs / EPUBs decrypting
+   * the same content via the same session don't re-run the Lit action on
+   * every page. The handle must come from a prior `unwrapEnvelope()` call
+   * on the same WASM session and still be inside its L2 TTL (2h default).
+   *
+   * If the handle has expired by the time `decryptAsset` / `decryptSegment`
+   * is called, the underlying WASM call will return `RequestExpired` and
+   * the caller should retry by re-running the Lit action.
+   */
+  attachRequestHandle(handle: number): void {
+    this._requestHandle = handle;
+  }
+
+  private constructor(
+    delegationCanonical: string,
+    delegationSig: `0x${string}`,
+    sessionId: string,
+    publicKeyHex: string,
+    wasmHandle: number,
+  ) {
+    this.delegationCanonical = delegationCanonical;
+    this.delegationSig = delegationSig;
+    this.sessionId = sessionId;
+    this.publicKeyHex = publicKeyHex;
+    this._wasmHandle = wasmHandle;
+  }
+
+  /**
+   * Create a fresh P-256 session inside WASM. Returns the new view plus the
+   * `sessionId` (UUID) and the `publicKeyHex` (decompressed 65-byte hex with
+   * `0x04` prefix) that `BackendSessionService` needs to persist.
+   *
+   * `delegationCanonical` + `delegationSig` are filled in by
+   * `BackendSessionService.confirmSession` after the wallet signs.
+   */
+  static async createNew(): Promise<{
+    sessionId: string;
+    publicKeyHex: string;
+    wasmHandle: number;
+  }> {
+    const { WasmDdrmDecryptRuntime } = await import('../services/wasm/WasmDdrmDecryptRuntime.js');
+    const rt = WasmDdrmDecryptRuntime.get();
+    const { handle, sessionId, publicKey } = await rt.sessionCreate();
+    const uncompressed = decompressP256Point(new Uint8Array(publicKey));
+    const publicKeyHex = '0x' + Buffer.from(uncompressed).toString('hex');
+    return { sessionId, publicKeyHex, wasmHandle: handle };
+  }
+
+  /**
+   * Resurrect a view from a stored record. Returns `null` when the WASM
+   * runtime no longer has the session (typically a process restart between
+   * session creation and request).
+   */
+  static async fromStoredSession(session: StoredSession): Promise<WasmSessionView | null> {
+    if (session.backend !== 'wasm') {
+      throw new Error('WasmSessionView.fromStoredSession: stored session has wrong backend');
+    }
+    const { WasmDdrmDecryptRuntime } = await import('../services/wasm/WasmDdrmDecryptRuntime.js');
+    const rt = WasmDdrmDecryptRuntime.get();
+    const handle = await rt.sessionLookup(session.id);
+    if (handle === null) return null;
+    return new WasmSessionView(
+      session.delegationCanonical,
+      session.delegationSig as `0x${string}`,
+      session.id,
+      session.publicKeyHex,
+      handle,
+    );
+  }
+
+  /** ECDSA-P256 sign via WASM. Returns canonical request JSON + DER hex signature. */
+  async signRequest(params: { kid: string; actionIpfsId: string }): Promise<{
+    requestCanonical: string;
+    requestSig: `0x${string}`;
+  }> {
+    const { WasmDdrmDecryptRuntime } = await import('../services/wasm/WasmDdrmDecryptRuntime.js');
+    const rt = WasmDdrmDecryptRuntime.get();
+
+    const normalizedKid = params.kid.startsWith('0x')
+      ? params.kid.toLowerCase()
+      : '0x' + params.kid.toLowerCase();
+    const req = {
+      actionIpfsId: params.actionIpfsId,
+      domain: REQUEST_DOMAIN,
+      kid: normalizedKid,
+      requestNonce: randomHex(8),
+      requestedAt: Math.floor(Date.now() / 1000),
+    };
+    const canonical = canonicalize(req);
+    const bytes = new TextEncoder().encode(canonical);
+    const sig = await rt.sessionSign(this._wasmHandle, bytes);
+    return {
+      requestCanonical: canonical,
+      requestSig: ('0x' + Buffer.from(sig).toString('hex')) as `0x${string}`,
+    };
+  }
+
+  /** ECDH unwrap inside WASM. Stores the resulting CEK in L2 keyed by the returned request handle. */
+  async unwrapEnvelope(envelope: Buffer): Promise<void> {
+    const { WasmDdrmDecryptRuntime } = await import('../services/wasm/WasmDdrmDecryptRuntime.js');
+    const rt = WasmDdrmDecryptRuntime.get();
+    this._requestHandle = await rt.sessionUnwrapEnvelope(this._wasmHandle, new Uint8Array(envelope));
+  }
+
+  async decryptAsset(ciphertext: Uint8Array, iv: Uint8Array): Promise<Buffer> {
+    if ( this._requestHandle === null ) {
+      throw new Error('WasmSessionView.decryptAsset: call unwrapEnvelope() first');
+    }
+    const { WasmDdrmDecryptRuntime } = await import('../services/wasm/WasmDdrmDecryptRuntime.js');
+    return WasmDdrmDecryptRuntime.get().requestDecryptAsset(this._requestHandle, iv, ciphertext);
+  }
+
+  async decryptSegment(initSegment: Uint8Array | null, segment: Uint8Array): Promise<Buffer> {
+    if ( this._requestHandle === null ) {
+      throw new Error('WasmSessionView.decryptSegment: call unwrapEnvelope() first');
+    }
+    const { WasmDdrmDecryptRuntime } = await import('../services/wasm/WasmDdrmDecryptRuntime.js');
+    return WasmDdrmDecryptRuntime.get().requestDecryptSegment(
+      this._requestHandle,
+      initSegment,
+      segment,
+      true,
+    );
+  }
+
+  /** Drop the L2 request (zeroes the CEK in WASM). The L1 session stays alive until token expiry. */
+  async dispose(): Promise<void> {
+    if ( this._requestHandle === null ) return;
+    const { WasmDdrmDecryptRuntime } = await import('../services/wasm/WasmDdrmDecryptRuntime.js');
+    await WasmDdrmDecryptRuntime.get().requestDrop(this._requestHandle);
+    this._requestHandle = null;
   }
 }
 

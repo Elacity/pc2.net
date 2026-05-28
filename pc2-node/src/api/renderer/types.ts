@@ -20,7 +20,13 @@ export interface DecryptParams {
 }
 
 export interface CEKRecoveryResult {
-  cekBase64: string;
+  /**
+   * Base64 CEK — populated only when the session view is the JS-backed
+   * `BackendSessionView`. For WASM-backed sessions the CEK lives only in
+   * WASM linear memory and the caller decrypts via
+   * `sessionView.decryptAsset` / `decryptSegment`.
+   */
+  cekBase64?: string;
   encryptedBytes: Buffer;
 }
 

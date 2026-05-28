@@ -1635,7 +1635,7 @@ setInterval(() => {
 
 // ── Promise coalescing for concurrent Lit calls ──────────────
 // Prevents duplicate $0.01 charges when concurrent requests hit for the same kid+buyer.
-const pendingLitCalls = new Map<string, Promise<string>>();
+const pendingLitCalls = new Map<string, Promise<string | undefined>>();
 
 // ── Session-scoped CEK cache ──────────────────────────────────
 // Short-lived in-memory cache to avoid redundant Lit Action calls within a
@@ -1667,6 +1667,52 @@ const cekCacheStats = {
 };
 
 const cekSessionCache = new Map<string, { cekBase64: string; expiresAt: number }>();
+
+/**
+ * Parallel cache for WASM-backed sessions. Stores the `ddrm-decrypt` L2
+ * `requestHandle` (the opaque integer returned by `unwrapEnvelope`) keyed
+ * on `(sessionId, kid, buyer)`. Reusing the handle on subsequent requests
+ * (e.g. multi-page PDF/EPUB rendering) skips both the Lit action and the
+ * envelope unwrap — the CEK remains in WASM linear memory the whole time.
+ *
+ * Keyed on sessionId additionally because WASM handles are scoped to the
+ * `WasmDdrmDecryptRuntime` instance; if the process restarts, the handle
+ * is gone, but so is the session, so the cache invalidates implicitly via
+ * `getSessionView(token)` returning null (the session lookup fails first).
+ *
+ * TTL matches `CEK_CACHE_TTL_MS` (5 min) which is shorter than the WASM L2
+ * TTL (2h), so we never serve an expired handle from this cache.
+ */
+const wasmRequestCache = new Map<string, { handle: number; expiresAt: number }>();
+
+function wasmCacheKey(sessionId: string, kid: string, buyerAddress: string): string {
+  return `${sessionId}:${kid}:${buyerAddress.toLowerCase()}`;
+}
+
+function getCachedWasmRequestHandle(sessionId: string, kid: string, buyerAddress: string): number | null {
+  const key = wasmCacheKey(sessionId, kid, buyerAddress);
+  const entry = wasmRequestCache.get(key);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) {
+    wasmRequestCache.delete(key);
+    return null;
+  }
+  // LRU promote.
+  wasmRequestCache.delete(key);
+  wasmRequestCache.set(key, entry);
+  return entry.handle;
+}
+
+function cacheWasmRequestHandle(sessionId: string, kid: string, buyerAddress: string, handle: number): void {
+  const key = wasmCacheKey(sessionId, kid, buyerAddress);
+  if (wasmRequestCache.has(key)) {
+    wasmRequestCache.delete(key);
+  } else if (wasmRequestCache.size >= CEK_CACHE_MAX_ENTRIES) {
+    const oldest = wasmRequestCache.keys().next().value;
+    if (oldest) wasmRequestCache.delete(oldest);
+  }
+  wasmRequestCache.set(key, { handle, expiresAt: Date.now() + CEK_CACHE_TTL_MS });
+}
 
 function cekCacheKey(kid: string, buyerAddress: string): string {
   return `${kid}:${buyerAddress.toLowerCase()}`;
@@ -1872,7 +1918,7 @@ router.post('/lit/encrypt', authenticate, async (req: AuthenticatedRequest, res:
 async function recoverWithSession(
   params: DecryptParams,
   ipfsService: any | undefined,
-  sessionView: import('./chipotle-client.js').BackendSessionView,
+  sessionView: import('./chipotle-client.js').BackendSessionView | import('./chipotle-client.js').WasmSessionView,
 ): Promise<CEKRecoveryResult> {
   const {
     litCiphertext, 
@@ -1892,9 +1938,26 @@ async function recoverWithSession(
 
   logger.info(`[Lit] Recover CEK: kid=${kid}, buyer=${buyerAddress}, cid=${encryptedDataCid}, backend=${effectiveBackend}`);
 
-  // Check session cache — avoids a $0.01 Lit call for multi-page PDFs
-  // and re-renders within the same viewing session (5 min TTL).
-  const cachedCek = getCachedCEK(kid, buyerAddress);
+  // Session cache avoids a $0.01 Lit call for multi-page PDFs and re-renders
+  // within the same viewing session (5 min TTL). Per-backend strategy:
+  //   - JS view: cache the base64 CEK string (`cekSessionCache`).
+  //   - WASM view: cache the `ddrm-decrypt` L2 request handle
+  //     (`wasmRequestCache`) keyed on the session as well, since handles
+  //     are scoped to the WASM runtime instance. Reusing the handle skips
+  //     both the Lit call AND the envelope unwrap — the CEK stays in WASM.
+  const isJsBackedView = 'cekBase64' in sessionView;
+  const cachedCek = isJsBackedView ? getCachedCEK(kid, buyerAddress) : null;
+  // For WASM, only attempt the cache if the view has a stable sessionId
+  // (it does — set at construction time from the StoredSession).
+  const cachedWasmHandle = !isJsBackedView
+    ? getCachedWasmRequestHandle((sessionView as { sessionId: string }).sessionId, kid, buyerAddress)
+    : null;
+  if (cachedWasmHandle !== null) {
+    logger.info(`[Lit] WASM request handle cache hit for kid=${kid}, buyer=${buyerAddress.substring(0, 10)}... (saved $0.01 + envelope unwrap)`);
+    // Attach the cached handle to this view so subsequent decryptAsset /
+    // decryptSegment calls use it without re-running the Lit action.
+    (sessionView as import('./chipotle-client.js').WasmSessionView).attachRequestHandle(cachedWasmHandle);
+  }
 
   // Kick off CEK recovery and IPFS fetch in parallel
   const litStart = Date.now();
@@ -1904,6 +1967,11 @@ async function recoverWithSession(
       logger.info(`[Lit] CEK cache hit for kid=${kid}, buyer=${buyerAddress.substring(0, 10)}... (saved $0.01)`);
       return cachedCek;
     }
+    // WASM-cache hit: the request handle was already attached above. The
+    // CEK lives in WASM linear memory; we don't need to return a string.
+    // The caller will branch on `cekBase64 === undefined` and call
+    // sessionView.decryptAsset() which uses the attached handle.
+    if (cachedWasmHandle !== null) return undefined;
 
     // Promise coalescing: if another request is already fetching this CEK, reuse the in-flight call
     const pending = pendingLitCalls.get(coalescingKey);
@@ -1913,7 +1981,7 @@ async function recoverWithSession(
       return pending;
     }
 
-    const doLitCall = async (): Promise<string> => {
+    const doLitCall = async (): Promise<string | undefined> => {
       try {
         if (effectiveBackend === 'chipotle') {
           const { recoverCEKEnvelope } = await import('./chipotle-client.js');
@@ -1946,17 +2014,40 @@ async function recoverWithSession(
             sessionView,
           );
 
-          let cekBase64: string;
+          let cekBase64: string | undefined;
           if (envelope.length <= 32) {
-            // Legacy plaintext CEK — pre-envelope Lit Actions returned the CEK directly.
+            // Legacy plaintext CEK — pre-envelope Lit Actions returned the
+            // CEK directly. This path predates the WASM backend and is JS
+            // only (the byte string IS the CEK, so we surface it as cekBase64).
             cekBase64 = envelope.toString('base64');
           } else {
             await sessionView.unwrapEnvelope(envelope);
-            cekBase64 = sessionView.cekBase64;
+            // `cekBase64` lives only on the JS-backed view. WASM-backed
+            // views keep the CEK inside WASM and expose it through
+            // `decryptAsset` / `decryptSegment`. Callers branch:
+            //   - decryptAssetTwoLayer: ignores cekBase64, uses
+            //     `sessionView.decryptAsset(encryptedBytes, iv)` — backend-agnostic.
+            //   - renderViaWASM: still reads cekBase64 for the JS path; for
+            //     WASM it calls `sessionView.decryptAsset` and uses the
+            //     renderer's `render_only` mode with plaintext.
+            if ('cekBase64' in sessionView) {
+              cekBase64 = sessionView.cekBase64;
+            } else {
+              cekBase64 = undefined;
+              // Cache the freshly-minted WASM L2 handle so subsequent
+              // /lit/secure-view calls for the same (sessionId, kid, buyer)
+              // skip both the Lit action and the unwrap. Handle stays alive
+              // for the WASM L2 TTL (2h); our JS-side cache TTL (5 min) is
+              // strictly shorter, so we never serve an expired entry.
+              const wasmView = sessionView as import('./chipotle-client.js').WasmSessionView;
+              if (wasmView.requestHandle !== null) {
+                cacheWasmRequestHandle(wasmView.sessionId, kid, buyerAddress, wasmView.requestHandle);
+              }
+            }
           }
 
           logger.info(`[Lit] CEK recovered in ${Date.now() - litStart}ms (Chipotle backend session)`);
-          cacheCEK(kid, buyerAddress, cekBase64);
+          if (cekBase64) cacheCEK(kid, buyerAddress, cekBase64);
           return cekBase64;
         }
         throw new Error(`Unsupported LIT_BACKEND: ${effectiveBackend}`);
@@ -2031,66 +2122,28 @@ const WASM_DECRYPT_MAX_BYTES = 200 * 1024 * 1024; // 200MB — above this, Node.
 export async function decryptAssetTwoLayer(
   params: DecryptParams,
   ipfsService: any,
-  wasmRuntime: WASMRuntime,
-  sessionView: import('./chipotle-client.js').BackendSessionView,
+  _wasmRuntime: WASMRuntime,
+  sessionView: import('./chipotle-client.js').BackendSessionView | import('./chipotle-client.js').WasmSessionView,
 ): Promise<Buffer> {
-  const { cekBase64, encryptedBytes } = await recoverWithSession(params, ipfsService, sessionView);
-
-  // Chipotle REST API may return base64 without padding — the Rust WASM
-  // decrypt-only code path requires standard padded base64.
-  const paddedCek = cekBase64.length % 4 === 0 ? cekBase64 : cekBase64 + '='.repeat(4 - (cekBase64.length % 4));
-
-  // WASM path: decryption happens in WASM, but CEK is passed in via command.json
-  if (encryptedBytes.length <= WASM_DECRYPT_MAX_BYTES) {
-    try {
-      // Phase 2-D-helpers: wasmRuntime now threaded in via the
-      // decryptAssetTwoLayer parameter (replaces ambient getWASMRuntime).
-      const wasmBinary = await loadRendererBinary(wasmRuntime);
-      const result = await wasmRuntime.executeDecryptOnly(
-        wasmBinary,
-        paddedCek,
-        params.iv,
-        'application/octet-stream',
-        encryptedBytes,
-        { timeoutMs: 60000 },
-      );
-
-      if (result.success && result.decryptedBytes) {
-        logger.info(`[Lit] Two-layer decrypt (WASM): ${result.decryptedBytes.length} bytes in ${result.executionTimeMs}ms for ${params.buyerAddress}`);
-        return result.decryptedBytes;
-      }
-
-      logger.warn(`[Lit] WASM decrypt-only failed (${result.error}), falling back to Node.js`);
-    } catch (wasmErr: any) {
-      logger.warn(`[Lit] WASM decrypt-only error: ${wasmErr.message}, falling back to Node.js`);
-    }
-  } else {
-    logger.info(`[Lit] File too large for WASM decrypt (${encryptedBytes.length}B > ${WASM_DECRYPT_MAX_BYTES}B), using Node.js`);
-  }
-
-  // Node.js fallback
-  const crypto = await import('crypto');
-  const cekBytes = Buffer.from(cekBase64, 'base64');
+  const { encryptedBytes } = await recoverWithSession(params, ipfsService, sessionView);
   const ivBytes = Buffer.from(params.iv, 'base64');
 
-  if (cekBytes.length !== 32) {
-    logger.warn(`[Lit] CEK length unexpected: ${cekBytes.length} bytes (expected 32)`);
+  const startDecrypt = Date.now();
+  // Backend-agnostic decrypt: BackendSessionView runs AES-256-GCM via
+  // node:crypto with the CEK in its `_cekBase64` field; WasmSessionView
+  // delegates to ddrm-decrypt where the CEK never leaves linear memory.
+  // The renderer's previous `decrypt_only` mode and the standalone
+  // node:crypto fallback are both subsumed here.
+  const plaintext = await sessionView.decryptAsset(encryptedBytes, ivBytes);
+  const elapsed = Date.now() - startDecrypt;
+
+  if (plaintext.length === 0) {
+    throw new Error('AES decryption returned empty data');
   }
 
-  const authTagLength = 16;
-  const ciphertextOnly = encryptedBytes.subarray(0, encryptedBytes.length - authTagLength);
-  const authTag = encryptedBytes.subarray(encryptedBytes.length - authTagLength);
-
-  const decipher = crypto.createDecipheriv('aes-256-gcm', cekBytes, ivBytes);
-  decipher.setAuthTag(authTag);
-  const decryptedBytes = Buffer.concat([decipher.update(ciphertextOnly), decipher.final()]);
-
-  cekBytes.fill(0);
-
-  if (decryptedBytes.length === 0) throw new Error('AES decryption returned empty data');
-
-  logger.info(`[Lit] Two-layer decrypt (Node.js fallback): ${decryptedBytes.length} bytes for ${params.buyerAddress}`);
-  return decryptedBytes;
+  const backendTag = 'cekBase64' in sessionView ? 'js' : 'wasm';
+  logger.info(`[Lit] Two-layer decrypt (${backendTag}): ${plaintext.length} bytes in ${elapsed}ms for ${params.buyerAddress}`);
+  return plaintext;
 }
 
 /**
@@ -2202,7 +2255,7 @@ async function renderViaWASM(
   mime: string,
   maxWidth: number,
   wasmRuntime: WASMRuntime,
-  sessionView: import('./chipotle-client.js').BackendSessionView,
+  sessionView: import('./chipotle-client.js').BackendSessionView | import('./chipotle-client.js').WasmSessionView,
   page?: number,
   ipfsService?: any,
   chapter?: number,
@@ -2210,27 +2263,57 @@ async function renderViaWASM(
 ): Promise<WASMRenderResult | null> {
   const { cekBase64, encryptedBytes } = await recoverWithSession(params, ipfsService, sessionView);
 
-  const paddedCek = cekBase64.length % 4 === 0 ? cekBase64 : cekBase64 + '='.repeat(4 - (cekBase64.length % 4));
-
   const watermarkText = `${params.buyerAddress.substring(0, 10)}...${params.buyerAddress.substring(params.buyerAddress.length - 6)} ${new Date().toISOString().split('T')[0]}`;
   const isEpub = mime === 'application/epub+zip' || mime === 'application/epub';
 
-  const command: RendererCommand = {
-    cek_b64: paddedCek,
-    iv_b64: params.iv,
-    mime_type: mime,
-    watermark: watermarkText,
-    page: !isEpub && page ? page - 1 : undefined,
-    chapter: isEpub ? (chapter ?? 0) : undefined,
-    max_width: maxWidth,
-    max_height: Math.round(maxWidth * 1.5),
-    output_format: isEpub ? 'html' : 'jpeg',
-    forensic_mark: isEpub ? params.buyerAddress : undefined,
-    viewport_width: isEpub ? (viewportWidth || 680) : undefined,
-  };
+  // Backend dispatch:
+  //   - JS-backed view: cekBase64 is set; pass it to the renderer which
+  //     does AES-GCM decrypt internally (legacy path, unchanged).
+  //   - WASM-backed view: cekBase64 is undefined because the CEK lives
+  //     inside `ddrm-decrypt`. Decrypt here via `sessionView.decryptAsset`
+  //     (which delegates to ddrm-decrypt — CEK stays in linear memory)
+  //     and pass plaintext to the renderer in `render_only` mode. The
+  //     renderer skips its decrypt step and routes straight to the MIME
+  //     dispatcher. CEK containment is preserved end-to-end.
+  let rendererInput: Buffer;
+  let command: RendererCommand;
+  if (cekBase64 === undefined) {
+    const ivBytes = Buffer.from(params.iv, 'base64');
+    rendererInput = await sessionView.decryptAsset(encryptedBytes, ivBytes);
+    command = {
+      cek_b64: '',
+      iv_b64: '',
+      mime_type: mime,
+      mode: 'render_only',
+      watermark: watermarkText,
+      page: !isEpub && page ? page - 1 : undefined,
+      chapter: isEpub ? (chapter ?? 0) : undefined,
+      max_width: maxWidth,
+      max_height: Math.round(maxWidth * 1.5),
+      output_format: isEpub ? 'html' : 'jpeg',
+      forensic_mark: isEpub ? params.buyerAddress : undefined,
+      viewport_width: isEpub ? (viewportWidth || 680) : undefined,
+    };
+  } else {
+    const paddedCek = cekBase64.length % 4 === 0 ? cekBase64 : cekBase64 + '='.repeat(4 - (cekBase64.length % 4));
+    rendererInput = encryptedBytes;
+    command = {
+      cek_b64: paddedCek,
+      iv_b64: params.iv,
+      mime_type: mime,
+      watermark: watermarkText,
+      page: !isEpub && page ? page - 1 : undefined,
+      chapter: isEpub ? (chapter ?? 0) : undefined,
+      max_width: maxWidth,
+      max_height: Math.round(maxWidth * 1.5),
+      output_format: isEpub ? 'html' : 'jpeg',
+      forensic_mark: isEpub ? params.buyerAddress : undefined,
+      viewport_width: isEpub ? (viewportWidth || 680) : undefined,
+    };
+  }
 
   const wasmBinary = await loadRendererBinary(wasmRuntime);
-  const output = await wasmRuntime.executeRenderer(wasmBinary, command, encryptedBytes, {
+  const output = await wasmRuntime.executeRenderer(wasmBinary, command, rendererInput, {
     timeoutMs: 60000,
   });
 
@@ -2320,14 +2403,21 @@ async function ethCallAdapter(tx: { to: `0x${string}`; data: `0x${string}` }): P
 
 /**
  * POST /api/storage/lit/begin-session
- * Body: { chainId?: number, ttlSeconds?: number }
- * Returns: { sessionId, delegationCanonical, expiresAt }
+ * Body: { chainId?: number, ttlSeconds?: number, backend?: 'js' | 'wasm' }
+ * Returns: { sessionId, delegationCanonical, expiresAt, backend }
  *
  * Backend generates the P-256 session keypair. The client never sees the
  * private key. `ownerAddress` comes from the authenticated PC2 session —
  * we never trust the request body for it. The client must have the user's
  * wallet sign `delegationCanonical` (`personal_sign`) and submit it to
  * `/lit/complete-session` to receive the bearer token.
+ *
+ * The optional `backend` selector picks which holder owns the session's
+ * private key — `'js'` (default, WebCrypto + FileSessionStore) or `'wasm'`
+ * (ddrm-decrypt linear memory). The selector is included verbatim inside
+ * `delegationCanonical` so the wallet signature binds it; an attacker
+ * cannot downgrade by stripping the field between sign and submit. The
+ * default flips to `'wasm'` in Phase 5 of DDRM-DECRYPT-WASM.
  */
 router.post('/lit/begin-session', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -2337,19 +2427,40 @@ router.post('/lit/begin-session', authenticate, async (req: AuthenticatedRequest
       return;
     }
 
-    const { chainId, ttlSeconds } = req.body || {};
+    const { chainId, ttlSeconds, backend: requestedBackend } = req.body || {};
+
+    // Validate backend selector — anything other than the two known values
+    // is a client bug, not a fallback. Default to 'wasm' now that Phase 5
+    // of DDRM-DECRYPT-WASM has landed: WASM-backed sessions can satisfy
+    // /skills/install (decryptAssetTwoLayer), /lit/secure-view (renderViaWASM
+    // via the renderer's render_only mode), and /media (segment dispatch on
+    // MediaSession.wasmRequestHandle). Set `PC2_DDRM_BACKEND=js` env override
+    // or pass `backend: 'js'` explicitly to fall back to the JS path.
+    const ENV_BACKEND = (process.env.PC2_DDRM_BACKEND === 'js' || process.env.PC2_DDRM_BACKEND === 'wasm')
+      ? (process.env.PC2_DDRM_BACKEND as 'js' | 'wasm')
+      : undefined;
+    let backend: 'js' | 'wasm' = ENV_BACKEND ?? 'wasm';
+    if (requestedBackend !== undefined) {
+      if (requestedBackend !== 'js' && requestedBackend !== 'wasm') {
+        res.status(400).json({ error: 'invalid_backend', message: 'backend must be "js" or "wasm"' });
+        return;
+      }
+      backend = requestedBackend;
+    }
 
     const { sessionService } = await import('../services/session/BackendSessionService.js');
     const result = await sessionService.createSession({
       ownerAddress: walletAddress,
       chainId: Number.isFinite(chainId) ? Number(chainId) : undefined,
       ttlSeconds: Number.isFinite(ttlSeconds) ? Math.max(60, Number(ttlSeconds)) : undefined,
+      backend,
     });
 
     res.json({
       sessionId: result.sessionId,
       delegationCanonical: result.delegationCanonical,
       expiresAt: result.expiresAt,
+      backend,
       maxDelegationWindowSeconds: MAX_DELEGATION_WINDOW_SECONDS,
       requestFreshnessWindowSeconds: REQUEST_FRESHNESS_WINDOW_SECONDS,
     });

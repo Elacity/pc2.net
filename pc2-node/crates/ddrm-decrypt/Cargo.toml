@@ -1,0 +1,66 @@
+[package]
+name = "ddrm-decrypt"
+version = "0.1.0"
+edition = "2021"
+description = "WASM-contained dDRM decrypt runtime — owns P-256 session keys and CEK; CEK never crosses the FFI boundary"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "ddrm-decrypt"
+path = "src/main.rs"
+
+[dependencies]
+# P-256 ECDSA (signing) + ECDH (envelope unwrap)
+p256 = { version = "0.13", default-features = false, features = ["ecdsa", "ecdh", "arithmetic", "pkcs8"] }
+elliptic-curve = { version = "0.13", default-features = false, features = ["sec1"] }
+ecdsa = { version = "0.16", default-features = false, features = ["signing", "verifying"] }
+sha2 = { version = "0.10", default-features = false }
+rand_core = { version = "0.6", features = ["getrandom"] }
+# wasm32-wasip1 satisfies getrandom via WASI's `random_get` — std feature is on
+# (default) so the WASI backend selects automatically. Do NOT disable default
+# features here; with `default-features = false` getrandom 0.2 panics on
+# wasm32-wasip1 the first time RNG is touched (manifests as `unreachable` trap
+# in OsRng::random).
+getrandom = "0.2"
+
+# AES-CBC (envelope unwrap) + AES-CTR (CENC sample decrypt) + AES-GCM (Chipotle full-asset)
+aes = "0.8"
+ctr = "0.9"
+cbc = { version = "0.1", features = ["alloc"] }
+cipher = { version = "0.4", features = ["block-padding", "alloc"] }
+aes-gcm = { version = "0.10", default-features = false, features = ["aes", "alloc"] }
+
+# Hex/base64 surface helpers
+hex = { version = "0.4", default-features = false, features = ["alloc"] }
+base64 = { version = "0.22", default-features = false, features = ["alloc"] }
+
+# Secret zeroing
+zeroize = { version = "1", features = ["zeroize_derive"] }
+
+# UUID for sessionId
+uuid = { version = "1", default-features = false, features = ["v4", "rng-getrandom"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
+
+# Release-shape build that preserves DWARF debug info so VS Code's
+# `ms-vscode.wasm-dwarf-debugging` extension (or Chrome DevTools) can map
+# WASM frames back to Rust source while the binary runs inside pc2-node.
+# `opt-level = 0` is intentional — the optimizer rewrites variable layouts
+# and inlines aggressively, making debug stepping nearly useless. Build via
+# `bash pc2-node/scripts/build-wasm.sh ddrm-decrypt --debug` which also
+# skips the `wasm-opt` strip pass.
+[profile.release-debug]
+inherits = "release"
+opt-level = 0
+debug = true
+strip = false
+lto = false
+codegen-units = 16

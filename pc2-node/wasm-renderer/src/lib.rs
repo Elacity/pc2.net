@@ -164,6 +164,17 @@ fn process_files_inner(command_json: &str, encrypted_bytes: &[u8]) -> (RenderRes
         return process_decrypt_only(&cmd, encrypted_bytes);
     }
 
+    // Render-only mode: input is ALREADY plaintext (decrypted by the caller).
+    // Skip AES-GCM decrypt and route straight to the renderer. Used when the
+    // caller holds the CEK in a place that cannot be exposed across the FFI
+    // boundary (e.g. `ddrm-decrypt`'s WASM linear memory): the caller calls
+    // `sessionView.decryptAsset()` first and hands us the resulting bytes
+    // with no `cek_b64`/`iv_b64`. The renderer never sees the key in this
+    // mode — CEK containment is preserved end-to-end for the WASM backend.
+    if cmd.mode.as_deref() == Some("render_only") {
+        return route_render_raw(&cmd, encrypted_bytes);
+    }
+
     // Step 1: Decrypt using CEK + IV from command, encrypted bytes from file
     let mut plaintext = match decrypt::aes_gcm_decrypt_raw(&cmd.cek_b64, &cmd.iv_b64, encrypted_bytes) {
         Ok(data) => data,

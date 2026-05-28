@@ -36,6 +36,8 @@ Thumbs.db
 
 # IDE
 .vscode/
+!.vscode/launch.json
+!.vscode/tasks.json
 .idea/
 
 # Secrets / API keys (never commit)

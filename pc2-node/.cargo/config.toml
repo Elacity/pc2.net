@@ -23,6 +23,9 @@ panic = "abort"
 [profile.release.package.cenc-decrypt]
 opt-level = 3
 
+[profile.release.package.ddrm-decrypt]
+opt-level = 3
+
 [profile.release.package.cenc-encrypt]
 opt-level = 3
 

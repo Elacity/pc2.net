@@ -418,12 +418,16 @@ router.post('/init', authenticate, requireSecureViewSession, async (req: SecureV
     // `hasAccessByContentId(del.ownerAddress, kid)`. Buyer address is encoded
     // in `del.ownerAddress` — no separate `coveredAddresses` field.
     const sessionView = req.secureViewSession!.view;
-    const cekBase64 = await recoverMediaCEK(litParams, sessionView);
-    logger.info(`[media/init] CEK recovered in ${Date.now() - requestStart}ms`);
+    const cekHandle = await recoverMediaCEK(litParams, sessionView);
+    logger.info(`[media/init] CEK recovered in ${Date.now() - requestStart}ms (backend=${cekHandle.kind})`);
 
-    // 4. Create session
+    // 4. Create session. The handle is either a base64 CEK string (JS
+    //    backend, /segment will hand it to cenc-decrypt) or a ddrm-decrypt
+    //    L2 request handle (WASM backend, /segment will hand it to
+    //    ddrm-decrypt directly). Both live for the playback duration.
     const session = mediaSessionManager.create({
-      cekBase64,
+      cekBase64: cekHandle.kind === 'js' ? cekHandle.cekBase64 : undefined,
+      wasmRequestHandle: cekHandle.kind === 'wasm' ? cekHandle.requestHandle : undefined,
       mpd,
       mpdBaseUrl,
       channel,
@@ -563,13 +567,29 @@ router.post('/segment', authenticate, requireSecureViewSession, async (req: Secu
     // Phase 2-D-helpers: route handler reads wasmRuntime from app.locals.
     const wasmRuntime = req.app.locals.wasmRuntime as WASMRuntime;
 
-    // Decrypt + strip via WASM (combined: decrypt samples then remove senc/saiz/saio boxes)
-    const cleanSegment = await decryptSegmentViaWASM(
-      segmentBytes,
-      session.cekBase64,
-      wasmRuntime,
-      initSegForTrack,
-    );
+    // Decrypt + strip via WASM. Dispatch on which decrypt handle the
+    // MediaSession holds (set at /media/init based on the session view's
+    // backend). Both paths produce the same output: decrypted segment with
+    // CENC encryption-metadata boxes stripped, ready for the player.
+    let cleanSegment: Buffer;
+    if (session.wasmRequestHandle !== undefined) {
+      const { WasmDdrmDecryptRuntime } = await import('../services/wasm/WasmDdrmDecryptRuntime.js');
+      cleanSegment = await WasmDdrmDecryptRuntime.get().requestDecryptSegment(
+        session.wasmRequestHandle,
+        initSegForTrack ?? null,
+        segmentBytes,
+        true,
+      );
+    } else if (session.cekBase64) {
+      cleanSegment = await decryptSegmentViaWASM(
+        segmentBytes,
+        session.cekBase64,
+        wasmRuntime,
+        initSegForTrack,
+      );
+    } else {
+      throw new Error('MediaSession holds neither cekBase64 nor wasmRequestHandle');
+    }
 
     res.setHeader('Content-Type', 'video/mp4');
     res.setHeader('Content-Length', String(cleanSegment.length));
@@ -1082,6 +1102,20 @@ async function decryptSegmentViaWASM(
  * The Lit Action's `hasAccessByContentId(del.ownerAddress, kid)` check is
  * the access gate — the session's wallet signature binds buyer→session key.
  */
+/**
+ * Discriminated handle describing how the /segment route should perform
+ * AES-CTR decryption on the encrypted media segments.
+ *
+ * - `js`   — CEK lives in Node heap on the BackendSessionView (`cekBase64`).
+ *            /segment passes it to `cenc-decrypt` WASM (legacy path).
+ * - `wasm` — CEK lives in `ddrm-decrypt` WASM linear memory, identified by
+ *            an opaque L2 `requestHandle`. /segment calls
+ *            `WasmDdrmDecryptRuntime.requestDecryptSegment(handle, init, seg)`.
+ */
+type MediaCekHandle =
+  | { kind: 'js'; cekBase64: string }
+  | { kind: 'wasm'; requestHandle: number };
+
 async function recoverMediaCEK(
   litParams: {
     litCiphertext: string;
@@ -1094,8 +1128,8 @@ async function recoverMediaCEK(
     rpc: string;
     litBackend: string;
   },
-  session: import('./chipotle-client.js').BackendSessionView,
-): Promise<string> {
+  session: import('./chipotle-client.js').BackendSessionView | import('./chipotle-client.js').WasmSessionView,
+): Promise<MediaCekHandle> {
   const { recoverCEKEnvelope } = await import('./chipotle-client.js');
 
   const envelope = await recoverCEKEnvelope(
@@ -1112,15 +1146,27 @@ async function recoverMediaCEK(
     session,
   );
 
-  // Legacy short payload: plaintext CEK ≤ 32 bytes — return as-is.
+  // Legacy short payload: plaintext CEK ≤ 32 bytes — JS-only path.
   if (envelope.length <= 32) {
     logger.info(`[Media] Legacy plaintext CEK (${envelope.length} bytes) — returning as-is`);
-    return envelope.toString('base64');
+    return { kind: 'js', cekBase64: envelope.toString('base64') };
   }
 
   await session.unwrapEnvelope(envelope);
-  // CEK lives in session._cekBase64 (Node heap only). Do not log or forward.
-  return session.cekBase64;
+
+  if ('cekBase64' in session) {
+    // JS backend: CEK lives in session._cekBase64 (Node heap). Do not log or forward.
+    return { kind: 'js', cekBase64: session.cekBase64 };
+  }
+
+  // WASM backend: CEK lives in ddrm-decrypt's L2 keyed by the request handle.
+  // The handle outlives this request (2h L2 TTL in WASM) so /segment can
+  // reuse it without re-running the Lit action.
+  const handle = session.requestHandle;
+  if (handle === null) {
+    throw new Error('recoverMediaCEK: WasmSessionView returned null requestHandle after unwrapEnvelope');
+  }
+  return { kind: 'wasm', requestHandle: handle };
 }
 
 // ── Media Encoding Pipeline ──────────────────────────────────────────────────

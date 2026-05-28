@@ -35,7 +35,15 @@ export interface RendererCommand {
     max_width?: number;
     max_height?: number;
     output_format?: 'jpeg' | 'webp' | 'png' | 'html';
-    mode?: 'decrypt_only';
+    /**
+     * `decrypt_only`  — decrypt CEK+IV against ciphertext, return plaintext (no render).
+     * `render_only`   — input is ALREADY plaintext; skip the AES-GCM step, route to
+     *                    the renderer directly. `cek_b64`/`iv_b64` are ignored and may
+     *                    be empty strings. Used by the WASM-backed session path where
+     *                    the CEK lives in `ddrm-decrypt` linear memory and the caller
+     *                    has already decrypted via `sessionView.decryptAsset()`.
+     */
+    mode?: 'decrypt_only' | 'render_only';
     /** Buyer wallet address — encoded as zero-width Unicode watermark in EPUB text. */
     forensic_mark?: string;
     /** Preferred reader pane width in CSS pixels (EPUB reflowable). */

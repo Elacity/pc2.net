@@ -160,6 +160,7 @@ export class FileSessionStore implements ISessionStore {
     const nowSec = Math.floor(Date.now() / 1000);
     let restored = 0;
     let expired = 0;
+    let wasmDropped = 0;
     for (const name of files) {
       if (!name.endsWith('.json')) continue;
       const path = join(this.dir, name);
@@ -171,6 +172,18 @@ export class FileSessionStore implements ISessionStore {
           expired++;
           continue;
         }
+        // WASM-backed sessions hold their private key in `ddrm-decrypt`
+        // linear memory; that state is gone after a process restart, so any
+        // record on disk is unrecoverable. Drop it proactively rather than
+        // serving stale entries that fail every request with `session_token
+        // _invalid`. The client re-bootstraps on its next request — the
+        // wallet prompt is the unavoidable cost of the WASM backend's
+        // "key never crosses FFI" guarantee.
+        if (session.backend === 'wasm') {
+          rmSync(path, { force: true });
+          wasmDropped++;
+          continue;
+        }
         this.mem.set(session);
         restored++;
       } catch (err: any) {
@@ -178,8 +191,8 @@ export class FileSessionStore implements ISessionStore {
         try { rmSync(path, { force: true }); } catch { /* ignore */ }
       }
     }
-    if (restored || expired) {
-      logger.info(`Loaded ${restored} session(s); pruned ${expired} expired`);
+    if (restored || expired || wasmDropped) {
+      logger.info(`Loaded ${restored} session(s); pruned ${expired} expired, ${wasmDropped} wasm-backed (unrecoverable after restart)`);
     }
   }
 }
@@ -187,21 +200,46 @@ export class FileSessionStore implements ISessionStore {
 // ── StoredSession ─────────────────────────────────────────────────────────────
 
 /**
+ * Backend that holds the session's private key material.
+ *
+ * - `'js'`: WebCrypto-managed P-256 key. `privateKeyJwk` / `privateKeyRaw`
+ *   contain the secret bytes. Sessions survive process restarts via
+ *   `FileSessionStore`.
+ * - `'wasm'`: `ddrm-decrypt` WASM-managed P-256 key. The private key lives
+ *   only in WASM linear memory; `privateKeyJwk` / `privateKeyRaw` are absent.
+ *   Sessions do **not** survive process restarts — the client re-bootstraps
+ *   when `session_lookup` returns null. The selector is included in the
+ *   wallet-signed canonical delegation so it cannot be downgraded.
+ */
+export type SessionBackend = 'js' | 'wasm';
+
+/**
  * Serializable session record. `curve + privateKeyRaw` is the portable
- * resurrection format — any P-256 implementation can reconstruct the
- * keypair. `privateKeyJwk` is the Node WebCrypto convenience format.
+ * resurrection format for the `'js'` backend — any P-256 implementation can
+ * reconstruct the keypair. `privateKeyJwk` is the Node WebCrypto convenience
+ * format. For the `'wasm'` backend both are absent because the private key
+ * never leaves WASM linear memory.
  */
 export interface StoredSession {
-  /** Equals `publicKeyHex` (P-256 uncompressed `0x04||X||Y`, 65 bytes). */
+  /**
+   * For `'js'` backend: equals `publicKeyHex` (P-256 uncompressed
+   * `0x04||X||Y`, 65 bytes). For `'wasm'` backend: a UUID v4 generated
+   * inside WASM (`wasm.session_create()` → `sessionId`).
+   */
   id: string;
   /** Explicit curve identifier — always `'P-256'` for now. */
   curve: 'P-256';
+  /**
+   * Which backend owns the private key. Forward-compat: records written
+   * before this field existed are treated as `'js'` on load.
+   */
+  backend?: SessionBackend;
   /** 65-byte uncompressed point hex (`0x04||X||Y`). */
   publicKeyHex: string;
-  /** Node.js WebCrypto convenience format. */
-  privateKeyJwk: JsonWebKey;
-  /** 32-byte big-endian private scalar, hex (no `0x` prefix) — language-agnostic. */
-  privateKeyRaw: string;
+  /** Present only for `'js'` backend. */
+  privateKeyJwk?: JsonWebKey;
+  /** 32-byte big-endian private scalar, hex (no `0x` prefix). Present only for `'js'` backend. */
+  privateKeyRaw?: string;
   /** Checksummed — from PC2 auth context, never from request body. */
   ownerAddress: string;
   /** Opaque bearer token (32 random bytes hex); `''` until confirmed. */
@@ -244,22 +282,52 @@ export class BackendSessionService {
     ownerAddress: string;
     chainId?: number;
     ttlSeconds?: number;
+    /**
+     * Which backend owns the session's private key. Defaults to `'js'`.
+     * The selector is included in `delegationCanonical` so the wallet
+     * signature binds it — an attacker cannot downgrade by stripping the
+     * field between sign and submit.
+     */
+    backend?: SessionBackend;
   }): Promise<{ sessionId: string; delegationCanonical: string; expiresAt: number }> {
-    const { subtle } = globalThis.crypto;
-
-    const kp = await subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
-    const rawPub = new Uint8Array(await subtle.exportKey('raw', kp.publicKey));
-    const publicKeyHex = '0x' + Buffer.from(rawPub).toString('hex');
-    const privateKeyJwk = await subtle.exportKey('jwk', kp.privateKey);
-    if (typeof privateKeyJwk.d !== 'string') {
-      throw new Error('BackendSessionService.createSession: generated JWK is missing private scalar `d`');
-    }
-    // `d` is base64url big-endian 32-byte scalar — hex for language-agnostic portability.
-    const privateKeyRaw = Buffer.from(privateKeyJwk.d, 'base64url').toString('hex');
-
+    const backend: SessionBackend = params.backend ?? 'js';
     const nowSec = Math.floor(Date.now() / 1000);
     const ttl = Math.min(params.ttlSeconds ?? MAX_DELEGATION_TTL_SECONDS, MAX_DELEGATION_TTL_SECONDS);
+
+    let sessionId: string;
+    let publicKeyHex: string;
+    let privateKeyJwk: JsonWebKey | undefined;
+    let privateKeyRaw: string | undefined;
+
+    if (backend === 'wasm') {
+      // WASM owns the private key. We import dynamically so this service
+      // does not pull in the WASM runtime when the JS backend is the only
+      // one ever used in this process.
+      const { WasmSessionView } = await import('../../api/chipotle-client.js');
+      const created = await WasmSessionView.createNew();
+      sessionId = created.sessionId;
+      publicKeyHex = created.publicKeyHex;
+      // privateKey* intentionally undefined — key never leaves WASM.
+    } else {
+      const { subtle } = globalThis.crypto;
+      const kp = await subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+      const rawPub = new Uint8Array(await subtle.exportKey('raw', kp.publicKey));
+      publicKeyHex = '0x' + Buffer.from(rawPub).toString('hex');
+      sessionId = publicKeyHex;
+      privateKeyJwk = await subtle.exportKey('jwk', kp.privateKey);
+      if (typeof privateKeyJwk.d !== 'string') {
+        throw new Error('BackendSessionService.createSession: generated JWK is missing private scalar `d`');
+      }
+      // `d` is base64url big-endian 32-byte scalar — hex for language-agnostic portability.
+      privateKeyRaw = Buffer.from(privateKeyJwk.d, 'base64url').toString('hex');
+    }
+
     const delegation = {
+      // `backend` is part of the signed canonical payload so the wallet
+      // signature binds the choice. Wave 1 readers that don't know about
+      // the field will see it as extra data — harmless under EIP-191
+      // personal_sign which signs the raw JSON.
+      backend,
       chainId: params.chainId ?? DEFAULT_CHAIN_ID,
       domain: DELEGATION_DOMAIN,
       expiresAt: nowSec + ttl,
@@ -271,8 +339,9 @@ export class BackendSessionService {
     const delegationCanonical = canonicalize(delegation);
 
     this.store.set({
-      id: publicKeyHex,
+      id: sessionId,
       curve: 'P-256',
+      backend,
       publicKeyHex,
       privateKeyJwk,
       privateKeyRaw,
@@ -283,7 +352,29 @@ export class BackendSessionService {
       createdAt: nowSec,
       expiresAt: delegation.expiresAt,
     });
-    return { sessionId: publicKeyHex, delegationCanonical, expiresAt: delegation.expiresAt };
+    logger.info(`Created session ${sessionId.substring(0, 14)}… backend=${backend} owner=${delegation.ownerAddress.substring(0, 10)}…`);
+    return { sessionId, delegationCanonical, expiresAt: delegation.expiresAt };
+  }
+
+  /**
+   * Resurrect the right `ISessionView` / `ICencDecryptor` impl for a stored
+   * record. Returns `null` for unknown/expired tokens or — for the WASM
+   * backend — when `wasm.session_lookup` no longer has the session (typically
+   * a process restart since session creation).
+   *
+   * Callers should treat a `null` result as `401 session_token_invalid`;
+   * clients re-bootstrap on that signal.
+   */
+  async getSessionView(token: string) {
+    const stored = this.store.getByToken(token);
+    if (!stored) return null;
+    const backend: SessionBackend = stored.backend ?? 'js';
+    if (backend === 'wasm') {
+      const { WasmSessionView } = await import('../../api/chipotle-client.js');
+      return WasmSessionView.fromStoredSession(stored);
+    }
+    const { BackendSessionView } = await import('../../api/chipotle-client.js');
+    return BackendSessionView.fromStoredSession(stored);
   }
 
   /**
@@ -333,7 +424,14 @@ export class BackendSessionService {
     }
     const nowSec = Math.floor(Date.now() / 1000);
     const ttl = Math.min(params.ttlSeconds ?? MAX_DELEGATION_TTL_SECONDS, MAX_DELEGATION_TTL_SECONDS);
+    // Carry forward the original backend selector into the renewed
+    // canonical payload. Without this, the wallet's renew signature would
+    // not bind the backend choice and an attacker could replay a sig
+    // captured under one backend against the other. The selector itself
+    // cannot be changed mid-session — renew preserves the original.
+    const backend: SessionBackend = session.backend ?? 'js';
     const delegation = {
+      backend,
       chainId: params.chainId ?? DEFAULT_CHAIN_ID,
       domain: DELEGATION_DOMAIN,
       expiresAt: nowSec + ttl,

@@ -82,12 +82,19 @@ async function apiFetch(path, body, extraHeaders) {
 // attaches it as `X-SecureView-Session` on every secure-content request.
 const SECURE_VIEW_SIGN_TIMEOUT_MS = 60000;
 
-function requestSessionTokenFromParent() {
+function requestSessionTokenFromParent(opts) {
   const provider = window.pc2Wallet
     || (window.ethereum && window.ethereum.isPC2WalletBridge ? window.ethereum : null);
   if (!provider || typeof provider.request !== 'function') {
     return Promise.reject(new Error('No PC2 wallet bridge available (window.pc2Wallet missing)'));
   }
+  // Forward `refresh: true` to the parent so it clears its cached token AND
+  // the IndexedDB record before bootstrapping a fresh session. Without this
+  // the parent hands back the same stale token after a 401 — the retry
+  // would fail with the identical `session_token_invalid` and surface to
+  // the user. (Bug discovered while tracking down "session_token_invalid
+  // most of the time" reports during dev server restarts.)
+  const refresh = !!(opts && opts.refresh);
   return new Promise(function (resolve, reject) {
     let settled = false;
     const timer = setTimeout(function () {
@@ -98,7 +105,7 @@ function requestSessionTokenFromParent() {
 
     provider.request({
       method: 'pc2_secureView_sign',
-      params: [{}],
+      params: [{ refresh: refresh }],
     }).then(function (bundle) {
       if (settled) return;
       settled = true;
@@ -121,9 +128,14 @@ function requestSessionTokenFromParent() {
 // IndexedDB and handles pre-emptive renewal, but caching here avoids an
 // RPC round-trip per segment fetch.
 let __secureViewToken = null;
-async function getSecureViewHeaders() {
-  if (!__secureViewToken) {
-    __secureViewToken = await requestSessionTokenFromParent();
+async function getSecureViewHeaders(opts) {
+  // Pass `opts = { refresh: true }` after a 401 — that propagates to the
+  // parent's `pc2_secureView_sign` so the parent clears its own cache AND
+  // the IndexedDB token before re-running the bootstrap (wallet prompt).
+  // Without forwarding refresh, the parent would hand back the same stale
+  // token and the retry would fail with the same error.
+  if (!__secureViewToken || (opts && opts.refresh)) {
+    __secureViewToken = await requestSessionTokenFromParent(opts || {});
   }
   return { 'X-SecureView-Session': __secureViewToken };
 }
@@ -138,9 +150,10 @@ async function mediaInit(buildBody) {
   const headers = await getSecureViewHeaders();
   let res = await apiFetch('/api/media/init', buildBody(), headers);
   if (res.status === 401) {
-    // Token expired or revoked — refresh once and retry.
+    // Token expired or revoked — force the parent to drop its cached token
+    // (and IndexedDB record) and re-bootstrap, then retry.
     invalidateSecureViewToken();
-    const retryHeaders = await getSecureViewHeaders();
+    const retryHeaders = await getSecureViewHeaders({ refresh: true });
     res = await apiFetch('/api/media/init', buildBody(), retryHeaders);
   }
   return res;
@@ -341,9 +354,10 @@ async function fetchSegmentWithRetry(trackIndex, segmentNumber, init) {
       let res = await apiFetch('/api/media/segment', body, segHeaders);
 
       if (res.status === 401) {
-        // Secure-view token expired or rotated — refresh and retry once.
+        // Secure-view token expired or rotated — force the parent to
+        // bootstrap a fresh session (wallet prompt) and retry once.
         invalidateSecureViewToken();
-        segHeaders = await getSecureViewHeaders();
+        segHeaders = await getSecureViewHeaders({ refresh: true });
         res = await apiFetch('/api/media/segment', body, segHeaders);
       }
 

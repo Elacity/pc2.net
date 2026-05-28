@@ -22,7 +22,7 @@
 
 import type { NextFunction, Response } from 'express';
 import type { AuthenticatedRequest } from '../middleware.js';
-import { BackendSessionView } from '../chipotle-client.js';
+import type { BackendSessionView, WasmSessionView } from '../chipotle-client.js';
 import {
   sessionService,
   type StoredSession,
@@ -31,10 +31,16 @@ import { createLogger } from '../../utils/logger.js';
 
 const logger = createLogger('SecureViewMiddleware');
 
+/**
+ * Either backend's view. Both implement `ISessionView` + `ICencDecryptor`;
+ * downstream handlers depend on the union, not the concrete class.
+ */
+export type SecureViewSessionView = BackendSessionView | WasmSessionView;
+
 export interface SecureViewRequest extends AuthenticatedRequest {
   secureViewSession?: {
     stored: StoredSession;
-    view: BackendSessionView;
+    view: SecureViewSessionView;
   };
 }
 
@@ -93,7 +99,16 @@ export async function requireSecureViewSession(
   }
 
   try {
-    const view = await BackendSessionView.fromStoredSession(stored);
+    // The factory dispatches on `stored.backend`. For the WASM backend it
+    // returns `null` when `wasm.session_lookup` has lost the session
+    // (typically a process restart between createSession and this request);
+    // surface that as the same `session_token_invalid` signal the client
+    // already handles by re-bootstrapping.
+    const view = await sessionService.getSessionView(token);
+    if (!view) {
+      res.status(401).json({ error: 'session_token_invalid' });
+      return;
+    }
     req.secureViewSession = { stored, view };
     res.setHeader('X-SecureView-Session', 'verified');
     next();

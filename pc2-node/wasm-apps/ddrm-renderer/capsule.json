@@ -4,7 +4,7 @@
   "description": "AES-GCM decrypt + render (image/text/PDF/code/EPUB/CBZ) for dDRM content. 1.1.2 adds EPUB copy-lockdown (user-select:none, print blocked, drag-save blocked), asterism styling, paged-mode scaffolding.",
   "target": "wasm32-wasip1",
   "binary": "ddrm-renderer.wasm",
-  "sha256": "da8f05e09eda5f62b46bd6c1a84fae5cbf30e57a0e79f27bab435d8715197991",
+  "sha256": "329c8a4614207d1aad47391519571594e0dbc2e318e8ef8be5a9007a196aeb9f",
   "capabilities": [
     "drm:decrypt",
     "drm:render",

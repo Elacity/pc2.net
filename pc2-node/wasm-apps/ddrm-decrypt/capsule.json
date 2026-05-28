@@ -1,0 +1,25 @@
+{
+  "name": "ddrm-decrypt",
+  "version": "0.1.0",
+  "description": "WASM-contained dDRM decrypt runtime \u2014 owns P-256 session keys and CEK; CEK never crosses the FFI boundary.",
+  "target": "wasm32-wasip1",
+  "instantiation": "long-lived",
+  "exports": [
+    "alloc",
+    "dealloc",
+    "session_create",
+    "session_get_session_id",
+    "session_get_public_key",
+    "session_sign",
+    "session_unwrap_envelope",
+    "session_lookup",
+    "session_drop",
+    "request_decrypt_chunk",
+    "request_decrypt_segment",
+    "request_decrypt_asset",
+    "request_drop",
+    "debug_session_count",
+    "debug_request_count"
+  ],
+  "sha256": "420375014069d9133f35826ea3497f813e77613161b6ec390412c2a34ac2b54f"
+}

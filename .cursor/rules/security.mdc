@@ -1,0 +1,277 @@
+---
+description: Security rules for any code that touches the dDRM decryption pipeline, secure-view sessions, Content Encryption Keys (CEKs), or the Lit Action contract. Applies to all new code and bugfixes in pc2-node and its WASM crates.
+alwaysApply: true
+---
+
+# Security Policy — dDRM, Sessions, CEK Containment
+
+> **Authoritative companion docs** (read before changing anything in this area):
+> - [`docs/core/DDRM_DECRYPT_RUNTIME.md`](../../docs/core/DDRM_DECRYPT_RUNTIME.md) — architecture, retry chain, file map.
+> - [`docs/core/DDRM_SESSION_ARCHITECTURE.md`](../../docs/core/DDRM_SESSION_ARCHITECTURE.md) — server-owned P-256 session model (predecessor).
+> - [`docs/core/CHIPOTLE_V3_PROTOCOL.md`](../../docs/core/CHIPOTLE_V3_PROTOCOL.md) — Lit Action protocol that decrypt depends on.
+> - `pc2-node/data/lit-actions/universal-decrypt-chipotle.js` — the deployed TEE verifier. Pin its CID in `chipotle-client.ts`.
+
+All rules below are **hard requirements**. Reviewer (human or AI) MUST reject any change that violates them. If a rule appears to block legitimate work, that means the design has a flaw — escalate, do not weaken the rule.
+
+---
+
+## 1. CEK containment invariants
+
+The Content Encryption Key (CEK) is the most sensitive piece of material in the system. Two backends exist (`'js'` and `'wasm'`); the WASM backend is the default and has the strictest containment.
+
+### 1.1 — No new CEK exit points
+
+**MUST NOT** introduce any new code that:
+- Returns a CEK (or its base64 / hex representation) from a function whose public type is anything other than `string` on `BackendSessionView._cekBase64` (the documented private field for the JS backend).
+- Reads `view.cekBase64` outside the two legacy sites that still depend on it (`storage.ts renderViaWASM` JS-backend branch, `media.ts recoverMediaCEK` JS-backend branch). New consumers MUST call `view.decryptAsset` / `view.decryptSegment` / `view.decryptChunk` instead.
+- Exposes the WASM L2 CEK across the FFI boundary. The `ddrm-decrypt` C ABI deliberately has **no `get_cek` export**. Adding one is a hard NO.
+- Logs the CEK, includes it in HTTP responses, embeds it in error messages, stores it in any persistent store other than `cekSessionCache` (JS backend) for ≤ 5 minutes.
+
+### 1.2 — Locality table (use this to audit any new code)
+
+| Place | JS backend | WASM backend |
+|---|---|---|
+| After `unwrapEnvelope` | `BackendSessionView._cekBase64` (V8 string) — private | `ddrm-decrypt::REQUESTS[h].cek: Zeroizing<Vec<u8>>` |
+| Cache | `cekSessionCache` (5 min TTL, LRU 1000 entries) | `wasmRequestCache` — caches the **handle only**, never the CEK itself |
+| Playback | `MediaSession.cekBase64` (V8 string) | `MediaSession.wasmRequestHandle` — handle only |
+| Renderer (`ddrm-renderer` WASM) | `RendererCommand.cek_b64` (passed via MemFS to the renderer) | **Never** — must use `mode: 'render_only'` with plaintext input |
+| `cenc-decrypt` WASM (legacy CENC path) | `command.cek_b64` (passed via MemFS) | **Never** — must use `ddrm-decrypt::media::decrypt_segment` |
+
+If a change adds a location not in this table, that change MUST be rejected or the table updated with the same review rigor as the original CEK refactor.
+
+### 1.3 — `Zeroizing` invariant inside `ddrm-decrypt`
+
+CEKs in the WASM crate live inside `RequestState.cek: Zeroizing<Vec<u8>>`. The `Zeroize` drop scrubs memory. **MUST NOT** copy CEK bytes out of that field into any non-zeroizing container (a plain `Vec<u8>`, a `String`, a serde-serialized field, etc.). The `with_request_cek` closure in `media.rs` is the only legitimate access pattern — borrow `&[u8]`, hand it to a cipher primitive, return only ciphertext or plaintext.
+
+### 1.4 — Sealed sessionView interface
+
+`ICencDecryptor` is the only sanctioned way for new consumers to use a session's decrypt capability. Method signatures **MUST NOT** be widened to accept or return CEK material. Any new method on `ICencDecryptor` must take plaintext / ciphertext + IV / key-id arguments and return plaintext / ciphertext — never the raw key.
+
+---
+
+## 2. Session lifecycle invariants
+
+### 2.1 — Bearer token is the only client-side secret
+
+The browser holds `{ token, sessionId, expiresAt }` in IndexedDB. **MUST NOT** persist or transmit anything else to the client that could be used to bypass the server's session check (no private keys, no envelopes, no CEKs, no Lit Action params signed with the session key).
+
+### 2.2 — Wallet signature is the only ownership ground truth
+
+`delegationCanonical` must be signed by the user's wallet via `personal_sign` (or EIP-1271 for smart accounts). The Lit Action re-runs `ecrecover` inside the TEE — server-side checks are defense-in-depth but **MUST NOT** be the only check. Removing the wallet signature step (or accepting a server-issued substitute) is a hard NO.
+
+### 2.3 — Signed `backend` selector
+
+The `backend: 'js' | 'wasm'` field MUST be included verbatim inside `delegationCanonical` before it is wallet-signed. The wallet signature binds the backend choice; an attacker cannot strip the field to downgrade. `renewSession` MUST carry the original backend forward into the renewed canonical payload — backend is immutable for the life of a session.
+
+### 2.4 — Bearer token issuance gating
+
+`/lit/complete-session` MUST verify `ecrecover(delegationSig, delegationCanonical) === stored.ownerAddress` before issuing a token. Issuing a token without this check is a hard NO.
+
+### 2.5 — Middleware authority
+
+`requireSecureViewSession` is the only authorized loader of session state in HTTP handlers. Handlers MUST consume `req.secureViewSession.view` from the middleware; they **MUST NOT** call `BackendSessionView.fromStoredSession` / `WasmSessionView.fromStoredSession` directly. Bypassing the middleware bypasses the token / owner / expiry / backend-dispatch checks.
+
+### 2.6 — Owner-address derivation
+
+`ownerAddress` MUST come from the authenticated user context (`req.user.wallet_address` in the PC2 auth middleware), never from the request body. Trusting client-supplied addresses lets any authenticated user impersonate any owner.
+
+### 2.7 — Restart semantics for WASM-backed sessions
+
+WASM-backed sessions cannot survive a Node restart (private key is in linear memory). `FileSessionStore.loadAll` MUST drop those records on startup. **MUST NOT** add a code path that serves a WASM-backed `StoredSession` after the process has restarted without first re-verifying `wasm.session_lookup(sessionId) !== null`.
+
+---
+
+## 3. Lit Action contract
+
+The Lit Action runs inside the Lit TEE and is identified by a pinned IPFS CID (`UNIVERSAL_DECRYPT_CID` in `chipotle-client.ts`). The action verifies six things; all six MUST be honoured by the client / server pair, in addition to whatever defense-in-depth checks the server runs:
+
+1. `canonicalize(del) === delegationRaw` and `canonicalize(req) === requestRaw` (canonical round-trip equality).
+2. `del.domain === DELEGATION_DOMAIN`, `req.domain === REQUEST_DOMAIN`, `del.chainId === jsParams.chainId`, `req.actionIpfsId === actionIpfsId`, `req.kid === normalizedKid`.
+3. Freshness: clock skew on `del.issuedAt`, `now > del.expiresAt`, `del.expiresAt - del.issuedAt > MAX_DELEGATION_WINDOW_SECONDS`, `|now - req.requestedAt| > REQUEST_FRESHNESS_WINDOW_SECONDS`.
+4. `ecrecover(delegationSig, delegationCanonical) === del.ownerAddress` (or EIP-1271 fallback).
+5. `verifyWebCrypto({name:'ECDSA', hash:'SHA-256'}, del.sessionPublicKey, requestRaw, requestSig)` — request signed by the session keypair.
+6. `hasAccessByContentId(toChecksum(del.ownerAddress) ∪ smartAccount, kid)` — on-chain access.
+
+### 3.1 — Signature format
+
+ECDSA-P256-SHA256 signatures sent to the Lit Action **MUST** be raw IEEE P1363 (`r || s`, exactly 64 bytes for P-256). DER-encoded signatures will fail with `req_sig_invalid`. The WASM crate uses `signing_key.sign(payload).to_bytes()` (raw); WebCrypto's `subtle.sign({name:'ECDSA', hash:'SHA-256'}, ...)` also returns raw. **MUST NOT** change `ddrm-decrypt::session::sign` to return DER, and MUST NOT add a `.to_der()` conversion anywhere in the sign path.
+
+### 3.2 — Canonical JSON byte-equality
+
+`canonicalize` (in `chipotle-client.ts` and the Lit Action) sorts keys, strips whitespace, and is recursive. The two implementations are byte-identical by design. **MUST NOT** change either one without changing the other in the same commit and rebuilding the pinned Lit Action CID.
+
+### 3.3 — Lit Action CID rotation
+
+`UNIVERSAL_DECRYPT_CID` in `chipotle-client.ts` is the deployed action. **MUST NOT** rotate the CID without:
+- Updating the source at `pc2-node/data/lit-actions/universal-decrypt-chipotle.js`.
+- Pinning the new CID to IPFS.
+- Deploying the new CID.
+- Updating the constant in `chipotle-client.ts` in the same commit.
+
+### 3.4 — Per-request freshness
+
+Every per-asset request MUST include a fresh `requestNonce` (8 random bytes) and `requestedAt` within `REQUEST_FRESHNESS_WINDOW_SECONDS` of the Lit Action's clock. Reusing nonces across requests is a hard NO — even if the same kid is being decrypted twice, sign a fresh request.
+
+---
+
+## 4. Envelope unwrap invariants
+
+### 4.1 — ECDH key derivation
+
+The shared AES-256-CBC key is the 32-byte X-coordinate of `SK * ephPub` (P-256 ECDH), used **directly without a KDF**. This matches WebCrypto's `deriveKey({name:'ECDH'}, ..., {name:'AES-CBC', length:256})`. **MUST NOT** insert an HKDF or other derivation here without also updating the Lit Action's envelope-build code — they must remain symmetric.
+
+### 4.2 — Envelope binary layout is frozen
+
+The envelope wire format (`HEADER | ephPubKeyLen | ephPubKey | iv (v=0x03) | sigLen | sig | signerPub | encCekLen | encryptedCek`) is shared between `chipotle-client.ts::unwrapECDHEnvelope`, `ddrm-decrypt::envelope::parse`, and the Lit Action's envelope writer. Any change to the layout requires updating all three in lockstep AND rotating the Lit Action CID. **MUST NOT** introduce parser tolerance for "extra" or "missing" fields without that lockstep change.
+
+### 4.3 — PKCS#7 unpadding
+
+The AES-256-CBC decrypt MUST use strict PKCS#7 unpadding. Tolerating malformed padding (returning partial plaintext, returning padding bytes as-is) leaks oracle bits to a remote attacker. The `aes-gcm`/`cbc` crates' default behavior is correct here; **MUST NOT** swap them for a hand-rolled implementation.
+
+---
+
+## 5. Cryptographic primitives — DO NOT roll your own
+
+Use only the existing crate dependencies for crypto:
+
+| Primitive | Rust crate (in `ddrm-decrypt`) | JS (in `chipotle-client.ts`) |
+|---|---|---|
+| P-256 ECDSA sign/verify | `p256::ecdsa` | `crypto.subtle.{sign,verify}` |
+| P-256 ECDH | `p256::ecdh` | `crypto.subtle.deriveKey` |
+| AES-256-CBC | `cbc::Decryptor<aes::Aes256>` + Pkcs7 | `crypto.subtle.decrypt({name:'AES-CBC'})` |
+| AES-256-GCM | `aes_gcm::Aes256Gcm` | `crypto.createDecipheriv('aes-256-gcm')` |
+| AES-128-CTR | `ctr::Ctr128BE<aes::Aes128>` (via `cenc::`) | `cenc-decrypt` WASM |
+| Hash | `sha2::Sha256` (transitively) | `crypto.createHash('sha256')` / `crypto.subtle.digest` |
+| Random | `OsRng` (WASI `random_get`) | `crypto.randomBytes` / `crypto.getRandomValues` |
+
+**MUST NOT** introduce a new dependency providing the same primitive (e.g. `ring`, `libsodium`, a different `aes` variant) without explicit approval — diverging crates make the security review surface larger.
+
+**MUST NOT** hand-roll AES, ECDSA, ECDH, hash, or RNG. Period.
+
+---
+
+## 6. Cache hygiene
+
+### 6.1 — Cache TTL ordering
+
+The JS-side caches MUST have TTLs strictly shorter than the WASM L2 TTL:
+
+- `cekSessionCache`: 5 min (JS-only).
+- `wasmRequestCache`: 5 min (handle cache).
+- `ddrm-decrypt` L2: 2 hours.
+
+This ordering guarantees we never serve a cached handle whose WASM-side state has already expired. **MUST NOT** raise the JS-side TTLs above the WASM L2 TTL.
+
+### 6.2 — Cache key includes session identity (WASM)
+
+`wasmRequestCache` keys MUST include `sessionId` because WASM handles are scoped to a `WasmDdrmDecryptRuntime` instance. Two sessions decrypting the same `(kid, buyer)` pair MUST have separate handles. Keying only on `(kid, buyer)` would let session A's request handle be served to session B — a cross-session leak.
+
+### 6.3 — Memory bounds
+
+All caches MUST have an LRU eviction policy with a hard cap (`CEK_CACHE_MAX_ENTRIES = 1000`). Unbounded caches in a long-running process are denial-of-service surface.
+
+### 6.4 — Admin flush hooks
+
+The existing `POST /api/storage/lit/flush-cek-cache` admin endpoint flushes `cekSessionCache`. If future code introduces a new CEK / handle cache, that endpoint MUST be updated to flush it as well. **MUST NOT** add a cache that has no admin flush path — revocation cannot reach it.
+
+---
+
+## 7. Client / iframe rules
+
+### 7.1 — `refresh` flag must propagate through every hop
+
+A 401 `session_token_invalid` triggers `signRequest({ refresh: true })` from the iframe. Every hop in the chain MUST forward the flag verbatim:
+
+```
+iframe (viewer.js / player.js)
+  └─ params: [{ refresh: true }]
+     └─ pc2-wallet-bridge.js: pc2_secureView_sign handler
+        └─ sv.signRequest({ kid, actionIpfsId, refresh })
+           └─ pc2-secure-view.js: signRequest()
+              └─ if (refresh) revoke() + bootstrap()
+```
+
+Two real bugs (now fixed) dropped this flag at hops 2 and 3, breaking the entire retry chain. Any new RPC, helper, or middleware that handles `refresh` MUST forward it explicitly — the default of "omit" was the bug.
+
+### 7.2 — Cache-buster bumps for client scripts
+
+Files under `pc2-node/src/wallet-bridge/` and `pc2-node/frontend/` MUST stay in sync (one is the source, the other is deployed). When changing either, bump the `?v=YYYYMMDDx` query param in both `pc2-node/frontend/index.html` AND `pc2-node/scripts/build-frontend.js`. Forgetting the bump leaves users on the cached old script — silent regression.
+
+Similarly: `pc2-node/data/test-apps/<app>/` and `pc2-node/data/installed-apps/<app>/` MUST stay in sync.
+
+### 7.3 — No CEK or session-secret in client logs
+
+Iframe scripts (`viewer.js`, `player.js`) MUST NOT log the bearer token, sessionId, or any decryption material to the browser console. Logging the token defeats its bearer-only secrecy.
+
+---
+
+## 8. Defense-in-depth server checks
+
+The Lit Action is the authoritative gate. Server-side mirror checks in `pc2-node/src/utils/secureViewSession.ts` are defense-in-depth — they catch malformed requests before spending a $0.01 Lit call and provide cleaner error codes. Server-side checks **MUST NOT** be relied upon for security correctness — the Lit Action runs them inside the TEE regardless. But they MUST stay in sync with the Lit Action's check set; removing one quietly creates a gap where a malformed request reaches the Lit Action and gets a less-informative error.
+
+If you change the Lit Action's check set, change the server's mirror in the same commit.
+
+---
+
+## 9. Build / deploy invariants
+
+### 9.1 — WASM sha pinning
+
+`WasmDdrmDecryptRuntime.ensureLoaded` verifies the binary's SHA-256 against `pc2-node/wasm-apps/ddrm-decrypt/capsule.json`. **MUST NOT** disable, weaken, or environment-variable-bypass this check. If a build step modifies the binary, it MUST also update the capsule manifest (which is what `scripts/build-wasm.sh` does automatically).
+
+### 9.2 — Debug builds are NOT for production
+
+`bash scripts/build-wasm.sh ddrm-decrypt --debug` produces a 30× larger binary with DWARF info and `opt-level=0`. Useful for `ms-vscode.wasm-dwarf-debugging` source-level debugging during development. **MUST NOT** be deployed to production. The unstripped binary leaks source paths and symbol names that aid attackers.
+
+### 9.3 — `panic = "abort"`
+
+The release profile of `ddrm-decrypt` MUST keep `panic = "abort"`. Unwinding panics expose internal state through stack walking; abort produces a clean WASM trap that the JS bridge handles via the reload-once boundary. The trap-and-reload path MUST stay in place — silent panic recovery would mask state corruption.
+
+---
+
+## 10. When you are about to violate one of these rules
+
+You are not. There is always another way. Examples:
+
+| Apparent need | Don't do this | Do this |
+|---|---|---|
+| Need CEK bytes outside `ddrm-decrypt` | Add a `get_cek` export | Add a `request_decrypt_<new-mode>` export that does the work inside WASM |
+| Need to skip wallet signing during testing | Remove the `ecrecover` check | Add a test-only Lit Action fork that doesn't deploy to mainnet |
+| Need a longer JS cache TTL | Raise above WASM L2's 2h | Raise the WASM L2 TTL first, in lockstep |
+| Need to log a CEK to debug | `console.log(cekBase64)` | Log the sha256 prefix of the CEK (`crypto.createHash('sha256').update(cek).digest('hex').slice(0, 12)`) — disambiguates without leaking |
+| Need to send the CEK to a different process | Serialize and POST it | Replicate the receiving process's behavior inside `ddrm-decrypt` |
+
+---
+
+## 11. PR checklist for any change in this area
+
+A change that touches **any** of the following requires explicit confirmation against this policy:
+
+- [ ] Files under `pc2-node/crates/ddrm-decrypt/`
+- [ ] `pc2-node/src/services/wasm/WasmDdrmDecryptRuntime.ts`
+- [ ] `pc2-node/src/services/session/BackendSessionService.ts`
+- [ ] `pc2-node/src/api/chipotle-client.ts`
+- [ ] `pc2-node/src/api/middleware/secureViewSession.ts`
+- [ ] `pc2-node/src/api/storage.ts` (any function in the `/lit/*` or `decryptAssetTwoLayer` / `renderViaWASM` / `recoverWithSession` path)
+- [ ] `pc2-node/src/api/media.ts` (any function in the `/media/*` or `recoverMediaCEK` / `decryptSegmentViaWASM` path)
+- [ ] `pc2-node/src/services/media/sessionManager.ts`
+- [ ] `pc2-node/wasm-renderer/src/lib.rs` (the renderer's mode dispatcher)
+- [ ] `pc2-node/data/lit-actions/universal-decrypt-chipotle.js`
+- [ ] `pc2-node/src/wallet-bridge/pc2-secure-view.js`
+- [ ] `pc2-node/src/wallet-bridge/pc2-wallet-bridge.js`
+- [ ] `pc2-node/data/test-apps/{ddrm-viewer,pc2-media-runtime}/`
+- [ ] `pc2-node/scripts/build-wasm.sh`
+
+For each touched file, verify against rules 1–9 above. When in doubt, escalate via task plan (`.cursor/tasks/<TASK-ID>/`) rather than committing.
+
+---
+
+## 12. Reading order for AI agents new to this area
+
+1. [`docs/core/DDRM_DECRYPT_RUNTIME.md`](../../docs/core/DDRM_DECRYPT_RUNTIME.md) §1–4 (mental model + flows).
+2. This security rules file in full.
+3. `pc2-node/src/api/chipotle-client.ts` lines around `ISessionView`, `ICencDecryptor`, `BackendSessionView`, `WasmSessionView`.
+4. `pc2-node/crates/ddrm-decrypt/src/lib.rs` (the C ABI surface — note the absence of `get_cek`).
+5. `pc2-node/data/lit-actions/universal-decrypt-chipotle.js` (the TEE verifier).
+
+Only after reading all five should you propose changes that touch the files in the PR checklist above.

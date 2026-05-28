@@ -255,6 +255,11 @@
     metaCid: null,
     draftId: null,
     intentId: null,
+    // Set by the post-mint capsule writer; consumed by the
+    // "Go to Asset" button on the success screen so we can deep-link
+    // the file manager to the freshly-saved .ddrm file.
+    lastMintCapsuleFolder: null,
+    lastMintCapsulePath: null,
   };
 
   // ── DOM refs ──────────────────────────────────────────
@@ -352,6 +357,13 @@
 
   function goToStep(n) {
     state.currentStep = n;
+    // Scroll to top on step change so the user lands at the top of the new
+    // panel rather than wherever the previous step's scroll left them.
+    try {
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    } catch (e) {
+      window.scrollTo(0, 0);
+    }
     var panels = document.querySelectorAll('.step-panel');
     var steps = document.querySelectorAll('#steps-bar .step');
 
@@ -5271,6 +5283,17 @@
           var safeName = (title || 'asset').replace(/[^a-zA-Z0-9 _\-]/g, '').substring(0, 80).trim() || 'asset';
           var capsulePath = capsuleFolder + '/' + safeName + '.ddrm';
 
+          // The user-visible size in their file manager is read from the
+          // capsule via `descriptor.pinnedSizeBytes` (UIItem.js,
+          // enrichDdrmSize). Without this field, the file manager falls
+          // back to the on-disk JSON descriptor size (~1 KB) and the
+          // user sees their 21 MB video listed as "1 KB" — confusing
+          // and inconsistent with older capsules. Use the original
+          // source file size: that's what the user thinks of as "their
+          // file's size", and for AES-GCM the encrypted blob is byte-
+          // for-byte the same as the plaintext (modulo a 16-byte tag).
+          var sourceFileSize = (state.selectedFile && state.selectedFile.size) || 0;
+
           var capsule = {
             schema: 'ddrm-capsule-v2',
             type: isMediaFile ? 'media' : 'non-media',
@@ -5284,6 +5307,7 @@
             thumbnail: imageUri || '',
             acquiredAt: new Date().toISOString(),
             acquiredBy: state.walletAddress,
+            pinnedSizeBytes: sourceFileSize,
           };
 
           if (isFreeContent) {
@@ -5343,6 +5367,13 @@
             }),
           });
           console.log('[Creator] .ddrm capsule saved:', capsulePath);
+          // Remember the destination so the success-screen "Go to Asset"
+          // button can deep-link the file manager. NB: dedupe_name=true
+          // means the actual saved name may differ slightly (e.g.
+          // "Title (2).ddrm"), but the FOLDER is stable, which is what
+          // openFolder needs.
+          state.lastMintCapsuleFolder = capsuleFolder;
+          state.lastMintCapsulePath = capsulePath;
         } catch (capsuleErr) {
           console.warn('[Creator] .ddrm capsule save failed (non-fatal):', capsuleErr.message);
         }
@@ -5380,6 +5411,8 @@
     state.draftId = null;
     state.intentId = null;
     state._mintResolve = null;
+    state.lastMintCapsuleFolder = null;
+    state.lastMintCapsulePath = null;
     clearFile();
     // Reset thumbnail picker UI
     if (dom.thumbPreviewImg) dom.thumbPreviewImg.src = '';
@@ -6102,6 +6135,47 @@
 
     dom.btnBackTo2.addEventListener('click', function () { goToStep(2); });
     dom.btnNewAsset.addEventListener('click', resetAll);
+
+    // ── Success-screen quick actions ──────────────────────
+    // "Go to Asset" reveals the freshly-saved .ddrm capsule in the
+    // file manager. The host shell exposes a top-level `openFolder`
+    // IPC channel (src/gui/src/IPC.js) that opens the explorer at
+    // the requested path — no puter SDK required.
+    var btnGoToAsset = document.getElementById('btn-go-to-asset');
+    if (btnGoToAsset) {
+      btnGoToAsset.addEventListener('click', function () {
+        var folder = state.lastMintCapsuleFolder;
+        if (!folder) {
+          showToast('Asset folder unavailable — capsule was not saved', 'error');
+          return;
+        }
+        try {
+          window.parent.postMessage({ msg: 'openFolder', path: folder }, '*');
+        } catch (err) {
+          console.warn('[Creator] openFolder postMessage failed:', err);
+          showToast('Could not open file manager', 'error');
+        }
+      });
+    }
+
+    // "Marketplace" launches the Elacity Market dApp so the creator
+    // can verify their listing. Same launchApp envelope used by
+    // app-center and elacity-market itself.
+    var btnOpenMarketplace = document.getElementById('btn-open-marketplace');
+    if (btnOpenMarketplace) {
+      btnOpenMarketplace.addEventListener('click', function () {
+        try {
+          window.parent.postMessage({
+            msg: 'launchApp',
+            appName: 'elacity-market',
+            windowTitle: 'Elacity Market',
+          }, '*');
+        } catch (err) {
+          console.warn('[Creator] launchApp(elacity-market) failed:', err);
+          showToast('Could not open Marketplace', 'error');
+        }
+      });
+    }
 
     var btnPublishLater = document.getElementById('btn-publish-later');
     if (btnPublishLater) {

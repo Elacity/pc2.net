@@ -353,6 +353,29 @@ router.post('/init', authenticate, requireSecureViewSession, async (req: SecureV
       }
     }
 
+    // PSSH bakes an `rpc` URL in at media-encode time so the Lit Action
+    // can run `gateway.hasAccessByContentId(...)`. For assets minted
+    // before the May 2026 RPC unification (RPC-PROXY-UNIFICATION-2026-05)
+    // that baked-in URL was the keyed Tenderly endpoint, which has since
+    // exhausted its quota and now returns HTTP 403. The Lit Action's
+    // `.catch(() => false)` swallows the network error and resolves to
+    // `access_denied` — even though the user is the legitimate on-chain
+    // holder. Symptom: "you need to purchase access tokens" on a video
+    // you just minted.
+    //
+    // Fix: override the PSSH-embedded RPC at the server boundary with
+    // our public proxy (caching + multi-RPC fallback + health tracker)
+    // or the current pool head. The RPC URL is NOT part of any
+    // signature — the Lit Action just uses it for the eth_call. So
+    // this is safe for legacy assets and gives them retroactive
+    // resilience. New assets carry our own URL in PSSH already, so
+    // this is a no-op for them.
+    const { getBaseRpcUrl: getBaseRpcUrlForLit, getPublicProxyUrl: getPublicProxyUrlForLit } = await import('../utils/rpc.js');
+    const overrideRpc = getPublicProxyUrlForLit() || getBaseRpcUrlForLit();
+    if (encData.rpc && encData.rpc !== overrideRpc) {
+      logger.info(`[media/init] Overriding PSSH-baked rpc: pssh=${encData.rpc} → server=${overrideRpc}`);
+    }
+
     const litParams: {
       litCiphertext: string;
       dataToEncryptHash: string;
@@ -371,7 +394,7 @@ router.post('/init', authenticate, requireSecureViewSession, async (req: SecureV
       authority: encData.authority || clientAuthority || '',
       chain: encData.chain || 'base',
       chainId: encData.chainId || 8453,
-      rpc: encData.rpc || '',
+      rpc: overrideRpc || encData.rpc || '',
       litBackend: (encData.litBackend as string) || LIT_BACKEND || 'datil',
     };
 

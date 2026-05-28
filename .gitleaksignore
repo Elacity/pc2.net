@@ -94,4 +94,4 @@ pc2-node/registry/v1.2/glide-finance-1.0.0.registry.json:generic-api-key:39
 #   .cursor/tasks/SUPERNODE-CLUSTER-SETUP/SUPERNODE-CLUSTER-SETUP.md
 #   .cursor/tasks/SUPERNODE-RPC-PROXY/SUPERNODE-RPC-PROXY.md (related
 #     migration pattern for the parallel RPC-proxy work)
-pc2-node/src/services/clusterPin.ts:generic-api-key:95
+pc2-node/src/services/clusterPin.ts:generic-api-key:96

@@ -475,6 +475,28 @@ async function main() {
       logger.info(`   Health check: http://localhost:${PORT}/health`);
       logger.info(`   API: http://localhost:${PORT}/api`);
 
+      // Surface missing-ffmpeg at boot instead of letting the user
+      // discover it mid-mint when dashPackager spawns and dies. The
+      // launcher (and any external supervisor reading our logs) can
+      // act on this warning before a real upload happens. Async +
+      // wrapped in try/catch so a probe failure can never crash boot.
+      void (async () => {
+        try {
+          const { spawn } = await import('child_process');
+          const probe = spawn('ffmpeg', ['-version'], { stdio: 'ignore' });
+          probe.on('error', () => {
+            logger.warn(
+              '⚠ ffmpeg not on PATH — video minting will fail. ' +
+              'Install with `brew install ffmpeg` (macOS) or ' +
+              '`apt-get install ffmpeg` (Linux), or use the ElastOS Launcher v1.2.8+ which installs it automatically.'
+            );
+          });
+          probe.on('exit', (code) => {
+            if (code === 0) logger.info('✓ ffmpeg available — video minting enabled');
+          });
+        } catch { /* probe is best-effort; never block boot */ }
+      })();
+
       // v1.2.7.13: emit a heartbeat the launcher (and any external
       // supervisor) can poll instead of tracking our PID. Also watches
       // for a restart-requested.flag so update.sh can trigger a clean

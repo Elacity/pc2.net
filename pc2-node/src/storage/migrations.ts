@@ -31,7 +31,7 @@ function findSchemaFile(): string {
   }
   throw new Error(`Schema file not found. Tried: ${SCHEMA_FILE} and ${sourceSchema}`);
 }
-const CURRENT_VERSION = 34;
+const CURRENT_VERSION = 35;
 
 interface Migration {
   version: number;
@@ -1427,6 +1427,38 @@ export function runMigrations(db: Database): void {
       }
     }
 
+    // Migration 35 (dDRM hardening, RELEASE-2026-05-28-DDRM-HARDENING):
+    // Add `kid` column to publish_drafts so draft-resume mints can emit the
+    // canonical KID as on-chain bytes16 contentId (matches the KID embedded
+    // in pssh/tenc on IPFS-pinned init segments). Without this column, the
+    // /api/drafts POST handler 500s as soon as the Creator app tries to save
+    // a video draft on any DB created before this migration shipped.
+    //
+    // Originally written as a second "Migration 34" in the wrong branch
+    // (else-if currentVersion === CURRENT_VERSION) so it never executed for
+    // users with DB version < 34. Renumbered to 35 and moved here on
+    // 2026-05-28 to actually run on every existing install.
+    // Tracked in MEDIA-2026-05-18-CENC-PSSH-LIBAV-COMPLIANCE.
+    if (currentVersion < 35) {
+      try {
+        log.info('📦 Running Migration 35: Add kid column to publish_drafts...');
+        db.exec('ALTER TABLE publish_drafts ADD COLUMN kid TEXT');
+        log.info('✅ Migration 35 complete: kid column added to publish_drafts');
+        recordMigration(db, 35);
+      } catch (error: any) {
+        if (String(error?.message || '').includes('duplicate column')) {
+          // Column already exists (fresh install via schema.sql, or manual
+          // patch). Treat as success and stamp the migration so we don't
+          // try again on every boot.
+          log.info('✅ Migration 35: kid column already present, stamping');
+          recordMigration(db, 35);
+        } else {
+          log.error(`❌ Migration 35 error: ${error.message}`);
+          throw error;
+        }
+      }
+    }
+
     log.info('✅ Migrations completed');
   } else if (currentVersion === CURRENT_VERSION) {
     // Even if migration version is current, check if FTS5 table exists
@@ -1488,22 +1520,6 @@ export function runMigrations(db: Database): void {
       }
     } catch (error: any) {
       log.warn('⚠️  Could not check/recreate FTS5 table:', error.message);
-    }
-
-    // Migration 34: Add `kid` column to publish_drafts so draft-resume mints
-    // can emit the canonical KID as on-chain bytes16 contentId (matches the
-    // KID embedded in pssh/tenc on IPFS-pinned init segments). Tracked in
-    // MEDIA-2026-05-18-CENC-PSSH-LIBAV-COMPLIANCE.
-    if (currentVersion < 34) {
-      try {
-        db.exec('ALTER TABLE publish_drafts ADD COLUMN kid TEXT');
-        log.info('✅ Migration 34: Added kid column to publish_drafts');
-      } catch (error: any) {
-        if (!error.message.includes('duplicate column')) {
-          log.warn(`⚠️  Migration 34 warning: ${error.message}`);
-        }
-      }
-      recordMigration(db, 34);
     }
 
     log.info('✅ Database schema is up to date');

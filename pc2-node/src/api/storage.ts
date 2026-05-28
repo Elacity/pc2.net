@@ -21,7 +21,7 @@ import {
   getClusterPinRetryQueueSnapshot,
   queryClusterPinStatus,
 } from '../services/clusterPin.js';
-import { getBaseRpcUrl, rotateBaseRpc } from '../utils/rpc.js';
+import { getBaseRpcUrl, getPublicProxyUrl, rotateBaseRpc } from '../utils/rpc.js';
 import {
   canonicalize,
   verifyDelegationEip1271,
@@ -1933,7 +1933,11 @@ async function recoverWithSession(
   const effectiveAuthority = DEFAULT_AUTHORITY;
   const effectiveChain = 'base';
   const effectiveChainId = 8453;
-  const effectiveRpc = getBaseRpcUrl();
+  // Prefer the operator-configured public proxy URL so the Lit Action's
+  // `gateway.hasAccessByContentId(...)` flows through our caching +
+  // multi-RPC failover proxy. Falsy = use pool head as before. See
+  // `.cursor/tasks/RPC-PROXY-UNIFICATION-2026-05`.
+  const effectiveRpc = getPublicProxyUrl() || getBaseRpcUrl();
   const effectiveBackend = params.litBackend || LIT_BACKEND;
 
   logger.info(`[Lit] Recover CEK: kid=${kid}, buyer=${buyerAddress}, cid=${encryptedDataCid}, backend=${effectiveBackend}`);
@@ -2771,7 +2775,10 @@ router.post('/lit/secure-view', authenticate, requireSecureViewSession, async (r
     // Free on-chain eth_call — avoids wasting a $0.01 Lit Action on the wrong address.
     // Server-controlled: RPC and authority are NEVER taken from client requests.
     const effectiveBody = { ...req.body };
-    const rpcUrl = getBaseRpcUrl();
+    // Prefer the operator-configured public proxy URL when set so the
+    // Lit Action's downstream chain reads benefit from cache + fallback.
+    // See `.cursor/tasks/RPC-PROXY-UNIFICATION-2026-05`.
+    const rpcUrl = getPublicProxyUrl() || getBaseRpcUrl();
     const authorityAddr = DEFAULT_AUTHORITY;
     let resolvedBuyer = buyerAddress;
 

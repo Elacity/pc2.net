@@ -12,6 +12,7 @@ import { verifyAntiSnipeSession } from './api/access-control.js';
 import { getNodeConfig } from './api/setup.js';
 import { getBaseUrl } from './utils/urlUtils.js';
 import { createLogger } from './utils/logger.js';
+import { getBaseRpcUrls, getHealthyBaseRpcUrls, markRpcUnhealthy, isHttp5xx } from './utils/rpc.js';
 const log = createLogger('static');
 
 // Data directory from environment or default
@@ -283,41 +284,24 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
   // read burst (sellersOf + listings + balanceOf on every asset detail open)
   // from the public `mainnet.base.org` rate limiter.
   //
-  // Ordering (first succeeds, rest are fallbacks):
-  //   1. llamarpc — ~300 req/min, very reliable, generous read budget
-  //   2. publicnode — ~200 req/min, geo-distributed, good uptime
-  //   3. Ankr public — ~100 req/min, wide geo coverage
-  //   4. BlockPI public — ~100 req/min, Asia-Pacific priority
-  //   5. mainnet.base.org (Coinbase official) — tight ~60 req/min, LAST
+  // Single source of truth: per RPC-PROXY-UNIFICATION-2026-05, the
+  // candidate list now comes from `utils/rpc.ts` — the same pool used
+  // by all server-side ethers calls and by the PSSH-embedded `rpc`
+  // value. Operators configure via `config.content_indexer.rpc_urls`
+  // (or env override `SUPERNODE_RPC_URLS` for prepend), and any
+  // supernode prepend is already applied by `initBaseRpcPool` at boot
+  // time. The previously-duplicated local hardcoded list (publicnode /
+  // ankr / blockpi / mainnet.base.org, plus separate supernode prepend)
+  // has been removed; whatever the operator configured for the rest of
+  // the node is what this proxy now serves.
   //
-  // mainnet.base.org was the first entry until 2026-04-28 when user
-  // reports of intermittent "price not showing" traced back to its throttle
-  // saturating and our JSON-wrapped-error fallback logic (prior to
-  // a3c599d6c) never failing over. With the fallback fix AND this reorder,
-  // most reads now hit llamarpc first and `mainnet.base.org` is only used
-  // if all three alternatives are down simultaneously (vanishingly rare).
-  //
-  // SUPERNODE_RPC_URLS (comma-separated env var) prepends authoritative
-  // supernode-backed endpoints ahead of the public community RPCs. When the
-  // supernode proxies are deployed (SUPERNODE-RPC-PROXY task), operators flip
-  // the env var on and no code change is required. The existing rate-limit /
-  // HTTP-error fallback logic transparently rolls to the public RPCs if any
-  // supernode URL misbehaves, so adding them at the front of the list is
-  // zero-risk.
-  const supernodeRpcUrlsEnv = (process.env.SUPERNODE_RPC_URLS || '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
-  const BASE_RPC_URLS = [
-    ...supernodeRpcUrlsEnv,
-    'https://base-rpc.publicnode.com',
-    'https://rpc.ankr.com/base',
-    'https://base.blockpi.network/v1/rpc/public',
-    'https://mainnet.base.org',
-  ];
-  if (supernodeRpcUrlsEnv.length > 0) {
-    log.info(`[rpc-proxy] ${supernodeRpcUrlsEnv.length} supernode RPC endpoint(s) prepended to BASE_RPC_URLS`);
-  }
+  // Ordering rationale lives at the top of `utils/rpc.ts`. mainnet.base.org
+  // was first until 2026-04-28 when its throttle saturated and our
+  // JSON-wrapped-error fallback never failed over (fix in a3c599d6c).
+  // With the fallback-fix + the post-task reorder, a key-less public
+  // RPC stays first and `mainnet.base.org` only gets traffic if every
+  // alternative is down simultaneously (vanishingly rare).
+  const BASE_RPC_URLS = getBaseRpcUrls();
 
   // Per-method cache TTLs (milliseconds). Methods not listed are not cached.
   //
@@ -418,7 +402,13 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
       m.includes('rate-limit') ||
       m.includes('rate limit') ||
       m.includes('too many requests') ||
-      m.includes('429')
+      m.includes('429') ||
+      // Tenderly: HTTP 200 OR HTTP 403 with `code:-32004 "You've reached
+      // the quota limit for your current plan."`. Without this branch the
+      // proxy would forward the JSON-200 quota error to the client as a
+      // legitimate response — same silent-fail surface that bit us in
+      // the May 2026 incident.
+      m.includes('quota')
     );
   }
 
@@ -441,7 +431,24 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
     const body = JSON.stringify(rpcReq);
     let lastError: string | null = null;
 
-    for (const rpcUrl of rpcUrls) {
+    // Skip URLs that have a live unhealthy mark from a previous request.
+    // For Base specifically, this is shared global state across BOTH
+    // this proxy and the server-side `baseRpcCall` rotation pool — a
+    // 5xx anywhere in pc2-node sidelines the URL everywhere. ESC has
+    // its own list and isn't affected by Base health marks.
+    const orderedUrls = chainKey === 'base'
+      ? (() => {
+          const healthy = getHealthyBaseRpcUrls();
+          const set = new Set(healthy);
+          // Preserve original order; the safety net inside
+          // `getHealthyBaseRpcUrls()` already returns the full list when
+          // every URL is sidelined simultaneously.
+          return rpcUrls.filter((u) => set.has(u));
+        })()
+      : rpcUrls;
+
+    for (const rpcUrl of orderedUrls) {
+      let httpStatus: number | undefined;
       try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 8000);
@@ -452,11 +459,23 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
           body,
           signal: controller.signal,
         });
+        httpStatus = upstream.status;
 
         clearTimeout(timeout);
 
         if (!upstream.ok) {
           lastError = `${rpcUrl}: HTTP ${upstream.status}`;
+          // 5xx / 429 / 408 / network = sideline this RPC for the
+          // cooldown so subsequent requests don't waste their first
+          // attempt on it. 4xx other than the rate/quota family is
+          // probably caller-error, don't sideline.
+          if (chainKey === 'base' && (isHttp5xx(httpStatus) || httpStatus === 429 || httpStatus === 408 || httpStatus === 403)) {
+            // 403 included specifically because Tenderly returns it
+            // for quota-exhausted keys (May 2026 incident). For other
+            // chains, skip the auto-sideline: ESC has fewer fallbacks
+            // and a misclassification would be more disruptive.
+            markRpcUnhealthy(rpcUrl);
+          }
           continue;
         }
 
@@ -466,6 +485,7 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
           const rlMsg = (data as { error?: { message?: string } }).error?.message ?? 'unknown';
           lastError = `${rpcUrl}: rate-limited (${rlMsg})`;
           log.info(`[rpc-proxy] ${chainKey} ${method ?? '?'} rate-limited on ${rpcUrl}, trying next fallback`);
+          if (chainKey === 'base') markRpcUnhealthy(rpcUrl);
           continue;
         }
 
@@ -476,7 +496,10 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
         res.json(data);
         return;
       } catch (err: any) {
+        // Transport-level failure (timeout, DNS, TCP reset). No HTTP
+        // status to inspect — assume the upstream is sick.
         lastError = `${rpcUrl}: ${err.message}`;
+        if (chainKey === 'base') markRpcUnhealthy(rpcUrl);
       }
     }
 

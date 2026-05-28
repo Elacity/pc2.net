@@ -116,6 +116,26 @@ export interface Config {
         chain_id?: number; // Base chain ID (default: 8453)
         chain_name?: string; // Chain name for Lit/wallet operations (default: "base")
         rpc_urls?: string[]; // Shared Base RPC pool with failover
+        // Optional: a publicly-reachable URL that points at THIS node's
+        // `/api/rpc/base` proxy. When set, the media-encode pipeline and
+        // the non-media Lit-encrypt path embed this URL into PSSH/access
+        // metadata so the Lit Action's on-chain access check goes through
+        // our caching, multi-RPC failover proxy instead of a single
+        // public RPC. Leave unset for nodes behind NAT — the existing
+        // public-RPC fallback continues to work in that case.
+        // Example for a public node: "https://try.pc2.net/api/rpc/base".
+        // See `.cursor/tasks/RPC-PROXY-UNIFICATION-2026-05` for the
+        // full design rationale and the incident that motivated it.
+        public_proxy_url?: string;
+        // Optional: how long (ms) an RPC URL is sidelined after a 5xx
+        // / quota / rate-limit error. While sidelined, both the
+        // `/api/rpc/base` proxy and the server-side `baseRpcCall` skip
+        // it on subsequent requests instead of wasting their first
+        // attempt on a known-failing upstream. Default: 60000 (60 s).
+        // Lower = faster retry of a recovering RPC. Higher = less load
+        // on a struggling RPC. Per Irzhy's design note: "ensure
+        // auto-rotate when constantly receiving 5xx error family".
+        rpc_unhealthy_cooldown_ms?: number;
     };
     content_indexer?: {
         enabled?: boolean; // Master toggle (default: true)

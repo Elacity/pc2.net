@@ -111,7 +111,18 @@ try {
     .split(',')
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
-  initBaseRpcPool(config.content_indexer?.rpc_urls, supernodeRpcUrls);
+  // Per RPC-PROXY-UNIFICATION-2026-05: when this node is publicly
+  // reachable, the operator can point `config.blockchain.public_proxy_url`
+  // at our own `/api/rpc/base`. The encode pipeline + non-media Lit path
+  // then embed THIS URL into PSSH/access conditions, so Lit Action
+  // access checks go through our caching + multi-RPC fallback proxy
+  // instead of a single public RPC. Falsy = preserve pre-task behavior.
+  initBaseRpcPool(
+    config.content_indexer?.rpc_urls,
+    supernodeRpcUrls,
+    config.blockchain?.public_proxy_url,
+    config.blockchain?.rpc_unhealthy_cooldown_ms,
+  );
 } catch (error) {
   logger.error('❌ Failed to load configuration:', error);
   process.exit(1);

@@ -18,6 +18,7 @@ import type { DatabaseManager, ContentCatalogItem } from '../storage/database.js
 import type { IPFSStorage } from '../storage/ipfs.js';
 import { getWASMRuntime } from './wasm/WASMRuntime.js';
 import type WASMRuntime from './wasm/WASMRuntime.js';
+import { isRpcHealthy, markRpcUnhealthy, isHttp5xx } from '../utils/rpc.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -329,18 +330,43 @@ export class ContentIndexerService {
     log.debug(`Rotated to RPC: ${this.getRpcUrl()}`);
   }
 
+  /**
+   * Advance `currentRpcIndex` past any URLs marked unhealthy by the shared
+   * `utils/rpc.ts` health tracker. Bails out after a full pool sweep so we
+   * never spin forever — if every URL is sidelined simultaneously, fall
+   * through and try anyway (cooldown might have expired for someone).
+   */
+  private skipUnhealthyRpcs(): void {
+    let skipped = 0;
+    while (!isRpcHealthy(this.getRpcUrl()) && skipped < this.config.rpcUrls.length) {
+      this.rotateRpc();
+      skipped++;
+    }
+  }
+
   private async rpcCall(method: string, params: any[]): Promise<any> {
     const maxAttempts = this.config.rpcUrls.length;
     let lastError: Error | null = null;
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      // Consult the shared health tracker before each attempt: a 5xx /
+      // quota error reported by the proxy or `baseRpcCall` should also
+      // make the indexer skip the same URL until the cooldown expires.
+      // Without this, every 5-min indexer scan wastes its first attempt
+      // on a known-failing upstream, and then doesn't propagate any
+      // status back to the shared tracker either.
+      this.skipUnhealthyRpcs();
+      const url = this.getRpcUrl();
+      let httpStatus: number | undefined;
+
       try {
-        const response = await fetch(this.getRpcUrl(), {
+        const response = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
           signal: AbortSignal.timeout(30000),
         });
+        httpStatus = response.status;
 
         if (!response.ok) {
           throw new Error(`RPC HTTP ${response.status}`);
@@ -354,7 +380,15 @@ export class ContentIndexerService {
         return json.result;
       } catch (error: any) {
         lastError = error;
-        log.debug(`RPC call failed on ${this.getRpcUrl()}: ${error.message}`);
+        log.debug(`RPC call failed on ${url}: ${error.message}`);
+        // Propagate failure into the shared health tracker so the proxy
+        // and `baseRpcCall` also skip this URL until the cooldown expires.
+        // Only sideline on HTTP 5xx / 429 / 408 / 403 (quota) / network
+        // errors — caller-side issues like a malformed request body
+        // shouldn't impugn the upstream.
+        if (httpStatus === undefined || isHttp5xx(httpStatus) || httpStatus === 429 || httpStatus === 408 || httpStatus === 403) {
+          markRpcUnhealthy(url);
+        }
         this.rotateRpc();
       }
     }

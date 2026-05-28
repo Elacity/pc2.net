@@ -30,7 +30,7 @@ const ELACITY_SYSTEM_ID = 'bf2c86c1d9ff4ab1b4be45ae4d99e1fe';
 
 import { getDecryptActionCid, getEncryptActionCid } from '../../api/chipotle-client.js';
 
-import { getBaseRpcUrl } from '../../utils/rpc.js';
+import { getBaseRpcUrl, getPublicProxyUrl } from '../../utils/rpc.js';
 
 // V3 AuthorityGateway on Base — must stay in lock-step with the same
 // constant in `storage.ts` and `chipotle-client.ts`. The env var override
@@ -43,8 +43,28 @@ import { getBaseRpcUrl } from '../../utils/rpc.js';
 // out updating all three call sites in lock-step.
 const DEFAULT_AUTHORITY = process.env.DDRM_AUTHORITY || '0x09dBe796f40ECEffEAccf243c3d758C4c1d8D87D';
 const DEFAULT_CHAIN_ID = parseInt(process.env.DDRM_CHAIN_ID || '8453', 10);
-// Env var override for PSSH-embedded RPC; falls back to shared pool
-const DEFAULT_RPC = process.env.DDRM_RPC || getBaseRpcUrl();
+
+/**
+ * Decide which RPC URL to bake into PSSH at encode time.
+ *
+ * Precedence (per RPC-PROXY-UNIFICATION-2026-05):
+ *   1. `DDRM_RPC` env var — explicit operator override.
+ *   2. `config.blockchain.public_proxy_url` (if set) — the publicly
+ *      reachable URL pointing at THIS node's `/api/rpc/base`. The Lit
+ *      Action's `gateway.hasAccessByContentId(...)` then flows through
+ *      our caching + multi-RPC failover proxy instead of a single
+ *      public RPC.
+ *   3. Pool head — current behavior for self-hosted nodes behind NAT.
+ *
+ * Evaluated per-encode (was a module-load-time `const` previously,
+ * which froze the URL at boot and never reflected `rotateBaseRpc()`).
+ */
+function getEncodeTimeRpc(): string {
+  if (process.env.DDRM_RPC) return process.env.DDRM_RPC;
+  const proxy = getPublicProxyUrl();
+  if (proxy) return proxy;
+  return getBaseRpcUrl();
+}
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -156,7 +176,7 @@ function buildProtectionData(kid: string, encryptResult: EncryptResult): PSSHPro
       litBackend: 'chipotle',
       chainId: DEFAULT_CHAIN_ID,
       authority: DEFAULT_AUTHORITY,
-      rpc: DEFAULT_RPC,
+      rpc: getEncodeTimeRpc(),
       kid: kid.startsWith('0x') ? kid : `0x${kid}`,
       dataToEncryptHash: encryptResult.dataToEncryptHash,
       ciphertext: encryptResult.ciphertext,

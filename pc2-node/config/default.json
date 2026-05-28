@@ -86,15 +86,25 @@
     "chain_id": 8453,
     "chain_name": "base",
     "rpc_urls": [
-      "https://mainnet.base.org",
       "https://base-rpc.publicnode.com",
-      "https://base.meowrpc.com"
+      "https://base.drpc.org",
+      "https://mainnet.base.org",
+      "https://base-mainnet.public.blastapi.io",
+      "https://base.meowrpc.com",
+      "https://1rpc.io/base"
     ]
   },
   "content_indexer": {
     "enabled": true,
     "scan_interval_minutes": 5,
-    "rpc_urls": ["https://mainnet.base.org", "https://base-rpc.publicnode.com", "https://base.meowrpc.com"],
+    "rpc_urls": [
+      "https://base-rpc.publicnode.com",
+      "https://base.drpc.org",
+      "https://mainnet.base.org",
+      "https://base-mainnet.public.blastapi.io",
+      "https://base.meowrpc.com",
+      "https://1rpc.io/base"
+    ],
     "max_blocks_per_scan": 10000,
     "metadata_fetch_concurrency": 3,
     "metadata_gateway_urls": ["https://ipfs.ela.city/ipfs/", "https://dweb.link/ipfs/", "https://cloudflare-ipfs.com/ipfs/"],

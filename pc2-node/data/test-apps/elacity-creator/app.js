@@ -1646,7 +1646,7 @@
     return { fee: decoded.fee, token: decoded.token };
   }
 
-  var BASE_RPC = 'https://mainnet.base.org';
+  var BASE_RPC = `${window.origin}/api/rpc/base`;
 
   async function rpcCall(to, data) {
     var resp = await fetch(BASE_RPC, {

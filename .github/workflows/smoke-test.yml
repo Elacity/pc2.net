@@ -217,7 +217,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           set -euo pipefail
-          echo "::group::apt-get canvas deps"
+          echo "::group::apt-get canvas + media-encode deps"
           sudo apt-get update
           sudo apt-get install -y \
             build-essential \
@@ -227,19 +227,20 @@ jobs:
             libgif-dev \
             librsvg2-dev \
             libpixman-1-dev \
-            pkg-config
+            pkg-config \
+            ffmpeg
           echo "::endgroup::"
 
       - name: Install canvas system libs (macOS)
         if: runner.os == 'macOS'
         run: |
           set -euo pipefail
-          echo "::group::brew canvas deps"
+          echo "::group::brew canvas + media-encode deps"
           # macos-latest typically ships these via brew already, but we
           # install explicitly so a runner-image change doesn't silently
           # break the build. brew install is idempotent — re-running on
           # an already-installed formula is a fast no-op (~1 s each).
-          brew install pkg-config cairo pango libpng jpeg giflib librsvg
+          brew install pkg-config cairo pango libpng jpeg giflib librsvg ffmpeg
           echo "::endgroup::"
 
       # A-7 + build-OOM defence in a single step.
@@ -931,7 +932,8 @@ jobs:
           apt-get install -y --no-install-recommends \
             curl ca-certificates git build-essential pkg-config \
             libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev \
-            librsvg2-dev libpixman-1-dev
+            librsvg2-dev libpixman-1-dev \
+            ffmpeg
           echo "::endgroup::"
 
           echo "::group::Node.js 20.x via NodeSource"

@@ -122,6 +122,11 @@ FROM node:20-alpine
 # - bash: required by wg-quick and awg-quick scripts
 # - iproute2: required by wg-quick for ip link/route management
 # - iptables: required by wg-quick for NAT/firewall rules
+# - ffmpeg: required by /api/media/encode (video minting). Without it,
+#   any Docker-based PC2 user (supernodes, self-hosters, public cloud)
+#   gets a 503 mid-mint. Installed alongside the other runtime deps so
+#   it's available the moment the container starts. Alpine's ffmpeg
+#   package includes libx264 (H.264) which is what the encoder uses.
 RUN apk add --no-cache \
     bubblewrap \
     tini \
@@ -130,6 +135,7 @@ RUN apk add --no-cache \
     bash \
     iproute2 \
     iptables \
+    ffmpeg \
     && rm -rf /var/cache/apk/*
 
 # Create non-root user for security

@@ -19,15 +19,21 @@
  * - Verifies with constant-time compare and TTL enforcement.
  * - Manages a single key on disk (mode 0600), generated on first call.
  *
- * Backwards compatibility (v1.2.1 ship)
- * -------------------------------------
- * The handler honours a kill-switch (env `FILE_URL_SIGNING_REQUIRED`,
- * default `false`). While the switch is OFF:
- *  - HMAC-shaped signatures verify normally.
+ * Secure-by-default (security.mdc)
+ * --------------------------------
+ * Signing is REQUIRED by default: only HMAC-valid + non-expired URLs are
+ * served. The launcher ships the node and its web GUI together, and every
+ * mint site (backend, filesystem, gateway) signs — and apps can only ever
+ * RECEIVE node-signed URLs (they hold no signing key), so they keep working.
+ *
+ * Operators with genuinely legacy/cached unsigned links can temporarily
+ * re-open the rollout-compat path with `FILE_URL_SIGNING_ALLOW_LEGACY=true`
+ * (or the historical `FILE_URL_SIGNING_REQUIRED=false`). While legacy is
+ * allowed:
+ *  - HMAC-shaped signatures still verify normally.
  *  - Anything else is treated as a legacy un-signed URL — served, but
- *    logged as `[file] legacy-unsigned` so we can confirm the desktop
- *    has switched over before flipping the switch ON (T+7d post v1.2.1).
- * When the switch is ON: only HMAC-valid + non-expired URLs are served.
+ *    logged as `[file] legacy-unsigned` so operators can confirm zero
+ *    legacy traffic before removing the escape hatch.
  */
 
 import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
@@ -119,13 +125,17 @@ export interface FileUrlVerifyResult {
 }
 
 /**
- * Whether the kill-switch is engaged. Defaults to OFF for the v1.2.1
- * ship so existing v1.1 desktops keep working during the rollout window.
- * Flip ON via env `FILE_URL_SIGNING_REQUIRED=true` after the desktop UI
- * has been updated (target: T+7d post v1.2.1).
+ * Whether signed `/file` URLs are mandatory. Secure-by-default: returns
+ * `true` unless an operator explicitly opts back into the legacy rollout-
+ * compat behaviour via `FILE_URL_SIGNING_ALLOW_LEGACY=true` (or the
+ * historical `FILE_URL_SIGNING_REQUIRED=false`). The escape hatch exists
+ * only for nodes still serving genuinely old/cached unsigned links.
  */
 export function isFileUrlSigningRequired(): boolean {
-  return String(process.env.FILE_URL_SIGNING_REQUIRED || '').toLowerCase() === 'true';
+  const allowLegacy =
+    String(process.env.FILE_URL_SIGNING_ALLOW_LEGACY || '').toLowerCase() === 'true' ||
+    String(process.env.FILE_URL_SIGNING_REQUIRED || '').toLowerCase() === 'false';
+  return !allowLegacy;
 }
 
 /**

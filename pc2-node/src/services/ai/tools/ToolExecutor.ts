@@ -12,6 +12,7 @@ import type { FilesystemManager } from '../../../storage/filesystem.js';
 import type { DatabaseManager } from '../../../storage/database.js';
 import { logger } from '../../../utils/logger.js';
 import { parseSkillFrontmatter } from '../../../utils/skill-parser.js';
+import { validateIntentFields, normalizeForDb } from '../../../utils/intentValidation.js';
 import { Server as SocketIOServer } from 'socket.io';
 import { broadcastItemAdded, broadcastItemRemoved, broadcastItemMoved, broadcastItemUpdated, broadcastToUser } from '../../../websocket/events.js';
 import { getGatewayService } from '../../gateway/index.js';
@@ -1819,15 +1820,18 @@ export class ToolExecutor {
             // Pull intent_id out separately; everything else is a field update
             const { intent_id, ...rawFields } = args as any;
 
-            // Normalise array fields → JSON strings for DB storage
-            const fields: any = { ...rawFields };
-            if (Array.isArray(fields.tags)) fields.tags = JSON.stringify(fields.tags);
-            if (Array.isArray(fields.royalty_partners)) {
-              // Server validation in api/intents.ts is the source of truth;
-              // here we only normalise. Sum-to-100 + address-shape checks
-              // are enforced when the row is fetched/edited via REST.
-              fields.royalty_partners = JSON.stringify(fields.royalty_partners);
+            // SECURITY (security.mdc): apply the SAME bounds the REST surface
+            // enforces (api/intents.ts) so the AI-tool write path cannot bypass
+            // category/access enums, copies ≤ 10000, price > 0, royalty
+            // sum-to-100, address shapes, etc. Shared validator = single source
+            // of truth.
+            const validationError = validateIntentFields(rawFields);
+            if (validationError) {
+              return { success: false, error: validationError };
             }
+
+            // Normalise array fields → JSON strings for DB storage
+            const fields: any = normalizeForDb(rawFields);
 
             if (intent_id === undefined || intent_id === null) {
               // Create

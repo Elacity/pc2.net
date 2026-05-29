@@ -16,14 +16,16 @@
  *      into their PSSH at encode time. We can't rewrite on-disk PSSH, so
  *      we OVERRIDE `litParams.rpc` at the server boundary.
  *   2. The override itself must resolve to a RESILIENT URL, not a single
- *      blind public RPC. `resolveLitAccessRpc()` resolves, most → least
- *      resilient:
+ *      blind public RPC — AND it must come ONLY from server-side sources.
+ *      `resolveLitAccessRpc()` resolves, most → least resilient:
  *        a. operator-pinned config.blockchain.public_proxy_url
- *        b. zero-config auto-route through THIS node's own public
- *           /api/rpc/base proxy (rotating + health-tracked + cached),
- *           derived from the request, guarded against loopback/LAN
- *        c. a currently-HEALTHY public RPC (skips recently-5xx/429
+ *        b. a currently-HEALTHY public RPC (skips recently-5xx/429
  *           upstreams), never the blind pool head
+ *      It must NEVER derive the URL from the inbound request. `Host` /
+ *      `X-Forwarded-Host` are client-controllable; deriving from them lets
+ *      an authenticated caller point the off-node access-check eth_call at
+ *      an attacker RPC that forges on-chain ownership → CEK released for
+ *      content they never bought (security.mdc; SEC audit 2026-05-29 H1).
  *
  * If a future refactor flattens this back to a single static RPC, the
  * intermittent "works on the 2nd try" playback failures return. There is
@@ -72,41 +74,48 @@ test('resolveLitAccessRpc prefers the operator-pinned public proxy first', () =>
   );
 });
 
-test('resolveLitAccessRpc auto-routes through this node\'s own /api/rpc/base', () => {
+test('SECURITY: resolveLitAccessRpc must NOT derive the RPC from the request', () => {
   const code = stripComments(readSource());
 
-  assert.ok(
-    /getBaseUrl\s*\(\s*req\s*\)/.test(code),
-    'resolveLitAccessRpc must derive this node\'s public origin from the ' +
-    'request via getBaseUrl(req) so playback that reaches us via our public ' +
-    'hostname auto-routes the Lit Action through our own proxy.',
-  );
+  // Locate the resolveLitAccessRpc body so we scope the assertions to it.
+  const fnStart = code.indexOf('function resolveLitAccessRpc');
+  assert.ok(fnStart >= 0, 'resolveLitAccessRpc must exist');
+  // Scope to the function's own body: from its signature to the first
+  // line-leading `}` (its closing brace — the inline destructure `}` is
+  // mid-line so it doesn't match). Avoids bleeding into the next handler,
+  // which legitimately references `req`.
+  const closeIdx = code.indexOf('\n}', fnStart);
+  assert.ok(closeIdx > fnStart, 'resolveLitAccessRpc must have a closing brace');
+  const fnSlice = code.slice(fnStart, closeIdx + 2);
 
   assert.ok(
-    /\/api\/rpc\/base/.test(code),
-    'resolveLitAccessRpc must build the `${origin}/api/rpc/base` proxy URL — ' +
-    'our rotating, health-tracked, cached RPC proxy. Without this the Lit ' +
-    'Action falls back to a single public RPC and playback fails intermittently.',
+    !/getBaseUrl\s*\(/.test(fnSlice),
+    'resolveLitAccessRpc must NOT call getBaseUrl() — it derives the host from ' +
+    'client-controllable Host / X-Forwarded-Host headers. A forged header would ' +
+    'point the off-node access-check eth_call at an attacker RPC that forges ' +
+    'ownership → CEK released for unowned content (SEC audit H1).',
+  );
+  assert.ok(
+    !/\breq\b/.test(fnSlice),
+    'resolveLitAccessRpc must not reference the request object at all — its ' +
+    'inputs must be server-side only (pinned proxy + healthy pool).',
+  );
+  assert.ok(
+    !/\/api\/rpc\/base/.test(fnSlice),
+    'resolveLitAccessRpc must not synthesise a `${origin}/api/rpc/base` URL from ' +
+    'the request. Operators that want the proxy set config.blockchain.public_proxy_url ' +
+    '(server-side), which getPublicProxyUrl() returns.',
   );
 });
 
-test('auto-route is guarded against loopback / LAN (Lit can\'t reach localhost)', () => {
+test('SECURITY: the client-host guard helper is gone (no request-derived path to guard)', () => {
   const code = stripComments(readSource());
-
   assert.ok(
-    /function\s+isPubliclyReachableHost\s*\(/.test(code),
-    'media.ts must define isPubliclyReachableHost(). The Lit network runs ' +
-    'OFF this node, so a localhost/192.168.x.x proxy URL is unreachable — we ' +
-    'must NOT auto-route to it, and must fall back to a public RPC instead.',
+    !/function\s+isPubliclyReachableHost\s*\(/.test(code),
+    'isPubliclyReachableHost must no longer exist — it only ever guarded the ' +
+    'removed request-derived auto-route. Re-introducing it implies the insecure ' +
+    'header-derived RPC path came back (SEC audit H1/M1).',
   );
-
-  // Must screen out at least loopback and the common RFC1918 ranges.
-  assert.ok(code.includes('127.0.0.1'), 'isPubliclyReachableHost must reject 127.0.0.1');
-  assert.ok(code.includes('localhost'), 'isPubliclyReachableHost must reject localhost');
-  assert.ok(code.includes('192\\.168') || code.includes('192.168'),
-    'isPubliclyReachableHost must reject 192.168.0.0/16');
-  assert.ok(code.includes('172\\.(1[6-9]') || code.includes('172.16'),
-    'isPubliclyReachableHost must reject the 172.16.0.0/12 range');
 });
 
 test('resolveLitAccessRpc falls back to a HEALTHY public RPC, not the blind pool head', () => {
@@ -124,7 +133,14 @@ test('litParams.rpc takes the resolved overrideRpc, not the PSSH-baked encData.r
 
   assert.ok(
     /overrideRpc\s*=\s*await\s+resolveLitAccessRpc\s*\(/.test(code),
-    'media/init must compute overrideRpc via `await resolveLitAccessRpc(req, ...)`.',
+    'media/init must compute overrideRpc via `await resolveLitAccessRpc(...)`.',
+  );
+
+  // The resolver takes ONLY the PSSH-baked rpc (server-side), never `req`.
+  assert.ok(
+    !/resolveLitAccessRpc\s*\(\s*req\b/.test(code),
+    'resolveLitAccessRpc must NOT be called with the request object — passing ' +
+    'req re-opens the client-header-derived RPC vulnerability (SEC audit H1).',
   );
 
   assert.ok(

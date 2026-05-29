@@ -2639,13 +2639,41 @@ router.post('/lit/revoke-session', authenticate, async (req: AuthenticatedReques
       res.status(400).json({ error: 'delegationNonce must be hex-encoded' });
       return;
     }
+
+    // SECURITY (security.mdc): bind the revoke to a session the CALLER owns.
+    // Without this, any authenticated user could revoke an arbitrary nonce
+    // and grief another owner's active session. We locate the caller's own
+    // session carrying this nonce and use its real expiry.
+    const callerWallet = req.user?.wallet_address?.toLowerCase();
+    const callerAlt = req.user?.smart_account_address?.toLowerCase();
+    const nonceLower = delegationNonce.toLowerCase();
+    const { sessionService } = await import('../services/session/BackendSessionService.js');
+    const ownedSession = sessionService.exportAll().find((s) => {
+      const ownerLower = s.ownerAddress.toLowerCase();
+      const ownedByCaller = ownerLower === callerWallet || (!!callerAlt && ownerLower === callerAlt);
+      if (!ownedByCaller) return false;
+      try {
+        const del = JSON.parse(s.delegationCanonical) as { nonce?: string };
+        return typeof del?.nonce === 'string' && del.nonce.toLowerCase() === nonceLower;
+      } catch {
+        return false;
+      }
+    });
+    if (!ownedSession) {
+      res.status(403).json({ error: 'delegation nonce not found for this session owner' });
+      return;
+    }
+
     const exp =
       Number.isFinite(expiresAt) && Number(expiresAt) > 0
         ? Number(expiresAt)
-        : Math.floor(Date.now() / 1000) + MAX_DELEGATION_WINDOW_SECONDS;
+        : ownedSession.expiresAt || Math.floor(Date.now() / 1000) + MAX_DELEGATION_WINDOW_SECONDS;
     revokeDelegation(delegationNonce as `0x${string}`, exp);
+    // Force-invalidate any cached CEK / WASM decrypt handle for this owner so
+    // the cutoff is immediate rather than lingering for the cache TTL.
+    const flushed = flushCEKCache({ buyerAddress: ownedSession.ownerAddress });
     logger.info(
-      `[SecureView.session] Revoked delegation nonce=${delegationNonce.substring(0, 10)}… by ${req.user?.wallet_address?.substring(0, 10)}…`,
+      `[SecureView.session] Revoked delegation nonce=${delegationNonce.substring(0, 10)}… by ${req.user?.wallet_address?.substring(0, 10)}… (flushed ${flushed} cache entr${flushed === 1 ? 'y' : 'ies'})`,
     );
     res.json({ ok: true });
   } catch (err: any) {

@@ -27,6 +27,7 @@ import {
   sessionService,
   type StoredSession,
 } from '../../services/session/BackendSessionService.js';
+import { isDelegationRevoked } from '../../utils/secureViewSession.js';
 import { createLogger } from '../../utils/logger.js';
 
 const logger = createLogger('SecureViewMiddleware');
@@ -96,6 +97,22 @@ export async function requireSecureViewSession(
     );
     res.status(403).json({ error: 'session_owner_mismatch' });
     return;
+  }
+
+  // Revocation gate (security.mdc). When the owner revokes a delegation via
+  // POST /lit/revoke-session it must stop working on this node IMMEDIATELY —
+  // not merely fail the (unused) defence-in-depth bundle verifier. The
+  // revoked nonce lives inside the wallet-signed canonical delegation, so we
+  // read it back here and reject before the session view is resurrected.
+  try {
+    const del = JSON.parse(stored.delegationCanonical) as { nonce?: string };
+    if (del?.nonce && isDelegationRevoked(del.nonce as `0x${string}`)) {
+      res.status(401).json({ error: 'session_revoked' });
+      return;
+    }
+  } catch {
+    // Malformed canonical delegation should never happen for a stored
+    // session; fall through and let getSessionView fail closed if it is bad.
   }
 
   try {

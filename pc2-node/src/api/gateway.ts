@@ -1013,8 +1013,20 @@ router.post('/skills/install', authenticate, requireSecureViewSession, async (re
       signature, issuer, actionCid,
     } = req.body;
 
-    if (!skillId || !kid || !litCiphertext || !dataToEncryptHash || !iv || !encryptedDataCid || !buyerAddress) {
-      res.status(400).json({ success: false, error: 'Missing required fields: skillId, kid, litCiphertext, dataToEncryptHash, iv, encryptedDataCid, buyerAddress' });
+    if (!skillId || !kid || !litCiphertext || !dataToEncryptHash || !iv || !encryptedDataCid) {
+      res.status(400).json({ success: false, error: 'Missing required fields: skillId, kid, litCiphertext, dataToEncryptHash, iv, encryptedDataCid' });
+      return;
+    }
+
+    // SECURITY (security.mdc): the buyer is the authenticated secure-view
+    // session owner, NEVER the request body. requireSecureViewSession has
+    // already proven this wallet signed the delegation and matches the auth
+    // context. Trusting body `buyerAddress` would let an authenticated user
+    // install a decrypted skill into ANOTHER wallet's namespace (filesystem
+    // write + installed_skills row) by passing a foreign address.
+    const ownerAddress = req.secureViewSession!.stored.ownerAddress;
+    if (buyerAddress && String(buyerAddress).toLowerCase() !== ownerAddress.toLowerCase()) {
+      res.status(403).json({ success: false, error: 'buyerAddress does not match the authenticated session owner' });
       return;
     }
 
@@ -1027,7 +1039,7 @@ router.post('/skills/install', authenticate, requireSecureViewSession, async (re
       return;
     }
 
-    logger.info(`[Gateway API] Installing skill "${skillId}" for ${buyerAddress}, kid=${kid}`);
+    logger.info(`[Gateway API] Installing skill "${skillId}" for ${ownerAddress}, kid=${kid}`);
 
     // Decrypt the SKILL.md via Lit Protocol (ownership verified on-chain inside Lit Action)
     const decryptParams: DecryptParams = {
@@ -1036,7 +1048,7 @@ router.post('/skills/install', authenticate, requireSecureViewSession, async (re
       iv,
       encryptedDataCid,
       kid,
-      buyerAddress,
+      buyerAddress: ownerAddress,
       authority,
       chainId,
       ...(signature && { signature }),
@@ -1061,13 +1073,13 @@ router.post('/skills/install', authenticate, requireSecureViewSession, async (re
 
     // Save to user filesystem at pc2/skills/{skillId}/SKILL.md
     const skillPath = `pc2/skills/${skillId}/SKILL.md`;
-    await filesystem.writeFile(skillPath, Buffer.from(skillContent, 'utf-8'), buyerAddress, {
+    await filesystem.writeFile(skillPath, Buffer.from(skillContent, 'utf-8'), ownerAddress, {
       mimeType: 'text/markdown',
     });
 
     // Record in installed_skills table
     db.insertInstalledSkill({
-      walletAddress: buyerAddress,
+      walletAddress: ownerAddress,
       skillId,
       kid,
       contentHash,
@@ -1080,7 +1092,7 @@ router.post('/skills/install', authenticate, requireSecureViewSession, async (re
     // Zero out decrypted bytes from memory
     decryptedBytes.fill(0);
 
-    logger.info(`[Gateway API] Skill "${skillId}" installed for ${buyerAddress} (hash: ${contentHash.slice(0, 12)}...)`);
+    logger.info(`[Gateway API] Skill "${skillId}" installed for ${ownerAddress} (hash: ${contentHash.slice(0, 12)}...)`);
 
     res.json({
       success: true,

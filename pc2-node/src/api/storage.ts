@@ -1773,6 +1773,9 @@ export function flushCEKCache(opts: { kid?: string; buyerAddress?: string } = {}
   if (!kid && !addr) {
     const n = cekSessionCache.size;
     cekSessionCache.clear();
+    // security.mdc §6.4: any cache that can serve a decrypt handle without a
+    // fresh access re-check MUST be flushed by the admin endpoint too.
+    wasmRequestCache.clear();
     cekCacheStats.manualFlushes += n;
     return n;
   }
@@ -1791,6 +1794,23 @@ export function flushCEKCache(opts: { kid?: string; buyerAddress?: string } = {}
       removed++;
     }
   }
+
+  // Mirror the targeted flush into the WASM handle cache. Keys there are
+  // `${sessionId}:${kid}:${buyerAddress}`; sessionId and address never contain
+  // ':' so the first/last separators bound the kid even if it embeds ':'.
+  for (const key of Array.from(wasmRequestCache.keys())) {
+    const firstSep = key.indexOf(':');
+    const lastSep = key.lastIndexOf(':');
+    if (firstSep === -1 || lastSep === firstSep) continue;
+    const entryKid = key.slice(firstSep + 1, lastSep);
+    const entryAddr = key.slice(lastSep + 1);
+    const kidMatch = !kid || entryKid === kid;
+    const addrMatch = !addr || entryAddr === addr;
+    if (kidMatch && addrMatch) {
+      wasmRequestCache.delete(key);
+    }
+  }
+
   cekCacheStats.manualFlushes += removed;
   return removed;
 }

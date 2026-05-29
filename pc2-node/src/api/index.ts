@@ -1513,17 +1513,35 @@ export function setupAPI(app: Express): void {
                 }
             }
 
-            // Cleanup pass: remove stale local: installs for any test-apps bundle
-            // that is no longer marked system (e.g. glide-finance, elastos-nft,
-            // supernode-manager, wallet-test from earlier boots).
+            // Cleanup pass: prune installs that should no longer be launchable.
             try {
                 const allInstalled = appInstallService.list();
+                const installedAppsDir = appInstallService.getAppsDir();
                 for (const inst of allInstalled) {
-                    if (!inst.cid?.startsWith('local:')) continue;
+                    // System bundles are re-synced fresh above — never prune them.
                     if (systemBundleNames.has(inst.app_name)) continue;
+
+                    // (a) Stale local: install for a test-apps bundle that is no
+                    //     longer marked system (e.g. glide-finance, elastos-nft,
+                    //     supernode-manager, wallet-test from earlier boots when
+                    //     they were briefly role:system).
+                    const isStaleLocalBundle = inst.cid?.startsWith('local:') === true;
+
+                    // (b) Orphaned install — the DB row survives but the app's
+                    //     on-disk files are gone (manual delete, partial/failed
+                    //     install, IPFS unpin). Launching it 404s and the window
+                    //     falls back to loading the PC2 root GUI ("an OS inside a
+                    //     window"). Prune regardless of cid scheme so it stops
+                    //     appearing in the launcher / dApp Centre. The user can
+                    //     reinstall it cleanly from the dApp store.
+                    const isOrphaned = !fs.existsSync(path.join(installedAppsDir, inst.app_name));
+
+                    if (!isStaleLocalBundle && !isOrphaned) continue;
+
                     try {
                         appInstallService.uninstall(inst.app_name);
-                        logger.info(`[API] 🧹 Removed stale auto-installed bundle: ${inst.app_name}`);
+                        const reason = isOrphaned ? 'orphaned (files missing)' : 'stale auto-installed bundle';
+                        logger.info(`[API] 🧹 Removed ${reason}: ${inst.app_name} (cid=${inst.cid})`);
                     } catch (err: any) {
                         logger.warn(`[API] ⚠️  Failed to clean up ${inst.app_name}: ${err.message}`);
                     }

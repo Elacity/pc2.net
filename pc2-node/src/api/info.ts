@@ -411,19 +411,19 @@ export function handleGetLaunchApps(req: Request, res: Response): void {
           // Get recent app names from database
           const recentAppNames = db.getRecentApps(session.wallet_address, 10);
           
-          // Map app names to full app objects with icons
+          // Map app names to full app objects with icons. `appMap` already
+          // contains every launchable app (hardcoded system apps + installed
+          // dApps from appInstallService.list()). A recent name that is NOT in
+          // appMap is therefore an app that has since been uninstalled or
+          // orphaned (files deleted) — surfacing it would put a dead tile in
+          // the start menu whose launch 404s and falls back to the PC2 root
+          // GUI ("an OS inside a window"). Skip those instead of fabricating a
+          // minimal entry.
           for (const appName of recentAppNames) {
             if (appMap[appName]) {
               recentApps.push(appMap[appName]);
             } else {
-              // App not in predefined list, create minimal entry with icon
-              recentApps.push({
-                name: appName,
-                title: appName.charAt(0).toUpperCase() + appName.slice(1).replace(/-/g, ' '),
-                uuid: `app-${appName}`,
-                icon: loadIconAsBase64(appName),
-                description: ''
-              });
+              logger.info(`[GetLaunchApps] Skipping recent app no longer installed: ${appName}`);
             }
           }
           

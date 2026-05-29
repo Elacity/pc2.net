@@ -253,7 +253,9 @@
         refresh: !!arg.refresh,
       })
         .then(function (bundle) {
-          console.log('[PC2 Bridge] OK pc2_secureView_sign | kid=' + arg.kid + ' | refresh=' + !!arg.refresh + ' | reqId=' + data.id);
+          // security.mdc §7.3: never log decryption-related material (the kid)
+          // to the page console; report presence only.
+          console.log('[PC2 Bridge] OK pc2_secureView_sign | kid=' + (arg.kid ? '<set>' : '<none>') + ' | refresh=' + !!arg.refresh + ' | reqId=' + data.id);
           respond({
             type: 'pc2-wallet-rpc-response',
             id: data.id, method: data.method, result: bundle

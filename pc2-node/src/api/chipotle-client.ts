@@ -1455,8 +1455,15 @@ export async function recoverCEKEnvelope(
 
   try {
     let effectiveCid = params.actionCid || UNIVERSAL_DECRYPT_CID;
-    assertAllowedDecryptCid(effectiveCid);
+    // Normalize known-good legacy decrypt CIDs to the canonical universal
+    // action BEFORE the allowlist gate. The remap keys are trusted legacy
+    // CIDs that resolve to UNIVERSAL_DECRYPT_CID, but they are NOT in
+    // LEGACY_DECRYPT_ACTION_CIDS — asserting first would reject a legitimate
+    // asset (e.g. QmRSpGF…) whose PSSH baked a remapped legacy CID. Unknown
+    // CIDs pass through unchanged and are still rejected by the gate below,
+    // so the kid↔ciphertext binding guarantee is preserved.
     effectiveCid = LEGACY_DECRYPT_ACTION_REMAP[effectiveCid] || effectiveCid;
+    assertAllowedDecryptCid(effectiveCid);
     const effectiveChainId = params.chainId || DEFAULT_CHAIN_ID;
     const normalizedKid = params.kid.startsWith('0x')
       ? params.kid.toLowerCase()

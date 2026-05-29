@@ -1044,6 +1044,21 @@
     var maxDim = Math.max(size.x, size.y, size.z);
     var distance = maxDim * 2;
 
+    // Adapt the clip planes to the model's real-world size. The camera is
+    // created with a fixed far=1000, but assets authored in mm/cm can span
+    // thousands of units (e.g. a 1327-unit car), pushing the model behind
+    // the far plane — it vanishes when zoomed out and reappears as you zoom
+    // in. Scaling near/far to maxDim fixes both tiny and huge models and
+    // avoids the z-fighting a 0.01 near + huge far would cause.
+    camera.near = Math.max(maxDim / 1000, 0.01);
+    camera.far = Math.max(distance * 100, 5000);
+    camera.updateProjectionMatrix();
+
+    // Keep zoom within the visible frustum so you can't dolly past the model
+    // (out beyond the far plane, or inside the near plane).
+    controls.minDistance = maxDim * 0.1;
+    controls.maxDistance = distance * 10;
+
     camera.position.set(center.x + distance * 0.6, center.y + distance * 0.4, center.z + distance * 0.6);
     controls.target.copy(center);
     controls.update();

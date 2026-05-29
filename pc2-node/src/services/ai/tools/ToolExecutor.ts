@@ -13,6 +13,7 @@ import type { DatabaseManager } from '../../../storage/database.js';
 import { logger } from '../../../utils/logger.js';
 import { parseSkillFrontmatter } from '../../../utils/skill-parser.js';
 import { validateIntentFields, normalizeForDb } from '../../../utils/intentValidation.js';
+import { isMonetisationAgentTool, isMonetisationAgentEnabled } from './MonetisationAgentTools.js';
 import { Server as SocketIOServer } from 'socket.io';
 import { broadcastItemAdded, broadcastItemRemoved, broadcastItemMoved, broadcastItemUpdated, broadcastToUser } from '../../../websocket/events.js';
 import { getGatewayService } from '../../gateway/index.js';
@@ -231,6 +232,17 @@ export class ToolExecutor {
   async executeTool(toolName: string, args: any): Promise<ToolExecutionResult> {
     try {
       logger.info('[ToolExecutor] Executing tool:', { toolName, args, walletAddress: this.walletAddress });
+
+      // v1.3.0: Monetisation Agent ships dormant by default. Defense-in-depth —
+      // even if a tool reaches dispatch (e.g. a stale advertised list), refuse
+      // to run the agent's intent tools unless explicitly enabled. This does NOT
+      // affect the Creator wizard's /api/intents REST API (a separate path).
+      if (isMonetisationAgentTool(toolName) && !isMonetisationAgentEnabled()) {
+        return {
+          success: false,
+          error: 'The Monetisation Agent is not enabled on this node.',
+        };
+      }
 
       // Route AgentKit tools to the AgentKitExecutor
       if (isAgentKitTool(toolName)) {

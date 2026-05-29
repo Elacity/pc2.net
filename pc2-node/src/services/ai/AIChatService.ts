@@ -17,7 +17,7 @@ import { normalizeToolsObject } from './utils/FunctionCalling.js';
 import { filesystemTools } from './tools/FilesystemTools.js';
 import { walletTools } from './tools/WalletTools.js';
 import { settingsTools } from './tools/SettingsTools.js';
-import { monetisationAgentTools } from './tools/MonetisationAgentTools.js';
+import { monetisationAgentTools, MONETISATION_TOOL_NAMES, isMonetisationAgentEnabled } from './tools/MonetisationAgentTools.js';
 import { agentKitTools } from './tools/AgentKitTools.js';
 import { skillsTools } from './tools/SkillsTools.js';
 import { canvasTools } from './tools/CanvasTools.js';
@@ -532,8 +532,11 @@ export class AIChatService {
     } else if (args.filesystem && args.walletAddress) {
       // Automatically include all AI tools if filesystem is available
       // This allows AI to perform filesystem, wallet, settings, and AgentKit operations
-      const allTools = [...filesystemTools, ...walletTools, ...settingsTools, ...agentKitTools, ...skillsTools, ...canvasTools, ...agentTools, ...monetisationAgentTools];
-      logger.info('[AIChatService] Auto-including all AI tools - filesystem:', filesystemTools.length, 'wallet:', walletTools.length, 'settings:', settingsTools.length, 'agentKit:', agentKitTools.length, 'skills:', skillsTools.length, 'canvas:', canvasTools.length, 'agent:', agentTools.length, 'monetisation:', monetisationAgentTools.length, 'total:', allTools.length);
+      // v1.3.0: Monetisation Agent ships dormant by default — only advertise
+      // its tools when explicitly enabled (MONETISATION_AGENT_ENABLED=true).
+      const monetisationTools = isMonetisationAgentEnabled() ? monetisationAgentTools : [];
+      const allTools = [...filesystemTools, ...walletTools, ...settingsTools, ...agentKitTools, ...skillsTools, ...canvasTools, ...agentTools, ...monetisationTools];
+      logger.info('[AIChatService] Auto-including all AI tools - filesystem:', filesystemTools.length, 'wallet:', walletTools.length, 'settings:', settingsTools.length, 'agentKit:', agentKitTools.length, 'skills:', skillsTools.length, 'canvas:', canvasTools.length, 'agent:', agentTools.length, 'monetisation:', monetisationTools.length, 'total:', allTools.length);
       tools = normalizeToolsObject(allTools);
       
       // Mark all tools by their type
@@ -553,6 +556,14 @@ export class AIChatService {
       logger.warn('[AIChatService] No tools available - filesystem:', !!args.filesystem, 'walletAddress:', !!args.walletAddress, 'args.tools:', args.tools);
     }
     
+    // v1.3.0: enforce the Monetisation Agent kill-switch at a single chokepoint
+    // so its tools are stripped no matter where they came from (auto-include or
+    // a frontend-supplied list). Disabled by default; flip on per-node with
+    // MONETISATION_AGENT_ENABLED=true.
+    if (tools && tools.length > 0 && !isMonetisationAgentEnabled()) {
+      tools = tools.filter((t: any) => !MONETISATION_TOOL_NAMES.has(t.function?.name || t.name));
+    }
+
     logger.info('[AIChatService] Final tools count:', tools?.length || 0);
     
     // Store toolSourceMap for use in executeWithTools

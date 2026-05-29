@@ -233,3 +233,20 @@ export const MONETISATION_TOOL_NAMES = new Set(
 export function isMonetisationAgentTool(toolName: string): boolean {
   return MONETISATION_TOOL_NAMES.has(toolName);
 }
+
+/**
+ * Whether the v1.3.0 Monetisation Agent (Creator-Studio S1) is enabled.
+ *
+ * Ships dormant by default for the v1.3.0 release: the feature is fully
+ * present but its conversational tools are not advertised to (or executable
+ * by) the AI chat unless a node operator opts in with
+ * `MONETISATION_AGENT_ENABLED=true`. No code change is required to flip it on.
+ *
+ * Disabling ONLY removes these intent-scoped agent tools. It does not affect:
+ *  - the core AI chat (every third-party + local provider keeps working), or
+ *  - the Creator wizard's own `/api/intents` REST API (a separate, user-driven
+ *    path that this flag deliberately leaves untouched).
+ */
+export function isMonetisationAgentEnabled(): boolean {
+  return String(process.env.MONETISATION_AGENT_ENABLED || '').toLowerCase() === 'true';
+}

@@ -21,7 +21,7 @@ import {
   getClusterPinRetryQueueSnapshot,
   queryClusterPinStatus,
 } from '../services/clusterPin.js';
-import { getBaseRpcUrl, getPublicProxyUrl, rotateBaseRpc } from '../utils/rpc.js';
+import { getBaseRpcUrl, getPublicProxyUrl, getHealthyBaseRpcUrls, rotateBaseRpc } from '../utils/rpc.js';
 import {
   canonicalize,
   verifyDelegationEip1271,
@@ -1935,9 +1935,12 @@ async function recoverWithSession(
   const effectiveChainId = 8453;
   // Prefer the operator-configured public proxy URL so the Lit Action's
   // `gateway.hasAccessByContentId(...)` flows through our caching +
-  // multi-RPC failover proxy. Falsy = use pool head as before. See
+  // multi-RPC failover proxy. When unset, hand the Lit Action a
+  // currently-HEALTHY public RPC (skips upstreams recently sidelined for
+  // 5xx/429) rather than the blind pool head — the action gets one URL
+  // with no rotation, so it must not be a known-failing one. See
   // `.cursor/tasks/RPC-PROXY-UNIFICATION-2026-05`.
-  const effectiveRpc = getPublicProxyUrl() || getBaseRpcUrl();
+  const effectiveRpc = getPublicProxyUrl() || getHealthyBaseRpcUrls()[0] || getBaseRpcUrl();
   const effectiveBackend = params.litBackend || LIT_BACKEND;
 
   logger.info(`[Lit] Recover CEK: kid=${kid}, buyer=${buyerAddress}, cid=${encryptedDataCid}, backend=${effectiveBackend}`);
@@ -2777,8 +2780,10 @@ router.post('/lit/secure-view', authenticate, requireSecureViewSession, async (r
     const effectiveBody = { ...req.body };
     // Prefer the operator-configured public proxy URL when set so the
     // Lit Action's downstream chain reads benefit from cache + fallback.
+    // When unset, pick a currently-HEALTHY public RPC (not the blind
+    // pool head) so a recently-rate-limited upstream isn't reused.
     // See `.cursor/tasks/RPC-PROXY-UNIFICATION-2026-05`.
-    const rpcUrl = getPublicProxyUrl() || getBaseRpcUrl();
+    const rpcUrl = getPublicProxyUrl() || getHealthyBaseRpcUrls()[0] || getBaseRpcUrl();
     const authorityAddr = DEFAULT_AUTHORITY;
     let resolvedBuyer = buyerAddress;
 

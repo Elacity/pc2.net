@@ -1,34 +1,35 @@
 /**
- * REGRESSION TEST: media.ts PSSH-baked-RPC override (RPC-PROXY-UNIFICATION-2026-05)
+ * REGRESSION TEST: media.ts Lit-Action RPC resolution (RPC-PROXY-UNIFICATION-2026-05)
  *
- * The single line that fixes legacy dDRM video assets
- * ---------------------------------------------------
- * Every encrypted media asset minted before this branch shipped has a
- * Tenderly RPC URL baked into its PSSH metadata at encode time. When a
- * viewer plays the asset back, the Lit Action loads PSSH, extracts the
- * `rpc` field, and uses it to evaluate the ERC-1155 ownership check.
- * Tenderly's free tier exhausted on 2026-05-27 → every legacy video
- * silently returned `access_denied`, even for the rightful owner.
+ * The problem this locks in
+ * -------------------------
+ * The Lit Action that gates dDRM playback runs OFF this node and does a
+ * single on-chain `gateway.hasAccessByContentId(...)` eth_call with ONE
+ * RPC URL we hand it. There is no in-action rotation, and the action
+ * swallows network errors with `.catch(() => false)`. So if we pass a
+ * momentarily rate-limited / quota-exhausted RPC, the legitimate owner
+ * gets a misleading `access_denied` → the "purchase access tokens" error
+ * on a video they actually own. This is the May 2026 playback incident.
  *
- * We can't rewrite already-encoded PSSH on disk. The fix is to override
- * `litParams.rpc` at the SERVER boundary, before forwarding the Lit
- * Action call, using a healthy server-managed RPC instead of whatever
- * was baked in years ago.
+ * Two failure modes are covered:
+ *   1. Legacy assets baked a now-degraded RPC (e.g. exhausted Tenderly)
+ *      into their PSSH at encode time. We can't rewrite on-disk PSSH, so
+ *      we OVERRIDE `litParams.rpc` at the server boundary.
+ *   2. The override itself must resolve to a RESILIENT URL, not a single
+ *      blind public RPC. `resolveLitAccessRpc()` resolves, most → least
+ *      resilient:
+ *        a. operator-pinned config.blockchain.public_proxy_url
+ *        b. zero-config auto-route through THIS node's own public
+ *           /api/rpc/base proxy (rotating + health-tracked + cached),
+ *           derived from the request, guarded against loopback/LAN
+ *        c. a currently-HEALTHY public RPC (skips recently-5xx/429
+ *           upstreams), never the blind pool head
  *
- * The override lives in `pc2-node/src/api/media.ts` around line 374:
- *
- *     const overrideRpc = getPublicProxyUrlForLit() || getBaseRpcUrlForLit();
- *     ...
- *     rpc: overrideRpc || encData.rpc || '',
- *
- * If a future refactor accidentally removes that override, EVERY video
- * minted before 2026-05-28 becomes unplayable again the moment any
- * embedded RPC degrades. There is no real-world test that catches this
- * regression without owning a legacy asset, so we lock the pattern in
- * via a source-scan instead.
- *
- * This is the same "lock the fix in literal source" pattern used by
- * setup-permissions-osascript.test.js and db-getsetting-resource-limits.test.js.
+ * If a future refactor flattens this back to a single static RPC, the
+ * intermittent "works on the 2nd try" playback failures return. There is
+ * no real-world test that catches this without owning a legacy asset and
+ * a degraded RPC, so we lock the pattern in via a source-scan — the same
+ * approach as setup-permissions-osascript.test.js.
  */
 
 import { test } from 'node:test';
@@ -52,78 +53,99 @@ function stripComments(source) {
   return s;
 }
 
-test('media.ts imports getPublicProxyUrl and getBaseRpcUrl from utils/rpc', () => {
+test('media.ts defines resolveLitAccessRpc — the single source of Lit RPC truth', () => {
   const code = stripComments(readSource());
-
   assert.ok(
-    /getPublicProxyUrl[A-Za-z]*\s*[,}=]/.test(code),
-    'media.ts must reference getPublicProxyUrl (used to derive overrideRpc). ' +
-    'Removing this import means PSSH-baked RPCs will be used as-is, breaking ' +
-    'every legacy video asset the moment its baked-in RPC degrades.',
-  );
-
-  assert.ok(
-    /getBaseRpcUrl[A-Za-z]*\s*[,}=]/.test(code),
-    'media.ts must reference getBaseRpcUrl as the fallback when no public proxy ' +
-    'is configured. Without it the override resolves to empty string and the ' +
-    'Lit Action loses any healthy RPC to call.',
+    /function\s+resolveLitAccessRpc\s*\(/.test(code),
+    'media.ts must define resolveLitAccessRpc(). This is the resolver that ' +
+    'decides which RPC the Lit Action uses for the on-chain access check. ' +
+    'Inlining a single RPC instead reintroduces the intermittent playback bug.',
   );
 });
 
-test('media.ts computes an overrideRpc value (proxy → pool head fallback)', () => {
+test('resolveLitAccessRpc prefers the operator-pinned public proxy first', () => {
   const code = stripComments(readSource());
-
-  // Match either variable name (`overrideRpc`) or the OR-chain that produces it.
-  // The intent matters more than the exact identifier.
-  const hasOverride =
-    /overrideRpc\s*=\s*getPublicProxyUrl/.test(code) ||
-    /rpc:\s*getPublicProxyUrl\w*\(\)\s*\|\|\s*getBaseRpcUrl\w*\(\)/.test(code);
-
   assert.ok(
-    hasOverride,
-    'media.ts must compute overrideRpc as `getPublicProxyUrl() || getBaseRpcUrl()`. ' +
-    'This is the line that retroactively fixes legacy dDRM video assets whose ' +
-    'PSSH metadata baked in a now-degraded RPC (e.g. exhausted Tenderly quota).',
+    /getPublicProxyUrl\s*\(/.test(code),
+    'resolveLitAccessRpc must consult getPublicProxyUrl() (config.blockchain.' +
+    'public_proxy_url) FIRST so operators can pin a resilient proxy URL.',
   );
 });
 
-test('litParams.rpc takes overrideRpc, not the PSSH-baked encData.rpc directly', () => {
+test('resolveLitAccessRpc auto-routes through this node\'s own /api/rpc/base', () => {
   const code = stripComments(readSource());
 
-  // The current production line is:
-  //   rpc: overrideRpc || encData.rpc || '',
-  // which means "always prefer server-managed RPC; only fall back to the
-  // PSSH-baked one if we have no override". If anyone reverses that
-  // precedence, legacy assets break again.
-  const overridesFirst =
-    /rpc:\s*overrideRpc\b/.test(code) ||
-    /rpc:\s*getPublicProxyUrl\w*\(\)\s*\|\|\s*getBaseRpcUrl\w*\(\)/.test(code);
-
   assert.ok(
-    overridesFirst,
-    'litParams.rpc assignment must prefer the server-side overrideRpc over ' +
-    'encData.rpc. Reverse this and the dDRM legacy-asset playback fix is undone.',
+    /getBaseUrl\s*\(\s*req\s*\)/.test(code),
+    'resolveLitAccessRpc must derive this node\'s public origin from the ' +
+    'request via getBaseUrl(req) so playback that reaches us via our public ' +
+    'hostname auto-routes the Lit Action through our own proxy.',
   );
 
-  // And the order must NOT be encData.rpc first.
+  assert.ok(
+    /\/api\/rpc\/base/.test(code),
+    'resolveLitAccessRpc must build the `${origin}/api/rpc/base` proxy URL — ' +
+    'our rotating, health-tracked, cached RPC proxy. Without this the Lit ' +
+    'Action falls back to a single public RPC and playback fails intermittently.',
+  );
+});
+
+test('auto-route is guarded against loopback / LAN (Lit can\'t reach localhost)', () => {
+  const code = stripComments(readSource());
+
+  assert.ok(
+    /function\s+isPubliclyReachableHost\s*\(/.test(code),
+    'media.ts must define isPubliclyReachableHost(). The Lit network runs ' +
+    'OFF this node, so a localhost/192.168.x.x proxy URL is unreachable — we ' +
+    'must NOT auto-route to it, and must fall back to a public RPC instead.',
+  );
+
+  // Must screen out at least loopback and the common RFC1918 ranges.
+  assert.ok(code.includes('127.0.0.1'), 'isPubliclyReachableHost must reject 127.0.0.1');
+  assert.ok(code.includes('localhost'), 'isPubliclyReachableHost must reject localhost');
+  assert.ok(code.includes('192\\.168') || code.includes('192.168'),
+    'isPubliclyReachableHost must reject 192.168.0.0/16');
+  assert.ok(code.includes('172\\.(1[6-9]') || code.includes('172.16'),
+    'isPubliclyReachableHost must reject the 172.16.0.0/12 range');
+});
+
+test('resolveLitAccessRpc falls back to a HEALTHY public RPC, not the blind pool head', () => {
+  const code = stripComments(readSource());
+  assert.ok(
+    /getHealthyBaseRpcUrls\s*\(\s*\)/.test(code),
+    'resolveLitAccessRpc must use getHealthyBaseRpcUrls() for its last-resort ' +
+    'RPC so a recently-rate-limited upstream (5xx/429) is skipped. Using the ' +
+    'blind pool head reintroduces the "works on the 2nd try" failure mode.',
+  );
+});
+
+test('litParams.rpc takes the resolved overrideRpc, not the PSSH-baked encData.rpc', () => {
+  const code = stripComments(readSource());
+
+  assert.ok(
+    /overrideRpc\s*=\s*await\s+resolveLitAccessRpc\s*\(/.test(code),
+    'media/init must compute overrideRpc via `await resolveLitAccessRpc(req, ...)`.',
+  );
+
+  assert.ok(
+    /rpc:\s*overrideRpc\b/.test(code),
+    'litParams.rpc must be assigned overrideRpc (the resolved, resilient URL), ' +
+    'not encData.rpc directly. The PSSH-baked value is the thing we bypass.',
+  );
+
   const psshFirstAntiPattern = /rpc:\s*encData\.rpc\s*\|\|\s*overrideRpc/.test(code);
   assert.ok(
     !psshFirstAntiPattern,
-    'litParams.rpc must NOT prefer encData.rpc over overrideRpc. The PSSH-baked ' +
-    'value is the very thing we are trying to bypass for legacy assets.',
+    'litParams.rpc must NOT prefer encData.rpc over overrideRpc.',
   );
 });
 
 test('media.ts logs the override decision (operational visibility)', () => {
   const code = stripComments(readSource());
-
-  // We want operators to see in logs when a legacy asset was rescued by
-  // the override. This is the diagnostic we used to root-cause the bug;
-  // without it, future quota exhaustion incidents are harder to triage.
   assert.ok(
     /Overriding PSSH-baked rpc/i.test(code),
-    'media.ts must log "Overriding PSSH-baked rpc" when overrideRpc differs from ' +
-    'encData.rpc. This is the breadcrumb that lets operators correlate playback ' +
-    'failures with PSSH-baked RPC degradation. See media.ts ~line 376.',
+    'media.ts must log "Overriding PSSH-baked rpc" when overrideRpc differs ' +
+    'from encData.rpc — the breadcrumb that correlates playback failures with ' +
+    'PSSH-baked RPC degradation.',
   );
 });

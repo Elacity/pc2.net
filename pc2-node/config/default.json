@@ -85,6 +85,8 @@
   "blockchain": {
     "chain_id": 8453,
     "chain_name": "base",
+    "public_proxy_url": "",
+    "rpc_unhealthy_cooldown_ms": 60000,
     "rpc_urls": [
       "https://base-rpc.publicnode.com",
       "https://base.drpc.org",

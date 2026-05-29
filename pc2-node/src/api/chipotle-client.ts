@@ -21,7 +21,7 @@ import https from 'https';
 import { createPublicKey, randomBytes, verify as cryptoVerify } from 'crypto';
 import type { StoredSession } from '../services/session/BackendSessionService.js';
 import { createLogger } from '../utils/logger.js';
-import { getBaseRpcUrl, getPublicProxyUrl } from '../utils/rpc.js';
+import { getBaseRpcUrl, getPublicProxyUrl, getHealthyBaseRpcUrls } from '../utils/rpc.js';
 import { recordMetricCounter, recordMetricHistogram } from '../utils/metrics.js';
 
 const logger = createLogger('chipotle');
@@ -1488,10 +1488,12 @@ export async function recoverCEKEnvelope(
       chainId: effectiveChainId,
       // Last-resort RPC fallback: when the caller didn't supply one,
       // prefer the operator-configured public proxy URL (so Lit access
-      // checks go through our caching + multi-RPC failover) before
-      // dropping back to the rotation pool head. See
-      // `.cursor/tasks/RPC-PROXY-UNIFICATION-2026-05`.
-      rpc: params.rpc || getPublicProxyUrl() || getBaseRpcUrl(),
+      // checks go through our caching + multi-RPC failover), then a
+      // currently-HEALTHY public RPC (skips upstreams recently sidelined
+      // for 5xx/429), and only then the blind pool head. The Lit Action
+      // gets ONE URL with no rotation, so it must not be a known-failing
+      // one. See `.cursor/tasks/RPC-PROXY-UNIFICATION-2026-05`.
+      rpc: params.rpc || getPublicProxyUrl() || getHealthyBaseRpcUrls()[0] || getBaseRpcUrl(),
       delegation: session.delegationCanonical,
       delegationSig: session.delegationSig,
       request: requestCanonical,

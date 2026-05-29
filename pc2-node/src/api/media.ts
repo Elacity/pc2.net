@@ -65,6 +65,59 @@ function getAuthToken(req: Request): string | null {
 // with ERR_SSL_WRONG_VERSION_NUMBER (TLS handshake against a plain-HTTP port).
 // Imported lazily inside the route to avoid changing the file's import block layout.
 
+// True only for origins the Lit network can actually reach. Loopback and
+// RFC1918/link-local hosts are excluded — the Lit Action runs OFF this
+// node, so a `http://localhost:4200/...` or `http://192.168.x.x:...`
+// proxy URL would be unreachable and the access check would fail.
+function isPubliclyReachableHost(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  if (h === 'localhost' || h.endsWith('.local')) return false;
+  if (h === '127.0.0.1' || h === '::1' || h === '0.0.0.0') return false;
+  if (/^10\./.test(h)) return false;                          // 10.0.0.0/8
+  if (/^192\.168\./.test(h)) return false;                    // 192.168.0.0/16
+  if (/^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(h)) return false; // 172.16.0.0/12
+  if (/^169\.254\./.test(h)) return false;                    // link-local
+  return true;
+}
+
+// Resolve the single RPC URL handed to the Lit Action for the on-chain
+// access check. The Lit Action runs OFF this node and does ONE eth_call
+// with whatever URL we pass — there is no in-action rotation, and it
+// swallows network errors with `.catch(() => false)`. So a momentarily
+// rate-limited URL reads as `access_denied` for a legitimate holder,
+// producing the intermittent "purchase access tokens" error on a video
+// the user actually owns (the May 2026 playback incident).
+//
+// Resolution order, most → least resilient:
+//   1. Operator-pinned `config.blockchain.public_proxy_url` — explicit
+//      override always wins.
+//   2. Zero-config auto-route through THIS node's own public
+//      `/api/rpc/base` proxy (rotating + health-tracked + cached),
+//      derived from the inbound request. During real playback the
+//      player reaches us via our public hostname (e.g. name.ela.city),
+//      so getBaseUrl(req) yields a publicly-reachable origin. Skipped
+//      when the request arrived over loopback/LAN (Lit can't reach it).
+//   3. A currently-HEALTHY public RPC from the pool (skips upstreams
+//      recently sidelined for 5xx/429), never the blind pool head.
+async function resolveLitAccessRpc(req: Request, psshRpc: string): Promise<string> {
+  const { getPublicProxyUrl, getHealthyBaseRpcUrls } = await import('../utils/rpc.js');
+
+  const pinned = getPublicProxyUrl();
+  if (pinned) return pinned;
+
+  try {
+    const { getBaseUrl } = await import('../utils/urlUtils.js');
+    const origin = getBaseUrl(req);
+    const host = new URL(origin).hostname;
+    if (isPubliclyReachableHost(host)) {
+      return `${origin}/api/rpc/base`;
+    }
+  } catch { /* fall through to a healthy public RPC */ }
+
+  const healthy = getHealthyBaseRpcUrls();
+  return healthy[0] || psshRpc || '';
+}
+
 // ── Lit Backend Selection (mirrors storage.ts) ───────────────────
 type LitBackend = 'chipotle' | 'datil';
 const LIT_BACKEND: LitBackend = (process.env.LIT_BACKEND as LitBackend) || 'chipotle';
@@ -370,8 +423,7 @@ router.post('/init', authenticate, requireSecureViewSession, async (req: SecureV
     // this is safe for legacy assets and gives them retroactive
     // resilience. New assets carry our own URL in PSSH already, so
     // this is a no-op for them.
-    const { getBaseRpcUrl: getBaseRpcUrlForLit, getPublicProxyUrl: getPublicProxyUrlForLit } = await import('../utils/rpc.js');
-    const overrideRpc = getPublicProxyUrlForLit() || getBaseRpcUrlForLit();
+    const overrideRpc = await resolveLitAccessRpc(req, encData.rpc || '');
     if (encData.rpc && encData.rpc !== overrideRpc) {
       logger.info(`[media/init] Overriding PSSH-baked rpc: pssh=${encData.rpc} → server=${overrideRpc}`);
     }

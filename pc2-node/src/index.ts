@@ -549,7 +549,20 @@ async function main() {
         logger.error('Error stopping Boson service:', error);
       }
     }
-    
+
+    // SIGTERM all managed service-app backends before tearing down ipfs/db.
+    // Doing it here (not later) means the spawned services see pc2-node
+    // alive long enough to flush their own state cleanly.
+    const processManager = app.locals.appProcessManager;
+    if (processManager) {
+      try {
+        await processManager.shutdown();
+        logger.info('✅ Managed app backends stopped');
+      } catch (error) {
+        logger.error('Error stopping managed app backends:', error);
+      }
+    }
+
     if (ipfs) {
       try {
         await ipfs.stop();

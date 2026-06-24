@@ -144,4 +144,18 @@ export interface InstalledApp {
   manifest_json: string;
   installed_at: number;
   updated_at: number;
+  /** Runtime state for `type: "service"` apps. NULL when not running. */
+  pid?: number | null;
+  port?: number | null;
+  started_at?: number | null;
+  /** Lifetime crash counter; resets only on explicit clearAppRuntime(). */
+  crash_count?: number;
+}
+
+/** Subset of {@link InstalledApp} runtime fields, used by AppProcessManager. */
+export interface AppRuntimeState {
+  pid: number | null;
+  port: number | null;
+  started_at: number | null;
+  crash_count: number;
 }

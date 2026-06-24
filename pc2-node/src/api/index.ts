@@ -60,6 +60,7 @@ import contextRouter from './context.js';
 import voiceRouter from './voice.js';
 import { createInstalledAppsRouter } from './installed-apps.js';
 import { AppInstallService } from '../services/AppInstallService.js';
+import { AppProcessManager } from '../services/AppProcessManager.js';
 import registryRouter from './registry.js';
 import { createSupernodeRouter } from './supernode.js';
 
@@ -1456,10 +1457,34 @@ export function setupAPI(app: Express): void {
     // Installed Apps (dApp Store) — requires db for registration
     if (db) {
         const dataDir = process.env.PC2_DATA_DIR || path.join(process.cwd(), 'data');
+        const appsDir = path.join(dataDir, 'installed-apps');
+        const logsDir = path.join(dataDir, 'logs');
         const appInstallService = new AppInstallService(db, ipfs, dataDir);
         app.locals.appInstallService = appInstallService;
-        app.use('/api/installed-apps', authenticate, createInstalledAppsRouter(appInstallService));
+
+        // AppProcessManager spawns/supervises the backend for `type:"service"`
+        // apps. Stored on app.locals so the SIGTERM/SIGINT shutdown hook in
+        // src/index.ts can call processManager.shutdown() before pc2-node exits,
+        // and so boot-time hydrate (next commit) can be invoked once routes
+        // are mounted.
+        const processManager = new AppProcessManager({ db, appsDir, logsDir });
+        app.locals.appProcessManager = processManager;
+
+        app.use(
+            '/api/installed-apps',
+            authenticate,
+            createInstalledAppsRouter(appInstallService, processManager, appsDir),
+        );
         logger.info('[API] ✅ Installed Apps API enabled at /api/installed-apps');
+
+        // Re-spawn service-type apps that were running before pc2-node
+        // restarted. Fire-and-forget — each app boots in the background;
+        // hydrate() catches and logs per-app failures so one bad app
+        // can't block the rest. Users hitting the UI before hydration
+        // completes see "stopped" status and can click Start manually.
+        processManager.hydrate().catch((err) => {
+            logger.error('[API] AppProcessManager.hydrate() failed:', err);
+        });
 
         // Sync bundled test apps on every startup.
         //

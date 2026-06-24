@@ -31,7 +31,7 @@ function findSchemaFile(): string {
   }
   throw new Error(`Schema file not found. Tried: ${SCHEMA_FILE} and ${sourceSchema}`);
 }
-const CURRENT_VERSION = 35;
+const CURRENT_VERSION = 36;
 
 interface Migration {
   version: number;
@@ -1456,6 +1456,32 @@ export function runMigrations(db: Database): void {
           log.error(`❌ Migration 35 error: ${error.message}`);
           throw error;
         }
+      }
+    }
+
+    // Migration 36 (ENM service-app support; originally PR #18's "Migration 33"):
+    // runtime-state columns for service-type apps so pc2-node can remember which
+    // service apps are running across restarts (boot-time hydrate) and surface
+    // live status to the launcher tile / /api/installed-apps/:name/status.
+    // See AppProcessManager for how these are written. Renumbered from 33 to 36
+    // on integration because main already shipped migrations 33-35.
+    if (currentVersion < 36) {
+      try {
+        log.info('📦 Running Migration 36: installed_apps runtime-state columns...');
+        const addCol = (sql: string) => {
+          try { db.exec(sql); } catch (e: any) {
+            if (!String(e?.message || '').includes('duplicate column')) throw e;
+          }
+        };
+        addCol(`ALTER TABLE installed_apps ADD COLUMN pid INTEGER`);
+        addCol(`ALTER TABLE installed_apps ADD COLUMN port INTEGER`);
+        addCol(`ALTER TABLE installed_apps ADD COLUMN started_at INTEGER`);
+        addCol(`ALTER TABLE installed_apps ADD COLUMN crash_count INTEGER NOT NULL DEFAULT 0`);
+        log.info('✅ Migration 36 complete: installed_apps has pid/port/started_at/crash_count');
+        recordMigration(db, 36);
+      } catch (error: any) {
+        log.error(`❌ Migration 36 error: ${error.message}`);
+        throw error;
       }
     }
 

@@ -62,7 +62,7 @@ export interface AppAuthor {
   url?: string;
 }
 
-export type AppType = 'web' | 'wasm' | 'data' | 'microvm' | 'agent';
+export type AppType = 'web' | 'wasm' | 'data' | 'microvm' | 'agent' | 'service';
 
 export type AppCategory =
   | 'media'
@@ -75,7 +75,7 @@ export type AppCategory =
   | 'marketplace'
   | 'other';
 
-const VALID_APP_TYPES: readonly string[] = ['web', 'wasm', 'data', 'microvm', 'agent'];
+const VALID_APP_TYPES: readonly string[] = ['web', 'wasm', 'data', 'microvm', 'agent', 'service'];
 
 const VALID_CATEGORIES: readonly string[] = [
   'media', 'blockchain', 'tools', 'system', 'games', 'social', 'ai', 'marketplace', 'other',
@@ -112,6 +112,57 @@ export interface AppService {
   protocol?: string;
   endpoint?: string;
   description?: string;
+}
+
+/**
+ * AppBackend — describes a long-running Node process that pc2-node spawns
+ * when a `type: "service"` app is installed and stops when it's uninstalled.
+ *
+ * Distinct from `AppService[]` (which is just metadata describing
+ * exposed APIs/protocols). `backend` is the actual thing that runs.
+ *
+ * Trust note: the spawned process inherits pc2-node's user privileges.
+ * Only first-party Elacity apps with verified `distribution.signature`
+ * + `signedBy` in the trusted publisher set should be granted this
+ * privilege — see AppProcessManager and the install handler in
+ * api/installed-apps.ts for enforcement.
+ */
+export interface AppBackend {
+  /** Path to the entry script, relative to the bundle root (e.g. "backend/dist/index.js"). */
+  entry: string;
+  /** TCP port the service binds to. The frontend may call localhost:<port>. */
+  port: number;
+  /**
+   * Optional path on the service for periodic liveness checks.
+   * If absent, only crashes are detected (no liveness signal).
+   */
+  healthCheck?: string;
+  /** Extra argv passed to node after the entry script. */
+  args?: string[];
+  /**
+   * Extra env vars merged on top of pc2-node's process env when spawning.
+   * Operator-controlled values (paths, secrets) should be set via pc2-node's
+   * config instead — these are app-author-controlled and should be limited.
+   */
+  env?: Record<string, string>;
+  /**
+   * Optional pre-stop teardown hook. pc2-node POSTs to this path on
+   * uninstall (purge mode) BEFORE sending SIGTERM, so the service can
+   * back up critical state — keystores, signing keys, anything
+   * unrecoverable — to a safe location.
+   *
+   * The service should respond within `teardownTimeoutMs` (default
+   * 30 000). If it times out or errors, pc2-node still proceeds with
+   * the uninstall but logs the failure. The teardown response body is
+   * echoed back to the API caller so the UI can surface where the
+   * backup landed.
+   *
+   * Apps without sensitive state can omit this entirely.
+   */
+  teardown?: {
+    endpoint: string;     // e.g. "/api/enm/teardown"
+    timeoutMs?: number;   // default 30000
+  };
 }
 
 export interface AppDistribution {
@@ -166,6 +217,28 @@ export interface AppManifest {
 
   display?: AppDisplay;
   services?: AppService[];
+  /**
+   * For `type: "service"` apps only. Describes the Node backend pc2-node
+   * spawns on install and stops on uninstall. See AppBackend doc above.
+   */
+  backend?: AppBackend;
+  /**
+   * Absolute filesystem paths the app writes to OUTSIDE its bundle dir.
+   * On purge-uninstall, pc2-node deletes these in addition to the bundle.
+   *
+   * Used by services that store state outside `APP_DATA_DIR` (e.g. ENM
+   * uses `/data/enm/` for chain data, binaries, and its own DB). Without
+   * this declaration, app-external state is preserved across uninstalls
+   * (current behaviour for non-service apps).
+   *
+   * Safety:
+   *   - Paths must be absolute
+   *   - Paths must have at least 2 segments (no `/`, `/etc`, `/home`)
+   *   - Paths must not contain `..`
+   *   - The trust gate on service installs ensures only signed-by-trusted
+   *     publishers can declare these
+   */
+  externalDataDirs?: string[];
   distribution?: AppDistribution;
   dependencies?: Record<string, string>;
 }
@@ -553,12 +626,103 @@ export class AppInstallService {
       log.warn(`[validateManifest] Unknown type "${manifest.type}" for app "${manifest.name}"`);
     }
 
+    if (manifest.type === 'service') {
+      this.validateServiceBackend(manifest);
+    }
+
     if (manifest.category && !VALID_CATEGORIES.includes(manifest.category)) {
       log.warn(`[validateManifest] Unknown category "${manifest.category}" for app "${manifest.name}"`);
     }
 
     if (manifest.capabilities) {
       this.validateCapabilities(manifest.capabilities, manifest.name);
+    }
+  }
+
+  /**
+   * Service-type apps must declare a `backend` block with at minimum
+   * an entry script + a port. Validated at install time so a bad
+   * manifest fails loudly before pc2-node tries to spawn anything.
+   */
+  private validateServiceBackend(manifest: AppManifest): void {
+    if (!manifest.backend) {
+      throw new Error(`App "${manifest.name}" has type "service" but no "backend" block`);
+    }
+    const b = manifest.backend;
+    if (!b.entry || typeof b.entry !== 'string') {
+      throw new Error(`App "${manifest.name}": backend.entry is required and must be a string`);
+    }
+    this.validateSafePath(b.entry);
+
+    if (typeof b.port !== 'number' || !Number.isInteger(b.port) || b.port < 1024 || b.port > 65535) {
+      throw new Error(
+        `App "${manifest.name}": backend.port must be an integer in 1024..65535 (got ${b.port})`,
+      );
+    }
+
+    if (b.healthCheck !== undefined && typeof b.healthCheck !== 'string') {
+      throw new Error(`App "${manifest.name}": backend.healthCheck must be a string path`);
+    }
+
+    if (b.args !== undefined && !Array.isArray(b.args)) {
+      throw new Error(`App "${manifest.name}": backend.args must be an array of strings`);
+    }
+
+    if (b.env !== undefined) {
+      if (typeof b.env !== 'object' || b.env === null || Array.isArray(b.env)) {
+        throw new Error(`App "${manifest.name}": backend.env must be an object of string→string`);
+      }
+      for (const [k, v] of Object.entries(b.env)) {
+        if (typeof v !== 'string') {
+          throw new Error(`App "${manifest.name}": backend.env.${k} must be a string`);
+        }
+      }
+    }
+
+    if (b.teardown !== undefined) {
+      if (typeof b.teardown !== 'object' || b.teardown === null || Array.isArray(b.teardown)) {
+        throw new Error(`App "${manifest.name}": backend.teardown must be an object`);
+      }
+      if (typeof b.teardown.endpoint !== 'string' || !b.teardown.endpoint.startsWith('/')) {
+        throw new Error(`App "${manifest.name}": backend.teardown.endpoint must be an absolute URL path (start with /)`);
+      }
+      if (b.teardown.timeoutMs !== undefined
+          && (typeof b.teardown.timeoutMs !== 'number' || b.teardown.timeoutMs < 1000)) {
+        throw new Error(`App "${manifest.name}": backend.teardown.timeoutMs must be a number >= 1000`);
+      }
+    }
+
+    // externalDataDirs is on the manifest, not backend, but services are
+    // the only kind that uses it — validate here while we have context.
+    if (manifest.externalDataDirs !== undefined) {
+      if (!Array.isArray(manifest.externalDataDirs)) {
+        throw new Error(`App "${manifest.name}": externalDataDirs must be an array of absolute paths`);
+      }
+      for (const p of manifest.externalDataDirs) {
+        if (typeof p !== 'string') {
+          throw new Error(`App "${manifest.name}": externalDataDirs entries must be strings`);
+        }
+        // Allow ${PC2_DATA_DIR} as the leading variable so manifests don't
+        // need to hardcode /var/lib/pc2/data. Other entries must be
+        // absolute. The runtime purgeExternalDir applies the safety checks
+        // again AFTER interpolation; this validator is just a quick
+        // sanity check at install time.
+        if (!p.startsWith('/') && !p.startsWith('${PC2_DATA_DIR}')) {
+          throw new Error(`App "${manifest.name}": externalDataDirs path "${p}" must be absolute or start with $\{PC2_DATA_DIR\}`);
+        }
+        if (p.includes('..')) {
+          throw new Error(`App "${manifest.name}": externalDataDirs path "${p}" must not contain '..'`);
+        }
+        // Refuse paths with too few segments — '/', '/etc', '/var', '/home',
+        // '/usr', '/opt', '/data' alone, etc. Need at least two segments
+        // beyond the root (or 1 beyond ${PC2_DATA_DIR}, since that's
+        // already a deep path).
+        const stripped = p.replace('${PC2_DATA_DIR}', '/_pc2_data_root');
+        const segments = stripped.split('/').filter(Boolean);
+        if (segments.length < 2) {
+          throw new Error(`App "${manifest.name}": externalDataDirs path "${p}" is too shallow — refuse to wipe top-level dirs`);
+        }
+      }
     }
   }
 

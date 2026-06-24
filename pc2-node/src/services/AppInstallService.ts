@@ -345,6 +345,22 @@ export class AppInstallService {
       });
       const signatureVerified = this.verifyDistributionSignature(manifest, bundleBuffer);
 
+      // Service-type apps spawn a pc2-node-privileged child process. Unlike
+      // other app kinds (which keep the v1 warn-only signature posture), a
+      // service install MUST fail closed when the signature does not verify
+      // against the fetched bundle bytes. The route-level gateServiceInstall
+      // only checks that `signedBy` is a trusted *identity* and that a
+      // signature is *present* — it does NOT cryptographically bind the
+      // bundle. Enforcing here closes the bundle-substitution gap for the
+      // privileged path (a swapped CID or forged signature can no longer
+      // spawn a backend). Thrown before any bytes hit disk.
+      if (manifest.type === 'service' && !signatureVerified) {
+        throw new Error(
+          `Service-type app "${manifest.name}" failed Ed25519 signature verification — ` +
+          `refusing to install a privileged backend from an unverified bundle.`,
+        );
+      }
+
       if (existsSync(appDir)) {
         rmSync(appDir, { recursive: true, force: true });
       }

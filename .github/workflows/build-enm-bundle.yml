@@ -1,0 +1,119 @@
+name: Build ENM bundle
+
+# Triggers:
+#   - push to main: builds the bundle, uploads as a workflow artifact (90-day retention)
+#   - tag push (v*): same build, plus attaches the bundle to a GitHub Release
+#   - manual: workflow_dispatch button in the Actions UI for ad-hoc rebuilds
+#
+# The signing key is loaded from the PC2_DEV_SIGNING_KEY secret so the publisher
+# hex stays STABLE across all CI builds — without that, every build would generate
+# a fresh keypair and the operator would have to update PC2_TRUSTED_SERVICE_PUBLISHERS
+# on every deploy.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'enm-server/**'
+      - 'src/backend/apps/elastos-node-manager/**'
+      - 'pc2-node/scripts/package-app.mjs'
+      - '.github/workflows/build-enm-bundle.yml'
+    tags:
+      - 'enm-v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write   # needed to attach artifacts to a GitHub Release on tag push
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          # Two lockfiles feed this build: enm-server (for the runtime deps that
+          # ship inside the bundle) and pc2-node (for the build-time `tar` package
+          # the packaging script imports). Caching both speeds up subsequent runs.
+          cache-dependency-path: |
+            enm-server/package-lock.json
+            pc2-node/package-lock.json
+
+      # The packaging script imports the `tar` package from pc2-node's
+      # node_modules — install only that one dep so we don't pull in pc2-node's
+      # 50+ runtime/dev dependencies just to build a tarball.
+      - name: Install build dep (tar)
+        working-directory: pc2-node
+        run: npm install --no-save --no-audit --no-fund tar@^7.5.2
+
+      # Restore the dev signing key from a repo secret so every CI build signs
+      # with the SAME publisher key. Without this, package-app.mjs generates a
+      # fresh keypair each run and the resulting bundle's signedBy hex changes,
+      # forcing an update to PC2_TRUSTED_SERVICE_PUBLISHERS on every deploy.
+      #
+      # Secret format: paste the entire contents of .pc2-dev-key.json (the JSON
+      # with publicPem + privatePem) into a repo secret named PC2_DEV_SIGNING_KEY.
+      # If the secret is empty/missing, package-app.mjs falls back to generating
+      # a fresh key — fine for first-run experimentation, but the publisher hex
+      # in the build summary will change build-to-build.
+      - name: Restore dev signing key
+        env:
+          KEY_JSON: ${{ secrets.PC2_DEV_SIGNING_KEY }}
+        run: |
+          if [ -n "$KEY_JSON" ]; then
+            printf '%s' "$KEY_JSON" > .pc2-dev-key.json
+            chmod 600 .pc2-dev-key.json
+            echo "key-restored=true" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Signing key::Restored stable dev key from PC2_DEV_SIGNING_KEY secret"
+          else
+            echo "::warning title=No signing key::PC2_DEV_SIGNING_KEY secret is empty — a fresh keypair will be generated and the publisher hex will be different from previous builds. Add the secret to keep the publisher hex stable."
+          fi
+
+      - name: Build bundle
+        run: node pc2-node/scripts/package-app.mjs
+
+      # Read the version out of enm-server/package.json so we can name artifacts
+      # and the GitHub Release predictably.
+      - name: Read version
+        id: version
+        run: |
+          VERSION=$(node -p "require('./enm-server/package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tarball=dist-app/elastos-node-manager-${VERSION}.tar.gz" >> "$GITHUB_OUTPUT"
+          echo "manifest=dist-app/elastos-node-manager-${VERSION}.json" >> "$GITHUB_OUTPUT"
+
+      # Surface the publisher hex in the build summary so the operator can copy
+      # it straight into PC2_TRUSTED_SERVICE_PUBLISHERS without unzipping the
+      # bundle. The hex also lives inside the manifest (distribution.signedBy).
+      - name: Print publisher hex
+        run: |
+          PUBLISHER=$(node -p "require('./${{ steps.version.outputs.manifest }}').distribution.signedBy")
+          echo "## ENM bundle ${{ steps.version.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Publisher hex** (set as \`PC2_TRUSTED_SERVICE_PUBLISHERS\` on the PC2 host):" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "    $PUBLISHER" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: elastos-node-manager-${{ steps.version.outputs.version }}
+          path: |
+            ${{ steps.version.outputs.tarball }}
+            ${{ steps.version.outputs.manifest }}
+          retention-days: 90
+
+      # Tag-triggered runs ALSO publish a GitHub Release with the tarball
+      # attached so `wget` from the deploy script can grab a stable URL.
+      - name: Attach to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/enm-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ steps.version.outputs.tarball }}
+            ${{ steps.version.outputs.manifest }}
+          generate_release_notes: true

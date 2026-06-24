@@ -15,6 +15,11 @@ import * as tar from 'tar';
 import { createLogger } from '../utils/logger.js';
 import type { DatabaseManager, InstalledApp } from '../storage/database.js';
 import type { IPFSStorage } from '../storage/ipfs.js';
+import {
+  type PlatformRequirement,
+  getHostPlatformSummary,
+  evaluatePlatformCompatibility,
+} from '../utils/platform.js';
 
 const log = createLogger('app-install');
 
@@ -213,6 +218,13 @@ export interface AppManifest {
     services?: string[];
     popup?: boolean;
     minVersion?: string;
+    /**
+     * Device-compatibility gate. When present, the host must satisfy every
+     * constraint or the install is refused (and the dApp Centre shows
+     * "Not compatible with this device"). Used by Linux-only service apps
+     * such as the Elastos Node Manager. See utils/platform.ts.
+     */
+    platform?: PlatformRequirement;
   };
 
   display?: AppDisplay;
@@ -317,6 +329,7 @@ export class AppInstallService {
 
     try {
       this.validateManifest(manifest);
+      this.enforcePlatformCompatibility(manifest);
 
       const appName = manifest.name;
       const appDir = join(this.appsDir, appName);
@@ -484,6 +497,7 @@ export class AppInstallService {
    */
   installFromLocal(manifest: AppManifest, localDir: string): InstalledApp {
     this.validateManifest(manifest);
+    this.enforcePlatformCompatibility(manifest);
 
     const appName = manifest.name;
     const appDir = join(this.appsDir, appName);
@@ -652,6 +666,49 @@ export class AppInstallService {
 
     if (manifest.capabilities) {
       this.validateCapabilities(manifest.capabilities, manifest.name);
+    }
+
+    if (manifest.requirements?.platform) {
+      this.validatePlatformRequirement(manifest.requirements.platform, manifest.name);
+    }
+  }
+
+  /** Shape-check requirements.platform. Throws on malformed declarations. */
+  private validatePlatformRequirement(p: PlatformRequirement, appName: string): void {
+    if (typeof p !== 'object' || p === null || Array.isArray(p)) {
+      throw new Error(`App "${appName}": requirements.platform must be an object`);
+    }
+    for (const key of ['os', 'arch'] as const) {
+      const v = p[key];
+      if (v !== undefined) {
+        if (!Array.isArray(v) || v.some((s) => typeof s !== 'string')) {
+          throw new Error(`App "${appName}": requirements.platform.${key} must be an array of strings`);
+        }
+      }
+    }
+    if (p.minMemoryMB !== undefined && (typeof p.minMemoryMB !== 'number' || p.minMemoryMB <= 0)) {
+      throw new Error(`App "${appName}": requirements.platform.minMemoryMB must be a positive number`);
+    }
+    if (p.reason !== undefined && typeof p.reason !== 'string') {
+      throw new Error(`App "${appName}": requirements.platform.reason must be a string`);
+    }
+  }
+
+  /**
+   * Refuse to install an app whose requirements.platform the current host
+   * does not satisfy. Defense-in-depth behind the dApp Centre's client-side
+   * gate — a hand-crafted API call cannot bypass it. (For service apps this
+   * is also a UX guard: installing a Linux-only service on macOS would just
+   * crash-loop into quarantine; failing closed here gives a clear message.)
+   */
+  private enforcePlatformCompatibility(manifest: AppManifest): void {
+    const req = manifest.requirements?.platform;
+    if (!req) return;
+    const verdict = evaluatePlatformCompatibility(req, getHostPlatformSummary());
+    if (!verdict.compatible) {
+      throw new Error(
+        `App "${manifest.name}" is not compatible with this device: ${verdict.reason}`,
+      );
     }
   }
 

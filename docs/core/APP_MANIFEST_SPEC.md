@@ -253,7 +253,13 @@ Requirements declare what the PC2 host must provide for the app to function corr
     "headers": ["cross-origin-isolation"],
     "popup": true,
     "minVersion": "1.1.0",
-    "services": ["ipfs", "wallet"]
+    "services": ["ipfs", "wallet"],
+    "platform": {
+      "os": ["linux"],
+      "arch": ["x64", "arm64"],
+      "minMemoryMB": 4096,
+      "reason": "Elastos Node Manager runs Linux node binaries."
+    }
   }
 }
 ```
@@ -264,6 +270,18 @@ Requirements declare what the PC2 host must provide for the app to function corr
 | `popup` | `boolean` | If true, app must open in a dedicated popup window (not an iframe tab). Required when `cross-origin-isolation` is needed. |
 | `minVersion` | `string` | Minimum PC2 version required. Semver string. |
 | `services` | `string[]` | PC2 services that must be available (e.g., `ipfs`, `wallet`, `ai`). |
+| `platform` | `object` | Device-compatibility gate. The host must satisfy every present field or the install is refused and the dApp Centre shows **"Not compatible with this device"**. Used by Linux-only service apps such as the Elastos Node Manager. |
+
+**`requirements.platform` fields** (each is an allow-list / minimum; absent = no constraint):
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `os` | `string[]` | Allowed `os.platform()` values, e.g. `["linux"]`. Blocks macOS (`darwin`) / Windows (`win32`) when omitted from the list. |
+| `arch` | `string[]` | Allowed `os.arch()` values, e.g. `["x64", "arm64"]`. `arm64` admits Jetson / Raspberry Pi-class devices. |
+| `minMemoryMB` | `number` | Minimum total RAM in MB. |
+| `reason` | `string` | Operator-facing message shown when incompatible (overrides the auto-generated text). |
+
+Gating is two-layer: the dApp Centre evaluates this client-side to disable the Install button (`isHostCompatible()`), and `AppInstallService` re-evaluates it server-side at install time as defense-in-depth (`evaluatePlatformCompatibility()` in `utils/platform.ts`). The host exposes its facts at `GET /api/system/host-platform`.
 
 ---
 

@@ -106,13 +106,30 @@ export function authenticate(
 
     if (authHeader?.startsWith('Bearer ')) {
         token = authHeader.substring(7).trim(); // Remove "Bearer " prefix and trim whitespace
-        // Check if token contains comma (multiple values) - take first one
+        // A doubled Authorization header arrives comma-joined, e.g.
+        // `Bearer <stale>,<fresh>`. This happens when a stale token lingers in
+        // one layer (localStorage after a node restart) while another layer
+        // sends the fresh one. The old behaviour blindly took the FIRST value,
+        // which was usually the stale token — the session lookup then failed
+        // and the user got a 401/"Non-owner attempted restricted action" even
+        // though a valid token was present (the post-restart login hang). We
+        // now pick the first comma-separated value that maps to a live session,
+        // falling back to the first value so behaviour is unchanged when none
+        // resolve.
         if (token.includes(',')) {
-            logger.warn('⚠️ Authorization header contains multiple values, using first', {
-                original: `${authHeader.substring(0, 50)}...`,
-                extracted: `${token.substring(0, 20)}...`,
+            const parts = token.split(',').map((p) => p.trim()).filter(Boolean);
+            const liveToken = parts.find((p) => {
+                const s = db.getSession(p);
+                return !!s && s.expires_at >= Date.now();
             });
-            token = token.split(',')[0].trim();
+            if (liveToken) {
+                token = liveToken;
+            } else {
+                logger.warn('⚠️ Authorization header had multiple values, none resolving to a live session; using first', {
+                    count: parts.length,
+                });
+                token = parts[0];
+            }
         }
     } else if (req.query.token) {
         token = String(req.query.token).trim();

@@ -3,10 +3,24 @@
  * package-app.mjs — packages Elastos Node Manager as a service-type
  * app bundle for the dApp Store.
  *
- * What it produces:
- *   dist-app/elastos-node-manager-<version>.tar.gz   (frontend + backend + manifest)
- *   dist-app/elastos-node-manager-<version>.json     (signed manifest, ready for /install)
- *   .pc2-dev-key.json                                (Ed25519 keypair, generated once)
+ * What it produces (PER target arch — see --arch below):
+ *   dist-app/elastos-node-manager-<version>-<os>-<arch>.tar.gz  (frontend + backend)
+ *   dist-app/elastos-node-manager-<version>-<os>-<arch>.json    (signed per-arch manifest fragment)
+ *   .pc2-dev-key.json                                           (DEV Ed25519 keypair, generated once)
+ *
+ * Multi-arch: ENM's backend bundles the NATIVE module better-sqlite3, whose
+ * .node binary is arch-specific. Build one bundle per arch ON A HOST OF THAT
+ * ARCH (the build-enm-bundle.yml CI matrix uses x64 + native arm64 runners),
+ * then fold both into one registry entry with per-arch `distribution.variants`.
+ *
+ * Flags / env:
+ *   --arch x64|arm64        target arch (default: host arch). Must match the
+ *                           build host unless --allow-cross-arch is given.
+ *   --os linux              target OS (default: linux; only linux supported).
+ *   --seed-file <path>      file holding a 64-hex Ed25519 seed to sign with
+ *   PC2_SIGNING_SEED_FILE   same as --seed-file (env form, for CI secrets)
+ *   PC2_SIGNING_SEED_HEX    inline 64-hex Ed25519 seed (env form)
+ *   (no seed) → falls back to .pc2-dev-key.json (DEV ONLY).
  *
  * Bundle layout inside the tarball:
  *   index.html, css/, js/, assets/   (frontend, served at root by pc2-node)
@@ -69,6 +83,31 @@ const SERVICE_PORT         = 4180;
 const SERVICE_BACKEND_ENTRY = 'backend/src/server.js';
 const SERVICE_HEALTH_PATH   = '/api/enm/health';
 
+// --- Multi-arch packaging ---------------------------------------------------
+// ENM's backend bundles `better-sqlite3`, a NATIVE module whose compiled
+// .node binary is architecture-specific. A bundle built on x64 will NOT run on
+// arm64 (Jetson / Raspberry Pi) and vice-versa. We therefore build ONE bundle
+// PER target arch — each on a host of that arch (CI matrix / native runner) —
+// and publish them as per-arch variants in the registry. The published
+// manifest advertises BOTH arches via requirements.platform; pc2-node's dApp
+// Centre picks the variant matching the host arch at install time.
+const SUPPORTED_TARGET_ARCHES = ['x64', 'arm64'];
+const TARGET_OS   = (getArg('--os')   || process.env.PC2_TARGET_OS   || 'linux');
+const TARGET_ARCH = (getArg('--arch') || process.env.PC2_TARGET_ARCH || process.arch);
+const ALLOW_CROSS_ARCH = process.argv.includes('--allow-cross-arch');
+
+// requirements.platform advertised in the published manifest — the UNION of
+// arches we ship, so the dApp Centre gates macOS/Windows OUT but allows Linux
+// x64 + arm64. The 50 GB disk floor lives in `reason` (the schema gates on RAM,
+// not disk, but operators need to see the real constraint).
+const PLATFORM_REQUIREMENT = {
+    os: ['linux'],
+    arch: ['x64', 'arm64'],
+    minMemoryMB: 4096,
+    reason: 'Elastos Node Manager runs native Linux node binaries (x86_64 / arm64) and needs at least 50 GB of free disk for chain data. It is not available on macOS or Windows.',
+};
+const MIN_PC2_VERSION = '1.1.0';
+
 // Files we always exclude from the backend portion of the bundle (build
 // artifacts, dev-only docs, tests). The frontend is shipped as-is.
 const BACKEND_EXCLUDES = ['.git', 'tests', '__tests__', 'Dockerfile', 'docs'];
@@ -81,9 +120,10 @@ function main() {
     sanityCheck();
 
     const version = readBackendVersion();
-    log(`[1/6] Packaging ${APP_NAME}-${version}`);
+    const baseName = `${APP_NAME}-${version}-${TARGET_OS}-${TARGET_ARCH}`;
+    log(`[1/6] Packaging ${baseName} (host arch=${process.arch})`);
 
-    log(`[2/6] Installing backend production deps…`);
+    log(`[2/6] Installing backend production deps (native better-sqlite3 → ${TARGET_ARCH})…`);
     execSync('npm install --omit=dev --no-audit --no-fund', {
         cwd: BACKEND_DIR,
         stdio: 'inherit',
@@ -96,7 +136,7 @@ function main() {
 
         log(`[4/6] Building tarball`);
         mkdirSync(OUT_DIR, { recursive: true });
-        const bundlePath = join(OUT_DIR, `${APP_NAME}-${version}.tar.gz`);
+        const bundlePath = join(OUT_DIR, `${baseName}.tar.gz`);
         tar.c({
             gzip: true,
             cwd: stage,
@@ -105,14 +145,14 @@ function main() {
         }, readdirSync(stage));
 
         log(`[5/6] Signing bundle`);
-        const { signatureHex, publisherHex } = signBundle(bundlePath);
+        const { signatureHex, publisherHex, size } = signBundle(bundlePath);
 
         log(`[6/6] Writing signed manifest`);
-        const manifest = buildManifest({ version, signatureHex, publisherHex });
-        const manifestPath = join(OUT_DIR, `${APP_NAME}-${version}.json`);
+        const manifest = buildManifest({ version, signatureHex, publisherHex, size });
+        const manifestPath = join(OUT_DIR, `${baseName}.json`);
         writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
 
-        printSummary({ bundlePath, manifestPath, publisherHex });
+        printSummary({ bundlePath, manifestPath, publisherHex, baseName });
     } finally {
         try { rmSync(stage, { recursive: true, force: true }); } catch { /* ignore */ }
     }
@@ -127,6 +167,24 @@ function sanityCheck() {
     if (!existsSync(BACKEND_DIR))  die(`Backend not found at ${BACKEND_DIR}`);
     if (!existsSync(join(BACKEND_DIR, 'src', 'server.js'))) {
         die(`Expected backend entry at ${join(BACKEND_DIR, 'src', 'server.js')} — adjust SERVICE_BACKEND_ENTRY if moved.`);
+    }
+    if (!SUPPORTED_TARGET_ARCHES.includes(TARGET_ARCH)) {
+        die(`Unsupported --arch "${TARGET_ARCH}". Supported: ${SUPPORTED_TARGET_ARCHES.join(', ')}.`);
+    }
+    // The backend bundles a NATIVE module (better-sqlite3). `npm install` builds
+    // it for the HOST arch, so a bundle is only valid if built on a host whose
+    // arch matches the target. Refuse a cross-arch build (which would silently
+    // bake the wrong .node and crash on the target) unless explicitly forced.
+    if (TARGET_ARCH !== process.arch && !ALLOW_CROSS_ARCH) {
+        die(
+            `Refusing to build a ${TARGET_ARCH} bundle on a ${process.arch} host — the bundled ` +
+            `native better-sqlite3 binary would be ${process.arch} and crash on ${TARGET_ARCH}. ` +
+            `Build on a ${TARGET_ARCH} host (CI matrix / native runner), or pass --allow-cross-arch ` +
+            `ONLY if you have separately ensured node_modules holds a ${TARGET_ARCH} prebuild.`,
+        );
+    }
+    if (TARGET_OS !== 'linux') {
+        die(`Only --os linux is supported for ENM (got "${TARGET_OS}"). The Elastos node binaries are Linux-only.`);
     }
 }
 
@@ -178,10 +236,29 @@ function signBundle(bundlePath) {
     return {
         signatureHex: signatureBytes.toString('hex'),
         publisherHex: rawPublicKey.toString('hex'),
+        size: bundleBuffer.length,
     };
 }
 
 function loadOrGenerateKeypair() {
+    // Production path: sign with a raw 32-byte Ed25519 seed (64 hex chars),
+    // e.g. the Elacity Labs publisher key. Provide it as a file (--seed-file /
+    // PC2_SIGNING_SEED_FILE) or inline (PC2_SIGNING_SEED_HEX). We wrap the seed
+    // in the fixed Ed25519 PKCS#8 DER prefix so Node's crypto can load it; the
+    // derived public key MUST match the registry's trusted publisher.
+    const seedFile = getArg('--seed-file') || process.env.PC2_SIGNING_SEED_FILE;
+    const seedHex = (seedFile ? readFileSync(seedFile, 'utf8') : (process.env.PC2_SIGNING_SEED_HEX || '')).trim();
+    if (seedHex) {
+        if (!/^[0-9a-fA-F]{64}$/.test(seedHex)) {
+            die('Signing seed must be exactly 64 hex chars (a 32-byte Ed25519 seed).');
+        }
+        const PKCS8_ED25519_PREFIX = Buffer.from('302e020100300506032b657004220420', 'hex');
+        const pkcs8 = Buffer.concat([PKCS8_ED25519_PREFIX, Buffer.from(seedHex, 'hex')]);
+        const privateKey = createPrivateKey({ key: pkcs8, format: 'der', type: 'pkcs8' });
+        const publicKey = createPublicKey(privateKey);
+        log('(signing with provided Ed25519 seed)');
+        return { privateKey, publicKey };
+    }
     if (existsSync(KEY_FILE)) {
         const stored = JSON.parse(readFileSync(KEY_FILE, 'utf8'));
         return {
@@ -201,7 +278,7 @@ function loadOrGenerateKeypair() {
     return kp;
 }
 
-function buildManifest({ version, signatureHex, publisherHex }) {
+function buildManifest({ version, signatureHex, publisherHex, size }) {
     return {
         name: APP_NAME,
         title: APP_TITLE,
@@ -240,6 +317,15 @@ function buildManifest({ version, signatureHex, publisherHex }) {
         capabilities: {
             network: true,
         },
+        // Device-compatibility gate (read by pc2-node's AppInstallService +
+        // the dApp Centre). ENM is Linux-only and ships per-arch native
+        // binaries, so macOS/Windows hosts are blocked and only x64 + arm64
+        // Linux (VPS, Jetson, Raspberry Pi) are offered. minVersion gates old
+        // PC2 builds that predate service-app support.
+        requirements: {
+            minVersion: MIN_PC2_VERSION,
+            platform: PLATFORM_REQUIREMENT,
+        },
         // Paths ENM writes to OUTSIDE its bundle dir — pc2-node deletes
         // these on purge-uninstall. Chain data, audit DB, downloaded
         // binaries, ENM's settings DB all live here. Keystore lives here
@@ -256,42 +342,56 @@ function buildManifest({ version, signatureHex, publisherHex }) {
             // Populate `cid` after uploading the tarball to IPFS. The dApp
             // Store catalog reads this manifest verbatim and POSTs it to
             // /api/installed-apps/install along with the CID body field.
+            //
+            // This is the PER-ARCH fragment for `${TARGET_OS}-${TARGET_ARCH}`.
+            // The catalog-assembly step (sync-from-pc2) folds the x64 + arm64
+            // fragments into a single registry entry whose `distribution.cid`
+            // is the x64 default (back-compat) and whose `distribution.variants`
+            // map carries the per-arch {cid, signature, size}. The installer
+            // then picks the variant matching the host arch.
             cid: '',
             signature: signatureHex,
             signedBy: publisherHex,
             channel: 'beta',
+            os: TARGET_OS,
+            arch: TARGET_ARCH,
+            size,
         },
     };
 }
 
-function printSummary({ bundlePath, manifestPath, publisherHex }) {
+function printSummary({ bundlePath, manifestPath, publisherHex, baseName }) {
     const banner = '─'.repeat(60);
+    const otherArch = TARGET_ARCH === 'x64' ? 'arm64' : 'x64';
     process.stderr.write(`
 ${banner}
-✅ Done.
+✅ Done — built the ${TARGET_OS}-${TARGET_ARCH} variant.
 
 Bundle:     ${bundlePath}
-Manifest:   ${manifestPath}
+Manifest:   ${manifestPath}   (per-arch fragment)
 Publisher:  ${publisherHex}
 
-Next steps:
-  1. Upload the .tar.gz to IPFS, capture the CID.
-     ipfs add "${bundlePath}"
+This is ONE arch. ENM ships per-arch (native better-sqlite3), so you also need
+the ${otherArch} bundle, built on a ${otherArch} Linux host:
 
-  2. Edit the manifest and set distribution.cid to that CID.
+  PC2_SIGNING_SEED_FILE=<seed> node pc2-node/scripts/package-app.mjs --arch ${otherArch}
 
-  3. On the PC2 host, set the trusted publisher env var:
+Then, to publish BOTH as one catalog entry:
+  1. Pin each tarball to IPFS, capture the per-arch CIDs:
+     ipfs add "${bundlePath}"            # ${TARGET_ARCH}
+     ipfs add "<the ${otherArch} tarball>"   # ${otherArch}
+
+  2. Run the catalog-assembly step to fold both fragments into one registry
+     entry (distribution.variants[linux-x64|linux-arm64]):
+     node deploy/app-registry/sync-from-pc2.mjs   # see its --help for inputs
+
+  3. On the PC2 host, trust the publisher (stable across builds because we sign
+     with the fixed Elacity Labs seed):
      PC2_TRUSTED_SERVICE_PUBLISHERS=${publisherHex}
      systemctl restart pc2-node
 
-  4. Either: list the {manifest, cid} pair in the dApp Store catalog
-     (apps.ela.city) so users see an Install tile,
-     or: directly install via curl —
-
-     curl -X POST http://<host>/api/installed-apps/install \\
-       -H 'Authorization: Bearer <owner-token>' \\
-       -H 'Content-Type: application/json' \\
-       -d '{"manifest": <paste manifest>, "cid": "<paste cid>"}'
+  The dApp Centre then offers ENM only on Linux x64/arm64 (Jetson/Pi/VPS) and
+  installs the variant matching each host's architecture.
 
 ${banner}
 `);
@@ -299,6 +399,13 @@ ${banner}
 
 function log(msg) { process.stderr.write(`[package-app] ${msg}\n`); }
 function die(msg) { log(`ERROR: ${msg}`); process.exit(1); }
+
+// Tiny `--flag value` reader (function declaration → hoisted, so it is safe to
+// call from the const initializers near the top of the module).
+function getArg(flag) {
+    const i = process.argv.indexOf(flag);
+    return i >= 0 && i + 1 < process.argv.length ? process.argv[i + 1] : undefined;
+}
 
 // =============================================================================
 // Entry

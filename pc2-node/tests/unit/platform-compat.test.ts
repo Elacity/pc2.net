@@ -13,6 +13,7 @@ import assert from 'node:assert/strict';
 
 import {
   evaluatePlatformCompatibility,
+  resolveHostVariant,
   type HostPlatformSummary,
 } from '../../src/utils/platform.js';
 
@@ -74,4 +75,36 @@ test('ENM-style requirement: Linux + 4GB — the Jetson/Pi-vs-Mac case', () => {
   assert.equal(evaluatePlatformCompatibility(enm, jetson).compatible, true);
   // Mac desktop → cannot (this is the dApp Store message the user asked for)
   assert.equal(evaluatePlatformCompatibility(enm, mac).compatible, false);
+});
+
+// ---- resolveHostVariant: per-arch capsule selection (multi-arch ENM) -------
+
+const ENM_VARIANTS = {
+  'linux-x64':   { cid: 'bafyX64',  signature: 'sigX64',  size: 30_100_000 },
+  'linux-arm64': { cid: 'bafyArm', signature: 'sigArm', size: 27_900_000 },
+};
+
+test('no variants → null (single-arch app uses top-level cid)', () => {
+  assert.equal(resolveHostVariant(undefined, linuxServer), null);
+  assert.equal(resolveHostVariant({}, linuxServer), null);
+});
+
+test('server picks linux-<own arch>', () => {
+  const onX64 = resolveHostVariant(ENM_VARIANTS, linuxServer);
+  assert.equal(onX64?.key, 'linux-x64');
+  assert.equal(onX64?.variant.cid, 'bafyX64');
+
+  const onArm = resolveHostVariant(ENM_VARIANTS, jetson);
+  assert.equal(onArm?.key, 'linux-arm64');
+  assert.equal(onArm?.variant.cid, 'bafyArm');
+});
+
+test('missing arch throws (no usable capsule → fail closed)', () => {
+  // macOS host has no linux-darwin variant → must refuse, not silently fetch x64
+  assert.throws(() => resolveHostVariant(ENM_VARIANTS, mac), /darwin-arm64/);
+});
+
+test('matched variant missing cid/signature throws', () => {
+  const broken = { 'linux-x64': { cid: '', signature: 'sig' } };
+  assert.throws(() => resolveHostVariant(broken, linuxServer), /missing cid or signature/);
 });

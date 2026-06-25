@@ -1604,7 +1604,16 @@
         function registryAppToCatalog(app) {
             const r = app.registry || {};
             const authorName = typeof app.author === 'object' ? app.author.name : (app.author || 'Unknown');
+            // Everything the publisher declared, MINUS the `registry` UI-metadata
+            // block (gradient/badges/etc., not a manifest field). Carried so the
+            // install call sends the publisher's real manifest — `type: "service"`,
+            // `backend`, `externalDataDirs`, `capabilities`, `display`,
+            // `distribution` — rather than a lossy reconstruction. Without this a
+            // service app like ENM would install as a plain web app (no backend
+            // spawned) and fail the Ed25519 signature gate (no signature sent).
+            const { registry: _registryUiBlock, ...rawManifest } = app;
             return {
+                rawManifest,
                 id: app.name,
                 name: app.title || app.name,
                 developer: authorName,
@@ -1635,6 +1644,14 @@
                 website: r.website || null,
                 source: r.source || null,
                 cid: app.distribution?.cid || null,
+                // Full distribution block (signature, signedBy, and per-arch
+                // `variants` for native-module apps). Carried so installApp can
+                // (a) send the signature to the server — required for service
+                // apps to pass the Ed25519 gate — and (b) so the compat check
+                // can fall back to "no build for your CPU yet" when this host's
+                // arch has no published variant. See AppDistribution in
+                // pc2-node/src/services/AppInstallService.ts.
+                distribution: app.distribution || null,
                 registryStatus: r.status || 'coming_soon',
                 // Manifest role — `'system'` for the four core capsules
                 // (Market, Player, Creator, dDRM Viewer) that auto-install
@@ -1774,9 +1791,25 @@
                 // apps that declare requirements.platform. Installed apps stay
                 // openable; if hostPlatform is unknown we skip the gate (fail-open
                 // in the UI — the server still enforces on install).
-                const compat = (!isInstalled && cat.platformReq)
+                let compat = (!isInstalled && cat.platformReq)
                     ? isHostCompatible(cat.platformReq, hostPlatform)
                     : { compatible: true };
+                // Per-arch capsules: even when platformReq's arch union allows
+                // this host (e.g. arch:["x64","arm64"]), there may be no PUBLISHED
+                // variant for the host's actual arch yet (x64-first rollout). In
+                // that case the install would fail server-side, so gate it out
+                // here with a clearer "coming soon" message.
+                if (compat.compatible && !isInstalled && hostPlatform && cat.distribution?.variants) {
+                    const variantKey = `${hostPlatform.os}-${hostPlatform.arch}`;
+                    if (!cat.distribution.variants[variantKey]) {
+                        const haveArches = Object.keys(cat.distribution.variants)
+                            .map(k => k.split('-').slice(1).join('-')).join(', ');
+                        compat = {
+                            compatible: false,
+                            reason: `No ${hostPlatform.arch} build available yet (published: ${haveArches || 'none'})`,
+                        };
+                    }
+                }
                 allApps.push({
                     ...cat,
                     installed: isInstalled,
@@ -2288,18 +2321,29 @@
                 // these via updateInstallProgress.
                 updateInstallProgress('fetching', 10);
 
+                // Start from the publisher's full manifest (type, backend,
+                // externalDataDirs, capabilities, display, distribution) so
+                // service apps spawn their backend and pass the signature gate.
+                // Fall back to {} for built-ins/launch apps that have no raw
+                // manifest. Identity fields are overridden from the catalog.
+                const baseManifest = app.rawManifest ? { ...app.rawManifest } : {};
                 const manifest = {
+                    ...baseManifest,
                     name: app.id,
                     title: app.name,
-                    version: app.version || '1.0.0',
-                    description: app.description,
-                    author: app.developer,
-                    entry: 'index.html',
-                    permissions: app.permissions || [],
+                    version: app.version || baseManifest.version || '1.0.0',
+                    description: app.description ?? baseManifest.description,
+                    author: app.developer ?? baseManifest.author,
+                    entry: baseManifest.entry || 'index.html',
+                    permissions: app.permissions || baseManifest.permissions || [],
                     // Echo the registry requirements (incl. platform) so the
                     // server's defense-in-depth compatibility check runs against
                     // the same constraints the UI gated on.
                     ...(app.manifestRequirements ? { requirements: app.manifestRequirements } : {}),
+                    // Distribution carries signature/signedBy (required for the
+                    // service-app Ed25519 gate) and per-arch `variants` (the
+                    // server resolves the capsule for its own architecture).
+                    ...(app.distribution ? { distribution: app.distribution } : {}),
                 };
 
                 const res = await pc2Fetch('/api/installed-apps/install', {

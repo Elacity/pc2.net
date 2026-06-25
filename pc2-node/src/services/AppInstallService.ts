@@ -19,6 +19,7 @@ import {
   type PlatformRequirement,
   getHostPlatformSummary,
   evaluatePlatformCompatibility,
+  resolveHostVariant,
 } from '../utils/platform.js';
 
 const log = createLogger('app-install');
@@ -170,6 +171,19 @@ export interface AppBackend {
   };
 }
 
+/**
+ * One architecture's capsule for a native-module app. The `cid` points at that
+ * arch's tarball on IPFS; `signature` is the Ed25519 detached signature over the
+ * SHA-256 of those tarball bytes — i.e. the same scheme as the top-level
+ * `distribution.signature`, just for this arch's bundle. The publisher key
+ * (`signedBy`) is shared and lives on the parent `AppDistribution`.
+ */
+export interface AppDistributionVariant {
+  cid: string;
+  signature: string;
+  size?: number | null;
+}
+
 export interface AppDistribution {
   cid?: string | null;
   signature?: string | null;
@@ -177,6 +191,16 @@ export interface AppDistribution {
   channel?: 'stable' | 'beta' | 'dev';
   updateUrl?: string | null;
   size?: number | null;
+  /**
+   * Per-arch capsules for apps that bundle a NATIVE module (e.g. the Elastos
+   * Node Manager bundles `better-sqlite3`, whose .node binary is arch-specific).
+   * Keyed by `"<os>-<arch>"` using Node's `os.platform()`/`os.arch()` values,
+   * e.g. `"linux-x64"`, `"linux-arm64"`. When present, the installer resolves
+   * the variant matching the HOST's own arch and ignores the top-level `cid`
+   * (which is kept as a back-compat default for older clients). `signedBy` is
+   * shared across all variants.
+   */
+  variants?: Record<string, AppDistributionVariant>;
 }
 
 export interface AppManifest {
@@ -338,12 +362,31 @@ export class AppInstallService {
         throw new Error(`App "${appName}" is already installed. Uninstall first or use update.`);
       }
 
-      log.info(`[install] Starting install of "${appName}" from CID ${cid}`);
+      // Native-module apps (e.g. ENM bundles better-sqlite3) ship one capsule
+      // per architecture. When the manifest declares distribution.variants, the
+      // node installs the bundle matching ITS OWN arch — never the top-level cid
+      // and never whatever the client asked for. The signature is still verified
+      // over the fetched bytes below, so resolving here is safe (a wrong/forged
+      // cid can't pass the trusted-publisher signature check). Throws if there
+      // is no capsule for this host's arch.
+      let effectiveCid = cid;
+      let verifyManifest = manifest;
+      const variant = this.resolveDistributionVariant(manifest);
+      if (variant) {
+        effectiveCid = variant.cid;
+        verifyManifest = {
+          ...manifest,
+          distribution: { ...manifest.distribution, cid: variant.cid, signature: variant.signature },
+        };
+        log.info(`[install] "${appName}": selected "${variant.key}" capsule (cid ${variant.cid})`);
+      }
+
+      log.info(`[install] Starting install of "${appName}" from CID ${effectiveCid}`);
       emit('fetching', 5, { message: `Fetching "${appName}" from IPFS…` });
 
       let bundleBuffer: Buffer;
       try {
-        bundleBuffer = await this.fetchFromIPFS(cid);
+        bundleBuffer = await this.fetchFromIPFS(effectiveCid);
       } catch (err: any) {
         throw new Error(`Failed to fetch app bundle from IPFS: ${err.message}`);
       }
@@ -356,7 +399,7 @@ export class AppInstallService {
         bytesReceived: bundleBuffer.length,
         totalBytes: bundleBuffer.length,
       });
-      const signatureVerified = this.verifyDistributionSignature(manifest, bundleBuffer);
+      const signatureVerified = this.verifyDistributionSignature(verifyManifest, bundleBuffer);
 
       // Service-type apps spawn a pc2-node-privileged child process. Unlike
       // other app kinds (which keep the v1 warn-only signature posture), a
@@ -408,7 +451,7 @@ export class AppInstallService {
         app_name: appName,
         title: manifest.title,
         version: manifest.version,
-        cid,
+        cid: effectiveCid,
         size: totalSize,
         icon: manifest.icon || null,
         description: manifest.description || null,
@@ -709,6 +752,32 @@ export class AppInstallService {
       throw new Error(
         `App "${manifest.name}" is not compatible with this device: ${verdict.reason}`,
       );
+    }
+  }
+
+  /**
+   * Resolve the per-arch capsule for THIS host from `distribution.variants`.
+   *
+   * Returns null when the manifest has no variants (single-arch app — the
+   * caller uses the top-level cid as-is). When variants exist, the node picks
+   * the one keyed by its own `"<os>-<arch>"` (Node's os.platform()/os.arch()),
+   * and throws if none matches — there is no usable capsule for this device, so
+   * the install must fail closed rather than fetch a wrong-arch bundle.
+   */
+  private resolveDistributionVariant(
+    manifest: AppManifest,
+  ): (AppDistributionVariant & { key: string }) | null {
+    try {
+      const resolved = resolveHostVariant<AppDistributionVariant>(
+        manifest.distribution?.variants,
+        getHostPlatformSummary(),
+      );
+      if (!resolved) return null;
+      return { ...resolved.variant, key: resolved.key };
+    } catch (err) {
+      // Re-wrap the pure resolver's generic message with the app name so the
+      // operator sees which app could not be installed on this device.
+      throw new Error(`App "${manifest.name}" ${(err as Error).message}`);
     }
   }
 

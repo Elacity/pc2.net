@@ -382,6 +382,33 @@ Controls how the app is packaged and delivered.
 | `signature` | `string` | Cryptographic signature of the bundle CID. Not enforced in PC2 v1. |
 | `signedBy` | `string` | Public key, DID, or wallet address of the signer. Paired with `signature`. |
 | `updateUrl` | `string` | URL to check for updates. The host polls this to detect new versions. |
+| `variants` | `object` | Per-architecture capsules for native-module apps. See below. |
+
+#### Per-Architecture Variants
+
+Apps whose backend bundles a **native module** (e.g. the Elastos Node Manager bundles `better-sqlite3`, whose compiled `.node` binary is architecture-specific) ship **one capsule per architecture**. A single CID cannot serve both x64 and arm64, so the manifest carries a `distribution.variants` map keyed by `"<os>-<arch>"` (Node's `os.platform()` / `os.arch()` values):
+
+```json
+{
+  "distribution": {
+    "channel": "beta",
+    "cid": "bafyx64default...",
+    "signedBy": "1ab060ba7578261355504300c1193c484ed8a46a30499c3fa3cb9065930367eb",
+    "variants": {
+      "linux-x64":   { "cid": "bafyx64...",  "signature": "…", "size": 30100000 },
+      "linux-arm64": { "cid": "bafyarm64...", "signature": "…", "size": 27900000 }
+    }
+  }
+}
+```
+
+Rules:
+
+- Each variant `signature` is the Ed25519 detached signature over the **SHA-256 of that arch's tarball bytes** (the same scheme as the top-level `signature`, just for that arch's bundle).
+- `signedBy` is **shared** across all variants (one publisher key).
+- The top-level `cid` / `signature` remain as a back-compat default (conventionally the `x64` bundle) for older clients that predate variant support.
+- When `variants` is present, the installer resolves the variant matching the **host's own architecture** (`linux-<arch>`) and ignores the top-level `cid`. If no variant exists for the host arch, the install is refused.
+- The dApp Centre treats the available variant keys as the effective compatible architectures, so a host with no matching variant sees "Not compatible with this device" rather than a failed install.
 
 #### Signature Verification (Future)
 

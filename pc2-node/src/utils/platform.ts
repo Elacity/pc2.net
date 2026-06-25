@@ -115,6 +115,47 @@ export function evaluatePlatformCompatibility(
   return { compatible: true };
 }
 
+/**
+ * The minimum shape of a per-arch distribution variant the resolver needs.
+ * The real type (with `size`) lives in AppInstallService.AppDistributionVariant;
+ * this generic keeps platform.ts free of a service-layer import.
+ */
+export interface VariantLike {
+  cid?: string | null;
+  signature?: string | null;
+}
+
+/**
+ * Select the per-arch capsule for `host` from a `distribution.variants` map.
+ *
+ * - Returns `null` when there are no variants (single-arch app; caller uses the
+ *   top-level cid as-is).
+ * - Returns `{ key, variant }` for the host's own `"<os>-<arch>"` key.
+ * - THROWS when variants exist but none matches the host arch, or the matched
+ *   variant is missing cid/signature — there is no usable capsule, so the
+ *   install must fail closed rather than fetch a wrong-arch bundle.
+ *
+ * Pure (host is passed in) so it is unit-testable independent of the real host;
+ * AppInstallService wraps it with getHostPlatformSummary() and the app name.
+ */
+export function resolveHostVariant<T extends VariantLike>(
+  variants: Record<string, T> | undefined | null,
+  host: HostPlatformSummary,
+): { key: string; variant: T } | null {
+  if (!variants || Object.keys(variants).length === 0) return null;
+  const key = `${host.os}-${host.arch}`;
+  const variant = variants[key];
+  if (!variant) {
+    throw new Error(
+      `no capsule for this device's architecture (${key}); available: ${Object.keys(variants).join(', ') || 'none'}`,
+    );
+  }
+  if (!variant.cid || !variant.signature) {
+    throw new Error(`variant "${key}" is missing cid or signature`);
+  }
+  return { key, variant };
+}
+
 /** Hardware override config that users can set in config.json */
 export interface OllamaHardwareConfig {
   autoDetect?: boolean;

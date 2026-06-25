@@ -5,10 +5,13 @@ name: Build ENM bundle
 #   - tag push (v*): same build, plus attaches the bundle to a GitHub Release
 #   - manual: workflow_dispatch button in the Actions UI for ad-hoc rebuilds
 #
-# The signing key is loaded from the PC2_DEV_SIGNING_KEY secret so the publisher
-# hex stays STABLE across all CI builds — without that, every build would generate
-# a fresh keypair and the operator would have to update PC2_TRUSTED_SERVICE_PUBLISHERS
-# on every deploy.
+# The signing key is loaded from the PC2_ENM_SIGNING_SEED secret (the 64-hex
+# Ed25519 publisher seed) so the publisher hex stays STABLE across all CI builds
+# — without that, every build would generate a fresh keypair and the operator
+# would have to update PC2_TRUSTED_SERVICE_PUBLISHERS on every deploy.
+#
+# NOTE: ENM bundles a native module, so it builds PER-ARCH (x64 + arm64) on
+# native runners. Each arch produces its own signed tarball + manifest fragment.
 on:
   push:
     branches: [main]
@@ -26,7 +29,19 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # ENM bundles the NATIVE module better-sqlite3, whose .node binary is
+    # arch-specific. We therefore build ONE bundle per arch ON A HOST OF THAT
+    # ARCH: x64 on ubuntu-latest, arm64 on GitHub's native arm64 runner. Each
+    # bundle is published as a per-arch variant in the registry.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -50,31 +65,36 @@ jobs:
         working-directory: pc2-node
         run: npm install --no-save --no-audit --no-fund tar@^7.5.2
 
-      # Restore the dev signing key from a repo secret so every CI build signs
-      # with the SAME publisher key. Without this, package-app.mjs generates a
-      # fresh keypair each run and the resulting bundle's signedBy hex changes,
-      # forcing an update to PC2_TRUSTED_SERVICE_PUBLISHERS on every deploy.
+      # Restore the Ed25519 signing SEED from a repo secret so every CI build
+      # signs with the SAME publisher key (the Elacity Labs production key).
+      # Without it, package-app.mjs generates a fresh keypair each run and the
+      # bundle's signedBy hex changes, forcing an update to
+      # PC2_TRUSTED_SERVICE_PUBLISHERS on every deploy.
       #
-      # Secret format: paste the entire contents of .pc2-dev-key.json (the JSON
-      # with publicPem + privatePem) into a repo secret named PC2_DEV_SIGNING_KEY.
-      # If the secret is empty/missing, package-app.mjs falls back to generating
-      # a fresh key — fine for first-run experimentation, but the publisher hex
-      # in the build summary will change build-to-build.
-      - name: Restore dev signing key
+      # Secret format: PC2_ENM_SIGNING_SEED = the 64-hex Ed25519 seed (the same
+      # value as ~/.elastos/keys/elacity-labs.ed25519). Written to a 0600 file
+      # and passed to the packager via PC2_SIGNING_SEED_FILE. If the secret is
+      # empty/missing (e.g. fork PRs), package-app.mjs falls back to a fresh dev
+      # key — fine for build-only checks, but the publisher hex will differ.
+      - name: Restore signing seed
         env:
-          KEY_JSON: ${{ secrets.PC2_DEV_SIGNING_KEY }}
+          SEED_HEX: ${{ secrets.PC2_ENM_SIGNING_SEED }}
         run: |
-          if [ -n "$KEY_JSON" ]; then
-            printf '%s' "$KEY_JSON" > .pc2-dev-key.json
-            chmod 600 .pc2-dev-key.json
-            echo "key-restored=true" >> "$GITHUB_OUTPUT"
-            echo "::notice title=Signing key::Restored stable dev key from PC2_DEV_SIGNING_KEY secret"
+          if [ -n "$SEED_HEX" ]; then
+            printf '%s' "$SEED_HEX" > .enm-signing.seed
+            chmod 600 .enm-signing.seed
+            echo "PC2_SIGNING_SEED_FILE=$PWD/.enm-signing.seed" >> "$GITHUB_ENV"
+            echo "::notice title=Signing key::Restored stable Ed25519 seed from PC2_ENM_SIGNING_SEED secret"
           else
-            echo "::warning title=No signing key::PC2_DEV_SIGNING_KEY secret is empty — a fresh keypair will be generated and the publisher hex will be different from previous builds. Add the secret to keep the publisher hex stable."
+            echo "::warning title=No signing seed::PC2_ENM_SIGNING_SEED secret is empty — a fresh dev key will be generated and the publisher hex will differ build-to-build. Add the secret to keep it stable."
           fi
 
-      - name: Build bundle
-        run: node pc2-node/scripts/package-app.mjs
+      # package-app.mjs runs `npm install --omit=dev` in enm-server, which fetches
+      # the better-sqlite3 prebuilt for the runner's arch (linux-x64 / linux-arm64
+      # are both published upstream). If a prebuild is ever unavailable, the
+      # ubuntu runners ship build-essential so node-gyp can compile from source.
+      - name: Build bundle (${{ matrix.arch }})
+        run: node pc2-node/scripts/package-app.mjs --arch ${{ matrix.arch }}
 
       # Read the version out of enm-server/package.json so we can name artifacts
       # and the GitHub Release predictably.
@@ -82,9 +102,10 @@ jobs:
         id: version
         run: |
           VERSION=$(node -p "require('./enm-server/package.json').version")
+          BASE="elastos-node-manager-${VERSION}-linux-${{ matrix.arch }}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tarball=dist-app/elastos-node-manager-${VERSION}.tar.gz" >> "$GITHUB_OUTPUT"
-          echo "manifest=dist-app/elastos-node-manager-${VERSION}.json" >> "$GITHUB_OUTPUT"
+          echo "tarball=dist-app/${BASE}.tar.gz" >> "$GITHUB_OUTPUT"
+          echo "manifest=dist-app/${BASE}.json" >> "$GITHUB_OUTPUT"
 
       # Surface the publisher hex in the build summary so the operator can copy
       # it straight into PC2_TRUSTED_SERVICE_PUBLISHERS without unzipping the
@@ -92,7 +113,7 @@ jobs:
       - name: Print publisher hex
         run: |
           PUBLISHER=$(node -p "require('./${{ steps.version.outputs.manifest }}').distribution.signedBy")
-          echo "## ENM bundle ${{ steps.version.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "## ENM bundle ${{ steps.version.outputs.version }} (${{ matrix.arch }})" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "**Publisher hex** (set as \`PC2_TRUSTED_SERVICE_PUBLISHERS\` on the PC2 host):" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
@@ -101,7 +122,7 @@ jobs:
       - name: Upload bundle artifact
         uses: actions/upload-artifact@v4
         with:
-          name: elastos-node-manager-${{ steps.version.outputs.version }}
+          name: elastos-node-manager-${{ steps.version.outputs.version }}-linux-${{ matrix.arch }}
           path: |
             ${{ steps.version.outputs.tarball }}
             ${{ steps.version.outputs.manifest }}

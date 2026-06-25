@@ -384,9 +384,24 @@ export class AppInstallService {
       log.info(`[install] Starting install of "${appName}" from CID ${effectiveCid}`);
       emit('fetching', 5, { message: `Fetching "${appName}" from IPFS…` });
 
+      // Known download size lets us draw a real filling bar during the fetch —
+      // the longest stage. Prefer the resolved variant's size (per-arch), else
+      // the top-level distribution size. The fetch band is 5..55 %; extraction
+      // continues at 60..90, registering at 95. Byte events stream on the
+      // gateway fetch path; a pure-bitswap fetch may stay coarse (small bundles).
+      const totalBytes = Number(
+        variant?.size ?? manifest.distribution?.size ?? 0,
+      );
+      const onFetchProgress = (bytesReceived: number): void => {
+        const pct = totalBytes > 0
+          ? 5 + Math.min(50, Math.floor((bytesReceived / totalBytes) * 50))
+          : 5;
+        emit('fetching', pct, { bytesReceived, totalBytes });
+      };
+
       let bundleBuffer: Buffer;
       try {
-        bundleBuffer = await this.fetchFromIPFS(effectiveCid);
+        bundleBuffer = await this.fetchFromIPFS(effectiveCid, onFetchProgress);
       } catch (err: any) {
         throw new Error(`Failed to fetch app bundle from IPFS: ${err.message}`);
       }
@@ -893,7 +908,10 @@ export class AppInstallService {
     }
   }
 
-  private async fetchFromIPFS(cid: string): Promise<Buffer> {
+  private async fetchFromIPFS(
+    cid: string,
+    onProgress?: (bytesReceived: number) => void,
+  ): Promise<Buffer> {
     if (!this.ipfs) {
       throw new Error('IPFS not available — cannot fetch remote app bundles');
     }
@@ -907,7 +925,7 @@ export class AppInstallService {
     // Timeout is generous (5 min) because the Glide Finance bundle is ~80 MB
     // and a slow home connection via the gateway fallback can take a minute.
     try {
-      await this.ipfs.pinRemoteCID(cid, { timeoutMs: 300_000 });
+      await this.ipfs.pinRemoteCID(cid, { timeoutMs: 300_000, onProgress });
     } catch (err: any) {
       const type = err?.type;
       if (type === 'INVALID_CID') {

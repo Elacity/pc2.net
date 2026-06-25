@@ -1624,6 +1624,17 @@
                 version: app.version || '',
                 icon: app.icon || 'package',
                 gradient: r.gradient || 'gradient-slate',
+                // Real branded logo shown in the store BEFORE install. The
+                // bundle's own icon lives inside the (not-yet-fetched) IPFS
+                // capsule, so the catalog entry must carry a fetchable image —
+                // `iconDataUrl` (a data: URI) or an `icon` that's already a URL.
+                // getCardIconHtml/getStaffPickIconHtml render `builtInIcon` via
+                // <img> with the .has-img treatment; absent one, they fall back
+                // to the gradient + category glyph. Installed apps still get the
+                // real bundle logo from mergeApps (launchAppIcons) which wins.
+                builtInIcon: (typeof app.iconDataUrl === 'string' && /^(data:|https?:|\/)/.test(app.iconDataUrl))
+                    ? app.iconDataUrl
+                    : (typeof app.icon === 'string' && /^(data:|https?:|\/)/.test(app.icon) ? app.icon : null),
                 // Optional hero image for the staff-pick card. Not present
                 // in the current registry payload but reading it here means
                 // the day a publisher adds `registry.banner` (or top-level
@@ -1784,8 +1795,10 @@
                 const isComingSoon = !isInstalled && (cat.registryStatus === 'coming_soon' || (!cat.cid && cat.registryStatus !== 'available'));
                 // For installed apps, prefer the backend-resolved bundle icon
                 // (the real branded logo) over the registry's category SVG
-                // key. Non-installed apps keep the category glyph so the
-                // "discover" feel is preserved. See DAPP-UX-POLISH-V12 #2.
+                // key. Non-installed apps fall back to the catalog's own
+                // `builtInIcon` (the registry `iconDataUrl`) so the real logo
+                // shows in the store BEFORE install; only when neither exists
+                // do we drop to the category glyph. See DAPP-UX-POLISH-V12 #2.
                 const realIcon = isInstalled ? launchAppIcons[cat.id] : null;
                 // Device-compatibility gate: only relevant for not-yet-installed
                 // apps that declare requirements.platform. Installed apps stay
@@ -1816,7 +1829,7 @@
                     isBuiltIn: isBuiltIn,
                     isComingSoon,
                     incompatibleReason: compat.compatible ? null : compat.reason,
-                    builtInIcon: realIcon || null,
+                    builtInIcon: realIcon || cat.builtInIcon || null,
                 });
             }
 

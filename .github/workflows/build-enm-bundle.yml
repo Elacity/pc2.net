@@ -14,11 +14,7 @@ name: Build ENM bundle
 # native runners. Each arch produces its own signed tarball + manifest fragment.
 on:
   push:
-    # TODO(remove-before-merge): feature/elastos-node-manager added temporarily
-    # so the new multi-arch matrix can be CI-tested on the branch (workflow_dispatch
-    # is unavailable until this workflow lands on the default branch). Drop it back
-    # to [main] before merging.
-    branches: [main, feature/elastos-node-manager]
+    branches: [main]
     paths:
       - 'enm-server/**'
       - 'src/backend/apps/elastos-node-manager/**'

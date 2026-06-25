@@ -344,8 +344,8 @@ function buildManifest({ version, signatureHex, publisherHex, size }) {
             // /api/installed-apps/install along with the CID body field.
             //
             // This is the PER-ARCH fragment for `${TARGET_OS}-${TARGET_ARCH}`.
-            // The catalog-assembly step (sync-from-pc2) folds the x64 + arm64
-            // fragments into a single registry entry whose `distribution.cid`
+            // The catalog-assembly step (assemble-enm-entry.mjs) folds the
+            // x64 + arm64 fragments into a single registry entry whose `distribution.cid`
             // is the x64 default (back-compat) and whose `distribution.variants`
             // map carries the per-arch {cid, signature, size}. The installer
             // then picks the variant matching the host arch.
@@ -383,7 +383,10 @@ Then, to publish BOTH as one catalog entry:
 
   2. Run the catalog-assembly step to fold both fragments into one registry
      entry (distribution.variants[linux-x64|linux-arm64]):
-     node deploy/app-registry/sync-from-pc2.mjs   # see its --help for inputs
+     node deploy/app-registry/scripts/assemble-enm-entry.mjs \\
+       --x64-manifest <x64.json> --x64-cid <x64-cid> \\
+       --arm64-manifest <arm64.json> --arm64-cid <arm64-cid>
+     node deploy/app-registry/scripts/sync-from-pc2.mjs   # then fold into registry.json
 
   3. On the PC2 host, trust the publisher (stable across builds because we sign
      with the fixed Elacity Labs seed):

@@ -7,6 +7,7 @@ import { readFile as readFileAsync } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import https from 'https';
+import http from 'http';
 import { isAPIRoute, isStaticAsset } from './utils/routes.js';
 import { verifyAntiSnipeSession } from './api/access-control.js';
 import { getNodeConfig } from './api/setup.js';
@@ -510,6 +511,75 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
     });
   }
 
+  /**
+   * Transparent loopback reverse-proxy for a running service app's backend.
+   *
+   * Forwards `/api/app-backend/<appName>/<rest>` → `http://127.0.0.1:<port>/<rest>`,
+   * preserving method, auth/content headers and body, and streaming the response
+   * (so SSE / chunked live data is not buffered). Target is always loopback; the
+   * app's backend enforces its own auth. Only running, installed service apps are
+   * proxied. Returns 503 when the backend is not running so the frontend can show
+   * a clean "reload to retry" instead of a hung socket.
+   */
+  function handleAppBackendProxy(req: Request, res: Response): void {
+    const appName = req.params.appName;
+    if (!appName || !/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(appName)) {
+      res.status(400).json({ success: false, error: 'Invalid app name' });
+      return;
+    }
+
+    const processManager = req.app?.locals?.appProcessManager;
+    const status = processManager?.getStatus?.(appName);
+    if (!status?.running || !status.port) {
+      res.status(503).json({ success: false, error: `App backend "${appName}" is not running` });
+      return;
+    }
+    const port: number = status.port;
+
+    // Strip the proxy prefix; keep the remainder (incl. querystring) verbatim.
+    const prefix = `/api/app-backend/${appName}`;
+    const subPath = req.originalUrl.slice(prefix.length) || '/';
+
+    // Forward headers, dropping hop-by-hop / host-specific ones. body re-serialized
+    // below since the JSON body-parser already consumed the stream upstream.
+    const headers: Record<string, string> = {};
+    for (const [key, value] of Object.entries(req.headers)) {
+      const lk = key.toLowerCase();
+      if (lk === 'host' || lk === 'connection' || lk === 'content-length') { continue; }
+      if (typeof value === 'string') { headers[key] = value; }
+      else if (Array.isArray(value)) { headers[key] = value.join(', '); }
+    }
+
+    let bodyBuf: Buffer | undefined;
+    const hasBody = req.method !== 'GET' && req.method !== 'HEAD';
+    if (hasBody && req.body && typeof req.body === 'object' && Object.keys(req.body).length > 0) {
+      bodyBuf = Buffer.from(JSON.stringify(req.body));
+      headers['content-type'] = 'application/json';
+      headers['content-length'] = String(bodyBuf.length);
+    }
+
+    const proxyReq = http.request(
+      { host: '127.0.0.1', port, method: req.method, path: subPath, headers },
+      (proxyRes) => {
+        res.writeHead(proxyRes.statusCode || 502, proxyRes.headers);
+        proxyRes.pipe(res);
+      },
+    );
+    proxyReq.on('error', (err: Error) => {
+      log.warn(`[app-backend-proxy] "${appName}" :${port}${subPath} — ${err.message}`);
+      if (!res.headersSent) {
+        res.status(502).json({ success: false, error: 'App backend unreachable' });
+      } else {
+        res.end();
+      }
+    });
+    // Abort the upstream if the client disconnects so we don't leak sockets.
+    res.on('close', () => { proxyReq.destroy(); });
+
+    if (bodyBuf) { proxyReq.write(bodyBuf); }
+    proxyReq.end();
+  }
+
   app.post('/api/rpc/esc', (req, res) => handleJsonRpcProxy(req, res, 'esc', ESC_RPC_URLS));
 
   // Base mainnet JSON-RPC proxy.
@@ -518,6 +588,15 @@ export function setupStaticServing(app: Express, options: StaticOptions): void {
   // lines ~814, ~988). Rewritten-to transparently by the interceptor script
   // injected by the `/particle-auth` route handler below.
   app.post('/api/rpc/base', (req, res) => handleJsonRpcProxy(req, res, 'base', BASE_RPC_URLS));
+
+  // Same-origin reverse-proxy for installed service-app backends.
+  // A service app (e.g. ENM / enm-server) runs a sidecar HTTP server on a
+  // loopback port. When the GUI is reached through a supernode domain the
+  // relay only forwards the main PC2 port — the sidecar port is not exposed,
+  // so the app's frontend cannot talk to its backend cross-origin. Routing it
+  // under the GUI origin here lets it ride the same relay. Handler is a hoisted
+  // function declaration defined below.
+  app.all('/api/app-backend/:appName/*', handleAppBackendProxy);
 
   // IMPORTANT: Register /apps/* route BEFORE the static middleware wrapper
   // Express checks app.get() routes before app.use() middleware, but only if registered first

@@ -20,18 +20,24 @@
     var DEFAULT_TIMEOUT_MS = 10_000;
     var DEFAULT_CACHE_TTL_MS = 30_000;
 
-    // ENM is now a PC2 app served from /apps/elastos-node-manager/, with its
-    // backend running as a sidecar (enm-server) on port 4180. The desktop
-    // launcher passes the operator's PC2 session token via the standard
-    // ?puter.auth.token=... query param (matches pc2-node middleware.ts:100).
-    // We forward it as a Bearer header on every request so enm-server's
-    // OwnerCheckMiddleware can resolve it against pc2-node's session DB.
+    // ENM is a PC2 app served by pc2-node; its backend runs as a sidecar
+    // (enm-server) on a loopback port (default 4180). We reach it through
+    // pc2-node's same-origin app-backend proxy
+    // (/api/app-backend/<appName>/<rest> → 127.0.0.1:<port>/<rest>) rather than
+    // a direct cross-origin call to host:4180. The sidecar port is bound to the
+    // node only; when the GUI is reached through a supernode domain the relay
+    // forwards just the main PC2 port, so a same-origin path is the only way the
+    // browser can reach the backend. The desktop launcher passes the operator's
+    // PC2 session token via ?puter.auth.token=…; we forward it as a Bearer
+    // header so enm-server's OwnerCheckMiddleware can resolve it.
     function deriveBackendBase() {
-        var port = (root.ENM_BACKEND_PORT && String(root.ENM_BACKEND_PORT)) || '4180';
+        // Explicit override for standalone/local runs where the backend is
+        // reached directly (e.g. dev against a local enm-server).
+        if (root.ENM_BACKEND_BASE) { return String(root.ENM_BACKEND_BASE); }
         var loc = root.location || {};
-        var host = loc.hostname || 'localhost';
-        var protocol = (loc.protocol === 'https:') ? 'https:' : 'http:';
-        return protocol + '//' + host + ':' + port + '/api/enm';
+        var origin = loc.origin
+            || ((loc.protocol || 'http:') + '//' + (loc.host || 'localhost'));
+        return origin + '/api/app-backend/elastos-node-manager/api/enm';
     }
 
     function deriveAuthToken() {

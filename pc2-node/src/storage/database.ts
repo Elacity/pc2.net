@@ -59,6 +59,11 @@ export class DatabaseManager {
     return this.db;
   }
 
+  /** Absolute path to the on-disk SQLite file (pc2.db). */
+  getDbPath(): string {
+    return this.dbPath;
+  }
+
   /**
    * Initialize database connection and run migrations
    */

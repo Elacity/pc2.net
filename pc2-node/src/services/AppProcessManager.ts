@@ -34,7 +34,7 @@
 
 import { spawn, ChildProcess } from 'node:child_process';
 import { existsSync, mkdirSync, openSync } from 'node:fs';
-import { join, resolve as resolvePath } from 'node:path';
+import { join, dirname, resolve as resolvePath } from 'node:path';
 
 import { createLogger } from '../utils/logger.js';
 import { DatabaseManager } from '../storage/database.js';
@@ -181,15 +181,25 @@ export class AppProcessManager {
         // via process.env (pc2-node's own env). App author can override via
         // manifest.backend.env (rarely correct — these are typically set by
         // pc2-node's deployment).
-        const dataDir = process.env.PC2_DATA_DIR || '/data';
+        // Resolve the real pc2-node state paths from the live DB handle rather
+        // than guessing a container-style "/data" default. pc2.db and
+        // node-config.json live side-by-side in pc2-node's data dir, so the
+        // config path is derived from the DB path's directory. The DB path is
+        // resolved to ABSOLUTE here: pc2-node configures it relative to its own
+        // cwd (e.g. "./data/pc2.db"), but spawned services run with
+        // cwd=bundleDir, so a relative path would resolve against the wrong
+        // directory and the session lookup would silently 401. An explicit
+        // process.env override still wins for non-standard deployments.
+        const pc2DbPath = resolvePath(this.db.getDbPath());
+        const pc2DataDir = dirname(pc2DbPath);
         const env: NodeJS.ProcessEnv = {
             ...process.env,
             // Where pc2-node's session DB lives. Services that need to
             // validate the requester's PC2 wallet (e.g. ENM's
             // OwnerCheckMiddleware) read it from here.
-            PC2_NODE_DB_PATH:     process.env.PC2_NODE_DB_PATH     ?? join(dataDir, 'pc2-node.sqlite'),
+            PC2_NODE_DB_PATH:     process.env.PC2_NODE_DB_PATH     ?? pc2DbPath,
             // Where pc2-node's owner record lives.
-            PC2_NODE_CONFIG_PATH: process.env.PC2_NODE_CONFIG_PATH ?? join(dataDir, 'node-config.json'),
+            PC2_NODE_CONFIG_PATH: process.env.PC2_NODE_CONFIG_PATH ?? join(pc2DataDir, 'node-config.json'),
             // App-author overrides go after the conventions but before the
             // PORT/APP_*_DIR vars below — those are pc2-node-controlled and
             // an app must NOT override them.

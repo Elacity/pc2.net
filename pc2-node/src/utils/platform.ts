@@ -23,6 +23,139 @@ export interface PlatformInfo {
   estimatedAvailableVRAM?: number;
 }
 
+/**
+ * Declarative platform requirement an app publishes in its manifest under
+ * `requirements.platform`. Every present field is an allow-list (os/arch) or a
+ * minimum (memory); an absent/empty field means "no constraint". A host is
+ * compatible only if it satisfies EVERY present constraint.
+ *
+ * Example (Elastos Node Manager — Linux-only, needs a real node host):
+ *   "requirements": { "platform": { "os": ["linux"], "minMemoryMB": 4096 } }
+ * That allows Jetson/Raspberry Pi (linux/arm64) and Linux/x64 servers, and
+ * blocks macOS / Windows desktops in the dApp Centre.
+ */
+export interface PlatformRequirement {
+  /** Allowed `os.platform()` values, e.g. ['linux']. Absent = any OS. */
+  os?: string[];
+  /** Allowed `os.arch()` values, e.g. ['x64','arm64']. Absent = any arch. */
+  arch?: string[];
+  /** Minimum total RAM in MB. Absent = no minimum. */
+  minMemoryMB?: number;
+  /** Operator-facing reason shown when incompatible (overrides the generated text). */
+  reason?: string;
+}
+
+/** Verdict for a (requirement, host) pair. */
+export interface PlatformCompatibility {
+  compatible: boolean;
+  /** Short human reason when incompatible; undefined when compatible. */
+  reason?: string;
+}
+
+/** Normalised host facts the compatibility check + dApp Centre UI consume. */
+export interface HostPlatformSummary {
+  os: string;        // os.platform(): 'linux' | 'darwin' | 'win32' | ...
+  arch: string;      // os.arch(): 'x64' | 'arm64' | ...
+  totalMemoryMB: number;
+  isJetson: boolean;
+  isConstrainedDevice: boolean;
+  jetsonModel?: string;
+}
+
+const OS_LABELS: Record<string, string> = {
+  linux: 'Linux',
+  darwin: 'macOS',
+  win32: 'Windows',
+};
+
+/**
+ * Compact, UI-friendly view of the host for device-compatibility gating.
+ * Backed by the cached detectPlatform() result.
+ */
+export function getHostPlatformSummary(): HostPlatformSummary {
+  const info = detectPlatform();
+  return {
+    os: info.platform,
+    arch: info.arch,
+    totalMemoryMB: info.totalMemoryMB,
+    isJetson: info.isJetson,
+    isConstrainedDevice: info.isConstrainedDevice,
+    jetsonModel: info.jetsonModel,
+  };
+}
+
+/**
+ * Pure compatibility check between a manifest's `requirements.platform` and a
+ * host summary. Returns { compatible, reason }.
+ *
+ * IMPORTANT: the dApp Centre mirrors this logic in JS (isHostCompatible() in
+ * src/backend/apps/app-center/index.html) for the client-side gate. Keep the
+ * two implementations in sync — this server copy is the authoritative one and
+ * is also enforced at install time as defense-in-depth.
+ */
+export function evaluatePlatformCompatibility(
+  req: PlatformRequirement | undefined,
+  host: HostPlatformSummary,
+): PlatformCompatibility {
+  if (!req) return { compatible: true };
+
+  if (Array.isArray(req.os) && req.os.length > 0 && !req.os.includes(host.os)) {
+    const want = req.os.map((o) => OS_LABELS[o] ?? o).join(' or ');
+    const have = OS_LABELS[host.os] ?? host.os;
+    return { compatible: false, reason: req.reason ?? `Requires ${want} (this device runs ${have})` };
+  }
+  if (Array.isArray(req.arch) && req.arch.length > 0 && !req.arch.includes(host.arch)) {
+    return { compatible: false, reason: req.reason ?? `Requires ${req.arch.join(' or ')} CPU (this device is ${host.arch})` };
+  }
+  if (typeof req.minMemoryMB === 'number' && host.totalMemoryMB < req.minMemoryMB) {
+    const needGB = (req.minMemoryMB / 1024).toFixed(1);
+    const haveGB = (host.totalMemoryMB / 1024).toFixed(1);
+    return { compatible: false, reason: req.reason ?? `Requires at least ${needGB} GB RAM (this device has ${haveGB} GB)` };
+  }
+  return { compatible: true };
+}
+
+/**
+ * The minimum shape of a per-arch distribution variant the resolver needs.
+ * The real type (with `size`) lives in AppInstallService.AppDistributionVariant;
+ * this generic keeps platform.ts free of a service-layer import.
+ */
+export interface VariantLike {
+  cid?: string | null;
+  signature?: string | null;
+}
+
+/**
+ * Select the per-arch capsule for `host` from a `distribution.variants` map.
+ *
+ * - Returns `null` when there are no variants (single-arch app; caller uses the
+ *   top-level cid as-is).
+ * - Returns `{ key, variant }` for the host's own `"<os>-<arch>"` key.
+ * - THROWS when variants exist but none matches the host arch, or the matched
+ *   variant is missing cid/signature — there is no usable capsule, so the
+ *   install must fail closed rather than fetch a wrong-arch bundle.
+ *
+ * Pure (host is passed in) so it is unit-testable independent of the real host;
+ * AppInstallService wraps it with getHostPlatformSummary() and the app name.
+ */
+export function resolveHostVariant<T extends VariantLike>(
+  variants: Record<string, T> | undefined | null,
+  host: HostPlatformSummary,
+): { key: string; variant: T } | null {
+  if (!variants || Object.keys(variants).length === 0) return null;
+  const key = `${host.os}-${host.arch}`;
+  const variant = variants[key];
+  if (!variant) {
+    throw new Error(
+      `no capsule for this device's architecture (${key}); available: ${Object.keys(variants).join(', ') || 'none'}`,
+    );
+  }
+  if (!variant.cid || !variant.signature) {
+    throw new Error(`variant "${key}" is missing cid or signature`);
+  }
+  return { key, variant };
+}
+
 /** Hardware override config that users can set in config.json */
 export interface OllamaHardwareConfig {
   autoDetect?: boolean;

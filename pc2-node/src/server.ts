@@ -1,6 +1,7 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
 import { Server } from 'http';
 import path from 'path';
+import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import { setupStaticServing } from './static.js';
 import { setupAPI } from './api/index.js';
@@ -161,6 +162,33 @@ export function createServer (options: ServerOptions): { app: Express; server: S
     if ( options.aiService ) {
         app.locals.aiService = options.aiService;
     }
+
+    // Gzip/deflate text responses (the 3.2MB GUI bundle, JSON API payloads,
+    // CSS/SVG). This is a no-op behind the supernode's nginx (which already
+    // gzips) but is the only compression for self-hosted nodes served DIRECTLY
+    // on the node port without a reverse proxy. The filter is deliberately
+    // conservative — compressing the wrong response corrupts it:
+    //   • text/event-stream  → SSE live streams (install progress, ENM feeds)
+    //     get buffered and never flush. NEVER compress.
+    //   • 206 / Content-Range → partial-content downloads (media seeking,
+    //     File Explorer Range fetches) break when re-encoded. NEVER compress.
+    //   • Content-Encoding already set → don't double-encode.
+    //   • images/video/tarballs/octet-stream → `compression.filter`'s mime-db
+    //     check already returns false (not compressible), so binary File
+    //     Explorer downloads pass through untouched.
+    // `compression` only rewrites RESPONSE bodies, so request body parsing,
+    // uploads (/writeFile), and WebSocket/Socket.io are unaffected. Default
+    // 1KB threshold skips tiny payloads. `x-no-compression` request header
+    // and `Cache-Control: no-transform` opt out, per the library contract.
+    app.use(compression({
+        filter: (req: Request, res: Response): boolean => {
+            const type = String(res.getHeader('Content-Type') || '');
+            if (type.includes('text/event-stream')) return false;
+            if (res.statusCode === 206 || res.getHeader('Content-Range')) return false;
+            if (res.getHeader('Content-Encoding')) return false;
+            return compression.filter(req, res);
+        },
+    }));
 
     // API routes (must come before static serving to avoid SPA fallback)
     setupAPI(app);

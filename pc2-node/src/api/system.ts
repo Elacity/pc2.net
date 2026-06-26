@@ -8,7 +8,7 @@
 import { Router, Response } from 'express';
 import { authenticate, AuthenticatedRequest, requireOwner } from './middleware.js';
 import { logger } from '../utils/logger.js';
-import { detectPlatform, getJetsonDiagnostics } from '../utils/platform.js';
+import { detectPlatform, getJetsonDiagnostics, getHostPlatformSummary } from '../utils/platform.js';
 import { spawnDetachedRespawn } from '../utils/respawner.js';
 import { execFileSync } from 'child_process';
 import { existsSync, readdirSync } from 'fs';
@@ -238,6 +238,21 @@ router.get('/info', authenticate, async (req: AuthenticatedRequest, res: Respons
       success: false,
       error: 'Failed to get system info',
     });
+  }
+});
+
+/**
+ * GET /api/system/host-platform
+ * Compact host facts (os/arch/memory/jetson) the dApp Centre uses to gate
+ * device compatibility for apps that publish requirements.platform. Kept
+ * authenticate-only (same posture as /info) — it's host metadata, not a secret.
+ */
+router.get('/host-platform', authenticate, async (_req: AuthenticatedRequest, res: Response) => {
+  try {
+    res.json({ success: true, result: getHostPlatformSummary() });
+  } catch (error) {
+    logger.error('[System] host-platform error:', error);
+    res.status(500).json({ success: false, error: 'Failed to get host platform' });
   }
 });
 

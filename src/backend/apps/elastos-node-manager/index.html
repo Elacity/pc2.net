@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="utf-8">
+    <!-- viewport-fit=cover lets safe-area-inset-* paddings honour iPhone
+         notches in landscape; interactive-widget=resizes-content tells
+         iOS to shrink the layout viewport when the soft keyboard opens
+         so Save/Continue buttons aren't covered by it. user-scalable
+         intentionally omitted so WCAG 1.4.4 (200% zoom) is allowed. -->
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content">
+    <meta name="referrer" content="no-referrer">
+    <title>Elastos Node Manager</title>
+    <link rel="stylesheet" href="css/styles.css?ts=20260529v245">
+    <script>
+        // Beta 3 — Phase 1c carried over. Dark-only. We hard-code data-theme=dark
+        // on documentElement so any rule that still says [data-theme="dark"] keeps
+        // matching even though the toggle is gone.
+        (function () {
+            try { document.documentElement.setAttribute('data-theme', 'dark'); }
+            catch (e) { /* :root dark values still apply */ }
+        })();
+
+        // alpha.25 → Beta 3 — pre-paint data-app-size detection.
+        // window.innerWidth inside iframes returns the iframe's interior
+        // width (NOT the outer browser viewport), which is what we want.
+        // Phase-02 mock spec: wide >=700px, narrow 480-699px, compact <480px.
+        (function () {
+            try {
+                var w = window.innerWidth || document.documentElement.clientWidth || 1200;
+                var size = w < 480 ? 'compact' : (w < 700 ? 'narrow' : 'wide');
+                document.documentElement.dataset.appSize = size;
+                window.__enmInitialWidth = w;
+            } catch (e) { /* ignore */ }
+        })();
+    </script>
+</head>
+<body>
+    <!-- alpha.28.1 batch 88 — mirror html[data-app-size] to body the
+         instant body opens, before any defer scripts run. The CSS at
+         body[data-app-size="..."] needs this to match on first paint. -->
+    <script>
+        (function () {
+            try {
+                var sz = document.documentElement.dataset.appSize;
+                if (sz) { document.body.dataset.appSize = sz; }
+            } catch (e) { /* app.js will mirror on first run */ }
+        })();
+    </script>
+
+    <!-- a11y: skip link lands at the top of the Tab order so keyboard
+         users can jump past the chrome (brand, tabs, gear). Visible
+         only on focus (see .enm-skip-link in styles.css). -->
+    <a href="#enm-main" class="enm-skip-link">Skip to main content</a>
+
+    <!-- BP-A — Reusable SVG defs referenced by the chain-card hero.
+         #enm-power-icon: the power symbol inside .enm-hero-power.
+         #enm-sync-grad:  cyan→blue linear gradient for the .enm-hero-sync
+                          progress ring. Both defined ONCE here so every
+                          mounted chain-card can `<use href="#..."/>`. -->
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+        <defs>
+            <symbol id="enm-power-icon" viewBox="0 0 24 24">
+                <path d="M18.36 6.64a9 9 0 1 1-12.73 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                <line x1="12" y1="3" x2="12" y2="13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+            </symbol>
+            <linearGradient id="enm-sync-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#00d4ff"/>
+                <stop offset="100%" stop-color="#5b8fff"/>
+            </linearGradient>
+        </defs>
+    </svg>
+
+    <!--
+        Beta 3 app shell. Reference: enm-design-mocks/v2/phase-02-chrome.html.
+
+        Structure (v0.5.237 — chain-selector dropdown removed; a static
+        node-mode label takes its slot and navigation moved to the
+        overview-as-default + always-visible tabs):
+            .enm-app[data-active-tab="..."]
+              .enm-topbar
+                .enm-node-mode      (static "Council node" / "BPoS node")
+                .enm-tabs           (role=tablist, horizontal scroll)
+              .enm-main             (pane container)
+
+        The four tabs are Dashboard / Logs / Settings / Activity. For a
+        Council node the Dashboard pane defaults to the multi-chain
+        overview (click a chain row to drill in; a "Back to overview"
+        control returns). A BPoS node lands on the single mainchain
+        dashboard. All sidechain config lives in Settings → Sidechain
+        settings.
+    -->
+    <div class="enm-app" id="app" data-active-tab="dashboard">
+        <!-- a11y: WCAG 2.4.6 needs a top-level heading. PC2 chrome shows
+             the app name in its title bar but AT users navigating by
+             heading need an h1 inside the document. -->
+        <h1 class="enm-sr-only">Elastos Node Manager</h1>
+
+        <header class="enm-topbar" role="banner">
+            <!-- v0.5.237 — the chain-selector dropdown was removed. A static,
+                 non-interactive node-mode label takes its place. PaneRouter
+                 (app.js #_detectNodeMode) sets its text from GET /config:
+                 "Council node" (>=2 chains) or "BPoS node" (mainchain only).
+                 Navigation model: Council boots to the multi-chain overview
+                 by default with the tab strip always visible; clicking a
+                 chain row drills into that chain (a "Back to overview"
+                 control returns). BPoS lands straight on the mainchain
+                 dashboard — no overview, no Back. -->
+            <div class="enm-node-mode" id="enm-node-mode" data-mode="" aria-live="polite"></div>
+            <nav class="enm-tabs" id="enm-tabs" role="tablist" aria-label="Sections" hidden>
+                <button type="button" class="enm-tab active" role="tab" id="enm-tab-dashboard" data-tab="dashboard" aria-selected="true"  aria-controls="enm-pane-dashboard" tabindex="0">Dashboard</button>
+                <button type="button" class="enm-tab"        role="tab" id="enm-tab-logs"      data-tab="logs"      aria-selected="false" aria-controls="enm-pane-logs"      tabindex="-1">Logs</button>
+                <button type="button" class="enm-tab"        role="tab" id="enm-tab-settings"  data-tab="settings"  aria-selected="false" aria-controls="enm-pane-settings"  tabindex="-1">Settings</button>
+                <button type="button" class="enm-tab"        role="tab" id="enm-tab-audit"     data-tab="audit"     aria-selected="false" aria-controls="enm-pane-audit"     tabindex="-1">Activity</button>
+            </nav>
+            <!-- beta.3.74 — the gear icon was removed. Per the operator's
+                 callout in 3.73 review: "the settings toggle and settings
+                 button do the same thing, we don't want both on all
+                 screens". js/app.js#_wireSettingsToggle wired the gear
+                 to programmatically click the Settings tab — pure
+                 redundancy. The Settings tab is the canonical entry and
+                 is always visible in the tabs strip, so the gear ate
+                 valuable topbar width (especially in the new compact
+                 2-row grid layout) for no behaviour the tab didn't
+                 already provide. _wireSettingsToggle stays in app.js
+                 as a no-op because its first line is a getElementById
+                 guard; if a future settings-drawer overlay returns the
+                 gear can come back. -->
+        </header>
+
+        <main class="enm-main" id="enm-main">
+            <!-- Spinner: a11y role=status implies aria-live=polite; pairing them
+                 caused Safari + older NVDA to double-announce in alpha. -->
+            <div class="enm-spinner" id="enm-spinner" role="status">
+                <div class="enm-spinner-dots">
+                    <div class="enm-spinner-dot"></div>
+                    <div class="enm-spinner-dot"></div>
+                    <div class="enm-spinner-dot"></div>
+                </div>
+                <p class="enm-spinner-text" id="enm-spinner-text">Connecting to Node Manager…</p>
+            </div>
+
+            <section class="enm-content" id="enm-content" hidden>
+                <div class="enm-pane" id="enm-pane-dashboard" role="tabpanel" aria-labelledby="enm-tab-dashboard" tabindex="0"></div>
+                <div class="enm-pane" id="enm-pane-logs"      role="tabpanel" aria-labelledby="enm-tab-logs"      tabindex="0" hidden></div>
+                <div class="enm-pane" id="enm-pane-settings"  role="tabpanel" aria-labelledby="enm-tab-settings"  tabindex="0" hidden></div>
+                <div class="enm-pane" id="enm-pane-audit"     role="tabpanel" aria-labelledby="enm-tab-audit"     tabindex="0" hidden></div>
+            </section>
+
+            <div class="enm-error" id="enm-error" hidden role="alert">
+                <div class="enm-error-title" id="enm-error-title"></div>
+                <div class="enm-error-detail" id="enm-error-detail"></div>
+                <div class="enm-error-actions">
+                    <button type="button" class="enm-btn enm-btn-primary" id="enm-error-retry">Retry</button>
+                    <button type="button" class="enm-btn enm-btn-secondary" id="enm-error-reload">Reload page</button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!--
+        Script load order:
+        strings + utils → services → components → app controller.
+        `defer` preserves execution order while letting all scripts
+        download in parallel.
+
+        Beta 3 keeps every alpha.29 service + component module. The
+        component files will be reshaped in B3.2-5 to emit the new
+        mock-derived markup; their JS contracts (event listeners,
+        lifecycle guards, ARIA wiring) stay intact.
+    -->
+    <script defer src="js/strings.js?ts=20260529v248"></script>
+    <script defer src="js/utils.js?ts=20260506g"></script>
+    <!-- v0.5.216 — js-sha3 (MIT, emn178/js-sha3 v0.9.3) for EIP-55 keccak-256
+         hard-block. Loaded BEFORE utils-eth.js so it can populate root.sha3. -->
+    <script defer src="js/vendor/js-sha3.min.js?ts=20260525v216"></script>
+    <script defer src="js/utils-eth.js?ts=20260525v216"></script>
+    <!-- v0.5.218 — sessionStorage prefs helper (XFLOW-19). -->
+    <script defer src="js/utils-prefs.js?ts=20260525v218"></script>
+    <!-- v0.5.219 — canonical state-vocabulary helper (XFLOW-04 + XFLOW-16).
+         Root-cause fix for the 14 patch regressions v0.5.200-v0.5.214. -->
+    <script defer src="js/utils-state-vocab.js?ts=20260525v219"></script>
+    <!-- v0.5.220 — action-completion watchdog (XFLOW-02). -->
+    <script defer src="js/utils-watchdog.js?ts=20260525v220"></script>
+    <!-- v0.5.221 — threshold-aware styling helper (XFLOW-12). -->
+    <script defer src="js/utils-threshold.js?ts=20260525v221"></script>
+    <!-- v0.5.223 — stale-indicator + friendly-errors helpers (XFLOW-20 + XFLOW-18). -->
+    <script defer src="js/utils-stale-and-errors.js?ts=20260525v223"></script>
+    <!-- v0.5.225 — provider-cap (cgroup limits) detection. Operator
+         directive 2026-05-25: opt-in / auto-detected, not default. -->
+    <script defer src="js/utils-host-limits.js?ts=20260525v225"></script>
+    <!-- v0.5.226 — stage-sync orchestrator (Phase 22 follow-up to Phase 21). -->
+    <script defer src="js/utils-stage-sync.js?ts=20260525v226"></script>
+    <!-- v0.5.217 — canonical destructive-action modal (XFLOW-22). Replaces
+         ad-hoc native confirm() + brittle inline gates. -->
+    <script defer src="js/components/destructive-modal.js?ts=20260525v217"></script>
+    <script defer src="js/illustrations.js?ts=20260506g"></script>
+    <script defer src="js/services/wallet.js?ts=20260506g"></script>
+    <script defer src="js/services/api.js?ts=20260506g"></script>
+    <script defer src="js/services/sse.js?ts=20260511d"></script>
+    <script defer src="js/services/notifications.js?ts=20260515b3e"></script>
+    <!-- alpha.29 batch 97 — shared screen-reader announcer -->
+    <script defer src="js/services/announcer.js?ts=20260514a"></script>
+    <!-- alpha.29 batch 98 — offline + recovery banner -->
+    <script defer src="js/services/online-watcher.js?ts=20260514a"></script>
+    <script defer src="js/services/fleet-health-gradient.js?ts=20260512a"></script>
+    <script defer src="js/services/height-series.js?ts=20260512a"></script>
+    <!-- v0.5.237 — chain-selector.js removed (the topbar dropdown is gone;
+         a static node-mode label replaces it, PaneRouter routes navigation). -->
+    <script defer src="js/components/system-status.js?ts=20260515b3s"></script>
+    <script defer src="js/components/sparkline.js?ts=20260512a"></script>
+    <script defer src="js/components/power-circle.js?ts=20260512a"></script>
+    <script defer src="js/components/chain-card.js?ts=20260520v168"></script>
+    <!-- v0.5.187 (Council Node UX Phase 3) — additive per-class dashboard
+         cards mounted BELOW the shared chain-card hero. Class B (EVM): mining
+         on/off + geth/reward addresses. Class C (Oracle): parent reachable +
+         height + last activity/error. Never mounted for the mainchain. -->
+    <script defer src="js/components/evm-detail-card.js?ts=20260528v237"></script>
+    <script defer src="js/components/oracle-status-card.js?ts=20260521v187"></script>
+    <script defer src="js/components/validator-registration-card.js?ts=20260529v248"></script>
+    <!-- beta.3.14 — always-on node-identity card. Truth-corrected from beta.3.13:
+         the keystore-derived address is the consensus signing identity ONLY;
+         block rewards go to the OwnerPublicKey-derived stake address (the
+         Essentials wallet that registered the producer). Operator-login wallet
+         row dropped.
+         beta.3.15 — bumped to ?ts=20260515b3s (drops balance line + dead
+         deposit/rewards stat). -->
+    <script defer src="js/components/node-identity-card.js?ts=20260526v228"></script>
+    <!-- beta.3.15 — producer-identity.js dropped. Component was loaded by the
+         old technical-view but never mounted on the Beta 3 dashboard. Its
+         CR Council / DID copy violated the "no Council content on dashboard"
+         operator rule, and the entire card was dead bytes in the bundle. -->
+    <!-- <script defer src="js/components/producer-identity.js"></script> -->
+
+    <script defer src="js/components/log-viewer.js?ts=20260528v237"></script>
+    <script defer src="js/components/proposal-card.js?ts=20260515b3f"></script>
+    <script defer src="js/components/welcome-screen.js?ts=20260515b3e"></script>
+    <script defer src="js/components/setup-conversation.js?ts=20260515b3o"></script>
+    <script defer src="js/components/settings-tab.js?ts=20260529v249"></script>
+    <!-- alpha.29 batch 103 — audit-tab lazy-loaded via enmLoadScript when
+         the Audit tab first activates. evm-tab similarly lazy, deferred
+         in Beta 3 since EVM (sidechain) tab is dropped from the visible
+         set; the script reference is kept for future re-enable. -->
+    <script>
+      window.ENM_LAZY_SCRIPTS = window.ENM_LAZY_SCRIPTS || {};
+      window.ENM_LAZY_SCRIPTS.auditTab = 'js/components/audit-tab.js?ts=20260520v168';
+      window.ENM_LAZY_SCRIPTS.evmTab   = 'js/components/evm-tab.js?ts=20260514a';
+    </script>
+    <!-- Beta 3 BP-B — settings-drawer.js dropped. Settings now lives in
+         the top-level Settings tab (lazy-mounted on first activation).
+         The gear icon switches to that tab instead of opening an overlay. -->
+    <!-- <script defer src="js/components/settings-drawer.js?ts=20260506g"></script> -->
+    <!--   ↑ kept commented for one release as audit-trail; remove in BP-E. -->
+
+    <script defer src="js/components/tools-update-card.js?ts=20260515b3e"></script>
+    <!-- beta.3.91 (Wave M2.3) — Multi-chain overview pane. PaneRouter
+         (M2.1) mounts this when the chain selector key is 'all'; until
+         this script loads PaneRouter renders the M2.1 stub instead. -->
+    <script defer src="js/components/multi-chain-overview.js?ts=20260529v244"></script>
+    <!-- v0.5.168 (Phase 2) — SPV Module pane. app.js mounts EnmSpvModule when
+         the chain selector key is 'spv' (aggregate arbiter SPV height +
+         per-sidechain SPV heights + on-demand logs-spv tail). -->
+    <script defer src="js/components/spv-module.js?ts=20260520spv168"></script>
+    <!-- v0.5.175 — Peers & Bootnodes panel. Mounts on the per-chain
+         dashboard for EVM sidechains (Class B: esc/eid/pg) so an operator
+         whose chain is stuck at 0 peers can add a peer by hand (the geth
+         fork's discv4 auto-discovery is weak). Self-service: validated,
+         persisted as --bootnodes, live-dialed via admin_addPeer. -->
+    <script defer src="js/components/peers-panel.js?ts=20260521v176"></script>
+    <!-- BP-E — technical-view.js retired. Beta 3 top-level tabs
+         (Dashboard / Logs / Settings / Audit) replaced its 4-sub-tab
+         wrapper; the Dashboard pane now mounts SystemStatus + ChainCard
+         + BPoS card + ToolsUpdate directly from app.js._showDashboard. -->
+    <script defer src="js/app.js?ts=20260529v240"></script>
+</body>
+</html>

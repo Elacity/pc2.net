@@ -173,7 +173,11 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   FOREIGN KEY (wallet_address) REFERENCES users(wallet_address) ON DELETE CASCADE
 );
 
--- Installed apps table: User-installed dApps from IPFS
+-- Installed apps table: User-installed dApps from IPFS.
+-- The pid/port/started_at/crash_count columns hold runtime state for
+-- `type: "service"` apps (the long-running Node-backend kind that
+-- AppProcessManager spawns on install + stops on uninstall).
+-- All four are NULL for non-service apps and after a service is stopped.
 CREATE TABLE IF NOT EXISTS installed_apps (
   app_name TEXT PRIMARY KEY,
   title TEXT NOT NULL,
@@ -187,7 +191,11 @@ CREATE TABLE IF NOT EXISTS installed_apps (
   requirements_json TEXT DEFAULT '{}',
   manifest_json TEXT NOT NULL DEFAULT '{}',
   installed_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL
+  updated_at INTEGER NOT NULL,
+  pid INTEGER,
+  port INTEGER,
+  started_at INTEGER,
+  crash_count INTEGER NOT NULL DEFAULT 0
 );
 
 -- Pinned CIDs table: Tracks marketplace purchases and CDN-participating content

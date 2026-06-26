@@ -1,10 +1,10 @@
 {
   "name": "elastos-desktop",
-  "version": "1.2.7.14",
-  "author": "ElastOS Technologies Inc.",
+  "version": "1.4.0",
+  "author": "Elacity LLC",
   "license": "AGPL-3.0-only",
-  "description": "ElastOS - Desktop environment in the browser!",
-  "homepage": "https://elastos.org",
+  "description": "PC2 - your sovereign Web3 cloud desktop that runs on your own hardware.",
+  "homepage": "https://pc2.net",
   "type": "module",
   "main": "exports.js",
   "directories": {

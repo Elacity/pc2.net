@@ -15,6 +15,12 @@ import * as tar from 'tar';
 import { createLogger } from '../utils/logger.js';
 import type { DatabaseManager, InstalledApp } from '../storage/database.js';
 import type { IPFSStorage } from '../storage/ipfs.js';
+import {
+  type PlatformRequirement,
+  getHostPlatformSummary,
+  evaluatePlatformCompatibility,
+  resolveHostVariant,
+} from '../utils/platform.js';
 
 const log = createLogger('app-install');
 
@@ -62,7 +68,7 @@ export interface AppAuthor {
   url?: string;
 }
 
-export type AppType = 'web' | 'wasm' | 'data' | 'microvm' | 'agent';
+export type AppType = 'web' | 'wasm' | 'data' | 'microvm' | 'agent' | 'service';
 
 export type AppCategory =
   | 'media'
@@ -75,7 +81,7 @@ export type AppCategory =
   | 'marketplace'
   | 'other';
 
-const VALID_APP_TYPES: readonly string[] = ['web', 'wasm', 'data', 'microvm', 'agent'];
+const VALID_APP_TYPES: readonly string[] = ['web', 'wasm', 'data', 'microvm', 'agent', 'service'];
 
 const VALID_CATEGORIES: readonly string[] = [
   'media', 'blockchain', 'tools', 'system', 'games', 'social', 'ai', 'marketplace', 'other',
@@ -114,6 +120,70 @@ export interface AppService {
   description?: string;
 }
 
+/**
+ * AppBackend — describes a long-running Node process that pc2-node spawns
+ * when a `type: "service"` app is installed and stops when it's uninstalled.
+ *
+ * Distinct from `AppService[]` (which is just metadata describing
+ * exposed APIs/protocols). `backend` is the actual thing that runs.
+ *
+ * Trust note: the spawned process inherits pc2-node's user privileges.
+ * Only first-party Elacity apps with verified `distribution.signature`
+ * + `signedBy` in the trusted publisher set should be granted this
+ * privilege — see AppProcessManager and the install handler in
+ * api/installed-apps.ts for enforcement.
+ */
+export interface AppBackend {
+  /** Path to the entry script, relative to the bundle root (e.g. "backend/dist/index.js"). */
+  entry: string;
+  /** TCP port the service binds to. The frontend may call localhost:<port>. */
+  port: number;
+  /**
+   * Optional path on the service for periodic liveness checks.
+   * If absent, only crashes are detected (no liveness signal).
+   */
+  healthCheck?: string;
+  /** Extra argv passed to node after the entry script. */
+  args?: string[];
+  /**
+   * Extra env vars merged on top of pc2-node's process env when spawning.
+   * Operator-controlled values (paths, secrets) should be set via pc2-node's
+   * config instead — these are app-author-controlled and should be limited.
+   */
+  env?: Record<string, string>;
+  /**
+   * Optional pre-stop teardown hook. pc2-node POSTs to this path on
+   * uninstall (purge mode) BEFORE sending SIGTERM, so the service can
+   * back up critical state — keystores, signing keys, anything
+   * unrecoverable — to a safe location.
+   *
+   * The service should respond within `teardownTimeoutMs` (default
+   * 30 000). If it times out or errors, pc2-node still proceeds with
+   * the uninstall but logs the failure. The teardown response body is
+   * echoed back to the API caller so the UI can surface where the
+   * backup landed.
+   *
+   * Apps without sensitive state can omit this entirely.
+   */
+  teardown?: {
+    endpoint: string;     // e.g. "/api/enm/teardown"
+    timeoutMs?: number;   // default 30000
+  };
+}
+
+/**
+ * One architecture's capsule for a native-module app. The `cid` points at that
+ * arch's tarball on IPFS; `signature` is the Ed25519 detached signature over the
+ * SHA-256 of those tarball bytes — i.e. the same scheme as the top-level
+ * `distribution.signature`, just for this arch's bundle. The publisher key
+ * (`signedBy`) is shared and lives on the parent `AppDistribution`.
+ */
+export interface AppDistributionVariant {
+  cid: string;
+  signature: string;
+  size?: number | null;
+}
+
 export interface AppDistribution {
   cid?: string | null;
   signature?: string | null;
@@ -121,6 +191,16 @@ export interface AppDistribution {
   channel?: 'stable' | 'beta' | 'dev';
   updateUrl?: string | null;
   size?: number | null;
+  /**
+   * Per-arch capsules for apps that bundle a NATIVE module (e.g. the Elastos
+   * Node Manager bundles `better-sqlite3`, whose .node binary is arch-specific).
+   * Keyed by `"<os>-<arch>"` using Node's `os.platform()`/`os.arch()` values,
+   * e.g. `"linux-x64"`, `"linux-arm64"`. When present, the installer resolves
+   * the variant matching the HOST's own arch and ignores the top-level `cid`
+   * (which is kept as a back-compat default for older clients). `signedBy` is
+   * shared across all variants.
+   */
+  variants?: Record<string, AppDistributionVariant>;
 }
 
 export interface AppManifest {
@@ -162,10 +242,39 @@ export interface AppManifest {
     services?: string[];
     popup?: boolean;
     minVersion?: string;
+    /**
+     * Device-compatibility gate. When present, the host must satisfy every
+     * constraint or the install is refused (and the dApp Centre shows
+     * "Not compatible with this device"). Used by Linux-only service apps
+     * such as the Elastos Node Manager. See utils/platform.ts.
+     */
+    platform?: PlatformRequirement;
   };
 
   display?: AppDisplay;
   services?: AppService[];
+  /**
+   * For `type: "service"` apps only. Describes the Node backend pc2-node
+   * spawns on install and stops on uninstall. See AppBackend doc above.
+   */
+  backend?: AppBackend;
+  /**
+   * Absolute filesystem paths the app writes to OUTSIDE its bundle dir.
+   * On purge-uninstall, pc2-node deletes these in addition to the bundle.
+   *
+   * Used by services that store state outside `APP_DATA_DIR` (e.g. ENM
+   * uses `/data/enm/` for chain data, binaries, and its own DB). Without
+   * this declaration, app-external state is preserved across uninstalls
+   * (current behaviour for non-service apps).
+   *
+   * Safety:
+   *   - Paths must be absolute
+   *   - Paths must have at least 2 segments (no `/`, `/etc`, `/home`)
+   *   - Paths must not contain `..`
+   *   - The trust gate on service installs ensures only signed-by-trusted
+   *     publishers can declare these
+   */
+  externalDataDirs?: string[];
   distribution?: AppDistribution;
   dependencies?: Record<string, string>;
 }
@@ -244,6 +353,7 @@ export class AppInstallService {
 
     try {
       this.validateManifest(manifest);
+      this.enforcePlatformCompatibility(manifest);
 
       const appName = manifest.name;
       const appDir = join(this.appsDir, appName);
@@ -252,12 +362,46 @@ export class AppInstallService {
         throw new Error(`App "${appName}" is already installed. Uninstall first or use update.`);
       }
 
-      log.info(`[install] Starting install of "${appName}" from CID ${cid}`);
+      // Native-module apps (e.g. ENM bundles better-sqlite3) ship one capsule
+      // per architecture. When the manifest declares distribution.variants, the
+      // node installs the bundle matching ITS OWN arch — never the top-level cid
+      // and never whatever the client asked for. The signature is still verified
+      // over the fetched bytes below, so resolving here is safe (a wrong/forged
+      // cid can't pass the trusted-publisher signature check). Throws if there
+      // is no capsule for this host's arch.
+      let effectiveCid = cid;
+      let verifyManifest = manifest;
+      const variant = this.resolveDistributionVariant(manifest);
+      if (variant) {
+        effectiveCid = variant.cid;
+        verifyManifest = {
+          ...manifest,
+          distribution: { ...manifest.distribution, cid: variant.cid, signature: variant.signature },
+        };
+        log.info(`[install] "${appName}": selected "${variant.key}" capsule (cid ${variant.cid})`);
+      }
+
+      log.info(`[install] Starting install of "${appName}" from CID ${effectiveCid}`);
       emit('fetching', 5, { message: `Fetching "${appName}" from IPFS…` });
+
+      // Known download size lets us draw a real filling bar during the fetch —
+      // the longest stage. Prefer the resolved variant's size (per-arch), else
+      // the top-level distribution size. The fetch band is 5..55 %; extraction
+      // continues at 60..90, registering at 95. Byte events stream on the
+      // gateway fetch path; a pure-bitswap fetch may stay coarse (small bundles).
+      const totalBytes = Number(
+        variant?.size ?? manifest.distribution?.size ?? 0,
+      );
+      const onFetchProgress = (bytesReceived: number): void => {
+        const pct = totalBytes > 0
+          ? 5 + Math.min(50, Math.floor((bytesReceived / totalBytes) * 50))
+          : 5;
+        emit('fetching', pct, { bytesReceived, totalBytes });
+      };
 
       let bundleBuffer: Buffer;
       try {
-        bundleBuffer = await this.fetchFromIPFS(cid);
+        bundleBuffer = await this.fetchFromIPFS(effectiveCid, onFetchProgress);
       } catch (err: any) {
         throw new Error(`Failed to fetch app bundle from IPFS: ${err.message}`);
       }
@@ -270,7 +414,23 @@ export class AppInstallService {
         bytesReceived: bundleBuffer.length,
         totalBytes: bundleBuffer.length,
       });
-      const signatureVerified = this.verifyDistributionSignature(manifest, bundleBuffer);
+      const signatureVerified = this.verifyDistributionSignature(verifyManifest, bundleBuffer);
+
+      // Service-type apps spawn a pc2-node-privileged child process. Unlike
+      // other app kinds (which keep the v1 warn-only signature posture), a
+      // service install MUST fail closed when the signature does not verify
+      // against the fetched bundle bytes. The route-level gateServiceInstall
+      // only checks that `signedBy` is a trusted *identity* and that a
+      // signature is *present* — it does NOT cryptographically bind the
+      // bundle. Enforcing here closes the bundle-substitution gap for the
+      // privileged path (a swapped CID or forged signature can no longer
+      // spawn a backend). Thrown before any bytes hit disk.
+      if (manifest.type === 'service' && !signatureVerified) {
+        throw new Error(
+          `Service-type app "${manifest.name}" failed Ed25519 signature verification — ` +
+          `refusing to install a privileged backend from an unverified bundle.`,
+        );
+      }
 
       if (existsSync(appDir)) {
         rmSync(appDir, { recursive: true, force: true });
@@ -306,7 +466,7 @@ export class AppInstallService {
         app_name: appName,
         title: manifest.title,
         version: manifest.version,
-        cid,
+        cid: effectiveCid,
         size: totalSize,
         icon: manifest.icon || null,
         description: manifest.description || null,
@@ -395,6 +555,7 @@ export class AppInstallService {
    */
   installFromLocal(manifest: AppManifest, localDir: string): InstalledApp {
     this.validateManifest(manifest);
+    this.enforcePlatformCompatibility(manifest);
 
     const appName = manifest.name;
     const appDir = join(this.appsDir, appName);
@@ -553,12 +714,172 @@ export class AppInstallService {
       log.warn(`[validateManifest] Unknown type "${manifest.type}" for app "${manifest.name}"`);
     }
 
+    if (manifest.type === 'service') {
+      this.validateServiceBackend(manifest);
+    }
+
     if (manifest.category && !VALID_CATEGORIES.includes(manifest.category)) {
       log.warn(`[validateManifest] Unknown category "${manifest.category}" for app "${manifest.name}"`);
     }
 
     if (manifest.capabilities) {
       this.validateCapabilities(manifest.capabilities, manifest.name);
+    }
+
+    if (manifest.requirements?.platform) {
+      this.validatePlatformRequirement(manifest.requirements.platform, manifest.name);
+    }
+  }
+
+  /** Shape-check requirements.platform. Throws on malformed declarations. */
+  private validatePlatformRequirement(p: PlatformRequirement, appName: string): void {
+    if (typeof p !== 'object' || p === null || Array.isArray(p)) {
+      throw new Error(`App "${appName}": requirements.platform must be an object`);
+    }
+    for (const key of ['os', 'arch'] as const) {
+      const v = p[key];
+      if (v !== undefined) {
+        if (!Array.isArray(v) || v.some((s) => typeof s !== 'string')) {
+          throw new Error(`App "${appName}": requirements.platform.${key} must be an array of strings`);
+        }
+      }
+    }
+    if (p.minMemoryMB !== undefined && (typeof p.minMemoryMB !== 'number' || p.minMemoryMB <= 0)) {
+      throw new Error(`App "${appName}": requirements.platform.minMemoryMB must be a positive number`);
+    }
+    if (p.reason !== undefined && typeof p.reason !== 'string') {
+      throw new Error(`App "${appName}": requirements.platform.reason must be a string`);
+    }
+  }
+
+  /**
+   * Refuse to install an app whose requirements.platform the current host
+   * does not satisfy. Defense-in-depth behind the dApp Centre's client-side
+   * gate — a hand-crafted API call cannot bypass it. (For service apps this
+   * is also a UX guard: installing a Linux-only service on macOS would just
+   * crash-loop into quarantine; failing closed here gives a clear message.)
+   */
+  private enforcePlatformCompatibility(manifest: AppManifest): void {
+    const req = manifest.requirements?.platform;
+    if (!req) return;
+    const verdict = evaluatePlatformCompatibility(req, getHostPlatformSummary());
+    if (!verdict.compatible) {
+      throw new Error(
+        `App "${manifest.name}" is not compatible with this device: ${verdict.reason}`,
+      );
+    }
+  }
+
+  /**
+   * Resolve the per-arch capsule for THIS host from `distribution.variants`.
+   *
+   * Returns null when the manifest has no variants (single-arch app — the
+   * caller uses the top-level cid as-is). When variants exist, the node picks
+   * the one keyed by its own `"<os>-<arch>"` (Node's os.platform()/os.arch()),
+   * and throws if none matches — there is no usable capsule for this device, so
+   * the install must fail closed rather than fetch a wrong-arch bundle.
+   */
+  private resolveDistributionVariant(
+    manifest: AppManifest,
+  ): (AppDistributionVariant & { key: string }) | null {
+    try {
+      const resolved = resolveHostVariant<AppDistributionVariant>(
+        manifest.distribution?.variants,
+        getHostPlatformSummary(),
+      );
+      if (!resolved) return null;
+      return { ...resolved.variant, key: resolved.key };
+    } catch (err) {
+      // Re-wrap the pure resolver's generic message with the app name so the
+      // operator sees which app could not be installed on this device.
+      throw new Error(`App "${manifest.name}" ${(err as Error).message}`);
+    }
+  }
+
+  /**
+   * Service-type apps must declare a `backend` block with at minimum
+   * an entry script + a port. Validated at install time so a bad
+   * manifest fails loudly before pc2-node tries to spawn anything.
+   */
+  private validateServiceBackend(manifest: AppManifest): void {
+    if (!manifest.backend) {
+      throw new Error(`App "${manifest.name}" has type "service" but no "backend" block`);
+    }
+    const b = manifest.backend;
+    if (!b.entry || typeof b.entry !== 'string') {
+      throw new Error(`App "${manifest.name}": backend.entry is required and must be a string`);
+    }
+    this.validateSafePath(b.entry);
+
+    if (typeof b.port !== 'number' || !Number.isInteger(b.port) || b.port < 1024 || b.port > 65535) {
+      throw new Error(
+        `App "${manifest.name}": backend.port must be an integer in 1024..65535 (got ${b.port})`,
+      );
+    }
+
+    if (b.healthCheck !== undefined && typeof b.healthCheck !== 'string') {
+      throw new Error(`App "${manifest.name}": backend.healthCheck must be a string path`);
+    }
+
+    if (b.args !== undefined && !Array.isArray(b.args)) {
+      throw new Error(`App "${manifest.name}": backend.args must be an array of strings`);
+    }
+
+    if (b.env !== undefined) {
+      if (typeof b.env !== 'object' || b.env === null || Array.isArray(b.env)) {
+        throw new Error(`App "${manifest.name}": backend.env must be an object of string→string`);
+      }
+      for (const [k, v] of Object.entries(b.env)) {
+        if (typeof v !== 'string') {
+          throw new Error(`App "${manifest.name}": backend.env.${k} must be a string`);
+        }
+      }
+    }
+
+    if (b.teardown !== undefined) {
+      if (typeof b.teardown !== 'object' || b.teardown === null || Array.isArray(b.teardown)) {
+        throw new Error(`App "${manifest.name}": backend.teardown must be an object`);
+      }
+      if (typeof b.teardown.endpoint !== 'string' || !b.teardown.endpoint.startsWith('/')) {
+        throw new Error(`App "${manifest.name}": backend.teardown.endpoint must be an absolute URL path (start with /)`);
+      }
+      if (b.teardown.timeoutMs !== undefined
+          && (typeof b.teardown.timeoutMs !== 'number' || b.teardown.timeoutMs < 1000)) {
+        throw new Error(`App "${manifest.name}": backend.teardown.timeoutMs must be a number >= 1000`);
+      }
+    }
+
+    // externalDataDirs is on the manifest, not backend, but services are
+    // the only kind that uses it — validate here while we have context.
+    if (manifest.externalDataDirs !== undefined) {
+      if (!Array.isArray(manifest.externalDataDirs)) {
+        throw new Error(`App "${manifest.name}": externalDataDirs must be an array of absolute paths`);
+      }
+      for (const p of manifest.externalDataDirs) {
+        if (typeof p !== 'string') {
+          throw new Error(`App "${manifest.name}": externalDataDirs entries must be strings`);
+        }
+        // Allow ${PC2_DATA_DIR} as the leading variable so manifests don't
+        // need to hardcode /var/lib/pc2/data. Other entries must be
+        // absolute. The runtime purgeExternalDir applies the safety checks
+        // again AFTER interpolation; this validator is just a quick
+        // sanity check at install time.
+        if (!p.startsWith('/') && !p.startsWith('${PC2_DATA_DIR}')) {
+          throw new Error(`App "${manifest.name}": externalDataDirs path "${p}" must be absolute or start with $\{PC2_DATA_DIR\}`);
+        }
+        if (p.includes('..')) {
+          throw new Error(`App "${manifest.name}": externalDataDirs path "${p}" must not contain '..'`);
+        }
+        // Refuse paths with too few segments — '/', '/etc', '/var', '/home',
+        // '/usr', '/opt', '/data' alone, etc. Need at least two segments
+        // beyond the root (or 1 beyond ${PC2_DATA_DIR}, since that's
+        // already a deep path).
+        const stripped = p.replace('${PC2_DATA_DIR}', '/_pc2_data_root');
+        const segments = stripped.split('/').filter(Boolean);
+        if (segments.length < 2) {
+          throw new Error(`App "${manifest.name}": externalDataDirs path "${p}" is too shallow — refuse to wipe top-level dirs`);
+        }
+      }
     }
   }
 
@@ -587,7 +908,10 @@ export class AppInstallService {
     }
   }
 
-  private async fetchFromIPFS(cid: string): Promise<Buffer> {
+  private async fetchFromIPFS(
+    cid: string,
+    onProgress?: (bytesReceived: number) => void,
+  ): Promise<Buffer> {
     if (!this.ipfs) {
       throw new Error('IPFS not available — cannot fetch remote app bundles');
     }
@@ -601,7 +925,7 @@ export class AppInstallService {
     // Timeout is generous (5 min) because the Glide Finance bundle is ~80 MB
     // and a slow home connection via the gateway fallback can take a minute.
     try {
-      await this.ipfs.pinRemoteCID(cid, { timeoutMs: 300_000 });
+      await this.ipfs.pinRemoteCID(cid, { timeoutMs: 300_000, onProgress });
     } catch (err: any) {
       const type = err?.type;
       if (type === 'INVALID_CID') {

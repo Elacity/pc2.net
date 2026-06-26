@@ -639,6 +639,25 @@
             background: #f8fafc;
             box-shadow: none;
         }
+        .install-btn.incompatible {
+            background: #fef2f2;
+            color: #b91c1c;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+        .install-btn.incompatible:hover {
+            background: #fef2f2;
+            box-shadow: none;
+        }
+        .modal-incompat-note {
+            margin-top: 8px;
+            font-size: 12px;
+            color: #b91c1c;
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            border-radius: 6px;
+            padding: 8px 10px;
+        }
         
         /* Modal overlay */
         .modal-overlay {
@@ -1479,6 +1498,42 @@
         let currentCategory = 'all';
         let currentTab = 'discover';
         let isLoading = true;
+        // Host facts from GET /api/system/host-platform, used to gate apps that
+        // publish requirements.platform (e.g. Linux-only services). null until
+        // loadData resolves, or if the endpoint is unavailable (older node).
+        let hostPlatform = null;
+
+        const OS_LABELS = { linux: 'Linux', darwin: 'macOS', win32: 'Windows' };
+
+        /**
+         * Client-side mirror of evaluatePlatformCompatibility() in
+         * pc2-node/src/utils/platform.ts — KEEP THE TWO IN SYNC. Returns
+         * { compatible, reason }. The server re-runs the authoritative check
+         * and also enforces it at install time.
+         */
+        function isHostCompatible(req, host) {
+            if (!req || !host) return { compatible: true };
+            if (Array.isArray(req.os) && req.os.length > 0 && !req.os.includes(host.os)) {
+                const want = req.os.map(o => OS_LABELS[o] || o).join(' or ');
+                const have = OS_LABELS[host.os] || host.os;
+                return { compatible: false, reason: req.reason || `Requires ${want} (this device runs ${have})` };
+            }
+            if (Array.isArray(req.arch) && req.arch.length > 0 && !req.arch.includes(host.arch)) {
+                return { compatible: false, reason: req.reason || `Requires ${req.arch.join(' or ')} CPU (this device is ${host.arch})` };
+            }
+            if (typeof req.minMemoryMB === 'number' && host.totalMemoryMB < req.minMemoryMB) {
+                const needGB = (req.minMemoryMB / 1024).toFixed(1);
+                const haveGB = (host.totalMemoryMB / 1024).toFixed(1);
+                return { compatible: false, reason: req.reason || `Requires at least ${needGB} GB RAM (this device has ${haveGB} GB)` };
+            }
+            return { compatible: true };
+        }
+
+        /** HTML-attribute escape for reason text shown in title="" tooltips. */
+        function escAttr(s) {
+            return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+                .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
 
         // Built-in app metadata (enriches the launch_apps data)
         const builtInMeta = {
@@ -1549,7 +1604,16 @@
         function registryAppToCatalog(app) {
             const r = app.registry || {};
             const authorName = typeof app.author === 'object' ? app.author.name : (app.author || 'Unknown');
+            // Everything the publisher declared, MINUS the `registry` UI-metadata
+            // block (gradient/badges/etc., not a manifest field). Carried so the
+            // install call sends the publisher's real manifest — `type: "service"`,
+            // `backend`, `externalDataDirs`, `capabilities`, `display`,
+            // `distribution` — rather than a lossy reconstruction. Without this a
+            // service app like ENM would install as a plain web app (no backend
+            // spawned) and fail the Ed25519 signature gate (no signature sent).
+            const { registry: _registryUiBlock, ...rawManifest } = app;
             return {
+                rawManifest,
                 id: app.name,
                 name: app.title || app.name,
                 developer: authorName,
@@ -1560,6 +1624,17 @@
                 version: app.version || '',
                 icon: app.icon || 'package',
                 gradient: r.gradient || 'gradient-slate',
+                // Real branded logo shown in the store BEFORE install. The
+                // bundle's own icon lives inside the (not-yet-fetched) IPFS
+                // capsule, so the catalog entry must carry a fetchable image —
+                // `iconDataUrl` (a data: URI) or an `icon` that's already a URL.
+                // getCardIconHtml/getStaffPickIconHtml render `builtInIcon` via
+                // <img> with the .has-img treatment; absent one, they fall back
+                // to the gradient + category glyph. Installed apps still get the
+                // real bundle logo from mergeApps (launchAppIcons) which wins.
+                builtInIcon: (typeof app.iconDataUrl === 'string' && /^(data:|https?:|\/)/.test(app.iconDataUrl))
+                    ? app.iconDataUrl
+                    : (typeof app.icon === 'string' && /^(data:|https?:|\/)/.test(app.icon) ? app.icon : null),
                 // Optional hero image for the staff-pick card. Not present
                 // in the current registry payload but reading it here means
                 // the day a publisher adds `registry.banner` (or top-level
@@ -1570,9 +1645,24 @@
                 isStaffPick: !!r.staffPick,
                 isPopular: !!r.popular,
                 requirements: { storage: formatSize(app.distribution?.size), memory: '-', compatibility: r.compatibility || 'PC2 1.0+' },
+                // Full manifest requirements (minVersion/platform/...) preserved
+                // for the device-compatibility gate and echoed back to the server
+                // on install so its defense-in-depth platform check sees the same
+                // constraints. `platformReq` is the requirements.platform subset
+                // the dApp Centre evaluates against the host. See utils/platform.ts.
+                manifestRequirements: app.requirements || null,
+                platformReq: (app.requirements && app.requirements.platform) || null,
                 website: r.website || null,
                 source: r.source || null,
                 cid: app.distribution?.cid || null,
+                // Full distribution block (signature, signedBy, and per-arch
+                // `variants` for native-module apps). Carried so installApp can
+                // (a) send the signature to the server — required for service
+                // apps to pass the Ed25519 gate — and (b) so the compat check
+                // can fall back to "no build for your CPU yet" when this host's
+                // arch has no published variant. See AppDistribution in
+                // pc2-node/src/services/AppInstallService.ts.
+                distribution: app.distribution || null,
                 registryStatus: r.status || 'coming_soon',
                 // Manifest role — `'system'` for the four core capsules
                 // (Market, Player, Creator, dDRM Viewer) that auto-install
@@ -1587,11 +1677,17 @@
         async function loadData() {
             isLoading = true;
             try {
-                const [installedRes, launchRes, registryRes] = await Promise.allSettled([
+                const [installedRes, launchRes, registryRes, hostRes] = await Promise.allSettled([
                     pc2Fetch('/api/installed-apps').then(r => r.ok ? r.json() : { apps: [] }),
                     fetch('/get-launch-apps').then(r => r.ok ? r.json() : { recommended: [] }),
                     fetch('/api/registry/apps').then(r => r.ok ? r.json() : { apps: [] }),
+                    pc2Fetch('/api/system/host-platform').then(r => r.ok ? r.json() : null),
                 ]);
+
+                // Host facts for device-compatibility gating. If this fails we
+                // leave hostPlatform null and skip the gate (fail-open in the UI;
+                // the server still enforces at install time as defense-in-depth).
+                hostPlatform = (hostRes.status === 'fulfilled' && hostRes.value && hostRes.value.result) || null;
 
                 const rawInstalled = (installedRes.status === 'fulfilled' ? installedRes.value.apps : []) || [];
                 // Defence-in-depth: even though /api/installed-apps now drops
@@ -1699,15 +1795,41 @@
                 const isComingSoon = !isInstalled && (cat.registryStatus === 'coming_soon' || (!cat.cid && cat.registryStatus !== 'available'));
                 // For installed apps, prefer the backend-resolved bundle icon
                 // (the real branded logo) over the registry's category SVG
-                // key. Non-installed apps keep the category glyph so the
-                // "discover" feel is preserved. See DAPP-UX-POLISH-V12 #2.
+                // key. Non-installed apps fall back to the catalog's own
+                // `builtInIcon` (the registry `iconDataUrl`) so the real logo
+                // shows in the store BEFORE install; only when neither exists
+                // do we drop to the category glyph. See DAPP-UX-POLISH-V12 #2.
                 const realIcon = isInstalled ? launchAppIcons[cat.id] : null;
+                // Device-compatibility gate: only relevant for not-yet-installed
+                // apps that declare requirements.platform. Installed apps stay
+                // openable; if hostPlatform is unknown we skip the gate (fail-open
+                // in the UI — the server still enforces on install).
+                let compat = (!isInstalled && cat.platformReq)
+                    ? isHostCompatible(cat.platformReq, hostPlatform)
+                    : { compatible: true };
+                // Per-arch capsules: even when platformReq's arch union allows
+                // this host (e.g. arch:["x64","arm64"]), there may be no PUBLISHED
+                // variant for the host's actual arch yet (x64-first rollout). In
+                // that case the install would fail server-side, so gate it out
+                // here with a clearer "coming soon" message.
+                if (compat.compatible && !isInstalled && hostPlatform && cat.distribution?.variants) {
+                    const variantKey = `${hostPlatform.os}-${hostPlatform.arch}`;
+                    if (!cat.distribution.variants[variantKey]) {
+                        const haveArches = Object.keys(cat.distribution.variants)
+                            .map(k => k.split('-').slice(1).join('-')).join(', ');
+                        compat = {
+                            compatible: false,
+                            reason: `No ${hostPlatform.arch} build available yet (published: ${haveArches || 'none'})`,
+                        };
+                    }
+                }
                 allApps.push({
                     ...cat,
                     installed: isInstalled,
                     isBuiltIn: isBuiltIn,
                     isComingSoon,
-                    builtInIcon: realIcon || null,
+                    incompatibleReason: compat.compatible ? null : compat.reason,
+                    builtInIcon: realIcon || cat.builtInIcon || null,
                 });
             }
 
@@ -1835,6 +1957,9 @@
             }
             if (app.isComingSoon) {
                 return `<button class="install-btn coming-soon" onclick="event.stopPropagation();">Coming Soon</button>`;
+            }
+            if (app.incompatibleReason) {
+                return `<button class="install-btn incompatible" title="${escAttr(app.incompatibleReason)}" onclick="event.stopPropagation();">Not compatible</button>`;
             }
             return `<button class="install-btn" onclick="event.stopPropagation(); installApp('${app.id}')">Install</button>`;
         }
@@ -2048,6 +2173,8 @@
                 }
             } else if (app.isComingSoon) {
                 actionBtn = `<button class="modal-btn disabled">Coming Soon</button>`;
+            } else if (app.incompatibleReason) {
+                actionBtn = `<button class="modal-btn disabled" title="${escAttr(app.incompatibleReason)}">Not compatible with this device</button>`;
             } else {
                 actionBtn = `<button class="modal-btn primary" onclick="closeDetailModal(); installApp('${app.id}')">Install</button>`;
             }
@@ -2068,6 +2195,7 @@
                         <div class="modal-section-title">About</div>
                         <div class="modal-description">${app.description}</div>
                     </div>
+                    ${app.incompatibleReason ? `<div class="modal-incompat-note">Not compatible with this device — ${escAttr(app.incompatibleReason)}</div>` : ''}
                     ${app.requirements ? `
                     <div class="modal-section">
                         <div class="modal-section-title">Requirements</div>
@@ -2170,6 +2298,12 @@
 
             if (app.isComingSoon || app.installed) return;
 
+            // Device-compatibility gate (client-side; server re-enforces).
+            if (app.incompatibleReason) {
+                showToast(`Not compatible with this device — ${app.incompatibleReason}`, true);
+                return;
+            }
+
             // CID-based install: require a CID on the catalog entry
             if (!app.cid) {
                 showToast('This app does not have an IPFS package yet. Coming soon!', true);
@@ -2200,14 +2334,29 @@
                 // these via updateInstallProgress.
                 updateInstallProgress('fetching', 10);
 
+                // Start from the publisher's full manifest (type, backend,
+                // externalDataDirs, capabilities, display, distribution) so
+                // service apps spawn their backend and pass the signature gate.
+                // Fall back to {} for built-ins/launch apps that have no raw
+                // manifest. Identity fields are overridden from the catalog.
+                const baseManifest = app.rawManifest ? { ...app.rawManifest } : {};
                 const manifest = {
+                    ...baseManifest,
                     name: app.id,
                     title: app.name,
-                    version: app.version || '1.0.0',
-                    description: app.description,
-                    author: app.developer,
-                    entry: 'index.html',
-                    permissions: app.permissions || [],
+                    version: app.version || baseManifest.version || '1.0.0',
+                    description: app.description ?? baseManifest.description,
+                    author: app.developer ?? baseManifest.author,
+                    entry: baseManifest.entry || 'index.html',
+                    permissions: app.permissions || baseManifest.permissions || [],
+                    // Echo the registry requirements (incl. platform) so the
+                    // server's defense-in-depth compatibility check runs against
+                    // the same constraints the UI gated on.
+                    ...(app.manifestRequirements ? { requirements: app.manifestRequirements } : {}),
+                    // Distribution carries signature/signedBy (required for the
+                    // service-app Ed25519 gate) and per-arch `variants` (the
+                    // server resolves the capsule for its own architecture).
+                    ...(app.distribution ? { distribution: app.distribution } : {}),
                 };
 
                 const res = await pc2Fetch('/api/installed-apps/install', {

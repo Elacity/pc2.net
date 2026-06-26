@@ -24,6 +24,7 @@ import type {
   AIConversation,
   ContentCatalogItem,
   InstalledApp,
+  AppRuntimeState,
 } from './types.js';
 
 // Re-export the storage domain types so that any consumer that historically
@@ -41,6 +42,7 @@ export type {
   AIConversation,
   ContentCatalogItem,
   InstalledApp,
+  AppRuntimeState,
 };
 
 const log = createLogger('database');
@@ -55,6 +57,11 @@ export class DatabaseManager {
 
   getDatabase(): Database | null {
     return this.db;
+  }
+
+  /** Absolute path to the on-disk SQLite file (pc2.db). */
+  getDbPath(): string {
+    return this.dbPath;
   }
 
   /**
@@ -1875,6 +1882,40 @@ export class DatabaseManager {
   uninstallApp(appName: string): boolean {
     const db = this.getDB();
     const result = db.prepare('DELETE FROM installed_apps WHERE app_name = ?').run(appName);
+    return result.changes > 0;
+  }
+
+  /**
+   * Update runtime-state columns (pid/port/started_at/crash_count) on an
+   * installed app row. Used by AppProcessManager to record a service's
+   * live state so /status endpoints + boot-time hydrate can read it.
+   *
+   * No-op if the app row doesn't exist (returns false). Service-type
+   * apps must be registered via registerInstalledApp() first.
+   */
+  setAppRuntime(appName: string, state: AppRuntimeState): boolean {
+    const db = this.getDB();
+    const result = db.prepare(`
+      UPDATE installed_apps
+         SET pid = ?, port = ?, started_at = ?, crash_count = ?, updated_at = ?
+       WHERE app_name = ?
+    `).run(state.pid, state.port, state.started_at, state.crash_count, Date.now(), appName);
+    return result.changes > 0;
+  }
+
+  /**
+   * Clear all runtime-state columns (resets to "not running"). Called
+   * when AppProcessManager stops an app cleanly; also called as part
+   * of a clean uninstall by the install handler before the row is
+   * deleted, so callers reading the row mid-uninstall see consistent state.
+   */
+  clearAppRuntime(appName: string): boolean {
+    const db = this.getDB();
+    const result = db.prepare(`
+      UPDATE installed_apps
+         SET pid = NULL, port = NULL, started_at = NULL, updated_at = ?
+       WHERE app_name = ?
+    `).run(Date.now(), appName);
     return result.changes > 0;
   }
 

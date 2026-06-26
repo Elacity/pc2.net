@@ -14,7 +14,10 @@ name: Build ENM bundle
 # native runners. Each arch produces its own signed tarball + manifest fragment.
 on:
   push:
-    branches: [main]
+    # TEMP: feature branch included to produce official CI-signed bundles for
+    # release prep (the proxy fix postdates the last main-built artifacts).
+    # REVERT before merge — see follow-up commit.
+    branches: [main, feature/elastos-node-manager]
     paths:
       - 'enm-server/**'
       - 'src/backend/apps/elastos-node-manager/**'

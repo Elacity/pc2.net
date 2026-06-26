@@ -1,0 +1,77 @@
+{
+  "name": "elastos-node-manager",
+  "title": "Elastos Node Manager",
+  "version": "0.5.249",
+  "description": "Run and self-heal an Elastos mainchain node for BPoS supernode operators.",
+  "author": "Elacity",
+  "type": "service",
+  "category": "blockchain",
+  "role": "dapp",
+  "icon": "assets/icon.svg",
+  "iconDataUrl": "data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPHN2ZyBpZD0iTGF5ZXJfMSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB4bWxuczp4bGluaz0iaHR0cDovL3d3dy53My5vcmcvMTk5OS94bGluayIgdmVyc2lvbj0iMS4xIiB2aWV3Qm94PSIwIDAgMTQwIDE0MCI+CiAgPGRlZnM+CiAgICA8c3R5bGU+CiAgICAgIC5zdDAgewogICAgICAgIGZpbGwtb3BhY2l0eTogLjY7CiAgICAgIH0KICAgICAgLnN0MSB7CiAgICAgICAgZmlsbDogdXJsKCNsaW5lYXItZ3JhZGllbnQpOwogICAgICB9CiAgICAgIC5zdDIgewogICAgICAgIGZpbGw6ICMxNDE0MTQ7CiAgICAgIH0KICAgIDwvc3R5bGU+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9ImxpbmVhci1ncmFkaWVudCIgeDE9IjcwIiB5MT0iMTA2LjkiIHgyPSI3MCIgeTI9IjMzLjYiIGdyYWRpZW50VHJhbnNmb3JtPSJ0cmFuc2xhdGUoMCAxMzkuOSkgc2NhbGUoMSAtMSkiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjZmZlZWRjIi8+CiAgICAgIDxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI2ZmYzM4MiIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICA8L2RlZnM+CiAgPHJlY3QgY2xhc3M9InN0MiIgeT0iMCIgd2lkdGg9IjE0MCIgaGVpZ2h0PSIxNDAiIHJ4PSIyMCIgcnk9IjIwIi8+CiAgPHBhdGggY2xhc3M9InN0MSIgZD0iTTk1LjcsMzMuOGMxLjktMS4xLDQuMi0xLjEsNi4xLDBsMTYuOSw5LjhjNC4yLDIuNCw0LjIsOC4yLjMsMTAuNWwtMTEuOSw2LjktLjQuMiwxMiw3YzQuMiwyLjQsNC4yLDguMi4zLDEwLjVsLTExLjksNi45LTguMSw0LjctMjYsMTVjLTEuOSwxLjEtNC4yLDEuMS02LjEsMGwtMjYtMTUtOC4xLTQuNy0xMS45LTYuOWMtNC0yLjMtNC04LjEsMC0xMC41bDEyLjEtNy4yaC0uMWMwLDAtMTEuOS03LTExLjktNy00LTIuMy00LTguMSwwLTEwLjVsMTYuNi05LjhjMS45LTEuMSw0LjItMS4xLDYuMSwwbDIyLjksMTMuMmMxLjksMS4xLDQuMiwxLjEsNi4xLDBsMjIuOS0xMy4yWiIvPgogIDxnPgogICAgPHBhdGggY2xhc3M9InN0MiIgZD0iTTg3LjIsNzMuOGguM2MzLjEuMiw1LjUsMi43LDUuNSw1LjhzLTIuNCw1LjYtNS41LDUuOGgtLjNzLTE0LjIsMC0xNC4yLDBjLTMuMiwwLTUuOC0yLjYtNS44LTUuOHMyLjYtNS44LDUuOC01LjhoMTQuMloiLz4KICAgIDxwYXRoIGNsYXNzPSJzdDAiIGQ9Ik01Mi4xLDUzLjZsLjIuMiw5LjYsNy41YzQsMy4xLDQsOS4xLDAsMTIuMmwtOS42LDcuNWMtMi41LDItNi4yLDEuNS04LjItMS0yLTIuNS0xLjUtNi4yLDEtOC4ybDUuNy00LjQtNS43LTQuNC0uMi0uMmMtMi4zLTItMi43LTUuNS0uOC04LDEuOS0yLjUsNS40LTMsNy45LTEuMloiLz4KICAgIDxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik01Mi4xLDUzLjZsLjIuMiwxMS42LDksLjIuMmMyLjMsMiwyLjcsNS41LjgsOC0xLjksMi41LTUuNCwzLTcuOSwxLjJsLS4yLS4yLTExLjYtOS0uMi0uMmMtMi4zLTItMi43LTUuNS0uOC04LDEuOS0yLjUsNS40LTMsNy45LTEuMloiLz4KICAgIDxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik01Ni42LDc3LjdjMS0xLjksMS41LTQuOC0xLTYuOGw4LjUuOS03LjUsNS44WiIvPgogIDwvZz4KPC9zdmc+Cg==",
+  "entry": "index.html",
+  "display": {
+    "width": 1200,
+    "height": 800,
+    "resizable": true
+  },
+  "backend": {
+    "entry": "backend/src/server.js",
+    "port": 4180,
+    "healthCheck": "/api/enm/health",
+    "teardown": {
+      "endpoint": "/api/enm/teardown",
+      "timeoutMs": 30000
+    }
+  },
+  "capabilities": {
+    "network": true
+  },
+  "requirements": {
+    "minVersion": "1.1.0",
+    "platform": {
+      "os": [
+        "linux"
+      ],
+      "arch": [
+        "x64",
+        "arm64"
+      ],
+      "minMemoryMB": 4096,
+      "reason": "Elastos Node Manager runs native Linux node binaries (x86_64 / arm64) and needs at least 50 GB of free disk for chain data. It is not available on macOS or Windows."
+    }
+  },
+  "externalDataDirs": [
+    "${PC2_DATA_DIR}/extensions/elastos-node-manager"
+  ],
+  "distribution": {
+    "cid": "bafybeifxo36g4oylmkv7lq4sppq6vsalyg3honwe367owibktqy6iy22mi",
+    "signedBy": "1ab060ba7578261355504300c1193c484ed8a46a30499c3fa3cb9065930367eb",
+    "channel": "beta",
+    "size": 5817936,
+    "variants": {
+      "linux-x64": {
+        "cid": "bafybeifxo36g4oylmkv7lq4sppq6vsalyg3honwe367owibktqy6iy22mi",
+        "signature": "f8a7998ba6bb8aff93e01cf57e8940892391ca12b99b113c4bc06297f0c0937aa321fe323508c787ec5b14666efddf380289e802694663663a5a815fa034a80a",
+        "size": 5817936
+      },
+      "linux-arm64": {
+        "cid": "bafybeida6gpbbhaq2yd2nektksr6h7grfn3tztbex5mbtqbmbelfrmbbeq",
+        "signature": "4431bef0e8ba1e4cc350082e1fc5cff35bf71cafb45422dd44b40855d1eb2480afc19689f564add559c92a4d0c27d7c652a02a5b5595d51da933652036b86d0a",
+        "size": 5793217
+      }
+    }
+  },
+  "registry": {
+    "category": "blockchain",
+    "gradient": "gradient-purple",
+    "badges": [
+      "beta",
+      "bpos"
+    ],
+    "status": "available",
+    "shortDesc": "Run & self-heal an Elastos BPoS mainchain node.",
+    "staffPick": false,
+    "popular": false
+  }
+}

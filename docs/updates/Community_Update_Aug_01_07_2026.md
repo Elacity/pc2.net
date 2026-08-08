@@ -2,11 +2,11 @@ Elacity Labs — Weekly Team Update for the World Computer Initiative (WCI)
 
 **August 1 – August 7, 2026**
 
-**Not a quiet week — and Runtime was not quiet either once all branches were scanned.** Coming out of [#31](https://github.com/Elacity/pc2.net/discussions/31) (mainnet recovery + Runtime v0.6 on `main`), heat is across the org: **ElacityLabsWeb** shipped a private **CodeRED Intel / ops admin portal** (~42 commits); **Hyper + hey-engine** kept hardening calls, radio, and relay (**6 + 18**); **Elastos.Node v1.2.3** fixed `ela rewound` for post-v1.0.0 recovery builds; **drm-api** surgically backported the Base **0.11** getLogs/CACHER pack to **ESC** (`release/next`, PR #4); security hardening branches on **ddrm-reader**, **events-watcher**, and drm CI. On Runtime, `main` got one VZ TURN-ownership fix; **`experiment/home-studio-h3-dogfood`** (pushed public 8 Aug) carries **~15 home-agent / Sparks H3 dogfood commits** after the weekly cutoff; and team status marks **`feat/dkms-esp-port`** READY-FOR-MANUAL-MERGE against the **0.7-dev roadmap** — content creation/playback ~**75%** functional (custody / protected content / commerce rails), conversation-plane ESP facts/verbs still owed with the rest of shell. **PC2** stayed product-quiet (docs publish only). Formal Runtime **v0.6.0 GitHub Release/tag** still outstanding. ELA tip ~**2,267,480** — past gate two (**2,265,000**).
+**Priority this week: Runtime, chain security, DKMS/content rails, and marketplace — not side tooling.** Coming out of [#31](https://github.com/Elacity/pc2.net/discussions/31) (mainnet recovery + Runtime v0.6 on `main`): **`experiment/home-studio-h3-dogfood`** carries ~15 home-agent / Sparks H3 dogfood commits after the weekly cutoff (Live SSE, Inbox/library, Waves 4–6, Studio Generate/Storyboard/Character) — **not for `main` yet**; team status marks **`feat/dkms-esp-port`** READY-FOR-MANUAL-MERGE against the **0.7-dev roadmap** (content creation/playback ~**75%** functional — custody / protected content / commerce); Runtime `main` got a VZ TURN-ownership correctness fix; **ELA** tip ~**2,267,480** (past gate **2,265,000**) with private **v1.0.3** security-readiness work recommending a **narrow urgent cut** then a follow-up (no public finding dump); **drm-api** backported Base **0.11** getLogs/CACHER to **ESC** (`release/next`, PR #4) and **elacity-web 4.5.0** merged; **Elastos.Node v1.2.3** fixed `ela rewound` for post-v1.0.0 recovery builds; marketplace-adjacent hardening on **ddrm-reader**, **events-watcher**, drm CI. Hyper + hey-engine kept shipping (**6 + 18**). **PC2** product-quiet. Formal Runtime **v0.6.0 GitHub Release/tag** still outstanding.
 
-**Community status (8 Aug):** mainchain is producing blocks again under BPoS and still being hardened. **ESC / EID / Arbiter / bridge remain closed on purpose** — different risk profile, automatic paths on careless restart, unfinished repair and rehearsal. Do not send funds into paused sidechain or bridge flows until official reopen. Details below and in the [mainchain postmortem](https://blog.elastos.net/announcement/main-chain-postmortem-august/).
+**Community status (8 Aug):** mainchain producing blocks under BPoS and still being hardened. **ESC / EID / Arbiter / bridge remain closed on purpose.** Do not send funds into paused sidechain or bridge flows until official reopen. Details below and in the [mainchain postmortem](https://blog.elastos.net/announcement/main-chain-postmortem-august/).
 
-> Mainchain online · ESC/bridge **still closed** · ELA **v1.0.3** narrow security cut prep (no public vuln dump) · Runtime **home-agent / Sparks H3 dogfood** · **dkms-esp-port** READY-FOR-MANUAL-MERGE · CodeRED Intel / ops admin · Hyper + hey-engine · Node **v1.2.3** · drm-api **0.11 → ESC** · PC2 quiet · ELA tip past **2,265,000** · Runtime **0.6 tag still pending**.
+> Runtime Home / Sparks H3 dogfood · **dkms-esp-port** READY-FOR-MANUAL-MERGE (~75% content rails) · ELA **v1.0.3** narrow security cut prep · marketplace **0.11 → ESC** + web **4.5.0** · Node **v1.2.3** · mainchain online / ESC-bridge **closed** · Runtime **0.6 tag still pending** · PC2 quiet.
 
 ---
 
@@ -15,51 +15,49 @@ Elacity Labs — Weekly Team Update for the World Computer Initiative (WCI)
 - **Previous report** — [Week of July 24 – July 31, 2026 (#31)](https://github.com/Elacity/pc2.net/discussions/31)
 - **This discussion** — [#32](https://github.com/Elacity/pc2.net/discussions/32)
 - **Elastos status** — [Mainchain postmortem (August)](https://blog.elastos.net/announcement/main-chain-postmortem-august/) · [honest recovery log](https://github.com/Elacity/pc2.net/blob/main/docs/updates/Elastos_ELA_Mainnet_Recovery_Honest_Log_2026-07.md)
-- **Ecosystem** — [elastos/Elastos.Node](https://github.com/elastos/Elastos.Node) release **[v1.2.3](https://github.com/elastos/Elastos.Node/releases/tag/v1.2.3)** · ELA tip ~**2,267,480** (past gate **2,265,000**)
+- **Runtime** — [Elacity/elastos-runtime](https://github.com/Elacity/elastos-runtime) `main` tip [`d358ded`](https://github.com/Elacity/elastos-runtime/commit/d358dedb) · [`experiment/home-studio-h3-dogfood`](https://github.com/Elacity/elastos-runtime/tree/experiment/home-studio-h3-dogfood) tip [`2d33644`](https://github.com/Elacity/elastos-runtime/commit/2d33644d) · CHANGELOG **[0.6.0]** on `main` · GitHub Release still **[v0.4.0](https://github.com/Elacity/elastos-runtime/releases/tag/v0.4.0)**
+- **Ecosystem** — [elastos/Elastos.Node](https://github.com/elastos/Elastos.Node) **[v1.2.3](https://github.com/elastos/Elastos.Node/releases/tag/v1.2.3)** · ELA tip ~**2,267,480** (past gate **2,265,000**)
+- **Marketplace** — drm-api PR **[#4](https://github.com/Elacity/drm-api-layer/pull/4)** (0.11 → ESC) · elacity-web PR **[#25](https://github.com/Elacity/elacity-web/pull/25)** (**4.5.0**)
 - **Hyper lane** — [Elacity/Hyper](https://github.com/Elacity/Hyper) · [Elacity/Hey-engine](https://github.com/Elacity/Hey-engine)
-- **Runtime** — [Elacity/elastos-runtime](https://github.com/Elacity/elastos-runtime) `main` tip [`d358ded`](https://github.com/Elacity/elastos-runtime/commit/d358dedb) · experiment branch [`experiment/home-studio-h3-dogfood`](https://github.com/Elacity/elastos-runtime/tree/experiment/home-studio-h3-dogfood) tip [`2d33644`](https://github.com/Elacity/elastos-runtime/commit/2d33644d) · CHANGELOG **[0.6.0]** on `main` · GitHub Release still **[v0.4.0](https://github.com/Elacity/elastos-runtime/releases/tag/v0.4.0)**
-- **Marketplace** — drm-api PR **[#4](https://github.com/Elacity/drm-api-layer/pull/4)** (0.11 → ESC) merged · elacity-web PR **[#25](https://github.com/Elacity/elacity-web/pull/25)** merged (**4.5.0**)
 - **Install (PC2 node)** — `bash <(curl -fsSL https://raw.githubusercontent.com/Elacity/pc2.net/main/scripts/update.sh)`
 - **Install (Runtime)** — `curl -fsSL https://elastos.elacitylabs.com/install.sh | bash`
 - **Live surfaces** — map.ela.city · portal.ela.city · elacitylabs.com · elacitylabs.com/provenance
 
 ## Table of Contents
 
-1. The Big Picture — Org Heat After the 0.6 Cut
+1. The Big Picture — Runtime, Security, DKMS, Marketplace First
 2. Elastos Status (8 Aug) — Mainchain Online, Sidechains Closed on Purpose
-3. Blind Spots — What a PC2+Runtime-Only Scan Missed
-4. Ecosystem — Node v1.2.3 + ELA Tip + v1.0.3 Security Readiness (High Level)
-5. ElacityLabsWeb — CodeRED Intel + Ops Admin Portal
-6. Hyper + Hey-engine — Calls, Radio, Relay
-7. Marketplace — drm-api 0.11 → ESC + web 4.5.0 Confirmed
-8. Security Hardening Branches — ddrm-reader, events-watcher, drm CI
-9. Runtime — `main` Tail + Home Dogfood + DKMS/ESP Port (Team Lane)
-10. PC2 — Convergence Continues (Docs Only)
-11. Release Engineering — 0.6 Tag Still Pending
-12. Convergence Lens
-13. Looking Ahead
-14. Summary Statistics
-15. Data-Quality Notes
+3. Blind Spots — What a Narrow Scan Missed
+4. Runtime — `main` Tail + Home Dogfood + DKMS/ESP Port
+5. Ecosystem — Node v1.2.3 + ELA Tip + v1.0.3 Security Readiness (High Level)
+6. Marketplace — drm-api 0.11 → ESC + web 4.5.0 + Hardening Branches
+7. Hyper + Hey-engine — Calls, Radio, Relay
+8. Supporting Ops — Continuous Monitoring Admin (Grant Lane)
+9. PC2 — Convergence Continues (Docs Only)
+10. Release Engineering — 0.6 Tag Still Pending
+11. Convergence Lens
+12. Looking Ahead
+13. Summary Statistics
+14. Data-Quality Notes
 
 ---
 
-## 1. The Big Picture — Org Heat After the 0.6 Cut
+## 1. The Big Picture — Runtime, Security, DKMS, Marketplace First
 
-Five stories this week — **chain status**, **Runtime Home dogfood** (off `main`), ops intel, mesh/mobile, and tooling.
+This week’s public story is the **product and security spine** of the World Computer stack — not the supporting ops tooling.
 
-**Zeroth, say plainly what is open and what is not.** Mainchain recovered through halt → patch → rewind → restart → BPoS. ESC, EID, Arbiter, and the bridge stay closed until repair, accounting, and rehearsal clear a higher bar. That sequencing is intentional. See §2.
+**Zeroth — what is open and what is not.** Mainchain recovered through halt → patch → rewind → restart → BPoS. ESC, EID, Arbiter, and the bridge stay closed until repair, accounting, and rehearsal clear a higher bar. See §2.
 
-**First, Runtime product heat is branch-scoped, not `main`.** (1) **Home / Sparks H3 dogfood** on `experiment/home-studio-h3-dogfood` — Live SSE, Inbox/library, Waves 4–6, Studio Generate/Storyboard/Character; not for `main` until secure converge. (2) **DKMS / protected-content / commerce ESP port** — teammate roadmap coverage (2026-08-07) marks `feat/dkms-esp-port` READY-FOR-MANUAL-MERGE vs `upstream/0.7-dev`: content creation and playback ~**75%** functional / ~**70%** ESP-aligned; foundation/hardening only touched where the rails forced it. Branch tip not yet on public `origin` heads — team lane. See §9.
+**First — Runtime.** Home / Sparks H3 dogfood on `experiment/home-studio-h3-dogfood` (Live SSE, Inbox/library, Waves 4–6, Studio Generate/Storyboard/Character) — not for `main` until secure converge. In parallel, **`feat/dkms-esp-port`** is READY-FOR-MANUAL-MERGE vs `upstream/0.7-dev`: custody / protected content / commerce ~**75%** functional. `main` itself only took a VZ TURN-ownership fix. See §4.
 
-**Second, Labs built an internal intelligence / ops surface.** ElacityLabsWeb (~42 commits, SashaMIT) folded **CodeRED OSS intelligence** into a unified `/admin` ops portal. Operator tooling — not a public product launch.
+**Second — chain security hardening.** Private **v1.0.3** readiness work recommends a **narrow urgent cut** for the highest-urgency unauthenticated remote-abuse class, then a stated **v1.0.4** for soak-heavy items — without publishing a finding register while related classes may still be live. Node **v1.2.3** unblocks operator recovery tooling. See §5.
 
-**Third, Hyper / hey-engine kept shipping.** Calls, radio, relay, and **one edition, no Google Play store path**.
+**Third — marketplace.** drm-api **0.11 → ESC** indexer readiness (PR #4); elacity-web **4.5.0** merged; ddrm-reader / events-watcher / drm CI hardening in flight. ESC user reopen is still closed (§2). See §6.
 
-**Fourth, ecosystem + marketplace closed last cycle’s open loops.** Node **v1.2.3**; drm-api **PR #4** (0.11 → ESC indexer readiness); elacity-web **4.5.0** merged; ELA tip past **2,265,000**.
-
-PC2 remains product-quiet (docs). Runtime `main` is the quiet correctness line; the Home lane is the loud one — branch-scoped.
+**Also shipping:** Hyper / hey-engine (calls, radio, relay; one edition, no Play). **PC2** product-quiet. A grant-backed **continuous monitoring + admin review** lane exists as supporting ops (§8) — useful IP for the ecosystem after the recent attacks; **not** the headline of this weekly.
 
 ## 2. Elastos Status (8 Aug) — Mainchain Online, Sidechains Closed on Purpose
+
 
 *Community framing from Elastos DAO / incident coordination (engineering led by the incident technical team). Not an “everything is fine” line — a clear account of what has been done since July, and what stays shut until it deserves confidence.*
 
@@ -124,126 +122,26 @@ A small set of engineers, Council members, operators, and coordinators have been
 
 Further public posts when there is a concrete ESC / bridge milestone, a locked audit handoff the community should know about, or a governance milestone that changes the public picture.
 
-## 3. Blind Spots — What a PC2+Runtime-Only Scan Missed
+## 3. Blind Spots — What a Narrow Scan Missed
 
-An auto-draft that only walked `pc2.net` + `elastos-runtime` concluded “tail cycle, 3 commits.” With full **Elacity + Elastos** org access restored:
+A `main`-only PC2+Runtime draft under-counted the week. Full **Elacity + Elastos** org + all Runtime remotes + team status:
 
 | Missed lane | Reality this window |
 |---|---|
+| **Runtime `experiment/home-studio-h3-dogfood`** | **~15** commits after cutoff — home-agent Waves + Sparks H3 (pushed 8 Aug); **77** ahead of `main` |
+| **Runtime `feat/dkms-esp-port` (team)** | READY-FOR-MANUAL-MERGE vs 0.7-dev — content rails ~75% functional; tip not on public `origin` yet |
 | Community / DAO status | Mainchain online · ESC/bridge closed on purpose · CRC make-whole · auditor engagement |
-| ELA v1.0.3 readiness (team) | Independent adversarial review of private candidate — **split release** recommended; finding register **not** published here |
-| **Runtime `experiment/home-studio-h3-dogfood`** | **~15** commits after cutoff — home-agent Waves + Sparks H3 (pushed 8 Aug); **77** ahead of `main` overall |
-| **Runtime `feat/dkms-esp-port` (team)** | READY-FOR-MANUAL-MERGE vs 0.7-dev roadmap — content rails ~75% functional; **not on public `origin` heads yet** (tip `e2cc4229` per team report) |
-| ElacityLabsWeb | **~42** commits — CodeRED Intel + ops admin |
-| Hey-engine | **18** commits — relay / radio / calls |
-| Hyper | **6** commits — calls / Play drop / build gate |
-| Elastos.Node | **v1.2.3** release |
-| drm-api-layer | **PR #4 merged** — 0.11 pack → ESC |
-| elacity-web | **PR #25 merged** — **4.5.0** on GitHub |
-| ddrm-reader / events-watcher / drm CI | Hardening / guard branches (open PRs #1 / #1 / #5) |
-| ELA tip | ~**2,267,480** — past gate two |
+| ELA v1.0.3 readiness (team) | Split-release recommendation; finding register **not** published here |
+| drm-api-layer / elacity-web | **PR #4** / **PR #25** merged — 0.11→ESC · **4.5.0** |
+| Elastos.Node | **v1.2.3** |
+| Hey-engine / Hyper | **18 / 6** |
+| ddrm-reader / events-watcher / drm CI | Hardening / guard branches (open PRs) |
+| Supporting ops (LabsWeb) | Grant-lane continuous monitoring admin — see §8; **not** a top story |
 
-**Rescan note (8 Aug afternoon):** first publish of this weekly looked only at Runtime `main` and under-counted the Home lane. Full branch walk of `elastos-runtime` (9 remotes) + private Elacity defaults + open PRs corrected that. Shell-ui long-lives (`feat/shell-ui-*`, `fix/elastos-shell-protocol-browser-wip`) had **no** in-window pushes — carried from prior cycles only.
+**Access note:** Elastos org readable (**242** repos). Only **Elastos.Node** showed in-window public pushes; **Elastos.ELA** quiet on `origin` — locked patch / private readiness posture.
 
-**Access note:** Elastos org readable (**242** repos). Only **Elastos.Node** showed in-window pushes; **Elastos.ELA** had no new commits — consistent with locked patch / audit handoff posture.
+## 4. Runtime — `main` Tail + Home Dogfood + DKMS/ESP Port
 
-## 4. Ecosystem — Node v1.2.3 + ELA Tip + v1.0.3 Security Readiness (High Level)
-
-### Elastos.Node — [v1.2.3](https://github.com/elastos/Elastos.Node/releases/tag/v1.2.3) (2026-08-03)
-
-**`ela rewound` rejected every build after v1.0.0.** The binary check matched the version string exactly, so a node correctly running **v1.0.2** was told it could not perform recovery and never reported READY. Point releases after the recovery build are the normal case once the chain is running again.
-
-**Fix:** accept **v1.0.0 or later**, compared as version numbers (not strings). String compare fails both ways (`1.0.2` < `1.0.0`, `0.9.9.6` > `1.0.0`, etc.). Prerelease builds are accepted but reported as such.
-
-```text
-node.sh update_script
-node.sh version          # expect v1.2.3
-```
-
-### ELA mainnet tip
-
-Public RPC height ~**2,267,480** (Aug 8 check). Gate two (**2,265,000** — ELA-only reward mint / arbiter fee base from the recovery log) is **behind tip**. Promote those two recovery items toward **proven live** when the honest-log scan band is republished across the gate (do not invent mint figures here).
-
-**Elastos.ELA (public):** no in-window commits on `origin`. Live binary remains **v1.0.2**. Quiet public tree is intentional while a locked point-release package is prepared — same posture as §2’s audit handoff note.
-
-### ELA v1.0.3 security readiness — high level only (team, 6 Aug)
-
-**Decision: do not publish the finding register or attack recipes here.** A teammate release-readiness brief (independent multi-pass adversarial review of a private v1.0.3 candidate tree) confirms there is still urgent hardening work before a broad “ship everything” cut. For the community weekly we keep only sequencing and process — not a vulnerability catalogue.
-
-What is safe and useful to say:
-
-- **Mainchain is online and still being hardened** — “blocks are moving” ≠ “all remote risk is gone” (already the §2 line; this brief is the engineering depth behind it).
-- **Split the release.** Recommendation from the readiness work: ship a **narrow v1.0.3** that closes the highest-urgency, unauthenticated remote-abuse class first; put peer-handling, ops/UI hardening, rollback/checkpoint, and switch-dependent items on a **stated follow-up (v1.0.4)** with soak/rehearsal time. Compressing the full backlog into one day is how a security release becomes the next incident.
-- **Preparatory work already in the private package** (no exploit detail): several fixes landed and verified in the candidate tree; recovery/treasury arming was **split onto its own switch** so safety fixes can ship without authorising a treasury movement; a deposit double-release fix is built/proven and awaiting merge into that cut.
-- **Process bar for the release itself** (not bug titles): pin each shippable fix with a regression test; keep fuzz corpora; audit size limits send-vs-receive for consistency; baseline audits against a real tagged version (not a candidate compared to itself); rehearse height/safety switches on the multi-node test net before arming on money; write the rollback plan before the roll-forward plan; validate config at startup and refuse bad configs.
-- **Out of scope for this engagement (still closed / separate clocks):** Arbiter as a separate codebase; sidechains, bridge, and oracles — consistent with ESC/bridge remaining closed on purpose in §2.
-- **Public GitHub stays quiet until the package is locked** for external review handoff. Operators: keep running current recovery binaries (**v1.0.2** + Node **v1.2.3**); watch for an official v1.0.3 announce — do not expect a public issue dump beforehand.
-
-If leadership later wants a short community advisory after the urgent cut is live, that is a separate post — not this weekly’s job.
-
-## 5. ElacityLabsWeb — CodeRED Intel + Ops Admin Portal
-
-**~42 commits on `main` (SashaMIT + 2 Claude co-authored).** Private ops surface:
-
-- **CodeRED OSS intelligence portal** folded into `/admin` before merge (PRs #17–#21)
-- Unified ops shell: full-height sidebar, overview dashboard, Elacity + CRC Accountant design tokens
-- Sprint lanes (incl. `awaiting_review`, Done = merged-only, Archived)
-- Severity color chips; finding counts on filter chips; stage as primary chip
-- Discovery: prefer human-queued Opportunity Registry targets; safe Claude Routine allowlist; WebFetch over curl; cron widened / aligned to 6×/day discovery
-- Auth: httpOnly session cookie dual-read with Bearer; stop storing JWT in localStorage; clear cookie on logout; remove login rate-limit that blocked operator CLI
-- Resilience: recover stale lazy chunks after deploy; guard React against Translate/extension DOM mutations; coerce fields so Amber Notion drains succeed
-- Copy: EU AI Act enforcement → present tense after Aug 2
-
-## 6. Hyper + Hey-engine — Calls, Radio, Relay
-
-### Hyper (6 · HeyElastos)
-
-- Calls: call screen blocks taps landing behind it; **720p** on the surface path (bitrate adapts; resolution does not)
-- Radio idle signal landed then reverted once, then re-approached from engine side
-- **Build:** refuse to ship an engine nobody can name
-- **Product:** drop Google Play — one edition, no store, no bundle
-
-### Hey-engine (18 · HeyElastos)
-
-- **Relay:** “my own relay” actually connects; raise client backstop past self-hosted ping; stop pre-empting server keepalive; tell the app which relay is carrying traffic
-- **Radio / Carrier:** background posture behind its own switch; thin `net_report` while backgrounded; stop asking a non-existent gateway for port mapping; do not dial a peer already directly connected; stop shouting at impossible addresses
-- **Calls:** drive accept as well as offer; re-export per-peer receive door for the video grid
-- **Addresses / tickets:** one ticket per contact (not per historical address); stop remembering where a contact used to be
-- **Chat list:** show what is actually latest, including a missed call
-- **Fan-out budget:** land the implementation the switch already advertised
-- Tests: QAD-reuse pins brought onto this line
-
-## 7. Marketplace — drm-api 0.11 → ESC + web 4.5.0 Confirmed
-
-### drm-api-layer — PR [#4](https://github.com/Elacity/drm-api-layer/pull/4) merged → `release/next` (ESC)
-
-Last week’s “worth continuing” item: port Base **0.11** adaptive `eth_getLogs` + CACHER pack to ESC. Done surgically (not a FF of Base tip — Base is ~247 commits ahead with Base-only product).
-
-- Probe-first adaptive scanner; Layer A anchors (never default `fromBlock` 0)
-- `resolveCacher` + TTL clamp; db.mixin cache-clean broadcast (best-effort)
-- Process keep-alive guards; Lab metrics off unless enabled
-- ESC chain 20: `blockNumberBatch` 50000, `logScan.maxChunk` 5M
-- Review follow-ups from irzhywau (+15 tests); **69** unit tests green on the pack
-
-**Context:** this is marketplace / indexer readiness against ESC’s chain ID and scan model — **not** an announcement that ESC or the bridge are open for users. ESC remains closed pending the reopen bar in §2.
-
-**Open:** PR [#5](https://github.com/Elacity/drm-api-layer/pull/5) — CI guard against exposing server-key-signed payable actions without authorization.
-
-### elacity-web — PR [#25](https://github.com/Elacity/elacity-web/pull/25) **merged** (2026-08-03)
-
-GitHub now matches last week’s deploy report: **4.5.0** on `release/base-network` (bump commit `84d729a` + polish merge). Light-mode / sell-flow / withdraw / offline toast from prior cycle are on the release line.
-
-## 8. Security Hardening Branches — ddrm-reader, events-watcher, drm CI
-
-Not all merged to default yet — flagged so they are not invisible:
-
-| Repo | Branch / PR | What |
-|---|---|---|
-| **ddrm-reader** | `fix/reader-fetch-hardening` | Harden reader fetch paths against traversal + unbounded reads |
-| **events-watcher** | `feat/discovery-max-trackers` | Cap dynamically discovered trackers via `discovery_max_trackers` |
-| **drm-api-layer** | PR #5 `ci/server-key-action-guard` | CI guard: no unauthorized server-key-signed payable actions |
-
-## 9. Runtime — `main` Tail + Home Dogfood + DKMS/ESP Port (Team Lane)
 
 Three Runtime stories this cycle: a small **`main`** correctness fix; a large **experiment-branch** Home / Studio dogfood line; and an internal **DKMS/ESP content-rails** port marked READY-FOR-MANUAL-MERGE against the 0.7-dev roadmap (not visible on public `origin` heads yet — team status, 2026-08-07).
 
@@ -304,13 +202,111 @@ Tip label in commit: `home-20260807aj`. This is the Runtime heat the first draft
 
 **Still carried on public remotes, no in-window pushes:** `feat/shell-ui-esp-on-protocol-extended-ai-work`, `feat/shell-ui-esp-on-protocol`, `feat/shell-ui-v1`, `fix/elastos-shell-protocol-browser-wip`, `flint-0.5`, `upstream/0.6-dev`.
 
-## 10. PC2 — Convergence Continues (Docs Only)
+## 5. Ecosystem — Node v1.2.3 + ELA Tip + v1.0.3 Security Readiness (High Level)
+
+
+### Elastos.Node — [v1.2.3](https://github.com/elastos/Elastos.Node/releases/tag/v1.2.3) (2026-08-03)
+
+**`ela rewound` rejected every build after v1.0.0.** The binary check matched the version string exactly, so a node correctly running **v1.0.2** was told it could not perform recovery and never reported READY. Point releases after the recovery build are the normal case once the chain is running again.
+
+**Fix:** accept **v1.0.0 or later**, compared as version numbers (not strings). String compare fails both ways (`1.0.2` < `1.0.0`, `0.9.9.6` > `1.0.0`, etc.). Prerelease builds are accepted but reported as such.
+
+```text
+node.sh update_script
+node.sh version          # expect v1.2.3
+```
+
+### ELA mainnet tip
+
+Public RPC height ~**2,267,480** (Aug 8 check). Gate two (**2,265,000** — ELA-only reward mint / arbiter fee base from the recovery log) is **behind tip**. Promote those two recovery items toward **proven live** when the honest-log scan band is republished across the gate (do not invent mint figures here).
+
+**Elastos.ELA (public):** no in-window commits on `origin`. Live binary remains **v1.0.2**. Quiet public tree is intentional while a locked point-release package is prepared — same posture as §2’s audit handoff note.
+
+### ELA v1.0.3 security readiness — high level only (team, 6 Aug)
+
+**Decision: do not publish the finding register or attack recipes here.** A teammate release-readiness brief (independent multi-pass adversarial review of a private v1.0.3 candidate tree) confirms there is still urgent hardening work before a broad “ship everything” cut. For the community weekly we keep only sequencing and process — not a vulnerability catalogue.
+
+What is safe and useful to say:
+
+- **Mainchain is online and still being hardened** — “blocks are moving” ≠ “all remote risk is gone” (already the §2 line; this brief is the engineering depth behind it).
+- **Split the release.** Recommendation from the readiness work: ship a **narrow v1.0.3** that closes the highest-urgency, unauthenticated remote-abuse class first; put peer-handling, ops/UI hardening, rollback/checkpoint, and switch-dependent items on a **stated follow-up (v1.0.4)** with soak/rehearsal time. Compressing the full backlog into one day is how a security release becomes the next incident.
+- **Preparatory work already in the private package** (no exploit detail): several fixes landed and verified in the candidate tree; recovery/treasury arming was **split onto its own switch** so safety fixes can ship without authorising a treasury movement; a deposit double-release fix is built/proven and awaiting merge into that cut.
+- **Process bar for the release itself** (not bug titles): pin each shippable fix with a regression test; keep fuzz corpora; audit size limits send-vs-receive for consistency; baseline audits against a real tagged version (not a candidate compared to itself); rehearse height/safety switches on the multi-node test net before arming on money; write the rollback plan before the roll-forward plan; validate config at startup and refuse bad configs.
+- **Out of scope for this engagement (still closed / separate clocks):** Arbiter as a separate codebase; sidechains, bridge, and oracles — consistent with ESC/bridge remaining closed on purpose in §2.
+- **Public GitHub stays quiet until the package is locked** for external review handoff. Operators: keep running current recovery binaries (**v1.0.2** + Node **v1.2.3**); watch for an official v1.0.3 announce — do not expect a public issue dump beforehand.
+
+If leadership later wants a short community advisory after the urgent cut is live, that is a separate post — not this weekly’s job.
+
+## 6. Marketplace — drm-api 0.11 → ESC + web 4.5.0 + Hardening Branches
+
+
+### drm-api-layer — PR [#4](https://github.com/Elacity/drm-api-layer/pull/4) merged → `release/next` (ESC)
+
+Last week’s “worth continuing” item: port Base **0.11** adaptive `eth_getLogs` + CACHER pack to ESC. Done surgically (not a FF of Base tip — Base is ~247 commits ahead with Base-only product).
+
+- Probe-first adaptive scanner; Layer A anchors (never default `fromBlock` 0)
+- `resolveCacher` + TTL clamp; db.mixin cache-clean broadcast (best-effort)
+- Process keep-alive guards; Lab metrics off unless enabled
+- ESC chain 20: `blockNumberBatch` 50000, `logScan.maxChunk` 5M
+- Review follow-ups from irzhywau (+15 tests); **69** unit tests green on the pack
+
+**Context:** this is marketplace / indexer readiness against ESC’s chain ID and scan model — **not** an announcement that ESC or the bridge are open for users. ESC remains closed pending the reopen bar in §2.
+
+**Open:** PR [#5](https://github.com/Elacity/drm-api-layer/pull/5) — CI guard against exposing server-key-signed payable actions without authorization.
+
+### elacity-web — PR [#25](https://github.com/Elacity/elacity-web/pull/25) **merged** (2026-08-03)
+
+GitHub now matches last week’s deploy report: **4.5.0** on `release/base-network` (bump commit `84d729a` + polish merge). Light-mode / sell-flow / withdraw / offline toast from prior cycle are on the release line.
+
+### Marketplace-adjacent hardening branches
+
+Not all merged to default yet:
+
+| Repo | Branch / PR | What |
+|---|---|---|
+| **ddrm-reader** | `fix/reader-fetch-hardening` | Harden reader fetch paths against traversal + unbounded reads |
+| **events-watcher** | `feat/discovery-max-trackers` | Cap dynamically discovered trackers via `discovery_max_trackers` |
+| **drm-api-layer** | PR #5 `ci/server-key-action-guard` | CI guard: no unauthorized server-key-signed payable actions |
+
+## 7. Hyper + Hey-engine — Calls, Radio, Relay
+
+
+### Hyper (6 · HeyElastos)
+
+- Calls: call screen blocks taps landing behind it; **720p** on the surface path (bitrate adapts; resolution does not)
+- Radio idle signal landed then reverted once, then re-approached from engine side
+- **Build:** refuse to ship an engine nobody can name
+- **Product:** drop Google Play — one edition, no store, no bundle
+
+### Hey-engine (18 · HeyElastos)
+
+- **Relay:** “my own relay” actually connects; raise client backstop past self-hosted ping; stop pre-empting server keepalive; tell the app which relay is carrying traffic
+- **Radio / Carrier:** background posture behind its own switch; thin `net_report` while backgrounded; stop asking a non-existent gateway for port mapping; do not dial a peer already directly connected; stop shouting at impossible addresses
+- **Calls:** drive accept as well as offer; re-export per-peer receive door for the video grid
+- **Addresses / tickets:** one ticket per contact (not per historical address); stop remembering where a contact used to be
+- **Chat list:** show what is actually latest, including a missed call
+- **Fan-out budget:** land the implementation the switch already advertised
+- Tests: QAD-reuse pins brought onto this line
+
+## 8. Supporting Ops — Continuous Monitoring Admin (Grant Lane)
+
+**Secondary this week — supporting the ecosystem after the recent attacks, not the product headline.**
+
+Under a **grant-backed** lane, ElacityLabsWeb (~42 commits) continues building a private **continuous code-monitoring** admin: watch ecosystem repositories for bug-class findings, surface them for human review, and drive **PRs that fix** what is confirmed — a fast feedback loop so Elastos / Elacity stack code does not wait on ad-hoc discovery alone. Unified `/admin` shell, sprint lanes (including awaiting-review / merged-only Done / Archived), severity chips, session hardening (httpOnly cookie dual-read), deploy-resilient lazy chunks, and discovery cadence for that monitoring pipeline.
+
+**Framing that matters:** this is **our ecosystem’s** monitoring + triage + fix-PR workflow in response to the July incident stack — not a story about scanning unrelated third-party projects. The same machinery is reusable IP elsewhere by design; that is not the public framing for this weekly.
+
+Admin auth/resilience polish this cycle (cookie sessions, Translate/DOM guards, finding-create defaults, cron alignment) keeps the review surface usable for operators. Details stay ops-internal; no finding catalogues in this post.
+
+## 9. PC2 — Convergence Continues (Docs Only)
+
 
 **Product landings:** zero. One docs commit on `main`: `150ccd1` — publish of the Jul 24–31 weekly + ELA honest log (the prior report itself).
 
 Operator line remains **v1.4.0**. Narrative unchanged: PC2 lessons live inside Runtime; quiet weeks are expected.
 
-## 11. Release Engineering — 0.6 Tag Still Pending
+## 10. Release Engineering — 0.6 Tag Still Pending
+
 
 | Item | Status |
 |---|---|
@@ -321,73 +317,67 @@ Operator line remains **v1.4.0**. Narrative unchanged: PC2 lessons live inside R
 | Mainchain GitHub / audit package | Closed until locked patch handoff |
 | ESC / bridge user reopen | **Closed** until repair + rehearsal bar met |
 
-## 12. Convergence Lens
+## 11. Convergence Lens
 
-| Concern | PC2 | Runtime | Rest of org / ecosystem |
+| Concern | PC2 | Runtime | Ecosystem |
 |---|---|---|---|
-| Strategic role | Stable 1.4.0 / quiet | 0.6 on `main` + Home dogfood + **DKMS/ESP content rails (team)** | Labs / Hyper / Node / drm |
+| Strategic role | Stable 1.4.0 / quiet | **Primary heat** — Home dogfood + DKMS/ESP content rails | Security + marketplace next |
 | Chain status | — | — | Mainchain online · ESC/bridge **closed on purpose** |
 | Home / Agent / Studio | — | Waves 4–6 + Sparks H3 (`experiment/home-studio-h3-dogfood`) | — |
-| DKMS / protected content / commerce | — | `feat/dkms-esp-port` READY-FOR-MANUAL-MERGE (~75% content section) | — |
-| Ops / intel | — | — | LabsWeb CodeRED + admin |
+| DKMS / protected content / commerce | — | `feat/dkms-esp-port` READY-FOR-MANUAL-MERGE (~75%) | — |
+| Money / nodes / security cut | — | — | Node **v1.2.3**; ELA tip past gate two; **v1.0.3** narrow cut prep |
+| Marketplace | — | commerce rails on DKMS port | drm **0.11→ESC**; web **4.5.0**; hardening PRs |
 | Mesh / mobile | — | — | Hyper + hey-engine |
-| Money / nodes | — | — | Node **v1.2.3**; ELA tip past gate two; **v1.0.3** narrow security cut prep (private); CRC make-whole |
-| Marketplace | — | — | drm **0.11→ESC** (indexer readiness); web **4.5.0** |
-| Release packaging | — | **0.6 tag open** · Home **not** merging to `main` yet | ELA **v1.0.3** candidate private · locked audit package in flight |
+| Supporting ops (grant) | — | — | Continuous monitoring admin — secondary |
+| Release packaging | — | **0.6 tag open** · Home/DKMS **not** on `main` yet | ELA **v1.0.3** candidate private |
 
-**Reading:** `main`-only Runtime looks like a tail week. Public experiment + internal DKMS/ESP port show two primary product workstreams off `main` — Home/Studio dogfood and content rails toward 0.7 — both gated on purpose. Full-org scan still shows Labs + Hyper + Node + drm; DAO status still carries: mainchain back ≠ bridge open.
+**Reading:** lead with Runtime + chain security + DKMS + marketplace. Supporting monitoring admin is real grant work after the attacks — keep it in the appendix of the narrative, not the lede.
 
-## 13. Looking Ahead
+## 12. Looking Ahead
 
-1. **ESC / bridge reopen track** — defect surface, height-forward repairs, accounting for stuck states, Council/relay ops steps, rehearsal environment; announce before inviting deposits
-2. **ELA v1.0.3 narrow security cut** — land the urgent unauthenticated-class fixes from the private readiness package; keep switch-dependent / soak-heavy items for **v1.0.4** with rehearsal; no public vuln dump while holes are live
-3. **Locked mainchain audit handoff** — freeze package → external review → widen access when it does not increase live risk
-4. **CRC Incident Recovery** — continue verified make-whole tranches; fuller public accounting when safe
-5. **Runtime Home converge** — dogfood Sparks H3 / home-agent against runtime principles + CTO infra; secure path before any `main` merge
-6. **`feat/dkms-esp-port` manual merge** — push/visible tip if not already; land against 0.7-dev when ready; subject-resolution (`RequiredHomeLaunchToken`) is the chain-mode gate; ESP conversation-plane migration rides with `feat/shell-ui-esp`
-7. **Publish Runtime GitHub Release/tag `v0.6.0`** (include `d358ded` or freeze earlier — decide explicitly)
-8. **Honest-log scan republish** across gate **2,265,000** — promote the two pending reward-mint items when the band is clean
-9. Fleet: **Node v1.2.3** + ELA **v1.0.2** until official **v1.0.3**; stop wallet/UX paths that grow stuck balances into closed rooms
-10. drm-api: soak ESC `release/next` post-0.11 port; land CI server-key guard (PR #5)
-11. Merge / soak ddrm-reader fetch hardening + events-watcher tracker cap (open PRs)
-12. Hyper: F-Droid / one-edition distribution path after Play drop
-13. CodeRED Intel: keep discovery → Amber drain cadence honest under load
-14. **PC2:** no expectation of product commits unless operator-critical
+1. **ELA v1.0.3 narrow security cut** — urgent unauthenticated-class fixes from the private readiness package; soak-heavy items → **v1.0.4**; no public vuln dump while holes may still be live
+2. **ESC / bridge reopen track** — repair, accounting, rehearsal; announce before inviting deposits
+3. **Locked mainchain audit handoff** — freeze package → external review → widen access when safe
+4. **Runtime Home converge** — Sparks H3 / home-agent vs runtime principles + CTO infra before any `main` merge
+5. **`feat/dkms-esp-port` manual merge** — visible tip; land vs 0.7-dev; `RequiredHomeLaunchToken` is the chain-mode gate; ESP conversation plane with `feat/shell-ui-esp`
+6. **Publish Runtime GitHub Release/tag `v0.6.0`**
+7. **CRC Incident Recovery** — verified make-whole tranches; fuller public accounting when safe
+8. **Honest-log scan republish** across gate **2,265,000**
+9. Fleet: **Node v1.2.3** + ELA **v1.0.2** until official **v1.0.3**
+10. Marketplace: soak ESC `release/next` post-0.11; land drm CI server-key guard; ddrm-reader / events-watcher hardening
+11. Hyper: F-Droid / one-edition path after Play drop
+12. Supporting ops (grant): keep continuous monitoring → human review → fix-PR loop honest for **ecosystem** repos
+13. **PC2:** no expectation of product commits unless operator-critical
 
-## 14. Summary Statistics
+## 13. Summary Statistics
 
-**Window (UTC):** 2026-08-01 **08:08** (prior report publish `150ccd1`) → 2026-08-07 end-of-day. Calendar Aug 1 landings before 08:08 counted in [#31](https://github.com/Elacity/pc2.net/discussions/31). Community status note dated **8 August 2026**.
+**Window (UTC):** 2026-08-01 **08:08** (prior report publish `150ccd1`) → 2026-08-07 end-of-day. Community status **8 August 2026**.
 
 | Repository | Commits (after cutoff) | Notes |
 |---|---|---|
-| Elacity/ElacityLabsWeb | **~42** | CodeRED Intel + ops admin portal |
-| Elacity/Hey-engine | **18** | Relay / radio / calls / tickets |
-| Elacity/Hyper | **6** | Calls / Play drop / build gate |
-| elastos/Elastos.Node | **2** | Release **v1.2.3** |
-| Elacity/drm-api-layer | PR activity | **#4 merged** (0.11→ESC); **#5 open** (CI guard) |
-| Elacity/elacity-web | merge confirm | PR **#25 merged**; **4.5.0** |
+| Elacity/elastos-runtime (`experiment/home-studio-h3-dogfood`) | **~15** | Home-agent Waves 4–6 + Sparks H3 (tip `2d33644`); **77** ahead of `main` |
+| Elacity/elastos-runtime (`feat/dkms-esp-port`, team) | 5 (report) | READY-FOR-MANUAL-MERGE @ `e2cc4229` — content ~75% / ~70%; not on public origin yet |
 | Elacity/elastos-runtime (`main`) | **1** | `d358ded` TURN cleanup ownership |
-| Elacity/elastos-runtime (`experiment/home-studio-h3-dogfood`) | **~15** after cutoff | Home-agent Waves 4–6 + Sparks H3 dogfood (tip `2d33644`); **77** ahead of `main` |
-| Elacity/elastos-runtime (`feat/dkms-esp-port`, team) | 5 (report) | READY-FOR-MANUAL-MERGE @ `e2cc4229` — **not on public origin heads yet**; content section ~75% / ~70% |
-| Elacity/pc2.net | docs | Weekly publish commits (product quiet) |
-| Elacity/ddrm-reader | branch | fetch hardening |
-| Elacity/events-watcher | branch | discovery tracker cap |
-| elastos/Elastos.ELA | **0** on public origin | v1.0.2 live · private **v1.0.3** readiness tree (team) · no public vuln dump |
+| elastos/Elastos.ELA | **0** on public origin | v1.0.2 live · private **v1.0.3** readiness (team) |
+| elastos/Elastos.Node | **2** | **v1.2.3** |
+| Elacity/drm-api-layer | PR activity | **#4 merged** (0.11→ESC); **#5 open** |
+| Elacity/elacity-web | merge confirm | PR **#25** · **4.5.0** |
+| Elacity/Hey-engine | **18** | Relay / radio / calls |
+| Elacity/Hyper | **6** | Calls / Play drop / build gate |
+| Elacity/ddrm-reader · events-watcher | branches | fetch hardening · tracker cap |
+| Elacity/ElacityLabsWeb | **~42** | Supporting continuous-monitoring admin (grant lane) |
+| Elacity/pc2.net | docs | Weekly publish only |
 
-- **Authors (selected):** SashaMIT (LabsWeb) · HeyElastos (Hyper/hey-engine) · 4HM3DMD (Node) · irzhywau (drm review / web merge) · andersalm (Runtime) · Claude co-authored LabsWeb commits under direction
+- **Authors (selected):** SashaMIT / Sash (Runtime Home, LabsWeb) · andersalm (Runtime `main`) · HeyElastos (Hyper/hey-engine) · 4HM3DMD (Node) · irzhywau (drm/web) · teammate DKMS coverage + ELA readiness briefs
 - **Releases:** Elastos.Node **v1.2.3**; Runtime GitHub Release still **v0.4.0**
-- **Access:** Elacity org + **Elastos org** both readable this run
-- **Off-repo:** Elastos DAO / incident coordination status (8 Aug) integrated in §2
+- **Access:** Elacity + Elastos orgs readable this run
 
-## 15. Data-Quality Notes
+## 14. Data-Quality Notes
 
-- **Prior auto-draft caveat stands and is corrected here.** A git-only PC2+Runtime-`main` pass under-counted the week. Full-org + **all Runtime remotes** + open PRs + 8 Aug Home push are now in this revision.
-- **Second correction (same day):** first publish of #32 still under-weighted Runtime until `experiment/home-studio-h3-dogfood` was re-fetched after the public push.
-- **Third correction (same day):** `feat/dkms-esp-port` roadmap coverage added from teammate report — branch tip not fetchable on public `origin`; percentages are their grounded assessment, not a re-audit from this session.
-- **Cutoff:** landings before 2026-08-01 08:08 UTC (including Runtime `51e37bd` / `27a02a8`) belong to [#31](https://github.com/Elacity/pc2.net/discussions/31), not double-counted as new product this week — except where this report explicitly notes carry-over status (0.6 tag, web 4.5.0 GitHub merge confirm).
-- **CodeRED / admin:** internal ops tooling; no exploit cookbook, no target lists in this public weekly.
-- **Sensitive omission:** settlement counterparty figures, LE detail, and private vuln catalogues stay out (same discipline as #30–#31). CRC program existence is public; amounts are not.
-- **ELA v1.0.3 readiness brief:** included only as **sequencing + process** (§4). Attack recipes, file paths, severity registers, agent/workflow IDs, and “how to reproduce” steps from the teammate brief are **intentionally omitted** while related classes of issue may still be live.
+- Full-org + all Runtime remotes + team briefs (DKMS roadmap, ELA readiness) are in this revision; `main`-only drafts under-count.
+- **ELA v1.0.3 readiness:** sequencing + process only — no attack recipes, file paths, or severity registers.
+- **Continuous monitoring admin (grant):** framed as ecosystem monitoring + triage + fix-PRs after the recent attacks — **not** third-party project hunting. No finding catalogues in this weekly.
+- **Sensitive omission:** settlement figures, LE detail, private vuln catalogues (same discipline as #30–#31).
 
 ---
 
@@ -395,22 +385,16 @@ Operator line remains **v1.4.0**. Narrative unchanged: PC2 lessons live inside R
 
 | Fact | Value |
 |---|---|
-| Previous report | [#31](https://github.com/Elacity/pc2.net/discussions/31) |
-| This discussion | [#32](https://github.com/Elacity/pc2.net/discussions/32) |
-| Mainchain | Online (BPoS) · still hardening |
-| ESC / EID / bridge | **Closed on purpose** — wait for official reopen |
+| Previous / this | [#31](https://github.com/Elacity/pc2.net/discussions/31) · [#32](https://github.com/Elacity/pc2.net/discussions/32) |
+| Runtime Home / Studio | Sparks H3 dogfood · **not for `main` yet** |
+| Runtime DKMS / content | READY-FOR-MANUAL-MERGE · content ~75% |
+| ELA security cut | **v1.0.3** narrow prep (private) · **v1.0.2** live |
+| Marketplace | **0.11 → ESC** · web **4.5.0** |
 | Node | **v1.2.3** |
-| ELA tip | ~**2,267,480** (past gate **2,265,000**) |
-| ELA binary | **v1.0.2** live · **v1.0.3** narrow security cut recommended (private prep; no public register) |
-| LabsWeb | ~**42** — CodeRED + ops admin |
-| Hyper / hey-engine | **6 / 18** |
-| drm-api | **0.11 → ESC** (PR #4) — indexer readiness, not user reopen |
-| elacity-web | **4.5.0** merged on GitHub |
-| Runtime `main` | `d358ded` · **0.6 tag still pending** |
-| Runtime Home / Studio | `experiment/home-studio-h3-dogfood` · Waves + Sparks H3 · **not for `main` yet** |
-| Runtime DKMS / content rails | `feat/dkms-esp-port` READY-FOR-MANUAL-MERGE · content ~75% · team tip not on origin yet |
-| PC2 | docs-only · convergence continues |
-| Postmortem | [blog.elastos.net](https://blog.elastos.net/announcement/main-chain-postmortem-august/) |
+| Mainchain / ESC | Online · bridge **closed on purpose** |
+| Runtime tag | **0.6 still pending** |
+| Supporting ops | Continuous monitoring admin (grant) — secondary |
+| PC2 | docs-only |
 
 ---
 

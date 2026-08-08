@@ -6,7 +6,7 @@ Elacity Labs — Weekly Team Update for the World Computer Initiative (WCI)
 
 **Community status (8 Aug):** mainchain is producing blocks again under BPoS and still being hardened. **ESC / EID / Arbiter / bridge remain closed on purpose** — different risk profile, automatic paths on careless restart, unfinished repair and rehearsal. Do not send funds into paused sidechain or bridge flows until official reopen. Details below and in the [mainchain postmortem](https://blog.elastos.net/announcement/main-chain-postmortem-august/).
 
-> Mainchain online · ESC/bridge **still closed** · Runtime **home-agent / Sparks H3 dogfood** · **dkms-esp-port** READY-FOR-MANUAL-MERGE (content rails ~75%) · CodeRED Intel / ops admin · Hyper + hey-engine · Node **v1.2.3** · drm-api **0.11 → ESC** · PC2 quiet · ELA tip past **2,265,000** · Runtime **0.6 tag still pending**.
+> Mainchain online · ESC/bridge **still closed** · ELA **v1.0.3** narrow security cut prep (no public vuln dump) · Runtime **home-agent / Sparks H3 dogfood** · **dkms-esp-port** READY-FOR-MANUAL-MERGE · CodeRED Intel / ops admin · Hyper + hey-engine · Node **v1.2.3** · drm-api **0.11 → ESC** · PC2 quiet · ELA tip past **2,265,000** · Runtime **0.6 tag still pending**.
 
 ---
 
@@ -28,7 +28,7 @@ Elacity Labs — Weekly Team Update for the World Computer Initiative (WCI)
 1. The Big Picture — Org Heat After the 0.6 Cut
 2. Elastos Status (8 Aug) — Mainchain Online, Sidechains Closed on Purpose
 3. Blind Spots — What a PC2+Runtime-Only Scan Missed
-4. Ecosystem — Node v1.2.3 + ELA Past Gate Two
+4. Ecosystem — Node v1.2.3 + ELA Tip + v1.0.3 Security Readiness (High Level)
 5. ElacityLabsWeb — CodeRED Intel + Ops Admin Portal
 6. Hyper + Hey-engine — Calls, Radio, Relay
 7. Marketplace — drm-api 0.11 → ESC + web 4.5.0 Confirmed
@@ -131,6 +131,7 @@ An auto-draft that only walked `pc2.net` + `elastos-runtime` concluded “tail c
 | Missed lane | Reality this window |
 |---|---|
 | Community / DAO status | Mainchain online · ESC/bridge closed on purpose · CRC make-whole · auditor engagement |
+| ELA v1.0.3 readiness (team) | Independent adversarial review of private candidate — **split release** recommended; finding register **not** published here |
 | **Runtime `experiment/home-studio-h3-dogfood`** | **~15** commits after cutoff — home-agent Waves + Sparks H3 (pushed 8 Aug); **77** ahead of `main` overall |
 | **Runtime `feat/dkms-esp-port` (team)** | READY-FOR-MANUAL-MERGE vs 0.7-dev roadmap — content rails ~75% functional; **not on public `origin` heads yet** (tip `e2cc4229` per team report) |
 | ElacityLabsWeb | **~42** commits — CodeRED Intel + ops admin |
@@ -146,7 +147,7 @@ An auto-draft that only walked `pc2.net` + `elastos-runtime` concluded “tail c
 
 **Access note:** Elastos org readable (**242** repos). Only **Elastos.Node** showed in-window pushes; **Elastos.ELA** had no new commits — consistent with locked patch / audit handoff posture.
 
-## 4. Ecosystem — Node v1.2.3 + ELA Past Gate Two
+## 4. Ecosystem — Node v1.2.3 + ELA Tip + v1.0.3 Security Readiness (High Level)
 
 ### Elastos.Node — [v1.2.3](https://github.com/elastos/Elastos.Node/releases/tag/v1.2.3) (2026-08-03)
 
@@ -163,7 +164,22 @@ node.sh version          # expect v1.2.3
 
 Public RPC height ~**2,267,480** (Aug 8 check). Gate two (**2,265,000** — ELA-only reward mint / arbiter fee base from the recovery log) is **behind tip**. Promote those two recovery items toward **proven live** when the honest-log scan band is republished across the gate (do not invent mint figures here).
 
-**Elastos.ELA:** no in-window commits. Live binary remains **v1.0.2**.
+**Elastos.ELA (public):** no in-window commits on `origin`. Live binary remains **v1.0.2**. Quiet public tree is intentional while a locked point-release package is prepared — same posture as §2’s audit handoff note.
+
+### ELA v1.0.3 security readiness — high level only (team, 6 Aug)
+
+**Decision: do not publish the finding register or attack recipes here.** A teammate release-readiness brief (independent multi-pass adversarial review of a private v1.0.3 candidate tree) confirms there is still urgent hardening work before a broad “ship everything” cut. For the community weekly we keep only sequencing and process — not a vulnerability catalogue.
+
+What is safe and useful to say:
+
+- **Mainchain is online and still being hardened** — “blocks are moving” ≠ “all remote risk is gone” (already the §2 line; this brief is the engineering depth behind it).
+- **Split the release.** Recommendation from the readiness work: ship a **narrow v1.0.3** that closes the highest-urgency, unauthenticated remote-abuse class first; put peer-handling, ops/UI hardening, rollback/checkpoint, and switch-dependent items on a **stated follow-up (v1.0.4)** with soak/rehearsal time. Compressing the full backlog into one day is how a security release becomes the next incident.
+- **Preparatory work already in the private package** (no exploit detail): several fixes landed and verified in the candidate tree; recovery/treasury arming was **split onto its own switch** so safety fixes can ship without authorising a treasury movement; a deposit double-release fix is built/proven and awaiting merge into that cut.
+- **Process bar for the release itself** (not bug titles): pin each shippable fix with a regression test; keep fuzz corpora; audit size limits send-vs-receive for consistency; baseline audits against a real tagged version (not a candidate compared to itself); rehearse height/safety switches on the multi-node test net before arming on money; write the rollback plan before the roll-forward plan; validate config at startup and refuse bad configs.
+- **Out of scope for this engagement (still closed / separate clocks):** Arbiter as a separate codebase; sidechains, bridge, and oracles — consistent with ESC/bridge remaining closed on purpose in §2.
+- **Public GitHub stays quiet until the package is locked** for external review handoff. Operators: keep running current recovery binaries (**v1.0.2** + Node **v1.2.3**); watch for an official v1.0.3 announce — do not expect a public issue dump beforehand.
+
+If leadership later wants a short community advisory after the urgent cut is live, that is a separate post — not this weekly’s job.
 
 ## 5. ElacityLabsWeb — CodeRED Intel + Ops Admin Portal
 
@@ -315,27 +331,28 @@ Operator line remains **v1.4.0**. Narrative unchanged: PC2 lessons live inside R
 | DKMS / protected content / commerce | — | `feat/dkms-esp-port` READY-FOR-MANUAL-MERGE (~75% content section) | — |
 | Ops / intel | — | — | LabsWeb CodeRED + admin |
 | Mesh / mobile | — | — | Hyper + hey-engine |
-| Money / nodes | — | — | Node **v1.2.3**; ELA tip past gate two; CRC make-whole |
+| Money / nodes | — | — | Node **v1.2.3**; ELA tip past gate two; **v1.0.3** narrow security cut prep (private); CRC make-whole |
 | Marketplace | — | — | drm **0.11→ESC** (indexer readiness); web **4.5.0** |
-| Release packaging | — | **0.6 tag open** · Home **not** merging to `main` yet | Locked mainchain audit package in flight |
+| Release packaging | — | **0.6 tag open** · Home **not** merging to `main` yet | ELA **v1.0.3** candidate private · locked audit package in flight |
 
 **Reading:** `main`-only Runtime looks like a tail week. Public experiment + internal DKMS/ESP port show two primary product workstreams off `main` — Home/Studio dogfood and content rails toward 0.7 — both gated on purpose. Full-org scan still shows Labs + Hyper + Node + drm; DAO status still carries: mainchain back ≠ bridge open.
 
 ## 13. Looking Ahead
 
 1. **ESC / bridge reopen track** — defect surface, height-forward repairs, accounting for stuck states, Council/relay ops steps, rehearsal environment; announce before inviting deposits
-2. **Locked mainchain audit handoff** — freeze package → external review → widen access when it does not increase live risk
-3. **CRC Incident Recovery** — continue verified make-whole tranches; fuller public accounting when safe
-4. **Runtime Home converge** — dogfood Sparks H3 / home-agent against runtime principles + CTO infra; secure path before any `main` merge
-5. **`feat/dkms-esp-port` manual merge** — push/visible tip if not already; land against 0.7-dev when ready; subject-resolution (`RequiredHomeLaunchToken`) is the chain-mode gate; ESP conversation-plane migration rides with `feat/shell-ui-esp`
-6. **Publish Runtime GitHub Release/tag `v0.6.0`** (include `d358ded` or freeze earlier — decide explicitly)
-7. **Honest-log scan republish** across gate **2,265,000** — promote the two pending reward-mint items when the band is clean
-8. Fleet: **Node v1.2.3** + ELA **v1.0.2**; stop wallet/UX paths that grow stuck balances into closed rooms
-9. drm-api: soak ESC `release/next` post-0.11 port; land CI server-key guard (PR #5)
-10. Merge / soak ddrm-reader fetch hardening + events-watcher tracker cap (open PRs)
-11. Hyper: F-Droid / one-edition distribution path after Play drop
-12. CodeRED Intel: keep discovery → Amber drain cadence honest under load
-13. **PC2:** no expectation of product commits unless operator-critical
+2. **ELA v1.0.3 narrow security cut** — land the urgent unauthenticated-class fixes from the private readiness package; keep switch-dependent / soak-heavy items for **v1.0.4** with rehearsal; no public vuln dump while holes are live
+3. **Locked mainchain audit handoff** — freeze package → external review → widen access when it does not increase live risk
+4. **CRC Incident Recovery** — continue verified make-whole tranches; fuller public accounting when safe
+5. **Runtime Home converge** — dogfood Sparks H3 / home-agent against runtime principles + CTO infra; secure path before any `main` merge
+6. **`feat/dkms-esp-port` manual merge** — push/visible tip if not already; land against 0.7-dev when ready; subject-resolution (`RequiredHomeLaunchToken`) is the chain-mode gate; ESP conversation-plane migration rides with `feat/shell-ui-esp`
+7. **Publish Runtime GitHub Release/tag `v0.6.0`** (include `d358ded` or freeze earlier — decide explicitly)
+8. **Honest-log scan republish** across gate **2,265,000** — promote the two pending reward-mint items when the band is clean
+9. Fleet: **Node v1.2.3** + ELA **v1.0.2** until official **v1.0.3**; stop wallet/UX paths that grow stuck balances into closed rooms
+10. drm-api: soak ESC `release/next` post-0.11 port; land CI server-key guard (PR #5)
+11. Merge / soak ddrm-reader fetch hardening + events-watcher tracker cap (open PRs)
+12. Hyper: F-Droid / one-edition distribution path after Play drop
+13. CodeRED Intel: keep discovery → Amber drain cadence honest under load
+14. **PC2:** no expectation of product commits unless operator-critical
 
 ## 14. Summary Statistics
 
@@ -355,7 +372,7 @@ Operator line remains **v1.4.0**. Narrative unchanged: PC2 lessons live inside R
 | Elacity/pc2.net | docs | Weekly publish commits (product quiet) |
 | Elacity/ddrm-reader | branch | fetch hardening |
 | Elacity/events-watcher | branch | discovery tracker cap |
-| elastos/Elastos.ELA | **0** | v1.0.2 still live · locked audit posture |
+| elastos/Elastos.ELA | **0** on public origin | v1.0.2 live · private **v1.0.3** readiness tree (team) · no public vuln dump |
 
 - **Authors (selected):** SashaMIT (LabsWeb) · HeyElastos (Hyper/hey-engine) · 4HM3DMD (Node) · irzhywau (drm review / web merge) · andersalm (Runtime) · Claude co-authored LabsWeb commits under direction
 - **Releases:** Elastos.Node **v1.2.3**; Runtime GitHub Release still **v0.4.0**
@@ -370,6 +387,7 @@ Operator line remains **v1.4.0**. Narrative unchanged: PC2 lessons live inside R
 - **Cutoff:** landings before 2026-08-01 08:08 UTC (including Runtime `51e37bd` / `27a02a8`) belong to [#31](https://github.com/Elacity/pc2.net/discussions/31), not double-counted as new product this week — except where this report explicitly notes carry-over status (0.6 tag, web 4.5.0 GitHub merge confirm).
 - **CodeRED / admin:** internal ops tooling; no exploit cookbook, no target lists in this public weekly.
 - **Sensitive omission:** settlement counterparty figures, LE detail, and private vuln catalogues stay out (same discipline as #30–#31). CRC program existence is public; amounts are not.
+- **ELA v1.0.3 readiness brief:** included only as **sequencing + process** (§4). Attack recipes, file paths, severity registers, agent/workflow IDs, and “how to reproduce” steps from the teammate brief are **intentionally omitted** while related classes of issue may still be live.
 
 ---
 
@@ -383,6 +401,7 @@ Operator line remains **v1.4.0**. Narrative unchanged: PC2 lessons live inside R
 | ESC / EID / bridge | **Closed on purpose** — wait for official reopen |
 | Node | **v1.2.3** |
 | ELA tip | ~**2,267,480** (past gate **2,265,000**) |
+| ELA binary | **v1.0.2** live · **v1.0.3** narrow security cut recommended (private prep; no public register) |
 | LabsWeb | ~**42** — CodeRED + ops admin |
 | Hyper / hey-engine | **6 / 18** |
 | drm-api | **0.11 → ESC** (PR #4) — indexer readiness, not user reopen |

@@ -2,11 +2,11 @@ Elacity Labs — Weekly Team Update for the World Computer Initiative (WCI)
 
 **August 1 – August 7, 2026**
 
-**Not a quiet week — and Runtime was not quiet either once all branches were scanned.** Coming out of [#31](https://github.com/Elacity/pc2.net/discussions/31) (mainnet recovery + Runtime v0.6 on `main`), heat is across the org: **ElacityLabsWeb** shipped a private **CodeRED Intel / ops admin portal** (~42 commits); **Hyper + hey-engine** kept hardening calls, radio, and relay (**6 + 18**); **Elastos.Node v1.2.3** fixed `ela rewound` for post-v1.0.0 recovery builds; **drm-api** surgically backported the Base **0.11** getLogs/CACHER pack to **ESC** (`release/next`, PR #4); security hardening branches on **ddrm-reader**, **events-watcher**, and drm CI. On Runtime, `main` got one VZ TURN-ownership fix — and **`experiment/home-studio-h3-dogfood`** (pushed public 8 Aug) carries **~15 home-agent / Sparks H3 dogfood commits** after the weekly cutoff (Live SSE chat, Inbox/library, Wave 4–6, Studio Generate/Storyboard/Character). **Not for `main` yet.** **PC2** stayed product-quiet (docs publish only). Formal Runtime **v0.6.0 GitHub Release/tag** still outstanding. ELA tip ~**2,267,480** — past gate two (**2,265,000**).
+**Not a quiet week — and Runtime was not quiet either once all branches were scanned.** Coming out of [#31](https://github.com/Elacity/pc2.net/discussions/31) (mainnet recovery + Runtime v0.6 on `main`), heat is across the org: **ElacityLabsWeb** shipped a private **CodeRED Intel / ops admin portal** (~42 commits); **Hyper + hey-engine** kept hardening calls, radio, and relay (**6 + 18**); **Elastos.Node v1.2.3** fixed `ela rewound` for post-v1.0.0 recovery builds; **drm-api** surgically backported the Base **0.11** getLogs/CACHER pack to **ESC** (`release/next`, PR #4); security hardening branches on **ddrm-reader**, **events-watcher**, and drm CI. On Runtime, `main` got one VZ TURN-ownership fix; **`experiment/home-studio-h3-dogfood`** (pushed public 8 Aug) carries **~15 home-agent / Sparks H3 dogfood commits** after the weekly cutoff; and team status marks **`feat/dkms-esp-port`** READY-FOR-MANUAL-MERGE against the **0.7-dev roadmap** — content creation/playback ~**75%** functional (custody / protected content / commerce rails), conversation-plane ESP facts/verbs still owed with the rest of shell. **PC2** stayed product-quiet (docs publish only). Formal Runtime **v0.6.0 GitHub Release/tag** still outstanding. ELA tip ~**2,267,480** — past gate two (**2,265,000**).
 
 **Community status (8 Aug):** mainchain is producing blocks again under BPoS and still being hardened. **ESC / EID / Arbiter / bridge remain closed on purpose** — different risk profile, automatic paths on careless restart, unfinished repair and rehearsal. Do not send funds into paused sidechain or bridge flows until official reopen. Details below and in the [mainchain postmortem](https://blog.elastos.net/announcement/main-chain-postmortem-august/).
 
-> Mainchain online · ESC/bridge **still closed** · Runtime **home-agent / Sparks H3 dogfood** (experiment branch) · CodeRED Intel / ops admin · Hyper + hey-engine · Node **v1.2.3** · drm-api **0.11 → ESC** · PC2 quiet · ELA tip past **2,265,000** · Runtime **0.6 tag still pending**.
+> Mainchain online · ESC/bridge **still closed** · Runtime **home-agent / Sparks H3 dogfood** · **dkms-esp-port** READY-FOR-MANUAL-MERGE (content rails ~75%) · CodeRED Intel / ops admin · Hyper + hey-engine · Node **v1.2.3** · drm-api **0.11 → ESC** · PC2 quiet · ELA tip past **2,265,000** · Runtime **0.6 tag still pending**.
 
 ---
 
@@ -33,7 +33,7 @@ Elacity Labs — Weekly Team Update for the World Computer Initiative (WCI)
 6. Hyper + Hey-engine — Calls, Radio, Relay
 7. Marketplace — drm-api 0.11 → ESC + web 4.5.0 Confirmed
 8. Security Hardening Branches — ddrm-reader, events-watcher, drm CI
-9. Runtime — `main` Tail + Home-Agent / Sparks H3 Dogfood (Experiment)
+9. Runtime — `main` Tail + Home Dogfood + DKMS/ESP Port (Team Lane)
 10. PC2 — Convergence Continues (Docs Only)
 11. Release Engineering — 0.6 Tag Still Pending
 12. Convergence Lens
@@ -49,7 +49,7 @@ Five stories this week — **chain status**, **Runtime Home dogfood** (off `main
 
 **Zeroth, say plainly what is open and what is not.** Mainchain recovered through halt → patch → rewind → restart → BPoS. ESC, EID, Arbiter, and the bridge stay closed until repair, accounting, and rehearsal clear a higher bar. That sequencing is intentional. See §2.
 
-**First, Runtime Home work landed hard — on an experiment branch, not `main`.** After Wave 0 synced onto 0.6 `main`, Aug 4–5 carried Live SSE chat, gateway backends UI, Desktop attach, usage metering, Inbox `library.read`, Local Library KB, fail-closed `web.search` stub, session fork/tags/search, On-Home sticky notes. Aug 8 public push added **Sparks H3 dogfood** (Generate / Storyboard / Character) on `experiment/home-studio-h3-dogfood`. Explicitly **not for `main`** until secure converge with runtime principles / CTO infra. See §9.
+**First, Runtime product heat is branch-scoped, not `main`.** (1) **Home / Sparks H3 dogfood** on `experiment/home-studio-h3-dogfood` — Live SSE, Inbox/library, Waves 4–6, Studio Generate/Storyboard/Character; not for `main` until secure converge. (2) **DKMS / protected-content / commerce ESP port** — teammate roadmap coverage (2026-08-07) marks `feat/dkms-esp-port` READY-FOR-MANUAL-MERGE vs `upstream/0.7-dev`: content creation and playback ~**75%** functional / ~**70%** ESP-aligned; foundation/hardening only touched where the rails forced it. Branch tip not yet on public `origin` heads — team lane. See §9.
 
 **Second, Labs built an internal intelligence / ops surface.** ElacityLabsWeb (~42 commits, SashaMIT) folded **CodeRED OSS intelligence** into a unified `/admin` ops portal. Operator tooling — not a public product launch.
 
@@ -132,6 +132,7 @@ An auto-draft that only walked `pc2.net` + `elastos-runtime` concluded “tail c
 |---|---|
 | Community / DAO status | Mainchain online · ESC/bridge closed on purpose · CRC make-whole · auditor engagement |
 | **Runtime `experiment/home-studio-h3-dogfood`** | **~15** commits after cutoff — home-agent Waves + Sparks H3 (pushed 8 Aug); **77** ahead of `main` overall |
+| **Runtime `feat/dkms-esp-port` (team)** | READY-FOR-MANUAL-MERGE vs 0.7-dev roadmap — content rails ~75% functional; **not on public `origin` heads yet** (tip `e2cc4229` per team report) |
 | ElacityLabsWeb | **~42** commits — CodeRED Intel + ops admin |
 | Hey-engine | **18** commits — relay / radio / calls |
 | Hyper | **6** commits — calls / Play drop / build gate |
@@ -226,9 +227,9 @@ Not all merged to default yet — flagged so they are not invisible:
 | **events-watcher** | `feat/discovery-max-trackers` | Cap dynamically discovered trackers via `discovery_max_trackers` |
 | **drm-api-layer** | PR #5 `ci/server-key-action-guard` | CI guard: no unauthorized server-key-signed payable actions |
 
-## 9. Runtime — `main` Tail + Home-Agent / Sparks H3 Dogfood (Experiment)
+## 9. Runtime — `main` Tail + Home Dogfood + DKMS/ESP Port (Team Lane)
 
-Two Runtime stories this cycle: a small **`main`** correctness fix, and a large **experiment-branch** Home / Studio dogfood line that a `main`-only scan would miss entirely.
+Three Runtime stories this cycle: a small **`main`** correctness fix; a large **experiment-branch** Home / Studio dogfood line; and an internal **DKMS/ESP content-rails** port marked READY-FOR-MANUAL-MERGE against the 0.7-dev roadmap (not visible on public `origin` heads yet — team status, 2026-08-07).
 
 ### `main` — `d358ded` fix(vz): scope TURN cleanup to launch ownership (+19/−2)
 
@@ -259,7 +260,33 @@ Branch tip [`2d33644`](https://github.com/Elacity/elastos-runtime/commit/2d33644
 
 Tip label in commit: `home-20260807aj`. This is the Runtime heat the first draft of this weekly under-reported.
 
-**Still carried, no in-window pushes:** `feat/shell-ui-esp-on-protocol-extended-ai-work`, `feat/shell-ui-esp-on-protocol`, `feat/shell-ui-v1`, `fix/elastos-shell-protocol-browser-wip`, `flint-0.5`, `upstream/0.6-dev` (tip still pre-window).
+### `feat/dkms-esp-port` — content rails vs `upstream/0.7-dev` roadmap (team coverage, 7 Aug)
+
+**Source:** teammate Roadmap Coverage Report — branch tip `e2cc4229` (5 commits), status **READY-FOR-MANUAL-MERGE**. Method: claims grounded in code/tests on the branch; dual lens **Functional %** vs **Aligned %** (discount for ESP target model: facts/verbs conversation plane, Runtime-owned authority, capsule interaction contracts).
+
+**Not on public `origin`:** a fresh walk of Elacity/elastos-runtime’s 9 remote heads does **not** yet list `feat/dkms-esp-port` / `e2cc4229`. Treated here as **internal team status** until pushed — still real product progress that a GitHub-only scan would miss.
+
+| Roadmap section | Functional | Aligned | Verdict |
+|---|---|---|---|
+| Foundation | ~15% | ~12% | Consumes foundation; invoke-path security + commerce-slice UI |
+| **Content creation and playback** | **~75%** | **~70%** | **This branch’s home** — custody / protected content / commerce |
+| Hardening | ~20% | ~20% | Real pieces; no item complete |
+| Later follow-ups | ~15% | ~15% | Precursors; egress-policy ~45% pre-seeded |
+
+**In the content section (branch home):**
+
+| Item | Func | Aligned | One-line |
+|---|---|---|---|
+| `feat/elastos-dkms-custody` | ~65% | ~65% | Threshold custody core, PQ-hybrid envelopes, release fail-closed CI-gated — provider plane **on-model** |
+| `feat/elastos-protected-content` | ~85% | ~75% | Rights/key/encrypt/decrypt/drm, CENC, both viewers, session lifecycle e2e-anchored; subject-resolution rewire still parked (dev-lane chain open/buy) |
+| `feat/elastos-content-commerce` | ~85% | ~65% | Full publish→index→buy→acquire rail + wallet step-up + chain; verb surface / market-route auth await ESP migration |
+| `feat/elastos-webspace-interop` | ~10% | ~10% | Enabling fix only — section’s remaining workstream |
+
+**ESP alignment in one sentence:** data and authority planes are on the target model (provider hostcalls, manifests/catalog, viewers/creator as web-projections, money verbs under Home — **no new authority path**). The **conversation plane is not** — commerce/viewer still REST-ish gateway + bespoke postMessage, same debt main’s wallet/system surfaces owe; belongs to `feat/shell-ui-esp`, not a dkms rework. Biggest in-section gap to “chain-mode-live”: `RequiredHomeLaunchToken` / subject-resolution threading.
+
+**Scheduling note from the report:** `feat/elastos-egress-policy` ~45% pre-seeded (crosvm egress audit/firewall + tests) — consider pulling earlier. When shell-ui ESP verbs land, commerce/protected-content aligned % converges up with little dkms-side work.
+
+**Still carried on public remotes, no in-window pushes:** `feat/shell-ui-esp-on-protocol-extended-ai-work`, `feat/shell-ui-esp-on-protocol`, `feat/shell-ui-v1`, `fix/elastos-shell-protocol-browser-wip`, `flint-0.5`, `upstream/0.6-dev`.
 
 ## 10. PC2 — Convergence Continues (Docs Only)
 
@@ -282,16 +309,17 @@ Operator line remains **v1.4.0**. Narrative unchanged: PC2 lessons live inside R
 
 | Concern | PC2 | Runtime | Rest of org / ecosystem |
 |---|---|---|---|
-| Strategic role | Stable 1.4.0 / quiet | 0.6 on `main` + **Home dogfood on experiment branch** | Labs / Hyper / Node / drm |
+| Strategic role | Stable 1.4.0 / quiet | 0.6 on `main` + Home dogfood + **DKMS/ESP content rails (team)** | Labs / Hyper / Node / drm |
 | Chain status | — | — | Mainchain online · ESC/bridge **closed on purpose** |
 | Home / Agent / Studio | — | Waves 4–6 + Sparks H3 (`experiment/home-studio-h3-dogfood`) | — |
+| DKMS / protected content / commerce | — | `feat/dkms-esp-port` READY-FOR-MANUAL-MERGE (~75% content section) | — |
 | Ops / intel | — | — | LabsWeb CodeRED + admin |
 | Mesh / mobile | — | — | Hyper + hey-engine |
 | Money / nodes | — | — | Node **v1.2.3**; ELA tip past gate two; CRC make-whole |
 | Marketplace | — | — | drm **0.11→ESC** (indexer readiness); web **4.5.0** |
 | Release packaging | — | **0.6 tag open** · Home **not** merging to `main` yet | Locked mainchain audit package in flight |
 
-**Reading:** `main`-only Runtime looks like a tail week. Branch-complete Runtime shows the Home/Studio dogfood line as a primary product workstream — still gated off `main` on purpose. Full-org scan still shows Labs + Hyper + Node + drm; DAO status still carries: mainchain back ≠ bridge open.
+**Reading:** `main`-only Runtime looks like a tail week. Public experiment + internal DKMS/ESP port show two primary product workstreams off `main` — Home/Studio dogfood and content rails toward 0.7 — both gated on purpose. Full-org scan still shows Labs + Hyper + Node + drm; DAO status still carries: mainchain back ≠ bridge open.
 
 ## 13. Looking Ahead
 
@@ -299,14 +327,15 @@ Operator line remains **v1.4.0**. Narrative unchanged: PC2 lessons live inside R
 2. **Locked mainchain audit handoff** — freeze package → external review → widen access when it does not increase live risk
 3. **CRC Incident Recovery** — continue verified make-whole tranches; fuller public accounting when safe
 4. **Runtime Home converge** — dogfood Sparks H3 / home-agent against runtime principles + CTO infra; secure path before any `main` merge
-5. **Publish Runtime GitHub Release/tag `v0.6.0`** (include `d358ded` or freeze earlier — decide explicitly)
-6. **Honest-log scan republish** across gate **2,265,000** — promote the two pending reward-mint items when the band is clean
-7. Fleet: **Node v1.2.3** + ELA **v1.0.2**; stop wallet/UX paths that grow stuck balances into closed rooms
-8. drm-api: soak ESC `release/next` post-0.11 port; land CI server-key guard (PR #5)
-9. Merge / soak ddrm-reader fetch hardening + events-watcher tracker cap (open PRs)
-10. Hyper: F-Droid / one-edition distribution path after Play drop
-11. CodeRED Intel: keep discovery → Amber drain cadence honest under load
-12. **PC2:** no expectation of product commits unless operator-critical
+5. **`feat/dkms-esp-port` manual merge** — push/visible tip if not already; land against 0.7-dev when ready; subject-resolution (`RequiredHomeLaunchToken`) is the chain-mode gate; ESP conversation-plane migration rides with `feat/shell-ui-esp`
+6. **Publish Runtime GitHub Release/tag `v0.6.0`** (include `d358ded` or freeze earlier — decide explicitly)
+7. **Honest-log scan republish** across gate **2,265,000** — promote the two pending reward-mint items when the band is clean
+8. Fleet: **Node v1.2.3** + ELA **v1.0.2**; stop wallet/UX paths that grow stuck balances into closed rooms
+9. drm-api: soak ESC `release/next` post-0.11 port; land CI server-key guard (PR #5)
+10. Merge / soak ddrm-reader fetch hardening + events-watcher tracker cap (open PRs)
+11. Hyper: F-Droid / one-edition distribution path after Play drop
+12. CodeRED Intel: keep discovery → Amber drain cadence honest under load
+13. **PC2:** no expectation of product commits unless operator-critical
 
 ## 14. Summary Statistics
 
@@ -322,6 +351,7 @@ Operator line remains **v1.4.0**. Narrative unchanged: PC2 lessons live inside R
 | Elacity/elacity-web | merge confirm | PR **#25 merged**; **4.5.0** |
 | Elacity/elastos-runtime (`main`) | **1** | `d358ded` TURN cleanup ownership |
 | Elacity/elastos-runtime (`experiment/home-studio-h3-dogfood`) | **~15** after cutoff | Home-agent Waves 4–6 + Sparks H3 dogfood (tip `2d33644`); **77** ahead of `main` |
+| Elacity/elastos-runtime (`feat/dkms-esp-port`, team) | 5 (report) | READY-FOR-MANUAL-MERGE @ `e2cc4229` — **not on public origin heads yet**; content section ~75% / ~70% |
 | Elacity/pc2.net | docs | Weekly publish commits (product quiet) |
 | Elacity/ddrm-reader | branch | fetch hardening |
 | Elacity/events-watcher | branch | discovery tracker cap |
@@ -336,6 +366,7 @@ Operator line remains **v1.4.0**. Narrative unchanged: PC2 lessons live inside R
 
 - **Prior auto-draft caveat stands and is corrected here.** A git-only PC2+Runtime-`main` pass under-counted the week. Full-org + **all Runtime remotes** + open PRs + 8 Aug Home push are now in this revision.
 - **Second correction (same day):** first publish of #32 still under-weighted Runtime until `experiment/home-studio-h3-dogfood` was re-fetched after the public push.
+- **Third correction (same day):** `feat/dkms-esp-port` roadmap coverage added from teammate report — branch tip not fetchable on public `origin`; percentages are their grounded assessment, not a re-audit from this session.
 - **Cutoff:** landings before 2026-08-01 08:08 UTC (including Runtime `51e37bd` / `27a02a8`) belong to [#31](https://github.com/Elacity/pc2.net/discussions/31), not double-counted as new product this week — except where this report explicitly notes carry-over status (0.6 tag, web 4.5.0 GitHub merge confirm).
 - **CodeRED / admin:** internal ops tooling; no exploit cookbook, no target lists in this public weekly.
 - **Sensitive omission:** settlement counterparty figures, LE detail, and private vuln catalogues stay out (same discipline as #30–#31). CRC program existence is public; amounts are not.
@@ -358,6 +389,7 @@ Operator line remains **v1.4.0**. Narrative unchanged: PC2 lessons live inside R
 | elacity-web | **4.5.0** merged on GitHub |
 | Runtime `main` | `d358ded` · **0.6 tag still pending** |
 | Runtime Home / Studio | `experiment/home-studio-h3-dogfood` · Waves + Sparks H3 · **not for `main` yet** |
+| Runtime DKMS / content rails | `feat/dkms-esp-port` READY-FOR-MANUAL-MERGE · content ~75% · team tip not on origin yet |
 | PC2 | docs-only · convergence continues |
 | Postmortem | [blog.elastos.net](https://blog.elastos.net/announcement/main-chain-postmortem-august/) |
 

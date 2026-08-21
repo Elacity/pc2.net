@@ -4,7 +4,7 @@ Elacity Labs — Weekly Team Update for the World Computer Initiative (WCI)
 
 **Last week’s freeze contracts started becoming product surface — Home lock/welcome on the freeze, protected-content custody and Wallet-signed rights in source, marketplace 4.6.1 / drm-api 0.13.0 shipped — while mainchain stays online and ESC / EID / the bridge stay closed on purpose.** Coming out of [#33](https://github.com/Elacity/pc2.net/discussions/33): Home URUX painted onto the freeze (lock face, Profile-first welcome, dock choreography); protected-content moved from v1 authority into published custody / provider / Runtime / rights / Wallet-signing lines; the mint → sell → buy → play journey is a written path, **not** an installed product yet. Marketplace cut **elacity-web 4.6.1** and **drm-api 0.13.0** (aligned on `release/next` as 0.8.3), plus v1 REST **1.13.2**, events-watcher batched getLogs, and edge hardening. **Halborn** is contracted for an independent Secure Code Review of pending mainchain **v1.0.3** (starts 28 August). CRC Incident Recovery for the coordinated KuCoin make-whole is **complete**. Runtime `main` quiet; **0.6 tag still pending**. PC2 product-quiet. ELA tip ~**2,276,945**.
 
-**Chain status:** mainchain producing under BPoS and still being hardened. **ESC and EID are still not ready to restart.** Do not send funds into paused sidechain or bridge flows. [Mainchain postmortem](https://blog.elastos.net/announcement/main-chain-postmortem-august/).
+**Chain status:** mainchain producing under BPoS and still being hardened. Private ESC / EID / Arbiter fix-and-proof work advanced this week (not on public GitHub). **Restart is still not cleared.** Do not send funds into paused sidechain or bridge flows. [Mainchain postmortem](https://blog.elastos.net/announcement/main-chain-postmortem-august/).
 
 > Home on the freeze · protected-content custody + Wallet-signed rights (source) · marketplace **4.6.1** / drm **0.13.0** · **Halborn** for ELA v1.0.3 · KuCoin CRC path complete · ESC/EID **still closed** · Runtime **0.6 tag pending** · PC2 quiet.
 
@@ -76,6 +76,19 @@ We compared established firms and contracted **Halborn** for an independent Secu
 ### Layers
 
 Mainchain remains live after the July response. ESC, EID, and the Arbiter bridge remain offline **on purpose**. Public GitHub for those trees did not move this week — recovery work stays private until it is safe to publish. Operator toolkit remains **Elastos.Node v1.2.3**.
+
+### Private ESC / EID / Arbiter prep (high level)
+
+A substantial **fix, proof, and release-preparation** cycle ran this week on the private ESC, EID, and Arbiter trees — money-path correctness, consensus determinism, remote-abuse hardening, config/build parity, and test integrity. **Nothing from that cycle is on public GitHub.** Restart is **still not cleared**; remaining blockers are operational (rehearsal, soak, fleet readiness), not “code is done so we turn it on.”
+
+Process facts we can share without a finding dump:
+
+- **237** commits on the private integration lines this week (ESC **91**, EID **112**, Arbiter **34**); three condensed release branches prepared, each matching its integration tree.
+- Guard coverage was mutation-swept across isolated worktrees: **1,259** production guards — **872** defended by a failing test when removed, **383** still need coverage (undefended means missing test, not “the fix is broken”).
+- A **12-node** mixed-version upgrade rehearsal compared every node across **135** heights / **273** sweeps, including a six-old / six-new split: **zero** divergence, **zero** version-correlated divergence, **zero** fleet reorg, **zero** stall. Rollback to the prior binary did not require an SPV store wipe.
+- Soak: **18 of 20** consecutive clean rounds required by the exit criterion. A two-restart sequence including rollback is approved and starting. Real chain history has not been revalidated on this mesh; light/LES/fast/archive modes were not the rehearsal modes.
+
+Adversarial review **rejected** proposed fixes that were worse than the defects they addressed. That is the right bar. We will announce reopen — we will not surprise people into a half-open bridge.
 
 ## 3. Runtime — Home URUX on the Freeze
 
@@ -187,7 +200,7 @@ One landing on `main`: the Aug 8–14 weekly. No product commits. Operator line 
 5. Runtime **0.6 tag** still outstanding
 6. Windows source gate: another clean cycle before it gates
 7. Marketplace: soak 4.6.1 / 0.13.0; Home card stills; events-watcher tracker cap
-8. ESC / EID / bridge: private repair continues — **no reopen until the bar is met**
+8. ESC / EID / bridge: finish soak (20/20), two-restart + rollback rehearsal, operational fleet checks — **no reopen until the bar is met**; keep finding registers internal
 9. Essentials: independent custody review before production changes; nothing claimed shipped
 10. **PC2:** quiet unless operator-critical
 
@@ -206,7 +219,7 @@ One landing on `main`: the Aug 8–14 weekly. No product commits. Operator line 
 | v1 REST / watchers / edge | Shipped | **1.13.2** · batched getLogs · CSP / `$`-action block |
 | Hyper / hey-engine | Quiet | — |
 | Essentials | Local only | Overhaul uncommitted |
-| Chain | Public GitHub quiet | Halborn contracted · KuCoin CRC complete · ESC/EID closed |
+| Chain | Public GitHub quiet | Halborn · KuCoin CRC complete · private ESC/EID/Arbiter prep (**237** commits) · restart **not** cleared |
 | PC2 | Quiet | Weekly docs only |
 | ELA tip | ~**2,276,945** | Mainchain online |
 
@@ -215,7 +228,7 @@ One landing on `main`: the Aug 8–14 weekly. No product commits. Operator line 
 
 ## 13. Notes
 
-- **Chain recovery internals** stay out (registers, recipes, unpublished trees). Halborn scope and KuCoin CRC completion are the community-safe facts this week.
+- **Chain recovery internals** stay out (registers, recipes, unpublished trees, live council-node detail). Halborn, KuCoin CRC completion, and private ESC/EID/Arbiter **process** stats (commit counts, rehearsal/soak) are the community-safe facts this week.
 - **Protected-content** is source review, not an installed journey. Unpublished local mint/buy drafts are not the accepted line.
 - **Essentials** work is local; no store claim; no finding dump.
 - Settlement counterparty detail beyond “KuCoin flow processed” stays in proper channels.
@@ -232,7 +245,7 @@ One landing on `main`: the Aug 8–14 weekly. No product commits. Operator line 
 | Marketplace | web **4.6.1** · drm **0.13.0** |
 | Halborn | ELA **v1.0.3** · starts 28 Aug |
 | KuCoin CRC | Complete |
-| Mainchain / ESC | Online · ESC/EID **still closed** |
+| Mainchain / ESC | Online · ESC/EID **still closed** · private prep, restart not cleared |
 | Runtime tag | **0.6 still pending** |
 | PC2 | Quiet · v1.4.0 |
 

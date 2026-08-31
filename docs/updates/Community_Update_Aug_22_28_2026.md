@@ -47,7 +47,7 @@ Elacity Labs — Weekly Team Update for the World Computer Initiative (WCI)
 
 **Zeroth — chain doors.** Mainchain is live. ESC, EID, Arbiter, and the bridge stay closed. Halborn opened the independent review of **v1.0.3** on **28 August**. That is not a reopen, and it is not “trust us.” See §2.
 
-**First — the protected-content stack is now eight stacked PRs**, then an umbrella. **#29** canonical content identities and rights grants; **#30** threshold custody envelopes + key reconstruction; **#31** bridge-authenticated release reconstruction; **#32** custody provider protocol and process; **#33** Wallet-signed rights requests; **#34** Runtime release authority + persisted state; **#35** chain rights evidence + typed decisions; **#36** runtime lifecycle — mint, buy, play, purchase closeout. Each is one contract. Reviewers can hold one boundary at a time. Collaboration candidate **#16** merged onto `upstream/0.7-dev`. **#38** proposes that 0.7 line for `main`. **#39** sits on top with Archive / Assistant workspace / Home menu work. **Still not an installed mint → buy → play journey.** See §3.
+**First — the protected-content stack is now eight stacked PRs**, then an umbrella. **#29** canonical content identities and rights grants; **#30** threshold custody envelopes + key reconstruction; **#31** bridge-authenticated release reconstruction; **#32** custody provider protocol and process; **#33** Wallet-signed rights requests; **#34** Runtime release authority + persisted state; **#35** chain rights evidence + typed decisions; **#36** runtime lifecycle — mint, buy, play, purchase closeout. Each is one contract. Reviewers can hold one boundary at a time. Collaboration candidate **#16** merged onto `upstream/0.7-dev`. **#38** proposes that 0.7 line for `main`. **#39** sits on top: Archive / Assistant workspace / Home menu, plus more source-line Library/marketplace work and a two-Runtime proof — still **not** an installed journey. See §3.
 
 **Second — Assistant grew a real substrate.** Typed model boundary, private workspace persistence, Chat and Build workflows, offer-driven Studio runs, safe markdown + math rendering. Model side: provider coordinator, bounded adapters, durable offer/run state, verified native provider execution. Legacy AI provider paths were retired, not deprecated in place. See §4.
 
@@ -55,7 +55,7 @@ Elacity Labs — Weekly Team Update for the World Computer Initiative (WCI)
 
 **Fourth — marketplace kept shipping.** elacity-web **4.6.6**: Home/Explore cards stop asking the chain for every listing; grids use stored prices and slim documents; Flint stills when media is missing; shops-list density. drm-api **0.13.1**: poster stills from the token image CID, not the media file; cheap-grid fetch. Edge: HTTP/2 + gzip + immutable `/assets/` on base.ela.city. See §7.
 
-**Fifth — Hyper / Hey after a quiet week.** Desktop + Android CI and a Mac DMG packager landed. Android: group member cards, workspaces vs private groups, force-relay for hide-IP contacts, talking-head video adapt, a signed-APK workflow so sideloads can replace earlier builds. Engine: sealed 1:1 DMs, unpublished media that stays unpublished across restart, radio self-heal that does not remesh every few seconds. No GitHub Release tag — source and sideload, not a store launch. See §8.
+**Fifth — Hyper / Hey after a quiet week.** Desktop (Skia `hyper-desktop`) landed in the Hyper repo, plus Android CI and a Mac DMG packager. Android: group member cards, workspaces vs private groups, force-relay for hide-IP contacts, talking-head video adapt, a signed-APK workflow so sideloads can replace earlier builds. Engine: sealed 1:1 DMs, unpublished media that stays unpublished across restart, radio self-heal that does not remesh every few seconds. Android CI is green; desktop CI is still red on HEAD. No GitHub Release tag — source and sideload, not a store launch. See §8.
 
 **Also:** browser-local-exit orphan reap **[#24](https://github.com/Elacity/elastos-runtime/pull/24)** merged. Source-home CI matrix now emits a proof artifact. WSL-first Windows strategy is a written doc. `elastos-logger` went from PoC to a crate with a tracing migration. PC2 shipped zero product commits — quiet by design.
 
@@ -110,7 +110,7 @@ Last week’s source became this week’s PRs. Each PR carries one contract so r
 
 **[#38](https://github.com/Elacity/elastos-runtime/pull/38)** — *ElastOS 0.7: protected-content foundation, collaboration, and runtime lifecycle* — is the umbrella: `upstream/0.7-dev` proposed for `main`. Merging is the chain owner’s decision. It exists so the remaining 0.7 work is visible in one place. It is **not** a tag and **not** a consumer launch.
 
-**[#39](https://github.com/Elacity/elastos-runtime/pull/39)** sits on that line: Archive Manager onto shared house chrome, Assistant workspace capsule, Home menu protocol for app-driven menus.
+**[#39](https://github.com/Elacity/elastos-runtime/pull/39)** sits on that line (opened 29 August, 112 commits ahead of `upstream/0.7-dev` at publish): Archive Manager onto shared house chrome, Assistant workspace capsule, Home menu protocol — and, after the Friday draft cutoff, more **source-line** Library video prepare/play, marketplace browse/buy, private decrypt-provider registration, and a documented two-Runtime custody proof. That branch is **open, not merged, not tagged**. It does not make mint → buy → play an installed product.
 
 ### What the branch tips actually did
 
@@ -185,7 +185,7 @@ Poster stills written from the token image CID, not the media file. List fetch s
 | Surface | What |
 |---|---|
 | **docker-arch** | HTTP/2 + JS gzip + immutable `/assets/` on base.ela.city (**#7**). ipfs.ela.city gateway work closed at the edge of last week |
-| **v1 REST** | Quiet this window (last week’s **1.13.2** holds) |
+| **v1 REST** | Quiet this window. **1.13.3** landed just before the Friday cut (non-array `eth_getLogs` + Base 8453 genesis) — treat as the #34/#35 seam, not a new ship this week |
 | **events-watcher** | Quiet (batched getLogs holds; tracker-cap PR still open) |
 | **LabsWeb** | Quiet (About / Provenance from last week) |
 
@@ -195,7 +195,7 @@ Last window these two were quiet. This window they were not. Hyper is the Androi
 
 **Shipped in source / sideload — not a store launch, no GitHub Release tag.**
 
-- Desktop + Android CI and a Mac DMG packager (**Hyper #38** merged). Group video grid (**#37**).
+- Skia **hyper-desktop** landed in the Hyper repo (22 August). Desktop + Android CI and a Mac DMG packager (**Hyper #38** merged). Group video grid (**#37**). Android CI green on HEAD; **desktop CI still red**.
 - Android product: group member cards, workspaces split from private groups, last-read bars, readable mentions, tap-or-hold message menu, theme-aware chat papers, voice notes restored to match source.
 - **Force relay** on contacts so hide-IP peers stay on the relay after restart; Accept no longer auto-pins trust (compared safety number required).
 - Talking-head capture locked to conversation grade; pause send on a weak link.

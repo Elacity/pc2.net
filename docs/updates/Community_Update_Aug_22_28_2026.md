@@ -2,11 +2,11 @@ Elacity Labs — Weekly Team Update for the World Computer Initiative (WCI)
 
 **August 22 – August 28, 2026**
 
-**Last week’s published source became a reviewable PR train — protected-content as eight stacked contracts, Assistant on a typed model boundary, Home now Recovery-Kit-first — while the marketplace kept shipping and Hyper/Hey woke up after a quiet week.** Coming out of [#34](https://github.com/Elacity/pc2.net/discussions/34): custody / Wallet-signed rights / chain evidence left the document and entered source. This cycle splits that source so reviewers can hold one boundary at a time (**[#29](https://github.com/Elacity/elastos-runtime/pull/29) → [#36](https://github.com/Elacity/elastos-runtime/pull/36)**), merges the collaboration candidate onto the 0.7 line (**[#16](https://github.com/Elacity/elastos-runtime/pull/16)**), and opens the 0.7 umbrella toward `main` (**[#38](https://github.com/Elacity/elastos-runtime/pull/38)**). Marketplace cut **elacity-web 4.6.1 → 4.6.6** and **drm-api 0.13.1**. **Halborn** Secure Code Review of mainchain **v1.0.3** **started 28 August**. ESC / EID / Arbiter / the bridge stay **closed on purpose**. Runtime `main` still quiet; **0.6 tag still pending**. PC2 product-quiet. ELA tip ~**2,284,075**.
+**Last week’s published source became a reviewable PR train — protected-content as eight stacked contracts, Assistant on a typed model boundary, Home now Recovery-Kit-first — while the marketplace kept shipping and Hyper/Hey woke up after a quiet week.** Coming out of [#34](https://github.com/Elacity/pc2.net/discussions/34): custody / Wallet-signed rights / chain evidence left the document and entered source. This cycle splits that source so reviewers can hold one boundary at a time (**[#29](https://github.com/Elacity/elastos-runtime/pull/29) → [#36](https://github.com/Elacity/elastos-runtime/pull/36)**), merges the collaboration candidate onto the 0.7 line (**[#16](https://github.com/Elacity/elastos-runtime/pull/16)**), and lands the 0.7 umbrella on `main` (**[#38](https://github.com/Elacity/elastos-runtime/pull/38)** merged 31 August; **[v0.7.0](https://github.com/Elacity/elastos-runtime/releases/tag/v0.7.0)** tagged 1 September). Marketplace cut **elacity-web 4.6.1 → 4.6.6** and **drm-api 0.13.1**. **Halborn** Secure Code Review of mainchain **v1.0.3** **started 28 August**. ESC / EID / Arbiter / the bridge stay **closed on purpose**. Monthly Runtime release contract **met** — progress tag, **not** a stable consumer download. PC2 product-quiet. ELA tip ~**2,284,075**.
 
 **Chain status:** mainchain producing under BPoS and still being hardened. Halborn’s independent review of pending **v1.0.3** is underway (Elastos.ELA only this round). Private ESC / EID / Arbiter fix-and-proof work continues — still not on public GitHub. **Restart is still not cleared.** Do not send funds into paused sidechain or bridge flows. [Mainchain postmortem](https://blog.elastos.net/announcement/main-chain-postmortem-august/).
 
-> Protected-content PR train **#29 → #36** · 0.7 umbrella **#38** · Recovery Kit before first Profile · marketplace **4.6.6** / drm **0.13.1** · Hyper/Hey mesh week · **Halborn underway** · ESC/EID **still closed** · Runtime **0.6 tag pending** · PC2 quiet.
+> Protected-content PR train **#29 → #36** · **#38** merged · **[v0.7.0](https://github.com/Elacity/elastos-runtime/releases/tag/v0.7.0)** tagged (progress, not a consumer launch) · Recovery Kit before first Profile · marketplace **4.6.6** / drm **0.13.1** · Hyper/Hey mesh week · **Halborn underway** · ESC/EID **still closed** · PC2 quiet.
 
 ---
 
@@ -15,7 +15,7 @@ Elacity Labs — Weekly Team Update for the World Computer Initiative (WCI)
 - **Previous report** — [Week of August 15 – August 21, 2026 (#34)](https://github.com/Elacity/pc2.net/discussions/34)
 - **This discussion** — [#35](https://github.com/Elacity/pc2.net/discussions/35)
 - **Elastos status** — [Mainchain postmortem (August)](https://blog.elastos.net/announcement/main-chain-postmortem-august/) · [honest recovery log](https://github.com/Elacity/pc2.net/blob/main/docs/updates/Elastos_ELA_Mainnet_Recovery_Honest_Log_2026-07.md)
-- **Runtime** — [Elacity/elastos-runtime](https://github.com/Elacity/elastos-runtime) · stacked **[#29](https://github.com/Elacity/elastos-runtime/pull/29)–[#36](https://github.com/Elacity/elastos-runtime/pull/36)** · 0.7 umbrella **[#38](https://github.com/Elacity/elastos-runtime/pull/38)** · UI reconstruction **[#39](https://github.com/Elacity/elastos-runtime/pull/39)** · Home **[#23](https://github.com/Elacity/elastos-runtime/pull/23)** · logger **[#25](https://github.com/Elacity/elastos-runtime/pull/25)** · GitHub Release still **[v0.4.0](https://github.com/Elacity/elastos-runtime/releases/tag/v0.4.0)**
+- **Runtime** — [Elacity/elastos-runtime](https://github.com/Elacity/elastos-runtime) · **[v0.7.0](https://github.com/Elacity/elastos-runtime/releases/tag/v0.7.0)** (1 Sep · progress tag on `main` `8ac18bec`) · **[#38](https://github.com/Elacity/elastos-runtime/pull/38)** merged · stacked **[#29](https://github.com/Elacity/elastos-runtime/pull/29)–[#36](https://github.com/Elacity/elastos-runtime/pull/36)** · **[#39](https://github.com/Elacity/elastos-runtime/pull/39)**
 - **Marketplace** — elacity-web **4.6.6** · drm-api **0.13.1**
 - **Install (PC2 node)** — `bash <(curl -fsSL https://raw.githubusercontent.com/Elacity/pc2.net/main/scripts/update.sh)`
 - **Install (Runtime)** — `curl -fsSL https://elastos.elacitylabs.com/install.sh | bash`
@@ -47,7 +47,7 @@ Elacity Labs — Weekly Team Update for the World Computer Initiative (WCI)
 
 **Zeroth — chain doors.** Mainchain is live. ESC, EID, Arbiter, and the bridge stay closed. Halborn opened the independent review of **v1.0.3** on **28 August**. That is not a reopen, and it is not “trust us.” See §2.
 
-**First — the protected-content stack is now eight stacked PRs**, then an umbrella. **#29** canonical content identities and rights grants; **#30** threshold custody envelopes + key reconstruction; **#31** bridge-authenticated release reconstruction; **#32** custody provider protocol and process; **#33** Wallet-signed rights requests; **#34** Runtime release authority + persisted state; **#35** chain rights evidence + typed decisions; **#36** runtime lifecycle — mint, buy, play, purchase closeout. Each is one contract. Reviewers can hold one boundary at a time. Collaboration candidate **#16** merged onto `upstream/0.7-dev`. **#38** proposes that 0.7 line for `main`. **#39** sits on top: Archive / Assistant workspace / Home menu, plus more source-line Library/marketplace work and a two-Runtime proof — still **not** an installed journey. See §3.
+**First — the protected-content stack is now eight stacked PRs**, then an umbrella. **#29** canonical content identities and rights grants; **#30** threshold custody envelopes + key reconstruction; **#31** bridge-authenticated release reconstruction; **#32** custody provider protocol and process; **#33** Wallet-signed rights requests; **#34** Runtime release authority + persisted state; **#35** chain rights evidence + typed decisions; **#36** runtime lifecycle — mint, buy, play, purchase closeout. Each is one contract. Reviewers can hold one boundary at a time. Collaboration candidate **#16** merged onto `upstream/0.7-dev`. **#38** then **merged to `main`** (31 August). **[v0.7.0](https://github.com/Elacity/elastos-runtime/releases/tag/v0.7.0)** was tagged 1 September — that is the monthly release contract (a progress tag, not a store/consumer launch; CI follow-up is still in flight). **#39** sits on that line: Archive / Assistant workspace / Home menu, plus more source-line Library/marketplace work and a two-Runtime proof — still **not** an installed journey. See §3.
 
 **Second — Assistant grew a real substrate.** Typed model boundary, private workspace persistence, Chat and Build workflows, offer-driven Studio runs, safe markdown + math rendering. Model side: provider coordinator, bounded adapters, durable offer/run state, verified native provider execution. Legacy AI provider paths were retired, not deprecated in place. See §4.
 
@@ -108,7 +108,7 @@ Last week’s source became this week’s PRs. Each PR carries one contract so r
 
 **[#16](https://github.com/Elacity/elastos-runtime/pull/16)** (collaboration candidate, including last week’s system map and **[#24](https://github.com/Elacity/elastos-runtime/pull/24)** orphan reap) **merged** into `upstream/0.7-dev` on 28 August.
 
-**[#38](https://github.com/Elacity/elastos-runtime/pull/38)** — *ElastOS 0.7: protected-content foundation, collaboration, and runtime lifecycle* — is the umbrella: `upstream/0.7-dev` proposed for `main`. Merging is the chain owner’s decision. It exists so the remaining 0.7 work is visible in one place. It is **not** a tag and **not** a consumer launch.
+**[#38](https://github.com/Elacity/elastos-runtime/pull/38)** — *ElastOS 0.7: protected-content foundation, collaboration, and runtime lifecycle* — **merged to `main`** on 31 August (`Merge branch 'upstream/0.7-dev'`). **[v0.7.0](https://github.com/Elacity/elastos-runtime/releases/tag/v0.7.0)** was published 1 September against `main` tip `8ac18bec` (CI follow-up after the merge). There is **no `v0.5.0` or `v0.6.0` tag**; the public line jumped **v0.4.0 → v0.7.0**. This meets the monthly GitHub Release contract as a **progress tracker**. It is **not** a stable consumer download: CI failed on the merge commit, a follow-up is on the way, installed acceptance and protected-content cutover remain open. Do not treat the tag as “go install 0.7.”
 
 **[#39](https://github.com/Elacity/elastos-runtime/pull/39)** sits on that line (opened 29 August, 112 commits ahead of `upstream/0.7-dev` at publish): Archive Manager onto shared house chrome, Assistant workspace capsule, Home menu protocol — and, after the Friday draft cutoff, more **source-line** Library video prepare/play, marketplace browse/buy, private decrypt-provider registration, and a documented two-Runtime custody proof. That branch is **open, not merged, not tagged**. It does not make mint → buy → play an installed product.
 
@@ -122,7 +122,7 @@ Last week’s source became this week’s PRs. Each PR carries one contract so r
 
 ### Honest limits (unchanged in kind)
 
-The stack is now reviewable; it is **still not** an installed mint → buy → open → play journey. Reconstruction still needs to move behind a private decrypt-provider boundary before the product path activates. Cutover is written as one atomic step — no parallel decoders. Treat **#38** as the review surface for that remaining work, not as “0.7 shipped.”
+The stack is now on `main` and tagged **v0.7.0**; it is **still not** an installed mint → buy → open → play journey. The tag message says the Runtime-owned protected-content path stays **inactive** until installed proof and the atomic cutover. Reconstruction still needs to move behind a private decrypt-provider boundary. Cutover is one atomic step — no parallel decoders. **v0.7.0** is the contract tag, not “0.7 shipped to users.”
 
 ## 4. Runtime — Assistant + Model Provider Substrate
 
@@ -213,17 +213,17 @@ No new push on the Essentials GitHub trees this window. The local overhaul from 
 
 `pc2.net` `main` after #34 — **zero** product commits, no PRs, no release. Operator line remains **v1.4.0**.
 
-Convergence holds: PC2 is a consumer of Runtime’s finished contracts. This week those contracts moved from source into a review train and a 0.7 umbrella (§3). PC2 does not open new seams until that train stabilizes. When it opens, first seams are still: dDRM viewer path and marketplace buy/trade against Wallet-signed rights.
+Convergence holds: PC2 is a consumer of Runtime’s finished contracts. This week those contracts moved from a review train onto `main` and a **v0.7.0** progress tag (§3). PC2 does not open new seams until installed acceptance is real. When it opens, first seams are still: dDRM viewer path and marketplace buy/trade against Wallet-signed rights.
 
 ## 11. Release Engineering
 
 | Item | Status |
 |---|---|
-| Runtime `main` | Quiet · tip still `d358ded` (2026-08-01) |
-| Runtime GitHub Release **v0.6.0** | **Still pending** (latest **[v0.4.0](https://github.com/Elacity/elastos-runtime/releases/tag/v0.4.0)**) |
-| Runtime 0.7 line | **[#38](https://github.com/Elacity/elastos-runtime/pull/38)** open `upstream/0.7-dev` → `main` · **not merged** |
-| Active Runtime reviews | Protected-content **#29–#36** · umbrella **#38** · UI **#39** · collaboration **#27+#28** · GBA **#26** · logger **#25** · Home **#23** · model-provider **#17** · dKMS/ESP **#15** · CI **#19** |
-| Merged this cycle | **#16** collaboration candidate → 0.7-dev · **#24** browser-local-exit orphan reap |
+| Runtime `main` | **Moved** · tip `8ac18bec` (1 Sep) · 0.7-dev merged 31 Aug |
+| Runtime GitHub Release | **[v0.7.0](https://github.com/Elacity/elastos-runtime/releases/tag/v0.7.0)** published 1 Sep · monthly contract met · **not** a stable consumer download · no `v0.5` / `v0.6` tag (jumped from **v0.4.0**) |
+| Runtime 0.7 line | **[#38](https://github.com/Elacity/elastos-runtime/pull/38)** **merged** to `main` |
+| Active Runtime reviews | Follow-up CI · remaining stacked PRs · **#39** / logger **#25** / model **#17** / dKMS **#15** / Home **#23** / CI **#19** |
+| Merged this cycle | **#38** → `main` · **#16** → 0.7-dev · **#24** orphan reap |
 | Closed | **#18** ElastOS picture map |
 | Marketplace | web **4.6.6** · drm **0.13.1** |
 | PC2 | No new tags · latest **v1.4.0** · quiet |
@@ -235,7 +235,7 @@ Convergence holds: PC2 is a consumer of Runtime’s finished contracts. This wee
 
 | Theme | Runtime (this week) | Marketplace / Hyper / PC2 / chain |
 |---|---|---|
-| Protected-content | 8-PR stack **#29→#36** · inactive path stitched · **#38** umbrella to `main` | Consumer path future (dDRM viewer, buy/trade against Wallet rights) — PC2 quiet |
+| Protected-content | 8-PR stack **#29→#36** · **#38** merged · **v0.7.0** tagged · path still **inactive** | Consumer path future (dDRM viewer, buy/trade against Wallet rights) — PC2 quiet |
 | mint → sell → buy → play | Wired **inactive** — not installed | Shared design intent |
 | Assistant / model | Typed boundary · durable offer/run · legacy AI retired | — |
 | Home / lock / recovery | Recovery-Kit-first · authority-safe lock · canonical chrome | — |
@@ -248,11 +248,11 @@ Convergence holds: PC2 is a consumer of Runtime’s finished contracts. This wee
 ## 13. Looking Ahead
 
 1. **Halborn** is underway — expect no public running commentary before the report lands. Community-safe update when there is a certificate or a scoped public fact.
-2. Land the protected-content stack in order. Reviewers work **#29 → #36** one contract at a time; **#38** is the 0.7 roll-up, not a shortcut around review.
+2. Finish the **v0.7.0** CI follow-up. The tag is the contract; green CI and installer/CID publish are separate.
 3. Move reconstruction behind the private decrypt-provider boundary before flipping the inactive product path to active. One implementation, atomic.
 4. Merge model-provider (**#17**) and logger (**#25**) onto the review base; keep VM-payload redaction as a first-class contract.
 5. Home URUX candidacy; keep entropy gates on the CI matrix.
-6. Runtime **0.6 tag** — still outstanding; unlock is contingent on the review stack settling and the source-home proof staying green. **#38** is 0.7 toward `main`, not a substitute for the pending 0.6 tag.
+6. Next monthly Runtime tag needs **new `main` work** — do not resticker `v0.7.0`. There will be no retroactive `v0.5` / `v0.6`.
 7. Windows — WSL-first stays the target; another clean cycle before the experimental native gate matters.
 8. Marketplace: soak **4.6.6** / **0.13.1**; events-watcher tracker cap still open.
 9. ESC / EID / bridge — finish soak, two-restart + rollback rehearsal, operational fleet checks — **no reopen until the bar is met**; finding registers stay internal.
@@ -260,7 +260,7 @@ Convergence holds: PC2 is a consumer of Runtime’s finished contracts. This wee
 
 ## 14. Summary Statistics
 
-**Week of** August 22 – August 28, 2026 (facts through publish, 31 August).
+**Week of** August 22 – August 28, 2026 (facts through 1 September amend: **v0.7.0**).
 
 Runtime volume below is the first-pass dedup (unique SHAs collapsed across the 12-branch protected-content stack). Raw undeduplicated Runtime was 240 commits / +439,929 / −74,930 / 2,773 files — the same logical change on multiple stacked branches.
 
@@ -276,16 +276,17 @@ Runtime volume below is the first-pass dedup (unique SHAs collapsed across the 1
 
 **Runtime commit-type histogram (dedup by subject):** feat 116 · fix 45 · docs 32 · merge 17 · test 12 · refactor 9 · chore 6 · style 2 · build 1.
 
-**Runtime PRs.** Opened **#26–#36** in-window, plus **#38** (28 Aug) and **#39** (29 Aug). Merged: **#16** (collaboration → 0.7-dev), **#24** (orphan reap). Closed: **#18**.
+**Runtime PRs.** Opened **#26–#36** in-window, plus **#38** (28 Aug) and **#39** (29 Aug). Merged: **#38** → `main` (31 Aug), **#16** → 0.7-dev, **#24** orphan reap. Closed: **#18**.
 
-**Releases.** No new GitHub tags on Runtime (**v0.4.0** latest) or PC2 (**v1.4.0** latest). Marketplace in-repo bumps as above. Node still **v1.2.3**.
+**Releases.** Runtime **[v0.7.0](https://github.com/Elacity/elastos-runtime/releases/tag/v0.7.0)** (1 Sep) — monthly contract met; progress tag, not a consumer launch. No `v0.5` / `v0.6`. PC2 still **v1.4.0**. Marketplace in-repo bumps as above. Node still **v1.2.3**.
 
 **People (workstream lens):** Anders Alm — protected-content stack, Assistant + model substrate, UIUX rollout, Home authority, Chat + capsules, CI · Irzhy Ranaivoarivony — elastos-logger + tracing migration, custody-provider hardening, stack merges, **#38 / #39** · SashaMIT — Recovery-Kit-first Profile, gba-nonogram capsule, source-home portability, marketplace grid/stills, Hyper CI/DMG · Hyper/Hey mesh (EverlastinOS) · chain recovery / Halborn coordination.
 
 ## 15. Notes
 
 - **Chain recovery internals** stay out (registers, recipes, unpublished trees, live council-node detail). Halborn kickoff, KuCoin CRC completion, and private ESC/EID/Arbiter **process** counts are the community-safe facts this week.
-- **Protected-content** is a reviewable stack (**#29 → #36**) and a 0.7 umbrella (**#38**), not an installed journey. Wired-inactive ≠ user-facing.
+- **Protected-content** is on `main` and tagged **v0.7.0**; the product path is still **inactive**. Wired-inactive ≠ user-facing. **v0.7.0** is a progress / contract tag, not a store install.
+- **Release contract.** August/this cycle is met by **v0.7.0**. July had no public Runtime tag (`v0.5` stayed on `flint-0.5`). Do not invent back-dated tags.
 - **Assistant** is pre-release engineering; legacy AI paths are gone; no external-provider secrets travel through Home or Runtime durable state.
 - **Reviewed UIUX** landed on the candidate — not tagged into a release.
 - **Hyper / Hey** are source + sideload this week, not a store launch.
@@ -300,15 +301,15 @@ Runtime volume below is the first-pass dedup (unique SHAs collapsed across the 1
 | Fact | Value |
 |---|---|
 | Previous / this | [#34](https://github.com/Elacity/pc2.net/discussions/34) · [#35](https://github.com/Elacity/pc2.net/discussions/35) |
-| Protected-content | PR train **#29 → #36** · umbrella **#38** · UI **#39** |
-| Merged | **#16** → 0.7-dev · **#24** orphan reap |
+| Protected-content | PR train **#29 → #36** · **#38** merged · path still inactive |
+| Merged | **#38** → `main` · **#16** → 0.7-dev · **#24** orphan reap |
 | Assistant | Typed model boundary · durable offer/run · legacy AI retired |
 | Home | Recovery Kit before first Profile · authority-safe lock |
 | Marketplace | web **4.6.6** · drm **0.13.1** |
 | Hyper / Hey | Mesh week · sideload / source · no tag |
 | Halborn | ELA **v1.0.3** · **started 28 Aug** |
 | Mainchain / ESC | Online · ESC/EID **still closed** · restart not cleared |
-| Runtime tag | **0.6 still pending** · `main` tip unchanged since 2026-08-01 |
+| Runtime tag | **[v0.7.0](https://github.com/Elacity/elastos-runtime/releases/tag/v0.7.0)** · contract met · not a consumer launch |
 | PC2 | Quiet · **v1.4.0** |
 
 ---

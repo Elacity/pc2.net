@@ -1,12 +1,12 @@
 Elacity Labs — Weekly Team Update for the World Computer Initiative (WCI)
 
-**August 29 – September 4, 2026**
+**August 29 – September 7, 2026**
 
-**ElastOS Runtime [v0.7.0](https://github.com/Elacity/elastos-runtime/releases/tag/v0.7.0) tagged on `main` this window** (1 September · tip `8ac18bec`). The line did not stop: **0.7.1** is already in review — two-Runtime protected-content proof, installed custody provisioning, Home Agent as its own capsule, first-run empty desktop. **ESC and EID resumed 1 September**; cross-chain transfers with the main chain are open again ([official announcement](https://blog.elastos.net/announcement/elastos-sidechains-resume-after-full-stack-audit/)). Marketplace cut **elacity-web 4.6.7** (live on base.ela.city 4 September). Hyper/Hey kept the mesh week going. **Halborn** Secure Code Review of mainchain **v1.0.3** is still underway. Operator toolkit **Elastos.Node v1.2.4**. PC2 product-quiet. ELA tip ~**2,289,048**.
+**ElastOS Runtime [v0.7.0](https://github.com/Elacity/elastos-runtime/releases/tag/v0.7.0) tagged on `main` this window** (1 September · tip `8ac18bec`). The line did not stop: **0.7.1** is already in review — two-Runtime protected-content proof, installed custody provisioning, Home Agent as its own capsule, first-run empty desktop. **ESC and EID resumed 1 September**; cross-chain transfers with the main chain are open again ([official announcement](https://blog.elastos.net/announcement/elastos-sidechains-resume-after-full-stack-audit/)). Marketplace cut **elacity-web 4.6.7** (live on base.ela.city 4 September). Hyper/Hey kept the mesh week going through the weekend. **Halborn** Secure Code Review of mainchain **v1.0.3** is still underway. Operator toolkit **Elastos.Node v1.2.4**. PC2 product-quiet. ELA tip ~**2,289,048**.
 
 **Chain status:** mainchain producing under BPoS. ESC and EID are producing again; main ↔ ESC / EID transfers are open. **PG / PGP cross-chain ELA stays disabled.** Halborn’s independent review of pending **v1.0.3** continues (Elastos.ELA only this round). **ela.city purchase, subscribe, and mint flows remain paused** pending a marketplace security follow-up — the sidechain resume is not a storefront reopen. Exchanges that froze ESC / EID deposits should contact the Elastos DAO before reopening. [Sidechains resume](https://blog.elastos.net/announcement/elastos-sidechains-resume-after-full-stack-audit/) · [Mainchain postmortem](https://blog.elastos.net/announcement/main-chain-postmortem-august/).
 
-> **Runtime [v0.7.0](https://github.com/Elacity/elastos-runtime/releases/tag/v0.7.0) released** · **0.7.1** in flight · ESC/EID **resumed** · marketplace **4.6.7** · Hyper/Hey mesh · **Halborn underway** · storefront **paused** · PC2 quiet.
+> **Runtime [v0.7.0](https://github.com/Elacity/elastos-runtime/releases/tag/v0.7.0) released** · **0.7.1** in flight · ESC/EID **resumed** · marketplace **4.6.7** · Hyper/Hey mesh through the weekend · **Halborn underway** · storefront **paused** · PC2 quiet.
 
 ---
 
@@ -56,7 +56,7 @@ Two public doors moved this cycle: the Runtime release, and the sidechains.
 
 **Marketplace kept shipping.** elacity-web **4.6.7** is live: atomic batching, faster reads, post-tx freshness, earnings and sidebar honesty. drm-api stayed at **0.13.2** on the default branch; **[#22](https://github.com/Elacity/drm-api-layer/pull/22)** is the unmerged API line, with selected SHAs already on the operator deploy. See §8.
 
-**Hyper / Hey** did not quiet down after last week’s mesh push — frost UI, delivered ticks, Hardware ELA on its own stack, Home deep links, talking-head and relay work. Source and sideload; no store tag. See §9.
+**Hyper / Hey** did not quiet down after last week’s mesh push — frost UI, delivered ticks, Hardware ELA on its own stack, Home deep links, talking-head and relay work — and Saturday–Monday kept going (invite deep links, idle-heat cuts, live-hop path labels). Source and sideload; no store tag. See §9.
 
 **PC2 stayed quiet on product** and let Runtime and the chain carry the cycle. See §11.
 
@@ -165,7 +165,7 @@ The privacy-reviewed Home journey workbook is published in the Runtime docs.
 
 ## 8. Marketplace — elacity-web 4.6.7
 
-**Shipped:** elacity-web **4.6.7** live on base.ela.city **4 September** (~27 commits in the window). drm-api **0.13.2** — no version bump, no new API tag. Default branch did not move. **[#22](https://github.com/Elacity/drm-api-layer/pull/22)** (stored index / list stock / `/view` access) is open; selected commits from that PR were operator-deployed without merging. ElacityLabsWeb, docker-arch, events-watcher, and the contract trees were quiet.
+**Shipped:** elacity-web **4.6.7** live on base.ela.city **4 September** (~27 commits in the window). drm-api **0.13.2** — no version bump, no new API tag. Default branch did not move. **[#22](https://github.com/Elacity/drm-api-layer/pull/22)** (stored index / list stock / `/view` access) is open; selected commits from that PR were operator-deployed without merging. Monday: a list-lookup crash when filters were absent closed on that same PR. ElacityLabsWeb, docker-arch, events-watcher, and the contract trees were quiet. Web itself had no weekend commits.
 
 What 4.6.7 is for operators and users on the **browse / wallet** surfaces (not a purchase reopen):
 
@@ -179,12 +179,13 @@ This is storefront hygiene on a **paused purchase path**. Soak 4.6.7; do not tre
 
 ## 9. Hyper / Hey — Mesh Week Continues
 
-**Shipped in source / sideload — not a store launch, no GitHub Release tag.** **~50** Hyper commits and **~79** Hey-engine commits in the window. Dependabot noise is open and not the story.
+**Shipped in source / sideload — not a store launch, no GitHub Release tag.** **63** Hyper commits and **103** Hey-engine commits across **29 August – 7 September**. Saturday–Monday added **13** Hyper and **24** Hey. Dependabot noise is open and not the story. Runtime, web, Node, and the private ESC / EID / Arbiter trees were quiet over the weekend.
 
-- **Chat face:** Frost wallpaper and incoming bubbles so text stays readable; quote-in-composer; delivered ticks that wait for ingest, not a stream ACK; mute stays in the thread; attachment percent that actually grows.
+- **Chat face:** Frost wallpaper and incoming bubbles so text stays readable; outgoing gold frost to match; quote-in-composer; delivered ticks that wait for ingest (one Hyper bolt; twin reserved for read); mute stays in the thread; attachment percent that actually grows; media caption stays on one bubble.
 - **Start / identity:** Sign up, Recovery, and More on start; App lock when the phone already has a PIN or biometric; Hardware ELA and Ledger on their own wallet stack, not mixed with the 12-word pile.
-- **Calls / video:** Incoming CallStyle while Hyper is open; talking-head encode that climbs with the hop; cell caps so LTE is not asked for desktop bitrate; 1:1 video ends when the link drops instead of freezing a last frame.
-- **Mesh:** Force-relay still honoured after restart; leftover dests cannot steal identity-dial from a live hop; Home launch tokens (`hyper:home:`) so a phone can link to one Home node without cloning a DID.
+- **Calls / video:** Incoming CallStyle while Hyper is open; talking-head encode that climbs with the hop; cell caps so LTE is not asked for desktop bitrate; 1:1 video ends when the link drops instead of freezing a last frame. Weekend: slim DM top bar — mute off the chrome, voice/video in one call menu.
+- **Mesh:** Force-relay still honoured after restart; leftover dests cannot steal identity-dial from a live hop; Home launch tokens (`hyper:home:`) so a phone can link to one Home node without cloning a DID. Weekend: custom-scheme invite deep links with Open by default; live-hop path labels so both sides of a relay pair agree; open 1:1 follows the waking sender instead of sticking to a stale chat id; prefer relay on VPN/overlay and recover wedged hops in seconds; peer-count badge counts live DM hops.
+- **Idle heat (weekend):** inbox warm coalesced; whoami off the UI thread; dead-ticket skip storm quieted; Home launch tokens parsed from the full href when the hash looks empty (and no throw in opaque Home iframes).
 - **Desktop / Play:** Play-shaped listing copy exists in tree; sideload still carries the full mesh. Not a store claim this week.
 
 ## 10. Essentials, Explorer, DAO
@@ -197,7 +198,7 @@ This is storefront hygiene on a **paused purchase path**. Soak 4.6.7; do not tre
 
 ## 11. PC2 — Quiet by Design
 
-`pc2.net` `main` this window — **eight** commits, all `docs(updates)` editorial polish on Weekly #35. **Zero** product commits, no PRs, no release. Operator line remains **v1.4.0**.
+`pc2.net` `main` this window — **ten** commits, all `docs(updates)`: eight editorial polish on Weekly #35, then Monday’s #36 publish. **Zero** product commits, no PRs, no release. Operator line remains **v1.4.0**.
 
 Convergence holds: PC2 consumes Runtime’s finished contracts. Those contracts are now tagged **v0.7.0**; 0.7.1 is the next reviewed slice. First seams remain the dDRM viewer path and marketplace buy/trade against Wallet-signed rights — after the storefront door is actually open.
 
@@ -226,7 +227,7 @@ Convergence holds: PC2 consumes Runtime’s finished contracts. Those contracts 
 | Assistant / Home Agent | Capsule on typed model contract · Shelf composer · **#55** | — |
 | Home / lock / first-run | Empty desktop · dock motion · lock face · **#54** | — |
 | Model / providers | Responses ≠ agent execution · installed-bin resolution | — |
-| Mesh / social | Home launch tokens from Hey | Hyper/Hey: frost, delivered ticks, Hardware ELA, relay (sideload) |
+| Mesh / social | Home launch tokens from Hey | Hyper/Hey: frost, delivered ticks, invite deep links, idle-heat cuts (sideload) |
 | Chain | — | ESC/EID **resumed** · PG **closed** · Halborn **underway** · Node **v1.2.4** · tip ~2,289,048 |
 | PC2 | — | Editorial only · **v1.4.0** |
 
@@ -243,18 +244,18 @@ Convergence holds: PC2 consumes Runtime’s finished contracts. Those contracts 
 
 ## 15. Summary Statistics
 
-**Week of** August 29 – September 4, 2026 (facts through 7 September scan).
+**Week of** August 29 – September 7, 2026 (last seven days through Monday).
 
 Runtime headline totals include two large merges (0.7-dev → `main`, and the protected-content UIUX reconstruction). Non-merge Runtime in the window: **82** commits · **+87,287 / −4,626** · **596** files.
 
 | Repo | Commits | Insertions | Deletions | Files |
 |---|---|---|---|---|
-| pc2.net | **8** (docs only) | 435 | 116 | 8 |
+| pc2.net | **10** (docs only) | — | — | #35 polish + #36 |
 | elastos-runtime (all-branch) | **87** | 500,279 | 55,084 | 1,987 |
-| elacity-web | **27** · shipped **4.6.7** | — | — | live 4 Sep |
-| drm-api-layer | **0** on default · **11** on **#22** | — | — | **0.13.2** · #22 open |
-| Hyper | **~50** | — | — | sideload / source |
-| Hey-engine | **~79** | — | — | mesh / DM / Home link |
+| elacity-web | **27** · shipped **4.6.7** | — | — | live 4 Sep · quiet after |
+| drm-api-layer | **0** on default · **12** on **#22** | — | — | **0.13.2** · #22 open |
+| Hyper | **63** (13 Sat–Mon) | — | — | sideload / source |
+| Hey-engine | **103** (24 Sat–Mon) | — | — | mesh / DM / Home link |
 | ESC / EID / Arbiter (private) | **4 / 4 / 2** | — | — | not public GitHub |
 | Elastos.Node | release **v1.2.4** | — | — | public toolkit |
 
@@ -264,7 +265,7 @@ Runtime headline totals include two large merges (0.7-dev → `main`, and the pr
 
 **Releases.** Runtime **[v0.7.0](https://github.com/Elacity/elastos-runtime/releases/tag/v0.7.0)** (1 Sep). Node **[v1.2.4](https://github.com/elastos/Elastos.Node/releases/tag/v1.2.4)** (31 Aug). Marketplace web **4.6.7**. PC2 still **v1.4.0**.
 
-**People (workstream lens):** Anders Alm — 0.7.1 Home Agent capsule, Shelf composer, URUX, protected-content listings, CI · Irzhy Ranaivoarivony — 0.7.0 tag/CI, installed custody / e2e proof, marketplace security follow-up (operational) · SashaMIT — Weekly #35, marketplace **4.6.7**, Hyper/Hey mesh · Infinity — Essentials local overhaul, explorer maintenance, sidechain resume ops · chain resume / Halborn coordination.
+**People (workstream lens):** Anders Alm — 0.7.1 Home Agent capsule, Shelf composer, URUX, protected-content listings, CI · Irzhy Ranaivoarivony — 0.7.0 tag/CI, installed custody / e2e proof, marketplace security follow-up (operational) · SashaMIT — Weekly #35/#36, marketplace **4.6.7** · Hyper/Hey mesh (incl. weekend) — EverlastinOS · Infinity — Essentials local overhaul, explorer maintenance, sidechain resume ops · chain resume / Halborn coordination.
 
 ## 16. Notes
 
@@ -289,7 +290,7 @@ Runtime headline totals include two large merges (0.7-dev → `main`, and the pr
 | Home Agent | Capsule + Shelf composer · **#55** |
 | Home URUX | Empty first-run · dock · lock · **#54** |
 | Marketplace | web **4.6.7** · drm **0.13.2** · purchase **paused** |
-| Hyper / Hey | Mesh week continued · sideload / source · no tag |
+| Hyper / Hey | **63 / 103** · weekend invite links + idle heat · sideload · no tag |
 | Halborn | ELA **v1.0.3** · **underway** |
 | Mainchain / ESC | Online · ESC/EID **resumed 1 Sep** · PG **closed** · tip ~**2,289,048** |
 | Node | **[v1.2.4](https://github.com/elastos/Elastos.Node/releases/tag/v1.2.4)** |
@@ -297,4 +298,4 @@ Runtime headline totals include two large merges (0.7-dev → `main`, and the pr
 
 ---
 
-*Cadence: weekly updates. Previous report — [Week of August 22 – August 28, 2026 (#35)](https://github.com/Elacity/pc2.net/discussions/35). This report — [#36](https://github.com/Elacity/pc2.net/discussions/36).*
+*Cadence: weekly updates. Previous report — [Week of August 22 – August 28, 2026 (#35)](https://github.com/Elacity/pc2.net/discussions/35). This report — [#36](https://github.com/Elacity/pc2.net/discussions/36) (29 August – 7 September).*

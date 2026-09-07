@@ -16,7 +16,7 @@ Elacity Labs — Weekly Team Update for the World Computer Initiative (WCI)
 - **This discussion** — [#36](https://github.com/Elacity/pc2.net/discussions/36)
 - **Elastos status** — [Sidechains resume (1 Sep)](https://blog.elastos.net/announcement/elastos-sidechains-resume-after-full-stack-audit/) · [Mainchain postmortem (August)](https://blog.elastos.net/announcement/main-chain-postmortem-august/) · [honest recovery log](https://github.com/Elacity/pc2.net/blob/main/docs/updates/Elastos_ELA_Mainnet_Recovery_Honest_Log_2026-07.md)
 - **Runtime** — [Elacity/elastos-runtime](https://github.com/Elacity/elastos-runtime) · **[v0.7.0](https://github.com/Elacity/elastos-runtime/releases/tag/v0.7.0)** · **[#38](https://github.com/Elacity/elastos-runtime/pull/38)** / **[#39](https://github.com/Elacity/elastos-runtime/pull/39)** merged · 0.7.1 **[#51](https://github.com/Elacity/elastos-runtime/pull/51)** · Home Agent **[#55](https://github.com/Elacity/elastos-runtime/pull/55)** · Home URUX **[#54](https://github.com/Elacity/elastos-runtime/pull/54)** · custody provisioning **[#52](https://github.com/Elacity/elastos-runtime/pull/52)**
-- **Marketplace** — elacity-web **4.6.7** · drm-api **0.13.2** (no new API tag this window)
+- **Marketplace** — elacity-web **4.6.7** · drm-api **0.13.2** · API **[#22](https://github.com/Elacity/drm-api-layer/pull/22)** open (selected operator deploys, default branch unmoved)
 - **Install (PC2 node)** — `bash <(curl -fsSL https://raw.githubusercontent.com/Elacity/pc2.net/main/scripts/update.sh)`
 - **Install (Runtime)** — `curl -fsSL https://elastos.elacitylabs.com/install.sh | bash`
 - **Live surfaces** — map.ela.city · portal.ela.city · base.ela.city · blockchain.elastos.io · elacitylabs.com · elacitylabs.com/provenance
@@ -54,7 +54,7 @@ Two public doors moved this cycle: the Runtime release, and the sidechains.
 
 **Chain doors.** Official 1 September: ESC and EID are producing; main ↔ sidechain transfers are open. PG cross-chain ELA stays off. Halborn continues on mainchain **v1.0.3**. The ela.city storefront is a separate door — purchase / subscribe / mint stay paused. See §2.
 
-**Marketplace kept shipping.** elacity-web **4.6.7** is live: atomic batching, faster reads, post-tx freshness, earnings and sidebar honesty. drm-api stayed on **0.13.2**. See §8.
+**Marketplace kept shipping.** elacity-web **4.6.7** is live: atomic batching, faster reads, post-tx freshness, earnings and sidebar honesty. drm-api stayed at **0.13.2** on the default branch; **[#22](https://github.com/Elacity/drm-api-layer/pull/22)** is the unmerged API line, with selected SHAs already on the operator deploy. See §8.
 
 **Hyper / Hey** did not quiet down after last week’s mesh push — frost UI, delivered ticks, Hardware ELA on its own stack, Home deep links, talking-head and relay work. Source and sideload; no store tag. See §9.
 
@@ -124,7 +124,9 @@ The 0.7 contract stack defined the shape. This cycle proved a path and started i
 
 **Portable / imported listings.** Runtime can ingest chain-bound custody listings it did not originate, open them, and transact against the imported half. It can also publish portable listings another Runtime can import. Buyer-side rights authentication closed a gap on the cross-Runtime buy. A lost mint-completion marker now adopts the finished work instead of re-minting (**[#43](https://github.com/Elacity/elastos-runtime/pull/43)**).
 
-**Installed provisioning.** Custody and chain prerequisites are declared up front as installed provider dependencies, with a verification path on that same provider — not an ad-hoc setup script. **[#52](https://github.com/Elacity/elastos-runtime/pull/52)** is the 0.7.1 review surface. A three-node custody harness and an installed e2e proof driver (fail-closed receipts, CI smoke) are on the 0.7.1 line; that is how the next release gate will be asked to believe the journey, not a laptop demo.
+**Installed provisioning.** Custody and chain prerequisites are declared up front as installed provider dependencies, with a verification path on that same provider — not an ad-hoc setup script. **[#52](https://github.com/Elacity/elastos-runtime/pull/52)** is the 0.7.1 review surface. A three-node custody harness and an installed e2e proof driver (fail-closed receipts, CI smoke) are on that line — how the next release gate will be asked to believe the journey, not a laptop demo.
+
+**Installed acceptance is still open.** Issues **[#44](https://github.com/Elacity/elastos-runtime/issues/44)–[#47](https://github.com/Elacity/elastos-runtime/issues/47)** (provision, installed e2e, cutover, one-Runtime mint → buy → play) are unchecked on **[#51](https://github.com/Elacity/elastos-runtime/pull/51)**. What landed on `main` is the **source / test-lane** proof. A local `feat/0.7.1-integration` branch stacks later work and has **no PR**.
 
 This is still **engineering on the 0.7.1 candidate**, not a consumer “mint → buy → play from the storefront” claim. The storefront pause in §2 is a separate door.
 
@@ -163,7 +165,7 @@ The privacy-reviewed Home journey workbook is published in the Runtime docs.
 
 ## 8. Marketplace — elacity-web 4.6.7
 
-**Shipped:** elacity-web **4.6.7** live on base.ela.city **4 September** (~27 commits in the window). drm-api **0.13.2** — no new API tag this cycle.
+**Shipped:** elacity-web **4.6.7** live on base.ela.city **4 September** (~27 commits in the window). drm-api **0.13.2** — no version bump, no new API tag. Default branch did not move. **[#22](https://github.com/Elacity/drm-api-layer/pull/22)** (stored index / list stock / `/view` access) is open; selected commits from that PR were operator-deployed without merging. ElacityLabsWeb, docker-arch, events-watcher, and the contract trees were quiet.
 
 What 4.6.7 is for operators and users on the **browse / wallet** surfaces (not a purchase reopen):
 
@@ -208,7 +210,7 @@ Convergence holds: PC2 consumes Runtime’s finished contracts. Those contracts 
 | Merged this cycle | **#38** → `main` · **#39** → 0.7-dev · **#27** collaboration · **#43** mint-adopt |
 | Active Runtime reviews | 0.7.1 **#51** · Home Agent **#55** · Home URUX **#54** · custody **#52** · dKMS **#15** · gba **#26** · logger **#25** · model **#17** |
 | CI | Staged pipeline · shared build artifacts · deterministic test stages · wallet-provider pin |
-| Marketplace | web **4.6.7** live · drm **0.13.2** (no new tag) |
+| Marketplace | web **4.6.7** live · drm **0.13.2** · **#22** open (partial deploy) |
 | PC2 | No new tags · latest **v1.4.0** · quiet |
 | Elastos.Node | **[v1.2.4](https://github.com/elastos/Elastos.Node/releases/tag/v1.2.4)** (31 Aug) |
 | Mainchain third-party review | Halborn · v1.0.3 · **underway** |
@@ -250,7 +252,7 @@ Runtime headline totals include two large merges (0.7-dev → `main`, and the pr
 | pc2.net | **8** (docs only) | 435 | 116 | 8 |
 | elastos-runtime (all-branch) | **87** | 500,279 | 55,084 | 1,987 |
 | elacity-web | **27** · shipped **4.6.7** | — | — | live 4 Sep |
-| drm-api-layer | **0** this window | — | — | HEAD **0.13.2** |
+| drm-api-layer | **0** on default · **11** on **#22** | — | — | **0.13.2** · #22 open |
 | Hyper | **~50** | — | — | sideload / source |
 | Hey-engine | **~79** | — | — | mesh / DM / Home link |
 | ESC / EID / Arbiter (private) | **4 / 4 / 2** | — | — | not public GitHub |
@@ -258,7 +260,7 @@ Runtime headline totals include two large merges (0.7-dev → `main`, and the pr
 
 **Runtime authors (non-merge):** Anders Alm **48** · SashaMIT **21** · Irzhy Ranaivoarivony **13**.
 
-**Runtime PRs.** Merged: **#38** → `main`, **#39** → 0.7-dev, **#27**, **#43**. Opened / active 0.7.1: **#51**, **#52**, **#54**, **#55**. Still open from prior: **#15**, **#17**, **#25**, **#26**.
+**Runtime PRs.** Merged: **#38** → `main`, **#39** → 0.7-dev, **#27**, **#43**. Opened / active 0.7.1: **#51**, **#52**, **#54**, **#55**. Installed-acceptance issues **#44–#47** still open. Still open from prior: **#15**, **#17**, **#25**, **#26**.
 
 **Releases.** Runtime **[v0.7.0](https://github.com/Elacity/elastos-runtime/releases/tag/v0.7.0)** (1 Sep). Node **[v1.2.4](https://github.com/elastos/Elastos.Node/releases/tag/v1.2.4)** (31 Aug). Marketplace web **4.6.7**. PC2 still **v1.4.0**.
 

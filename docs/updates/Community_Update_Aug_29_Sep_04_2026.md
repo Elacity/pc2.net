@@ -2,11 +2,11 @@ Elacity Labs — Weekly Team Update for the World Computer Initiative (WCI)
 
 **August 29 – September 7, 2026**
 
-**ElastOS Runtime [v0.7.0](https://github.com/Elacity/elastos-runtime/releases/tag/v0.7.0) tagged on `main` this window** (1 September · tip `8ac18bec`). The line did not stop: **0.7.1** is already in review — two-Runtime protected-content proof, installed custody provisioning, Home Agent as its own capsule, first-run empty desktop. **ESC and EID resumed 1 September**; cross-chain transfers with the main chain are open again ([official announcement](https://blog.elastos.net/announcement/elastos-sidechains-resume-after-full-stack-audit/)). Marketplace cut **elacity-web 4.6.7** (live on base.ela.city 4 September). Hyper/Hey kept the mesh week going through the weekend. **Halborn** Secure Code Review of mainchain **v1.0.3** is still underway. Operator toolkit **Elastos.Node v1.2.4**. PC2 product-quiet. ELA tip ~**2,289,048**.
+**ElastOS Runtime [v0.7.0](https://github.com/Elacity/elastos-runtime/releases/tag/v0.7.0) tagged on `main` this window** (1 September · tip `8ac18bec`). The line did not stop: **0.7.1** is already in review — two-Runtime protected-content proof, installed custody provisioning, Home Agent as its own capsule, first-run empty desktop. **ESC and EID resumed 1 September**; cross-chain transfers with the main chain are open again ([official announcement](https://blog.elastos.net/announcement/elastos-sidechains-resume-after-full-stack-audit/)). Marketplace cut **elacity-web 4.6.7** (4 September). Hyper/Hey kept the mesh week going through the weekend. **Halborn** Secure Code Review of mainchain **v1.0.3** is still underway. Operator toolkit **Elastos.Node v1.2.4**. PC2 product-quiet. ELA tip ~**2,289,048**.
 
-**Chain status:** mainchain producing under BPoS. ESC and EID are producing again; main ↔ ESC / EID transfers are open. **PG / PGP cross-chain ELA stays disabled.** Halborn’s independent review of pending **v1.0.3** continues (Elastos.ELA only this round). **ela.city purchase, subscribe, and mint flows remain paused** pending a marketplace security follow-up — the sidechain resume is not a storefront reopen. Exchanges that froze ESC / EID deposits should contact the Elastos DAO before reopening. [Sidechains resume](https://blog.elastos.net/announcement/elastos-sidechains-resume-after-full-stack-audit/) · [Mainchain postmortem](https://blog.elastos.net/announcement/main-chain-postmortem-august/).
+**Chain status:** mainchain producing under BPoS. ESC and EID are producing again; main ↔ ESC / EID transfers are open. **PG / PGP cross-chain ELA stays disabled.** Halborn’s independent review of pending **v1.0.3** continues (Elastos.ELA only this round). Exchanges that froze ESC / EID deposits should contact the Elastos DAO before reopening. [Sidechains resume](https://blog.elastos.net/announcement/elastos-sidechains-resume-after-full-stack-audit/) · [Mainchain postmortem](https://blog.elastos.net/announcement/main-chain-postmortem-august/).
 
-> **Runtime [v0.7.0](https://github.com/Elacity/elastos-runtime/releases/tag/v0.7.0) released** · **0.7.1** in flight · ESC/EID **resumed** · marketplace **4.6.7** · Hyper/Hey mesh through the weekend · **Halborn underway** · storefront **paused** · PC2 quiet.
+> **Runtime [v0.7.0](https://github.com/Elacity/elastos-runtime/releases/tag/v0.7.0) released** · **0.7.1** in flight · ESC/EID **resumed** · marketplace **4.6.7** · Hyper/Hey mesh through the weekend · **Halborn underway** · PC2 quiet.
 
 ---
 
@@ -19,7 +19,7 @@ Elacity Labs — Weekly Team Update for the World Computer Initiative (WCI)
 - **Marketplace** — elacity-web **4.6.7** · drm-api **0.13.2** · API **[#22](https://github.com/Elacity/drm-api-layer/pull/22)** open (selected operator deploys, default branch unmoved)
 - **Install (PC2 node)** — `bash <(curl -fsSL https://raw.githubusercontent.com/Elacity/pc2.net/main/scripts/update.sh)`
 - **Install (Runtime)** — `curl -fsSL https://elastos.elacitylabs.com/install.sh | bash`
-- **Live surfaces** — map.ela.city · portal.ela.city · base.ela.city · blockchain.elastos.io · elacitylabs.com · elacitylabs.com/provenance
+- **Live surfaces** — map.ela.city · portal.ela.city · blockchain.elastos.io · elacitylabs.com · elacitylabs.com/provenance
 
 ## Table of Contents
 
@@ -52,7 +52,7 @@ Two public doors moved this cycle: the Runtime release, and the sidechains.
 
 **Home grew an Agent seam.** The Shelf is a live composer that opens Agent Space. The harness is its own capsule on the typed model contract that shipped in 0.7 — same install and gate shape as every other Runtime capsule. First-run now seeds an empty desktop and pins Marketplace. See §5–§6.
 
-**Chain doors.** Official 1 September: ESC and EID are producing; main ↔ sidechain transfers are open. PG cross-chain ELA stays off. Halborn continues on mainchain **v1.0.3**. The ela.city storefront is a separate door — purchase / subscribe / mint stay paused. See §2.
+**Chain doors.** Official 1 September: ESC and EID are producing; main ↔ sidechain transfers are open. PG cross-chain ELA stays off. Halborn continues on mainchain **v1.0.3**. See §2.
 
 **Marketplace kept shipping.** elacity-web **4.6.7** is live: atomic batching, faster reads, post-tx freshness, earnings and sidebar honesty. drm-api stayed at **0.13.2** on the default branch; **[#22](https://github.com/Elacity/drm-api-layer/pull/22)** is the unmerged API line, with selected SHAs already on the operator deploy. See §8.
 
@@ -73,7 +73,6 @@ Two public doors moved this cycle: the Runtime release, and the sidechains.
 | **ESC / EID** | **Resumed 1 September** — producing blocks |
 | **Main ↔ ESC / EID** | **Open** — deposits checked against the main-chain record before credit |
 | **PG / PGP ↔ main** | **Disabled** — do not submit cross-chain ELA on PG |
-| **ela.city storefront** | **Purchase / subscribe / mint paused** — not a storefront reopen |
 | **Exchanges / custodians** | Contact the Elastos DAO before reopening ESC / EID deposits or withdrawals |
 | **CRC Incident Recovery (KuCoin flow)** | **Complete** — if you were affected and have not heard from KuCoin, contact their support. Separate exchange follow-up remains in proper channels. |
 
@@ -98,10 +97,6 @@ Halborn’s Secure Code Review of pending mainchain **v1.0.3** is still underway
 ### Private trees
 
 Public GitHub for ESC / EID / Arbiter did not reopen. A small private follow-through landed around the resume line (high-level process counts only). Nothing from those trees is a public source drop.
-
-### Storefront pause
-
-ela.city purchase, subscribe, and mint stay **paused** while a marketplace security follow-up completes. That is independent of ESC producing blocks. Do not send funds into those flows until we say they are open. Browse and existing holdings are a different question than opening a new purchase.
 
 ## 3. Runtime v0.7.0 — Tag, Merge, Release Matrix
 
@@ -128,7 +123,7 @@ The 0.7 contract stack defined the shape. This cycle proved a path and started i
 
 **Installed acceptance is still open.** Issues **[#44](https://github.com/Elacity/elastos-runtime/issues/44)–[#47](https://github.com/Elacity/elastos-runtime/issues/47)** (provision, installed e2e, cutover, one-Runtime mint → buy → play) are unchecked on **[#51](https://github.com/Elacity/elastos-runtime/pull/51)**. What landed on `main` is the **source / test-lane** proof. A local `feat/0.7.1-integration` branch stacks later work and has **no PR**.
 
-This is still **engineering on the 0.7.1 candidate**, not a consumer “mint → buy → play from the storefront” claim. The storefront pause in §2 is a separate door.
+This is still **engineering on the 0.7.1 candidate**, not a consumer “mint → buy → play” claim.
 
 ## 5. Home Agent Capsule — Shelf Becomes the Composer
 
@@ -165,9 +160,9 @@ The privacy-reviewed Home journey workbook is published in the Runtime docs.
 
 ## 8. Marketplace — elacity-web 4.6.7
 
-**Shipped:** elacity-web **4.6.7** live on base.ela.city **4 September** (~27 commits in the window). drm-api **0.13.2** — no version bump, no new API tag. Default branch did not move. **[#22](https://github.com/Elacity/drm-api-layer/pull/22)** (stored index / list stock / `/view` access) is open; selected commits from that PR were operator-deployed without merging. Monday: a list-lookup crash when filters were absent closed on that same PR. ElacityLabsWeb, docker-arch, events-watcher, and the contract trees were quiet. Web itself had no weekend commits.
+**Shipped:** elacity-web **4.6.7** on **4 September** (~27 commits in the window). drm-api **0.13.2** — no version bump, no new API tag. Default branch did not move. **[#22](https://github.com/Elacity/drm-api-layer/pull/22)** (stored index / list stock / `/view` access) is open; selected commits from that PR were operator-deployed without merging. Monday: a list-lookup crash when filters were absent closed on that same PR. ElacityLabsWeb, docker-arch, events-watcher, and the contract trees were quiet. Web itself had no weekend commits.
 
-What 4.6.7 is for operators and users on the **browse / wallet** surfaces (not a purchase reopen):
+What 4.6.7 is on the browse / wallet / earnings paths:
 
 - **EIP-5792** atomic batching with simulation preflight, plus exact-amount approvals on the remaining sequential path.
 - **Alchemy** as the baked read provider — fewer public-RPC misses on grids and balances.
@@ -175,7 +170,7 @@ What 4.6.7 is for operators and users on the **browse / wallet** surfaces (not a
 - **Earnings / sidebar:** phantom reward rows swept against chain on load; unclaimed totals from a cheap aggregate, not fat item lists; channel badges and subscription expiry on the name line; notification badge no longer inflated by stale earnings snapshots.
 - **View chrome:** null-item transform guard, channel avatar fallback, IPFS double-stack salvage.
 
-This is storefront hygiene on a **paused purchase path**. Soak 4.6.7; do not treat it as “buy is back.”
+Soak **4.6.7** on those paths. Continue **#22**.
 
 ## 9. Hyper / Hey — Mesh Week Continues
 
@@ -200,7 +195,7 @@ This is storefront hygiene on a **paused purchase path**. Soak 4.6.7; do not tre
 
 `pc2.net` `main` this window — **ten** commits, all `docs(updates)`: eight editorial polish on Weekly #35, then Monday’s #36 publish. **Zero** product commits, no PRs, no release. Operator line remains **v1.4.0**.
 
-Convergence holds: PC2 consumes Runtime’s finished contracts. Those contracts are now tagged **v0.7.0**; 0.7.1 is the next reviewed slice. First seams remain the dDRM viewer path and marketplace buy/trade against Wallet-signed rights — after the storefront door is actually open.
+Convergence holds: PC2 consumes Runtime’s finished contracts. Those contracts are now tagged **v0.7.0**; 0.7.1 is the next reviewed slice. First seams remain the dDRM viewer path and marketplace buy/trade against Wallet-signed rights.
 
 ## 12. Release Engineering
 
@@ -216,14 +211,13 @@ Convergence holds: PC2 consumes Runtime’s finished contracts. Those contracts 
 | Elastos.Node | **[v1.2.4](https://github.com/elastos/Elastos.Node/releases/tag/v1.2.4)** (31 Aug) |
 | Mainchain third-party review | Halborn · v1.0.3 · **underway** |
 | ESC / EID | **Resumed 1 Sep** · PG cross-chain **still closed** |
-| Storefront | Purchase / mint **paused** |
 
 ## 13. Convergence Lens
 
 | Theme | Runtime (this week) | Marketplace / Hyper / PC2 / chain |
 |---|---|---|
-| Protected-content | Two-Runtime proof · import/buy/open/publish · installed provisioning · **#52** | Storefront purchase **paused** · 4.6.7 browse/wallet hygiene |
-| mint → sell → buy → play | Proven on two Runtimes in test · 0.7.1 closeout still open | Not a consumer storefront claim |
+| Protected-content | Two-Runtime proof · import/buy/open/publish · installed provisioning · **#52** | **4.6.7** browse / wallet / earnings · drm **#22** |
+| mint → sell → buy → play | Proven on two Runtimes in test · 0.7.1 closeout still open | Marketplace path work in **4.6.7** / **#22** |
 | Assistant / Home Agent | Capsule on typed model contract · Shelf composer · **#55** | — |
 | Home / lock / first-run | Empty desktop · dock motion · lock face · **#54** | — |
 | Model / providers | Responses ≠ agent execution · installed-bin resolution | — |
@@ -237,7 +231,7 @@ Convergence holds: PC2 consumes Runtime’s finished contracts. Those contracts 
 2. **ElastOS v2** on the **v0.7.0** foundation — protected-content, Home Agent, Wallet, marketplace path.
 3. **Model delivery plan** → shipped provider behaviour (native default, remote fallback, delegated evaluation).
 4. **Halborn** — community-safe update when there is a certificate or a scoped public fact.
-5. **Storefront** stays paused until the marketplace security follow-up is done. Soak **4.6.7** on browse / wallet.
+5. Soak **4.6.7**. Merge or keep deploying **#22** (stored index / list stock / `/view`).
 6. **PG** cross-chain stays closed until that team’s review lands with the DAO.
 7. **ESC reserve credit** (~1.58 million ELA from frozen main-chain funds) — publish when the on-chain record exists.
 8. **PC2** — quiet unless operator-critical; first reviewed 0.7 piece into the node build when the inventory says so.
@@ -265,13 +259,12 @@ Runtime headline totals include two large merges (0.7-dev → `main`, and the pr
 
 **Releases.** Runtime **[v0.7.0](https://github.com/Elacity/elastos-runtime/releases/tag/v0.7.0)** (1 Sep). Node **[v1.2.4](https://github.com/elastos/Elastos.Node/releases/tag/v1.2.4)** (31 Aug). Marketplace web **4.6.7**. PC2 still **v1.4.0**.
 
-**People (workstream lens):** Anders Alm — 0.7.1 Home Agent capsule, Shelf composer, URUX, protected-content listings, CI · Irzhy Ranaivoarivony — 0.7.0 tag/CI, installed custody / e2e proof, marketplace security follow-up (operational) · SashaMIT — Weekly #35/#36, marketplace **4.6.7** · Hyper/Hey mesh (incl. weekend) — EverlastinOS · Infinity — Essentials local overhaul, explorer maintenance, sidechain resume ops · chain resume / Halborn coordination.
+**People (workstream lens):** Anders Alm — 0.7.1 Home Agent capsule, Shelf composer, URUX, protected-content listings, CI · Irzhy Ranaivoarivony — 0.7.0 tag/CI, installed custody / e2e proof · SashaMIT — Weekly #35/#36, marketplace **4.6.7** · Hyper/Hey mesh (incl. weekend) — EverlastinOS · Infinity — Essentials local overhaul, explorer maintenance, sidechain resume ops · chain resume / Halborn coordination.
 
 ## 16. Notes
 
-- **Chain recovery internals** stay out (registers, recipes, unpublished trees, live council-node detail). The 1 September resume post, Halborn status, KuCoin CRC completion, and the storefront pause are the community-safe facts this week.
-- **Marketplace security follow-up** is not a finding dump. Pause is the public fact. Do not treat ESC producing as “buy is open.”
-- **Protected-content** is tagged in **v0.7.0** and being proved on **0.7.1**. Not a consumer storefront claim.
+- **Chain recovery internals** stay out (registers, recipes, unpublished trees, live council-node detail). The 1 September resume post, Halborn status, and KuCoin CRC completion are the community-safe facts this week.
+- **Protected-content** is tagged in **v0.7.0** and being proved on **0.7.1**. Not a consumer product claim.
 - **Home Agent** is the capsule seam, not a shipped consumer assistant.
 - **Hyper / Hey** are source + sideload this week, not a store launch.
 - **Essentials** remains local; no store claim.
@@ -289,7 +282,7 @@ Runtime headline totals include two large merges (0.7-dev → `main`, and the pr
 | Protected-content | Two-Runtime proof · installed provisioning · **#51 / #52** |
 | Home Agent | Capsule + Shelf composer · **#55** |
 | Home URUX | Empty first-run · dock · lock · **#54** |
-| Marketplace | web **4.6.7** · drm **0.13.2** · purchase **paused** |
+| Marketplace | web **4.6.7** · drm **0.13.2** · **#22** |
 | Hyper / Hey | **63 / 103** · weekend invite links + idle heat · sideload · no tag |
 | Halborn | ELA **v1.0.3** · **underway** |
 | Mainchain / ESC | Online · ESC/EID **resumed 1 Sep** · PG **closed** · tip ~**2,289,048** |

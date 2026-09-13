@@ -24,7 +24,7 @@ Elacity Labs — Weekly Team Update for the World Computer Initiative (WCI)
 
 1. The Big Picture — 0.7.1 Integration, Two Tracks
 2. Elastos Status — ESC / EID Open, Halborn Underway
-3. Runtime — #58 Merged, #64 Is the Review Head
+3. Runtime — PR 58 Merged, PR 64 Is the Review Head
 4. Protected Content — Runtime-Owned Authority, Non-Media Objects
 5. Home — Storefront, Canonical Entry, One-Command Install (Source)
 6. Auth, Passkey, Recovery
@@ -76,7 +76,7 @@ Long form: [Sidechains resume (1 Sep)](https://blog.elastos.net/announcement/ela
 
 No new public blog this window. Operator toolkit remains **[Elastos.Node v1.2.4](https://github.com/elastos/Elastos.Node/releases/tag/v1.2.4)**. Private ESC / EID / Arbiter / ELA trees were quiet. Public GitHub for those sidechain trees did not reopen.
 
-## 3. Runtime — #58 Merged, #64 Is the Review Head
+## 3. Runtime — PR 58 Merged, PR 64 Is the Review Head
 
 **`main` did not move.** Tip is still `8ac18bec` · **[v0.7.0](https://github.com/Elacity/elastos-runtime/releases/tag/v0.7.0)**. There is **no v0.7.1 tag**.
 

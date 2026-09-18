@@ -50,7 +50,7 @@ Elacity Labs — Weekly Team Update for the World Computer Initiative (WCI)
 
 **Rail two — models, publisher, Assistant (Anders).** A signed two-entry catalogue (SmolLM2 + Qwen) installs into managed Home. Publisher promotes the release head last, from verified staging. The installer probes the staged binary and stages the catalogue before replacing anything. A fresh Mac install completed Get → Assistant → restart → reuse. Remote Qwen from Linux seed through Mac is recorded. Browser recovery advanced, then paused so model delivery could close. **[PR 64](https://github.com/Elacity/elastos-runtime/pull/64)** did not move. **[PR 65](https://github.com/Elacity/elastos-runtime/pull/65)** / **[PR 66](https://github.com/Elacity/elastos-runtime/pull/66)** opened. See §5–§6.
 
-**Marketplace.** First-pass Runtime-only drafts missed this. Web **~29** commits: one-click mint, shop create/index, cinema orderbook, sign-on-play, subscriptions, revenue honesty, and the upload job UI (live checkpoints, ETA, stall / Retry). drm-api **~18** commits: metadata race, TransferBatch quantities, channel indexing, comments/ratings, IPFS provider count. **transcoder-gcloud 6** on the encode branches: parallel renditions, fewer Cloud Run startups, a shorter ladder on small sources, leftover deploy triggers removed. Versions unchanged (**4.6.8** / **0.13.2**). See §7.
+**Marketplace.** First-pass Runtime-only drafts missed this. Web **~29** commits on the one live branch (~19 product, ~10 verification notes). drm-api **~18**. **transcoder-gcloud 6**. Elastos.org rebuild **3** on `website-rebuild-2026` (not the live default). **elacitylabs.com** quiet. See §7.
 
 **Not this week’s invention:** Runtime-owned authority cutover, storefront + canonical Home in source, kit-first passkey, unified Assistant as a *first* Mac reply — those were #37. This week is the **signed-model journey** and **protection past video**. A lot of the week was also small setup / recovery / flow-fit work that does not show up as a headline commit.
 
@@ -129,7 +129,9 @@ Versions did not bump. The **paths** did — including the GCloud encode plane t
 
 On the Cloud Run jobs themselves (**transcoder-gcloud**, 6 commits on the encode / ladder branches): renditions transcode in parallel instead of one-after-another; the small-file encode path dropped from six sequential job starts to three, and one ~90s startup floor came out of every encode branch; low-bitrate sources no longer get a full 4–5 rung ladder they cannot use. Leftover Cloud Build triggers that could still push an old API image were deleted — the live path is the Elacity drm-api GitHub Action on a green merge, then the VM image update.
 
-**elacity-web (~29 commits, still 4.6.8).** One-click mint skips a redundant approval on upgraded factories and never navigates to `/view/.../undefined`. Shop create redirects into the new shop; owner badge holds across wallet modes; channel→shop copy; directory sort. Cinema: sell-tab parity with Buy, Max quantity, orderbook tab for access-token listings (own rows highlighted, manage / delist from the table). Player: sign-on-play — the license prompt waits for play, lock states tell the truth. Subscribe no longer crashes the empty modal, and the asset lock flips to play without a refresh. Subscriptions: expired renewals in Manage, sidebar countdown. Revenue: unclaimed-rewards flicker gone; asset-only volume labeled honestly. Properties shows a live IPFS pin-provider count. Placeholders use the Elacity mark. Nav / activity / filter edges (hover-intent, load-more, drawer types) were cleaned in the same cut.
+**elacity-web (~29 commits, still 4.6.8).** That is the full marketplace set this window — no other web branch moved. About ten of the 29 are live-path verification notes (mint, shop index, money legs, deploys), not extra product. The product commits: one-click mint skips a redundant approval on upgraded factories and never navigates to `/view/.../undefined`. Shop create redirects into the new shop; owner badge holds across wallet modes; channel→shop copy; directory sort. Cinema: sell-tab parity with Buy, Max quantity, orderbook tab for access-token listings (own rows highlighted, manage / delist from the table). Player: sign-on-play — the license prompt waits for play, lock states tell the truth. Subscribe no longer crashes the empty modal, and the asset lock flips to play without a refresh. Subscriptions: expired renewals in Manage, sidebar countdown. Revenue: unclaimed-rewards flicker gone; asset-only volume labeled honestly. Properties shows a live IPFS pin-provider count. Placeholders use the Elacity mark. Nav / activity / filter edges (hover-intent, load-more, drawer types) were cleaned in the same cut. **elacitylabs.com** (ElacityLabsWeb) had **no** commits this window.
+
+**Elastos.org rebuild (3 commits, `website-rebuild-2026` — not the live default).** Homepage / Build / About polish: stack diagrams, merge-miner identity, live hashrate history, DAO council graphic, quieter Elacity carousel, mobile layouts and CTA consistency. Branch backup of the current pass — not a claim that the production site flipped.
 
 **drm-api (~18 commits, still 0.13.2).** **[PR 23](https://github.com/Elacity/drm-api-layer/pull/23)–[PR 26](https://github.com/Elacity/drm-api-layer/pull/26)** merged: v3 shop banner indexing, owner-badge / `byAddress` fallback, CI image build on green merge, metadata insert-race (don’t discard a fetched document). Also: TransferBatch quantities on a single-event transport; `tokenURI` shapes normalised; thumbnail failure must not block channel index; subscription includeExpired; comment star ratings + in-place owner rate; IPFS provider-count endpoint.
 
@@ -228,7 +230,9 @@ This is a **map**, not a bridge, not a date, and not a community action. Do not 
 |---|---|---|
 | pc2.net | **0** | Quiet |
 | elastos-runtime | **~20** unique on the two rails (follow-up 9 · remote-services cluster 11+) | No merge to `main` · first-pass ~+106,624 / −3,282 / 328 file-touches |
-| elacity-web | **~29** | still **4.6.8** · pipeline job UI + shop/cinema/mint |
+| elacity-web | **~29** | still **4.6.8** · ~19 product · ~10 verification notes |
+| ElacityLabsWeb | **0** | last push 21 August |
+| elastos (`website-rebuild-2026`) | **3** | homepage / Build / About · hashrate · Elacity carousel · **not** live default |
 | drm-api-layer | **~18** | still **0.13.2** · **PR 23–26** merged |
 | transcoder-gcloud | **6** | encode / ladder branches · parallel transcode · fewer job starts |
 | lit-keystore-moleculer | **2** | image payloads + CI matrix |
@@ -239,7 +243,7 @@ This is a **map**, not a bridge, not a date, and not a community action. Do not 
 
 **Runtime authors:** Anders Alm — installer, catalogue, Assistant, Browser, publisher · Irzhy Ranaivoarivony — protected-content follow-up, wallet re-ask.
 
-**Marketplace / pipeline:** SashaMIT — elacity-web shop/cinema/mint + upload job UI · drm-api · GCloud encode / transcode · keystore deploy hygiene.
+**Marketplace / pipeline:** SashaMIT — elacity-web shop/cinema/mint + upload job UI · drm-api · GCloud encode / transcode · keystore deploy hygiene · Elastos.org rebuild branch.
 
 **Also this week:** Essentials live-app review and blocked-flow / browser-privacy repairs · DAO rebuild on real proposal / council / suggestion data (not deployed) · ELA-on-Ethereum → main-chain route research (nothing built). Plus a lot of small setup, recovery, and flow-fit work that is not listed line by line.
 
@@ -250,7 +254,7 @@ This is a **map**, not a bridge, not a date, and not a community action. Do not 
 - **Chain recovery internals** stay out. Resume post, Halborn status, and KuCoin CRC completion are the community-safe chain facts.
 - **0.7.1** is not tagged and the device installer is **not** a consumer download this week. Do not post the preview host until the team says so.
 - **Protected-content** follow-up is engineering on the 0.7.1 line, not a consumer storefront reopen.
-- **Marketplace / GCloud** this week is live-path encode and job-UI work, not a new web version and not a storefront reopen.
+- **Marketplace / GCloud** this week is live-path encode and job-UI work, not a new web version and not a storefront reopen. **elacitylabs.com** did not move. The Elastos.org rebuild is a **branch**, not a production flip.
 - **Assistant** signed-model journey is an installed Mac checkpoint. Model Get on that Home candidate is still open.
 - **Hyper / Hey** remain source + sideload. Group chat is not in this preview.
 - **Essentials / DAO** are local / internal. Do not treat them as live community surfaces.

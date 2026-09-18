@@ -1,0 +1,229 @@
+Elacity Labs — Weekly Team Update for the World Computer Initiative (WCI)
+
+**September 14 – September 18, 2026**
+
+**The signed 0.7.1 preview is live** — [Home](https://elastos.elacitylabs.com/home/) on the matching Linux Runtime, existing accounts preserved. A fresh Apple silicon install completed the first **signed-model journey**: catalogue discovery, Marketplace Get through Content and Carrier, Assistant replies, reload, full Runtime restart, and reuse without another download. Remote Qwen also ran from a Linux seed through a Mac service path (owner-approved). **Protected content** widened past video: any-file protect / read, audio in the same plane, custody-only nodes, external wallets, one mint effect, owned mints as Library items, honest progress and failures. **Marketplace** kept moving on the live shop/cinema/mint paths (web still **4.6.8**, drm-api still **0.13.2**, **~29 / ~18** commits). **Halborn** on mainchain **v1.0.3** still underway. ESC / EID stay **open**; PG cross-chain stays **off**. `main` is still **[v0.7.0](https://github.com/Elacity/elastos-runtime/releases/tag/v0.7.0)** — **no 0.7.1 tag**. Full release acceptance is **open**. PC2 product-quiet. ELA tip ~**2,297,118**.
+
+**Chain status:** mainchain producing under BPoS. ESC and EID producing; main ↔ ESC / EID open. **PG / PGP cross-chain ELA stays disabled.** Halborn’s independent review of pending **v1.0.3** continues (Elastos.ELA only this round). Exchanges that froze ESC / EID deposits should contact the Elastos DAO before reopening. [Sidechains resume](https://blog.elastos.net/announcement/elastos-sidechains-resume-after-full-stack-audit/) · [Mainchain postmortem](https://blog.elastos.net/announcement/main-chain-postmortem-august/).
+
+> **0.7.1 preview live** · first signed-model journey · protected content past video · marketplace shop/cinema/mint paths · **Halborn underway** · ESC/EID **open** · no 0.7.1 tag · PC2 quiet.
+
+---
+
+## Key Links This Week
+
+- **Previous report** — [Week of September 8 – September 13, 2026 (#37)](https://github.com/Elacity/pc2.net/discussions/37)
+- **This discussion** — [#38](https://github.com/Elacity/pc2.net/discussions/38)
+- **Elastos status** — [Sidechains resume (1 Sep)](https://blog.elastos.net/announcement/elastos-sidechains-resume-after-full-stack-audit/) · [Mainchain postmortem (August)](https://blog.elastos.net/announcement/main-chain-postmortem-august/) · [honest recovery log](https://github.com/Elacity/pc2.net/blob/main/docs/updates/Elastos_ELA_Mainnet_Recovery_Honest_Log_2026-07.md)
+- **Runtime** — [Elacity/elastos-runtime](https://github.com/Elacity/elastos-runtime) · **[v0.7.0](https://github.com/Elacity/elastos-runtime/releases/tag/v0.7.0)** still latest tag · preview [Home](https://elastos.elacitylabs.com/home/) · follow-up **[PR 62](https://github.com/Elacity/elastos-runtime/pull/62)** · review **[PR 64](https://github.com/Elacity/elastos-runtime/pull/64)** (unchanged) · UI **[PR 65](https://github.com/Elacity/elastos-runtime/pull/65)** · hosted-inference plan **[PR 66](https://github.com/Elacity/elastos-runtime/pull/66)** · release path **[PR 51](https://github.com/Elacity/elastos-runtime/pull/51)**
+- **Marketplace** — elacity-web **4.6.8** · drm-api **0.13.2** · API **[PR 23](https://github.com/Elacity/drm-api-layer/pull/23)–[PR 26](https://github.com/Elacity/drm-api-layer/pull/26)** merged · **[PR 22](https://github.com/Elacity/drm-api-layer/pull/22)** still open
+- **Install (PC2 node)** — `bash <(curl -fsSL https://raw.githubusercontent.com/Elacity/pc2.net/main/scripts/update.sh)`
+- **Install (Runtime preview)** — `curl -fsSL https://elastos.elacitylabs.com/install.sh | bash`
+- **Live surfaces** — [elastos.elacitylabs.com](https://elastos.elacitylabs.com/) · map.ela.city · portal.ela.city · blockchain.elastos.io · elacitylabs.com · elacitylabs.com/provenance
+
+## Table of Contents
+
+1. The Big Picture — Preview Live, Two Runtime Rails, Marketplace Moved
+2. Elastos Status — ESC / EID Open, Halborn Underway
+3. Runtime Preview — Signed 0.7.1 Home, Acceptance Still Open
+4. Protected Content — Past Video, Honest Mint / Custody
+5. Models, Installer, Assistant
+6. Browser, Wallet, UI Reviews
+7. Marketplace — Shop, Cinema, Mint, drm-api
+8. Hyper / Hey
+9. PC2 — Quiet by Design
+10. Release Engineering
+11. Convergence Lens
+12. Looking Ahead
+13. Summary Statistics
+14. Notes
+
+---
+
+## 1. The Big Picture — Preview Live, Two Runtime Rails, Marketplace Moved
+
+[#37](https://github.com/Elacity/pc2.net/discussions/37) left 0.7.1 as a merged integration line plus review **[PR 64](https://github.com/Elacity/elastos-runtime/pull/64)**, installer still “not a consumer download.” This cycle the **signed preview is public**, and the week split three ways.
+
+**Rail one — protected content (Irzhy).** The follow-up branch generalises protection past video: documents, images, 3D, books, comics, archives; audio through the same player plane; a CENC box that declares the PQ scheme in-band; custody-only nodes with kubo peering and bounded replica fan-out; external wallets; one mint effect; owned mints as Library items; dispatch-time custody statements; a truthful failure taxonomy; a second attempt that works. **[PR 62](https://github.com/Elacity/elastos-runtime/pull/62)** tracks that head. Source suites are green. The installed mint → buy → play journey is **not** accepted. See §4.
+
+**Rail two — models, publisher, Assistant (Anders).** A signed two-entry catalogue (SmolLM2 + Qwen) installs into managed Home. Publisher promotes the release head last, from verified staging. The installer probes the staged binary and stages the catalogue before replacing anything. A fresh Mac install completed Get → Assistant → restart → reuse. Remote Qwen from Linux seed through Mac is recorded. Browser recovery advanced, then paused so model delivery could close. **[PR 64](https://github.com/Elacity/elastos-runtime/pull/64)** did not move. **[PR 65](https://github.com/Elacity/elastos-runtime/pull/65)** / **[PR 66](https://github.com/Elacity/elastos-runtime/pull/66)** opened. See §5–§6.
+
+**Marketplace.** First-pass Runtime-only drafts missed this. Web **~29** commits: one-click mint, shop create/index, cinema orderbook, sign-on-play, subscriptions, revenue honesty. drm-api **~18** commits: metadata race, TransferBatch quantities, channel indexing, comments/ratings, IPFS provider count. Versions unchanged (**4.6.8** / **0.13.2**). See §7.
+
+**Not this week’s invention:** Runtime-owned authority cutover, storefront + canonical Home in source, kit-first passkey, unified Assistant as a *first* Mac reply — those were #37. This week is the **public preview**, the **signed-model journey**, and **protection past video**.
+
+**Chain / PC2.** No new public certificate. No PC2 product commits. See §2 and §9.
+
+## 2. Elastos Status — ESC / EID Open, Halborn Underway
+
+*Public framing only. Finding registers, live-defect recipes, and unpublished recovery trees stay inside the recovery engagement.*
+
+| Surface | Status |
+|---|---|
+| **Mainchain** | Online under BPoS · tip ~**2,297,118** · still being hardened |
+| **Pending mainchain review** | **Halborn** Secure Code Review of **v1.0.3** — started 28 August · report targeted early October · Elastos.ELA only this round |
+| **ESC / EID** | **Open** — producing since 1 September |
+| **Main ↔ ESC / EID** | **Open** |
+| **PG / PGP ↔ main** | **Disabled** |
+| **Exchanges / custodians** | Contact the Elastos DAO before reopening ESC / EID deposits or withdrawals |
+| **CRC Incident Recovery (KuCoin flow)** | **Complete** — if you were affected and have not heard from KuCoin, contact their support |
+
+Long form: [Sidechains resume (1 Sep)](https://blog.elastos.net/announcement/elastos-sidechains-resume-after-full-stack-audit/) · [Mainchain postmortem (August)](https://blog.elastos.net/announcement/main-chain-postmortem-august/) · [honest recovery log](https://github.com/Elacity/pc2.net/blob/main/docs/updates/Elastos_ELA_Mainnet_Recovery_Honest_Log_2026-07.md).
+
+No new public blog this window. Operator toolkit remains **[Elastos.Node v1.2.4](https://github.com/elastos/Elastos.Node/releases/tag/v1.2.4)**. Private ESC / EID / Arbiter / ELA trees were quiet.
+
+## 3. Runtime Preview — Signed 0.7.1 Home, Acceptance Still Open
+
+**`main` did not move.** Tip is still `8ac18bec` · **[v0.7.0](https://github.com/Elacity/elastos-runtime/releases/tag/v0.7.0)**. There is **no v0.7.1 tag**.
+
+The public preview at [elastos.elacitylabs.com](https://elastos.elacitylabs.com/) serves signed 0.7.1 artifacts. [Home](https://elastos.elacitylabs.com/home/) is up; an existing account signed back in with saved work. A fresh isolated Apple silicon Home installed from the public installer.
+
+**Open on the preview (not hidden):** the public Home can list the verified model but its own Get still needs a repair; remote Qwen is not restored on that public Home; Browser recovery and the final mint → buy → play journey are unfinished. Treat this as a **development preview**, not release acceptance.
+
+**[PR 64](https://github.com/Elacity/elastos-runtime/pull/64)** is last week’s review baseline and did not advance. Current model / Assistant / installer work sits on `feat/remote-services`. Protected-content follow-up sits on `feat/protected-content-0.7.1-followup` / **[PR 62](https://github.com/Elacity/elastos-runtime/pull/62)**. Path onto `main` remains **[PR 51](https://github.com/Elacity/elastos-runtime/pull/51)**.
+
+Team write-up (internal evidence, not a second weekly): [2026-09-18 team sync](https://github.com/Elacity/elastos-runtime/blob/19bb7a900da292983e198283ccf1b78d9748b335/docs/audits/2026-09-18-team-sync.md).
+
+## 4. Protected Content — Past Video, Honest Mint / Custody
+
+Nine commits on the follow-up line. Same Runtime-owned authority as #37 — this week **widens what it protects** and **tells the truth** while it does it.
+
+- **Any-file path.** Object mint, chunked read-back, Elacity Reader for pictures, documents, text, 3D, books, comics, archives — one capsule format, per-kind viewers.
+- **Audio.** Protects through an AAC fMP4 rendition and plays in the Elacity Player. A CENC `pssh` box declares the PQ scheme in-band (it no longer lives only in capsule metadata). Cover art no longer hijacks the audio track.
+- **Custody plane.** A node can be custody-only (ciphertext + policy, not a viewer), speak kubo, and fan out replicas with a bound. Peering mesh has proof it holds under partition.
+- **Mint / wallet.** External wallets; one mint effect; settle on confirmations; own a mint as a Library item; wait instead of refusing an in-flight action; re-ask when an approval lapses instead of stranding the mint.
+- **Honesty.** Custody statements at dispatch time; named failures; real progress; stage-aware publish status; a second attempt that works. One kind of owned copy. A `.ddrm` capsule that describes itself (authority, KID, token, ledger, type, CID).
+- **Review package.** Crypto review bundle (suite card, threat model, golden vectors) and standing-doc alignment — ready to send, not a completed external review.
+
+**Still open:** installed J5 (mint → list → buy → open → play → close) on the current branch. Publish latency and truthful “still joining” progress are part of that gate. **[Issue 47](https://github.com/Elacity/elastos-runtime/issues/47)** / **[Issue 48](https://github.com/Elacity/elastos-runtime/issues/48)** stay the acceptance / review markers.
+
+## 5. Models, Installer, Assistant
+
+**Signed catalogue.** Two entries (SmolLM2-135M-Instruct and Qwen) install and copy into managed Home. The public installer stages and verifies the catalogue before replacing the Runtime.
+
+**First installed journey (fresh Mac).** Discover the model without a hand-added source, admit the package through Marketplace + Content / Carrier, two Assistant replies, same chat and selection after reload and a full Runtime restart, reuse without another payload transfer. Stop that cannot settle honestly reports unknown — not a fake success.
+
+**Remote Qwen.** Same Assistant contract as local. Mac owns the model; seed owns the conversation. Owner approves in Inbox; seed gets a reply computed on the Mac. Grant resume, revoke, replay, and capacity refusal have installed or focused evidence. Final second-principal denial and public-seed-to-Mac on *this* candidate are still open.
+
+**Installer / publisher.** Head-last publication from verified staging (manifest never valid mid-write). Artifact rejection proved before state changes; clean rerun. Staged executable probed before it replaces the live binary. Health and bootstrap from distinct source URLs. Host Cargo cache reused for native Mac prep. musl / KVM ioctl hygiene so Alpine-class and native virt stay honest.
+
+**Assistant follow-ups.** Composer draft saved as typed; Studio reachable and bound to its session; handshake after a capsule document reload. Failed runs stay visible after save/reload.
+
+**[PR 66](https://github.com/Elacity/elastos-runtime/pull/66)** is a **docs** plan for attested hosted inference as another model-provider backend — not a shipped hosted product.
+
+## 6. Browser, Wallet, UI Reviews
+
+**Browser.** Restore keeps `page_status` errors and visible recovery input. Audio ICE samples on the inbound RTP clock. Local and remote journeys advanced (navigation, input, video, decoded audio, close cleanup, profile persistence). Wallet-over-Carrier, file upload, endurance, and the remote reload gate are **not** accepted. Work is **paused** on the branch so model delivery could close — inventory kept, not abandoned (**[PR 65](https://github.com/Elacity/elastos-runtime/pull/65)** adapted Assistant sidebar modes, Library menu, window snap, light-bar wordmark).
+
+**Wallet.** Lapsed approval asks again (see §4).
+
+## 7. Marketplace — Shop, Cinema, Mint, drm-api
+
+Versions did not bump. The **paths** did.
+
+**elacity-web (~29 commits, still 4.6.8).** One-click mint (skip a redundant approval, never land on `/view/.../undefined`, honest pipeline progress + stall watchdog). Shop create redirects into the new shop; owner badge across wallet modes; channel→shop copy; directory sort. Cinema: sell-tab parity, Max quantity, orderbook tab for access-token listings. Player: sign-on-play lock states. Subscriptions: expired renewals in Manage, sidebar countdown. Revenue: unclaimed-rewards flicker gone; asset-only volume labeled honestly. IPFS availability on Properties. Placeholders use the Elacity mark.
+
+**drm-api (~18 commits, still 0.13.2).** **[PR 23](https://github.com/Elacity/drm-api-layer/pull/23)–[PR 26](https://github.com/Elacity/drm-api-layer/pull/26)** merged: v3 shop banner indexing, owner-badge / `byAddress` fallback, CI image build on green merge, metadata insert-race (don’t discard a fetched document). Also: TransferBatch quantities on a single-event transport; `tokenURI` shapes normalised; thumbnail failure must not block channel index; subscription includeExpired; comment star ratings + in-place owner rate; IPFS provider-count endpoint; media-pipeline upload gated on wallet auth + rate limit.
+
+**[PR 22](https://github.com/Elacity/drm-api-layer/pull/22)** still open. v3 **[PR 1](https://github.com/Elacity/v3-drm-protocol/pull/1)** (mint-and-list in one tx) unchanged from last week.
+
+Keystore deploy hygiene (Lit action payloads in the image) landed beside the web mint path — operator plumbing, not a new protocol.
+
+## 8. Hyper / Hey
+
+**Hyper 3** commits: Share invite mints a pending hey-invite (not a chat deep link); re-poll `canChat` after an invite-promote race; persist chat acceptance and compact invite QR. **Hey-engine 0** on `main` this window (push metadata only). Still **source / sideload, no tag**.
+
+## 9. PC2 — Quiet by Design
+
+`pc2.net` — **zero** commits after #37. Operator line remains **v1.4.0**.
+
+0.7.1 is still a Runtime-only line. PC2 waits for the capsule / authority contract this follow-up is finishing — so the node does not fork last week’s pre-follow-up surface.
+
+## 10. Release Engineering
+
+| Item | Status |
+|---|---|
+| Runtime `main` | Unchanged · **[v0.7.0](https://github.com/Elacity/elastos-runtime/releases/tag/v0.7.0)** · tip `8ac18bec` |
+| Public preview | **Live** · [Home](https://elastos.elacitylabs.com/home/) · **not** a 0.7.1 tag |
+| 0.7.1-dev | Still **[PR 58](https://github.com/Elacity/elastos-runtime/pull/58)** tip · **[PR 64](https://github.com/Elacity/elastos-runtime/pull/64)** unchanged |
+| Active reviews | **PR 51** · **PR 59** · **PR 60** · **PR 62** · **PR 63** · **PR 64** · **PR 65** · **PR 66** |
+| Marketplace | web **4.6.8** (product commits, no bump) · drm **0.13.2** · **PR 23–26** merged |
+| PC2 | Quiet · **v1.4.0** |
+| Elastos.Node | **v1.2.4** |
+| Halborn | v1.0.3 · **underway** |
+| ESC / EID | **Open** · PG **closed** |
+| 0.7.1 tag | **None** |
+
+## 11. Convergence Lens
+
+| Theme | Runtime (this week) | Marketplace / Hyper / PC2 / chain |
+|---|---|---|
+| Preview | Signed 0.7.1 Home live · Mac install journey | — |
+| Protected-content | Any-file + audio · custody-only · honest mint · **PR 62** | Cinema / sign-on-play / one-click mint paths |
+| Models / Assistant | Signed catalogue · Get → reply → restart · remote Qwen recorded | — |
+| Publisher / installer | Head-last · staged probe · catalogue-before-binary | drm-api image on green merge |
+| Browser | Recovery + RTP clock · paused for model close | — |
+| Mesh | — | Hyper invite QR / hey-invite |
+| Chain | — | ESC/EID **open** · Halborn **underway** · tip ~2,297,118 |
+| PC2 | — | Zero commits · **v1.4.0** |
+
+## 12. Looking Ahead
+
+1. Repair **public Home model Get**; re-prove remote Qwen on the current public candidate.
+2. Finish installed **mint → buy → play** on the follow-up head (**PR 62** / journey J5). Then land the branch.
+3. Resume **Browser** recovery / reload gate — inventory is on the branch, not done.
+4. **Do not tag 0.7.1** until those gates plus the v0.7.0 first-hop update are on a frozen candidate. **[PR 51](https://github.com/Elacity/elastos-runtime/pull/51)** is still the path onto `main`.
+5. Soak marketplace mint / shop / cinema paths. Keep **drm-api PR 22** moving.
+6. **PC2** stays quiet until this capsule contract is what the node consumes.
+7. **Halborn** — community-safe update when there is a certificate. **PG** stays closed.
+
+## 13. Summary Statistics
+
+**Week of** September 14 – September 18, 2026 (after #37).
+
+| Repo | Commits | Notes |
+|---|---|---|
+| pc2.net | **0** | Quiet |
+| elastos-runtime | **~20** unique on the two rails (follow-up 9 · remote-services cluster 11+) | No merge to `main` · first-pass ~+106,624 / −3,282 / 328 file-touches |
+| elacity-web | **~29** | still **4.6.8** |
+| drm-api-layer | **~18** | still **0.13.2** · **PR 23–26** merged |
+| Hyper | **3** | invite / QR |
+| Hey-engine | **0** | push only |
+| ESC / EID / Arbiter / ELA (private) | **0** | not public GitHub |
+| Elastos.Node | **0** | still **v1.2.4** |
+
+**Runtime authors:** Anders Alm — installer, catalogue, Assistant, Browser, publisher · Irzhy Ranaivoarivony — protected-content follow-up, wallet re-ask · marketplace (SashaMIT) — web + drm-api paths.
+
+**Releases.** None tagged. Latest Runtime tag **[v0.7.0](https://github.com/Elacity/elastos-runtime/releases/tag/v0.7.0)**. Preview artifacts are **not** that tag. PC2 **v1.4.0**.
+
+## 14. Notes
+
+- **Chain recovery internals** stay out. Resume post, Halborn status, and KuCoin CRC completion are the community-safe chain facts.
+- **0.7.1** is a **preview**, not a GitHub Release. Public model Get and J5 are still open — say so.
+- **Protected-content** follow-up is engineering on the 0.7.1 line, not a consumer storefront reopen.
+- **Assistant** signed-model journey is an installed Mac checkpoint plus a public-list gap.
+- **Hyper / Hey** remain source + sideload.
+- **PC2** zero-commits is by design.
+- Bare issue numbers in headings are written as “PR 62” so GitHub does not auto-link the Puter fork.
+
+---
+
+### Quick fact card
+
+| Fact | Value |
+|---|---|
+| Previous / this | [#37](https://github.com/Elacity/pc2.net/discussions/37) · [#38](https://github.com/Elacity/pc2.net/discussions/38) |
+| Runtime | **[v0.7.0](https://github.com/Elacity/elastos-runtime/releases/tag/v0.7.0)** still latest tag · **0.7.1 preview live** |
+| Preview | [Home](https://elastos.elacitylabs.com/home/) · acceptance **open** |
+| Protected-content | Past video · audio · custody-only · **PR 62** |
+| Models | Signed catalogue · Mac Get → Assistant → restart |
+| Marketplace | web **4.6.8** · drm **0.13.2** · shop/cinema/mint paths |
+| Hyper / Hey | Invite QR · Hey quiet |
+| Halborn | ELA **v1.0.3** · **underway** |
+| Mainchain / ESC | Online · ESC/EID **open** · PG **closed** · tip ~**2,297,118** |
+| Node | **v1.2.4** |
+| PC2 | Quiet · **v1.4.0** |
+
+---
+
+*Cadence: weekly updates. Previous report — [Week of September 8 – September 13, 2026 (#37)](https://github.com/Elacity/pc2.net/discussions/37). This report — [#38](https://github.com/Elacity/pc2.net/discussions/38).*

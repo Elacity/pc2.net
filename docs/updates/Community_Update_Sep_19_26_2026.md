@@ -2,11 +2,13 @@ Elacity Labs — Weekly Team Update for the World Computer Initiative (WCI)
 
 **September 19 – September 26, 2026**
 
-**A protected file was read on an installed Home.** The creator can choose the channel, USDC listings settle at the scale they show, and the approval screen is readable. The market shelf shows protected items again after they had been hidden since late August. One button rebuilds a copy you already own, and a purchase in progress stays visible after reload. Buying from a live offer — by shared link or from Explore — is on a follow-up branch. **Home** can use an image you own as the desktop, the Assistant toggle carries the Elastos mark, and a phone layout is in progress on a local branch. **Models** moved onto a 0.7.2 line. The public seed completed a signed SmolLM2 Get, one short reply, and a restart. A fresh Mac Home received the signed package, and a second Mac Home got one approved reply from the owner. A useful Assistant, Linux containment, and a signed Qwen journey are still open. **No 0.7.2 tag.** **Marketplace** (ela.city) had the largest product week the first pass missed: search, live activity, notifications and email, cart and batch mint, creator analytics, reports, and referral links. Web still **4.6.8**, drm-api still **0.13.2**. Playback of a protected object on that site is still open. Anders’ [19–25 September note](https://github.com/Elacity/elastos-runtime/blob/docs%2Fweekly-2026-09-25/docs/audits/2026-09-25-team-sync.md) is the model record: isolation is the largest gate, Community Chat still needs an owner and a delivery choice, and the updater replaces its binary before it is validated. **Essentials** and the **DAO** stayed local. The DAO’s old 2021 ELA/ETH position was emptied and a small test position is live; the rest of the liquidity is not in yet. The **Ledger** app is a private patch of the current app and has not been submitted. **Halborn** on mainchain **v1.0.3** still underway. ESC / EID stay **open**; PG cross-chain stays **off**. Runtime `main` is still **[v0.7.0](https://github.com/Elacity/elastos-runtime/releases/tag/v0.7.0)** — **no 0.7.1 tag**. The preview host is **not** posted. PC2 product-quiet.
+**Runtime into protected dDRM.** A protected file was read on an installed Home. The creator chooses the channel. USDC listings settle at the scale they show. The approval screen is readable. The shelf shows protected items again after they had been hidden since late August. Download rebuilds a `.ddrm` the account already owns, and a purchase in progress stays visible after reload. Buying from a live offer, by shared link or from Explore, is on a follow-up branch. **[PR 62](https://github.com/Elacity/elastos-runtime/pull/62)** and **[PR 70](https://github.com/Elacity/elastos-runtime/pull/70)** are open. Runtime `main` is still **[v0.7.0](https://github.com/Elacity/elastos-runtime/releases/tag/v0.7.0)** — **no 0.7.1 tag**. The preview host is **not** posted.
+
+**Home** can use an image you own as the desktop, the Assistant toggle carries the Elastos mark, and a phone layout is in progress on a local branch. **Models** sit on the next runtime line: the public seed completed a short SmolLM2 reply, one Mac share was proved, and Linux containment is still the gate. **No 0.7.2 tag.** **Marketplace** (ela.city) shipped search, live activity, notifications and email, cart and batch mint, creator analytics, reports, and referral links. Web still **4.6.8**, drm-api still **0.13.2**. Playback there of an object protected on a runtime Home is still open. **Essentials** and the **DAO** stayed local. The DAO’s old 2021 ELA/ETH position was emptied and a small test position is live; the rest of the liquidity is not in yet. The **Ledger** app is a private patch of the current app and has not been submitted. **Halborn** on mainchain **v1.0.3** still underway. ESC / EID stay **open**; PG cross-chain stays **off**. PC2 product-quiet.
 
 **Chain status:** mainchain producing under BPoS. ESC and EID producing; main ↔ ESC / EID open. **PG / PGP cross-chain ELA stays disabled.** Halborn’s independent review of pending **v1.0.3** continues (Elastos.ELA only this round). Private ESC / EID / Arbiter trees were quiet. Exchanges that froze ESC / EID deposits should contact the Elastos DAO before reopening. [Sidechains resume](https://blog.elastos.net/announcement/elastos-sidechains-resume-after-full-stack-audit/) · [Mainchain postmortem](https://blog.elastos.net/announcement/main-chain-postmortem-august/).
 
-> **Installed protected read** · shelf visible again · offer buy on a branch · Home wallpaper + Assistant mark · phone layout **local** · public seed SmolLM2 reply · Mac model share proved once · Linux containment **open** · marketplace search / activity / notifications · playback on ela.city **still open** · Essentials / DAO **local** · LP test position only · Ledger patch **not submitted** · **Halborn underway** · no 0.7.1 or 0.7.2 tag · preview host **not posted** · PC2 quiet.
+> **Runtime into protected dDRM** · installed read · shelf visible again · owned `.ddrm` · offer buy on **PR 70** · **PR 62** open · no 0.7.1 tag · preview host **not posted** · Home wallpaper + Assistant mark · phone layout **local** · SmolLM2 reply · Linux containment **open** · marketplace search / activity / notifications · ela.city playback **still open** · Essentials / DAO **local** · LP test position only · Ledger patch **not submitted** · **Halborn underway** · PC2 quiet.
 
 ---
 
@@ -14,8 +16,8 @@ Elacity Labs — Weekly Team Update for the World Computer Initiative (WCI)
 
 - **Previous report** — [Week of September 14 – September 18, 2026 (#38)](https://github.com/Elacity/pc2.net/discussions/38)
 - **This discussion** — [#39](https://github.com/Elacity/pc2.net/discussions/39)
+- **Runtime / protected dDRM** — [Elacity/elastos-runtime](https://github.com/Elacity/elastos-runtime) · **[v0.7.0](https://github.com/Elacity/elastos-runtime/releases/tag/v0.7.0)** still latest tag · **[PR 62](https://github.com/Elacity/elastos-runtime/pull/62)** · offer buy **[PR 70](https://github.com/Elacity/elastos-runtime/pull/70)** · desktop **[PR 67](https://github.com/Elacity/elastos-runtime/pull/67)** · Assistant mark **[PR 68](https://github.com/Elacity/elastos-runtime/pull/68)** · alignment **[PR 69](https://github.com/Elacity/elastos-runtime/pull/69)** · models **[PR 71](https://github.com/Elacity/elastos-runtime/pull/71)** on **[PR 64](https://github.com/Elacity/elastos-runtime/pull/64)** · release path **[PR 51](https://github.com/Elacity/elastos-runtime/pull/51)**
 - **Elastos status** — [Sidechains resume (1 Sep)](https://blog.elastos.net/announcement/elastos-sidechains-resume-after-full-stack-audit/) · [Mainchain postmortem (August)](https://blog.elastos.net/announcement/main-chain-postmortem-august/) · [honest recovery log](https://github.com/Elacity/pc2.net/blob/main/docs/updates/Elastos_ELA_Mainnet_Recovery_Honest_Log_2026-07.md)
-- **Runtime** — [Elacity/elastos-runtime](https://github.com/Elacity/elastos-runtime) · **[v0.7.0](https://github.com/Elacity/elastos-runtime/releases/tag/v0.7.0)** still latest tag · follow-up **[PR 62](https://github.com/Elacity/elastos-runtime/pull/62)** · offer buy **[PR 70](https://github.com/Elacity/elastos-runtime/pull/70)** · desktop **[PR 67](https://github.com/Elacity/elastos-runtime/pull/67)** · Assistant mark **[PR 68](https://github.com/Elacity/elastos-runtime/pull/68)** · alignment **[PR 69](https://github.com/Elacity/elastos-runtime/pull/69)** · models **[PR 71](https://github.com/Elacity/elastos-runtime/pull/71)** on **[PR 64](https://github.com/Elacity/elastos-runtime/pull/64)** · release path **[PR 51](https://github.com/Elacity/elastos-runtime/pull/51)**
 - **Anders’ note** — [19–25 September team sync](https://github.com/Elacity/elastos-runtime/blob/docs%2Fweekly-2026-09-25/docs/audits/2026-09-25-team-sync.md) on `docs/weekly-2026-09-25`
 - **Marketplace** — elacity-web **4.6.8** (~119 commits) · drm-api **0.13.2** (~75)
 - **Install (PC2 node)** — `bash <(curl -fsSL https://raw.githubusercontent.com/Elacity/pc2.net/main/scripts/update.sh)`
@@ -23,10 +25,10 @@ Elacity Labs — Weekly Team Update for the World Computer Initiative (WCI)
 
 ## Table of Contents
 
-1. The Big Picture — An Installed Read, a Marketplace Week
-2. Elastos Status — ESC / EID Open, Halborn Underway
-3. Protected Content — Read, Shelf, Owned Copy
-4. Market Buy — Runtime Branch
+1. The Big Picture — Runtime into Protected dDRM
+2. Protected dDRM — Read, Shelf, Owned Copy
+3. Market Buy — Runtime Branch
+4. Elastos Status — ESC / EID Open, Halborn Underway
 5. Home — Wallpaper, Mark, Phone Layout
 6. Models — 0.7.2 Evidence, Acceptance Still Open
 7. Marketplace — Search, Activity, Notifications, Cart
@@ -45,11 +47,11 @@ Elacity Labs — Weekly Team Update for the World Computer Initiative (WCI)
 
 ---
 
-## 1. The Big Picture — An Installed Read, a Marketplace Week
+## 1. The Big Picture — Runtime into Protected dDRM
 
-[#38](https://github.com/Elacity/pc2.net/discussions/38) left the installed mint → buy → play journey open, the preview host unposted, and the marketplace on shop / cinema / mint plus the GCloud encode cuts. This week splits four ways.
+This week’s runtime work lands in protected dDRM. [#38](https://github.com/Elacity/pc2.net/discussions/38) left the installed mint → buy → play journey open. A protected file has now been read on an installed Home. See §2–§3.
 
-**Protected content (Irzhy).** Three squash commits repack the follow-up line. Most of that text was already in #38. What is new: a protected file opened and read on an installed Home; the creator picks the channel; USDC no longer settles at the wrong scale; the approval screen can be read; the shelf shows protected rows again; Download rebuilds an owned copy; a purchase in progress survives reload. **[PR 62](https://github.com/Elacity/elastos-runtime/pull/62)** is still open. Buying from any live offer is **[PR 70](https://github.com/Elacity/elastos-runtime/pull/70)**. See §3–§4.
+**Protected dDRM (Irzhy).** Three squash commits repack the follow-up line. Most of that text was already in #38. What is new: the installed read; the creator picks the channel; USDC no longer settles at the wrong scale; the approval screen can be read; the shelf shows protected rows again; Download rebuilds an owned `.ddrm`; a purchase in progress survives reload. **[PR 62](https://github.com/Elacity/elastos-runtime/pull/62)** is still open. Buying from any live offer is **[PR 70](https://github.com/Elacity/elastos-runtime/pull/70)**. The long confirmation is still easy to read as a dead end. The full journey is not release acceptance, and there is no 0.7.1 tag.
 
 **Home and models.** Wallpaper from your own Library (**[PR 67](https://github.com/Elacity/elastos-runtime/pull/67)**), the Elastos mark on the Assistant toggle (**[PR 68](https://github.com/Elacity/elastos-runtime/pull/68)**), alignment rules for the two-platform installer (**[PR 69](https://github.com/Elacity/elastos-runtime/pull/69)**). Phone Home layout is a large local branch, not a pull request. Models continued on **[PR 71](https://github.com/Elacity/elastos-runtime/pull/71)**. Anders’ written note, pushed 26 September, is the record for what those builds actually proved. See §5–§6.
 
@@ -59,25 +61,9 @@ Elacity Labs — Weekly Team Update for the World Computer Initiative (WCI)
 
 **Not this week’s invention:** the signed-model Mac journey, custody-only nodes, and the GCloud encode cuts were #38. The three squash commits on PR 62 mostly restate that surface. Say what changed on top.
 
-**Chain / PC2.** No new public certificate. No PC2 product commits after #38. See §2 and §14.
+**Chain / PC2.** No new public certificate. No PC2 product commits after #38. See §4 and §14.
 
-## 2. Elastos Status — ESC / EID Open, Halborn Underway
-
-*Public framing only. Finding registers and unpublished recovery trees stay inside the recovery engagement.*
-
-| Surface | Status |
-|---|---|
-| **Mainchain** | Online under BPoS · still being hardened |
-| **Pending mainchain review** | **Halborn** Secure Code Review of **v1.0.3** — started 28 August · Elastos.ELA only this round |
-| **ESC / EID** | **Open** — producing since 1 September |
-| **Main ↔ ESC / EID** | **Open** |
-| **PG / PGP ↔ main** | **Disabled** |
-| **Exchanges / custodians** | Contact the Elastos DAO before reopening ESC / EID deposits or withdrawals |
-| **CRC Incident Recovery (KuCoin flow)** | **Complete** — if you were affected and have not heard from KuCoin, contact their support |
-
-No new public blog this window. Operator toolkit remains **[Elastos.Node v1.2.4](https://github.com/elastos/Elastos.Node/releases/tag/v1.2.4)**. Private ESC / EID / Arbiter / ELA trees were quiet.
-
-## 3. Protected Content — Read, Shelf, Owned Copy
+## 2. Protected dDRM — Read, Shelf, Owned Copy
 
 **[PR 62](https://github.com/Elacity/elastos-runtime/pull/62)** · `feat/protected-content-0.7.1-followup` · still **open**.
 
@@ -98,11 +84,27 @@ On 21 September the branch was rewritten into three themes. Treat those as a his
 
 **Still open:** the long confirmation wait is still easy to read as a dead end rather than a wait. The full installed mint → list → buy → open → play → close journey is **not** release acceptance. PR 62 is not merged. `main` did not move.
 
-## 4. Market Buy — Runtime Branch
+## 3. Market Buy — Runtime Branch
 
 **[PR 70](https://github.com/Elacity/elastos-runtime/pull/70)** (`feat/protected-content-listing-buy`, open). A buyer can purchase from a live offer found through a shared link or in Explore. Lookups cover token URI, the content-id binding, and the live offers. A listing can be rebuilt from shared data. A purchase record is kept.
 
 Adopting that purchase onto a Home that did not list the item — from shared metadata, with owned items marked purchased even when this Home has no listing — is **in progress**. An asset protected somewhere else should open where it was protected. That adoption is not claimed complete. PR 70 is not merged.
+
+## 4. Elastos Status — ESC / EID Open, Halborn Underway
+
+*Public framing only. Finding registers and unpublished recovery trees stay inside the recovery engagement.*
+
+| Surface | Status |
+|---|---|
+| **Mainchain** | Online under BPoS · still being hardened |
+| **Pending mainchain review** | **Halborn** Secure Code Review of **v1.0.3** — started 28 August · Elastos.ELA only this round |
+| **ESC / EID** | **Open** — producing since 1 September |
+| **Main ↔ ESC / EID** | **Open** |
+| **PG / PGP ↔ main** | **Disabled** |
+| **Exchanges / custodians** | Contact the Elastos DAO before reopening ESC / EID deposits or withdrawals |
+| **CRC Incident Recovery (KuCoin flow)** | **Complete** — if you were affected and have not heard from KuCoin, contact their support |
+
+No new public blog this window. Operator toolkit remains **[Elastos.Node v1.2.4](https://github.com/elastos/Elastos.Node/releases/tag/v1.2.4)**. Private ESC / EID / Arbiter / ELA trees were quiet.
 
 ## 5. Home — Wallpaper, Mark, Phone Layout
 
@@ -236,7 +238,7 @@ Ledger no longer accepts Nano S app updates. The planned device set for a later 
 |---|---|
 | Runtime `main` | Unchanged · **[v0.7.0](https://github.com/Elacity/elastos-runtime/releases/tag/v0.7.0)** · tip `8ac18bec` |
 | 0.7.1 preview host | **Not posted** · installer **not** a consumer download · **no** 0.7.1 tag |
-| Protected content | **PR 62** open · installed read landed · full journey **not** accepted |
+| Protected dDRM | **PR 62** open · installed read landed · full journey **not** accepted |
 | Offer buy | **PR 70** open · adoption **in progress** |
 | Home surface | **PR 67** · **PR 68** · **PR 69** open · phone layout **local only** |
 | Models | **PR 71** open, stacked on **PR 64** · seed SmolLM2 reply proved · useful Assistant **open** · **no** 0.7.2 tag |
@@ -257,7 +259,7 @@ Ledger no longer accepts Nano S app updates. The planned device set for a later 
 
 | Theme | Runtime (this week) | Marketplace / Hyper / chain / Infinity |
 |---|---|---|
-| Protected content | Installed read · shelf visible · owned-copy download · **PR 62** | Cinema / mint paths from prior weeks still the live shop |
+| Protected dDRM | Installed read · shelf visible · owned-copy download · **PR 62** | Cinema / mint paths from prior weeks still the live shop |
 | Market buy | Live-offer buy by link or Explore · **PR 70** · adoption in progress | Site playback of that object **still open** |
 | Home | Wallpaper · Assistant mark · phone layout local · public Home has the icon fix · Browser Close **not** on that Home | — |
 | Models | Seed SmolLM2 reply · one Mac share with End · Qwen3.5-9B on an earlier Mac only · Linux containment **open** · hosted calls **paused** | — |
@@ -338,7 +340,7 @@ Ledger no longer accepts Nano S app updates. The planned device set for a later 
 | Previous / this | [#38](https://github.com/Elacity/pc2.net/discussions/38) · [#39](https://github.com/Elacity/pc2.net/discussions/39) |
 | Runtime | **[v0.7.0](https://github.com/Elacity/elastos-runtime/releases/tag/v0.7.0)** · **no 0.7.1 tag** |
 | Preview host | **Not posted** |
-| Protected content | Installed read · shelf visible · **PR 62** open |
+| Protected dDRM | Installed read · shelf visible · owned `.ddrm` · **PR 62** open |
 | Offer buy | **PR 70** · adoption in progress |
 | Home | **PR 67** · **PR 68** · **PR 69** · phone **local** |
 | Models | Seed SmolLM2 reply · one Mac share · isolation **open** · **PR 71** · **no** 0.7.2 tag |

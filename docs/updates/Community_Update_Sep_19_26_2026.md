@@ -2,11 +2,11 @@ Elacity Labs — Weekly Team Update for the World Computer Initiative (WCI)
 
 **September 19 – September 26, 2026**
 
-**A protected file was read on an installed Home.** The creator can choose the channel, USDC listings settle at the scale they show, and the approval screen is readable. The market shelf shows protected items again after they had been hidden since late August. One button rebuilds a copy you already own, and a purchase in progress stays visible after reload. Buying from a live offer — by shared link or from Explore — is on a follow-up branch. **Home** can use an image you own as the desktop, the Assistant toggle carries the Elastos mark, and a phone layout is in progress on a local branch. **Models** moved onto a 0.7.2 line: exact offers, owner-gated hosted routes, and more installed evidence. Public model Get is **not** accepted. **Marketplace** (ela.city) had the largest product week the first pass missed: search, live activity, notifications and email, cart and batch mint, creator analytics, reports, and referral links. Web still **4.6.8**, drm-api still **0.13.2**. Playback of a protected object on that site is still open. **Models, after the pushed commits:** Inbox revoke, a history of handled requests, and a real sandbox were described in the team call and are **not on the remote**. On the public node the model process is **not** sandboxed. A community room that stays in sync is on the OS list and is still unreliable. **Essentials** and the **DAO** stayed local. The DAO’s old 2021 ELA/ETH position was emptied and a small test position is live; the rest of the liquidity is not in yet. The **Ledger** app is a private patch of the current app and has not been submitted. **Halborn** on mainchain **v1.0.3** still underway. ESC / EID stay **open**; PG cross-chain stays **off**. Runtime `main` is still **[v0.7.0](https://github.com/Elacity/elastos-runtime/releases/tag/v0.7.0)** — **no 0.7.1 tag**. The preview host is **not** posted. PC2 product-quiet.
+**A protected file was read on an installed Home.** The creator can choose the channel, USDC listings settle at the scale they show, and the approval screen is readable. The market shelf shows protected items again after they had been hidden since late August. One button rebuilds a copy you already own, and a purchase in progress stays visible after reload. Buying from a live offer — by shared link or from Explore — is on a follow-up branch. **Home** can use an image you own as the desktop, the Assistant toggle carries the Elastos mark, and a phone layout is in progress on a local branch. **Models** moved onto a 0.7.2 line. The public seed completed a signed SmolLM2 Get, one short reply, and a restart. A fresh Mac Home received the signed package, and a second Mac Home got one approved reply from the owner. A useful Assistant, Linux containment, and a signed Qwen journey are still open. **No 0.7.2 tag.** **Marketplace** (ela.city) had the largest product week the first pass missed: search, live activity, notifications and email, cart and batch mint, creator analytics, reports, and referral links. Web still **4.6.8**, drm-api still **0.13.2**. Playback of a protected object on that site is still open. Anders’ [19–25 September note](https://github.com/Elacity/elastos-runtime/blob/docs%2Fweekly-2026-09-25/docs/audits/2026-09-25-team-sync.md) is the model record: isolation is the largest gate, Community Chat still needs an owner and a delivery choice, and the updater replaces its binary before it is validated. **Essentials** and the **DAO** stayed local. The DAO’s old 2021 ELA/ETH position was emptied and a small test position is live; the rest of the liquidity is not in yet. The **Ledger** app is a private patch of the current app and has not been submitted. **Halborn** on mainchain **v1.0.3** still underway. ESC / EID stay **open**; PG cross-chain stays **off**. Runtime `main` is still **[v0.7.0](https://github.com/Elacity/elastos-runtime/releases/tag/v0.7.0)** — **no 0.7.1 tag**. The preview host is **not** posted. PC2 product-quiet.
 
 **Chain status:** mainchain producing under BPoS. ESC and EID producing; main ↔ ESC / EID open. **PG / PGP cross-chain ELA stays disabled.** Halborn’s independent review of pending **v1.0.3** continues (Elastos.ELA only this round). Private ESC / EID / Arbiter trees were quiet. Exchanges that froze ESC / EID deposits should contact the Elastos DAO before reopening. [Sidechains resume](https://blog.elastos.net/announcement/elastos-sidechains-resume-after-full-stack-audit/) · [Mainchain postmortem](https://blog.elastos.net/announcement/main-chain-postmortem-august/).
 
-> **Installed protected read** · shelf visible again · offer buy on a branch · Home wallpaper + Assistant mark · phone layout **local** · 0.7.2 model evidence · Inbox revoke **not pushed** · public-node model **not sandboxed** · marketplace search / activity / notifications · playback on ela.city **still open** · Essentials / DAO **local** · LP test position only · Ledger patch **not submitted** · **Halborn underway** · no 0.7.1 tag · preview host **not posted** · PC2 quiet.
+> **Installed protected read** · shelf visible again · offer buy on a branch · Home wallpaper + Assistant mark · phone layout **local** · public seed SmolLM2 reply · Mac model share proved once · Linux containment **open** · marketplace search / activity / notifications · playback on ela.city **still open** · Essentials / DAO **local** · LP test position only · Ledger patch **not submitted** · **Halborn underway** · no 0.7.1 or 0.7.2 tag · preview host **not posted** · PC2 quiet.
 
 ---
 
@@ -15,7 +15,8 @@ Elacity Labs — Weekly Team Update for the World Computer Initiative (WCI)
 - **Previous report** — [Week of September 14 – September 18, 2026 (#38)](https://github.com/Elacity/pc2.net/discussions/38)
 - **This discussion** — [#39](https://github.com/Elacity/pc2.net/discussions/39)
 - **Elastos status** — [Sidechains resume (1 Sep)](https://blog.elastos.net/announcement/elastos-sidechains-resume-after-full-stack-audit/) · [Mainchain postmortem (August)](https://blog.elastos.net/announcement/main-chain-postmortem-august/) · [honest recovery log](https://github.com/Elacity/pc2.net/blob/main/docs/updates/Elastos_ELA_Mainnet_Recovery_Honest_Log_2026-07.md)
-- **Runtime** — [Elacity/elastos-runtime](https://github.com/Elacity/elastos-runtime) · **[v0.7.0](https://github.com/Elacity/elastos-runtime/releases/tag/v0.7.0)** still latest tag · follow-up **[PR 62](https://github.com/Elacity/elastos-runtime/pull/62)** · offer buy **[PR 70](https://github.com/Elacity/elastos-runtime/pull/70)** · desktop **[PR 67](https://github.com/Elacity/elastos-runtime/pull/67)** · Assistant mark **[PR 68](https://github.com/Elacity/elastos-runtime/pull/68)** · alignment **[PR 69](https://github.com/Elacity/elastos-runtime/pull/69)** · models **[PR 71](https://github.com/Elacity/elastos-runtime/pull/71)** · release path **[PR 51](https://github.com/Elacity/elastos-runtime/pull/51)**
+- **Runtime** — [Elacity/elastos-runtime](https://github.com/Elacity/elastos-runtime) · **[v0.7.0](https://github.com/Elacity/elastos-runtime/releases/tag/v0.7.0)** still latest tag · follow-up **[PR 62](https://github.com/Elacity/elastos-runtime/pull/62)** · offer buy **[PR 70](https://github.com/Elacity/elastos-runtime/pull/70)** · desktop **[PR 67](https://github.com/Elacity/elastos-runtime/pull/67)** · Assistant mark **[PR 68](https://github.com/Elacity/elastos-runtime/pull/68)** · alignment **[PR 69](https://github.com/Elacity/elastos-runtime/pull/69)** · models **[PR 71](https://github.com/Elacity/elastos-runtime/pull/71)** on **[PR 64](https://github.com/Elacity/elastos-runtime/pull/64)** · release path **[PR 51](https://github.com/Elacity/elastos-runtime/pull/51)**
+- **Anders’ note** — [19–25 September team sync](https://github.com/Elacity/elastos-runtime/blob/docs%2Fweekly-2026-09-25/docs/audits/2026-09-25-team-sync.md) on `docs/weekly-2026-09-25`
 - **Marketplace** — elacity-web **4.6.8** (~119 commits) · drm-api **0.13.2** (~75)
 - **Install (PC2 node)** — `bash <(curl -fsSL https://raw.githubusercontent.com/Elacity/pc2.net/main/scripts/update.sh)`
 - **Live surfaces** — map.ela.city · portal.ela.city · blockchain.elastos.io · elacitylabs.com · elacitylabs.com/provenance
@@ -50,7 +51,7 @@ Elacity Labs — Weekly Team Update for the World Computer Initiative (WCI)
 
 **Protected content (Irzhy).** Three squash commits repack the follow-up line. Most of that text was already in #38. What is new: a protected file opened and read on an installed Home; the creator picks the channel; USDC no longer settles at the wrong scale; the approval screen can be read; the shelf shows protected rows again; Download rebuilds an owned copy; a purchase in progress survives reload. **[PR 62](https://github.com/Elacity/elastos-runtime/pull/62)** is still open. Buying from any live offer is **[PR 70](https://github.com/Elacity/elastos-runtime/pull/70)**. See §3–§4.
 
-**Home and models.** Wallpaper from your own Library (**[PR 67](https://github.com/Elacity/elastos-runtime/pull/67)**), the Elastos mark on the Assistant toggle (**[PR 68](https://github.com/Elacity/elastos-runtime/pull/68)**), alignment rules for the two-platform installer (**[PR 69](https://github.com/Elacity/elastos-runtime/pull/69)**). Phone Home layout is a large local branch, not a pull request. Models continued on **[PR 71](https://github.com/Elacity/elastos-runtime/pull/71)** — evidence and binding, not acceptance. The team call after those commits covers Inbox revoke, request history, guest-owned hosted setup, and the sandbox gap. That follow-up is **not pushed**. See §5–§6.
+**Home and models.** Wallpaper from your own Library (**[PR 67](https://github.com/Elacity/elastos-runtime/pull/67)**), the Elastos mark on the Assistant toggle (**[PR 68](https://github.com/Elacity/elastos-runtime/pull/68)**), alignment rules for the two-platform installer (**[PR 69](https://github.com/Elacity/elastos-runtime/pull/69)**). Phone Home layout is a large local branch, not a pull request. Models continued on **[PR 71](https://github.com/Elacity/elastos-runtime/pull/71)**. Anders’ written note, pushed 26 September, is the record for what those builds actually proved. See §5–§6.
 
 **Marketplace.** First-pass Runtime drafts missed this again. ela.city and drm-api shipped search, a live activity stream, in-app / push / email notifications, a cart with one confirmation, batch mint, creator analytics, reports, and referral links. Versions did not bump. Playback on the site, for an object protected on a runtime Home, is still the open piece and can follow the OS release. See §7.
 
@@ -113,36 +114,37 @@ Adopting that purchase onto a Home that did not list the item — from shared me
 
 **Phone layout** — about **64** commits on a **local** branch (`feat/home-phone-layout`). Not opened as a pull request. The phone Home is the app grid: 44 px targets, sheets from the bottom, long-press menus, a push drawer for sidebars, Spotlight and Notification Centre readable on a narrow stage, Reconnecting when the gateway stops answering. This is not in a preview and not on `main`. The team kept tightening that layout against the same local build. It is still not a shared branch.
 
-**Public node, separate from that branch.** Desktop icons can be moved and then jump back after a refresh. A quick close does not always shut the browser down. The icon jump did not show the same way on other local instances. Changing several things at once makes both worse. Neither is fixed in a pull request.
+**Public Home.** It received a clearer key message and the desktop-icon persistence fix. It has not received the full source branch. Browser Close is repaired in source and passed an isolated check. That repair is not on the public Home. A reviewed Mac Browser build still needs ordinary navigation, input, media, profile, reload, and close checks.
 
 ## 6. Models — 0.7.2 Evidence, Acceptance Still Open
 
 **[PR 71](https://github.com/Elacity/elastos-runtime/pull/71)** (`feat/0.7.2-models`) and the CI pin beside it (`fix/0.7.2-model-ci-node`) carried most of Anders’ week. A large share of those commits are evidence notes. The code that moved:
 
-- Local offers activate after admit, without a restart.
+- Get moves to Use without a restart. Stale activation status clears. A long download keeps showing progress.
 - A shared model is requested from a signed contact catalogue, bound to one offer revision.
-- Hosted effects stay tied to the authorized run and to an Inbox connection the owner staged.
-- The owner can end a hosted route. On the pushed branch, guest hosted setup was hidden. The later pass walks that back: each guest sets up their own hosted route. Sharing the admin’s setup with every guest was the wrong model.
-- Linux model-provider sockets are confined at launch.
+- Hosted effects stay tied to the authorized run and to an Inbox connection the owner staged. The owner can end that route. Guest hosted setup stays hidden.
 - Content receipt lookup is scoped to the CID that was asked for (also on the seed deploy branches).
-- Browser Close has fresh headless and installed smoke.
+- Browser Close passed an isolated check. The public Home does not have that repair yet.
 
-Installed SmolLM2 Get attempts are **recorded**. They are **not** acceptance. Public model Get, remote Qwen on the current candidate, and the Browser reload gate from #38 are still open. A temporary hosted route is not a public API product. **No 0.7.2 tag.** The preview host stays unposted.
+**What the builds proved.** The public seed completed Marketplace Get of its signed SmolLM2 capsule, one short reply, then restart and reuse. That was the failure at the end of last week’s runtime report. The seed already held SmolLM2 before that Get, so a fresh download onto the seed is still unproven. SmolLM2-135M shows the install path and a short reply. A useful local Assistant is still open: a measured model on the seed, and the signed Qwen3.5-9B journey on a suitable Mac. Qwen3.5-4B is the first seed candidate, still subject to the engine, signing, answer quality, and resource checks. An earlier Mac build recorded a real Qwen3.5-9B reply, save, reload, and restart. That receipt belongs to the build that produced it.
 
-**Team call — not on the remote.** Anders’ later pass is local. He still needs to push it. Until that push, the bullets above are the shared record, and the list below is status from the call.
+A fresh Mac Home received the full signed package from another holder. On matching isolated Mac builds, a second Home found that exact model, requested access, and received a reply computed on the owner Home. The owner ended the grant in Inbox, and the other Home lost the offer. Refusal, recovery, and the wider failure cases are still open. The public seed has not run this matching-build journey. Remote sharing is outside the focused 0.7.2 release. The call also asked for a history of handled Inbox requests that stays after dismiss. The written note does not record that history as done.
 
-- **Local files.** Instructions that send the model at the person’s own files were wrong. That path is being corrected.
-- **Inbox.** Approval covers sharing a service and opening internet access, including invoking the route again. Revoke now sits next to approve. Handled requests still vanish when they are dismissed. The Inbox needs a history that stays.
-- **Hosted use stays off** until someone turns it on, and network access stays off until that request is approved. Per-request approval is how a weak answer gets seen instead of being silent.
-- **Cancellation** proof, and the stock providers, are reported fixed in that local pass. They are not on the remote yet.
-- **Sandbox.** On the public node the model process is **not** sandboxed. The account it runs as can reach the host. That is an open gap, not a tolerated default for a shared machine. macOS has a partial boundary around network and local files. Linux sandboxing is still to do. Providers still run as ordinary programs, which was an earlier trade-off. The seed image cannot run a virtual machine, so the isolation that counts is an outer capsule. Do not treat that public node as a safe place for other people’s models.
-- **After access ends,** later messages have to be refused, including across a node restart. Stop-sharing once a second person is added still needs a pass. The provider catalogue still needs an update. A busy model has to surface that state instead of dropping the turn.
-- **Overlap.** PR 62 touches about **81** of the same files as this model work. Marketplace edits overlap it too. Both need a settle after the push. A pile of old tests, especially tests that assume a single runtime, no longer match and need cleanup.
-- **OS bar from the same call.** The core a first download has to do: run a model that was downloaded locally, enter a room and keep talking, browse, and move that install to the next build. Hosted routes are extra. They do not replace the local model. Protected playback on ela.city can follow that OS release. There is **no date** on either.
+Earlier Mac builds completed real replies through Venice and OpenRouter. Named connections can be saved and edited. Public hosted calls stay paused. Installed Mac and Linux proof is still required that the model process cannot bypass Runtime’s route, and that approval and End govern every send. Jev stays optional. **No 0.7.2 tag.** The preview host stays unposted.
 
-**Community room.** It is on that OS list. It was the first app, before the graphical Home, and it worked then. It is not reliable now: join and leave lines still break the room. Another fix pass is open. It is not in a preview.
+**Isolation is the largest release gate.** The public seed’s local model process does not yet have Linux containment. The installed Mac model process can reach more user files than the capsule contract allows. Controlled tests have moved hosted consent and child isolation forward. The installed paths are still open. Next is a reviewed Linux containment plan for the seed, then installed Mac and Linux proof of the ordinary Inbox approval and End journey.
 
-**Update.** An installed runtime needs a path from one build to the next that a person can run without a terminal rescue. That path worked before the graphical Home. It has not been shown again on the current candidate.
+**Where it sits.** [PR 71](https://github.com/Elacity/elastos-runtime/pull/71) is the model source, stacked on [PR 64](https://github.com/Elacity/elastos-runtime/pull/64). The seed preview is separate: [Runtime](https://github.com/Elacity/elastos-runtime/tree/deploy/0.7.1-seed-runtime) and [Home UI](https://github.com/Elacity/elastos-runtime/tree/deploy/0.7.1-seed-home-ui). [PR 65](https://github.com/Elacity/elastos-runtime/pull/65) through [PR 69](https://github.com/Elacity/elastos-runtime/pull/69), and [PR 62](https://github.com/Elacity/elastos-runtime/pull/62), stay open. None of that contributor work is in a release candidate. PR 62 adds another external-data consent path, and that path has to use the same Runtime authority as hosted AI. The call also had PR 62 overlapping this model work in about 81 files. Anders’ note is the [19–25 September team sync](https://github.com/Elacity/elastos-runtime/blob/docs%2Fweekly-2026-09-25/docs/audits/2026-09-25-team-sync.md).
+
+**CI.** PR 71 failed its UI source checks. [`3d51690c`](https://github.com/Elacity/elastos-runtime/commit/3d51690c975964f5386aadd2009ee67b043f1fe6) pins Node 26, the major used by the passing local checks, on `fix/0.7.2-model-ci-node`. That pin is not in PR 71. A passing GitHub run is still open.
+
+**Community room.** The release plan now names a public-room journey and the first visit it needs. Chat still needs an owner, a delivery choice, and installed tests. Carrier connects peers directly, so a two-Home test will not prove delivery for people behind home routers. Relay qualification is later. On the call, join and leave lines were still breaking the room.
+
+**Update.** The plan’s next stable line is **0.7.2**, because a preview build already reports 0.7.1 and the updater compares versions. There is **no 0.7.2 tag**, and this note does not publish that host. The plan calls for an old-client 0.7.1 → 0.7.2 test, then a second signed update with recovery, keeping the person’s state. The updater today replaces its own binary before final validation, and it does not restart Home.
+
+**Decisions still in front of a candidate:** how Chat ships, which Linux containment method protects model providers, which model the seed offers for regular use, who holds signing keys, who restarts Home after an update, and which public-seed accounts may configure and pay for hosted AI.
+
+**Later than this release:** the wider Qwen distribution and benchmark matrix, remote model sharing, remote Browser placement, protected purchases, Linux ARM64 delivery, and relay qualification. The focused 0.7.2 shape is a usable public Home with a local Assistant, approved hosted use, Community Chat, a local Mac Browser, and an update that keeps state. There is no date on it.
 
 ## 7. Marketplace — Search, Activity, Notifications, Cart
 
@@ -237,10 +239,11 @@ Ledger no longer accepts Nano S app updates. The planned device set for a later 
 | Protected content | **PR 62** open · installed read landed · full journey **not** accepted |
 | Offer buy | **PR 70** open · adoption **in progress** |
 | Home surface | **PR 67** · **PR 68** · **PR 69** open · phone layout **local only** |
-| Models | **PR 71** open · evidence, not acceptance · Inbox follow-up **not pushed** · **no** 0.7.2 tag |
-| Sandbox | Public-node model process **not** sandboxed · Linux isolation **open** |
-| Community room | On the OS list · still unreliable |
-| Runtime update | Required on the OS bar · not re-shown on the GUI candidate |
+| Models | **PR 71** open, stacked on **PR 64** · seed SmolLM2 reply proved · useful Assistant **open** · **no** 0.7.2 tag |
+| Isolation | Largest gate · seed has **no** Linux containment · installed Mac process exceeds the file contract |
+| Community room | Named in the plan · needs an owner, a delivery choice, and installed tests |
+| Runtime update | Next plan line **0.7.2** · updater replaces its binary before validation · does not restart Home |
+| Model CI | PR 71 UI checks failed · Node 26 pin on `fix/0.7.2-model-ci-node` · not integrated |
 | Marketplace | web **4.6.8** · drm **0.13.2** · site playback of a runtime-protected object **still open** |
 | PC2 | Quiet · **v1.4.0** |
 | Elastos.Node | **v1.2.4** |
@@ -256,8 +259,8 @@ Ledger no longer accepts Nano S app updates. The planned device set for a later 
 |---|---|---|
 | Protected content | Installed read · shelf visible · owned-copy download · **PR 62** | Cinema / mint paths from prior weeks still the live shop |
 | Market buy | Live-offer buy by link or Explore · **PR 70** · adoption in progress | Site playback of that object **still open** |
-| Home | Wallpaper · Assistant mark · phone layout local · public-node icons and browser close **open** | — |
-| Models | Exact-offer grants · guest sets up their own hosted route · Get **not** accepted · revoke and history **not pushed** · process **not** sandboxed on the public node | — |
+| Home | Wallpaper · Assistant mark · phone layout local · public Home has the icon fix · Browser Close **not** on that Home | — |
+| Models | Seed SmolLM2 reply · one Mac share with End · Qwen3.5-9B on an earlier Mac only · Linux containment **open** · hosted calls **paused** | — |
 | Marketplace | — | Search, live activity, push + email, cart, batch mint, analytics, reports, referral · playback **open** |
 | Mesh | — | Hyper upload / block lists · Hey relay video · sideload |
 | Wallet / DAO | — | Essentials review screens, **no** signed funds · DAO local, synthetic sign-in |
@@ -269,11 +272,11 @@ Ledger no longer accepts Nano S app updates. The planned device set for a later 
 
 1. Show the long confirmation on PR 62 as a wait. The installed read is not the full journey, and it is not a tag.
 2. Finish adopting a market purchase onto a Home that did not list it (**PR 70**).
-3. Push the Inbox follow-up: revoke, a history that stays, local-file reads that match the request, and refusal after access ends. Settle the overlap with PR 62 and with the marketplace edits.
-4. Isolate the model process before anyone treats the public node as shared. Linux sandboxing and an outer capsule are the open work. macOS’s partial file and network boundary is not that isolation.
-5. Land **PR 67**, **PR 68**, and **PR 69** on their own. The phone layout needs a pull request before anyone treats it as shared. Icon positions and browser shutdown on the public node are separate bugs.
-6. Keep collecting model Get and Browser evidence on **PR 71**. Do not call Get accepted until the public candidate passes. Hosted routes stay optional and off until approved.
-7. Put the community room back into a state where people stay in sync, without join and leave lines taking the room. Show an install moving from one runtime build to the next.
+3. Give PR 62 the same Runtime authority hosted AI uses. Keep a history of handled Inbox requests. Settle the file overlap with the model work.
+4. Write the Linux containment plan for the seed, then prove Inbox approval and End on installed Mac and Linux. Bring the installed Mac process inside the file contract.
+5. Land **PR 65** through **PR 69** on their own. The phone layout needs a pull request before anyone treats it as shared. Put the Browser Close repair on the public Home, then run the ordinary Mac Browser checks.
+6. Fold the Node 26 pin into **PR 71** and get a passing GitHub run. Keep Qwen3.5-4B a candidate until engine, signing, answer quality, and resources are checked. Public hosted calls stay paused.
+7. Name a Chat owner and a delivery choice, then test an installed public room. A two-Home Carrier link does not prove people behind home routers. Show 0.7.1 → 0.7.2 on an old client, with recovery, and a Home restart after the update. Do not tag 0.7.2 on the current updater.
 8. Soak ela.city search, activity, notifications, and cart on the current 4.6.8 / 0.13.2 line. Playback of a runtime-protected object on that site follows the OS release.
 9. **PC2** stays quiet until the protected-content surface on PR 62 is what the node consumes.
 10. **Essentials** and **DAO** stay local until live sign-in replaces the synthetic authority. Participation stays in the DAO database. No store or public-domain claim from this week.
@@ -304,7 +307,7 @@ Ledger no longer accepts Nano S app updates. The planned device set for a later 
 
 **Marketplace:** SashaMIT — ela.city, drm-api, events-watcher, v1-rest.
 
-**Also this week, not in those repos:** Essentials consolidation, review flows, and an unverified-ESC-contract warning · DAO local accounts, comments, profiles, participation kept in the DAO database · ELA/ETH pool test position · Ledger patch branch. Inbox revoke, request history, and the sandbox gap are local to the runtime checkout and are **not** in the commit counts above.
+**Also this week, not in those repos:** Essentials consolidation, review flows, and an unverified-ESC-contract warning · DAO local accounts, comments, profiles, participation kept in the DAO database · ELA/ETH pool test position · Ledger patch branch. Anders’ team-sync note is on `docs/weekly-2026-09-25`, outside the commit counts above.
 
 **Releases.** None tagged. Latest Runtime tag **[v0.7.0](https://github.com/Elacity/elastos-runtime/releases/tag/v0.7.0)**. PC2 **v1.4.0**. Marketplace **4.6.8** / **0.13.2**. Essentials, DAO, and the Ledger app are **not** public releases.
 
@@ -315,8 +318,9 @@ Ledger no longer accepts Nano S app updates. The planned device set for a later 
 - **PR 62 squashes** mostly restate #38. The installed read, the shelf fix, Download, and the USDC scale fix are the new claims.
 - **PR 70** is an open runtime branch. Adoption onto a Home that did not list the item is in progress.
 - **Phone Home** is a local branch until it is a pull request.
-- **Model Get** evidence is not acceptance. Inbox revoke and the sandbox gap are not on the remote. The public-node model process is not sandboxed.
-- **Community room** and the runtime self-update are on the OS list and are not shown as done.
+- **SmolLM2 on the public seed** is one short reply, not a useful Assistant. Fresh delivery onto that seed is unproven. Qwen3.5-9B evidence belongs to an earlier Mac build.
+- **Isolation** is the largest gate. The seed has no Linux containment. The installed Mac process can reach more user files than the capsule contract allows.
+- **Community Chat** needs an owner, a delivery choice, and installed tests. The updater replaces its binary before validation and does not restart Home. There is no 0.7.2 tag.
 - **ela.city playback** of a runtime-protected object is still open.
 - **Hyper / Hey** remain source and sideload.
 - **Essentials / DAO** are local. DAO sign-in in this build is synthetic.
@@ -337,8 +341,8 @@ Ledger no longer accepts Nano S app updates. The planned device set for a later 
 | Protected content | Installed read · shelf visible · **PR 62** open |
 | Offer buy | **PR 70** · adoption in progress |
 | Home | **PR 67** · **PR 68** · **PR 69** · phone **local** |
-| Models | **PR 71** · Get **not** accepted · Inbox follow-up **not pushed** · public node **not** sandboxed |
-| Community room / update | On the OS list · room still unreliable · update not re-shown |
+| Models | Seed SmolLM2 reply · one Mac share · isolation **open** · **PR 71** · **no** 0.7.2 tag |
+| Community room / update | Needs owner and delivery choice · updater replaces binary before validation |
 | Marketplace | web **4.6.8** · drm **0.13.2** · search / activity / notifications / cart · playback **open** |
 | Essentials / DAO | Local · DAO **not deployed** |
 | ELA/ETH pool | 2021 position emptied · **0.5 ETH** test · remainder out |

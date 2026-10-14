@@ -76,6 +76,7 @@ process.on('beforeExit', (code) => {
 import { createServer } from './server.js';
 import { DatabaseManager, IPFSStorage, FilesystemManager, type IPFSNetworkMode, setGlobalDatabase } from './storage/index.js';
 import { loadConfig, type Config } from './config/loader.js';
+import { unsignedAuthBootError } from './api/auth/wallet-proof.js';
 import { logger, createLogger } from './utils/logger.js';
 
 const log = createLogger('pc2');
@@ -101,6 +102,15 @@ let config: Config;
 try {
   config = loadConfig();
   logger.info('✅ Configuration loaded');
+  const unsignedAuthError = unsignedAuthBootError({
+    allowUnsigned: process.env.PC2_ALLOW_UNSIGNED_AUTH === '1',
+    host: config.server.host,
+    nodeEnv: process.env.NODE_ENV,
+  });
+  if ( unsignedAuthError ) {
+    logger.error(unsignedAuthError);
+    process.exit(1);
+  }
 
   // Supernode RPC proxy (SUPERNODE-RPC-PROXY task): when the operator has
   // pointed this node at one or more supernode-backed Base RPC endpoints via

@@ -1612,6 +1612,9 @@ export function setupAPI(app: Express): void {
     // Register /stat BEFORE other routes to ensure it's matched correctly
     app.all('/stat', authenticate, handleStat); // Use app.all() to handle both GET and POST
     app.post('/readdir', authenticate, handleReaddir);
+    // The desktop calls /fs/readdir. Without this alias the folder
+    // window gets a 404 and shows "Failed to load directory".
+    app.post('/fs/readdir', authenticate, handleReaddir);
     app.get('/read', authenticate, handleRead);
     app.post('/read', authenticate, handleRead); // Also support POST for /read
     app.post('/write', authenticate, handleWrite);

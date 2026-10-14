@@ -522,6 +522,29 @@ jobs:
           # 401 (auth required — proves auth middleware is wired correctly).
           INFO_CODE=$(curl -s -m 2 -o /dev/null -w '%{http_code}' "http://localhost:${PC2_PORT}/api/info" || echo "000")
           RESOURCES_CODE=$(curl -s -m 2 -o /dev/null -w '%{http_code}' "http://localhost:${PC2_PORT}/api/resources" || echo "000")
+          # Unsigned login and claim must be refused on the default config.
+          # Loopback is not a substitute for a wallet signature.
+          AUTH_CODE=$(curl -s -m 5 -o /tmp/pc2-auth.json -w '%{http_code}' -X POST "http://localhost:${PC2_PORT}/auth/particle" -H 'Content-Type: application/json' -d '{"wallet_address":"0x1234567890123456789012345678901234567890"}' || echo "000")
+          CLAIM_CODE=$(curl -s -m 5 -o /tmp/pc2-claim.json -w '%{http_code}' -X POST "http://localhost:${PC2_PORT}/api/access/claim-ownership" -H 'Content-Type: application/json' -d '{"walletAddress":"0x1234567890123456789012345678901234567890"}' || echo "000")
+          CHALLENGE_CODE=$(curl -s -m 5 -o /tmp/pc2-challenge.json -w '%{http_code}' "http://localhost:${PC2_PORT}/auth/challenge?address=0x1234567890123456789012345678901234567890&publicHost=zzz.ela.city" || echo "000")
+          READDIR_CODE=$(curl -s -m 5 -o /tmp/pc2-readdir.json -w '%{http_code}' -X POST "http://localhost:${PC2_PORT}/fs/readdir" -H 'Content-Type: application/json' -d '{"path":"/"}' || echo "000")
+          echo "Auth gate smoke: /auth/particle → HTTP ${AUTH_CODE} (expected 401), /api/access/claim-ownership → HTTP ${CLAIM_CODE} (expected 401), /auth/challenge → HTTP ${CHALLENGE_CODE} (expected 200), /fs/readdir → HTTP ${READDIR_CODE} (expected 401)"
+          if [ "${AUTH_CODE}" != "401" ] || [ "${CLAIM_CODE}" != "401" ] || [ "${CHALLENGE_CODE}" != "200" ] || [ "${READDIR_CODE}" != "401" ]; then
+            echo "::error::Unsigned login or claim was not refused, or the challenge was not issued"
+            echo "auth body: $(cat /tmp/pc2-auth.json 2>/dev/null || true)"
+            echo "claim body: $(cat /tmp/pc2-claim.json 2>/dev/null || true)"
+            exit 1
+          fi
+          node -e "
+            const r = JSON.parse(require('fs').readFileSync('/tmp/pc2-challenge.json', 'utf8'));
+            const first = String(r.message || '').split('\n')[0];
+            if (!first.startsWith('zzz.ela.city ')) {
+              console.error('::error::Challenge host was ' + JSON.stringify(first) + ', expected zzz.ela.city');
+              process.exit(1);
+            }
+            console.log('✅ Challenge names the public host');
+          "
+
           echo "Secondary route smoke: /api/info → HTTP ${INFO_CODE} (expected 200), /api/resources → HTTP ${RESOURCES_CODE} (expected 401)"
 
           if [ "${INFO_CODE}" != "200" ]; then
@@ -1079,13 +1102,15 @@ jobs:
           fetch-depth: 1
 
       # The actual gate: run install-arm.sh exactly as a Pi user would, but
-      # with PC2_CI_MODE=1 so it skips the host-only steps. PC2_BRANCH points
-      # at the branch this CI run is testing so the script clones our work,
-      # not main.
+      # with PC2_CI_MODE=1 so it skips the host-only steps. PC2_BRANCH must
+      # be a real remote branch. On a pull request github.ref_name is
+      # "<number>/merge", which origin does not have, so the script's
+      # git clone fails. head_ref is the source branch. On a push,
+      # head_ref is empty and ref_name is the branch.
       - name: Run install-arm.sh (PC2_CI_MODE=1, branch under test)
         env:
           PC2_CI_MODE: '1'
-          PC2_BRANCH: ${{ github.ref_name }}
+          PC2_BRANCH: ${{ github.head_ref || github.ref_name }}
           PC2_DIR: /tmp/pc2-install-test
           # install-arm.sh's install_pc2 step runs `npm run build:pc2` which
           # spawns tsc and Vite. 4 GB heap is what build-pi-os uses too.

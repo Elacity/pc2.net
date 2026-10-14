@@ -12,6 +12,7 @@
     "database_path": "./data/pc2.db"
   },
   "security": {
+    "siweRequired": true,
     "session_duration_days": 7,
     "rate_limit_window_ms": 60000,
     "rate_limit_max_requests": 100

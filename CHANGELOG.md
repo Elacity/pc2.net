@@ -6,6 +6,18 @@
 
 ---
 
+## [v1.4.1] - 2026-10-14 - Wallet signature required for login and first claim
+
+A request that contains only a wallet address can no longer claim an unowned node or open a session. The login page already asks for a signature. The server now requires that signature, and dismissing the prompt stays signed out. An existing session keeps working until it expires. `name.ela.city` login is unchanged for an owner who approves the prompt.
+
+- New sessions and a first claim require a verified wallet signature. A missing `siweRequired` setting means the check is on.
+- `GET /api/access/status` returns `hasOwner` and leaves the owner address out.
+- The sign-in challenge uses the public hostname when the request arrives through the private gateway.
+- The desktop directory listing accepts `/fs/readdir` as well as `/readdir`.
+- The first-run welcome window no longer covers the desktop.
+
+---
+
 ## [v1.2.8.0] - 2026-05-DD - Operator self-observability (Health & Support app + local telemetry) + resource-limit bug fix + release-engineering hardening
 
 > **Scope (DRAFT — pending tag)**: A focused operator-observability release. Ships a new built-in **Health & Support** app that lets operators run a one-click self-test on their PC2 node, view local telemetry (p50/p95/p99 latencies of critical paths), and compose a sanitised support report they can choose to send manually. Fixes a latent bug where resource-limit settings configured via API (`storage_limit`, `max_concurrent_wasm`, `max_memory_mb`, `wasm_timeout_ms`) were silently ignored on read. Plus a substantial under-the-hood investment in CI reliability and code structure to make future releases safer — none of which changes user-facing behaviour but all of which catches a class of bugs before they reach users. **No new outbound telemetry of any kind** — all observability is local-only; operators see their own data, nothing leaves the machine without an explicit user-initiated send. Branch: [`feat/t-1-telemetry-and-support`](https://github.com/Elacity/pc2.net/tree/feat/t-1-telemetry-and-support). 56 commits since v1.2.7.14; full pre-tag checklist at [`.cursor/tasks/RELEASE-ENGINEERING-V1280/PRE-TAG-CHECKLIST.md`](.cursor/tasks/RELEASE-ENGINEERING-V1280/PRE-TAG-CHECKLIST.md).

@@ -351,20 +351,14 @@ const ParticleNetworkProvider: React.FC<React.PropsWithChildren<ParticleNetworkC
       }
       console.log('[Particle Auth]: Auth callback using API origin:', apiOrigin);
 
-      // SEC-3a (2026-04 audit): SIWE wallet-control proof.
-      // Fetch a single-use challenge, sign it with the connected wallet, and
-      // include {signature, nonce, message} in the auth payload. Designed for
-      // forward + backward compatibility:
-      //   • Legacy server (no /auth/challenge route) → 404 → we skip SIWE
-      //     fields and the POST works exactly as before.
-      //   • New server with siweRequired=false → server LOGS but does not
-      //     enforce, so we get telemetry before the kill-switch flips.
-      //   • New server with siweRequired=true → enforced. Wallet pop-up =
-      //     ONE personal_sign per fresh login. (No pop-up on token reuse;
-      //     only when this auth flow runs.)
+      // One personal_sign per fresh login. A missing signature does not
+      // continue into /auth/particle. publicHost lets the node name this
+      // site in the prompt when the gateway rewrote Host to a tunnel address.
+      let siweReady = false;
       try {
         if (eoaAddress) {
-          const challengeRes = await fetch(`${apiOrigin}/auth/challenge?address=${encodeURIComponent(eoaAddress)}`);
+          const publicHost = window.location.host;
+          const challengeRes = await fetch(`${apiOrigin}/auth/challenge?address=${encodeURIComponent(eoaAddress)}&publicHost=${encodeURIComponent(publicHost)}`);
           if (challengeRes.ok) {
             const challenge = await challengeRes.json() as { nonce: string; message: string };
             // primaryWallet.connector is the live wagmi connector;
@@ -396,18 +390,30 @@ const ParticleNetworkProvider: React.FC<React.PropsWithChildren<ParticleNetworkC
               authPayload.signature = signature;
               authPayload.nonce = challenge.nonce;
               authPayload.message = challenge.message;
+              siweReady = true;
               console.log('[Particle Auth]: SIWE signature attached');
             }
-          } else if (challengeRes.status === 404) {
-            console.log('[Particle Auth]: Server has no /auth/challenge — legacy unsigned auth (backcompat)');
           } else {
-            console.warn('[Particle Auth]: /auth/challenge returned', challengeRes.status, '— proceeding unsigned');
+            console.warn('[Particle Auth]: /auth/challenge returned', challengeRes.status);
           }
         }
       } catch (siweErr) {
-        // Never break login on SIWE failure during the audit-only rollout phase.
-        // The server will reject the unsigned POST iff siweRequired=true.
-        console.warn('[Particle Auth]: SIWE challenge/sign step failed (continuing unsigned):', siweErr);
+        console.warn('[Particle Auth]: SIWE challenge/sign step failed:', siweErr);
+      }
+
+      if (!siweReady) {
+        let isInIframe = false;
+        try {
+          isInIframe = window !== window.parent || window.self !== window.top;
+        } catch (e) {
+          isInIframe = true;
+        }
+        const messageTarget = isInIframe ? window.parent : window;
+        messageTarget.postMessage({
+          type: 'particle-auth.error',
+          payload: { message: 'Wallet signature is required to sign in.' },
+        }, '*');
+        return;
       }
 
       const response = await fetch(`${apiOrigin}/auth/particle`, {

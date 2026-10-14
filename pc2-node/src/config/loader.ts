@@ -33,12 +33,9 @@ export interface Config {
         rate_limit_window_ms: number;
         rate_limit_max_requests: number;
         /**
-     * SEC-3a (2026-04 audit): kill-switch for SIWE wallet-control proof on
-     * /auth/particle and /api/access/claim-ownership. Default false for
-     * zero-risk rollout — when false the server still issues challenges
-     * and accepts signatures (so client can be deployed first), but does
-     * NOT reject requests that lack them. Flip to true after the GUI
-     * change is deployed and verified.
+     * Wallet signature required for a new login and a first claim.
+     * A missing value is enforced. PC2_ALLOW_UNSIGNED_AUTH=1 is the
+     * local-dev exception and refuses to boot on a public bind.
      */
         siweRequired?: boolean;
     };

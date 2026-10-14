@@ -14,9 +14,8 @@ import { getNodeConfig, saveNodeConfig } from './setup.js';
 import { authenticate, AuthenticatedRequest } from './middleware.js';
 import type { DatabaseManager } from '../storage/database.js';
 import { Config } from '../config/loader.js';
-import { verifySiweSignature } from './auth/siwe-verify.js';
-import { challengeStore } from './auth/challenge-store.js';
 import { firstRunTokenStore } from './setup/first-run-token.js';
+import { isSiweRequired, verifyPresentedWalletProof } from './auth/wallet-proof.js';
 
 const LOOPBACK_RE = /^(127\.|::1$|::ffff:127\.)/;
 function isLoopback (addr: string | undefined): boolean {
@@ -122,9 +121,25 @@ router.get('/status', (req: Request, res: Response) => {
         const sessionToken = req.cookies?.antiSnipeSession;
         const hasValidSession = sessionToken ? verifyAntiSnipeSession(sessionToken) : false;
 
+        // The owner address is not a public field. The settings page sends
+        // the owner's session and still receives it.
+        let visibleOwner: string | undefined;
+        if ( hasOwner && config.ownerWallet ) {
+            const header = req.headers.authorization;
+            const token = header?.startsWith('Bearer ') ? header.slice('Bearer '.length).trim() : '';
+            const db = req.app?.locals?.db as DatabaseManager | undefined;
+            const session = token && db ? db.getSession(token) : null;
+            if ( session && session.expires_at > Date.now() && ! session.scope ) {
+                const allowed = (config.allowedWallets || []).some((w: { wallet: string }) => compareAddresses(w.wallet, session.wallet_address));
+                if ( compareAddresses(session.wallet_address, config.ownerWallet) || allowed ) {
+                    visibleOwner = config.ownerWallet;
+                }
+            }
+        }
+
         res.json({
             hasOwner,
-            ownerWallet: config.ownerWallet || null,
+            ...(visibleOwner ? { ownerWallet: visibleOwner } : {}),
             hasAntiSnipePassword,
             hasValidSession,
             requiresPassword: hasAntiSnipePassword && !hasOwner && !hasValidSession,
@@ -208,18 +223,9 @@ router.post('/verify-password', async (req: Request, res: Response) => {
  * Set owner wallet (called after first successful wallet login)
  * POST /api/access/claim-ownership
  *
- * SEC-3a (2026-04 audit): formerly accepted any wallet address from any
- * unauthenticated client — letting a remote attacker pin a brand-new
- * node's ownership to a wallet they don't even control. The endpoint
- * now requires ONE proof of intent:
- *   (a) anti-snipe password proven this session (cookie set by
- *       /api/access/verify-password) — the original UX path,
- *   (b) request from loopback (local first-run setup wizard),
- *   (c) a valid X-First-Run-Token header (remote setup),
- * AND when config.security.siweRequired is true, additionally requires:
- *   (d) a valid SIWE signature ({ signature, nonce, message } in the body)
- *       proving the caller controls the wallet they're claiming.
- * Replay is prevented by single-use nonces (see challenge-store.ts).
+ * Requires a SIWE signature for the wallet being claimed. When an
+ * anti-snipe password is set, the caller also needs that session, a
+ * loopback connection, or a first-run token.
  */
 router.post('/claim-ownership', async (req: Request, res: Response) => {
     try {
@@ -243,57 +249,42 @@ router.post('/claim-ownership', async (req: Request, res: Response) => {
         }
 
         const appConfig = req.app.locals.config as Config | undefined;
-        const siweRequired = !!appConfig?.security?.siweRequired;
+        const siweRequired = isSiweRequired(appConfig);
+        const proof = await verifyPresentedWalletProof({
+            siweRequired,
+            wallet: walletAddress,
+            signature,
+            nonce,
+            message,
+        });
+        if ( ! proof.ok ) {
+            return res.status(401).json({ success: false, error: proof.error, message: proof.message });
+        }
 
-        // Gate 1: proof-of-intent (one of cookie / loopback / first-run-token)
         const remoteAddr = req.socket.remoteAddress || '';
         const cookies = (req as Request & { cookies?: Record<string, string> }).cookies || {};
         const antiSnipeCookie = cookies.antiSnipeSession;
         const firstRunHeader = req.headers['x-first-run-token'];
         const firstRunToken = Array.isArray(firstRunHeader) ? firstRunHeader[0] : firstRunHeader;
-
-        const intentProven =
+        const operatorPresent =
             (antiSnipeCookie && verifyAntiSnipeSession(antiSnipeCookie)) ||
             isLoopback(remoteAddr) ||
-            (typeof firstRunToken === 'string' && firstRunTokenStore.verify(firstRunToken)) ||
-            !siweRequired; // legacy escape hatch until kill-switch flips
+            (typeof firstRunToken === 'string' && firstRunTokenStore.verify(firstRunToken));
 
-        if ( ! intentProven ) {
-            logger.warn('[AccessControl] claim-ownership refused — no intent proof', {
+        if ( config.antiSnipePasswordHash && ! operatorPresent ) {
+            logger.warn('[AccessControl] claim-ownership refused — anti-snipe password not proven', {
                 wallet: `${walletAddress.substring(0, 10) }...`,
-                remoteAddr: remoteAddr.substring(0, 32),
             });
             return res.status(403).json({
                 success: false,
-                error: 'Claim requires anti-snipe password, loopback, or X-First-Run-Token.',
+                error: 'Claim requires the anti-snipe password.',
             });
         }
-
-        // Gate 2: SIWE wallet-control proof (verified opportunistically when
-        // present; required when kill-switch flips).
-        const haveSiweFields = !!(signature && nonce && message);
-        if ( siweRequired && !haveSiweFields ) {
-            return res.status(401).json({ success: false, error: 'siwe_required', message: 'Fetch /auth/challenge then sign and resubmit.' });
-        }
-        if ( haveSiweFields ) {
-            const consumed = challengeStore.consume(nonce, walletAddress);
-            if ( ! consumed.ok ) {
-                if ( siweRequired ) return res.status(401).json({ success: false, error: 'invalid_nonce', message: consumed.reason });
-                logger.warn('[AccessControl] SIWE nonce rejected (audit-only):', consumed.reason);
-            } else {
-                const verifyResult = await verifySiweSignature({
-                    message: message!,
-                    signature: signature!,
-                    expectedAddress: walletAddress,
-                    addressType: detectAddressType(walletAddress) === 'solana' ? 'solana' : 'evm',
-                });
-                if ( ! verifyResult.valid ) {
-                    if ( siweRequired ) return res.status(401).json({ success: false, error: 'invalid_signature', message: verifyResult.reason });
-                    logger.warn('[AccessControl] SIWE signature rejected (audit-only):', verifyResult.reason);
-                } else {
-                    logger.info('[AccessControl] ✅ SIWE proof verified for claim');
-                }
-            }
+        if ( ! siweRequired && ! isLoopback(remoteAddr) ) {
+            return res.status(403).json({
+                success: false,
+                error: 'Unsigned claim is restricted to loopback.',
+            });
         }
 
         // All gates passed — commit the claim.

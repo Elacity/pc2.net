@@ -490,7 +490,7 @@ window.initgui = async function(options){
     //--------------------------------------------------------------------------------------
     else if(action === 'login'){
         // await UIWindowParticleLogin();
-        window.location.href = '/particle-auth';
+        window.location.href = '/particle-auth?v=20261014a';
     }
     //--------------------------------------------------------------------------------------
     // Action: Signup

@@ -16,8 +16,8 @@ import { normalizeAddress, compareAddresses, detectAddressType } from '../utils/
 import crypto from 'crypto';
 import { getNodeConfig, saveNodeConfig } from './setup.js';
 import { challengeStore } from './auth/challenge-store.js';
-import { verifySiweSignature } from './auth/siwe-verify.js';
 import { firstRunTokenStore } from './setup/first-run-token.js';
+import { isSiweRequired, resolveChallengeHost, verifyPresentedWalletProof } from './auth/wallet-proof.js';
 import { recordTelemetryOnce } from './telemetry.js';
 
 const LOOPBACK_RE = /^(127\.|::1$|::ffff:127\.)/;
@@ -29,10 +29,9 @@ function isLoopback (addr: string | undefined): boolean {
  * SEC-3a (2026-04 audit): issue a single-use SIWE challenge.
  * GET /auth/challenge?address=0x...
  *
- * Even when config.security.siweRequired is false, this endpoint always
- * works so the GUI can be deployed first ("forward compatibility"). The
- * server only ENFORCES presence of a valid signature in handleParticleAuth
- * once the kill-switch flips.
+ * The browser passes publicHost (window.location.host). That name is used
+ * only when the TCP peer is a private gateway or loopback address, so a
+ * tunnel hop shows zzz.ela.city instead of 10.100.0.4:4200.
  */
 export function handleAuthChallenge (req: Request, res: Response): void {
     const address = (req.query.address as string | undefined) || '';
@@ -41,7 +40,12 @@ export function handleAuthChallenge (req: Request, res: Response): void {
         return;
     }
     try {
-        const host = req.headers.host || 'pc2-node.local';
+        const clientHost = typeof req.query.publicHost === 'string' ? req.query.publicHost : undefined;
+        const host = resolveChallengeHost({
+            remoteAddress: req.socket.remoteAddress,
+            requestHost: req.headers.host,
+            clientHost,
+        });
         const proto = (req.headers['x-forwarded-proto'] as string) || (req.protocol || 'http');
         const challenge = challengeStore.issue(address, host, {
             uri: `${proto}://${host}`,
@@ -63,11 +67,9 @@ export function handleAuthChallenge (req: Request, res: Response): void {
  * Authenticate with Particle Auth
  * POST /auth/particle
  *
- * SEC-3a (2026-04 audit): when config.security.siweRequired is true, the
- * caller must supply { signature, nonce, message } proving wallet
- * control. When false (default), legacy unauthenticated flow remains so
- * the GUI rollout is risk-free; the verification path is exercised
- * opportunistically (logged-only) to surface bugs before the flag flips.
+ * A new session requires { signature, nonce, message } proving the caller
+ * controls the wallet. A missing security.siweRequired is enforced.
+ * PC2_ALLOW_UNSIGNED_AUTH=1 is the local-dev exception.
  */
 export async function handleParticleAuth (req: Request, res: Response): Promise<void> {
     const db = (req.app.locals.db as DatabaseManager | undefined);
@@ -113,58 +115,22 @@ export async function handleParticleAuth (req: Request, res: Response): Promise<
         const normalizedWallet = normalizeAddress(wallet_address);
         const addressType = detectAddressType(wallet_address);
 
-        // SEC-3a (2026-04 audit): SIWE wallet-control proof.
-        // Always run verification when caller supplied { signature, nonce, message }
-        // (so we can validate the GUI before flipping the kill-switch). Only REJECT
-        // missing/invalid signatures when config.security.siweRequired is true.
-        const siweRequired = !!config.security.siweRequired;
+        const siweRequired = isSiweRequired(config);
         const { signature, nonce, message } = body as { signature?: string; nonce?: string; message?: string };
-
-        if ( signature || nonce || message || siweRequired ) {
-            const haveAll = !!(signature && nonce && message);
-            if ( ! haveAll ) {
-                if ( siweRequired ) {
-                    logger.warn('🚫 SIWE required but request missing signature/nonce/message', {
-                        wallet: `${normalizedWallet.substring(0, 10) }...`,
-                        hasSignature: !!signature,
-                        hasNonce: !!nonce,
-                        hasMessage: !!message,
-                    });
-                    res.status(401).json({ error: 'siwe_required', message: 'A signed challenge is required. Fetch /auth/challenge first.' });
-                    return;
-                }
-            } else {
-                // Verify nonce — must exist, not be expired, bound to this address
-                const consumed = challengeStore.consume(nonce, normalizedWallet);
-                if ( ! consumed.ok ) {
-                    if ( siweRequired ) {
-                        logger.warn('🚫 SIWE nonce rejected', { reason: consumed.reason, wallet: `${normalizedWallet.substring(0, 10) }...` });
-                        res.status(401).json({ error: 'invalid_nonce', message: consumed.reason });
-                        return;
-                    }
-                    logger.warn('⚠️  SIWE nonce rejected (audit-only, kill-switch off)', { reason: consumed.reason });
-                } else {
-                    // Verify signature — EVM EOA path is the only one currently exercised by
-                    // the Particle Auth GUI (smart accounts will need eip1271Verifier injection).
-                    const verifyResult = await verifySiweSignature({
-                        message: message!,
-                        signature: signature!,
-                        expectedAddress: normalizedWallet,
-                        addressType: addressType === 'solana' ? 'solana' : 'evm',
-                        // smartAccountAddress: smart_account_address || undefined,  // wire when EIP-1271 verifier is implemented
-                    });
-                    if ( ! verifyResult.valid ) {
-                        if ( siweRequired ) {
-                            logger.warn('🚫 SIWE signature verification failed', { reason: verifyResult.reason, wallet: `${normalizedWallet.substring(0, 10) }...` });
-                            res.status(401).json({ error: 'invalid_signature', message: verifyResult.reason });
-                            return;
-                        }
-                        logger.warn('⚠️  SIWE signature failed (audit-only, kill-switch off)', { reason: verifyResult.reason });
-                    } else {
-                        logger.info('✅ SIWE signature verified', { wallet: `${normalizedWallet.substring(0, 10) }...` });
-                    }
-                }
-            }
+        const proof = await verifyPresentedWalletProof({
+            siweRequired,
+            wallet: normalizedWallet,
+            signature,
+            nonce,
+            message,
+        });
+        if ( ! proof.ok ) {
+            logger.warn('🚫 Wallet proof rejected', {
+                error: proof.error,
+                wallet: `${normalizedWallet.substring(0, 10) }...`,
+            });
+            res.status(401).json({ error: proof.error, message: proof.message });
+            return;
         }
 
         logger.info('🔐 Address type detected', {
@@ -202,54 +168,41 @@ export async function handleParticleAuth (req: Request, res: Response): Promise<
                 role: isOwner ? 'owner' : 'member',
             });
         } else {
-            // No owner set yet - this wallet may claim ownership.
-            //
-            // SEC-3a (2026-04 audit): an unauthenticated attacker could previously
-            // claim a brand-new node by simply POSTing any wallet address. The
-            // gates below now require ONE of:
-            //   (a) anti-snipe password proven this session (cookie set by
-            //       /api/access/verify-password) — the original UX path,
-            //   (b) request from loopback (local first-run setup wizard),
-            //   (c) a valid X-First-Run-Token header (remote setup),
-            //   (d) the kill-switch is still off (siweRequired=false) — legacy
-            //       behavior preserved during rollout.
-            // When siweRequired=true, we additionally require that the SIWE
-            // signature has already been verified above (which it has, because
-            // the only way past the SIWE block when siweRequired=true is success).
+            // No owner set yet. The wallet signature above is the claim.
+            // A configured anti-snipe password still has to be entered first.
+            // The dev unsigned switch may claim only from loopback.
             const remoteAddr = req.socket.remoteAddress || '';
             const cookies = (req as Request & { cookies?: Record<string, string> }).cookies || {};
             const antiSnipeCookie = cookies.antiSnipeSession;
             const firstRunHeader = req.headers['x-first-run-token'];
             const firstRunToken = Array.isArray(firstRunHeader) ? firstRunHeader[0] : firstRunHeader;
 
-            // Lazy import to avoid circular deps at module load
             const { verifyAntiSnipeSession } = await import('./access-control.js');
-            const claimAllowed =
+            const operatorPresent =
                 (antiSnipeCookie && verifyAntiSnipeSession(antiSnipeCookie)) ||
                 isLoopback(remoteAddr) ||
-                (typeof firstRunToken === 'string' && firstRunTokenStore.verify(firstRunToken)) ||
-                !siweRequired; // legacy escape hatch until kill-switch flips
+                (typeof firstRunToken === 'string' && firstRunTokenStore.verify(firstRunToken));
 
-            if ( ! claimAllowed ) {
-                logger.warn('🚫 Ownership claim refused — no proof of intent', {
+            if ( nodeConfig.antiSnipePasswordHash && ! operatorPresent ) {
+                logger.warn('🚫 Ownership claim refused — anti-snipe password not proven', {
                     wallet: `${normalizedWallet.substring(0, 10) }...`,
-                    remoteAddr: remoteAddr.substring(0, 32),
-                    hasAntiSnipeCookie: !!antiSnipeCookie,
-                    hasFirstRunToken: !!firstRunToken,
                 });
                 res.status(403).json({
                     error: 'claim_denied',
-                    message: 'This node has no anti-snipe password set; first-claim is restricted to loopback or X-First-Run-Token.',
+                    message: 'Enter the anti-snipe password before claiming this node.',
+                });
+                return;
+            }
+            if ( ! siweRequired && ! isLoopback(remoteAddr) ) {
+                res.status(403).json({
+                    error: 'claim_denied',
+                    message: 'Unsigned claim is restricted to loopback.',
                 });
                 return;
             }
 
-            logger.info('🔐 No owner set — first wallet will claim', {
+            logger.info('🔐 No owner set — first signed wallet will claim', {
                 wallet: `${normalizedWallet.substring(0, 10) }...`,
-                proofPath: antiSnipeCookie ? 'antiSnipeCookie'
-                    : isLoopback(remoteAddr) ? 'loopback'
-                        : firstRunToken ? 'firstRunToken'
-                            : 'legacy(siweRequired=false)',
             });
 
             try {

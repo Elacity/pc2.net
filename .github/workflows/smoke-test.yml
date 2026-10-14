@@ -1102,13 +1102,15 @@ jobs:
           fetch-depth: 1
 
       # The actual gate: run install-arm.sh exactly as a Pi user would, but
-      # with PC2_CI_MODE=1 so it skips the host-only steps. PC2_BRANCH points
-      # at the branch this CI run is testing so the script clones our work,
-      # not main.
+      # with PC2_CI_MODE=1 so it skips the host-only steps. PC2_BRANCH must
+      # be a real remote branch. On a pull request github.ref_name is
+      # "<number>/merge", which origin does not have, so the script's
+      # git clone fails. head_ref is the source branch. On a push,
+      # head_ref is empty and ref_name is the branch.
       - name: Run install-arm.sh (PC2_CI_MODE=1, branch under test)
         env:
           PC2_CI_MODE: '1'
-          PC2_BRANCH: ${{ github.ref_name }}
+          PC2_BRANCH: ${{ github.head_ref || github.ref_name }}
           PC2_DIR: /tmp/pc2-install-test
           # install-arm.sh's install_pc2 step runs `npm run build:pc2` which
           # spawns tsc and Vite. 4 GB heap is what build-pi-os uses too.

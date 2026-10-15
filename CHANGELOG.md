@@ -6,6 +6,17 @@
 
 ---
 
+## [v1.4.2] - 2026-10-16 - Setup page and recovery phrase require the owner
+
+An already-configured node can no longer be reset through the public setup page, and the recovery phrase can no longer be locked or read without the owner's session and a real wallet signature.
+
+- `POST /api/setup/complete` returns 409 once the node is set up, has an owner, or has a different username. It no longer contacts the gateway or rewrites the owner file in those cases.
+- `POST /api/boson/register` requires the owner's session.
+- The recovery-phrase routes require the owner's session, and the signature must recover to the wallet. Decrypt works only for the wallet that locked the phrase. Existing encrypted phrases still decrypt.
+- The node-info and phrase-status routes require a signed-in session.
+
+---
+
 ## [v1.4.1] - 2026-10-14 - Wallet signature required for login and first claim
 
 A request that contains only a wallet address can no longer claim an unowned node or open a session. The login page already asks for a signature. The server now requires that signature, and dismissing the prompt stays signed out. An existing session keeps working until it expires. `name.ela.city` login is unchanged for an owner who approves the prompt.

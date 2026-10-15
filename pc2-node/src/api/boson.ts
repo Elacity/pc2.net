@@ -8,6 +8,8 @@ import { Router, Request, Response } from 'express';
 import type { BosonService } from '../services/boson/index.js';
 import os from 'os';
 import { createLogger } from '../utils/logger.js';
+import { authenticate, requireOwner } from './middleware.js';
+import { verifyPhraseProof } from './auth/phrase-proof.js';
 const log = createLogger('api-boson');
 
 const router = Router();
@@ -71,7 +73,7 @@ router.get('/identity', (req: Request, res: Response) => {
  * POST /api/boson/register
  * Register a username
  */
-router.post('/register', async (req: Request, res: Response) => {
+router.post('/register', authenticate, requireOwner, async (req: Request, res: Response) => {
   const bosonService = getBosonService(req);
   
   if (!bosonService) {
@@ -315,7 +317,7 @@ function checkRateLimit(walletAddress: string): { allowed: boolean; remainingAtt
  * POST /api/boson/mnemonic-sign-message
  * Get the message to sign for mnemonic operations
  */
-router.post('/mnemonic-sign-message', (req: Request, res: Response) => {
+router.post('/mnemonic-sign-message', authenticate, requireOwner, (req: Request, res: Response) => {
   const bosonService = getBosonService(req);
   
   if (!bosonService) {
@@ -341,7 +343,7 @@ router.post('/mnemonic-sign-message', (req: Request, res: Response) => {
  * POST /api/boson/decrypt-mnemonic
  * Decrypt and return the mnemonic (rate limited)
  */
-router.post('/decrypt-mnemonic', (req: Request, res: Response) => {
+router.post('/decrypt-mnemonic', authenticate, requireOwner, async (req: Request, res: Response) => {
   const bosonService = getBosonService(req);
   
   if (!bosonService) {
@@ -380,6 +382,19 @@ router.post('/decrypt-mnemonic', (req: Request, res: Response) => {
     });
   }
   
+  const identity = bosonService.getIdentityService().getIdentity();
+  const proof = await verifyPhraseProof({
+    walletAddress,
+    signature,
+    lockedBy: identity?.encryptedMnemonic?.address ?? null,
+  });
+  if (!proof.ok) {
+    return res.status(proof.status).json({
+      error: proof.error,
+      remainingAttempts: rateLimit.remainingAttempts,
+    });
+  }
+
   // Try to decrypt
   const mnemonic = bosonService.decryptMnemonic(signature);
   
@@ -402,7 +417,7 @@ router.post('/decrypt-mnemonic', (req: Request, res: Response) => {
  * GET /api/boson/mnemonic-status
  * Check if mnemonic backup is available
  */
-router.get('/mnemonic-status', (req: Request, res: Response) => {
+router.get('/mnemonic-status', authenticate, (req: Request, res: Response) => {
   const bosonService = getBosonService(req);
   
   if (!bosonService) {
@@ -430,7 +445,7 @@ router.get('/mnemonic-status', (req: Request, res: Response) => {
  * GET /api/boson/full-identity
  * Get complete identity info for settings panel
  */
-router.get('/full-identity', (req: Request, res: Response) => {
+router.get('/full-identity', authenticate, (req: Request, res: Response) => {
   const bosonService = getBosonService(req);
   
   if (!bosonService) {
@@ -483,7 +498,7 @@ router.get('/full-identity', (req: Request, res: Response) => {
  * Encrypt mnemonic on first login and set admin wallet
  * Called automatically after first Particle login
  */
-router.post('/secure-mnemonic', async (req: Request, res: Response) => {
+router.post('/secure-mnemonic', authenticate, requireOwner, async (req: Request, res: Response) => {
   const bosonService = getBosonService(req);
   
   if (!bosonService) {
@@ -504,6 +519,11 @@ router.post('/secure-mnemonic', async (req: Request, res: Response) => {
     return res.status(400).json({
       error: 'Wallet address is required',
     });
+  }
+
+  const proof = await verifyPhraseProof({ walletAddress, signature });
+  if (!proof.ok) {
+    return res.status(proof.status).json({ error: proof.error });
   }
 
   // Check if already secured
@@ -552,7 +572,7 @@ router.post('/secure-mnemonic', async (req: Request, res: Response) => {
  * GET /api/boson/needs-securing
  * Check if mnemonic needs to be secured (for first login flow)
  */
-router.get('/needs-securing', (req: Request, res: Response) => {
+router.get('/needs-securing', authenticate, (req: Request, res: Response) => {
   const bosonService = getBosonService(req);
   
   if (!bosonService) {
@@ -578,7 +598,7 @@ router.get('/needs-securing', (req: Request, res: Response) => {
  * Encrypt a user-provided mnemonic (for when it's not in memory)
  * Used when user saved their mnemonic during setup and wants to encrypt it later
  */
-router.post('/encrypt-mnemonic', async (req: Request, res: Response) => {
+router.post('/encrypt-mnemonic', authenticate, requireOwner, async (req: Request, res: Response) => {
   const bosonService = getBosonService(req);
   
   if (!bosonService) {
@@ -613,6 +633,11 @@ router.post('/encrypt-mnemonic', async (req: Request, res: Response) => {
     return res.status(400).json({
       error: 'Invalid mnemonic: must be exactly 24 words',
     });
+  }
+
+  const proof = await verifyPhraseProof({ walletAddress, signature });
+  if (!proof.ok) {
+    return res.status(proof.status).json({ error: proof.error });
   }
 
   // Check if already has a backup

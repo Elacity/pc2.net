@@ -907,6 +907,11 @@ export default {
             } catch (e) {}
             return null;
         };
+
+        const authHeaders = (extra = {}) => {
+            const token = getAuthToken();
+            return token ? { ...extra, 'Authorization': `Bearer ${token}` } : { ...extra };
+        };
         
         // Load node identity
         async function loadNodeIdentity() {
@@ -961,7 +966,7 @@ export default {
                         $el_window.find('#view-recovery-btn').show();
                         $el_window.find('#open-encrypt-modal-btn, #no-recovery-message, #encrypt-now-section').hide();
                     } else {
-                        const needsCheck = await fetch(new URL('/api/boson/needs-securing', window.api_origin).toString());
+                        const needsCheck = await fetch(new URL('/api/boson/needs-securing', window.api_origin).toString(), { headers: authHeaders() });
                         const needsResult = await needsCheck.json();
                         
                         if (needsResult.hasMnemonicInMemory) {
@@ -997,7 +1002,7 @@ export default {
                 
                 const msgResponse = await fetch(new URL('/api/boson/mnemonic-sign-message', window.api_origin).toString(), {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: authHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ walletAddress })
                 });
                 const msgResult = await msgResponse.json();
@@ -1070,7 +1075,7 @@ export default {
                 
                 const msgResponse = await fetch(new URL('/api/boson/mnemonic-sign-message', window.api_origin).toString(), {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: authHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ walletAddress })
                 });
                 const msgResult = await msgResponse.json();
@@ -1085,7 +1090,7 @@ export default {
                 
                 const secureResponse = await fetch(new URL('/api/boson/secure-mnemonic', window.api_origin).toString(), {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: authHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ signature, walletAddress })
                 });
                 const secureResult = await secureResponse.json();
@@ -1162,7 +1167,7 @@ export default {
                     
                     const msgResponse = await fetch(new URL('/api/boson/mnemonic-sign-message', window.api_origin).toString(), {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: authHeaders({ 'Content-Type': 'application/json' }),
                         body: JSON.stringify({ walletAddress })
                     });
                     const msgResult = await msgResponse.json();
@@ -1174,7 +1179,7 @@ export default {
                     
                     const secureResponse = await fetch(new URL('/api/boson/encrypt-mnemonic', window.api_origin).toString(), {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: authHeaders({ 'Content-Type': 'application/json' }),
                         body: JSON.stringify({ mnemonic, signature, walletAddress })
                     });
                     const secureResult = await secureResponse.json();

@@ -18,6 +18,7 @@ import nacl from 'tweetnacl';
 import { logger } from '../utils/logger.js';
 import { toBase58, deriveFromMnemonic } from '../services/boson/IdentityService.js';
 import { requireSetupAuth } from './setup/setup-auth.js';
+import { setupCompleteBlockReason } from './setup/setup-guard.js';
 
 const router = Router();
 
@@ -275,6 +276,17 @@ router.post('/complete', async (req: Request, res: Response) => {
 
         const bosonService = req.app.locals.bosonService;
 
+        const blockReason = setupCompleteBlockReason({
+            setupMarkerExists: existsSync(SETUP_COMPLETE_FILE),
+            ownerWallet: getNodeConfig().ownerWallet,
+            storedUsername: bosonService?.getUsernameService?.()?.getUsername?.() ?? null,
+            requestedUsername: username,
+        });
+        if ( blockReason ) {
+            logger.warn(`[Setup] Refused /complete: ${blockReason}`);
+            return res.status(409).json({ success: false, error: blockReason });
+        }
+
         if ( ! bosonService ) {
             return res.status(503).json({ success: false, error: 'Boson service not available' });
         }
@@ -293,6 +305,12 @@ router.post('/complete', async (req: Request, res: Response) => {
 
         // Hash the anti-snipe password
         const passwordHash = await bcrypt.hash(password, 12);
+
+        // An owner may have claimed while the gateway call and bcrypt ran.
+        if ( getNodeConfig().ownerWallet || existsSync(SETUP_COMPLETE_FILE) ) {
+            logger.warn('[Setup] Refused /complete: node was claimed during setup');
+            return res.status(409).json({ success: false, error: 'This node already has an owner.' });
+        }
 
         // Save node config with password hash (owner not yet set)
         // Include publicUrl so DID tethering can use it for callbacks

@@ -9,6 +9,7 @@ import { logger } from '../utils/logger.js';
 import { lookup as dnsLookup } from 'dns/promises';
 import { isIP } from 'net';
 import { Agent } from 'undici';
+import { TRUSTED_ROOT_CERTIFICATES } from '../utils/tlsTrust.js';
 
 const router = Router();
 
@@ -143,6 +144,7 @@ async function resolveAndValidate(hostname: string): Promise<ResolvedTarget> {
 function makePinnedDispatcher(target: ResolvedTarget): Agent {
   return new Agent({
     connect: {
+      ca: TRUSTED_ROOT_CERTIFICATES,
       lookup: (_host: string, _opts: unknown, cb: (err: NodeJS.ErrnoException | null, address: string, family: number) => void) => {
         cb(null, target.ip, target.family);
       },

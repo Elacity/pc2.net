@@ -735,7 +735,6 @@ ExecStart=/usr/bin/node index.js
 Restart=always
 RestartSec=3
 Environment=NODE_ENV=production
-Environment=NODE_TLS_REJECT_UNAUTHORIZED=0
 
 [Install]
 WantedBy=multi-user.target

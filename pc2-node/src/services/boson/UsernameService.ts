@@ -12,10 +12,6 @@ import { join } from 'path';
 import { logger } from '../../utils/logger.js';
 import type { GatewayTokenStore } from '../gateway/GatewayTokenStore.js';
 
-// Allow self-signed certificates when calling gateway by IP
-// This is safe because we're only calling our own trusted gateway
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-
 export interface UsernameConfig {
     dataDir: string; // Directory to store username config
     gatewayUrl: string; // Web Gateway URL (e.g., https://demo.ela.city)

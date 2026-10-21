@@ -82,10 +82,8 @@ let retrySchedulerStarted = false;
 // tokens with rotatable scopes are slated for v1.2.8 — see SUPERNODE-RPC-PROXY
 // task for the same migration pattern.
 //
-// IP-based HTTPS URL is intentional: the cert is self-signed (no DNS for
-// `cluster.ela.city` pointing here yet — gated on Thailand DNS round-trip).
-// pc2-node already runs with NODE_TLS_REJECT_UNAUTHORIZED=0 globally
-// (UsernameService.ts:17), so the IP-literal cert is accepted.
+// IP-based HTTPS URL: the supernode serves the Let's Encrypt `*.ela.city`
+// certificate, and utils/tlsTrust.ts verifies supernode IPs against it.
 //
 // Override: set SUPERNODE_CLUSTER_PIN_URL and/or _TOKEN in shell env or
 //           pc2-node/.env to use a different cluster (e.g. self-hosted).

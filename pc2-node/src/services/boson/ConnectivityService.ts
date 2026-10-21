@@ -16,6 +16,7 @@ import { WireGuardService } from '../wireguard/WireGuardService.js';
 import { AmneziaWGService } from '../wireguard/AmneziaWGService.js';
 import { VLESSRealityService } from '../vless/VLESSRealityService.js';
 import { fromBase58 } from './IdentityService.js';
+import { supernodeServername } from '../../utils/tlsTrust.js';
 import { execSync } from 'child_process';
 import net, { type Server, type Socket } from 'net';
 import https from 'https';
@@ -85,12 +86,12 @@ let cacheTimestamp: number = 0;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 /**
- * Fetch JSON from an HTTPS URL, tolerating self-signed certs
- * (supernodes serve HTTPS on raw IPs with self-signed certificates).
+ * Fetch JSON from an HTTPS URL. Supernode IPs verify against their ela.city certificate.
  */
 function httpsGetJson<T>(url: string, timeoutMs = 5000): Promise<T> {
   return new Promise((resolve, reject) => {
-    const req = https.get(url, { rejectUnauthorized: false, timeout: timeoutMs }, (res) => {
+    const servername = supernodeServername(new URL(url).hostname);
+    const req = https.get(url, { servername, timeout: timeoutMs }, (res) => {
       if (!res.statusCode || res.statusCode >= 400) {
         res.resume();
         reject(new Error(`HTTP ${res.statusCode}`));

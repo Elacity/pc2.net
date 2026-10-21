@@ -9,6 +9,7 @@ import fs from 'fs';
 import type { DatabaseManager, FilesystemManager } from '../storage/index.js';
 import { Config } from '../config/loader.js';
 import { baseRpcCall } from '../utils/rpc.js';
+import { SUPERNODE_TLS_SERVERNAME } from '../utils/tlsTrust.js';
 import { Server as SocketIOServer } from 'socket.io';
 import { authenticate, requireOwner, corsMiddleware, errorHandler, AuthenticatedRequest } from './middleware.js';
 import { logger, createLogger } from '../utils/logger.js';
@@ -1395,17 +1396,16 @@ export function setupAPI(app: Express): void {
         }
     });
 
-    // ESC RPC Proxy — forwards JSON-RPC calls to Contabo ESC archive node (self-signed cert)
-    const escRpcAgent = new https.Agent({ rejectUnauthorized: false });
+    // ESC RPC Proxy — forwards JSON-RPC calls to Contabo ESC archive node
     app.post('/api/esc-rpc', (req: Request, res: Response) => {
         const postData = JSON.stringify(req.body);
         const proxyReq = https.request({
             hostname: '38.242.211.112',
+            servername: SUPERNODE_TLS_SERVERNAME,
             port: 443,
             path: '/rpc/esc',
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(postData) },
-            agent: escRpcAgent,
             timeout: 15000,
         }, (proxyRes) => {
             let body = '';

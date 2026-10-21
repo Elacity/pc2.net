@@ -362,6 +362,14 @@ jobs:
           (cd pc2-node && npm run test:unit)
           echo "::endgroup::"
 
+      - name: No TLS verification bypass in pc2-node
+        run: |
+          set -euo pipefail
+          if grep -rnE "rejectUnauthorized:[[:space:]]*false|NODE_TLS_REJECT_UNAUTHORIZED[[:space:]]*=" pc2-node/src; then
+            echo "::error::TLS verification bypass found in pc2-node/src"
+            exit 1
+          fi
+
       # A-4: Boot smoke — actually start the pc2-node binary in the background
       # and assert /api/health responds with status:ok before tearing it down.
       #

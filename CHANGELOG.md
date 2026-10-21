@@ -6,6 +6,17 @@
 
 ---
 
+## [v1.4.3] - 2026-10-21 - Outbound HTTPS certificates are verified
+
+pc2-node no longer accepts any certificate on outbound HTTPS. Until now it switched verification off for the whole process at startup, so AI keys, RPC calls, gateway tokens and pins could be intercepted on an untrusted network.
+
+- Certificate verification is on for every outbound request. Self-signed, expired and wrong-host certificates are refused.
+- The Elacity supernodes are still reached by IP, but are checked against their Let's Encrypt `*.ela.city` certificate. No supernode or DNS change is needed.
+- The roots distrusted after the eMudhra intermediate compromise (20 Oct 2026) are removed from the trust store pc2-node uses. Node's bundled store still includes emSign ECC Root CA - G3.
+- The supernode bootstrap no longer writes `NODE_TLS_REJECT_UNAUTHORIZED=0` into the gateway's systemd unit.
+
+---
+
 ## [v1.4.2] - 2026-10-16 - Setup page and recovery phrase require the owner
 
 An already-configured node can no longer be reset through the public setup page, and the recovery phrase can no longer be locked or read without the owner's session and a real wallet signature.

@@ -23,6 +23,7 @@ import type { StoredSession } from '../services/session/BackendSessionService.js
 import { createLogger } from '../utils/logger.js';
 import { getBaseRpcUrl, getPublicProxyUrl, getHealthyBaseRpcUrls } from '../utils/rpc.js';
 import { recordMetricCounter, recordMetricHistogram } from '../utils/metrics.js';
+import { supernodeServername } from '../utils/tlsTrust.js';
 
 const logger = createLogger('chipotle');
 
@@ -837,7 +838,8 @@ function loadCachedProvision(): ProvisionConfig | null {
 
 function httpsGet(url: string, timeoutMs = 5000): Promise<string> {
   return new Promise((resolve, reject) => {
-    const req = https.get(url, { rejectUnauthorized: false, timeout: timeoutMs }, (res) => {
+    const servername = supernodeServername(new URL(url).hostname);
+    const req = https.get(url, { servername, timeout: timeoutMs }, (res) => {
       if (!res.statusCode || res.statusCode >= 400) {
         reject(new Error(`HTTP ${res.statusCode}`));
         res.resume();

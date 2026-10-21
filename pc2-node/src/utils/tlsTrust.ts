@@ -17,7 +17,7 @@ import { rootCertificates } from 'tls';
 import { Agent, buildConnector, setGlobalDispatcher } from 'undici';
 import { refuseBrotli } from './refuseBrotli.js';
 
-const DISTRUSTED_ROOT_SPKI_SHA256: ReadonlySet<string> = new Set([
+export const DISTRUSTED_ROOT_SPKI_SHA256: ReadonlySet<string> = new Set([
     '8d417db2dd8bf5e3084d1e3f196d583849d81bdd4c00c70b9d39369e96b8c782', // emSign ECC Root CA - G3
     'c619e4780ed8e0abeda24ad732567de4383a7ea941338f6d1a7d1b49ac792fe9', // emSign Root TLS CA - G3
     'bd153ed7b0434f6886b17bce8bbe84ed340c7132d702a8f4fa318f756ecbd6f3', // Comodo AAA Certificate Services

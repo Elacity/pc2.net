@@ -7,7 +7,7 @@
 #   curl -sSL https://raw.githubusercontent.com/Elacity/pc2.net/main/scripts/install-arm.sh | bash
 #
 # What this does:
-#   1. Installs Node.js 20, PM2, build tools
+#   1. Installs Node.js 24, PM2, build tools
 #   2. Clones PC2 and builds it
 #   3. Installs WireGuard (kernel module or wireguard-go fallback for Jetson)
 #   4. Configures permissions so PC2 can manage WireGuard tunnels automatically
@@ -266,7 +266,7 @@ install_prerequisites() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Install Node.js 20
+# Install Node.js 24
 # ─────────────────────────────────────────────────────────────────────────────
 
 install_nodejs() {
@@ -275,14 +275,14 @@ install_nodejs() {
 
     if command -v node &> /dev/null; then
         NODE_VERSION=$(node -v | cut -d 'v' -f 2 | cut -d '.' -f 1)
-        if [ "$NODE_VERSION" -ge 20 ]; then
+        if [ "$NODE_VERSION" -ge 24 ]; then
             print_ok "Node.js $(node -v) already installed"
             return
         fi
     fi
 
-    print_step "Installing Node.js 20..."
-    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+    print_step "Installing Node.js 24..."
+    curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
     sudo apt-get install -y -qq nodejs
 
     print_ok "Node.js $(node -v) installed"

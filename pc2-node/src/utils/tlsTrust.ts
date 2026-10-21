@@ -15,8 +15,9 @@ import https from 'https';
 import { createHash, X509Certificate } from 'crypto';
 import { rootCertificates } from 'tls';
 import { Agent, buildConnector, setGlobalDispatcher } from 'undici';
+import { refuseBrotli } from './refuseBrotli.js';
 
-const DISTRUSTED_ROOT_SPKI_SHA256: ReadonlySet<string> = new Set([
+export const DISTRUSTED_ROOT_SPKI_SHA256: ReadonlySet<string> = new Set([
     '8d417db2dd8bf5e3084d1e3f196d583849d81bdd4c00c70b9d39369e96b8c782', // emSign ECC Root CA - G3
     'c619e4780ed8e0abeda24ad732567de4383a7ea941338f6d1a7d1b49ac792fe9', // emSign Root TLS CA - G3
     'bd153ed7b0434f6886b17bce8bbe84ed340c7132d702a8f4fa318f756ecbd6f3', // Comodo AAA Certificate Services
@@ -40,7 +41,10 @@ export function supernodeServername(host: string): string | undefined {
     return SUPERNODE_IPS.has(host) ? SUPERNODE_TLS_SERVERNAME : undefined;
 }
 
-/** Apply the trust policy to every global `fetch` and default-agent `https` request. Call once at boot. */
+/**
+ * Apply the trust policy to every global `fetch` and default-agent `https` request,
+ * and keep Brotli responses away from global `fetch`. Call once at boot.
+ */
 export function installOutboundTlsPolicy(): void {
     https.globalAgent.options.ca = TRUSTED_ROOT_CERTIFICATES;
     const connect = buildConnector({ ca: TRUSTED_ROOT_CERTIFICATES });
@@ -49,5 +53,5 @@ export function installOutboundTlsPolicy(): void {
             { ...opts, servername: supernodeServername(opts.hostname) ?? opts.servername },
             callback,
         ),
-    }));
+    }).compose(refuseBrotli));
 }

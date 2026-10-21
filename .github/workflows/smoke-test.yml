@@ -169,10 +169,10 @@ jobs:
       # Pin Node to a version we actually support. pc2-node/package.json
       # declares engines.node >=20.18.0; we pick the latest 20.x to match
       # what a fresh user install of nvm or Node-via-Homebrew would land on.
-      - name: Setup Node.js 20.x
+      - name: Setup Node.js 24.22.1
         uses: actions/setup-node@v4
         with:
-          node-version: '20.x'
+          node-version: '24.22.1'
 
       # Cache npm + yarn at home dir level. Speeds up successive runs from
       # ~6 min install down to ~90 s once the cache is warm. The cache key
@@ -973,7 +973,7 @@ jobs:
           echo "::group::Node.js 20.x via NodeSource"
           # NodeSource is the documented Debian install path for Node 20.
           # Pi OS users following our README will hit this same script.
-          curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+          curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
           apt-get install -y --no-install-recommends nodejs
           echo "::endgroup::"
 

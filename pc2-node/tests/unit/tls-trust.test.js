@@ -11,6 +11,7 @@ import https from 'node:https';
 import { rootCertificates } from 'node:tls';
 
 const {
+    DISTRUSTED_ROOT_SPKI_SHA256,
     TRUSTED_ROOT_CERTIFICATES,
     SUPERNODE_TLS_SERVERNAME,
     spkiSha256,
@@ -18,16 +19,18 @@ const {
     installOutboundTlsPolicy,
 } = await import('../../dist/utils/tlsTrust.js');
 
+// Node 24.22.1+ no longer bundles emSign ECC G3; Node 20/22 still do.
 const EMSIGN_ECC_G3 = '8d417db2dd8bf5e3084d1e3f196d583849d81bdd4c00c70b9d39369e96b8c782';
 
-test('emSign ECC Root CA - G3 is removed from the trusted roots', () => {
-    assert.ok(rootCertificates.some((pem) => spkiSha256(pem) === EMSIGN_ECC_G3), 'fixture: Node still bundles it');
+test('emSign ECC Root CA - G3 is never trusted', () => {
+    assert.ok(DISTRUSTED_ROOT_SPKI_SHA256.has(EMSIGN_ECC_G3));
     assert.ok(!TRUSTED_ROOT_CERTIFICATES.some((pem) => spkiSha256(pem) === EMSIGN_ECC_G3));
 });
 
-test('only distrusted roots are removed', () => {
-    const removed = rootCertificates.length - TRUSTED_ROOT_CERTIFICATES.length;
-    assert.ok(removed >= 1 && removed <= 3, `removed ${removed}`);
+test('exactly the bundled distrusted roots are removed', () => {
+    const expected = rootCertificates.filter((pem) => !DISTRUSTED_ROOT_SPKI_SHA256.has(spkiSha256(pem)));
+    assert.deepEqual(TRUSTED_ROOT_CERTIFICATES, expected);
+    assert.ok(rootCertificates.length - TRUSTED_ROOT_CERTIFICATES.length <= DISTRUSTED_ROOT_SPKI_SHA256.size);
 });
 
 test('supernode IPs verify against the ela.city name; other hosts are unchanged', () => {

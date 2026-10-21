@@ -4,7 +4,7 @@
 # This Dockerfile creates a self-contained PC2 node that users can
 # deploy on their personal hardware or VPS.
 
-FROM node:20-alpine
+FROM node:24.22.1-alpine
 
 # Labels
 LABEL org.opencontainers.image.title="ElastOS PC2"

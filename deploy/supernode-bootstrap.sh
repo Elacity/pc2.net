@@ -168,10 +168,10 @@ apt-get install -y -qq \
   openjdk-17-jre-headless \
   > /dev/null 2>&1
 
-# Install Node.js 20.x if not present
-if ! command -v node &>/dev/null || [[ $(node -v | cut -d. -f1 | tr -d v) -lt 18 ]]; then
-  log "Installing Node.js 20.x..."
-  curl -fsSL https://deb.nodesource.com/setup_20.x | bash - > /dev/null 2>&1
+# Install Node.js 24.x if not present
+if ! command -v node &>/dev/null || [[ $(node -v | cut -d. -f1 | tr -d v) -lt 24 ]]; then
+  log "Installing Node.js 24.x..."
+  curl -fsSL https://deb.nodesource.com/setup_24.x | bash - > /dev/null 2>&1
   apt-get install -y -qq nodejs > /dev/null 2>&1
 fi
 log_ok "Node.js $(node -v)"

@@ -13,7 +13,7 @@
 # What this does:
 #   1. Validates WSL2 environment
 #   2. Enables systemd if needed (requires WSL restart)
-#   3. Installs Node.js 20, PM2, build tools
+#   3. Installs Node.js 24, PM2, build tools
 #   4. Clones and builds PC2
 #   5. Installs transport binaries (WireGuard, AmneziaWG, sing-box)
 #   6. Configures PM2 persistence across WSL restarts
@@ -195,18 +195,18 @@ install_node() {
 
     if command -v node &>/dev/null; then
         NODE_VERSION=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
-        if [[ "$NODE_VERSION" -ge 18 ]]; then
+        if [[ "$NODE_VERSION" -ge 24 ]]; then
             print_ok "Node.js $(node -v) already installed"
             return 0
         fi
     fi
 
-    print_step "Installing Node.js 20 via nvm..."
+    print_step "Installing Node.js 24 via nvm..."
     curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
     [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-    nvm install 20
-    nvm use 20
-    nvm alias default 20
+    nvm install 24
+    nvm use 24
+    nvm alias default 24
     print_ok "Node.js $(node -v) installed"
 }
 

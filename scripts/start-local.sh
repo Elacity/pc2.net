@@ -132,11 +132,11 @@ install_node() {
     # Load nvm immediately
     [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
     
-    # Install Node.js 20
-    echo -e "${CYAN}Installing Node.js 20...${NC}"
-    nvm install 20
-    nvm use 20
-    nvm alias default 20
+    # Install Node.js 24
+    echo -e "${CYAN}Installing Node.js 24...${NC}"
+    nvm install 24
+    nvm use 24
+    nvm alias default 24
     
     echo -e "${GREEN}✓ Node.js $(node -v) installed${NC}"
     echo ""

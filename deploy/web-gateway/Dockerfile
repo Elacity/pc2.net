@@ -1,7 +1,7 @@
 # PC2 Web Gateway
 # Multi-stage build for minimal production image
 
-FROM node:20-alpine AS builder
+FROM node:24.22.1-alpine AS builder
 
 WORKDIR /app
 
@@ -12,7 +12,7 @@ COPY package*.json ./
 RUN npm ci --only=production
 
 # Production image
-FROM node:20-alpine
+FROM node:24.22.1-alpine
 
 WORKDIR /app
 

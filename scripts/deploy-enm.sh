@@ -90,7 +90,7 @@ verify_node_modules() {
             die "npm install failed in $backend_dir — ENM cannot start without complete node_modules"
         fi
     else
-        die "node_modules incomplete + npm not on PATH. Install Node 20.x first: curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && sudo apt install -y nodejs"
+        die "node_modules incomplete + npm not on PATH. Install Node 24.x first: curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash - && sudo apt install -y nodejs"
     fi
 }
 

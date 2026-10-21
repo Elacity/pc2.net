@@ -66,7 +66,7 @@ RUN chmod +x /binaries/*
 # ---------------------------------------------------------------------------
 # Stage 2: Build the Node.js application
 # ---------------------------------------------------------------------------
-FROM node:20-alpine AS builder
+FROM node:24.22.1-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache python3 make g++ git
@@ -112,7 +112,7 @@ RUN cd pc2-node && npm run build:backend || true
 # ---------------------------------------------------------------------------
 # Stage 3: Production image
 # ---------------------------------------------------------------------------
-FROM node:20-alpine
+FROM node:24.22.1-alpine
 
 # Install runtime dependencies
 # - bubblewrap: namespace isolation (multi-user security)

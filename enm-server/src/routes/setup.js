@@ -1414,7 +1414,7 @@ function build(extensionHandle) {
                     httpError = { status: 412, body: errorBody(
                         'install-class-c: no Node.js runtime detected. POST '
                         + '/api/enm/setup/install-node-runtime first (M4.3) or '
-                        + 'install Node.js v23.10.0 on the host.',
+                        + 'install Node.js v24.22.1 on the host.',
                     ) };
                     throw new SetupAbort();
                 }

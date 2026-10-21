@@ -8,8 +8,9 @@ import { AuthenticatedRequest, authenticate } from './middleware.js';
 import { logger } from '../utils/logger.js';
 import { lookup as dnsLookup } from 'dns/promises';
 import { isIP } from 'net';
-import { Agent } from 'undici';
+import { Agent, type Dispatcher } from 'undici';
 import { TRUSTED_ROOT_CERTIFICATES } from '../utils/tlsTrust.js';
+import { refuseBrotli } from '../utils/refuseBrotli.js';
 
 const router = Router();
 
@@ -141,7 +142,7 @@ async function resolveAndValidate(hostname: string): Promise<ResolvedTarget> {
  * the attacker flips the A-record between our validation lookup and the
  * fetch's own lookup.
  */
-function makePinnedDispatcher(target: ResolvedTarget): Agent {
+function makePinnedDispatcher(target: ResolvedTarget): Dispatcher {
   return new Agent({
     connect: {
       ca: TRUSTED_ROOT_CERTIFICATES,
@@ -149,7 +150,7 @@ function makePinnedDispatcher(target: ResolvedTarget): Agent {
         cb(null, target.ip, target.family);
       },
     },
-  });
+  }).compose(refuseBrotli);
 }
 
 /**
@@ -228,7 +229,7 @@ async function handleHttpRequest(req: AuthenticatedRequest, res: Response): Prom
     delete requestHeaders['cookie'];
 
     const dispatcher = makePinnedDispatcher(target);
-    const fetchOptions: RequestInit & { dispatcher?: Agent } = {
+    const fetchOptions: RequestInit & { dispatcher?: Dispatcher } = {
       method,
       headers: requestHeaders,
       signal: controller.signal,
@@ -441,7 +442,7 @@ async function handleDownload(req: AuthenticatedRequest, res: Response): Promise
         },
         signal: controller.signal,
         dispatcher,
-      } as RequestInit & { dispatcher?: Agent });
+      } as RequestInit & { dispatcher?: Dispatcher });
     } finally {
       void dispatcher.close().catch(() => { /* noop */ });
     }

@@ -6,6 +6,17 @@
 
 ---
 
+## [v1.4.4] - 2026-10-21 - Node.js October security release
+
+Node.js fixed a HIGH-severity Brotli decoder out-of-bounds write (CVE-2026-111497) that any Brotli-encoded `fetch` response can reach. The fix is only in Node 24.22.1, 22.23.4 and 26.12.1; Node 20, which most PC2 nodes run, gets none. This release protects nodes on any Node version and moves new installs to Node 24.
+
+- pc2-node no longer asks servers for Brotli, and refuses a Brotli-encoded response before Node decodes it. This covers every outbound `fetch`, including agent HTTP requests.
+- Docker images use `node:24.22.1`. The ARM, WSL and local installers and the supernode bootstrap install Node 24, and CI builds on 24.22.1.
+- enm-server's fallback Node download is v24.22.1 instead of the end-of-life v23.10.0.
+- An existing node keeps whichever Node it already has; the in-app update does not change it. Upgrading Node to 24.22.1 by hand is still recommended.
+
+---
+
 ## [v1.4.3] - 2026-10-21 - Outbound HTTPS certificates are verified
 
 pc2-node no longer accepts any certificate on outbound HTTPS. Until now it switched verification off for the whole process at startup, so AI keys, RPC calls, gateway tokens and pins could be intercepted on an untrusted network.

@@ -9,7 +9,7 @@
 #   - /data/enm           — ENM's own state (SQLite, ela-build cache, logs)
 #
 # What's in the image:
-#   - Node 20 (matches PC2's runtime)
+#   - Node 24 (matches PC2's runtime)
 #   - Toolchain to build ela on first run (git, make, gcc, build-essential,
 #     python3, pkg-config, wget, curl, ca-certificates)
 #   - Diagnostics tools (iproute2, procps, lsof) for HostConflictScanner
@@ -19,7 +19,7 @@
 #     release into /data/enm/cache/go-* on first ela build (no system Go).
 #   - The `ela` binary. Built on demand by the operator via the wizard.
 
-FROM node:20-bookworm-slim
+FROM node:24.22.1-bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git make tar gzip wget curl ca-certificates \

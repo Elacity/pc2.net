@@ -392,7 +392,7 @@ const classBSchema = Joi.object({
 // declares:
 //   - parentChainId    — which EVM sidechain feeds this oracle
 //   - scriptPath       — directory holding crosschain_<X>.js
-//   - nodejsVersion    — pinned to v23.10.0 per upstream (M4.3 ships)
+//   - nodejsVersion    — pinned to v24.22.1 (v23 is end of life)
 //   - ports.httpRpc    — the oracle's status endpoint port
 //   - parent.{chainRpcUrl, mainchainRpcUrl} — optional overrides; the
 //     adapter falls through to per-chain RPC URLs derived from cfg
@@ -415,7 +415,7 @@ const classCSchema = Joi.object({
     activeNet: Joi.string().valid('mainnet', 'testnet').default('mainnet'),
     parentChainId: Joi.string().valid('esc', 'eid', 'pg').required(),
     scriptPath: Joi.string().allow('').default(''),
-    nodejsVersion: Joi.string().allow('').default('v23.10.0'),
+    nodejsVersion: Joi.string().allow('').default('v24.22.1'),
     ports: classCPortsSchema.required(),
     parent: classCParentSchema,
     healing: perChainHealingSchema,

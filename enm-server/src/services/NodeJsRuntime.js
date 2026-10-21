@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0
  *
  * NodeJsRuntime — Wave M4.3 (beta.0.3.3) — locate or install the
- * Node.js v23.10.0 interpreter the Class C Oracles need.
+ * Node.js interpreter the Class C Oracles need.
  *
  * Plan §12 Q1 recommended bundling (+50MB) but the bundle path is a
  * release-engineering concern — for the runtime side we ship two
@@ -53,7 +53,7 @@ const DOWNLOAD_RETRY_BASE_MS = 2000;
 // PINNED_VERSION is what installLocal() downloads as a LAST RESORT
 // when the host doesn't have any usable Node.js. Matches node.sh:520
 // for parity but is no longer the floor: any v18+ runtime works.
-const PINNED_VERSION = 'v23.10.0';
+const PINNED_VERSION = 'v24.22.1';
 
 // beta.0.4.1 (operator directive) — lowered MIN_MAJOR from 23 → 18.
 // The oracle scripts use web3 + express + standard fs/net APIs that

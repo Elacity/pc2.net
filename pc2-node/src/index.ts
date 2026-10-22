@@ -99,7 +99,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 if (installOutboundTlsPolicy()) {
-  logger.warn('Ignored NODE_TLS_REJECT_UNAUTHORIZED=0 (left by an older update); outbound TLS certificates are verified. Remove it from pc2-node/.env.');
+  logger.warn('Ignored NODE_TLS_REJECT_UNAUTHORIZED set to 0 (left by an older update); outbound TLS certificates are verified. Remove it from pc2-node/.env.');
 }
 
 // Load configuration

@@ -370,10 +370,20 @@ if [ -z "${ASSIGNED_IP:-}" ]; then
   fi
   PROVISION_BODY="$PROVISION_BODY}"
 
-  RESPONSE=$(curl -sk -w "\n%{http_code}" -X POST \
+  # Elacity supernodes are reached by IP and serve the *.ela.city certificate.
+  GATEWAY_HOST="${GATEWAY_URL#https://}"; GATEWAY_HOST="${GATEWAY_HOST%%[:/]*}"
+  TLS_ARGS=()
+  if [[ "$GATEWAY_HOST" == "69.164.241.210" || "$GATEWAY_HOST" == "38.242.211.112" ]]; then
+    PROVISION_URL="https://supernode.ela.city${GATEWAY_URL#https://$GATEWAY_HOST}/api/wg/register"
+    TLS_ARGS=(--resolve "supernode.ela.city:443:$GATEWAY_HOST" -H "Host: $GATEWAY_HOST")
+  else
+    PROVISION_URL="$GATEWAY_URL/api/wg/register"
+  fi
+
+  RESPONSE=$(curl -s -w "\n%{http_code}" -X POST ${TLS_ARGS[@]+"${TLS_ARGS[@]}"} \
     -H "Content-Type: application/json" \
     -d "$PROVISION_BODY" \
-    "$GATEWAY_URL/api/wg/register" 2>&1)
+    "$PROVISION_URL" 2>&1)
 
   HTTP_CODE=$(echo "$RESPONSE" | tail -1)
   RESPONSE_BODY=$(echo "$RESPONSE" | sed '$d')

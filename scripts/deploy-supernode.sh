@@ -187,14 +187,18 @@ run_scp() {
 smoke_test() {
   local label="$1" base_url="$2" host_header="${3:-}"
   local host_arg=""
-  [ -n "$host_header" ] && host_arg="-H Host:$host_header --resolve $host_header:443:${base_url#https://}"
 
   log "Smoke-testing $label ($base_url)"
+  # Reach the IP but present the domain so the certificate is verified for it.
+  if [ -n "$host_header" ]; then
+    host_arg="--resolve $host_header:443:${base_url#https://}"
+    base_url="https://$host_header"
+  fi
 
   # Test 1: /api/health
   local h
   # shellcheck disable=SC2086
-  h=$(curl -sk --max-time 8 $host_arg "$base_url/api/health" -w '\n__HTTP__%{http_code}' || true)
+  h=$(curl -s --max-time 8 $host_arg "$base_url/api/health" -w '\n__HTTP__%{http_code}' || true)
   local code="${h##*__HTTP__}"
   if [ "$code" != "200" ]; then
     fail "$label: /api/health returned $code (expected 200)"
@@ -208,7 +212,7 @@ smoke_test() {
 
   # Test 2: /api/supernodes
   # shellcheck disable=SC2086
-  h=$(curl -sk --max-time 8 $host_arg "$base_url/api/supernodes" -w '\n__HTTP__%{http_code}' || true)
+  h=$(curl -s --max-time 8 $host_arg "$base_url/api/supernodes" -w '\n__HTTP__%{http_code}' || true)
   code="${h##*__HTTP__}"
   if [ "$code" != "200" ]; then
     fail "$label: /api/supernodes returned $code (expected 200)"
@@ -222,7 +226,7 @@ smoke_test() {
 
   # Test 3: SEC-2 exploit MUST return 400 "Invalid username" (NOT 503, NOT root output)
   # shellcheck disable=SC2086
-  h=$(curl -sk --max-time 8 -X POST $host_arg "$base_url/api/vless/register" \
+  h=$(curl -s --max-time 8 -X POST $host_arg "$base_url/api/vless/register" \
        -H 'Content-Type: application/json' \
        --data-raw '{"username":"x\"; id ; echo \""}' \
        -w '\n__HTTP__%{http_code}' || true)

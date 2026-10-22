@@ -161,7 +161,7 @@ jobs:
       # error rather than an opaque clone failure), and we re-evaluate
       # then with a `git config insteadOf` rewrite step.
       - name: Checkout (without submodules — not needed by build:pc2)
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: false
           fetch-depth: 1
@@ -170,7 +170,7 @@ jobs:
       # declares engines.node >=20.18.0; we pick the latest 20.x to match
       # what a fresh user install of nvm or Node-via-Homebrew would land on.
       - name: Setup Node.js 24.22.1
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24.22.1'
 
@@ -178,7 +178,7 @@ jobs:
       # ~6 min install down to ~90 s once the cache is warm. The cache key
       # mixes OS + all known lockfiles so a dep change always invalidates.
       - name: Cache npm + yarn caches
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/.npm
@@ -612,7 +612,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 1
 
@@ -804,19 +804,19 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: false
           fetch-depth: 1
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       # We don't push, but the gha cache lets a successful build on commit N
       # reuse layers from commit N-1 to speed up the inner-loop iteration
       # while we're stabilising this job.
       - name: Build pc2-node Docker image (no push)
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
         with:
           context: .
           file: ./pc2-node/Dockerfile
@@ -989,7 +989,7 @@ jobs:
       # actions/checkout uses git which we just apt-installed above.
       # No submodules — same rationale as the existing matrix's checkout step.
       - name: Checkout (no submodules)
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: false
           fetch-depth: 1
@@ -1107,7 +1107,7 @@ jobs:
       # install-arm.sh will then do its OWN git clone of $PC2_BRANCH into
       # $PC2_DIR — that's two clones, fine in CI, the realistic user flow.
       - name: Checkout (for in-branch install-arm.sh)
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: false
           fetch-depth: 1
@@ -1269,6 +1269,59 @@ jobs:
             echo "::endgroup::"
             exit 1
           fi
+
+  # ---------------------------------------------------------------------------
+  # install-node-script: the Node step update.sh runs (scripts/install-node.sh)
+  # against a NodeSource Node 20 + global pm2 install, which is how most
+  # Linux nodes were set up.
+  # ---------------------------------------------------------------------------
+  install-node-script:
+    name: install-node.sh upgrade (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    container:
+      image: ubuntu:22.04
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: NodeSource Node 20 + pm2 (existing node)
+        run: |
+          set -euo pipefail
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates curl gnupg
+          curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+          apt-get install -y nodejs
+          npm install -g pm2
+          node -v && pm2 -v
+
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 1
+
+      - name: Upgrade to the patched Node
+        run: |
+          set -euo pipefail
+          bash scripts/install-node.sh
+          hash -r
+          test "$(command -v node)" = /usr/local/bin/node
+          test "$(node -v)" = v24.22.1
+          npm -v
+          pm2 -v
+          npm install -g pm2 >/dev/null
+          test -x /usr/local/bin/pm2
+
+      - name: Second run leaves it alone
+        run: bash scripts/install-node.sh | grep -q "already has the October 2026 security fixes"
 
   # ---------------------------------------------------------------------------
   # summary: roll up matrix results into a single "ok / not ok" output so the

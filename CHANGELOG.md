@@ -6,6 +6,19 @@
 
 ---
 
+## [v1.4.5] - 2026-10-22 - Node.js upgrade on update, TLS clean-up
+
+Running `scripts/update.sh` on a Linux node now moves it to the patched Node.js release, and the remaining places that skipped certificate checks verify them.
+
+- `update.sh` installs Node.js 24.22.1 from nodejs.org (SHA-256 checked) when the node runs an unpatched Node, then restarts pm2 onto it and rebuilds native modules. Nodes on nvm, macOS or 32-bit OS are left as they are, with the command to upgrade printed. Set `PC2_SKIP_NODE_UPGRADE=1` to skip. The ARM installer and the supernode bootstrap use the same installer.
+- pc2-node ignores a leftover `NODE_TLS_REJECT_UNAUTHORIZED=0` (copied into `pc2-node/.env` by older updates) and logs a warning. `update.sh` removes it from `.env` and no longer copies it. The pm2 config always sets it to `1`.
+- The web gateway's DHT, gossip and registry-sync requests no longer decompress responses, and verify the Elacity supernodes' certificates. Gossip between the supernodes had been failing on certificate checks.
+- The gateway writes `registry.json` atomically, keeping the previous copy as `.bak`, and recovers from `.bak` if the file is truncated. This was already running on InterServer and was missing from the repo.
+- The supernode bootstrap, deploy, WireGuard setup and diagnose scripts no longer use `curl -k`. The cluster backfill and supernode verify scripts no longer turn verification off.
+- GitHub Actions are pinned to commit SHAs. The release-PR workflow declares its permissions.
+
+---
+
 ## [v1.4.4] - 2026-10-21 - Node.js October security release
 
 Node.js fixed a HIGH-severity Brotli decoder out-of-bounds write (CVE-2026-111497) that any Brotli-encoded `fetch` response can reach. The fix is only in Node 24.22.1, 22.23.4 and 26.12.1; Node 20, which most PC2 nodes run, gets none. This release protects nodes on any Node version and moves new installs to Node 24.

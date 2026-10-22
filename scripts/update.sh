@@ -262,7 +262,6 @@ if [[ -f "$ECO_FILE" ]]; then
         SUPERNODE_CLUSTER_PIN_TOKEN
         SUPERNODE_CLUSTER_PIN_REPLICATION_MIN
         SUPERNODE_CLUSTER_PIN_REPLICATION_MAX
-        NODE_TLS_REJECT_UNAUTHORIZED
         ELACITY_PIN_FORWARD_URL
         SUPERNODE_PIN_MIRRORS
         ANTHROPIC_API_KEY
@@ -318,6 +317,14 @@ ENV_HEADER
     fi
 fi
 
+# Older versions of this step copied NODE_TLS_REJECT_UNAUTHORIZED=0 into
+# .env, which turns off certificate checks for every outbound request.
+if [[ -f "$ENV_FILE" ]] && grep -q '^NODE_TLS_REJECT_UNAUTHORIZED=0' "$ENV_FILE"; then
+    grep -v '^NODE_TLS_REJECT_UNAUTHORIZED=0' "$ENV_FILE" > "$ENV_FILE.tmp" || true
+    cat "$ENV_FILE.tmp" > "$ENV_FILE" && rm -f "$ENV_FILE.tmp"
+    echo "🔐 Removed NODE_TLS_REJECT_UNAUTHORIZED=0 from pc2-node/.env (certificates are verified from v1.4.3)"
+fi
+
 # ─────────────────────────────────────────────────────────────────────
 # Step 4: Pull latest code (force-reset, no merges)
 # ─────────────────────────────────────────────────────────────────────
@@ -328,6 +335,29 @@ git fetch origin main
 git reset --hard origin/main
 # Drop any half-installed asset artefacts from a broken previous run
 git clean -fd src/particle-auth/assets/ 2>/dev/null || true
+
+# ─────────────────────────────────────────────────────────────────────
+# Step 4b (v1.4.5): Node.js security release.
+#
+# Runs before npm install so native modules are rebuilt for the Node
+# that will run PC2. Non-fatal: if Node can't be upgraded here (nvm,
+# macOS, 32-bit OS, no sudo) the update continues on the current Node,
+# which pc2-node's Brotli guard still protects.
+# ─────────────────────────────────────────────────────────────────────
+echo ""
+echo "🟢 Step 4b: Checking Node.js security release..."
+if [[ "${PC2_SKIP_NODE_UPGRADE:-0}" == "1" ]]; then
+    echo "   Skipped (PC2_SKIP_NODE_UPGRADE=1)"
+elif [[ -f "$PC2_DIR/scripts/install-node.sh" ]]; then
+    NODE_BEFORE="$(node -v 2>/dev/null || true)"
+    bash "$PC2_DIR/scripts/install-node.sh" || echo "   ⚠️  Continuing on Node $(node -v); see the message above to upgrade by hand."
+    hash -r
+    # pm2 starts apps with its daemon's Node, so the daemon must restart onto the new one.
+    if [[ "$(node -v 2>/dev/null || true)" != "$NODE_BEFORE" ]]; then
+        echo "   Restarting the pm2 daemon on $(node -v)..."
+        pm2 update >/dev/null 2>&1 || echo "   ⚠️  'pm2 update' failed; run it by hand so PC2 starts on $(node -v)."
+    fi
+fi
 
 # ─────────────────────────────────────────────────────────────────────
 # Step 5: Install at BOTH root AND pc2-node.

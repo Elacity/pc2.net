@@ -45,3 +45,23 @@ test('installOutboundTlsPolicy sets the default https trust store', () => {
     installOutboundTlsPolicy();
     assert.equal(https.globalAgent.options.ca, TRUSTED_ROOT_CERTIFICATES);
 });
+
+test('installOutboundTlsPolicy removes a leftover TLS-off setting', () => {
+    const env = 'NODE_TLS_REJECT_UNAUTHORIZED';
+    const original = process.env[env];
+    try {
+        process.env[env] = '0';
+        assert.equal(installOutboundTlsPolicy(), true);
+        assert.equal(process.env[env], undefined);
+
+        process.env[env] = '1';
+        assert.equal(installOutboundTlsPolicy(), false);
+        assert.equal(process.env[env], '1');
+    } finally {
+        if (original === undefined) {
+            delete process.env[env];
+        } else {
+            process.env[env] = original;
+        }
+    }
+});

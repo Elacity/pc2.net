@@ -247,7 +247,7 @@ section "9. Cluster pin connectivity (Elacity supernode)"
 # any token here — we just check the endpoint is reachable. A 401 means
 # the cluster is up; a connection failure means the node can't reach it.
 run "curl Elacity supernode (expect HTTP 401 = up & auth-gated)" \
-    bash -c "curl -sk -o /dev/null -w 'HTTP %{http_code}, time %{time_total}s\\n' --max-time 8 https://38.242.211.112/cluster-pin/pins"
+    bash -c "curl -s -o /dev/null -w 'HTTP %{http_code}, time %{time_total}s\\n' --max-time 8 --resolve supernode.ela.city:443:38.242.211.112 -H 'Host: 38.242.211.112' https://supernode.ela.city/cluster-pin/pins"
 
 section "10. Recent logs (last 200 lines, filtered for pin/cluster/ipfs/wireguard/error)"
 # v1.2.7.6: on macOS the launcher writes PC2 logs to

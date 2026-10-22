@@ -21,6 +21,7 @@ import {
   ProvisioningTokenStore,
   getProvisioningTokenFromRequest,
 } from "./lib/provisioning-token.js";
+import { peerRequest } from "./lib/peer-request.js";
 const { createProxyServer } = httpProxy;
 
 // ============================================================================
@@ -596,14 +597,9 @@ async function queryDHT(username) {
   
   for (const endpoint of DHT_CONFIG.supernodeEndpoints) {
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), DHT_CONFIG.queryTimeoutMs);
-      
-      const response = await fetch(`${endpoint}/dht/get?key=${encodeURIComponent(dhtKey)}`, {
-        signal: controller.signal,
+      const response = await peerRequest(`${endpoint}/dht/get?key=${encodeURIComponent(dhtKey)}`, {
+        timeoutMs: DHT_CONFIG.queryTimeoutMs,
       });
-      
-      clearTimeout(timeoutId);
       
       if (response.ok) {
         const data = await response.json();
@@ -633,11 +629,10 @@ async function storeToDHT(username, nodeInfo) {
   // Try to store in all supernodes for redundancy
   const storePromises = DHT_CONFIG.supernodeEndpoints.map(async (endpoint) => {
     try {
-      const response = await fetch(`${endpoint}/dht/put`, {
+      const response = await peerRequest(`${endpoint}/dht/put`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: dhtKey, value: nodeInfo }),
-        signal: AbortSignal.timeout(DHT_CONFIG.queryTimeoutMs),
+        body: { key: dhtKey, value: nodeInfo },
+        timeoutMs: DHT_CONFIG.queryTimeoutMs,
       });
       return response.ok;
     } catch {
@@ -1013,15 +1008,11 @@ async function gossipSupernodes() {
     if (node.address === myAddress) continue;
 
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5000);
-      await fetch(`${node.gatewayUrl}/api/supernodes/gossip`, {
+      await peerRequest(`${node.gatewayUrl}/api/supernodes/gossip`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ supernodes: ourList, source: CONFIG.gatewayId }),
-        signal: controller.signal,
+        body: { supernodes: ourList, source: CONFIG.gatewayId },
+        timeoutMs: 5000,
       }).catch(() => {});
-      clearTimeout(timeout);
     } catch {
       // Gossip failures are non-critical
     }
@@ -1042,12 +1033,7 @@ async function syncRegistryFromPeers() {
     if (node.address === myAddress) continue;
 
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 10000);
-      const resp = await fetch(`${node.gatewayUrl}/api/registry/sync`, {
-        signal: controller.signal,
-      });
-      clearTimeout(timeout);
+      const resp = await peerRequest(`${node.gatewayUrl}/api/registry/sync`, { timeoutMs: 10000 });
 
       if (!resp.ok) continue;
 

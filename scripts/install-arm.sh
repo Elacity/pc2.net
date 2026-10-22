@@ -273,19 +273,21 @@ install_nodejs() {
     echo ""
     print_step "Checking Node.js..."
 
-    if command -v node &> /dev/null; then
-        NODE_VERSION=$(node -v | cut -d 'v' -f 2 | cut -d '.' -f 1)
-        if [ "$NODE_VERSION" -ge 24 ]; then
-            print_ok "Node.js $(node -v) already installed"
-            return
-        fi
+    # Installed from nodejs.org (24.22.1+, SHA-256 checked); NodeSource's
+    # 24.x channel lagged the October 2026 security release.
+    local script_dir installer
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || true)"
+    installer="$script_dir/install-node.sh"
+    if [ ! -f "$installer" ]; then
+        installer="$(mktemp)"
+        curl -fsSL "https://raw.githubusercontent.com/Elacity/pc2.net/${REPO_BRANCH}/scripts/install-node.sh" -o "$installer"
     fi
-
-    print_step "Installing Node.js 24..."
-    curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
-    sudo apt-get install -y -qq nodejs
-
-    print_ok "Node.js $(node -v) installed"
+    if ! bash "$installer"; then
+        print_error "Could not install Node.js 24.22.1 (see message above)"
+        exit 1
+    fi
+    hash -r
+    print_ok "Node.js $(node -v) ready"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

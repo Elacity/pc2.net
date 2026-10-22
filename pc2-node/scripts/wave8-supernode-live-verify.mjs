@@ -23,6 +23,8 @@ const SUPERNODES = [
   'https://69.164.241.210/api/ddrm/provision',
   'https://38.242.211.112/api/ddrm/provision',
 ];
+// The supernodes are addressed by IP but serve the *.ela.city certificate.
+const SUPERNODE_TLS_SERVERNAME = 'supernode.ela.city';
 
 const PROVISION_ENVELOPE_DOMAIN = 'elacity.pc2.chipotle-provision.v1';
 const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
@@ -42,7 +44,7 @@ function canonicalize(value) {
 
 function httpsGet(url) {
   return new Promise((resolve, reject) => {
-    const req = https.get(url, { rejectUnauthorized: false, timeout: 10000 }, (res) => {
+    const req = https.get(url, { servername: SUPERNODE_TLS_SERVERNAME, timeout: 10000 }, (res) => {
       if (res.statusCode !== 200) {
         res.resume();
         return reject(new Error(`http_${res.statusCode}`));

@@ -41,11 +41,19 @@ export function supernodeServername(host: string): string | undefined {
     return SUPERNODE_IPS.has(host) ? SUPERNODE_TLS_SERVERNAME : undefined;
 }
 
+// Older updaters copied this into pc2-node/.env; '0' turns off verification process-wide.
+const TLS_VERIFY_ENV = 'NODE_TLS_REJECT_UNAUTHORIZED';
+
 /**
  * Apply the trust policy to every global `fetch` and default-agent `https` request,
- * and keep Brotli responses away from global `fetch`. Call once at boot.
+ * and keep Brotli responses away from global `fetch`. Call once at boot, after dotenv.
+ * Returns true if a leftover TLS-off setting was found and removed.
  */
-export function installOutboundTlsPolicy(): void {
+export function installOutboundTlsPolicy(): boolean {
+    const removedTlsOff = process.env[TLS_VERIFY_ENV] === '0';
+    if (removedTlsOff) {
+        delete process.env[TLS_VERIFY_ENV];
+    }
     https.globalAgent.options.ca = TRUSTED_ROOT_CERTIFICATES;
     const connect = buildConnector({ ca: TRUSTED_ROOT_CERTIFICATES });
     setGlobalDispatcher(new Agent({
@@ -54,4 +62,5 @@ export function installOutboundTlsPolicy(): void {
             callback,
         ),
     }).compose(refuseBrotli));
+    return removedTlsOff;
 }

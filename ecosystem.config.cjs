@@ -57,7 +57,7 @@ module.exports = {
     // Hardcoded defaults (always set):
     //   NODE_ENV, PORT, PATH                       — runtime / system
     //   LIT_BACKEND, REPLICATION_MIN/MAX           — feature defaults
-    //   NODE_TLS_REJECT_UNAUTHORIZED               — TLS safety (default "1")
+    //   NODE_TLS_REJECT_UNAUTHORIZED               — TLS verification (always "1")
     //
     // Conditional opt-in vars (cluster, AI, comms credentials, RPC pool):
     //   We use the spread pattern `...(process.env.X ? { X: process.env.X } : {})`
@@ -83,13 +83,8 @@ module.exports = {
       SUPERNODE_CLUSTER_PIN_REPLICATION_MIN: process.env.SUPERNODE_CLUSTER_PIN_REPLICATION_MIN || "2",
       SUPERNODE_CLUSTER_PIN_REPLICATION_MAX: process.env.SUPERNODE_CLUSTER_PIN_REPLICATION_MAX || "2",
 
-      // ── TLS handling for self-signed cluster cert (TEMPORARY) ──────────
-      // Always-set with safe default "1" (verify). Operator sets to "0" in
-      // shell or .env to opt out (required for current cluster IP-literal
-      // setup until cluster.ela.city DNS + valid cert ship in v1.2.8+).
-      // Note: pc2-node/src/services/boson/UsernameService.ts also forces
-      // this to "0" at import time as belt-and-suspenders.
-      NODE_TLS_REJECT_UNAUTHORIZED: process.env.NODE_TLS_REJECT_UNAUTHORIZED || "1",
+      // Always verify TLS: an inherited "0" from the shell would disable it process-wide.
+      NODE_TLS_REJECT_UNAUTHORIZED: "1",
 
       // ── Opt-in: IPFS Cluster pinning (v1.2.7+) ─────────────────────────
       // When both URL and TOKEN are set, pc2-node forwards every successful

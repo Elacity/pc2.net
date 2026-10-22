@@ -34,6 +34,8 @@ BOOTSTRAP_SUPERNODES=(
   "https://69.164.241.210"
   "https://38.242.211.112"
 )
+# Bootstrap supernodes are addressed by IP but serve the *.ela.city certificate.
+SUPERNODE_TLS_NAME="supernode.ela.city"
 
 # Minimum requirements
 MIN_CORES=4
@@ -77,6 +79,13 @@ log_ok() { log "OK: $*"; }
 log_warn() { log "WARN: $*"; }
 log_err() { log "ERROR: $*"; }
 log_step() { echo ""; log "=== STEP: $* ==="; }
+
+# supernode_curl https://<ip>/path [curl args...] — certificate-verified request to a bootstrap supernode
+supernode_curl() {
+  local url="$1"; shift
+  local host="${url#https://}"; host="${host%%/*}"
+  curl --resolve "${SUPERNODE_TLS_NAME}:443:${host}" -H "Host: ${host}" "https://${SUPERNODE_TLS_NAME}${url#https://${host}}" "$@"
+}
 
 # ============================================================================
 # Step 0: Pre-flight checks
@@ -168,12 +177,15 @@ apt-get install -y -qq \
   openjdk-17-jre-headless \
   > /dev/null 2>&1
 
-# Install Node.js 24.x if not present
-if ! command -v node &>/dev/null || [[ $(node -v | cut -d. -f1 | tr -d v) -lt 24 ]]; then
-  log "Installing Node.js 24.x..."
-  curl -fsSL https://deb.nodesource.com/setup_24.x | bash - > /dev/null 2>&1
-  apt-get install -y -qq nodejs > /dev/null 2>&1
+# Install Node.js 24.22.1+ from nodejs.org (SHA-256 checked); NodeSource's
+# 24.x channel lagged the October 2026 security release.
+NODE_INSTALLER="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)/../scripts/install-node.sh"
+if [[ ! -f "$NODE_INSTALLER" ]]; then
+  NODE_INSTALLER="$(mktemp)"
+  curl -fsSL https://raw.githubusercontent.com/Elacity/pc2.net/main/scripts/install-node.sh -o "$NODE_INSTALLER"
 fi
+bash "$NODE_INSTALLER" || { log_err "Could not install Node.js 24.22.1"; exit 1; }
+hash -r
 log_ok "Node.js $(node -v)"
 
 # Install Go 1.21+ for AmneziaWG compilation
@@ -630,7 +642,7 @@ REGISTRY_SYNCED=false
 for SN_URL in "${BOOTSTRAP_SUPERNODES[@]}"; do
   SYNC_URL="${SN_URL/https/http}:4500/api/registry/apps"
   log "Trying to sync registry from ${SYNC_URL}..."
-  if curl -s --max-time 10 -k "$SYNC_URL" -o "${REGISTRY_DIR}/registry.json" 2>/dev/null; then
+  if curl -s --max-time 10 "$SYNC_URL" -o "${REGISTRY_DIR}/registry.json" 2>/dev/null; then
     if jq -e '.apps' "${REGISTRY_DIR}/registry.json" > /dev/null 2>&1; then
       REGISTRY_SYNCED=true
       APP_COUNT=$(jq '.apps | length' "${REGISTRY_DIR}/registry.json")
@@ -647,7 +659,7 @@ fi
 
 # Create registry sync cron (every 5 minutes from primary)
 cat > /etc/cron.d/pc2-registry-sync << EOF
-*/5 * * * * root curl -s --max-time 10 -k ${BOOTSTRAP_SUPERNODES[0]}:4500/api/registry/apps -o ${REGISTRY_DIR}/registry.json.tmp 2>/dev/null && mv ${REGISTRY_DIR}/registry.json.tmp ${REGISTRY_DIR}/registry.json 2>/dev/null || true
+*/5 * * * * root curl -s --max-time 10 ${BOOTSTRAP_SUPERNODES[0]/https/http}:4500/api/registry/apps -o ${REGISTRY_DIR}/registry.json.tmp 2>/dev/null && mv ${REGISTRY_DIR}/registry.json.tmp ${REGISTRY_DIR}/registry.json 2>/dev/null || true
 EOF
 
 # Only start if index.js exists
@@ -847,8 +859,8 @@ EOF
 REGISTERED=0
 for SN_URL in "${BOOTSTRAP_SUPERNODES[@]}"; do
   log "Registering with ${SN_URL}..."
-  RESP=$(curl -s --max-time 10 -k \
-    -X POST "${SN_URL}/api/supernodes/register" \
+  RESP=$(supernode_curl "${SN_URL}/api/supernodes/register" -s --max-time 10 \
+    -X POST \
     -H "Content-Type: application/json" \
     -d "$REGISTER_PAYLOAD" 2>/dev/null || echo '{"error":"unreachable"}')
   
@@ -864,9 +876,13 @@ done
 log "Registered with ${REGISTERED}/${#BOOTSTRAP_SUPERNODES[@]} supernodes"
 
 # Setup heartbeat cron (every 2 minutes)
-cat > /etc/cron.d/pc2-supernode-heartbeat << EOF
-*/2 * * * * root for SN in ${BOOTSTRAP_SUPERNODES[*]}; do curl -s --max-time 5 -k -X POST "\${SN}/api/supernodes/heartbeat" -H "Content-Type: application/json" -d '{"id":"${NODE_ID}","address":"${PUBLIC_IP}","port":${BOSON_PORT},"proxyPort":${PROXY_PORT},"gatewayUrl":"https://${PUBLIC_IP}","name":"${SN_NAME}","region":"${REGION}"}' > /dev/null 2>&1; done
+: > /etc/cron.d/pc2-supernode-heartbeat
+for SN in "${BOOTSTRAP_SUPERNODES[@]}"; do
+  SN_IP="${SN#https://}"
+  cat >> /etc/cron.d/pc2-supernode-heartbeat << EOF
+*/2 * * * * root curl -s --max-time 5 --resolve ${SUPERNODE_TLS_NAME}:443:${SN_IP} -H "Host: ${SN_IP}" -X POST "https://${SUPERNODE_TLS_NAME}/api/supernodes/heartbeat" -H "Content-Type: application/json" -d '{"id":"${NODE_ID}","address":"${PUBLIC_IP}","port":${BOSON_PORT},"proxyPort":${PROXY_PORT},"gatewayUrl":"https://${PUBLIC_IP}","name":"${SN_NAME}","region":"${REGION}"}' > /dev/null 2>&1
 EOF
+done
 
 log_ok "Heartbeat cron configured (every 2 min)"
 
@@ -903,11 +919,11 @@ echo ""
 echo "  Registration: ${REGISTERED}/${#BOOTSTRAP_SUPERNODES[@]} supernodes"
 echo ""
 echo "  Next steps:"
-echo "    1. Deploy gateway code:  scp deploy/web-gateway/index.js root@${PUBLIC_IP}:${GW_DIR}/"
+echo "    1. Deploy gateway code:  scp -r deploy/web-gateway/index.js deploy/web-gateway/lib root@${PUBLIC_IP}:${GW_DIR}/"
 echo "    2. Deploy IPFS relay:    scp deploy/ipfs-relay/index.js root@${PUBLIC_IP}:${RELAY_DIR}/"
 echo "    3. Deploy app registry:  scp deploy/app-registry/index.js root@${PUBLIC_IP}:${REGISTRY_DIR}/"
 echo "    4. Set up Boson DHT:     (requires Java — see docs/pc2-infrastructure/)"
-echo "    5. Check health:         curl -k https://${PUBLIC_IP}/api/health"
+echo "    5. Check health:         curl http://127.0.0.1:3080/api/health"
 echo ""
 echo "  Logs: tail -f ${LOG_FILE}"
 echo "================================================================"

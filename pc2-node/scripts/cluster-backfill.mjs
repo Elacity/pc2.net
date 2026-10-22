@@ -11,7 +11,11 @@
 //
 // Required env (already set in pc2-node ecosystem.config.cjs):
 //   SUPERNODE_CLUSTER_PIN_URL, SUPERNODE_CLUSTER_PIN_TOKEN
-//   NODE_TLS_REJECT_UNAUTHORIZED=0 (until proper-cert subdomain in v1.3.x)
+// Run from pc2-node/ after `npm run build`: certificates are verified with
+// the same trust policy as the server (supernode IPs checked as *.ela.city).
+
+import { installOutboundTlsPolicy } from "../dist/utils/tlsTrust.js";
+installOutboundTlsPolicy();
 
 // Try @photostructure/sqlite first (v1.2.7+), fall back to better-sqlite3 (v1.2.6).
 let Database;
@@ -33,9 +37,6 @@ const LIMIT = parseInt(process.env.LIMIT || "1000", 10);
 if (!URL || !TOKEN) {
   console.error("ERROR: SUPERNODE_CLUSTER_PIN_URL and _TOKEN must be set");
   process.exit(1);
-}
-if (process.env.NODE_TLS_REJECT_UNAUTHORIZED !== "0") {
-  console.warn("WARN: NODE_TLS_REJECT_UNAUTHORIZED is not '0'; self-signed cert may fail");
 }
 
 console.log(`Cluster URL : ${URL}`);

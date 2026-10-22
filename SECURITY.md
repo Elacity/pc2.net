@@ -1,21 +1,8 @@
-# Puter Security Policy
+# Security
 
-Thank you for helping make Puter safe. Keeping user information safe and secure is a top priority, and we welcome the contribution of external security researchers.
+If you believe you've found a security issue in software maintained in this repository, report it through a [private GitHub security advisory](https://github.com/Elacity/pc2.net/security/advisories/new), or by email to security@ela.city.
 
-<br>
-
-# Scope
-
-If you believe you've found a security issue in software that is maintained in this repository, we encourage you to notify us.
-
-<br>
-
-# How to Submit a Report
-
-To submit a vulnerability report, please contact us at security@puter.com. Your submission will be reviewed and validated by a member of our team.
-
-> [!WARNING]  
-> Please do not report security vulnerabilities through public GitHub issues, discussions, or pull requests.
+Do not describe an unfixed issue in a public issue, discussion, pull request, commit message, or branch name.
 
 <br>
 

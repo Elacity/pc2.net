@@ -1767,17 +1767,36 @@ async function getProxySession(endpoint) {
 
 // Load registry from disk
 function loadRegistry() {
+  // Load entries from a JSON file into the in-memory registry; returns count.
+  const loadFromFile = (file) => {
+    const data = JSON.parse(fs.readFileSync(file, "utf8"));
+    for (const [username, info] of Object.entries(data)) {
+      registry.set(username, info);
+    }
+    return registry.size;
+  };
   try {
     if (!fs.existsSync(CONFIG.dataDir)) {
       fs.mkdirSync(CONFIG.dataDir, { recursive: true });
     }
 
     if (fs.existsSync(CONFIG.registryFile)) {
-      const data = JSON.parse(fs.readFileSync(CONFIG.registryFile, "utf8"));
-      for (const [username, info] of Object.entries(data)) {
-        registry.set(username, info);
+      try {
+        const count = loadFromFile(CONFIG.registryFile);
+        console.log(`[Gateway] Loaded ${count} users from registry`);
+      } catch (parseErr) {
+        // registry.json can be truncated by an ENOSPC/interrupted write. Recover
+        // from the previous-good .bak instead of silently starting empty (which
+        // would mark every node offline until each one re-registers).
+        console.error("[Gateway] registry.json unreadable, trying backup:", parseErr.message);
+        const bak = `${CONFIG.registryFile}.bak`;
+        if (fs.existsSync(bak)) {
+          const count = loadFromFile(bak);
+          console.log(`[Gateway] Recovered ${count} users from registry .bak`);
+        } else {
+          console.error("[Gateway] No registry .bak available; starting empty");
+        }
       }
-      console.log(`[Gateway] Loaded ${registry.size} users from registry`);
     }
   } catch (error) {
     console.error("[Gateway] Failed to load registry:", error);
@@ -1791,7 +1810,16 @@ function saveRegistry() {
     for (const [username, info] of registry) {
       data[username] = info;
     }
-    fs.writeFileSync(CONFIG.registryFile, JSON.stringify(data, null, 2));
+    // Atomic write: keep the prior file as .bak, write to a temp, then rename.
+    // A partial/ENOSPC write lands on the temp, never on the live registry, so
+    // the live file is never left truncated/corrupt.
+    const json = JSON.stringify(data, null, 2);
+    const tmp = `${CONFIG.registryFile}.tmp`;
+    if (fs.existsSync(CONFIG.registryFile)) {
+      try { fs.copyFileSync(CONFIG.registryFile, `${CONFIG.registryFile}.bak`); } catch (e) { /* best-effort backup */ }
+    }
+    fs.writeFileSync(tmp, json);
+    fs.renameSync(tmp, CONFIG.registryFile);
   } catch (error) {
     console.error("[Gateway] Failed to save registry:", error);
   }

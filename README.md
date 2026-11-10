@@ -1,3 +1,18 @@
+# End of life
+
+PC2 / Elacity Node is no longer maintained by Elacity, and this repository is archived (read-only).
+
+ElastOS v2 replaces it:
+
+- Release: https://github.com/elastos/elastos-runtime/releases/tag/v2.0.0
+- Repository: https://github.com/elastos/elastos-runtime
+
+Existing node operators should stop running PC2 / Elacity Node and move to ElastOS v2.
+
+See [SECURITY.md](SECURITY.md) for a known unfixed issue.
+
+---
+
 <h1 align="center">☁️ PC2.NET</h1>
 <h3 align="center">Your Sovereign Cloud. Your Hardware. Your Rules.</h3>
 

@@ -1,3 +1,18 @@
+# End of life
+
+PC2 / Elacity Node is no longer maintained by Elacity, and this repository is archived (read-only).
+
+v1.4.5 (and earlier) has a known, unfixed weakness in the wallet sign-in. The SIWE login does not check that the signed message is the challenge the node issued, so a previously captured signature from a wallet can be replayed to log in as that wallet, and an unowned node can be claimed.
+
+This will not be patched because the project is end of life. Operators should stop running PC2 / Elacity Node and move to ElastOS v2:
+
+- Release: https://github.com/elastos/elastos-runtime/releases/tag/v2.0.0
+- Repository: https://github.com/elastos/elastos-runtime
+
+Credit: reported by independent researcher [kta1kri](https://github.com/kta1kri).
+
+---
+
 # Puter Security Policy
 
 Thank you for helping make Puter safe. Keeping user information safe and secure is a top priority, and we welcome the contribution of external security researchers.
